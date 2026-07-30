@@ -22,11 +22,13 @@ No real provider ships here. The interface plus a deterministic fake is what mak
 the rest testable with no key, no network, and no spend.
 """
 
+from . import handshake
 from .claims import validate
 from .compiler import Narration, NarrationError, ledger_key, narrate
 from .prompts import Prompt, SECTION_PROSE, get, register, versions
 from .providers import (
     DeterministicProvider,
+    ResponseProvider,
     Provider,
     ProviderError,
     UnreachableProvider,
@@ -59,6 +61,8 @@ __all__ = [
     "Provider",
     "ProviderError",
     "DeterministicProvider",
+    "ResponseProvider",
+    "handshake",
     "UnreachableProvider",
     "ViolatingProvider",
     "digest",

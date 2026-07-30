@@ -251,15 +251,18 @@ class _Validator:
                 )
 
     def artifact_files(self) -> None:
-        """Every manifest entry must point at a file that exists.
+        """Every manifest entry that names a file must point at one that exists.
 
-        Skipped for a generated world, which carries intents and no manifest —
-        there is nothing rendered yet to point at.
+        An empty path is legitimate and means "compiled, not rendered in this
+        format set" — a Jira bundle has no file when only Markdown was requested.
+        What is not legitimate is naming a path that is not there.
         """
         root = self.world.root
         if root is None or not self.world._artifacts:
             return
         for artifact in self.world.artifacts:
+            if not artifact.path:
+                continue
             self.checks += 1
             if not (root / artifact.path).is_file():
                 self.fail("referential", "missing_file", artifact.id, f"path {artifact.path} does not exist")

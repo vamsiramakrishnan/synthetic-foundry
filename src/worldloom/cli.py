@@ -29,6 +29,11 @@ app = typer.Typer(
 )
 evals_app = typer.Typer(no_args_is_help=True, help="Work with a corpus's evaluation set.")
 app.add_typer(evals_app, name="evals")
+narrate_app = typer.Typer(
+    no_args_is_help=True,
+    help="Hand prose requests to an agent, and validate what comes back.",
+)
+app.add_typer(narrate_app, name="narrate")
 
 console = Console()
 err = Console(stderr=True)
@@ -169,12 +174,124 @@ def build(
         raise typer.Exit(code=1)
 
     if out is not None:
+        # Compile before writing, so the exported corpus carries its artifact IR
+        # and an agent can ask it for prose requests without rebuilding.
+        if not world.artifact_irs:
+            world = world.compile()
         try:
             written = world.export(out, overwrite=overwrite)
         except FileExistsError as exc:
             err.print(f"[red]error:[/red] {exc}")
             raise typer.Exit(code=2) from exc
         console.print(f"[green]✓[/green] exported to [bold]{written}[/bold]")
+
+
+@narrate_app.command("requests")
+def narrate_requests(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the prose requests an agent needs to answer.
+
+    Each request is self-describing: the facts it may use, which are required, what
+    the author knew and when, the voice, and the rules in full.
+    """
+    from .narrative import handshake
+
+    world = _load(corpus)
+    if not world.artifact_irs:
+        try:
+            world = world.compile()
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] {corpus}: {exc}")
+            raise typer.Exit(code=2) from exc
+
+    document = handshake.requests_document(world)
+    if not document["requests"]:
+        console.print("[green]✓[/green] nothing awaiting prose")
+        return
+
+    payload = handshake.dump(document)
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(
+            f"[green]✓[/green] {len(document['requests'])} request(s) written to [bold]{out}[/bold]"
+        )
+
+
+@narrate_app.command("accept")
+def narrate_accept(
+    corpus: str = typer.Argument(..., help="Corpus path to write prose into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Response JSON from the agent."),
+    model_id: str = typer.Option(
+        "agent", "--model-id",
+        help="Who wrote it. Recorded in the ledger and part of the replay key.",
+    ),
+) -> None:
+    """Validate agent-written prose and commit it, or report every violation.
+
+    Nothing is committed unless every response passes. A partial commit would leave
+    a corpus half-narrated with no record of which half.
+    """
+    from .narrative import ResponseProvider, handshake
+
+    world = _load(corpus)
+    if not world.artifact_irs:
+        world = world.compile()
+    try:
+        responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {source}: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    verdicts = handshake.review(world, responses)
+    rejected = {name: v for name, v in verdicts.items() if not v.accepted}
+
+    if rejected:
+        err.print(
+            f"[red]✗[/red] {len(rejected)} of {len(verdicts)} response(s) rejected."
+            " Nothing was committed."
+        )
+        for name, verdict in sorted(rejected.items()):
+            err.print(f"\n[bold]{name}[/bold]")
+            for violation in verdict.violations:
+                err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
+        raise typer.Exit(code=1)
+
+    narrated = world.narrate(ResponseProvider(responses, model_id=model_id), retries=0)
+    written = narrated.export(corpus, overwrite=True)
+
+    console.print(
+        f"[green]✓[/green] {len(verdicts)} section(s) accepted and recorded in the ledger"
+    )
+    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not _report(narrated):
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def render(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    formats: list[str] = typer.Option(..., "--format", "-f", help="Formats to render. Repeatable."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write here instead of back into the corpus."),
+) -> None:
+    """Render an existing corpus into files."""
+    from .render import RenderError
+
+    world = _load(corpus)
+    try:
+        rendered = world.render(*formats)
+    except (RenderError, ValueError) as exc:
+        err.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    written = rendered.export(out or Path(corpus), overwrite=True)
+    console.print(f"[green]✓[/green] {len(rendered._rendered)} file(s) written to [bold]{written}[/bold]")
+    if not _report(rendered):
+        raise typer.Exit(code=1)
 
 
 @app.command()

@@ -49,6 +49,26 @@ jobs:
             --out "${{ runner.temp }}/rendered"
           worldloom validate "${{ runner.temp }}/rendered"
 
+      # The agent handshake: a corpus asks for prose, and refuses prose that
+      # restates a figure. Exercised with a scripted "agent" so the contract is
+      # covered without a model in CI.
+      - name: The agent handshake accepts and rejects
+        run: |
+          worldloom build --seed 8128 --incident --out "${{ runner.temp }}/agent"
+          worldloom narrate requests "${{ runner.temp }}/agent" -o requests.json
+          python3 tests/scripted_agent.py requests.json responses.json
+          worldloom narrate accept "${{ runner.temp }}/agent" --from responses.json \
+            --model-id ci-scripted-agent
+          worldloom render "${{ runner.temp }}/agent" -f markdown -f xlsx
+          worldloom validate "${{ runner.temp }}/agent"
+
+          # And a violation must be rejected rather than quietly accepted.
+          python3 tests/scripted_agent.py requests.json bad.json --restate
+          if worldloom narrate accept "${{ runner.temp }}/agent" --from bad.json; then
+            echo "a restated figure was accepted — the guardrail is not working"
+            exit 1
+          fi
+
       # Narrate, then regenerate from the ledger with the provider unreachable,
       # and require the two corpora to be byte-identical. This is the project's
       # central claim, enforced rather than asserted.

@@ -177,6 +177,44 @@ class DeterministicProvider:
         return f"DeterministicProvider(calls={self.calls})"
 
 
+class ResponseProvider:
+    """Prose the driving agent already wrote.
+
+    This is the provider Worldloom is actually built around. There is no SDK call
+    and no API key: the agent reading the harness *is* the model, and this serves
+    back what it handed over so the rest of the pipeline — validation, retry,
+    ledger — runs unchanged.
+
+    The inversion matters. A library that calls out to a model has to own
+    credentials, retries, rate limits, and a prompt it cannot see the output of. A
+    harness the agent drives owns none of that; it owns the *contract*, and the
+    validator is what makes the contract binding rather than advisory.
+    """
+
+    def __init__(self, responses: dict[str, GeneratedNarrative], *, model_id: str = "agent") -> None:
+        self.responses = responses
+        self.id = model_id
+        self.calls = 0
+
+    def complete(
+        self,
+        request: NarrativeRequest,
+        prompt: Prompt,
+        facts: dict[str, CanonicalFact],
+        *,
+        feedback: str = "",
+    ) -> GeneratedNarrative:
+        self.calls += 1
+        key = f"{request.artifact_id}/{request.section}"
+        try:
+            return self.responses[key]
+        except KeyError:
+            raise ProviderError(
+                f"no response supplied for {key}."
+                " Run `worldloom narrate requests` and answer every request."
+            ) from None
+
+
 class UnreachableProvider:
     """A provider that refuses to answer.
 

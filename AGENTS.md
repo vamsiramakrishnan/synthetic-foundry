@@ -1,0 +1,209 @@
+# Worldloom, for agents
+
+You are the model. Worldloom is the harness.
+
+This repository does not call a language model. It builds a coherent synthetic
+enterprise deterministically, works out which documents that enterprise would
+have, hands you a bounded request for each one, and then **checks what you wrote
+against the facts**. If you restate a number, cite something you were not given,
+or mention an entity that does not exist, your prose is rejected with the reason
+and you try again.
+
+That division is the whole design. You supply judgement and language. The harness
+supplies truth, and refuses anything that contradicts it.
+
+Written to be agent-neutral: everything below is shell commands and JSON files, so
+it works from Claude Code, Antigravity, or any harness that can run a terminal.
+
+---
+
+## Setup
+
+```bash
+pip install -e ".[xlsx]"
+worldloom --help
+```
+
+## The loop
+
+```bash
+# 1. Build a world. Same seed, same world, every time.
+worldloom build --seed 8128 --incident --out ./corpus
+
+# 2. Ask what prose is needed.
+worldloom narrate requests ./corpus -o requests.json
+
+# 3. Read requests.json. Write responses.json. (This is your job.)
+
+# 4. Submit. Accepted prose is committed and recorded; rejected prose is returned
+#    with the violated rule, and nothing is committed.
+worldloom narrate accept ./corpus --from responses.json --model-id <your model>
+
+# 5. Materialise it.
+worldloom render ./corpus -f xlsx -f markdown -f jira -f confluence -f servicenow
+
+# 6. Check the whole corpus agrees with itself.
+worldloom validate ./corpus
+```
+
+Steps 3 and 4 repeat until every response is accepted. Rejection is normal and is
+not a failure of the harness — it is the harness working.
+
+---
+
+## Writing responses
+
+`requests.json` carries everything you need. Do not go looking for other context;
+if a fact is not in the request, you may not use it.
+
+Each request looks like this:
+
+```json
+{
+  "id": "ART-0003/By business unit",
+  "artifact_type": "cfo_variance_memo",
+  "section": "By business unit",
+  "written_by": "Group Financial Controller",
+  "voice": "precise, procedural, cautious",
+  "audience": "group_cfo",
+  "target_words": 130,
+  "knows_as_of": "2026-04-08T09:40:00+00:00",
+  "must_not_claim": [],
+  "facts": [
+    {
+      "id": "FACT-0020",
+      "statement": "financial.revenue.actual = 408,800 AUD_thousands",
+      "authority": "system_of_record",
+      "valid_from": "2026-04-07T16:40:00+00:00",
+      "superseded": false,
+      "required": true
+    }
+  ]
+}
+```
+
+Answer it like this, one entry per request, `id` matching exactly:
+
+```json
+{
+  "responses": [
+    {
+      "id": "ART-0003/By business unit",
+      "text": "Food finished {{fact:FACT-0028}} against plan, the largest of the three shortfalls.",
+      "claims": [
+        {
+          "text": "Food finished below plan by the largest margin.",
+          "supporting_fact_ids": ["FACT-0028", "FACT-0029", "FACT-0030"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### The rules, and why each exists
+
+**Never write a number.** Every figure, percentage, and date goes in as
+`{{fact:FACT-0028}}`. The renderer substitutes the value from the ledger at render
+time, so a board deck and the workbook it derives from read the same entry and
+neither holds a copy. A number you type is a copy, and a copy can drift. This is
+checked lexically — any digit outside a reference is rejected.
+
+**Every claim cites its facts.** A claim with no support is invalid, not merely
+weak: there is nothing to check it against.
+
+**Use only the facts in your request.** The request is the boundary. Citing a fact
+outside it means you reached for something the author of this document did not
+have.
+
+**Respect `knows_as_of`.** This is when the document was written. You may not
+anticipate anything discovered later — a triage page written at 09:26 cannot cite
+a root cause confirmed at 13:27, and the corpus depends on it not doing so.
+
+**A `superseded` fact is a past belief.** It was true when recorded and later
+proved wrong. Refer to it as history — "it was initially recorded as…" — never as
+the current position. This is how an incident RCA discusses the hypothesis that
+turned out to be wrong.
+
+**Invent no entities.** No company, person, system, or metric that is not in your
+facts.
+
+**Write in the given voice, for the given audience, at roughly the given length.**
+This is the part that is actually yours. A CFO's controller writes differently from
+a service desk analyst, and an executive summary is not an RCA.
+
+### Aim for a document, not a list
+
+The dullest possible correct answer is one sentence per fact. Prefer prose that
+argues: lead with the position, group what belongs together, say what it means.
+Sections partition the facts deliberately — a section headed "By business unit"
+was given unit figures precisely so it does not restate the group position.
+
+---
+
+## What the harness will not let you do
+
+`worldloom validate` runs over a thousand checks and treats any of these as a
+defect, not a warning:
+
+- A total that does not equal the sum of its parts
+- A variance that is not actual less budget
+- A percentage that does not match the amounts it describes
+- A document citing a fact that did not yet exist when it was written
+- A reference to an entity, event, or fact that does not exist
+- A reporting line that cycles, or a service that owns itself
+- An author who cannot see the document they wrote
+- Lore that constrains nothing
+
+If you are tempted to make one of these pass by editing the fixture or relaxing a
+check: don't. A validator that can be talked out of failing is decoration. Fix the
+thing it caught.
+
+---
+
+## Determinism, and why it constrains you
+
+A world regenerates byte-for-byte from its seed plus its generation ledger:
+
+```bash
+worldloom build --seed 8128 --incident --replay ./corpus -f markdown --out ./again
+diff -r ./corpus ./again
+```
+
+The second command makes **no model call at all** — every request is served from
+the ledger. CI enforces this on every push.
+
+Two consequences for you:
+
+- **Never introduce a clock, `random`, or a UUID.** Ledger keys are content
+  addresses. `hash()` is randomised per process and is not one either; use
+  `worldloom.ids.content_key`.
+- **Prompt text is versioned data.** Editing a prompt in place silently changes
+  what a seed means. Bump the version in `src/worldloom/narrative/prompts.py`.
+
+---
+
+## Where things are
+
+| Path | What |
+| --- | --- |
+| `src/worldloom/models.py` | The thin waist. Every subsystem speaks these types |
+| `src/worldloom/generators/` | Deterministic generation. No model, no clock |
+| `src/worldloom/narrative/` | The contract with you: requests, claims, ledger |
+| `src/worldloom/render/` | Formats. Read the IR and nothing else |
+| `src/worldloom/validate.py` | The guardrails. Start here to understand the rules |
+| `examples/retail-close/` | The hand-authored reference corpus. Frozen |
+| `docs/build-order.md` | What gets built next, and the gate it must pass |
+| `docs/generation-model.md` | Which engine owns what, and why |
+| `docs/lore.md` | Lore as a constraint graph |
+
+## Working on the harness itself
+
+```bash
+pytest -q                                   # 183 tests
+worldloom validate retail-close             # the reference corpus must stay coherent
+```
+
+Read `docs/build-order.md` before adding a subsystem. It sequences the work and
+states an exit gate for each step, and the ordering is deliberate — several steps
+exist specifically to stop a later one from being built on guesses.

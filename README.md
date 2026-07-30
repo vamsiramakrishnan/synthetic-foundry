@@ -2,44 +2,50 @@
 
 **Worldloom is to enterprise corpora what SQLite is to databases.**
 
-A small, deterministic Python library that generates coherent synthetic enterprise worlds — organisations, people, projects, finances, systems, incidents, years of history — and materialises them into realistic documents, business system records, and knowledge artifacts for AI evaluation, retrieval, and agent testing.
+A small, deterministic harness that generates coherent synthetic enterprise worlds
+— organisations, people, projects, finances, systems, incidents, years of history —
+and materialises them into realistic documents, business system records, and
+knowledge artifacts for AI evaluation, retrieval, and agent testing.
 
-No service to run. No configuration to write. No orchestration framework to adopt. A library, and a CLI that is a thin wrapper over it.
+No service to run. No API key. No model behind an SDK.
 
-```python
-from worldloom import World
+**Your coding agent is the model. Worldloom is the harness.**
 
-world = (
-    World()
-    .inspired_by("woolworths")
-    .fictionalise()
-    .employees(80_000)
-    .history(years=12)
-    .simulate(months=24)
-    .generate()
-)
+```bash
+pip install -e ".[xlsx]"
 
-world.export("./demo", formats=["pptx", "xlsx", "docx", "jira", "confluence"])
+worldloom build --seed 8128 --incident --out ./corpus   # deterministic: the world
+worldloom narrate requests ./corpus -o requests.json    # what prose is needed
+#   the agent writes responses.json
+worldloom narrate accept ./corpus --from responses.json # checked against the facts
+worldloom render ./corpus -f xlsx -f jira -f confluence
+worldloom validate ./corpus                             # 1,100+ coherence checks
 ```
 
-> **Status: Gate A complete; renderers and the narrative compiler landing.** The builder chain above and DOCX/PPTX/PDF are still ahead. What runs today:
+Worldloom builds the enterprise, works out which documents it would have, resolves
+every table and figure, and then hands the agent a bounded request per section. What
+comes back is **checked against the fact ledger**. Restate a number, cite something
+you were not given, or mention an entity that does not exist, and the prose is
+rejected with the reason.
+
+That division is the design. The agent supplies judgement and language. The harness
+supplies truth, and refuses anything that contradicts it.
+
+Agents start at **[AGENTS.md](AGENTS.md)**. Claude Code has a skill: `/worldloom`.
+
+> **Status: Gate A complete; renderers and the agent handshake landing.** The Python
+> builder chain further down this README, and DOCX/PPTX/PDF, are still ahead. What
+> runs today is everything in the block above, plus:
 >
 > ```bash
-> pip install -e ".[xlsx]"
-> worldloom demo retail-close                    # the hand-authored corpus, 1250 checks
-> worldloom build --seed 8128 --incident --narrate \
->     -f xlsx -f markdown -f jira -f confluence -f servicenow \
->     --out ./dist/demo                          # generate, narrate, render, validate
-> worldloom build --seed 8128 --incident --replay ./dist/demo \
->     -f xlsx -f markdown -f jira -f confluence -f servicenow \
->     --out ./dist/again                          # regenerate offline from the ledger
+> worldloom build --seed 8128 --incident --replay ./corpus -f xlsx --out ./again
+> diff -r ./corpus ./again        # identical, and no model was called
 > ```
 >
-> Those last two commands produce **byte-identical corpora**, and the second makes no provider call at all. That is the determinism claim below, demonstrated rather than asserted — and CI diffs the two directories on every push.
->
-> No provider ships. `--narrate` uses a deterministic fake, so the whole pipeline is exercised with no key, no network, and no spend; a real adapter is a thin wrapper over the same interface.
->
-> Treat the rest of this README as the target API. The [roadmap](#roadmap) marks what is built; [`docs/build-order.md`](docs/build-order.md) is the sequence and the exit gate for each step.
+> A world regenerates byte-for-byte from its seed plus its generation ledger. CI
+> enforces that diff on every push. The [roadmap](#roadmap) marks what is built;
+> [`docs/build-order.md`](docs/build-order.md) is the sequence and the exit gate for
+> each step.
 
 ---
 
@@ -125,7 +131,11 @@ The full division — twenty areas of generation, what the model owns in each, a
 
 ---
 
-## The API
+## The Python engine
+
+The harness is the product; this is the engine underneath it, and every CLI command
+is a thin wrapper over it. Reach for it when you are extending Worldloom rather than
+using it — a new renderer, scenario, or industry is written here.
 
 The design goal is a single sentence:
 
@@ -306,12 +316,19 @@ Five verbs, each meaning exactly one thing:
 
 There is no third way to do either.
 
-### The CLI is a wrapper
+### The CLI is the surface
 
-The CLI adds no capability the library lacks, and no capability the library lacks is reachable from the CLI. It calls the same five verbs.
+The CLI adds no capability the engine lacks, and nothing the engine can do is
+unreachable from the CLI. It is what an agent drives, so it is the surface that
+matters most:
 
 ```bash
-worldloom build --seed 8128 --out ./demo
+worldloom build      # generate a world from a seed
+worldloom narrate    # requests / accept — the agent handshake
+worldloom render     # materialise into files
+worldloom validate   # check that every document agrees
+worldloom inspect    # show what a corpus contains
+worldloom evals      # export the evaluation set
 ```
 
 ---
