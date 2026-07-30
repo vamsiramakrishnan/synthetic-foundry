@@ -22,13 +22,17 @@ world = (
 world.export("./demo", formats=["pptx", "xlsx", "docx", "jira", "confluence"])
 ```
 
-> **Status: Gate A complete.** The example above does *not* run yet — no renderer exists, so nothing is materialised into a file. What does run today is a world generated deterministically from a seed, and the hand-authored golden episode it was built against:
+> **Status: Gate A complete, renderers landing.** The example above does *not* run in that exact shape yet — the builder chain and DOCX/PPTX/PDF are still ahead. What runs today is a world generated from a seed and materialised into files:
 >
 > ```bash
-> pip install -e .
-> worldloom demo retail-close          # the hand-authored corpus, 1250 coherence checks
-> worldloom build --seed 8128          # generate one instead, and validate it
+> pip install -e ".[xlsx]"
+> worldloom demo retail-close                     # the hand-authored corpus, 1250 checks
+> worldloom build --seed 8128 --incident \
+>     -f xlsx -f markdown -f jira -f confluence -f servicenow \
+>     --out ./dist/demo                           # generate one, render it, validate it
 > ```
+>
+> The workbook carries real formulas — totals are `=SUM(...)`, variances recompute, and a hidden reconciliation sheet checks the sum of the units against what the fact ledger states. Narrative artifacts are resolved outlines: every heading and table final, prose pending the compiler at step 6.
 >
 > Treat the rest of this README as the target API. The [roadmap](#roadmap) marks what is built; [`docs/build-order.md`](docs/build-order.md) is the sequence and the exit gate for each step.
 
@@ -562,8 +566,10 @@ The first executable is `worldloom demo retail-close`, not `worldloom interview`
 - [ ] Direct, cross-artifact, numerical, multi-hop, temporal, and authority question types
 - [ ] Expected abstention and required citation checking
 - [ ] In-repo baseline retriever, so the gate is self-testable
-- [ ] XLSX source model with reconciling totals and recorded fact IDs
-- [ ] Portable Jira, Confluence, and ServiceNow bundles
+- [x] Artifact IR with declared formulas, and a renderer registry
+- [x] XLSX source model: real formulas, named ranges, hidden lineage and reconciliation sheets
+- [x] Portable Jira, Confluence, and ServiceNow bundles
+- [x] Markdown fallback, so every artifact stays readable and diffable
 - [ ] DOCX, then PPTX, then PDF derived from both
 - [ ] LLM as constrained narrative compiler: claim extraction, fact-reference substitution, validation loop
 - [ ] Deterministic fake provider and generation-ledger replay

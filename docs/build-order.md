@@ -388,6 +388,14 @@ Derived from DOCX and PPTX. Do not create a parallel PDF narrative path; that is
 
 A single run produces the XLSX source model, Jira bundle, Confluence bundle, ServiceNow bundle, DOCX memo, PPTX summary, PDF snapshot, and evaluation JSONL — all agreeing, because all compiled from the same fact ledger.
 
+**Formulas are declared in the IR, not invented by a renderer.** *Which* cells are computed, and from what, is a semantic fact the compiler knows. So the IR carries `sum`, `difference`, `ratio_pct`, and `reference` declarations, and each renderer decides only how to spell them: XLSX emits `=SUM(C4:C6)`, Markdown emits the literal. Both agree because both read one declaration.
+
+**The reconciliation sheet must compare against the ledger, not against itself.** Subtracting the P&L's group cell from a sum of the units is tautological when the group cell is itself `=SUM(units)` — it can never disagree, so it proves nothing. The check has to compare the computed sum against the value the fact ledger *states*. That is what makes it a check on the corpus rather than on the spreadsheet's own arithmetic.
+
+**Test the formulas, not the file.** A spreadsheet library stores formulas without evaluating them, so a renderer can emit syntactically valid nonsense and every naive test still passes. The suite carries a small evaluator for the formula shapes the renderer is allowed to produce, and asserts each one resolves to the fact it came from. An unrecognised shape fails the evaluator rather than being skipped.
+
+**Narrative artifacts render as outlines until step 6.** Sections and tables are resolved; `body` is `None`. That is the honest output before a narrative compiler exists, and it is [document outlining](generation-model.md#12-document-outlines) arriving early: prose is later written into a shape that is already correct, rather than inventing structure and data together.
+
 ---
 
 ## 6. Introduce the LLM as a constrained narrative compiler

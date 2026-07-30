@@ -354,13 +354,106 @@ class ArtifactIntent(Model):
     rationale: str | None = None
 
 
+class FormulaKind(StrEnum):
+    """How a computed cell is derived.
+
+    Which cells are computed, and from what, is a *semantic* fact the planner
+    knows — so it is declared in the IR rather than inferred by a renderer. XLSX
+    emits ``=SUM(C4:C6)``; Markdown emits the literal; both agree because both
+    read the same declaration.
+    """
+
+    SUM = "sum"
+    """Sum of the named rows, within this cell's own column."""
+
+    DIFFERENCE = "difference"
+    """First operand column minus the second, within this cell's own row."""
+
+    RATIO_PCT = "ratio_pct"
+    """First operand column divided by the second, as a percentage."""
+
+    REFERENCE = "reference"
+    """A single cell elsewhere, addressed ``table:row:column``."""
+
+
+class Cell(Model):
+    """One value in a table.
+
+    Always carries a literal ``value``, even when it is computed. That is what
+    lets a renderer without formula support stay consistent with one that has it,
+    and it is what the reconciliation check compares against.
+    """
+
+    value: float | str | None = None
+    fact_id: str | None = None
+    formula: FormulaKind | None = None
+    operands: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _formula_needs_operands(self) -> Cell:
+        if self.formula is not None and not self.operands:
+            raise ValueError(f"a {self.formula.value} cell must name its operands")
+        return self
+
+
+class Column(Model):
+    """A table column."""
+
+    key: str
+    label: str
+    number_format: str | None = None
+
+
+class Row(Model):
+    """A table row. ``emphasis`` marks totals."""
+
+    key: str
+    label: str
+    cells: dict[str, Cell] = Field(default_factory=dict)
+    emphasis: bool = False
+
+
+class Table(Model):
+    """A resolved table: every value present, every computation declared."""
+
+    key: str
+    title: str
+    columns: list[Column] = Field(default_factory=list)
+    rows: list[Row] = Field(default_factory=list)
+    note: str | None = None
+
+    def column(self, key: str) -> Column | None:
+        for column in self.columns:
+            if column.key == key:
+                return column
+        return None
+
+    def row(self, key: str) -> Row | None:
+        for row in self.rows:
+            if row.key == key:
+                return row
+        return None
+
+
 class ArtifactSection(Model):
-    """One resolved section of an artifact."""
+    """One resolved section of an artifact.
+
+    ``body`` is ``None`` while a section is awaiting prose. That is the ordinary
+    state before the narrative compiler exists: structure and tables are resolved
+    first, so prose is later written against data that already exists.
+    """
 
     heading: str
     body: str | None = None
-    table: list[dict[str, Any]] | None = None
+    table: Table | None = None
     fact_ids: list[str] = Field(default_factory=list)
+    hidden: bool = False
+    """Present in the artifact but not part of its readable surface."""
+
+    @property
+    def awaiting_prose(self) -> bool:
+        """Whether this section still needs narrative."""
+        return self.body is None and self.table is None
 
 
 class ArtifactIR(Model):
@@ -373,7 +466,26 @@ class ArtifactIR(Model):
     id: str
     intent_id: str
     title: str
+    subtitle: str | None = None
     sections: list[ArtifactSection] = Field(default_factory=list)
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+    def tables(self) -> list[Table]:
+        """Every table in this artifact, in order."""
+        return [s.table for s in self.sections if s.table is not None]
+
+    def fact_ids(self) -> list[str]:
+        """Every fact this artifact rests on, deduplicated, order preserved."""
+        seen: dict[str, None] = {}
+        for section in self.sections:
+            for fact_id in section.fact_ids:
+                seen.setdefault(fact_id, None)
+            if section.table:
+                for row in section.table.rows:
+                    for cell in row.cells.values():
+                        if cell.fact_id:
+                            seen.setdefault(cell.fact_id, None)
+        return list(seen)
 
 
 class ArtifactManifestEntry(Model):

@@ -16,10 +16,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+xlsx = ["openpyxl>=3.1"]
 polars = ["polars>=0.20"]
 pandas = ["pandas>=2.0"]
 arrow = ["pyarrow>=15.0"]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "openpyxl>=3.1"]
 
 [project.scripts]
 worldloom = "worldloom.cli:app"

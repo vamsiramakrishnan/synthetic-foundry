@@ -11,7 +11,7 @@ against, so their shape matters more than their current implementation.
 from __future__ import annotations
 
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -29,6 +29,7 @@ from .ids import Minter
 from .models import (
     AccessPolicy,
     ArtifactIntent,
+    ArtifactIR,
     ArtifactManifestEntry,
     Authority,
     BusinessUnit,
@@ -71,6 +72,7 @@ class World:
     _facts: tuple[CanonicalFact, ...] = ()
     _events: tuple[EnterpriseEvent, ...] = ()
     _artifact_intents: tuple[ArtifactIntent, ...] = ()
+    _artifact_irs: tuple[ArtifactIR, ...] = ()
     _artifacts: tuple[ArtifactManifestEntry, ...] = ()
     _intentional_errors: tuple[IntentionalError, ...] = ()
     _evaluations: tuple[EvaluationCase, ...] = ()
@@ -86,6 +88,8 @@ class World:
     _roles: dict[str, str] = field(default_factory=dict)
     _minter: Minter | None = None
     _annual_revenue: int = 0
+    _rendered: tuple = ()
+    """Rendered payloads, held until ``export`` writes them."""
 
     # -- construction ------------------------------------------------------
 
@@ -118,6 +122,7 @@ class World:
             _facts=tuple(corpus.load_models(root / corpus.FACTS_FILE, CanonicalFact)),
             _events=tuple(corpus.load_models(root / corpus.EVENTS_FILE, EnterpriseEvent)),
             _artifact_intents=tuple(corpus.load_models(root / corpus.INTENTS_FILE, ArtifactIntent)),
+            _artifact_irs=tuple(corpus.load_models(root / corpus.IR_FILE, ArtifactIR)),
             _artifacts=tuple(corpus.load_models(root / corpus.MANIFEST_FILE, ArtifactManifestEntry)),
             _intentional_errors=tuple(corpus.load_models(root / corpus.ERRORS_FILE, IntentionalError)),
             _evaluations=tuple(corpus.load_models(root / corpus.EVALS_FILE, EvaluationCase)),
@@ -180,6 +185,15 @@ class World:
         step 6. An intent is the decision that a document should exist.
         """
         return Collection(self._artifact_intents, label="ArtifactIntentCollection")
+
+    @property
+    def artifact_irs(self) -> Collection[ArtifactIR]:
+        """Compiled artifact content, format-independent.
+
+        Populated by ``render()``. A renderer reads these and nothing else, which
+        is what keeps two formats of one artifact in agreement.
+        """
+        return Collection(self._artifact_irs, label="ArtifactIRCollection")
 
     @property
     def artifacts(self) -> ArtifactCollection:
@@ -313,6 +327,7 @@ class World:
             _facts=self._facts + facts,
             _events=self._events + events,
             _artifact_intents=self._artifact_intents + artifact_intents,
+            _artifact_irs=self._artifact_irs,
             _artifacts=self._artifacts + artifacts,
             _intentional_errors=self._intentional_errors + intentional_errors,
             _evaluations=self._evaluations + evaluations,
@@ -325,6 +340,101 @@ class World:
             _minter=self._minter,
             _annual_revenue=self._annual_revenue,
         )
+
+    def render(self, *formats: str) -> World:
+        """Compile artifact intents into IR, render them, and record the manifest.
+
+            world = world.render("xlsx", "markdown", "jira")
+            world.export("./dist/demo")
+
+        Every format is a projection of one resolved IR, which is why two formats
+        of the same artifact cannot disagree. Bodies are held in memory until
+        ``export`` writes them.
+        """
+        from . import documents, render as render_module
+        from .ids import Minter
+
+        if not formats:
+            raise ValueError(f"name at least one format: {', '.join(render_module.available())}")
+        if not self._artifact_intents:
+            raise ValueError("nothing to render — run a scenario first to plan artifacts")
+
+        minter = self._minter or Minter()
+        facts = {fact.id: fact for fact in self._facts}
+
+        irs = tuple(
+            documents.compile_intent(self, intent, minter) for intent in self._artifact_intents
+        )
+        staged = replace(self, _artifact_irs=irs)
+
+        rendered: list[render_module.Rendered] = []
+        for name in formats:
+            rendered.extend(render_module.renderer(name)(staged))
+
+        # One manifest entry per artifact, describing the first file rendered for
+        # it. An artifact rendered to several formats keeps one identity.
+        entries: list[ArtifactManifestEntry] = []
+        seen: set[str] = set()
+        for item in rendered:
+            if item.artifact_id in seen:
+                continue
+            seen.add(item.artifact_id)
+            intent = next(i for i in self._artifact_intents if i.id == item.artifact_id)
+            ir = next(r for r in irs if r.intent_id == intent.id)
+            authority, lifecycle = documents.standing(intent.artifact_type)
+            entries.append(
+                ArtifactManifestEntry(
+                    id=intent.id,
+                    intent_id=intent.id,
+                    title=ir.title,
+                    artifact_type=intent.artifact_type,
+                    domain=intent.domain,
+                    path=item.path,
+                    media_type=item.media_type,
+                    author_id=intent.author_id,
+                    audience=intent.audience,
+                    created_at=documents.written_at(intent, facts),
+                    authority=authority,
+                    lifecycle=lifecycle,
+                    supporting_fact_ids=list(intent.required_fact_ids),
+                    event_ids=list(intent.triggered_by),
+                    lore_ids=sorted({
+                        lore_id
+                        for fact_id in intent.required_fact_ids
+                        if fact_id in facts
+                        for lore_id in facts[fact_id].lore_ids
+                    }),
+                    access_policy_id=self._policy_for(intent.audience),
+                    recipe=intent.artifact_type,
+                )
+            )
+
+        return replace(
+            self,
+            _artifact_irs=irs,
+            _artifacts=tuple(entries),
+            _rendered=tuple(rendered),
+        )
+
+    def _policy_for(self, audience: str) -> str | None:
+        """Map an intent's audience onto an access policy.
+
+        Falls back to the most restrictive policy rather than the most permissive:
+        an unrecognised audience should not accidentally publish to all staff.
+        """
+        if not self._access_policies:
+            return None
+        by_label = {policy.label.lower(): policy.id for policy in self._access_policies}
+        wanted = {
+            "all_staff": "all staff",
+            "finance": "finance and audit only",
+            "group_cfo": "finance and audit only",
+            "executive_committee": "executive committee only",
+            "technology": "technology and service operations",
+        }.get(audience)
+        if wanted and wanted in by_label:
+            return by_label[wanted]
+        return self._access_policies[-1].id
 
     # -- operations --------------------------------------------------------
 
@@ -372,6 +482,8 @@ class World:
         corpus.write_jsonl(target / corpus.EVENTS_FILE, list(self._events))
         if self._artifact_intents:
             corpus.write_jsonl(target / corpus.INTENTS_FILE, list(self._artifact_intents))
+        if self._artifact_irs:
+            corpus.write_jsonl(target / corpus.IR_FILE, list(self._artifact_irs))
         if self._artifacts:
             corpus.write_jsonl(target / corpus.MANIFEST_FILE, list(self._artifacts))
         corpus.write_jsonl(target / corpus.ERRORS_FILE, list(self._intentional_errors))
@@ -379,7 +491,14 @@ class World:
         if self._ledger:
             corpus.write_jsonl(target / corpus.LEDGER_FILE, list(self._ledger))
 
-        if self.root is not None:
+        # Rendered bodies, when this world was rendered in memory.
+        for item in self._rendered:
+            destination = target / item.path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(item.payload)
+
+        # Or copied through, when it was loaded from a corpus on disk.
+        if self.root is not None and not self._rendered:
             source_dir = self.root / corpus.ARTIFACTS_DIR
             if source_dir.is_dir():
                 shutil.copytree(source_dir, target / corpus.ARTIFACTS_DIR)

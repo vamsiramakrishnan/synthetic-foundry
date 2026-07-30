@@ -29,7 +29,7 @@ jobs:
           cache: pip
 
       - name: Install
-        run: pip install -e ".[dev,polars]"
+        run: pip install -e ".[dev,polars,xlsx]"
 
       - name: Tests
         run: pytest -q
@@ -41,3 +41,10 @@ jobs:
 
       - name: Generated world validates
         run: worldloom build --seed 8128 --out "${{ runner.temp }}/generated"
+
+      - name: Rendered corpus validates
+        run: |
+          worldloom build --seed 8128 --incident \
+            -f xlsx -f markdown -f jira -f confluence -f servicenow \
+            --out "${{ runner.temp }}/rendered"
+          worldloom validate "${{ runner.temp }}/rendered"

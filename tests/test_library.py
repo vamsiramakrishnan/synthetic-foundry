@@ -155,6 +155,36 @@ def test_cli_build_can_force_the_incident_off(tmp_path) -> None:
     assert "incident_rca" not in {i.artifact_type for i in world.artifact_intents}
 
 
+def test_cli_build_renders_when_asked(tmp_path) -> None:
+    out = tmp_path / "rendered"
+    result = runner.invoke(app, [
+        "build", "--seed", "8128", "--incident",
+        "-f", "xlsx", "-f", "markdown", "-f", "jira", "-f", "confluence", "-f", "servicenow",
+        "--out", str(out),
+    ])
+    assert result.exit_code == 0, result.output
+    assert (out / "artifact-manifest.jsonl").is_file()
+    assert (out / "artifact-ir.jsonl").is_file()
+    assert list(out.glob("artifacts/*.xlsx")), "the workbook should be rendered"
+    assert (out / "jira" / "issues.jsonl").is_file()
+    assert (out / "servicenow" / "incident.json").is_file()
+    assert (out / "confluence" / "pages.jsonl").is_file()
+
+    assert runner.invoke(app, ["validate", str(out)]).exit_code == 0
+
+
+def test_cli_rejects_an_unknown_format(tmp_path) -> None:
+    result = runner.invoke(app, ["build", "--format", "powerpoint", "--out", str(tmp_path / "x")])
+    assert result.exit_code == 2
+    assert "unknown format" in result.output
+
+
+def test_cli_lists_formats() -> None:
+    result = runner.invoke(app, ["formats"])
+    assert result.exit_code == 0
+    assert "xlsx" in result.output and "servicenow" in result.output
+
+
 def test_cli_validate_passes_on_the_golden_episode() -> None:
     result = runner.invoke(app, ["validate", "retail-close"])
     assert result.exit_code == 0, result.output

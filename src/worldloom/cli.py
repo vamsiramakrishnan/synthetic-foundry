@@ -102,6 +102,10 @@ def build(
         help="Force the operational incident on or off. Omit to let the seed and lore decide.",
     ),
     employees: int = typer.Option(80_000, "--employees", help="Stated headcount for the company."),
+    formats: list[str] = typer.Option(
+        None, "--format", "-f",
+        help="Render these formats. Repeatable. Omit to plan artifacts without rendering.",
+    ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
 ) -> None:
     """Generate a world deterministically from a seed, then validate it.
@@ -114,6 +118,15 @@ def build(
 
     world = RetailWorld(seed=seed, employees=employees).build()
     world = world.run(MonthEndClose(period=period, include_operational_incident=incident))
+
+    if formats:
+        from .render import RenderError
+
+        try:
+            world = world.render(*formats)
+        except RenderError as exc:
+            err.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=2) from exc
 
     console.print(_summary_table(world))
     console.print()
@@ -237,6 +250,15 @@ def evals_export(
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(payload, encoding="utf-8")
         console.print(f"[green]✓[/green] {len(lines)} case(s) written to [bold]{out}[/bold]")
+
+
+@app.command()
+def formats() -> None:
+    """List the renderers this installation has."""
+    from .render import available
+
+    for name in available():
+        console.print(name)
 
 
 @app.command()
