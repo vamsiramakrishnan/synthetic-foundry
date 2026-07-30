@@ -109,9 +109,11 @@ def artifact_intents(
                "The incident record is the system of record for the operational timeline.")
 
         intent("incident_rca", "engineering", "technology", roles["platform_senior"],
-               [k["fact_feed_status"], k["fact_hypothesis"], k["fact_cause"], k["fact_affected"],
-                k["fact_recurrence"], k["fact_workaround"], k["fact_classification"], k["fact_owner"],
-                k["fact_remediation"], k["fact_remediation_scope"]],
+               [k["fact_feed_status"], k["fact_incident_ref"], k["fact_hypothesis"],
+                k["fact_cause_ruled_out"], k["fact_cause"], k["fact_affected"],
+                k["fact_valuation_status"], k["fact_recurrence"], k["fact_workaround"],
+                k["fact_classification"], k["fact_owner"], k["fact_remediation"],
+                k["fact_remediation_scope"], k["fact_close_delayed"]],
                [k["event_root_cause"], k["event_control_failure"]], "long",
                "A P2 incident that delayed the close warrants a reviewed RCA.")
 

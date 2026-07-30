@@ -420,18 +420,61 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
 # Narrative artifacts — outline only, until step 6
 # ---------------------------------------------------------------------------
 
-#: Section headings per narrative artifact type. Ordering is the document's
-#: argument, so it is decided here rather than left to a prompt.
-_OUTLINES: dict[str, tuple[str, ...]] = {
-    "cfo_variance_memo": ("Position", "By business unit", "Close timetable", "Recommendation"),
-    "executive_summary": ("In brief", "Close", "Focus next period"),
-    "incident_rca": ("Summary", "Timeline", "Initial assessment and why it was wrong",
-                     "Root cause", "Contributing factors", "Actions"),
-    "working_note": ("Checklist", "Running note", "Points to carry"),
-    "confluence_page": ("Current position", "Next steps"),
-    "knowledge_article": ("When to use this", "Cause", "Procedure", "Important"),
-    "close_calendar": ("Commitment", "This period", "Escalation"),
+#: The outline of each narrative artifact type: heading, the fact kinds that
+#: section is *about*, and whose figures it uses.
+#:
+#: Sections partition the facts rather than all receiving the same set. That is
+#: what an outline is for — a section headed "By business unit" that also restates
+#: the group position is not an outline, it is a repeated list. Assigning facts per
+#: section here means each narrative request is bounded to what its section is
+#: actually arguing.
+#:
+#: ``scope`` is ``group`` (company-level subjects only), ``unit`` (business units
+#: only), or ``any``.
+_OUTLINES: dict[str, tuple[tuple[str, tuple[str, ...], str], ...]] = {
+    "cfo_variance_memo": (
+        ("Position", ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."), "group"),
+        ("By business unit", ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."), "unit"),
+        ("Drivers", ("metric.",), "any"),
+        ("Close timetable", ("close.", "ops.cause", "ops.workaround", "financial.incident_pl_impact"), "any"),
+        ("Recommendation", ("ops.remediation", "ops.root_cause_classification", "ops.mapping_table_owner"), "any"),
+    ),
+    "executive_summary": (
+        ("In brief", ("financial.revenue.", "financial.gross_margin_pct."), "group"),
+        ("Close", ("close.", "financial.incident_pl_impact"), "any"),
+        ("Focus next period", ("metric.",), "any"),
+    ),
+    "incident_rca": (
+        ("Summary", ("ops.feed_status", "ops.affected_records"), "any"),
+        ("Timeline", ("ops.incident_opened", "ops.valuation_status", "close."), "any"),
+        ("Initial assessment and why it was wrong", ("ops.cause_ruled_out",), "any"),
+        ("Root cause", ("ops.cause", "ops.root_cause_classification", "ops.mapping_table_owner"), "any"),
+        ("Contributing factors", ("ops.previous_similar_incident", "ops.workaround"), "any"),
+        ("Actions", ("ops.remediation",), "any"),
+    ),
+    "working_note": (
+        ("Where the close stands", ("close.",), "any"),
+        ("Running note", ("ops.",), "any"),
+    ),
+    "confluence_page": (
+        # A triage page knows the symptom and the first guess, nothing more.
+        ("Current position", ("ops.feed_status", "ops.incident_opened"), "any"),
+        ("Next steps", ("ops.cause",), "any"),
+    ),
+    "knowledge_article": (
+        ("When to use this", ("ops.feed_status", "ops.affected_records"), "any"),
+        ("Cause", ("ops.cause", "ops.mapping_table_owner"), "any"),
+        ("Procedure", ("ops.workaround",), "any"),
+    ),
+    "close_calendar": (
+        ("Commitment", ("close.due_date",), "any"),
+        ("Escalation", ("close.revised_date", "close.status", "close.delay"), "any"),
+    ),
 }
+
+_DEFAULT_OUTLINE: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("Summary", ("",), "any"),
+)
 
 
 def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
@@ -443,7 +486,15 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     correct rather than inventing structure and data together.
     """
     facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
-    headings = _OUTLINES.get(intent.artifact_type, ("Summary", "Detail"))
+    plan = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
+    unit_ids = {unit.id for unit in world.business_units}
+
+    def in_scope(fact: CanonicalFact, scope: str) -> bool:
+        if scope == "group":
+            return fact.subject == world.company.id
+        if scope == "unit":
+            return fact.subject in unit_ids
+        return True
 
     supporting = Table(
         key="supporting_facts",
@@ -476,10 +527,19 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     author = world.people.by_id(intent.author_id)
     persona = world.personas.get(author.persona_id) if author.persona_id else None
 
-    sections = [
-        ArtifactSection(heading=heading, body=None, fact_ids=[f.id for f in facts])
-        for heading in headings
-    ]
+    sections: list[ArtifactSection] = []
+    for heading, prefixes, scope in plan:
+        assigned = [
+            fact.id
+            for fact in facts
+            if in_scope(fact, scope) and any(fact.kind.startswith(prefix) for prefix in prefixes)
+        ]
+        # A section with nothing to say does not belong in the document. The plan
+        # follows the episode, so a close without an incident gets no incident
+        # sections rather than an empty heading.
+        if assigned:
+            sections.append(ArtifactSection(heading=heading, body=None, fact_ids=assigned))
+
     sections.append(ArtifactSection(heading="Supporting facts", table=supporting, hidden=True))
 
     return ArtifactIR(

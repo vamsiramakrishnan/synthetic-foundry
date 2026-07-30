@@ -106,6 +106,14 @@ def build(
         None, "--format", "-f",
         help="Render these formats. Repeatable. Omit to plan artifacts without rendering.",
     ),
+    narrate: bool = typer.Option(
+        False, "--narrate",
+        help="Generate prose with the built-in deterministic provider (no network, no key).",
+    ),
+    replay: Path = typer.Option(
+        None, "--replay",
+        help="Replay narration from an existing corpus's generation ledger instead of generating.",
+    ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
 ) -> None:
     """Generate a world deterministically from a seed, then validate it.
@@ -118,6 +126,33 @@ def build(
 
     world = RetailWorld(seed=seed, employees=employees).build()
     world = world.run(MonthEndClose(period=period, include_operational_incident=incident))
+
+    if narrate or replay is not None:
+        from .narrative import DeterministicProvider, ProviderError, UnreachableProvider
+
+        ledger = ()
+        provider = DeterministicProvider()
+        if replay is not None:
+            source = _load(str(replay))
+            ledger = source._ledger
+            if not ledger:
+                err.print(f"[red]error:[/red] {replay} carries no generation ledger to replay")
+                raise typer.Exit(code=2)
+            # Unreachable on purpose: a replay that quietly falls back to
+            # generating would not be a replay.
+            provider = UnreachableProvider()
+
+        try:
+            world = world.narrate(provider, ledger=ledger)
+        except ProviderError as exc:
+            err.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=2) from exc
+
+        calls, replayed, rejected = world._narration
+        console.print(
+            f"[dim]narration:[/dim] {calls} provider call(s), {replayed} replayed"
+            f", {rejected} rejected\n"
+        )
 
     if formats:
         from .render import RenderError

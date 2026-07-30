@@ -460,6 +460,14 @@ The deterministic fake provider is what makes the whole pipeline testable in CI 
 
 No generated numerical, temporal, or entity claim is accepted without fact support. The LLM may choose emphasis and wording. It may not choose reality.
 
+**Land the interface and the fake provider; ship no real adapter.** The whole pipeline — request shaping, claim extraction, the validation loop, ledger write and replay — is then testable with no key, no network, and no spend, and the first real adapter is written against a contract that already works. The fake is a contract fixture, not a stand-in for quality: it composes sentences from templates keyed on fact kind, and any judgement about prose has to wait for a real model.
+
+**Prove replay against the files, not the objects.** The artifact a user hands to someone else is a directory. So the test generates a corpus, regenerates it from its ledger with the provider made unreachable, and diffs the two directories byte for byte — including the XLSX. CI runs it on every push.
+
+**Knowability is `valid_from <= cutoff`, not `holds_at(cutoff)`.** Those are different questions: whether a fact was *true* at a moment, and whether an author writing later may *refer* to it. An RCA is largely about a belief that turned out to be wrong, so testing currency makes the most important document in the corpus unwritable. A superseded fact is legitimate material for a later document — it simply has to read as history rather than as the current position.
+
+**Sections partition the facts.** An outline whose every section receives the same fact set produces a document that says the same thing five times. Each heading declares the fact kinds it is *about*, and a section with nothing to say is dropped rather than left empty — the plan follows the episode, the same rule as artifact planning.
+
 ---
 
 ## 7. Build a second vertical before generalising

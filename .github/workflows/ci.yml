@@ -48,3 +48,16 @@ jobs:
             -f xlsx -f markdown -f jira -f confluence -f servicenow \
             --out "${{ runner.temp }}/rendered"
           worldloom validate "${{ runner.temp }}/rendered"
+
+      # Narrate, then regenerate from the ledger with the provider unreachable,
+      # and require the two corpora to be byte-identical. This is the project's
+      # central claim, enforced rather than asserted.
+      - name: Narration replays byte-for-byte
+        run: |
+          FORMATS="-f xlsx -f markdown -f jira -f confluence -f servicenow"
+          worldloom build --seed 8128 --incident --narrate $FORMATS \
+            --out "${{ runner.temp }}/narrated"
+          worldloom build --seed 8128 --incident --replay "${{ runner.temp }}/narrated" \
+            $FORMATS --out "${{ runner.temp }}/replayed"
+          diff -r "${{ runner.temp }}/narrated" "${{ runner.temp }}/replayed"
+          worldloom validate "${{ runner.temp }}/replayed"

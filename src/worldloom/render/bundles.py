@@ -283,7 +283,7 @@ def render_confluence(world: World) -> list[Rendered]:
                 "author": intent.author_id,
                 "created": manifest.created_at.isoformat() if manifest else None,
                 "version": 1,
-                "body": markdown.render(ir).decode("utf-8"),
+                "body": markdown.render(ir, facts).decode("utf-8"),
                 "labels": [intent.domain, intent.artifact_type],
                 "worldloom_fact_ids": list(intent.required_fact_ids),
                 # A page whose facts have since been superseded is stale. Labelled

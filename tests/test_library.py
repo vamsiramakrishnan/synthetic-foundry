@@ -173,6 +173,37 @@ def test_cli_build_renders_when_asked(tmp_path) -> None:
     assert runner.invoke(app, ["validate", str(out)]).exit_code == 0
 
 
+def test_cli_narrates_and_then_replays(tmp_path) -> None:
+    first, second = tmp_path / "first", tmp_path / "second"
+
+    generated = runner.invoke(app, [
+        "build", "--seed", "8128", "--incident", "--narrate", "-f", "markdown", "--out", str(first),
+    ])
+    assert generated.exit_code == 0, generated.output
+    assert "provider call(s)" in generated.output
+    assert (first / "generation-ledger.jsonl").is_file()
+
+    replayed = runner.invoke(app, [
+        "build", "--seed", "8128", "--incident", "--replay", str(first), "-f", "markdown", "--out", str(second),
+    ])
+    assert replayed.exit_code == 0, replayed.output
+    assert "0 provider call(s)" in replayed.output
+
+    for path in first.rglob("*"):
+        if path.is_file():
+            relative = path.relative_to(first)
+            assert path.read_bytes() == (second / relative).read_bytes(), relative
+
+
+def test_cli_refuses_to_replay_a_corpus_with_no_ledger(tmp_path) -> None:
+    plain = tmp_path / "plain"
+    assert runner.invoke(app, ["build", "--seed", "8128", "--out", str(plain)]).exit_code == 0
+
+    result = runner.invoke(app, ["build", "--seed", "8128", "--replay", str(plain)])
+    assert result.exit_code == 2
+    assert "no generation ledger" in result.output
+
+
 def test_cli_rejects_an_unknown_format(tmp_path) -> None:
     result = runner.invoke(app, ["build", "--format", "powerpoint", "--out", str(tmp_path / "x")])
     assert result.exit_code == 2

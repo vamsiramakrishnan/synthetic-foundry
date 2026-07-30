@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..models import ArtifactIR, Table
+from ..models import ArtifactIR, CanonicalFact, Table
+from ..narrative import references
 from . import Rendered
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -57,8 +58,13 @@ def _table(table: Table) -> str:
     return "\n".join(lines)
 
 
-def render(ir: ArtifactIR) -> bytes:
-    """Render one IR to Markdown bytes."""
+def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> bytes:
+    """Render one IR to Markdown bytes.
+
+    Prose carries ``{{fact:ID}}`` references; *facts* resolves them at render time.
+    Without it the references stay visible, which is the right failure — a document
+    that quietly drops a figure reads as complete and is not.
+    """
     parts: list[str] = [f"# {ir.title}"]
     if ir.subtitle:
         parts.append(f"**{ir.subtitle}**")
@@ -82,7 +88,7 @@ def render(ir: ArtifactIR) -> bytes:
         parts.append(heading)
 
         if section.body:
-            parts.append(section.body)
+            parts.append(references.substitute(section.body, facts) if facts else section.body)
         elif section.table is not None:
             parts.append(_table(section.table))
         else:
@@ -130,7 +136,7 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug}.md",
                 media_type="text/markdown",
-                payload=render(ir),
+                payload=render(ir, {fact.id: fact for fact in world.facts}),
             )
         )
     return out

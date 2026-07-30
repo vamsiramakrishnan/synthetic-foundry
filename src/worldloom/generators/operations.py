@@ -331,6 +331,7 @@ def _incident_chain(
         "fact_feed_status": status.id,
         "fact_incident_ref": reference.id,
         "fact_hypothesis": hypothesis.id,
+        "fact_cause_ruled_out": dismissal.id,
         "fact_cause": cause.id,
         "fact_affected": records.id,
         "fact_recurrence": recurrence.id,

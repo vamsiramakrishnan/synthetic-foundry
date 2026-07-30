@@ -90,6 +90,8 @@ class World:
     _annual_revenue: int = 0
     _rendered: tuple = ()
     """Rendered payloads, held until ``export`` writes them."""
+    _narration: tuple = ()
+    """(provider calls, replayed, rejected) from the last narration pass."""
 
     # -- construction ------------------------------------------------------
 
@@ -341,8 +343,59 @@ class World:
             _annual_revenue=self._annual_revenue,
         )
 
+    def compile(self) -> World:
+        """Turn artifact intents into IR: resolved sections, tables, and references.
+
+        Structure and data are resolved *before* any prose exists, so narrative is
+        later written against numbers that already agree. Called automatically by
+        ``narrate`` and ``render`` when needed.
+        """
+        from . import documents
+        from .ids import Minter
+
+        if not self._artifact_intents:
+            raise ValueError("nothing to compile — run a scenario first to plan artifacts")
+
+        minter = self._minter or Minter()
+        irs = tuple(
+            documents.compile_intent(self, intent, minter) for intent in self._artifact_intents
+        )
+        return replace(self, _artifact_irs=irs, _artifacts=self._manifest_for(irs))
+
+    def narrate(
+        self,
+        provider: Any,
+        *,
+        ledger: tuple[GenerationLedgerEntry, ...] | None = None,
+        retries: int = 2,
+    ) -> World:
+        """Fill every section awaiting prose, replaying from a ledger where possible.
+
+            world = world.narrate(DeterministicProvider())
+
+        This is the only stage that touches a model, so it is a separate verb rather
+        than folded into ``render`` — a call that may cost money should be one you
+        wrote.
+
+        Pass ``ledger`` to replay: every recorded call is served from the ledger and
+        the provider is never asked, which is how a world regenerates byte-identical
+        without depending on model calls being reproducible.
+        """
+        from .narrative import compiler
+
+        staged = self if self._artifact_irs else self.compile()
+        available = self._ledger if ledger is None else ledger
+        result = compiler.narrate(staged, provider, ledger=available, retries=retries)
+
+        return replace(
+            staged,
+            _artifact_irs=result.irs,
+            _ledger=result.ledger,
+            _narration=(result.provider_calls, result.replayed, result.rejected),
+        )
+
     def render(self, *formats: str) -> World:
-        """Compile artifact intents into IR, render them, and record the manifest.
+        """Render the compiled artifacts and record the manifest.
 
             world = world.render("xlsx", "markdown", "jira")
             world.export("./dist/demo")
@@ -350,37 +403,48 @@ class World:
         Every format is a projection of one resolved IR, which is why two formats
         of the same artifact cannot disagree. Bodies are held in memory until
         ``export`` writes them.
+
+        Compiles first if needed, and leaves existing IR alone — so narrating and
+        then rendering keeps the prose rather than discarding it.
         """
-        from . import documents, render as render_module
-        from .ids import Minter
+        from . import render as render_module
 
         if not formats:
             raise ValueError(f"name at least one format: {', '.join(render_module.available())}")
         if not self._artifact_intents:
             raise ValueError("nothing to render — run a scenario first to plan artifacts")
 
-        minter = self._minter or Minter()
-        facts = {fact.id: fact for fact in self._facts}
-
-        irs = tuple(
-            documents.compile_intent(self, intent, minter) for intent in self._artifact_intents
-        )
-        staged = replace(self, _artifact_irs=irs)
+        staged = self if self._artifact_irs else self.compile()
+        irs = staged._artifact_irs
 
         rendered: list[render_module.Rendered] = []
         for name in formats:
             rendered.extend(render_module.renderer(name)(staged))
 
-        # One manifest entry per artifact, describing the first file rendered for
-        # it. An artifact rendered to several formats keeps one identity.
+        return replace(
+            staged,
+            _artifacts=self._manifest_for(irs, rendered=rendered),
+            _rendered=tuple(rendered),
+        )
+
+    def _manifest_for(self, irs, rendered=None):  # type: ignore[no-untyped-def]
+        """Build manifest entries for compiled artifacts.
+
+        Paths come from the rendered files when there are any; a compiled but
+        unrendered artifact still gets an entry so the plan is inspectable, with an
+        empty path until a renderer gives it one.
+        """
+        from . import documents
+
+        facts = {fact.id: fact for fact in self._facts}
+        first_file: dict[str, object] = {}
+        for item in rendered or ():
+            first_file.setdefault(item.artifact_id, item)
+
         entries: list[ArtifactManifestEntry] = []
-        seen: set[str] = set()
-        for item in rendered:
-            if item.artifact_id in seen:
-                continue
-            seen.add(item.artifact_id)
-            intent = next(i for i in self._artifact_intents if i.id == item.artifact_id)
-            ir = next(r for r in irs if r.intent_id == intent.id)
+        for ir in irs:
+            intent = next(i for i in self._artifact_intents if i.id == ir.intent_id)
+            item = first_file.get(intent.id)
             authority, lifecycle = documents.standing(intent.artifact_type)
             entries.append(
                 ArtifactManifestEntry(
@@ -389,8 +453,8 @@ class World:
                     title=ir.title,
                     artifact_type=intent.artifact_type,
                     domain=intent.domain,
-                    path=item.path,
-                    media_type=item.media_type,
+                    path=getattr(item, "path", ""),
+                    media_type=getattr(item, "media_type", "application/x-worldloom-ir"),
                     author_id=intent.author_id,
                     audience=intent.audience,
                     created_at=documents.written_at(intent, facts),
@@ -408,13 +472,7 @@ class World:
                     recipe=intent.artifact_type,
                 )
             )
-
-        return replace(
-            self,
-            _artifact_irs=irs,
-            _artifacts=tuple(entries),
-            _rendered=tuple(rendered),
-        )
+        return tuple(entries)
 
     def _policy_for(self, audience: str) -> str | None:
         """Map an intent's audience onto an access policy.
@@ -547,6 +605,7 @@ class Summary:
             ("Labelled imperfections", f"{len(world.intentional_errors):,}"),
             ("Evaluation cases", f"{len(world.evaluations):,}"),
             ("Generation ledger", f"{len(world.ledger):,} entries"),
+            ("Narrated sections", f"{sum(1 for ir in world.artifact_irs for s in ir.sections if s.body):,}"),
             ("Reporting period", world.period or "—"),
             ("Seed", "—" if world.seed is None else str(world.seed)),
         ]
