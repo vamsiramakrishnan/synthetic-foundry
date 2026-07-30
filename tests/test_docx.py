@@ -238,3 +238,102 @@ def test_acronyms_survive_the_title(rendered: World) -> None:
     titles = {ir.title for ir in rendered.artifact_irs}
     assert "CFO Variance Memo" in titles
     assert not any("Cfo" in title for title in titles)
+
+
+# ---------------------------------------------------------------------------
+# Document furniture
+# ---------------------------------------------------------------------------
+
+
+def _one(rendered: World, fragment: str):  # type: ignore[no-untyped-def]
+    item = next(r for r in rendered._rendered if fragment in r.path and r.path.endswith(".docx"))
+    return _document(item.payload)
+
+
+def test_pages_are_a4_with_corporate_margins(rendered: World) -> None:
+    """The worlds this renders are not American."""
+    for payload in _files(rendered, ".docx").values():
+        section = _document(payload).sections[0]
+        assert round(section.page_width.mm) == 210
+        assert round(section.page_height.mm) == 297
+        assert round(section.top_margin.mm) == 22
+
+
+def test_the_header_names_the_world_and_the_document(rendered: World) -> None:
+    document = _one(rendered, "incident-rca")
+    header = document.sections[0].header.paragraphs[0].text
+    assert rendered.company.name in header
+    assert "Incident RCA" in header
+
+
+def test_the_footer_counts_pages_with_a_field_not_a_literal(rendered: World) -> None:
+    """A written page count is wrong the moment a section is added."""
+    footer = _one(rendered, "incident-rca").sections[0].footer.paragraphs[0]
+    xml = footer._element.xml
+    assert "PAGE" in xml and "NUMPAGES" in xml
+    assert "fldChar" in xml, "page number should be a Word field"
+
+
+def test_long_documents_get_a_contents_field(rendered: World) -> None:
+    """A field, so Word builds it from the headings actually present."""
+    from worldloom.render.docx import _TOC_THRESHOLD
+
+    for ir in rendered.artifact_irs:
+        payload = _files(rendered, ".docx").get(ir.id)
+        if payload is None:
+            continue
+        visible = [s for s in ir.sections if not s.hidden]
+        xml = _document(payload).element.xml
+        assert (" TOC " in xml) == (len(visible) >= _TOC_THRESHOLD), ir.id
+
+
+def test_table_headers_are_shaded_and_negatives_are_marked(rendered: World) -> None:
+    """A financial table nobody can scan is a financial table nobody reads."""
+    from worldloom.render.docx import _HEADER_FILL
+
+    document = _one(rendered, "cfo-variance-memo")
+    assert _HEADER_FILL in document.element.xml
+    # Parenthesised, so the sign survives a black-and-white printer; the colour
+    # is the second signal, never the only one.
+    assert any("(" in cell.text for table in document.tables for row in table.rows for cell in row.cells)
+
+
+def test_the_memo_carries_a_divisional_table_and_a_figure(rendered: World) -> None:
+    """A variance memo without a table makes its reader hold four numbers in their
+    head while reading a paragraph about them."""
+    ir = next(
+        ir for ir in rendered.artifact_irs
+        if rendered.artifact_intents.by_id(ir.intent_id).artifact_type == "cfo_variance_memo"
+    )
+    section = next(s for s in ir.sections if s.heading == "Divisional summary")
+    assert section.table is not None and section.charts
+
+    body = _text_of(_one(rendered, "cfo-variance-memo"))
+    assert "Figure — Revenue against plan by division" in body
+    assert "█" in body, "the figure should draw proportional bars"
+
+
+def _text_of(document) -> str:  # type: ignore[no-untyped-def]
+    parts = [p.text for p in document.paragraphs]
+    for table in document.tables:
+        for row in table.rows:
+            parts.extend(cell.text for cell in row.cells)
+    return "\n".join(parts)
+
+
+def test_the_figure_plots_the_same_values_the_table_shows(rendered: World) -> None:
+    """The bars are drawn from the cells beside them, so they cannot disagree."""
+    ir = next(
+        ir for ir in rendered.artifact_irs
+        if rendered.artifact_intents.by_id(ir.intent_id).artifact_type == "cfo_variance_memo"
+    )
+    section = next(s for s in ir.sections if s.heading == "Divisional summary")
+    chart = section.charts[0]
+    measure = chart.series[0]
+
+    body = _text_of(_one(rendered, "cfo-variance-memo"))
+    for row in section.table.rows:
+        cell = row.cells.get(measure)
+        if cell is None or not isinstance(cell.value, (int, float)):
+            continue
+        assert format_value(cell.value, "#,##0;(#,##0)") in body
