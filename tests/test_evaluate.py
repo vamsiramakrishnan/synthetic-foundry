@@ -66,12 +66,34 @@ def test_the_retriever_returns_nothing_for_nonsense(corpus: World) -> None:
 
 
 def test_the_baseline_handles_the_easy_questions(corpus: World) -> None:
-    """If it failed these the corpus would be incoherent, not hard."""
+    """Graded on difficulty, not on question type.
+
+    Asserting that every numerical comparison passes was only true while they
+    were all easy. Ranking thirty-four categories by margin is a numerical
+    comparison too, and a keyword baseline has no business answering it — so the
+    floor is judged on the cases the corpus labels easy.
+    """
     card = score(corpus)
-    by_type = card.by_type()
-    for kind in (EvaluationType.DIRECT_LOOKUP, EvaluationType.NUMERICAL_COMPARISON):
-        passed, total = by_type[kind]
-        assert passed == total, f"{kind.value}: a keyword baseline should manage {passed}/{total}"
+    outcomes = {o.case_id: o for o in card.outcomes}
+    easy = [c for c in corpus.evaluations if c.difficulty == "easy"]
+    assert len(easy) >= 4, "the set needs a floor to measure against"
+    for case in easy:
+        assert outcomes[case.id].passed, (
+            f"{case.id} is labelled easy but the baseline failed it: {case.question}"
+        )
+
+
+def test_the_baseline_fails_the_hard_ones(corpus: World) -> None:
+    """The whole point. If it passed these, the corpus would not be testing anything."""
+    card = score(corpus)
+    outcomes = {o.case_id: o for o in card.outcomes}
+    hard = [c for c in corpus.evaluations if c.difficulty == "hard"]
+    assert len(hard) >= 10
+    failed = sum(1 for c in hard if not outcomes[c.id].passed)
+    assert failed >= len(hard) * 0.5, (
+        f"the baseline answered {len(hard) - failed}/{len(hard)} hard questions — "
+        "either the retriever got cleverer or the corpus got easier"
+    )
 
 
 def test_the_baseline_cannot_abstain(corpus: World) -> None:
@@ -140,3 +162,77 @@ def test_the_scorecard_reports_by_question_type(corpus: World) -> None:
     assert len(card) == len(corpus.evaluations)
     assert sum(total for _, total in card.by_type().values()) == len(card)
     assert "overall" in str(card)
+
+
+# ---------------------------------------------------------------------------
+# The taxonomy itself
+# ---------------------------------------------------------------------------
+
+
+def test_every_question_shape_is_represented(corpus: World) -> None:
+    """A type with one case is a type the score cannot say anything about."""
+    from collections import Counter
+
+    counts = Counter(c.evaluation_type for c in corpus.evaluations)
+    assert set(counts) == set(EvaluationType), f"missing: {set(EvaluationType) - set(counts)}"
+    thin = {kind.value: n for kind, n in counts.items() if n < 2}
+    assert not thin, f"question types with a single case prove nothing: {thin}"
+
+
+def test_the_set_is_large_enough_to_mean_something(corpus: World) -> None:
+    assert len(corpus.evaluations) >= 30
+
+
+def test_hard_cases_name_their_sources_and_their_traps(corpus: World) -> None:
+    """A distractor is what makes authority resolution a test rather than a lookup.
+
+    The stale status page confidently states a cause that was later ruled out. A
+    case that does not name it is not testing whether a system can tell the record
+    from the rumour.
+    """
+    authority = [
+        c for c in corpus.evaluations
+        if c.evaluation_type is EvaluationType.AUTHORITY_RESOLUTION
+    ]
+    assert authority
+    assert any(c.distractor_artifact_ids for c in authority), (
+        "no authority case names the document that would mislead"
+    )
+    assert sum(1 for c in corpus.evaluations if c.required_artifact_ids) >= 10
+
+
+def test_no_case_is_both_source_and_trap(corpus: World) -> None:
+    for case in corpus.evaluations:
+        assert not set(case.required_artifact_ids) & set(case.distractor_artifact_ids), case.id
+
+
+def test_every_answer_is_read_from_the_ledger(corpus: World) -> None:
+    """The exit gate for this step: no answer is independently invented."""
+    for case in corpus.evaluations:
+        if case.expects_abstention:
+            assert not case.expected_fact_ids
+            continue
+        assert case.expected_fact_ids
+        for fact_id in case.expected_fact_ids:
+            corpus.facts.by_id(fact_id)  # raises if ungrounded
+
+
+def test_an_abstention_case_stays_unanswerable_as_the_corpus_grows(corpus: World) -> None:
+    """The failure mode this family has, and had.
+
+    "How many stores does the food division operate?" was an abstention case
+    until a store estate was generated, at which point the answer appeared in the
+    workbook and the case silently became wrong. So no abstention question may
+    name a dimension the corpus now models.
+    """
+    modelled = {"store", "stores", "category", "categories", "revenue", "margin", "close"}
+    for case in corpus.evaluations:
+        if not case.expects_abstention:
+            continue
+        # It may *mention* a modelled noun, but must not ask for a figure the
+        # corpus carries; the safeguard is that no fact of the corpus answers it.
+        assert not case.expected_fact_ids
+        counted = {"how many stores", "how many categories"}
+        assert not any(phrase in case.question.casefold() for phrase in counted), (
+            f"{case.id} asks for something the corpus now models: {case.question}"
+        )

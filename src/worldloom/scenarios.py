@@ -79,7 +79,7 @@ class MonthEndClose:
 
         The world passed in is not mutated.
         """
-        from .generators import finance, operations, planning
+        from .generators import evaluation, finance, operations, planning
         from .retail import BASE_INCIDENT_LIKELIHOOD
 
         if world.seed is None:
@@ -148,13 +148,24 @@ class MonthEndClose:
             workbook_facts=financials.facts,
         )
 
-        cases = planning.evaluation_cases(
+        cases = evaluation.evaluation_cases(
             minter,
             episode=episode,
-            financial_facts=financial_facts,
-            company_id=world.company.id,
-            unit_ids=unit_ids,
-            unit_names={unit.id: unit.name for unit in world.business_units},
+            facts=financials.facts,
+            subjects=evaluation.Subjects(
+                company_id=world.company.id,
+                unit_ids=unit_ids,
+                names=world.entity_names(),
+                categories_by_unit={
+                    unit.id: [c.id for c in world.categories if c.business_unit_id == unit.id]
+                    for unit in world.business_units
+                },
+                sites_by_unit={
+                    unit.id: [s.id for s in world.sites if s.business_unit_id == unit.id]
+                    for unit in world.business_units
+                },
+            ),
+            intents=intents,
             period=self.period,
         )
 

@@ -233,7 +233,7 @@ def test_answers_are_read_from_facts_not_invented(world: World) -> None:
 def test_expected_answers_name_things_a_reader_would_recognise(world: World) -> None:
     """An expected answer citing 'BU-0001' cannot be graded against prose."""
     unit_case = world.evaluations.filter(
-        lambda c: "largest revenue variance" in c.question
+        lambda c: "adverse revenue variance" in c.question
     ).one()
     unit_names = {unit.name for unit in world.business_units}
     assert any(name in unit_case.expected_answer for name in unit_names)
