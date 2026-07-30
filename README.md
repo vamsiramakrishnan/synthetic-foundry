@@ -1,19 +1,19 @@
-Worldloom
+# Worldloom
 
-Generate coherent synthetic enterprise worlds that evolve over time and materialize into realistic documents, business systems, and knowledge artifacts for AI evaluation, retrieval, and agent testing.
+Generate coherent synthetic enterprise worlds that evolve over time and materialise into realistic documents, business systems, and knowledge artifacts for AI evaluation, retrieval, and agent testing.
 
-⸻
+---
 
-Why Worldloom?
+## Why Worldloom?
 
 Most synthetic data generators produce isolated documents.
 
-A Jira ticket is created independently from a Confluence page.
-A PowerPoint references projects that don’t exist.
-A PDF reports financial numbers that cannot be reconciled.
-An incident has three different root causes depending on which document you read.
+- A Jira ticket is created independently from a Confluence page.
+- A PowerPoint references projects that don't exist.
+- A PDF reports financial numbers that cannot be reconciled.
+- An incident has three different root causes depending on which document you read.
 
-Real enterprises don’t work this way.
+Real enterprises don't work this way.
 
 Every document, spreadsheet, presentation, ticket, approval, financial report, architecture decision, and postmortem is a consequence of people making decisions over time.
 
@@ -21,133 +21,128 @@ Worldloom generates the enterprise first.
 
 Documents are simply projections of that evolving world.
 
-⸻
+---
 
-Philosophy
+## Philosophy
 
 Worldloom is built around one idea:
 
-Generate reality first. Render artifacts second.
+> **Generate reality first. Render artifacts second.**
 
 Instead of prompting an LLM to create documents, Worldloom constructs a coherent enterprise simulation.
 
 It models:
 
-* organisations
-* people
-* reporting structures
-* products
-* services
-* customers
-* vendors
-* projects
-* financial models
-* systems
-* permissions
-* operational events
-* historical timelines
-* strategic decisions
+- organisations
+- people
+- reporting structures
+- products
+- services
+- customers
+- vendors
+- projects
+- financial models
+- systems
+- permissions
+- operational events
+- historical timelines
+- strategic decisions
 
 From this canonical world, Worldloom materialises realistic enterprise artifacts across multiple formats.
 
-                   Enterprise World
+```
+                  Enterprise World
                           │
                           ▼
-                 Canonical Facts
+                   Canonical Facts
                           │
                           ▼
-                  Historical Events
+                 Historical Events
                           │
                           ▼
-                  Artifact Planning
+                 Artifact Planning
                           │
       ┌───────────────────┼───────────────────┐
       │                   │                   │
       ▼                   ▼                   ▼
-   Documents          Business Systems      Reports
+  Documents         Business Systems       Reports
       │                   │                   │
       ▼                   ▼                   ▼
- DOCX PPTX PDF      Jira ServiceNow      XLSX Confluence
+DOCX PPTX PDF      Jira ServiceNow     XLSX Confluence
+```
 
-⸻
+---
 
-Key Features
+## Key Features
 
-Enterprise-first generation
+### Enterprise-first generation
 
 Generate complete synthetic organisations instead of disconnected documents.
 
 Every artifact has:
 
-* history
-* ownership
-* authors
-* audiences
-* permissions
-* lineage
-* supporting facts
-* temporal validity
+- history
+- ownership
+- authors
+- audiences
+- permissions
+- lineage
+- supporting facts
+- temporal validity
 
-⸻
-
-Socratic world building
+### Socratic world building
 
 Rather than asking the user for hundreds of configuration values, Worldloom conducts a structured interview.
 
 It progressively constructs:
 
-* company identity
-* operating model
-* organisational topology
-* technology landscape
-* financial structure
-* strategic priorities
-* historical backstory
-* political tensions
-* information ecosystem
+- company identity
+- operating model
+- organisational topology
+- technology landscape
+- financial structure
+- strategic priorities
+- historical backstory
+- political tensions
+- information ecosystem
 
-The result is a deterministic World Seed.
+The result is a deterministic **World Seed**.
 
-⸻
-
-Inspired by real enterprises
+### Inspired by real enterprises
 
 Generate organisations inspired by real companies without reproducing proprietary information.
 
 Examples:
 
-Large Australian Retailer
-↓
-Southern Cross Retail Group
-Global IT Services Company
-↓
-Meridian Global Services
+| Inspiration | Generated organisation |
+| --- | --- |
+| Large Australian Retailer | Southern Cross Retail Group |
+| Global IT Services Company | Meridian Global Services |
 
 The generated organisation preserves:
 
-* industry characteristics
-* operating complexity
-* scale
-* economic model
+- industry characteristics
+- operating complexity
+- scale
+- economic model
 
 while inventing:
 
-* employees
-* customers
-* financials
-* programmes
-* projects
-* incidents
-* internal systems
+- employees
+- customers
+- financials
+- programmes
+- projects
+- incidents
+- internal systems
 
-⸻
-
-Temporal simulation
+### Temporal simulation
 
 Worldloom generates years of operational history.
 
 Example:
 
+```
 2018
 └── Acquisition
 2019
@@ -164,187 +159,176 @@ Example:
 └── Major production incident
 2025
 └── AI transformation programme
+```
 
 Past decisions continue to influence future documents.
 
-⸻
-
-Coherent artifacts
+### Coherent artifacts
 
 Generate:
 
-Strategy
+**Strategy**
 
-* Executive memos
-* Board papers
-* Steering committee decks
-* Quarterly business reviews
-* Investment proposals
+- Executive memos
+- Board papers
+- Steering committee decks
+- Quarterly business reviews
+- Investment proposals
 
-Finance
+**Finance**
 
-* Month-end workbooks
-* Management reports
-* Budget packs
-* Forecasts
-* Variance analysis
-* Cash-flow reports
+- Month-end workbooks
+- Management reports
+- Budget packs
+- Forecasts
+- Variance analysis
+- Cash-flow reports
 
-Engineering
+**Engineering**
 
-* PRDs
-* BRDs
-* Technical designs
-* ADRs
-* Runbooks
-* Test plans
-* Incident RCAs
+- PRDs
+- BRDs
+- Technical designs
+- ADRs
+- Runbooks
+- Test plans
+- Incident RCAs
 
-Delivery
+**Delivery**
 
-* Programme plans
-* RAID logs
-* Meeting minutes
-* Change requests
-* Dependency maps
+- Programme plans
+- RAID logs
+- Meeting minutes
+- Change requests
+- Dependency maps
 
-Operations
+**Operations**
 
-* ServiceNow records
-* Knowledge articles
-* SOPs
-* Change approvals
+- ServiceNow records
+- Knowledge articles
+- SOPs
+- Change approvals
 
-Customer
+**Customer**
 
-* Account plans
-* Proposals
-* Statements of work
-* QBRs
+- Account plans
+- Proposals
+- Statements of work
+- QBRs
 
-People
+**People**
 
-* Workforce plans
-* Hiring plans
-* Policies
-* Training material
+- Workforce plans
+- Hiring plans
+- Policies
+- Training material
 
-⸻
-
-Multiple output formats
+### Multiple output formats
 
 Native support for:
 
-* XLSX
-* PPTX
-* DOCX
-* PDF
-* Confluence
-* Jira
-* ServiceNow
+- XLSX
+- PPTX
+- DOCX
+- PDF
+- Confluence
+- Jira
+- ServiceNow
 
 More renderers can be added without changing the world model.
 
-⸻
-
-Built for evaluation
+### Built for evaluation
 
 Every generated scenario can automatically produce:
 
-* evaluation questions
-* expected answers
-* supporting citations
-* distractor documents
-* temporal cut-offs
-* permission-aware variants
-* multi-hop reasoning tests
+- evaluation questions
+- expected answers
+- supporting citations
+- distractor documents
+- temporal cut-offs
+- permission-aware variants
+- multi-hop reasoning tests
 
 Perfect for:
 
-* RAG
-* Enterprise Search
-* AI agents
-* Document understanding
-* Benchmarking
-* Retrieval evaluation
+- RAG
+- Enterprise Search
+- AI agents
+- Document understanding
+- Benchmarking
+- Retrieval evaluation
 
-⸻
-
-Deterministic
+### Deterministic
 
 The same seed produces the same enterprise.
 
+```bash
 worldloom build \
     --seed 8128
+```
 
 Re-running with the same configuration reproduces identical:
 
-* organisations
-* projects
-* events
-* financials
-* artifacts
-* evaluation datasets
+- organisations
+- projects
+- events
+- financials
+- artifacts
+- evaluation datasets
 
-⸻
+---
 
-Architecture
+## Architecture
 
-               Socratic Interview
-                        │
-                        ▼
-                  World Seed
-                        │
-                        ▼
-                Enterprise Builder
-                        │
-                        ▼
-               Canonical World Model
-                        │
-      ┌─────────────────┼──────────────────┐
-      │                 │                  │
-      ▼                 ▼                  ▼
- Historical        Event Engine       Fact Ledger
- Timeline
-      │                 │                  │
-      └─────────────────┼──────────────────┘
-                        ▼
-                Artifact Planner
-                        │
-                        ▼
-                  Artifact IR
-                        │
-      ┌─────────────────┼───────────────────┐
-      │                 │                   │
-      ▼                 ▼                   ▼
- Narrative        Renderers          Evaluations
- Generator
+```
+                 Socratic Interview
+                          │
+                          ▼
+                     World Seed
+                          │
+                          ▼
+                  Enterprise Builder
+                          │
+                          ▼
+                Canonical World Model
+                          │
+      ┌───────────────────┼───────────────────┐
+      │                   │                   │
+      ▼                   ▼                   ▼
+  Historical         Event Engine         Fact Ledger
+   Timeline
+      │                   │                   │
+      └───────────────────┼───────────────────┘
+                          ▼
+                   Artifact Planner
+                          │
+                          ▼
+                     Artifact IR
+                          │
+      ┌───────────────────┼───────────────────┐
+      │                   │                   │
+      ▼                   ▼                   ▼
+  Narrative            Renderers         Evaluations
+  Generator
+```
 
-⸻
+---
 
-Design Principles
+## Design Principles
 
-World before documents
+### World before documents
 
 Documents never exist in isolation.
 
 Everything originates from a canonical enterprise world.
 
-⸻
+### Facts before prose
 
-Facts before prose
+LLMs write language. They do not invent truth.
 
-LLMs write language.
+Facts are generated deterministically. Narrative is generated afterwards.
 
-They do not invent truth.
-
-Facts are generated deterministically.
-
-Narrative is generated afterwards.
-
-⸻
-
-Simulation before rendering
+### Simulation before rendering
 
 Events create facts.
 
@@ -354,48 +338,45 @@ Artifacts create files.
 
 Never the other way around.
 
-⸻
-
-Lineage everywhere
+### Lineage everywhere
 
 Every generated artifact records:
 
-* source world
-* source scenario
-* source events
-* supporting facts
-* author
-* audience
-* permissions
-* generation recipe
-* version
-* provenance
+- source world
+- source scenario
+- source events
+- supporting facts
+- author
+- audience
+- permissions
+- generation recipe
+- version
+- provenance
 
 Nothing is anonymous.
 
-⸻
-
-Controlled imperfection
+### Controlled imperfection
 
 Real enterprises are messy.
 
 Worldloom intentionally introduces:
 
-* stale documents
-* outdated assumptions
-* duplicate issues
-* superseded reports
-* incomplete summaries
-* conflicting terminology
+- stale documents
+- outdated assumptions
+- duplicate issues
+- superseded reports
+- incomplete summaries
+- conflicting terminology
 
 Every inconsistency is labelled and traceable.
 
-⸻
+---
 
-Example
+## Example
 
 A single production incident can automatically generate:
 
+```
 Major Incident
         │
         ▼
@@ -403,66 +384,67 @@ ServiceNow Incident
         │
         ├───────────────┐
         ▼               ▼
- Jira Bug         Incident Timeline
+   Jira Bug     Incident Timeline
         │               │
         ▼               ▼
- Engineering RCA   Executive Update
+Engineering RCA   Executive Update
         │               │
         ├───────────────┐
         ▼               ▼
- Knowledge Base   Audit Evidence
+ Knowledge Base    Audit Evidence
+```
 
 Every artifact agrees on:
 
-* timestamps
-* systems
-* services
-* financial impact
-* root cause
-* ownership
+- timestamps
+- systems
+- services
+- financial impact
+- root cause
+- ownership
 
 unless the disagreement is intentional.
 
-⸻
+---
 
-Who is this for?
+## Who is this for?
 
 Worldloom is designed for teams building:
 
-* Enterprise Search
-* AI Agents
-* RAG systems
-* Coding Agents
-* Evaluation pipelines
-* Synthetic benchmarks
-* Knowledge Graphs
-* Enterprise copilots
-* Document intelligence systems
+- Enterprise Search
+- AI Agents
+- RAG systems
+- Coding Agents
+- Evaluation pipelines
+- Synthetic benchmarks
+- Knowledge Graphs
+- Enterprise copilots
+- Document intelligence systems
 
-⸻
+---
 
-Roadmap
+## Roadmap
 
-* Socratic world generation
-* Enterprise simulation engine
-* Financial modelling
-* Artifact recipe framework
-* XLSX renderer
-* DOCX renderer
-* PPTX renderer
-* PDF renderer
-* Confluence renderer
-* Jira renderer
-* ServiceNow renderer
-* Permission engine
-* Evaluation generation
-* Multi-company ecosystems
-* Cross-enterprise supply chains
+- [ ] Socratic world generation
+- [ ] Enterprise simulation engine
+- [ ] Financial modelling
+- [ ] Artifact recipe framework
+- [ ] XLSX renderer
+- [ ] DOCX renderer
+- [ ] PPTX renderer
+- [ ] PDF renderer
+- [ ] Confluence renderer
+- [ ] Jira renderer
+- [ ] ServiceNow renderer
+- [ ] Permission engine
+- [ ] Evaluation generation
+- [ ] Multi-company ecosystems
+- [ ] Cross-enterprise supply chains
 
-⸻
+---
 
-Guiding Principle
+## Guiding Principle
 
-Reality is generated once. Documents are rendered many times.
+> **Reality is generated once. Documents are rendered many times.**
 
 That distinction is what makes Worldloom useful for building AI systems that must reason across complex enterprise information instead of memorising disconnected files.
