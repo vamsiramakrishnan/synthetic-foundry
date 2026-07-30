@@ -269,6 +269,31 @@ class World:
         when = datetime.fromisoformat(moment) if isinstance(moment, str) else moment
         return self.facts.at(when)
 
+    def org_at(self, moment: datetime | str) -> EmployeeCollection:
+        """Who worked here at *moment* — the org chart's ``as_of``.
+
+        The temporal counterpart to ``as_of`` for people rather than facts. A
+        window is half-open at both ends by intent: ``joined=None`` means "was
+        already here when the corpus begins" and ``left=None`` means "still here",
+        so a world where nobody ever joins or leaves returns its whole roster at
+        every moment — which is exactly what it did before windows existed.
+
+        The comparison on ``left`` is strict. Someone's last day is a day they
+        worked, and the artifacts they signed that day have to keep a valid
+        author, so ``left`` is the instant the window closes rather than the last
+        instant inside it.
+        """
+        when = datetime.fromisoformat(moment) if isinstance(moment, str) else moment
+        return EmployeeCollection(
+            tuple(
+                person
+                for person in self._people
+                if (person.joined is None or person.joined <= when)
+                and (person.left is None or person.left > when)
+            ),
+            label="EmployeeCollection",
+        )
+
     def visible_to(self, employee_id: str) -> ArtifactCollection:
         """Artifacts *employee_id* is permitted to see. Deny beats allow."""
         employee = self.people.by_id(employee_id)
@@ -344,18 +369,29 @@ class World:
         evaluations: tuple[EvaluationCase, ...] = (),
         intentional_errors: tuple[IntentionalError, ...] = (),
         ledger: tuple[GenerationLedgerEntry, ...] = (),
+        people: tuple[Employee, ...] = (),
+        business_units: tuple[BusinessUnit, ...] = (),
         period: str | None = None,
     ) -> World:
         """A copy of this world with more appended. Never mutates in place.
 
-        Append-only by construction: there is no path here that edits an existing
-        fact, because a fact that turned out to be wrong is superseded rather than
-        corrected.
+        Append-only by construction for everything the corpus *asserts*: there is
+        no path here that edits an existing fact, because a fact that turned out
+        to be wrong is superseded rather than corrected.
+
+        Entities are the one exception, and deliberately so. A person who leaves
+        is the same person — they do not become a second ``Employee`` with the
+        same name — so ``people`` and ``business_units`` merge by id: a row whose
+        id is already known *replaces* the record in place, anything new is
+        appended. What makes that safe is that the replacement only ever closes a
+        validity window (sets ``left``, sets ``dissolved``), and the change is
+        still witnessed by an event and a fact like every other change. The roster
+        holds who is here now; the timeline holds how it got that way.
         """
         return World(
             company=self.company,
-            _business_units=self._business_units,
-            _people=self._people,
+            _business_units=_merged(self._business_units, business_units),
+            _people=_merged(self._people, people),
             _systems=self._systems,
             _services=self._services,
             _cost_centres=self._cost_centres,
@@ -490,6 +526,24 @@ class World:
             if intent.supersedes
         }
 
+        # A revision retires its predecessor for the same reason, and the version
+        # number is the length of the chain behind it rather than anything the
+        # planner carries. Deriving it here means a planner cannot emit v3 without
+        # a v2 existing — the number is a fact about the chain, not a label.
+        revises = {i.id: i.revises for i in self._artifact_intents if i.revises}
+        replaced |= set(revises.values())
+
+        def version_of(intent_id: str) -> int:
+            version, seen = 1, {intent_id}
+            previous = revises.get(intent_id)
+            # The guard is for a cycle, which the validator reports properly as
+            # `revised_twice`; looping forever here would mean it never got to.
+            while previous is not None and previous not in seen:
+                seen.add(previous)
+                version += 1
+                previous = revises.get(previous)
+            return version
+
         entries: list[ArtifactManifestEntry] = []
         for ir in irs:
             intent = next(i for i in self._artifact_intents if i.id == ir.intent_id)
@@ -523,6 +577,8 @@ class World:
                     }),
                     supersedes=intent.supersedes,
                     derived_from=list(intent.derived_from),
+                    revises=intent.revises,
+                    version=version_of(intent.id),
                     access_policy_id=self._policy_for(intent.audience),
                     recipe=intent.artifact_type,
                 )
@@ -632,6 +688,21 @@ class World:
             f"{' planned' if not self._artifacts and self._artifact_intents else ''}, "
             f"evals={len(self._evaluations)})"
         )
+
+
+def _merged(existing: tuple, incoming: tuple) -> tuple:
+    """*existing* with *incoming* merged in by id, order preserved.
+
+    Order is load-bearing, not cosmetic: entity order reaches the corpus files,
+    the manifest, and every rendered roster, so a merge that appended updates
+    would reshuffle a world merely because someone left. A replacement keeps the
+    departing person's original position; only genuinely new ids extend the tail.
+    """
+    if not incoming:
+        return existing
+    updates = {item.id: item for item in incoming}
+    merged = tuple(updates.pop(item.id, item) for item in existing)
+    return merged + tuple(item for item in incoming if item.id in updates)
 
 
 class Summary:

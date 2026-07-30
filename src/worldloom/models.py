@@ -164,10 +164,24 @@ class BusinessUnit(Entity):
     company_id: str
     leader_id: str
     kind: str
+    formed: datetime | None = None
+    dissolved: datetime | None = None
+    """When the unit existed. ``None`` at either end means "outside the corpus"."""
 
 
 class Employee(Entity):
     title: str
+    joined: datetime | None = None
+    """When this person started. ``None`` means "before the corpus begins"."""
+    left: datetime | None = None
+    """When they stopped. ``None`` means still here.
+
+    A datetime rather than a date, so it compares directly with an artifact's
+    ``created_at`` without a conversion at every call site. The invariant this
+    exists for is that an artifact's author must have been employed on the day it
+    was written — which the corpus asserted implicitly and could never check,
+    because nobody ever left.
+    """
     manager_id: str | None = None
     business_unit_id: str | None = None
     function: str
@@ -384,6 +398,15 @@ class ArtifactIntent(Model):
     required_fact_ids: list[str] = Field(default_factory=list)
     size_profile: Literal["small", "medium", "long"] = "small"
     rationale: str | None = None
+    revises: str | None = None
+    """A new version of the *same* document, not a different one.
+
+    Three relationships, and conflating them loses information a reader needs.
+    ``supersedes`` is a different document replacing this one — last month's
+    calendar by this month's. ``derived_from`` builds on without replacing, and
+    both stay true. ``revises`` keeps the document's identity: an incident review
+    that gains a section after review is the same review, at version two.
+    """
     supersedes: str | None = None
     """The artifact this one replaces — a republished calendar, a reissued report.
 
@@ -621,9 +644,13 @@ class ArtifactManifestEntry(Model):
     lore_ids: list[str] = Field(default_factory=list)
     derived_from: list[str] = Field(default_factory=list)
     supersedes: str | None = None
+    revises: str | None = None
+    """The earlier version of this same document. See ``ArtifactIntent.revises``."""
     access_policy_id: str | None = None
     recipe: str | None = None
     version: int = 1
+    """Which revision this is. Incremented along a ``revises`` chain, and left at
+    one for a document that was never reissued."""
 
 
 # ---------------------------------------------------------------------------

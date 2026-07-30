@@ -392,6 +392,66 @@ class _Validator:
                     f"replaced by {successor} but still {entry.lifecycle.value}",
                 )
 
+        # Revision is neither of the other two. `supersedes` is one document
+        # replacing a different document; `derived_from` is a new document built
+        # on an older one that stays true. `revises` is the *same* document at a
+        # later version — the March close calendar v2, not a second calendar —
+        # so the chain has to be strictly linear and strictly increasing, and each
+        # link has to keep the identity that makes it the same document at all.
+        revised_by: dict[str, str] = {}
+        for entry in self.world.artifacts:
+            if not entry.revises:
+                continue
+            earlier = entries.get(entry.revises)
+
+            self.checks += 1
+            if entry.revises == entry.id:
+                self.fail("referential", "self_revised", entry.id, "revises itself")
+
+            self.checks += 1
+            if entry.revises in revised_by:
+                self.fail(
+                    "referential", "revised_twice", entry.revises,
+                    f"revised by both {revised_by[entry.revises]} and {entry.id}"
+                    " — a version history is a line, not a tree",
+                )
+            revised_by[entry.revises] = entry.id
+
+            if earlier is None:
+                continue
+
+            self.checks += 1
+            if entry.version <= earlier.version:
+                self.fail(
+                    "referential", "version_not_advanced", entry.id,
+                    f"is version {entry.version}, revising {earlier.id}"
+                    f" which is already version {earlier.version}",
+                )
+
+            self.checks += 1
+            if earlier.created_at > entry.created_at:
+                self.fail(
+                    "temporal", "revises_later_artifact", entry.id,
+                    f"revises {earlier.id}, which was written later"
+                    f" ({earlier.created_at.isoformat()})",
+                )
+
+            # What makes it the same document rather than a new one. If either of
+            # these moved, the right relationship was `supersedes`.
+            self.checks += 1
+            if earlier.artifact_type != entry.artifact_type:
+                self.fail(
+                    "referential", "revises_different_kind", entry.id,
+                    f"a {entry.artifact_type} cannot be a revision of a {earlier.artifact_type}",
+                )
+
+            self.checks += 1
+            if earlier.lifecycle is not Lifecycle.SUPERSEDED:
+                self.fail(
+                    "referential", "revised_not_marked", earlier.id,
+                    f"revised by {entry.id} but still {earlier.lifecycle.value}",
+                )
+
         # Derivation is not replacement: an earlier review of an earlier incident
         # stays true about that incident, and both remain current.
         for entry in self.world.artifacts:
@@ -630,6 +690,83 @@ class _Validator:
                         f"created {artifact.created_at.isoformat()} but cites {fact_id}"
                         f" which only becomes valid at {fact.valid_from.isoformat()}",
                     )
+
+        # Validity windows have to run forwards. Checked before the windows are
+        # used below, because a reversed window makes every question asked of it
+        # meaningless rather than merely wrong.
+        for person in w.people:
+            if person.joined is None or person.left is None:
+                continue
+            self.checks += 1
+            if person.left < person.joined:
+                self.fail(
+                    "temporal",
+                    "employment_reversed",
+                    person.id,
+                    f"left {person.left.isoformat()} before joining {person.joined.isoformat()}",
+                )
+
+        for unit in w.business_units:
+            if unit.formed is None or unit.dissolved is None:
+                continue
+            self.checks += 1
+            if unit.dissolved < unit.formed:
+                self.fail(
+                    "temporal",
+                    "unit_window_reversed",
+                    unit.id,
+                    f"dissolved {unit.dissolved.isoformat()} before forming {unit.formed.isoformat()}",
+                )
+
+        # The invariant the whole personnel model exists for: a document was
+        # written by somebody who worked here on the day it was written. The
+        # corpus always asserted this implicitly and could never check it, because
+        # until validity windows existed nobody ever joined or left. It is the
+        # cheapest way for an org change to go wrong — plan a close, then have
+        # its author depart mid-quarter, and the reviewer signing the March
+        # report left in February.
+        for artifact in w.artifacts:
+            person = w.people.get(artifact.author_id)
+            if person is None:
+                continue
+            if person.joined is not None and person.joined > artifact.created_at:
+                self.checks += 1
+                self.fail(
+                    "temporal",
+                    "author_not_yet_employed",
+                    artifact.id,
+                    f"authored by {person.id} at {artifact.created_at.isoformat()},"
+                    f" who joined {person.joined.isoformat()}",
+                )
+            # Strict, matching ``World.org_at``: someone's last day is a day they
+            # worked, so an artifact created exactly at ``left`` is still theirs.
+            if person.left is not None and person.left <= artifact.created_at:
+                self.checks += 1
+                self.fail(
+                    "temporal",
+                    "author_already_departed",
+                    artifact.id,
+                    f"authored by {person.id} at {artifact.created_at.isoformat()},"
+                    f" who left {person.left.isoformat()}",
+                )
+
+        # A unit's leader has to be employed for the unit's whole life, not just
+        # at some point in it. Checked at the moment the unit forms because that
+        # is the one instant every unit has; a leader who later departs is caught
+        # by the departure scenario reassigning the post.
+        for unit in w.business_units:
+            leader = w.people.get(unit.leader_id)
+            if leader is None or unit.formed is None:
+                continue
+            self.checks += 1
+            if leader.joined is not None and leader.joined > unit.formed:
+                self.fail(
+                    "temporal",
+                    "leader_not_yet_employed",
+                    unit.id,
+                    f"formed {unit.formed.isoformat()} under {leader.id},"
+                    f" who joined {leader.joined.isoformat()}",
+                )
 
         for case in w.evaluations:
             if case.temporal_cutoff is None:
