@@ -140,7 +140,7 @@ Hand-author:
 | 2 | cost centres |
 | 1 | reporting period |
 | 3–5 | lore commitments |
-| 30–50 | canonical facts |
+| 50–60 | canonical facts |
 | 10–15 | events |
 | 8–12 | artifacts |
 | 20–30 | evaluation questions |
@@ -166,7 +166,9 @@ evals.jsonl
 
 **Write some evaluation questions before the corpus.** Authoring questions after the corpus guarantees they are answerable by it — the interesting failure modes get selected out. Write a subset first, especially the expected-abstention cases, so the corpus is built against questions rather than the reverse.
 
-**Include a supersession chain in the facts.** Not 50 flat facts: an initial hypothesis, its supersession, and a confirmed cause, with distinct validity and authority states. Supersession is the hardest part of the schema and the most likely to be wrong, so it must be exercised by the fixture rather than deferred to step 3.
+**Include a supersession chain in the facts.** Not a flat list: an initial hypothesis, its supersession, and a confirmed cause, with distinct validity and authority states. Supersession is the hardest part of the schema and the most likely to be wrong, so it must be exercised by the fixture rather than deferred to step 3.
+
+The fact count is driven by what the episode has to prove, not by a target. Reconciling revenue, gross profit, and margin at both unit and group level, while also carrying a supersession chain, lands around 55.
 
 ### Lore, minimally
 

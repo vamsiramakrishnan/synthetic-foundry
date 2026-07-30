@@ -1,0 +1,497 @@
+{
+  "access_policies": [
+    {
+      "allow_business_units": [],
+      "allow_functions": [],
+      "allow_people": [],
+      "deny_people": [],
+      "id": "POLICY-0001",
+      "label": "All staff"
+    },
+    {
+      "allow_business_units": [],
+      "allow_functions": ["Finance", "Audit"],
+      "allow_people": ["PERSON-0001", "PERSON-0003"],
+      "deny_people": [],
+      "id": "POLICY-0002",
+      "label": "Finance and audit only"
+    },
+    {
+      "allow_business_units": [],
+      "allow_functions": ["Executive"],
+      "allow_people": ["PERSON-0002"],
+      "deny_people": [],
+      "id": "POLICY-0003",
+      "label": "Executive committee only"
+    },
+    {
+      "allow_business_units": [],
+      "allow_functions": ["Technology", "ServiceOperations"],
+      "allow_people": ["PERSON-0003"],
+      "deny_people": [],
+      "id": "POLICY-0004",
+      "label": "Technology and service operations"
+    }
+  ],
+  "business_units": [
+    {
+      "company_id": "CO-0001",
+      "id": "BU-FOOD",
+      "kind": "supermarkets",
+      "leader_id": "PERSON-0004",
+      "name": "Food"
+    },
+    {
+      "company_id": "CO-0001",
+      "id": "BU-GM",
+      "kind": "general_merchandise",
+      "leader_id": "PERSON-0005",
+      "name": "General Merchandise"
+    },
+    {
+      "company_id": "CO-0001",
+      "id": "BU-DIGITAL",
+      "kind": "online",
+      "leader_id": "PERSON-0006",
+      "name": "Digital"
+    }
+  ],
+  "company": {
+    "currency": "AUD",
+    "currency_unit": "thousands",
+    "employees_total": 81422,
+    "fiscal_year_start_month": 7,
+    "headquarters": "Sydney, Australia",
+    "id": "CO-0001",
+    "industry": "Omnichannel retail",
+    "name": "Southern Cross Retail Group"
+  },
+  "cost_centres": [
+    {
+      "business_unit_id": null,
+      "id": "CC-1000",
+      "name": "Finance Shared Services",
+      "owner_id": "PERSON-0007"
+    },
+    {
+      "business_unit_id": null,
+      "id": "CC-2400",
+      "name": "Data Platform Engineering",
+      "owner_id": "PERSON-0011"
+    }
+  ],
+  "people": [
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0001",
+      "manager_id": null,
+      "name": "Rosalind Achterberg",
+      "persona_id": "PERSONA-EXEC",
+      "title": "Group Chief Executive Officer"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-1000",
+      "function": "Finance",
+      "id": "PERSON-0002",
+      "manager_id": "PERSON-0001",
+      "name": "Desmond Faulkner-Reyes",
+      "persona_id": "PERSONA-CFO",
+      "title": "Group Chief Financial Officer"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Technology",
+      "id": "PERSON-0003",
+      "manager_id": "PERSON-0001",
+      "name": "Priya Venkataraghavan",
+      "persona_id": "PERSONA-EXEC",
+      "title": "Chief Information Officer"
+    },
+    {
+      "business_unit_id": "BU-FOOD",
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0004",
+      "manager_id": "PERSON-0001",
+      "name": "Marguerite Oyelaran",
+      "persona_id": "PERSONA-EXEC",
+      "title": "Managing Director, Food"
+    },
+    {
+      "business_unit_id": "BU-GM",
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0005",
+      "manager_id": "PERSON-0001",
+      "name": "Callum Draeger",
+      "persona_id": "PERSONA-EXEC",
+      "title": "Managing Director, General Merchandise"
+    },
+    {
+      "business_unit_id": "BU-DIGITAL",
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0006",
+      "manager_id": "PERSON-0001",
+      "name": "Sunniva Bergqvist",
+      "persona_id": "PERSONA-EXEC",
+      "title": "Managing Director, Digital"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-1000",
+      "function": "Finance",
+      "id": "PERSON-0007",
+      "manager_id": "PERSON-0002",
+      "name": "Adaeze Nwachukwu-Hall",
+      "persona_id": "PERSONA-CONTROLLER",
+      "title": "Group Financial Controller"
+    },
+    {
+      "business_unit_id": "BU-FOOD",
+      "cost_centre_id": "CC-1000",
+      "function": "Finance",
+      "id": "PERSON-0008",
+      "manager_id": "PERSON-0007",
+      "name": "Tobias Lindqvist",
+      "persona_id": "PERSONA-FIN-BP",
+      "title": "Finance Business Partner, Food"
+    },
+    {
+      "business_unit_id": "BU-GM",
+      "cost_centre_id": "CC-1000",
+      "function": "Finance",
+      "id": "PERSON-0009",
+      "manager_id": "PERSON-0007",
+      "name": "Yerlan Abenov",
+      "persona_id": "PERSONA-FIN-BP",
+      "title": "Finance Business Partner, General Merchandise"
+    },
+    {
+      "business_unit_id": "BU-DIGITAL",
+      "cost_centre_id": "CC-1000",
+      "function": "Finance",
+      "id": "PERSON-0010",
+      "manager_id": "PERSON-0007",
+      "name": "Ilse Vandermolen",
+      "persona_id": "PERSONA-FIN-BP",
+      "title": "Finance Business Partner, Digital"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-2400",
+      "function": "Technology",
+      "id": "PERSON-0011",
+      "manager_id": "PERSON-0003",
+      "name": "Ezekiel Mbatha",
+      "persona_id": "PERSONA-ENG-LEAD",
+      "title": "Head of Data Platform"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-2400",
+      "function": "Technology",
+      "id": "PERSON-0012",
+      "manager_id": "PERSON-0011",
+      "name": "Havva Demirsoy",
+      "persona_id": "PERSONA-ENG-PLATFORM",
+      "title": "Senior Data Platform Engineer"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-2400",
+      "function": "Technology",
+      "id": "PERSON-0013",
+      "manager_id": "PERSON-0011",
+      "name": "Rafferty Okonkwo",
+      "persona_id": "PERSONA-ENG-PLATFORM",
+      "title": "Data Platform Engineer"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "ServiceOperations",
+      "id": "PERSON-0014",
+      "manager_id": "PERSON-0003",
+      "name": "Beatriz Sandoval-Klein",
+      "persona_id": "PERSONA-SVC-LEAD",
+      "title": "Head of Service Operations"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "ServiceOperations",
+      "id": "PERSON-0015",
+      "manager_id": "PERSON-0014",
+      "name": "Nikolai Ferreira-Osei",
+      "persona_id": "PERSONA-SVC-OPS",
+      "title": "Service Desk Analyst"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "ServiceOperations",
+      "id": "PERSON-0016",
+      "manager_id": "PERSON-0014",
+      "name": "Wilhelmina Costa-Braithwaite",
+      "persona_id": "PERSONA-SVC-OPS",
+      "title": "Major Incident Manager"
+    },
+    {
+      "business_unit_id": "BU-GM",
+      "cost_centre_id": null,
+      "function": "Merchandising",
+      "id": "PERSON-0017",
+      "manager_id": "PERSON-0005",
+      "name": "Grethe Aasland",
+      "persona_id": "PERSONA-MERCH-LEAD",
+      "title": "Head of Merchandising Systems"
+    },
+    {
+      "business_unit_id": "BU-GM",
+      "cost_centre_id": null,
+      "function": "Merchandising",
+      "id": "PERSON-0018",
+      "manager_id": "PERSON-0017",
+      "name": "Chidubem Eze-Whitfield",
+      "persona_id": "PERSONA-MERCH",
+      "title": "Merchandising Systems Analyst"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-1000",
+      "function": "Finance",
+      "id": "PERSON-0019",
+      "manager_id": "PERSON-0007",
+      "name": "Solveig Ramaswamy",
+      "persona_id": "PERSONA-CONTROLLER",
+      "title": "Group Reporting Manager"
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-1000",
+      "function": "Audit",
+      "id": "PERSON-0020",
+      "manager_id": "PERSON-0002",
+      "name": "Anselm Trbojevic",
+      "persona_id": "PERSONA-AUDIT",
+      "title": "Internal Audit Manager"
+    }
+  ],
+  "period": "2026-03",
+  "personas": [
+    {
+      "favourite_phrases": ["on a like-for-like basis", "materially"],
+      "id": "PERSONA-CFO",
+      "label": "Group CFO",
+      "optimism": -0.1,
+      "political_awareness": 0.8,
+      "voice": "measured, numeric, unsentimental",
+      "risk_tolerance": -0.4,
+      "sentence_complexity": "medium",
+      "technical_depth": "low",
+      "traits": { "hedging": 0.2, "quantitative": 0.9 }
+    },
+    {
+      "favourite_phrases": ["control environment", "for completeness"],
+      "id": "PERSONA-CONTROLLER",
+      "label": "Financial controller",
+      "optimism": -0.2,
+      "political_awareness": 0.5,
+      "voice": "precise, procedural, cautious",
+      "risk_tolerance": -0.7,
+      "sentence_complexity": "high",
+      "technical_depth": "low",
+      "traits": { "hedging": 0.4, "quantitative": 0.8 }
+    },
+    {
+      "favourite_phrases": ["run-rate", "phasing"],
+      "id": "PERSONA-FIN-BP",
+      "label": "Finance business partner",
+      "optimism": 0.1,
+      "political_awareness": 0.6,
+      "voice": "commercial, explanatory",
+      "risk_tolerance": -0.2,
+      "sentence_complexity": "medium",
+      "technical_depth": "low",
+      "traits": { "hedging": 0.3, "quantitative": 0.7 }
+    },
+    {
+      "favourite_phrases": ["upstream", "idempotent"],
+      "id": "PERSONA-ENG-LEAD",
+      "label": "Engineering leader",
+      "optimism": 0.0,
+      "political_awareness": 0.4,
+      "voice": "direct, systems-oriented",
+      "risk_tolerance": 0.1,
+      "sentence_complexity": "medium",
+      "technical_depth": "high",
+      "traits": { "hedging": 0.1, "quantitative": 0.5 }
+    },
+    {
+      "favourite_phrases": ["root cause", "blast radius"],
+      "id": "PERSONA-ENG-PLATFORM",
+      "label": "Platform engineer",
+      "optimism": -0.1,
+      "political_awareness": 0.1,
+      "voice": "terse, technical, evidence-first",
+      "risk_tolerance": 0.2,
+      "sentence_complexity": "low",
+      "technical_depth": "high",
+      "traits": { "hedging": 0.05, "quantitative": 0.6 }
+    },
+    {
+      "favourite_phrases": ["per the runbook", "time to restore"],
+      "id": "PERSONA-SVC-LEAD",
+      "label": "Service operations leader",
+      "optimism": 0.0,
+      "political_awareness": 0.5,
+      "voice": "procedural, status-driven",
+      "risk_tolerance": -0.3,
+      "sentence_complexity": "medium",
+      "technical_depth": "medium",
+      "traits": { "hedging": 0.2, "quantitative": 0.4 }
+    },
+    {
+      "favourite_phrases": ["awaiting update", "under investigation"],
+      "id": "PERSONA-SVC-OPS",
+      "label": "Service desk",
+      "optimism": 0.3,
+      "political_awareness": 0.1,
+      "voice": "clipped, template-driven",
+      "risk_tolerance": 0.0,
+      "sentence_complexity": "low",
+      "technical_depth": "medium",
+      "traits": { "hedging": 0.5, "quantitative": 0.2 }
+    },
+    {
+      "favourite_phrases": ["range architecture", "category"],
+      "id": "PERSONA-MERCH-LEAD",
+      "label": "Merchandising leader",
+      "optimism": 0.2,
+      "political_awareness": 0.7,
+      "voice": "commercial, defensive under scrutiny",
+      "risk_tolerance": 0.1,
+      "sentence_complexity": "medium",
+      "technical_depth": "low",
+      "traits": { "defensive_about_ownership": 0.3, "hedging": 0.4 }
+    },
+    {
+      "favourite_phrases": ["mapping table", "hierarchy node"],
+      "id": "PERSONA-MERCH",
+      "label": "Merchandising analyst",
+      "optimism": 0.0,
+      "political_awareness": 0.2,
+      "voice": "operational, detail-heavy",
+      "risk_tolerance": -0.1,
+      "sentence_complexity": "low",
+      "technical_depth": "medium",
+      "traits": { "hedging": 0.2 }
+    },
+    {
+      "favourite_phrases": ["control objective", "evidence"],
+      "id": "PERSONA-AUDIT",
+      "label": "Internal audit",
+      "optimism": -0.3,
+      "political_awareness": 0.6,
+      "voice": "formal, control-oriented",
+      "risk_tolerance": -0.8,
+      "sentence_complexity": "high",
+      "technical_depth": "low",
+      "traits": { "hedging": 0.1 }
+    },
+    {
+      "favourite_phrases": ["strategically", "headwinds"],
+      "id": "PERSONA-EXEC",
+      "label": "Executive",
+      "optimism": 0.4,
+      "political_awareness": 0.9,
+      "voice": "brief, confident, outcome-focused",
+      "risk_tolerance": 0.2,
+      "sentence_complexity": "low",
+      "technical_depth": "low",
+      "traits": { "hedging": 0.3, "understatement": 0.5 }
+    }
+  ],
+  "schema_version": 1,
+  "seed": 8128,
+  "services": [
+    {
+      "criticality_tier": 1,
+      "depends_on": ["SVC-0002", "SYS-0003"],
+      "id": "SVC-0001",
+      "name": "inventory-valuation",
+      "owner_id": "PERSON-0012",
+      "purpose": "Values on-hand stock nightly for financial reporting",
+      "system_id": "SYS-0003"
+    },
+    {
+      "criticality_tier": 2,
+      "depends_on": ["SYS-0002"],
+      "id": "SVC-0002",
+      "name": "product-hierarchy-sync",
+      "owner_id": "PERSON-0013",
+      "purpose": "Publishes the product hierarchy from Merchandising Hub to the data platform",
+      "system_id": "SYS-0002"
+    },
+    {
+      "criticality_tier": 1,
+      "depends_on": ["SVC-0001", "SYS-0001"],
+      "id": "SVC-0003",
+      "name": "month-end-close-orchestrator",
+      "owner_id": "PERSON-0012",
+      "purpose": "Sequences the month-end close jobs and gates the ledger lock",
+      "system_id": "SYS-0001"
+    },
+    {
+      "criticality_tier": 1,
+      "depends_on": ["SYS-0004"],
+      "id": "SVC-0004",
+      "name": "checkout-api",
+      "owner_id": "PERSON-0013",
+      "purpose": "Handles online basket and checkout requests",
+      "system_id": "SYS-0004"
+    }
+  ],
+  "systems": [
+    {
+      "id": "SYS-0001",
+      "is_system_of_record_for": ["general_ledger", "financial_reporting"],
+      "name": "Helios ERP",
+      "owner_id": "PERSON-0007",
+      "purpose": "Group finance system of record"
+    },
+    {
+      "id": "SYS-0002",
+      "is_system_of_record_for": ["product_hierarchy", "range_architecture"],
+      "name": "Merchandising Hub",
+      "owner_id": "PERSON-0017",
+      "purpose": "Master data for products, categories, and the product hierarchy"
+    },
+    {
+      "id": "SYS-0003",
+      "is_system_of_record_for": ["inventory_valuation"],
+      "name": "Atlas Data Platform",
+      "owner_id": "PERSON-0011",
+      "purpose": "Analytical data platform and reporting pipelines"
+    },
+    {
+      "id": "SYS-0004",
+      "is_system_of_record_for": ["online_orders"],
+      "name": "Commerce Platform",
+      "owner_id": "PERSON-0013",
+      "purpose": "Online storefront, basket, and checkout"
+    },
+    {
+      "id": "SYS-0005",
+      "is_system_of_record_for": ["store_transactions"],
+      "name": "Store POS",
+      "owner_id": "PERSON-0004",
+      "purpose": "In-store point of sale and transaction capture"
+    }
+  ]
+}

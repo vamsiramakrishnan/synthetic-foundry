@@ -22,7 +22,13 @@ world = (
 world.export("./demo", formats=["pptx", "xlsx", "docx", "jira", "confluence"])
 ```
 
-> **Status: design.** Worldloom is not implemented yet. This README is the target API — the shape we are building toward and the standard we intend to hold. Nothing below runs today. See the [roadmap](#roadmap).
+> **Status: Gate A in progress.** The example above does *not* run yet — no world is generated, and no renderer exists. What does run today is the golden episode: a hand-authored, fully coherent corpus, and the kernel that loads, queries, validates, and exports it.
+>
+> ```bash
+> pip install -e . && worldloom demo retail-close
+> ```
+>
+> Treat the rest of this README as the target API. The [roadmap](#roadmap) marks what is built; [`docs/build-order.md`](docs/build-order.md) is the sequence and the exit gate for each step.
 
 ---
 
@@ -538,12 +544,13 @@ The first executable is `worldloom demo retail-close`, not `worldloom interview`
 
 **Gate A — Coherence.** One episode agrees with itself across facts, events, systems, and artifacts.
 
-- [ ] Thin waist: `World`, `Event`, `Fact`, `Persona`, `ArtifactIntent`, `ArtifactIR`, `EvaluationCase`, `GenerationLedger`
-- [ ] Hand-authored golden episode: retail month-end close, no LLM
-- [ ] Library kernel: load, inspect, validate, export
+- [x] Thin waist: `World`, `Event`, `Fact`, `Persona`, `ArtifactIntent`, `ArtifactIR`, `EvaluationCase`, `GenerationLedger`
+- [x] Hand-authored golden episode: retail month-end close, no LLM
+- [x] Library kernel: load, inspect, validate, export — `worldloom demo retail-close`
+- [x] Temporal append-only fact ledger with supersession and authority
+- [x] Coherence validator: referential, graph, financial reconciliation, temporal, lore, access
+- [x] Minimal lore: 5 commitments, each constraining a downstream decision
 - [ ] Deterministic organisation, financial, and operational generators
-- [ ] Temporal append-only fact ledger with supersession and authority
-- [ ] Minimal lore: commitments that constrain generation
 - [ ] Same seed reproduces the corpus
 
 **Gate B — Utility.** An external retrieval or agent system can ingest the corpus and be scored against it.
