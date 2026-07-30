@@ -384,6 +384,17 @@ class ArtifactIntent(Model):
     required_fact_ids: list[str] = Field(default_factory=list)
     size_profile: Literal["small", "medium", "long"] = "small"
     rationale: str | None = None
+    supersedes: str | None = None
+    """The artifact this one replaces — a republished calendar, a reissued report.
+
+    Declared at planning time rather than discovered at render time, because
+    whether a document replaces another is a decision the planner makes and a
+    renderer has no way to infer.
+    """
+    derived_from: list[str] = Field(default_factory=list)
+    """Artifacts this one builds on without replacing. A second incident review
+    citing the first is derived from it; neither supersedes the other, and both
+    remain current."""
 
 
 class FormulaKind(StrEnum):

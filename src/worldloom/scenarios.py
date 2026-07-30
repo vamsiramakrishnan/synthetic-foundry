@@ -104,6 +104,11 @@ class MonthEndClose:
             lore_by_target=index,
             incident_likelihood=likelihood,
             force_incident=self.include_operational_incident,
+            prior_incident_periods=tuple(
+                fact.period
+                for fact in world.facts.where(kind="ops.incident_opened")
+                if fact.period
+            ),
         )
 
         # Unit keys come from the world rather than a literal list, because the
@@ -146,6 +151,7 @@ class MonthEndClose:
             period=self.period,
             density=1.0 + density_adjustment(world, "finance/status_reports"),
             workbook_facts=financials.facts,
+            prior_intents=world._artifact_intents,
         )
 
         cases = evaluation.evaluation_cases(
@@ -167,6 +173,8 @@ class MonthEndClose:
             ),
             intents=intents,
             period=self.period,
+            history=world._facts,
+            prior_intents=world._artifact_intents,
         )
 
         return world.extend(

@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .ids import id_prefix, is_id
-from .models import FormulaKind
+from .models import FormulaKind, Lifecycle
 
 if TYPE_CHECKING:  # pragma: no cover
     from .world import World
@@ -338,6 +338,73 @@ class _Validator:
                             "artifact", "chart_double_counts", f"{ir.id}/{chart.key}",
                             f"plots {row.key} and its own parts {overlap}",
                         )
+
+    def supersession(self) -> None:
+        """A replaced document must be older than what replaced it, and marked.
+
+        Facts already have this discipline. Artifacts did not, because nothing
+        populated `supersedes` until documents started being republished across
+        periods — and a supersession chain that is wrong is worse than none: a
+        reader asking which close calendar is current would get the wrong answer
+        with full confidence.
+        """
+        entries = {entry.id: entry for entry in self.world.artifacts}
+        replaced_by: dict[str, str] = {}
+
+        for entry in self.world.artifacts:
+            if not entry.supersedes:
+                continue
+            earlier = entries.get(entry.supersedes)
+            if earlier is None:
+                continue
+
+            self.checks += 1
+            if earlier.created_at > entry.created_at:
+                self.fail(
+                    "temporal", "supersedes_later_artifact", entry.id,
+                    f"replaces {earlier.id}, which was written later"
+                    f" ({earlier.created_at.isoformat()})",
+                )
+
+            self.checks += 1
+            if earlier.artifact_type != entry.artifact_type:
+                self.fail(
+                    "referential", "supersedes_different_kind", entry.id,
+                    f"a {entry.artifact_type} cannot replace a {earlier.artifact_type}",
+                )
+
+            self.checks += 1
+            if entry.supersedes in replaced_by:
+                self.fail(
+                    "referential", "superseded_twice", entry.supersedes,
+                    f"replaced by both {replaced_by[entry.supersedes]} and {entry.id}",
+                )
+            replaced_by[entry.supersedes] = entry.id
+
+        for artifact_id, successor in replaced_by.items():
+            entry = entries.get(artifact_id)
+            if entry is None:
+                continue
+            self.checks += 1
+            if entry.lifecycle is not Lifecycle.SUPERSEDED:
+                self.fail(
+                    "referential", "superseded_not_marked", artifact_id,
+                    f"replaced by {successor} but still {entry.lifecycle.value}",
+                )
+
+        # Derivation is not replacement: an earlier review of an earlier incident
+        # stays true about that incident, and both remain current.
+        for entry in self.world.artifacts:
+            for parent in entry.derived_from:
+                self.checks += 1
+                if parent == entry.id:
+                    self.fail("referential", "self_derived", entry.id, "derives from itself")
+                earlier = entries.get(parent)
+                if earlier is not None and earlier.created_at > entry.created_at:
+                    self.fail(
+                        "temporal", "derives_from_later_artifact", entry.id,
+                        f"derives from {parent}, which was written later",
+                    )
 
     # -- graph -------------------------------------------------------------
 
@@ -688,6 +755,7 @@ class _Validator:
         self.access()
         self.artifact_files()
         self.charts()
+        self.supersession()
         self.graph()
         self.financial()
         self.temporal()

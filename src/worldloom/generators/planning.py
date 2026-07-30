@@ -51,6 +51,7 @@ def artifact_intents(
     period: str,
     density: float,
     workbook_facts: tuple[CanonicalFact, ...] = (),
+    prior_intents: tuple[ArtifactIntent, ...] = (),
 ) -> tuple[ArtifactIntent, ...]:
     """Plan the artifacts this episode warrants.
 
@@ -69,8 +70,19 @@ def artifact_intents(
     detail = [f.id for f in (workbook_facts or financial_facts)]
     intents: list[ArtifactIntent] = []
 
+    def latest(artifact_type: str) -> str | None:
+        """The most recent prior artifact of a type, if this world has run before.
+
+        Intents accumulate in order, so the last one of a type is the previous
+        period's. That is what makes a second episode continuous with the first
+        rather than a fresh world that happens to share a company name.
+        """
+        found = [i.id for i in prior_intents if i.artifact_type == artifact_type]
+        return found[-1] if found else None
+
     def intent(artifact_type: str, domain: str, audience: str, author: str,
-               facts: list[str], events: list[str], size: str, rationale: str) -> None:
+               facts: list[str], events: list[str], size: str, rationale: str,
+               *, supersedes: str | None = None, derived_from: list[str] | None = None) -> None:
         intents.append(
             ArtifactIntent(
                 id=minter.next("ART"),
@@ -82,12 +94,18 @@ def artifact_intents(
                 required_fact_ids=facts,
                 size_profile=size,  # type: ignore[arg-type]
                 rationale=rationale,
+                supersedes=supersedes,
+                derived_from=[a for a in (derived_from or []) if a],
             )
         )
 
+    # Republished every period, replacing the last one. This is the corpus's
+    # cleanest supersession chain: two documents that both look authoritative,
+    # where only the newest is current and the older ones are still on the shelf.
     intent("close_calendar", "finance", "all_staff", roles["reporting_manager"],
            [episode.keys["fact_due_date"]], [episode.keys["event_close_started"]], "small",
-           "The close calendar states the committed date every period.")
+           "The close calendar states the committed date every period.",
+           supersedes=latest("close_calendar"))
 
     intent("finance_workbook", "finance", "finance", roles["reporting_manager"],
            detail + [episode.keys["fact_close_delay"]], [episode.close_event_id], "long",
@@ -123,7 +141,12 @@ def artifact_intents(
                 k["fact_classification"], k["fact_owner"], k["fact_remediation"],
                 k["fact_remediation_scope"], k["fact_close_delayed"]],
                [k["event_root_cause"], k["event_control_failure"]], "long",
-               "A P2 incident that delayed the close warrants a reviewed RCA.")
+               "A P2 incident that delayed the close warrants a reviewed RCA.",
+               # Derived from, never superseding: an earlier review of an earlier
+               # incident remains true about that incident. A recurrence builds on
+               # it, and both stay current — which is exactly what makes "did the
+               # remediation work" answerable.
+               derived_from=[latest("incident_rca")])
 
         intent("jira_issues", "engineering", "technology", roles["platform_lead"],
                [k["fact_classification"], k["fact_owner"], k["fact_remediation"], k["fact_remediation_scope"]],

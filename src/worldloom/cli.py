@@ -122,6 +122,13 @@ def build(
         0, "--comparatives",
         help="Prior months of actuals to generate, for a trend. 11 gives a rolling year.",
     ),
+    periods: int = typer.Option(
+        1, "--periods",
+        help=(
+            "Run this many consecutive closes. More than one gives recurrence, "
+            "superseded documents, and the evaluation questions a single close cannot pose."
+        ),
+    ),
     formats: list[str] = typer.Option(
         None, "--format", "-f",
         help="Render these formats. Repeatable. Omit to plan artifacts without rendering.",
@@ -155,13 +162,20 @@ def build(
             raise typer.Exit(code=2) from exc
 
     world = RetailWorld(seed=seed, archetype=shape, employees=employees).build()
-    world = world.run(
-        MonthEndClose(
-            period=period,
-            include_operational_incident=incident,
-            comparative_months=comparatives,
+
+    # Consecutive closes on one world. Comparatives belong to the first only: they
+    # backfill months before it, and a later episode asking for them again would
+    # generate a second set of facts for months the corpus already has.
+    year, month = (int(part) for part in period.split("-"))
+    for index in range(max(1, periods)):
+        stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
+        world = world.run(
+            MonthEndClose(
+                period=stamp,
+                include_operational_incident=incident,
+                comparative_months=comparatives if index == 0 else 0,
+            )
         )
-    )
 
     if narrate or replay is not None:
         from .narrative import DeterministicProvider, ProviderError, UnreachableProvider

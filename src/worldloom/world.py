@@ -480,11 +480,25 @@ class World:
         for item in rendered or ():
             first_file.setdefault(item.artifact_id, item)
 
+        # An artifact that something later supersedes is no longer current, whatever
+        # its type would otherwise give it. Computed here rather than at planning
+        # time because it depends on what came *after*, which the planner of the
+        # earlier document could not have known.
+        replaced = {
+            intent.supersedes
+            for intent in self._artifact_intents
+            if intent.supersedes
+        }
+
         entries: list[ArtifactManifestEntry] = []
         for ir in irs:
             intent = next(i for i in self._artifact_intents if i.id == ir.intent_id)
             item = first_file.get(intent.id)
             authority, lifecycle = documents.standing(intent.artifact_type)
+            if intent.id in replaced:
+                from .models import Lifecycle
+
+                lifecycle = Lifecycle.SUPERSEDED
             entries.append(
                 ArtifactManifestEntry(
                     id=intent.id,
@@ -507,6 +521,8 @@ class World:
                         if fact_id in facts
                         for lore_id in facts[fact_id].lore_ids
                     }),
+                    supersedes=intent.supersedes,
+                    derived_from=list(intent.derived_from),
                     access_policy_id=self._policy_for(intent.audience),
                     recipe=intent.artifact_type,
                 )

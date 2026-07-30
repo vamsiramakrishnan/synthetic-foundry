@@ -86,6 +86,7 @@ def generate(
     lore_by_target: dict[str, list[str]],
     incident_likelihood: float,
     force_incident: bool | None = None,
+    prior_incident_periods: tuple[str, ...] = (),
 ) -> CloseEpisode:
     """Generate the close, and an incident if lore and the seed conspire."""
     events: list[EnterpriseEvent] = []
@@ -125,7 +126,8 @@ def generate(
         chain = _incident_chain(rng.derive("chain"), minter, period=period, day=day1,
                                company_id=company_id, roles=roles,
                                incident_lore=incident_lore, calendar_lore=calendar_lore,
-                               ownership_lore=ownership_lore, previous_event=start)
+                               ownership_lore=ownership_lore, previous_event=start,
+                               prior_incident_periods=prior_incident_periods)
         events.extend(chain["events"])
         facts.extend(chain["facts"])
         keys.update(chain["keys"])
@@ -177,7 +179,7 @@ def generate(
 def _incident_chain(
     rng: Rng, minter: Minter, *, period: str, day: date, company_id: str, roles: dict[str, str],
     incident_lore: list[str], calendar_lore: list[str], ownership_lore: list[str],
-    previous_event: EnterpriseEvent,
+    previous_event: EnterpriseEvent, prior_incident_periods: tuple[str, ...] = (),
 ) -> dict:
     """The eight-step incident: detect, triage, be wrong, be corrected, work around, escalate."""
     events: list[EnterpriseEvent] = []
@@ -267,9 +269,13 @@ def _incident_chain(
 
     status = _text(minter, "ops.feed_status", valuation, "failed", at=detected,
                    authority=Authority.SYSTEM_OF_RECORD, event=failed.id, source=platform)
+    # Stamped with its reporting period, because an incident belongs to a close.
+    # Without it a later episode cannot find the earlier one, and "has this
+    # happened before" stays a rhetorical question.
     reference = _text(minter, "ops.incident_opened", valuation,
                       f"{incident_ref} opened at priority P2 against inventory-valuation",
-                      at=raised, authority=Authority.SYSTEM_OF_RECORD, event=opened.id, source=platform)
+                      at=raised, authority=Authority.SYSTEM_OF_RECORD, event=opened.id,
+                      source=platform, period=period)
 
     # The wrong answer, with an expiry. It is superseded, never overwritten.
     hypothesis = _text(minter, "ops.cause", valuation, "Overnight ERP outage", at=hypothesised,
@@ -287,10 +293,21 @@ def _incident_chain(
         value=Quantity(amount=affected, unit="SKUs"), valid_from=confirmed,
         authority=Authority.CONFIRMED, source_system=mdm, event_id=found.id, lore_ids=incident_lore,
     )
-    recurrence = _text(minter, "ops.previous_similar_incident", valuation,
-                       "A comparable valuation failure was traced to the same mapping table",
-                       at=confirmed, authority=Authority.CONFIRMED, event=found.id,
-                       source=platform, lore=incident_lore)
+    # Named rather than gestured at. "A comparable failure happened before" is
+    # unfalsifiable and unanswerable; naming the period makes "when did this last
+    # happen, and did the fix hold" a question with an answer in the corpus.
+    recurrence = _text(
+        minter, "ops.previous_similar_incident", valuation,
+        (
+            f"A comparable valuation failure in {prior_incident_periods[-1]} was traced to"
+            " the same mapping table, and the response then restored service without"
+            " assigning ownership"
+            if prior_incident_periods
+            else "A comparable valuation failure was traced to the same mapping table"
+        ),
+        at=confirmed, authority=Authority.CONFIRMED, event=found.id,
+        source=platform, lore=incident_lore,
+    )
     workaround = _text(minter, "ops.workaround", valuation,
                        "Manual hierarchy mapping override applied to complete valuation for the period",
                        at=worked_around, authority=Authority.CONFIRMED, event=patched.id,

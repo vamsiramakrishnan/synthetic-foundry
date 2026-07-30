@@ -82,6 +82,20 @@ jobs:
             --out "${{ runner.temp }}/scored"
           worldloom evaluate "${{ runner.temp }}/scored" -v
 
+      # Several closes on one world. Recurrence, superseded calendars, and the
+      # evaluation families that a single episode cannot pose at all — and the
+      # supersession invariants that only exist once documents get republished.
+      - name: A series of closes validates and replays
+        run: |
+          FORMATS="-f xlsx -f markdown -f docx"
+          worldloom build --seed 8128 --incident --periods 3 --narrate $FORMATS \
+            --out "${{ runner.temp }}/series"
+          worldloom validate "${{ runner.temp }}/series"
+          worldloom evaluate "${{ runner.temp }}/series"
+          worldloom build --seed 8128 --incident --periods 3 \
+            --replay "${{ runner.temp }}/series" $FORMATS --out "${{ runner.temp }}/series-again"
+          diff -r "${{ runner.temp }}/series" "${{ runner.temp }}/series-again"
+
       # The agent handshake: a corpus asks for prose, and refuses prose that
       # restates a figure. Exercised with a scripted "agent" so the contract is
       # covered without a model in CI.

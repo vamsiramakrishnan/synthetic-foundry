@@ -77,6 +77,8 @@ class _Taxonomy:
         subjects: Subjects,
         intents: tuple[ArtifactIntent, ...],
         period: str,
+        history: tuple[CanonicalFact, ...] = (),
+        prior_intents: tuple[ArtifactIntent, ...] = (),
     ) -> None:
         self.minter = minter
         self.episode = episode
@@ -94,6 +96,8 @@ class _Taxonomy:
                 self.by_kind[(fact.kind, fact.subject)] = fact
 
         self.artifact = {intent.artifact_type: intent.id for intent in intents}
+        self.history = history
+        self.prior_intents = prior_intents
 
     # -- helpers -----------------------------------------------------------
 
@@ -443,6 +447,77 @@ class _Taxonomy:
             sources=[self.artifact.get("executive_summary")], distractors=[rca],
         )
 
+    def across_episodes(self) -> None:
+        """The questions a single close cannot pose.
+
+        Recurrence, whether a remediation held, and which of two documents that
+        both look authoritative is the current one. These are the families the
+        corpus claims to be about, and until a world ran more than one period they
+        were all argued from a single episode's worth of evidence.
+        """
+        if not self.history:
+            return
+
+        earlier_incidents = [
+            f for f in self.history
+            if f.kind == "ops.incident_opened" and f.period and f.period != self.period
+        ]
+        calendars = [i.id for i in (*self.prior_intents, *()) if i.artifact_type == "close_calendar"]
+        current_calendar = self.artifact.get("close_calendar")
+
+        if calendars and current_calendar:
+            due = self.get("close.due_date", self.subjects.company_id)
+            if due:
+                self.case(
+                    "Which close calendar states the committed date currently in force?",
+                    EvaluationType.AUTHORITY_RESOLUTION,
+                    f"The calendar published for {self.period}, committing to {due.text_value}.",
+                    [due.id], difficulty="hard",
+                    reasoning="Earlier calendars are published, look identical, and are superseded.",
+                    sources=[current_calendar], distractors=calendars,
+                )
+
+        if earlier_incidents and self.episode.had_incident:
+            k = self.episode.keys
+            previous = earlier_incidents[-1]
+            self.case(
+                "When did a comparable valuation failure last occur, and did the response "
+                "prevent it recurring?",
+                EvaluationType.CAUSAL_MULTI_HOP,
+                f"In {previous.period}. It did not — the same mapping table failed again in "
+                f"{self.period}, and ownership is still unassigned.",
+                [previous.id, k["fact_recurrence"], k["fact_owner"]], difficulty="hard",
+                reasoning="Spans two episodes. A single close cannot answer it at all.",
+                sources=[self.artifact.get("incident_rca")],
+            )
+            self.case(
+                f"How many valuation incidents has the group opened up to and including {self.period}?",
+                EvaluationType.NUMERICAL_COMPARISON,
+                f"{len(earlier_incidents) + 1}.",
+                [f.id for f in earlier_incidents] + [k["fact_incident_ref"]], difficulty="hard",
+                reasoning="Requires counting across periods rather than reading one record.",
+            )
+
+        # The same measure, asked of a period that is no longer current. A system
+        # that returns the latest figure regardless of the period asked for fails
+        # here and nowhere else.
+        prior_revenue = [
+            f for f in self.history
+            if f.kind == "financial.revenue.actual"
+            and f.subject == self.subjects.company_id
+            and f.period
+            and f.period != self.period
+        ]
+        if prior_revenue:
+            earlier = prior_revenue[-1]
+            self.case(
+                f"What was total revenue in {earlier.period}?",
+                EvaluationType.TEMPORAL_STATE, _fmt(earlier), [earlier.id],
+                difficulty="hard",
+                reasoning="The current period's figure is the confident wrong answer.",
+                sources=[self.artifact.get("finance_workbook")],
+            )
+
     def abstentions(self) -> None:
         """Plausible questions this corpus does not answer.
 
@@ -480,13 +555,22 @@ def evaluation_cases(
     subjects: Subjects,
     intents: tuple[ArtifactIntent, ...],
     period: str,
+    history: tuple[CanonicalFact, ...] = (),
+    prior_intents: tuple[ArtifactIntent, ...] = (),
 ) -> tuple[EvaluationCase, ...]:
-    """Derive the evaluation set for one episode."""
+    """Derive the evaluation set for one episode.
+
+    ``history`` and ``prior_intents`` are what the world already contained. A
+    second episode asks questions the first could not — which is the only way the
+    hard families get past a handful of cases each.
+    """
     taxonomy = _Taxonomy(
-        minter, episode=episode, facts=facts, subjects=subjects, intents=intents, period=period
+        minter, episode=episode, facts=facts, subjects=subjects, intents=intents,
+        period=period, history=history, prior_intents=prior_intents,
     )
     taxonomy.direct_lookup()
     taxonomy.numerical_comparison()
     taxonomy.incident()
+    taxonomy.across_episodes()
     taxonomy.abstentions()
     return tuple(taxonomy.cases)
