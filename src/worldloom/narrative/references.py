@@ -78,6 +78,26 @@ def render_value(fact: CanonicalFact) -> str:
     return f"{magnitude} {unit}"
 
 
+def describe(fact: CanonicalFact, subject: str | None = None) -> str:
+    """A fact as one line: what it is about, what it measures, and what it says.
+
+    The subject is the whole point of this function. Without it, a request
+    carrying four business units' revenue is four indistinguishable numbers, and a
+    writer handed them can only produce four identical sentences — which is
+    exactly what happened until this existed. "Australian Food revenue was X, New
+    Zealand Food Y" is not writable from ``financial.revenue.actual = 614,400``
+    repeated four times, however good the writer.
+
+    The measure goes through ``render_value`` rather than a format string of its
+    own, so a figure reads the same here as it does in finished prose. Formatting
+    it separately is how ``3.4935e+06`` reached a supporting-facts table that a
+    human was supposed to read.
+    """
+    measure = render_value(fact) if fact.value is not None else (fact.text_value or "")
+    lead = f"{subject} · " if subject else ""
+    return f"{lead}{fact.kind} = {measure}" if measure else f"{lead}{fact.kind}"
+
+
 def substitute(text: str, facts: dict[str, CanonicalFact]) -> str:
     """Replace every reference in *text* with its fact's value.
 

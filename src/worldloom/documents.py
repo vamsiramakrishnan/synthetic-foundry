@@ -20,6 +20,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from .ids import Minter
+from .narrative import references
 from .models import (
     ArtifactIntent,
     ArtifactIR,
@@ -769,6 +770,7 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
     plan = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
     unit_ids = {unit.id for unit in world.business_units}
+    names = world.entity_names()
 
     def in_scope(fact: CanonicalFact, scope: str) -> bool:
         if scope == "group":
@@ -781,22 +783,19 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
         key="supporting_facts",
         title="Supporting facts",
         columns=[
-            Column(key="fact", label="Fact"),
+            Column(key="subject", label="Subject"),
             Column(key="statement", label="Statement"),
             Column(key="authority", label="Authority"),
             Column(key="valid_from", label="Valid from"),
         ],
         rows=[
+            # The row label is the fact ID, so a "Fact" column repeating it was a
+            # column of duplicates where the subject should have been. An appendix
+            # a reader cannot use to tell one revenue line from another is not an
+            # appendix.
             Row(key=fact.id, label=fact.id, cells={
-                "fact": Cell(value=fact.id),
-                "statement": Cell(
-                    value=fact.text_value
-                    if fact.text_value
-                    else f"{fact.kind} = {fact.value.amount:,g} {fact.value.unit}"
-                    if fact.value
-                    else fact.kind,
-                    fact_id=fact.id,
-                ),
+                "subject": Cell(value=names.get(fact.subject, fact.subject)),
+                "statement": Cell(value=references.describe(fact), fact_id=fact.id),
                 "authority": Cell(value=fact.authority.value),
                 "valid_from": Cell(value=fact.valid_from.isoformat()),
             })

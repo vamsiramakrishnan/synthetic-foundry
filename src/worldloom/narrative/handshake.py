@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from . import references
 from .claims import validate
 from .compiler import _request_for
 from .requests import (
@@ -54,13 +55,14 @@ RULES: tuple[str, ...] = (
 )
 
 
-def _fact_payload(fact: CanonicalFact, *, required: bool) -> dict[str, Any]:
-    statement = fact.text_value or (
-        f"{fact.kind} = {fact.value.amount:,g} {fact.value.unit}" if fact.value else fact.kind
-    )
+def _fact_payload(
+    fact: CanonicalFact, *, required: bool, subject: str | None = None
+) -> dict[str, Any]:
     return {
         "id": fact.id,
-        "statement": statement,
+        "subject": subject or fact.subject,
+        "period": fact.period or "",
+        "statement": references.describe(fact, subject),
         "kind": fact.kind,
         "authority": fact.authority.value,
         "valid_from": fact.valid_from.isoformat(),
@@ -82,7 +84,11 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
         "knows_as_of": request.temporal_cutoff.isoformat() if request.temporal_cutoff else None,
         "must_not_claim": list(request.forbidden_claims),
         "facts": [
-            _fact_payload(facts[f], required=f in request.required_fact_ids)
+            _fact_payload(
+                facts[f],
+                required=f in request.required_fact_ids,
+                subject=request.subjects.get(f),
+            )
             for f in request.allowed_fact_ids
             if f in facts
         ],

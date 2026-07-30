@@ -500,8 +500,8 @@ def test_narration_needs_something_to_narrate() -> None:
 
 
 def test_prompts_are_versioned() -> None:
-    assert prompts.versions() == {"section_prose": "1"}
-    assert prompts.SECTION_PROSE.key == "section_prose@1"
+    assert prompts.versions() == {"section_prose": "2"}
+    assert prompts.SECTION_PROSE.key == "section_prose@2"
     with pytest.raises(KeyError, match="unknown prompt"):
         prompts.get("nope")
 

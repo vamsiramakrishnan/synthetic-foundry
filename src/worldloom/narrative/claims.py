@@ -123,6 +123,16 @@ def validate(
     return Verdict(accepted=not violations, violations=violations)
 
 
+#: Function words that begin a sentence and are not part of the name that follows.
+#:
+#: Without these, "For Australian Food, revenue was …" reads as an entity called
+#: "For Australian Food" and is rejected. That is the check working — it is
+#: supposed to be suspicious of capitalised runs — but the run it found starts one
+#: word too early. Found by the validator refusing prose this repository's own
+#: fixture provider had just written.
+_SENTENCE_OPENERS = frozenset({"For", "At", "In", "On", "By", "The", "A", "An", "This", "Both"})
+
+
 def _capitalised_runs(text: str) -> list[str]:
     """Multi-word capitalised runs, as a cheap proxy for named entities.
 
@@ -134,6 +144,8 @@ def _capitalised_runs(text: str) -> list[str]:
     current: list[str] = []
     for token in text.replace("\n", " ").split(" "):
         stripped = token.strip(".,;:()'\"")
+        if not current and stripped in _SENTENCE_OPENERS:
+            continue
         if stripped[:1].isupper() and stripped[1:2].islower():
             current.append(stripped)
         else:

@@ -232,6 +232,24 @@ class World:
         """The generation ledger. Empty at Gate A — no generative calls yet."""
         return Collection(self._ledger, label="GenerationLedgerCollection")
 
+    def entity_names(self) -> dict[str, str]:
+        """Every entity ID to the name a person would use for it.
+
+        Built for describing facts: a fact's subject is an ID, and an ID is not
+        something prose can be written about. A narrative request that says
+        ``financial.revenue.actual = 614,400`` four times over is unanswerable;
+        one that names Australian Food, New Zealand Food, General Merchandise and
+        Digital is a memo waiting to be written.
+        """
+        names = {self.company.id: self.company.name}
+        for group in (
+            self._business_units, self._people, self._systems, self._services,
+            self._cost_centres, self._categories, self._sites,
+        ):
+            names.update({item.id: item.name for item in group})
+        names.update({persona.id: persona.label for persona in self._personas})
+        return names
+
     # -- named views -------------------------------------------------------
 
     def timeline(self) -> EventCollection:

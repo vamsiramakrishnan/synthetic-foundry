@@ -33,6 +33,13 @@ class NarrativeRequest(Model):
     """What the author could know. Facts valid after this are not visible."""
     allowed_fact_ids: list[str] = Field(default_factory=list)
     required_fact_ids: list[str] = Field(default_factory=list)
+    subjects: dict[str, str] = Field(default_factory=dict)
+    """Fact ID to the name of the entity it is about.
+
+    Carried on the request rather than looked up, because the contract is that a
+    request can be answered without reading this repository — and a figure whose
+    subject is an opaque ID cannot be written about at all.
+    """
     forbidden_claims: list[str] = Field(default_factory=list)
     target_words: int = 120
     fact_digest: str = ""

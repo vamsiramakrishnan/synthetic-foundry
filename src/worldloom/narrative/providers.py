@@ -150,6 +150,14 @@ class DeterministicProvider:
         budget = max(len(required), min(len(usable), max(2, request.target_words // 18)))
         chosen = required + optional[: max(0, budget - len(required))]
 
+        # Name the entity only when the section is actually contrasting several.
+        # A "Position" section whose facts are all group-level reads better
+        # without the company's name in front of every sentence; a "By business
+        # unit" section without the names is four identical sentences.
+        distinct = {request.subjects.get(fact.id) for fact in chosen}
+        distinct.discard(None)
+        contrasting = len(distinct) > 1
+
         sentences: list[str] = []
         claims: list[GeneratedClaim] = []
         for fact in chosen:
@@ -165,6 +173,9 @@ class DeterministicProvider:
                 sentence = f"At the time it was recorded as {reference}, which was later superseded."
             else:
                 sentence = _shape(fact.kind).format(ref=reference)
+                subject = request.subjects.get(fact.id)
+                if contrasting and subject:
+                    sentence = f"For {subject}, {sentence[0].lower()}{sentence[1:]}"
             sentences.append(sentence)
             claims.append(GeneratedClaim(text=sentence, supporting_fact_ids=[fact.id]))
 

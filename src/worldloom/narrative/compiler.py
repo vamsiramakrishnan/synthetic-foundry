@@ -96,6 +96,7 @@ def _request_for(
     manifest = world.artifacts.get(ir.id)
 
     allowed = [f for f in section.fact_ids if f in facts]
+    names = world.entity_names()
     # An author knows what had happened by the time they wrote. Using the
     # artifact's own timestamp as the cut-off is what stops a page written during
     # triage from citing a cause confirmed hours later — while still letting a
@@ -113,6 +114,11 @@ def _request_for(
         artifact_id=ir.id,
         artifact_type=intent.artifact_type,
         section=section.heading,
+        subjects={
+            fact_id: names[facts[fact_id].subject]
+            for fact_id in allowed
+            if facts[fact_id].subject in names
+        },
         persona_id=persona.id if persona else "",
         voice=persona.voice if persona else "plain",
         audience=intent.audience,

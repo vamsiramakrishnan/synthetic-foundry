@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..models import CanonicalFact
+from . import references
 from .requests import NarrativeRequest
 
 
@@ -37,9 +38,7 @@ class Prompt:
             fact = facts.get(fact_id)
             if fact is None:
                 continue
-            statement = fact.text_value or (
-                f"{fact.kind} = {fact.value.amount:,g} {fact.value.unit}" if fact.value else fact.kind
-            )
+            statement = references.describe(fact, request.subjects.get(fact_id))
             required = " (REQUIRED)" if fact_id in request.required_fact_ids else ""
             lines.append(
                 f"  {fact_id}  [{fact.authority.value}] {statement}"
@@ -62,7 +61,12 @@ class Prompt:
 
 SECTION_PROSE = Prompt(
     name="section_prose",
-    version="1",
+    # v2: fact lines now name the entity each figure is about. The template is
+    # unchanged, but what it renders is not — and the ledger key is only honest
+    # if a changed prompt changes the key. Replaying a v1 corpus against v2
+    # therefore regenerates rather than silently serving prose written from a
+    # weaker prompt, which is the whole point of versioning this.
+    version="2",
     template="""\
 Write the "{section}" section of a {artifact_type} for {audience}.
 
