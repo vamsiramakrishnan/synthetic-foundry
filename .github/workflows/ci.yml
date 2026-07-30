@@ -1,9 +1,17 @@
 name: ci
 
+# Push is restricted to the default branch on purpose: with `branches: ["**"]`
+# every push to a PR branch triggers both a push run and a pull_request run, so
+# each job runs twice for no extra signal.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
+
+# A new push supersedes whatever was already running for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
