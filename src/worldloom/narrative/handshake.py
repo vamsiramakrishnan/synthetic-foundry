@@ -52,16 +52,36 @@ RULES: tuple[str, ...] = (
     " anything discovered later.",
     "A fact marked `superseded: true` was believed at the time and later proved"
     " wrong. You may refer to it as a past belief, never as the current position.",
+    # The rules above are prohibitions. These four are the ones that make prose
+    # good rather than merely legal — a section that satisfies every constraint
+    # and says nothing is a section that passed validation and failed its job.
+    "`purpose` is the section's job. Write to it. A section that lists the facts"
+    " in the order supplied has not done its job even if every rule above is"
+    " satisfied.",
+    "`background` is standing context that explains why the figures look as they"
+    " do. Reason from it and allude to it. Do not assert it as a finding, do not"
+    " cite it, and never present it as something the facts establish.",
+    "Where a fact has `prior_period_fact`, both are available to cite. That is how"
+    " a trend is stated: reference this period and the last, and let the reader see"
+    " the movement, rather than describing a movement in words the ledger cannot"
+    " check.",
+    "Not every fact deserves a sentence. Weight them. A division that performed to"
+    " plan warrants a clause; the one that did not warrants the paragraph.",
 )
 
 
 def _fact_payload(
-    fact: CanonicalFact, *, required: bool, subject: str | None = None
+    fact: CanonicalFact,
+    *,
+    required: bool,
+    subject: str | None = None,
+    comparator: str | None = None,
 ) -> dict[str, Any]:
     return {
         "id": fact.id,
         "subject": subject or fact.subject,
         "period": fact.period or "",
+        **({"prior_period_fact": comparator} if comparator else {}),
         "statement": references.describe(fact, subject),
         "kind": fact.kind,
         "authority": fact.authority.value,
@@ -78,8 +98,13 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
         "artifact_type": request.artifact_type,
         "section": request.section,
         "written_by": request.author_title,
+        "purpose": request.purpose,
         "voice": request.voice,
+        "persona": request.persona_label,
+        "author_traits": dict(request.author_traits),
         "audience": request.audience,
+        "background": list(request.background),
+        "hierarchy": dict(request.hierarchy),
         "target_words": request.target_words,
         "knows_as_of": request.temporal_cutoff.isoformat() if request.temporal_cutoff else None,
         "must_not_claim": list(request.forbidden_claims),
@@ -88,6 +113,7 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
                 facts[f],
                 required=f in request.required_fact_ids,
                 subject=request.subjects.get(f),
+                comparator=request.comparators.get(f),
             )
             for f in request.allowed_fact_ids
             if f in facts

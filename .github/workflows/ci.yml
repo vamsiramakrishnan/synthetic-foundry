@@ -59,6 +59,18 @@ jobs:
             -f xlsx -f markdown -f docx --out "${{ runner.temp }}/large"
           worldloom validate "${{ runner.temp }}/large"
 
+      # The reference narration: real agent-written prose, accepted whole. Guards
+      # the requests rather than the prose — a change that makes a request harder
+      # to answer well shows up here and nowhere else.
+      - name: The reference narration is still accepted
+        run: |
+          worldloom build --seed 8128 --incident --archetype australian_grocery \
+            --comparatives 11 --out "${{ runner.temp }}/reference"
+          worldloom narrate accept "${{ runner.temp }}/reference" \
+            --from examples/grocery-close/narration.json --model-id claude-opus-5
+          worldloom render "${{ runner.temp }}/reference" -f docx -f xlsx -f markdown
+          worldloom validate "${{ runner.temp }}/reference"
+
       # The agent handshake: a corpus asks for prose, and refuses prose that
       # restates a figure. Exercised with a scripted "agent" so the contract is
       # covered without a model in CI.

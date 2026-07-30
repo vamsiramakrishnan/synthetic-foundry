@@ -33,6 +33,31 @@ class NarrativeRequest(Model):
     """What the author could know. Facts valid after this are not visible."""
     allowed_fact_ids: list[str] = Field(default_factory=list)
     required_fact_ids: list[str] = Field(default_factory=list)
+    purpose: str = ""
+    """What this section has to accomplish. The difference between prose that
+    argues and prose that lists."""
+    background: list[str] = Field(default_factory=list)
+    """Standing context that explains *why* the figures look as they do.
+
+    Lore assertions reachable from the facts supplied. Explicitly not citable and
+    explicitly not figures — a writer may reason from them and allude to them, and
+    must not assert them as findings. Without this a variance memo can say margin
+    fell; with it, the memo can say margin fell for the reason everyone in the
+    business already argues about, which is what a real one does."""
+    author_traits: dict[str, float] = Field(default_factory=dict)
+    """How this specific author writes under pressure, from lore. Signed
+    magnitudes: positive is more of the named trait."""
+    persona_label: str = ""
+    hierarchy: dict[str, str] = Field(default_factory=dict)
+    """Subject name to where it sits — "division of Ardent Holdings", "category in
+    Australian Food". Lets prose say "the largest division" instead of naming four
+    units flatly."""
+    comparators: dict[str, str] = Field(default_factory=dict)
+    """Fact ID to the ID of the same measure a period earlier.
+
+    Both are in ``allowed_fact_ids``, so a trend claim is written by citing two
+    references rather than by restating a movement. This is what makes "the third
+    consecutive month of erosion" a sentence the harness will accept."""
     subjects: dict[str, str] = Field(default_factory=dict)
     """Fact ID to the name of the entity it is about.
 

@@ -16,6 +16,7 @@ reconciliation constraints everything else is checked against.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -700,49 +701,172 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
 #:
 #: ``scope`` is ``group`` (company-level subjects only), ``unit`` (business units
 #: only), or ``any``.
-_OUTLINES: dict[str, tuple[tuple[str, tuple[str, ...], str], ...]] = {
+@dataclass(frozen=True)
+class SectionPlan:
+    """One section of a narrative artifact, and what it is for."""
+
+    heading: str
+    kinds: tuple[str, ...]
+    """Fact-kind prefixes this section is about."""
+    scope: str
+    """``group`` (company subjects), ``unit`` (business units), or ``any``."""
+    purpose: str
+    """The section's job, in the words its author would use.
+
+    This is the field that decides whether the prose argues or lists. A writer
+    told only "write the Drivers section, here are four metrics" can produce a
+    correct paragraph of four sentences and nothing better. A writer told the
+    section has to attribute the group margin movement and say whether it is
+    structural or one-off has something to actually do.
+    """
+
+
+_OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
     "cfo_variance_memo": (
-        ("Position", ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."), "group"),
-        ("By business unit", ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."), "unit"),
-        ("Drivers", ("metric.",), "any"),
-        ("Close timetable", ("close.", "ops.cause", "ops.workaround", "financial.incident_pl_impact"), "any"),
-        ("Recommendation", ("ops.remediation", "ops.root_cause_classification", "ops.mapping_table_owner"), "any"),
+        SectionPlan(
+            "Position", ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."), "group",
+            "State the group result against plan and say plainly whether the period was "
+            "acceptable. Lead with the number that matters most, not with the first one in "
+            "the list. The CFO already knows the shape of the month; give them the "
+            "sentence they will repeat to the board.",
+        ),
+        SectionPlan(
+            "By business unit", ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."), "unit",
+            "Attribute the group position to divisions. Say which unit carried the miss "
+            "and which held up, and do not give equal airtime to units that behaved "
+            "normally. A division performing to plan warrants a clause, not a paragraph.",
+        ),
+        SectionPlan(
+            "Drivers", ("metric.",), "any",
+            "Explain what moved margin and whether it is structural or one-off. This is "
+            "the section the CFO reads twice; it must connect a cause to a figure rather "
+            "than list metrics. Where a driver sits inside a division rather than across "
+            "the group, say so.",
+        ),
+        SectionPlan(
+            "Close timetable", ("close.", "ops.cause", "ops.workaround", "financial.incident_pl_impact"), "any",
+            "Report whether the close met its committed date and, if not, what stopped it. "
+            "Distinguish a calendar impact from a P&L impact explicitly — conflating them "
+            "is the most common error in this kind of memo.",
+        ),
+        SectionPlan(
+            "Recommendation", ("ops.remediation", "ops.root_cause_classification", "ops.mapping_table_owner"), "any",
+            "Say what should happen next and who has to decide. Be specific about which "
+            "remediation addresses the underlying control and which addresses detection "
+            "only; a reader who cannot tell them apart will approve the cheaper one.",
+        ),
     ),
     "executive_summary": (
-        ("In brief", ("financial.revenue.", "financial.gross_margin_pct."), "group"),
-        ("Close", ("close.", "financial.incident_pl_impact"), "any"),
-        ("Focus next period", ("metric.",), "any"),
+        SectionPlan(
+            "In brief", ("financial.revenue.", "financial.gross_margin_pct."), "group",
+            "Three sentences at most. An executive committee wants the result, the "
+            "direction, and whether anything requires them. Confident register, no hedging, "
+            "no methodology.",
+        ),
+        SectionPlan(
+            "Close", ("close.", "financial.incident_pl_impact"), "any",
+            "State whether the books closed on time and whether the result was affected. "
+            "This paper deliberately does not raise the control failure behind the delay — "
+            "write only what the facts given support.",
+        ),
+        SectionPlan(
+            "Focus next period", ("metric.",), "any",
+            "Name the one or two measures the committee should watch, and why. Forward-"
+            "looking, brief, and free of operational detail.",
+        ),
     ),
     "incident_rca": (
-        ("Summary", ("ops.feed_status", "ops.affected_records"), "any"),
-        ("Timeline", ("ops.incident_opened", "ops.valuation_status", "close."), "any"),
-        ("Initial assessment and why it was wrong", ("ops.cause_ruled_out",), "any"),
-        ("Root cause", ("ops.cause", "ops.root_cause_classification", "ops.mapping_table_owner"), "any"),
-        ("Contributing factors", ("ops.previous_similar_incident", "ops.workaround"), "any"),
-        ("Actions", ("ops.remediation",), "any"),
+        SectionPlan(
+            "Summary", ("ops.feed_status", "ops.affected_records"), "any",
+            "What failed, how much was affected, and what it stopped. Written for someone "
+            "who will read this section and nothing else.",
+        ),
+        SectionPlan(
+            "Timeline", ("ops.incident_opened", "ops.valuation_status", "close."), "any",
+            "The sequence, in order, with the moment the close was put at risk made "
+            "explicit. Times matter here; narrative flourish does not.",
+        ),
+        SectionPlan(
+            "Initial assessment and why it was wrong", ("ops.cause_ruled_out",), "any",
+            "State the hypothesis triage recorded and why it was ruled out. Write it as a "
+            "belief held at the time, not as an error — the point is what the evidence "
+            "supported then, not blame now.",
+        ),
+        SectionPlan(
+            "Root cause", ("ops.cause", "ops.root_cause_classification", "ops.mapping_table_owner"), "any",
+            "The confirmed cause, and the condition that allowed it to persist. An "
+            "unassigned owner is itself a finding and should be stated as one.",
+        ),
+        SectionPlan(
+            "Contributing factors", ("ops.previous_similar_incident", "ops.workaround"), "any",
+            "What made this more likely or harder to catch. Recurrence is the strongest "
+            "signal available; if there is precedent, lead with it.",
+        ),
+        SectionPlan(
+            "Actions", ("ops.remediation",), "any",
+            "What is being done, by whom, and which action addresses the control rather "
+            "than the symptom. Distinguish the two; a reader must not be able to mistake "
+            "improved detection for a fixed control.",
+        ),
     ),
     "working_note": (
-        ("Where the close stands", ("close.",), "any"),
-        ("Running note", ("ops.",), "any"),
+        SectionPlan(
+            "Where the close stands", ("close.",), "any",
+            "A controller's own note, written mid-close for their own use. Terse, "
+            "provisional, dated in its thinking. Not a report.",
+        ),
+        SectionPlan(
+            "Running note", ("ops.",), "any",
+            "Working observations in the order they were made, including what is still "
+            "unknown. It is legitimate — and realistic — for this to read as unfinished.",
+        ),
     ),
     "confluence_page": (
-        # A triage page knows the symptom and the first guess, nothing more.
-        ("Current position", ("ops.feed_status", "ops.incident_opened"), "any"),
-        ("Next steps", ("ops.cause",), "any"),
+        SectionPlan(
+            "Current position", ("ops.feed_status", "ops.incident_opened"), "any",
+            "A triage status page written while the incident is open. It knows the symptom "
+            "and the first guess and nothing more. Write with the confidence of the moment, "
+            "which later turns out to have been misplaced.",
+        ),
+        SectionPlan(
+            "Next steps", ("ops.cause",), "any",
+            "What the team is doing about it right now. Provisional by nature. This page is "
+            "never updated, so it must not hedge in a way that would age well.",
+        ),
     ),
     "knowledge_article": (
-        ("When to use this", ("ops.feed_status", "ops.affected_records"), "any"),
-        ("Cause", ("ops.cause", "ops.mapping_table_owner"), "any"),
-        ("Procedure", ("ops.workaround",), "any"),
+        SectionPlan(
+            "When to use this", ("ops.feed_status", "ops.affected_records"), "any",
+            "The symptom a future reader will recognise. Written so someone hitting this at "
+            "2am can tell in one sentence whether they are in the right article.",
+        ),
+        SectionPlan(
+            "Cause", ("ops.cause", "ops.mapping_table_owner"), "any",
+            "Why it happens, briefly, and who to go to. Enough that the procedure below "
+            "makes sense; not a root-cause analysis.",
+        ),
+        SectionPlan(
+            "Procedure", ("ops.workaround",), "any",
+            "The steps, in order, imperative mood. A reader should be able to follow this "
+            "without understanding the cause.",
+        ),
     ),
     "close_calendar": (
-        ("Commitment", ("close.due_date",), "any"),
-        ("Escalation", ("close.revised_date", "close.status", "close.delay"), "any"),
+        SectionPlan(
+            "Commitment", ("close.due_date",), "any",
+            "State the committed date for the period. This is a standing published "
+            "document; write it as policy, not as news.",
+        ),
+        SectionPlan(
+            "Escalation", ("close.revised_date", "close.status", "close.delay"), "any",
+            "What happens when the date moves, and where the period ended up. Procedural "
+            "register — this is read by people looking up a rule.",
+        ),
     ),
 }
 
-_DEFAULT_OUTLINE: tuple[tuple[str, tuple[str, ...], str], ...] = (
-    ("Summary", ("",), "any"),
+_DEFAULT_OUTLINE: tuple[SectionPlan, ...] = (
+    SectionPlan("Summary", ("",), "any", "Summarise what the facts below establish."),
 )
 
 
@@ -808,17 +932,22 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     persona = world.personas.get(author.persona_id) if author.persona_id else None
 
     sections: list[ArtifactSection] = []
-    for heading, prefixes, scope in plan:
+    for step in plan:
         assigned = [
             fact.id
             for fact in facts
-            if in_scope(fact, scope) and any(fact.kind.startswith(prefix) for prefix in prefixes)
+            if in_scope(fact, step.scope)
+            and any(fact.kind.startswith(prefix) for prefix in step.kinds)
         ]
         # A section with nothing to say does not belong in the document. The plan
         # follows the episode, so a close without an incident gets no incident
         # sections rather than an empty heading.
         if assigned:
-            sections.append(ArtifactSection(heading=heading, body=None, fact_ids=assigned))
+            sections.append(
+                ArtifactSection(
+                    heading=step.heading, body=None, fact_ids=assigned, purpose=step.purpose
+                )
+            )
 
     sections.append(ArtifactSection(heading="Supporting facts", table=supporting, hidden=True))
 

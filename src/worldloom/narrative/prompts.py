@@ -40,13 +40,23 @@ class Prompt:
                 continue
             statement = references.describe(fact, request.subjects.get(fact_id))
             required = " (REQUIRED)" if fact_id in request.required_fact_ids else ""
+            prior = request.comparators.get(fact_id)
             lines.append(
                 f"  {fact_id}  [{fact.authority.value}] {statement}"
-                f" (valid from {fact.valid_from.isoformat()}){required}"
+                f" (valid from {fact.valid_from.isoformat()})"
+                + (f" (prior period: {prior})" if prior else "")
+                + required
             )
+
+        traits = ", ".join(f"{name} {value:+.1f}" for name, value in sorted(request.author_traits.items()))
 
         return self.template.format(
             section=request.section,
+            purpose=request.purpose or "  (not stated)",
+            persona=f" ({request.persona_label})" if request.persona_label else "",
+            traits=f"\nWriting tendencies: {traits}" if traits else "",
+            hierarchy="\n".join(f"  {k} — {v}" for k, v in sorted(request.hierarchy.items())) or "  (none)",
+            background="\n".join(f"  - {b}" for b in request.background) or "  (none)",
             artifact_type=request.artifact_type.replace("_", " "),
             audience=request.audience.replace("_", " "),
             author_title=request.author_title,
@@ -61,22 +71,36 @@ class Prompt:
 
 SECTION_PROSE = Prompt(
     name="section_prose",
-    # v2: fact lines now name the entity each figure is about. The template is
-    # unchanged, but what it renders is not — and the ledger key is only honest
-    # if a changed prompt changes the key. Replaying a v1 corpus against v2
-    # therefore regenerates rather than silently serving prose written from a
-    # weaker prompt, which is the whole point of versioning this.
-    version="2",
+    # v2 named the entity each figure is about. v3 adds the section's purpose, the
+    # standing context that explains the figures, and the prior period — the
+    # difference between prose that is legal and prose that argues. The template
+    # changed, so the version does; a ledger key is only honest if a changed
+    # prompt changes it.
+    version="3",
     template="""\
 Write the "{section}" section of a {artifact_type} for {audience}.
 
-You are writing as: {author_title}
-Voice: {voice}
+What this section has to do:
+{purpose}
+
+You are writing as: {author_title}{persona}
+Voice: {voice}{traits}
 Target length: about {target_words} words.
 You know only what was true at: {cutoff}
 
 Facts you may use. Reference each one as {{{{fact:ID}}}} — never write a figure out:
 {facts}
+
+Where a fact carries "prior period: FACT-ID", both are available to cite. That is
+how a trend is stated — reference this period and the last, and let the reader see
+the movement.
+
+Where each subject sits:
+{hierarchy}
+
+Standing context. This explains why the figures look as they do. Reason from it
+and allude to it; do not assert it as a finding and do not cite it:
+{background}
 
 You must not claim:
 {forbidden}
@@ -86,6 +110,8 @@ Rules:
 - Every assertion must be supported by at least one of the facts above.
 - Do not mention anything not present in the facts above.
 - Facts marked REQUIRED must appear.
+- Write to the purpose. Listing the facts in the order supplied is not the job.
+- Weight the facts. Not every one deserves a sentence.
 
 Return the prose, and a list of the claims it makes with the fact IDs supporting each.
 """,

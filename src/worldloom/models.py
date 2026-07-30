@@ -479,6 +479,14 @@ class ArtifactSection(Model):
     body: str | None = None
     table: Table | None = None
     fact_ids: list[str] = Field(default_factory=list)
+    purpose: str = ""
+    """What this section has to accomplish, and for whom.
+
+    A heading and a bag of figures is enough to produce a list. It is not enough
+    to produce an argument, and the difference between a list and an argument is
+    most of what separates real enterprise prose from generated prose. So the
+    outline states the section's job, and the narrative request carries it.
+    """
     hidden: bool = False
     """Present in the artifact but not part of its readable surface."""
 

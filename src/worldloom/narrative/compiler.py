@@ -83,6 +83,67 @@ def _forbidden_for(artifact_type: str) -> list[str]:
     return []
 
 
+def _comparators(
+    allowed: list[str],
+    facts: dict[str, CanonicalFact],
+    cutoff,  # type: ignore[no-untyped-def]
+) -> dict[str, str]:
+    """Each measured fact paired with the same measure one period earlier."""
+    by_measure: dict[tuple[str, str, str], str] = {}
+    for fact in facts.values():
+        if fact.period and fact.value is not None and not fact.is_superseded:
+            by_measure.setdefault((fact.kind, fact.subject, fact.period), fact.id)
+
+    out: dict[str, str] = {}
+    for fact_id in allowed:
+        fact = facts[fact_id]
+        if not fact.period or fact.value is None:
+            continue
+        year, _, month = fact.period.partition("-")
+        previous = (
+            f"{int(year) - 1:04d}-12" if month == "01" else f"{year}-{int(month) - 1:02d}"
+        )
+        earlier = by_measure.get((fact.kind, fact.subject, previous))
+        if earlier is None:
+            continue
+        # A comparator the author could not yet have seen is not a comparator.
+        if cutoff is not None and facts[earlier].valid_from > cutoff:
+            continue
+        out[fact_id] = earlier
+    return out
+
+
+def _background(world: World, cited: list[CanonicalFact]) -> list[str]:
+    """Lore reachable from the facts supplied.
+
+    Only what the figures actually touch. Handing a writer the whole lore graph
+    would invite them to explain a margin miss with a decision that has nothing to
+    do with it, which is worse than no context at all.
+    """
+    wanted = {lore_id for fact in cited for lore_id in fact.lore_ids}
+    return [c.assertion for c in world.lore if c.id in wanted]
+
+
+def _hierarchy(world: World, cited: list[CanonicalFact], names: dict[str, str]) -> dict[str, str]:
+    """Where each subject sits, so prose can say "the largest division"."""
+    units = {unit.id: unit.name for unit in world.business_units}
+    out: dict[str, str] = {}
+    for fact in cited:
+        subject = fact.subject
+        if subject in out or subject not in names:
+            continue
+        if subject == world.company.id:
+            out[names[subject]] = "the group"
+        elif subject in units:
+            out[names[subject]] = f"division of {world.company.name}"
+        else:
+            parent = getattr(world.categories.get(subject) or world.sites.get(subject), "business_unit_id", None)
+            if parent in units:
+                kind = "category in" if world.categories.get(subject) else "site in"
+                out[names[subject]] = f"{kind} {units[parent]}"
+    return out
+
+
 def _request_for(
     world: World,
     ir: ArtifactIR,
@@ -110,6 +171,14 @@ def _request_for(
         and (cutoff is None or facts[fact_id].valid_from <= cutoff)
     ][:3]
 
+    # The prior period's value of each measure, added to the allowed set so a
+    # trend is written by citing two references rather than by restating a
+    # movement the writer worked out in their head. Without this the harness
+    # would be right to reject "the third consecutive month" — there would be
+    # nothing supporting it.
+    comparators = _comparators(allowed, facts, cutoff)
+    allowed = allowed + [c for c in comparators.values() if c not in allowed]
+
     return NarrativeRequest(
         artifact_id=ir.id,
         artifact_type=intent.artifact_type,
@@ -119,6 +188,12 @@ def _request_for(
             for fact_id in allowed
             if facts[fact_id].subject in names
         },
+        purpose=section.purpose,
+        background=_background(world, [facts[f] for f in allowed]),
+        author_traits=dict(author.traits),
+        persona_label=persona.label if persona else "",
+        hierarchy=_hierarchy(world, [facts[f] for f in allowed], names),
+        comparators=comparators,
         persona_id=persona.id if persona else "",
         voice=persona.voice if persona else "plain",
         audience=intent.audience,
