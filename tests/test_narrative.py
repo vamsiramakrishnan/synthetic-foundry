@@ -181,7 +181,15 @@ def test_correcting_a_fact_invalidates_its_prose(narrated: World) -> None:
     """The fact digest is in the key so a changed figure regenerates, not replays."""
     world = fresh()
     facts = list(world._facts)
-    index = next(i for i, f in enumerate(facts) if f.value and f.kind.endswith("revenue.actual"))
+    # A group-level figure, because only those reach a narrative section. A
+    # category or store revenue fact is in the corpus and on the workbook, but no
+    # prose cites it, so corrupting one would change no ledger key and the replay
+    # would legitimately succeed.
+    index = next(
+        i
+        for i, f in enumerate(facts)
+        if f.value and f.kind.endswith("revenue.actual") and f.subject == world.company.id
+    )
     facts[index] = facts[index].model_copy(
         update={"value": facts[index].value.model_copy(update={"amount": 123_456})}
     )

@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import archetypes
+from .archetypes import AUSTRALIAN_GROCERY, OMNICHANNEL_RETAILER, Archetype
 from .ids import Minter
 from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
 from .rng import Rng
@@ -154,12 +156,30 @@ class RetailWorld:
 
         world = RetailWorld(seed=8128).build()
         world = world.run(MonthEndClose(period="2026-03"))
+
+    The archetype decides scale and shape — how many divisions, what they sell,
+    how many stores. Everything in the world is generated from the seed; the
+    archetype contributes no data of its own::
+
+        world = RetailWorld.inspired_by("a large Australian grocer", seed=8128).build()
     """
 
     seed: int
-    employees: int = 80_000
-    annual_revenue: int = 7_800_000
-    """In the company's currency unit — thousands, so this is 7.8bn."""
+    archetype: Archetype = OMNICHANNEL_RETAILER
+    employees: int | None = None
+    annual_revenue: int | None = None
+    """Override the archetype's scale. ``None`` takes the archetype's own."""
+
+    @classmethod
+    def inspired_by(cls, description: str, *, seed: int) -> RetailWorld:
+        """A world shaped like the business *description* names.
+
+        Shape only: unit mix, margin structure, store count, category depth. No
+        figure, name, or fact about the described company is looked up or used —
+        the point is a corpus that behaves like that *kind* of business while
+        being wholly invented.
+        """
+        return cls(seed=seed, archetype=archetypes.inspired_by(description))
 
     def build(self) -> World:
         """Generate the organisation and its lore. No events yet."""
@@ -171,7 +191,7 @@ class RetailWorld:
         commitments = lore(minter)
         org = organisation.generate(
             rng.derive("organisation"), minter,
-            lore=commitments, employees_total=self.employees,
+            archetype=self.archetype, lore=commitments,
         )
 
         return World(
@@ -181,14 +201,25 @@ class RetailWorld:
             _systems=org.systems,
             _services=org.services,
             _cost_centres=org.cost_centres,
+            _categories=org.categories,
+            _sites=org.sites,
             _personas=org.personas,
             _access_policies=org.access_policies,
             _lore=commitments,
             seed=self.seed,
             _roles=org.roles,
             _minter=minter,
-            _annual_revenue=self.annual_revenue,
+            _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
+            _archetype=self.archetype,
         )
 
 
-__all__ = ["RetailWorld", "MonthEndClose", "lore", "BASE_INCIDENT_LIKELIHOOD"]
+__all__ = [
+    "RetailWorld",
+    "MonthEndClose",
+    "lore",
+    "BASE_INCIDENT_LIKELIHOOD",
+    "Archetype",
+    "AUSTRALIAN_GROCERY",
+    "OMNICHANNEL_RETAILER",
+]

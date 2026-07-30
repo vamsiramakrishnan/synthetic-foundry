@@ -94,11 +94,153 @@ def _money(amount: float | None, fact_id: str | None = None) -> Cell:
     return Cell(value=amount, fact_id=fact_id)
 
 
-def _lookup(facts: list[CanonicalFact], kind: str, subject: str) -> CanonicalFact | None:
-    for fact in facts:
-        if fact.kind == kind and fact.subject == subject and not fact.is_superseded:
-            return fact
-    return None
+#: The seven P&L columns, and the fact kind each reads.
+_MEASURES: dict[str, str] = {
+    "revenue_budget": "financial.revenue.budget",
+    "revenue_actual": "financial.revenue.actual",
+    "revenue_variance": "financial.revenue.variance",
+    "gp_budget": "financial.gross_profit.budget",
+    "gp_actual": "financial.gross_profit.actual",
+    "gp_variance": "financial.gross_profit.variance",
+    "gm_pct_actual": "financial.gross_margin_pct.actual",
+}
+
+#: Columns computed from the two beside them, and from which. Declared once here
+#: so a category row, a unit subtotal, and the group row all recompute the same
+#: way — a subtotal that pasted its variance while the rows above computed theirs
+#: is exactly the disagreement this project exists to prevent.
+_DERIVED: dict[str, tuple[FormulaKind, list[str]]] = {
+    "revenue_variance": (FormulaKind.DIFFERENCE, ["revenue_actual", "revenue_budget"]),
+    "gp_variance": (FormulaKind.DIFFERENCE, ["gp_actual", "gp_budget"]),
+    "gm_pct_actual": (FormulaKind.RATIO_PCT, ["gp_actual", "revenue_actual"]),
+}
+
+#: Columns a subtotal must *not* sum, because they do not add up. A margin
+#: percentage is a ratio of totals, never the total of ratios; a variance, by
+#: contrast, is additive, so a subtotal sums its children's variances and shows
+#: which of them the group's miss came from.
+_NOT_ADDITIVE = frozenset({"gm_pct_actual"})
+
+
+def _pnl_columns() -> list[Column]:
+    return [
+        Column(key="revenue_budget", label="Revenue budget", number_format=MONEY_FORMAT),
+        Column(key="revenue_actual", label="Revenue actual", number_format=MONEY_FORMAT),
+        Column(key="revenue_variance", label="Revenue variance", number_format=MONEY_FORMAT),
+        Column(key="gp_budget", label="GP budget", number_format=MONEY_FORMAT),
+        Column(key="gp_actual", label="GP actual", number_format=MONEY_FORMAT),
+        Column(key="gp_variance", label="GP variance", number_format=MONEY_FORMAT),
+        Column(key="gm_pct_actual", label="GM% actual", number_format=PERCENT_FORMAT),
+    ]
+
+
+class _Facts:
+    """The cited facts, indexed by what a sheet asks for.
+
+    A workbook at store level cites thousands of facts and reads each of them
+    several times. Scanning the list per lookup is quadratic, and the period must
+    be part of the key — with a trend in the corpus, a scan for
+    ``revenue.actual`` of a category finds last January first.
+    """
+
+    __slots__ = ("_by_key", "all")
+
+    def __init__(self, facts: list[CanonicalFact]) -> None:
+        self.all = facts
+        self._by_key: dict[tuple[str, str, str | None], CanonicalFact] = {}
+        for fact in facts:
+            if not fact.is_superseded:
+                self._by_key.setdefault((fact.kind, fact.subject, fact.period), fact)
+
+    def get(self, kind: str, subject: str, period: str | None) -> CanonicalFact | None:
+        return self._by_key.get((kind, subject, period))
+
+
+def _measure_row(
+    index: _Facts,
+    *,
+    key: str,
+    label: str,
+    subject: str,
+    period: str,
+    columns: list[Column],
+    children: list[str] | None = None,
+    emphasis: bool = False,
+    extra: dict[str, Cell] | None = None,
+) -> Row:
+    """One P&L row: stated where the ledger states it, computed where it derives.
+
+    ``children`` makes the row a subtotal, summing the named rows rather than
+    restating a figure — so a reader who deletes a category sees the unit total
+    move.
+    """
+    cells: dict[str, Cell] = {}
+    for column in columns:
+        fact = index.get(_MEASURES[column.key], subject, period)
+        value = fact.value.amount if fact and fact.value else None
+        fact_id = fact.id if fact else None
+        derived = _DERIVED.get(column.key)
+        if children and column.key not in _NOT_ADDITIVE:
+            cells[column.key] = Cell(
+                value=value, fact_id=fact_id, formula=FormulaKind.SUM, operands=children
+            )
+        elif derived is not None:
+            formula, operands = derived
+            cells[column.key] = Cell(value=value, fact_id=fact_id, formula=formula, operands=operands)
+        else:
+            cells[column.key] = _money(value, fact_id)
+    # Descriptive columns a sheet carries alongside its measures — a store's
+    # region and format. They are passed in rather than looked up because they
+    # belong to the entity, not to the fact ledger.
+    cells.update(extra or {})
+    return Row(key=key, label=label, cells=cells, emphasis=emphasis)
+
+
+def _sum_row(
+    key: str,
+    label: str,
+    *,
+    columns: list[Column],
+    children: list[str],
+    source: list[Row],
+    extra: dict[str, Cell] | None = None,
+) -> Row:
+    """A total that reports the rows above it rather than a figure from the ledger.
+
+    Needed where the rows present do not cover the whole parent. A store sheet in
+    a world whose online division has no stores cannot carry a "Group" row citing
+    the group revenue fact: the fact includes the online unit and the sheet does
+    not, so the row would state a total its own formula contradicts. Caught by the
+    formula evaluator in the render tests, which recomputes every cell rather than
+    trusting that a declared sum sums.
+    """
+    lookup = {row.key: row for row in source}
+    cells: dict[str, Cell] = {}
+    for column in columns:
+        if column.key in _NOT_ADDITIVE:
+            continue
+        total = sum(
+            (lookup[child].cells[column.key].value or 0.0)
+            for child in children
+            if child in lookup and column.key in lookup[child].cells
+        )
+        cells[column.key] = Cell(value=total, formula=FormulaKind.SUM, operands=children)
+    for column in columns:
+        derived = _DERIVED.get(column.key)
+        if derived is None or column.key not in _NOT_ADDITIVE:
+            continue
+        formula, operands = derived
+        left = cells.get(operands[0])
+        right = cells.get(operands[1])
+        if left is None or right is None:
+            continue
+        if formula is FormulaKind.DIFFERENCE:
+            value = (left.value or 0.0) - (right.value or 0.0)
+        else:
+            value = ((left.value or 0.0) / right.value * 100) if right.value else 0.0
+        cells[column.key] = Cell(value=value, formula=formula, operands=operands)
+    cells.update(extra or {})
+    return Row(key=key, label=label, cells=cells, emphasis=True)
 
 
 # ---------------------------------------------------------------------------
@@ -113,101 +255,50 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     of the rows above it, every variance as a difference, every margin as a ratio
     — so a reader who recalculates the sheet gets the same answer, and a renderer
     that supports formulas can emit them rather than paste values.
+
+    The sheets follow the reporting hierarchy rather than a fixed list. A retailer
+    reads its month at category level and its estate at store level, so those
+    sheets exist when the world has those dimensions and are absent when it does
+    not — an empty "Store Performance" tab is worse than no tab.
     """
-    facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
-    period = next((f.period for f in facts if f.period), world.period or "")
+    by_id = {fact.id: fact for fact in world._facts}
+    index = _Facts([by_id[f] for f in intent.required_fact_ids if f in by_id])
+    facts = index.all
+    periods = sorted({f.period for f in facts if f.period})
+    period = world.period or (periods[-1] if periods else "")
     units = list(world.business_units)
     company = world.company
 
     unit_keys = [unit.id for unit in units]
+    columns = _pnl_columns()
+
+    categories_of = {
+        unit.id: [c for c in world.categories if c.business_unit_id == unit.id]
+        for unit in units
+    }
+    # A site with no revenue fact is a site the finance generator did not book
+    # turnover for — a distribution centre. It belongs on a property register, not
+    # on a store P&L.
+    sites_of = {
+        unit.id: [
+            s
+            for s in world.sites
+            if s.business_unit_id == unit.id
+            and index.get("financial.revenue.actual", s.id, period) is not None
+        ]
+        for unit in units
+    }
 
     # -- Business Unit P&L -------------------------------------------------
-    columns = [
-        Column(key="revenue_budget", label="Revenue budget", number_format=MONEY_FORMAT),
-        Column(key="revenue_actual", label="Revenue actual", number_format=MONEY_FORMAT),
-        Column(key="revenue_variance", label="Revenue variance", number_format=MONEY_FORMAT),
-        Column(key="gp_budget", label="GP budget", number_format=MONEY_FORMAT),
-        Column(key="gp_actual", label="GP actual", number_format=MONEY_FORMAT),
-        Column(key="gp_variance", label="GP variance", number_format=MONEY_FORMAT),
-        Column(key="gm_pct_actual", label="GM% actual", number_format=PERCENT_FORMAT),
+    rows = [
+        _measure_row(index, key=unit.id, label=unit.name, subject=unit.id,
+                     period=period, columns=columns)
+        for unit in units
     ]
-
-    def measure(subject: str, kind: str) -> CanonicalFact | None:
-        return _lookup(facts, kind, subject)
-
-    rows: list[Row] = []
-    for unit in units:
-        revenue_budget = measure(unit.id, "financial.revenue.budget")
-        revenue_actual = measure(unit.id, "financial.revenue.actual")
-        gp_budget = measure(unit.id, "financial.gross_profit.budget")
-        gp_actual = measure(unit.id, "financial.gross_profit.actual")
-        gm_actual = measure(unit.id, "financial.gross_margin_pct.actual")
-        variance = measure(unit.id, "financial.revenue.variance")
-        gp_var = measure(unit.id, "financial.gross_profit.variance")
-        rows.append(
-            Row(
-                key=unit.id,
-                label=unit.name,
-                cells={
-                    "revenue_budget": _money(revenue_budget.value.amount if revenue_budget else None,
-                                             revenue_budget.id if revenue_budget else None),
-                    "revenue_actual": _money(revenue_actual.value.amount if revenue_actual else None,
-                                             revenue_actual.id if revenue_actual else None),
-                    # Declared as a difference, not pasted: the sheet recomputes it.
-                    "revenue_variance": Cell(
-                        value=variance.value.amount if variance else None,
-                        fact_id=variance.id if variance else None,
-                        formula=FormulaKind.DIFFERENCE,
-                        operands=["revenue_actual", "revenue_budget"],
-                    ),
-                    "gp_budget": _money(gp_budget.value.amount if gp_budget else None,
-                                        gp_budget.id if gp_budget else None),
-                    "gp_actual": _money(gp_actual.value.amount if gp_actual else None,
-                                        gp_actual.id if gp_actual else None),
-                    "gp_variance": Cell(
-                        value=gp_var.value.amount if gp_var else None,
-                        fact_id=gp_var.id if gp_var else None,
-                        formula=FormulaKind.DIFFERENCE,
-                        operands=["gp_actual", "gp_budget"],
-                    ),
-                    "gm_pct_actual": Cell(
-                        value=gm_actual.value.amount if gm_actual else None,
-                        fact_id=gm_actual.id if gm_actual else None,
-                        formula=FormulaKind.RATIO_PCT,
-                        operands=["gp_actual", "revenue_actual"],
-                    ),
-                },
-            )
-        )
-
-    group_cells: dict[str, Cell] = {}
-    for column in columns:
-        group_fact = {
-            "revenue_budget": measure(company.id, "financial.revenue.budget"),
-            "revenue_actual": measure(company.id, "financial.revenue.actual"),
-            "revenue_variance": measure(company.id, "financial.revenue.variance"),
-            "gp_budget": measure(company.id, "financial.gross_profit.budget"),
-            "gp_actual": measure(company.id, "financial.gross_profit.actual"),
-            "gp_variance": measure(company.id, "financial.gross_profit.variance"),
-            "gm_pct_actual": measure(company.id, "financial.gross_margin_pct.actual"),
-        }[column.key]
-        if column.key == "gm_pct_actual":
-            # Group margin is a ratio of group totals, not an average of unit margins.
-            group_cells[column.key] = Cell(
-                value=group_fact.value.amount if group_fact else None,
-                fact_id=group_fact.id if group_fact else None,
-                formula=FormulaKind.RATIO_PCT,
-                operands=["gp_actual", "revenue_actual"],
-            )
-        else:
-            group_cells[column.key] = Cell(
-                value=group_fact.value.amount if group_fact else None,
-                fact_id=group_fact.id if group_fact else None,
-                formula=FormulaKind.SUM,
-                operands=unit_keys,
-            )
-
-    rows.append(Row(key=company.id, label="Group", cells=group_cells, emphasis=True))
+    rows.append(
+        _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
+                     columns=columns, children=unit_keys, emphasis=True)
+    )
 
     pnl = Table(
         key="pnl",
@@ -216,41 +307,186 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         rows=rows,
         note="Group is the sum of the business units above. Variances recompute from actual less budget.",
     )
+    group_cells = rows[-1].cells
 
     # -- Summary -----------------------------------------------------------
+    def summary_row(key: str, label: str, *, emphasis: bool = False) -> Row:
+        cell = group_cells[key]
+        return Row(key=key, label=label, emphasis=emphasis, cells={
+            "value": Cell(value=cell.value, fact_id=cell.fact_id,
+                          formula=FormulaKind.REFERENCE,
+                          operands=[f"pnl:{company.id}:{key}"])})
+
     summary = Table(
         key="summary",
         title="Summary",
         columns=[Column(key="value", label="Value", number_format=MONEY_FORMAT)],
         rows=[
-            Row(key="revenue_actual", label="Revenue actual", cells={
-                "value": Cell(value=group_cells["revenue_actual"].value,
-                              fact_id=group_cells["revenue_actual"].fact_id,
-                              formula=FormulaKind.REFERENCE,
-                              operands=[f"pnl:{company.id}:revenue_actual"])}),
-            Row(key="revenue_budget", label="Revenue budget", cells={
-                "value": Cell(value=group_cells["revenue_budget"].value,
-                              fact_id=group_cells["revenue_budget"].fact_id,
-                              formula=FormulaKind.REFERENCE,
-                              operands=[f"pnl:{company.id}:revenue_budget"])}),
-            Row(key="revenue_variance", label="Revenue variance", emphasis=True, cells={
-                "value": Cell(value=group_cells["revenue_variance"].value,
-                              fact_id=group_cells["revenue_variance"].fact_id,
-                              formula=FormulaKind.REFERENCE,
-                              operands=[f"pnl:{company.id}:revenue_variance"])}),
-            Row(key="gp_actual", label="Gross profit actual", cells={
-                "value": Cell(value=group_cells["gp_actual"].value,
-                              fact_id=group_cells["gp_actual"].fact_id,
-                              formula=FormulaKind.REFERENCE,
-                              operands=[f"pnl:{company.id}:gp_actual"])}),
-            Row(key="gp_variance", label="Gross profit variance", emphasis=True, cells={
-                "value": Cell(value=group_cells["gp_variance"].value,
-                              fact_id=group_cells["gp_variance"].fact_id,
-                              formula=FormulaKind.REFERENCE,
-                              operands=[f"pnl:{company.id}:gp_variance"])}),
+            summary_row("revenue_actual", "Revenue actual"),
+            summary_row("revenue_budget", "Revenue budget"),
+            summary_row("revenue_variance", "Revenue variance", emphasis=True),
+            summary_row("gp_actual", "Gross profit actual"),
+            summary_row("gp_variance", "Gross profit variance", emphasis=True),
         ],
         note=f"{company.name} · {period} · {company.currency} {company.currency_unit}",
     )
+
+    sections = [
+        ArtifactSection(heading="Summary", table=summary),
+        ArtifactSection(heading="Business Unit P&L", table=pnl),
+    ]
+
+    # -- Category P&L ------------------------------------------------------
+    # The level the business is actually managed at. A unit subtotal here sums
+    # its own categories, and the group row sums the subtotals — never the
+    # categories directly, or every line would be counted twice.
+    category_rows: list[Row] = []
+    subtotal_keys: list[str] = []
+    for unit in units:
+        members = categories_of[unit.id]
+        if not members:
+            continue
+        for category in members:
+            category_rows.append(
+                _measure_row(index, key=category.id, label=f"{unit.name} · {category.name}",
+                             subject=category.id, period=period, columns=columns)
+            )
+        category_rows.append(
+            _measure_row(index, key=unit.id, label=f"{unit.name} total", subject=unit.id,
+                         period=period, columns=columns,
+                         children=[c.id for c in members], emphasis=True)
+        )
+        subtotal_keys.append(unit.id)
+
+    category_table: Table | None = None
+    if category_rows:
+        covers_group = len(subtotal_keys) == len(units)
+        category_rows.append(
+            _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
+                         columns=columns, children=subtotal_keys, emphasis=True)
+            if covers_group
+            else _sum_row(company.id, "Total, categorised units", columns=columns,
+                          children=subtotal_keys, source=category_rows)
+        )
+        category_table = Table(
+            key="category",
+            title="Category P&L",
+            columns=columns,
+            rows=category_rows,
+            note=(
+                "Categories sum to their business unit; the unit totals sum to group. "
+                "Margin varies by category, so the group rate moves with the mix as well "
+                "as with performance."
+            ),
+        )
+        sections.append(ArtifactSection(heading="Category P&L", table=category_table))
+
+    # -- Store performance -------------------------------------------------
+    store_columns = [
+        Column(key="region", label="Region"),
+        Column(key="format", label="Format"),
+        Column(key="revenue_budget", label="Revenue budget", number_format=MONEY_FORMAT),
+        Column(key="revenue_actual", label="Revenue actual", number_format=MONEY_FORMAT),
+        Column(key="revenue_variance", label="Revenue variance", number_format=MONEY_FORMAT),
+    ]
+    store_money = [c for c in store_columns if c.key in _MEASURES]
+
+    store_rows: list[Row] = []
+    store_subtotals: list[str] = []
+    for unit in units:
+        estate = sites_of[unit.id]
+        if not estate:
+            continue
+        for site in estate:
+            row = _measure_row(index, key=site.id, label=site.name, subject=site.id,
+                               period=period, columns=store_money,
+                               extra={"region": Cell(value=site.region),
+                                      "format": Cell(value=site.format)})
+            store_rows.append(row)
+        store_rows.append(
+            _measure_row(index, key=unit.id, label=f"{unit.name} total", subject=unit.id,
+                         period=period, columns=store_money,
+                         children=[s.id for s in estate], emphasis=True,
+                         extra={"region": Cell(value=""), "format": Cell(value="")})
+        )
+        store_subtotals.append(unit.id)
+
+    store_table: Table | None = None
+    if store_rows:
+        blank = {"region": Cell(value=""), "format": Cell(value="")}
+        covers_group = len(store_subtotals) == len(units)
+        store_rows.append(
+            _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
+                         columns=store_money, children=store_subtotals, emphasis=True, extra=blank)
+            if covers_group
+            else _sum_row(company.id, "Total, trading stores", columns=store_money,
+                          children=store_subtotals, source=store_rows, extra=blank)
+        )
+        store_table = Table(
+            key="stores",
+            title="Store Performance",
+            columns=store_columns,
+            rows=store_rows,
+            note=(
+                "Stores decompose the same unit revenue the categories do, so both sheets "
+                "reach the same unit total by different routes. Distribution centres hold "
+                "stock and book no revenue, so they are not listed here."
+            ),
+        )
+        sections.append(ArtifactSection(heading="Store Performance", table=store_table))
+
+    # -- Revenue trend -----------------------------------------------------
+    if len(periods) > 1:
+        trend_columns = [
+            Column(key=p, label=p, number_format=MONEY_FORMAT) for p in periods
+        ]
+
+        def trend_row(key: str, label: str, subject: str, *, children: list[str] | None = None,
+                      emphasis: bool = False) -> Row:
+            cells: dict[str, Cell] = {}
+            for month in periods:
+                fact = index.get("financial.revenue.actual", subject, month)
+                cells[month] = Cell(
+                    value=fact.value.amount if fact and fact.value else None,
+                    fact_id=fact.id if fact else None,
+                    formula=FormulaKind.SUM if children else None,
+                    operands=children or [],
+                )
+            return Row(key=key, label=label, cells=cells, emphasis=emphasis)
+
+        trend_rows: list[Row] = []
+        trend_subtotals: list[str] = []
+        for unit in units:
+            members = categories_of[unit.id]
+            for category in members:
+                trend_rows.append(trend_row(category.id, f"{unit.name} · {category.name}", category.id))
+            if members:
+                trend_rows.append(
+                    trend_row(unit.id, f"{unit.name} total", unit.id,
+                              children=[c.id for c in members], emphasis=True)
+                )
+                trend_subtotals.append(unit.id)
+            else:
+                trend_rows.append(trend_row(unit.id, unit.name, unit.id))
+                trend_subtotals.append(unit.id)
+        trend_rows.append(
+            trend_row(company.id, "Group", company.id, children=trend_subtotals, emphasis=True)
+        )
+        sections.append(
+            ArtifactSection(
+                heading="Revenue Trend",
+                table=Table(
+                    key="trend",
+                    title="Revenue Trend",
+                    columns=trend_columns,
+                    rows=trend_rows,
+                    note=(
+                        "Actual revenue by month. Prior periods carry no budget: a trend needs "
+                        "actuals, and generating budgets nobody reads would treble the ledger."
+                    ),
+                ),
+            )
+        )
 
     # -- Variance drivers --------------------------------------------------
     drivers: list[Row] = []
@@ -286,6 +522,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         ],
         rows=drivers,
     )
+    sections.append(ArtifactSection(heading="Variance Drivers", table=driver_table))
 
     # -- Incident impact ---------------------------------------------------
     impact_rows: list[Row] = []
@@ -313,6 +550,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         rows=impact_rows,
         note="A close delay is a calendar impact. It is not a P&L impact unless the P&L impact says so.",
     )
+    sections.append(ArtifactSection(heading="Incident Impact", table=impact))
 
     # -- Hidden: lineage and reconciliation --------------------------------
     lineage = Table(
@@ -322,6 +560,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             Column(key="fact", label="Fact"),
             Column(key="kind", label="Kind"),
             Column(key="subject", label="Subject"),
+            Column(key="period", label="Period"),
             Column(key="authority", label="Authority"),
             Column(key="source_system", label="Source system"),
             Column(key="valid_from", label="Valid from"),
@@ -331,6 +570,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                 "fact": Cell(value=fact.id),
                 "kind": Cell(value=fact.kind),
                 "subject": Cell(value=fact.subject),
+                "period": Cell(value=fact.period or ""),
                 "authority": Cell(value=fact.authority.value),
                 "source_system": Cell(value=fact.source_system or ""),
                 "valid_from": Cell(value=fact.valid_from.isoformat()),
@@ -339,6 +579,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         ],
         note="Every value on this workbook traces to a fact ID here.",
     )
+    sections.append(ArtifactSection(heading="Lineage", table=lineage, hidden=True))
 
     # Each check must net to zero, and the comparison is against the value the
     # *ledger* states — not against the sheet's own total.
@@ -348,26 +589,29 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # the group fact's literal is what makes this sheet a real check on the corpus,
     # and what would surface a generator that stated a total its parts do not
     # reach.
+    #
+    # Every roll-up is checked, not just units to group. Categories and stores are
+    # two independent decompositions of the same unit revenue, and a corpus where
+    # only one of them adds up is a corpus with two answers to one question.
     checks: list[Row] = []
-    for key, label, column_key, fact in (
-        ("revenue_units_to_group", "Unit revenue sums to group revenue",
-         "revenue_actual", measure(company.id, "financial.revenue.actual")),
-        ("gp_units_to_group", "Unit gross profit sums to group gross profit",
-         "gp_actual", measure(company.id, "financial.gross_profit.actual")),
-    ):
-        stated = fact.value.amount if fact and fact.value else None
+
+    def check(key: str, label: str, table: str, column: str,
+              children: list[str], stated_fact: CanonicalFact | None,
+              source_rows: dict[str, Row]) -> None:
+        stated = stated_fact.value.amount if stated_fact and stated_fact.value else None
         summed = sum(
-            row.cells[column_key].value or 0.0
-            for row in rows
-            if not row.emphasis and column_key in row.cells
+            (source_rows[child].cells[column].value or 0.0)
+            for child in children
+            if child in source_rows
         )
         checks.append(
             Row(
                 key=key,
                 label=label,
                 cells={
-                    "summed": Cell(value=summed, formula=FormulaKind.SUM, operands=unit_keys),
-                    "stated": Cell(value=stated, fact_id=fact.id if fact else None),
+                    "summed": Cell(value=summed, formula=FormulaKind.SUM,
+                                   operands=[f"{table}:{child}:{column}" for child in children]),
+                    "stated": Cell(value=stated, fact_id=stated_fact.id if stated_fact else None),
                     "difference": Cell(
                         value=(summed - stated) if stated is not None else None,
                         formula=FormulaKind.DIFFERENCE,
@@ -377,11 +621,37 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             )
         )
 
+    pnl_rows = {row.key: row for row in pnl.rows}
+    check("revenue_units_to_group", "Unit revenue sums to group revenue", "pnl", "revenue_actual",
+          unit_keys, index.get("financial.revenue.actual", company.id, period), pnl_rows)
+    check("gp_units_to_group", "Unit gross profit sums to group gross profit", "pnl", "gp_actual",
+          unit_keys, index.get("financial.gross_profit.actual", company.id, period), pnl_rows)
+
+    if category_table is not None:
+        category_lookup = {row.key: row for row in category_table.rows}
+        for unit in units:
+            members = categories_of[unit.id]
+            if not members:
+                continue
+            check(f"categories_to_{unit.id}", f"{unit.name} categories sum to the unit",
+                  "category", "revenue_actual", [c.id for c in members],
+                  index.get("financial.revenue.actual", unit.id, period), category_lookup)
+
+    if store_table is not None:
+        store_lookup = {row.key: row for row in store_table.rows}
+        for unit in units:
+            estate = sites_of[unit.id]
+            if not estate:
+                continue
+            check(f"stores_to_{unit.id}", f"{unit.name} stores sum to the unit",
+                  "stores", "revenue_actual", [s.id for s in estate],
+                  index.get("financial.revenue.actual", unit.id, period), store_lookup)
+
     reconciliation = Table(
         key="reconciliation",
         title="Reconciliation",
         columns=[
-            Column(key="summed", label="Sum of units", number_format=MONEY_FORMAT),
+            Column(key="summed", label="Sum of parts", number_format=MONEY_FORMAT),
             Column(key="stated", label="Stated by ledger", number_format=MONEY_FORMAT),
             Column(key="difference", label="Difference", number_format=MONEY_FORMAT),
         ],
@@ -392,20 +662,14 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             "corpus rather than against itself."
         ),
     )
+    sections.append(ArtifactSection(heading="Reconciliation", table=reconciliation, hidden=True))
 
     return ArtifactIR(
         id=intent.id,
         intent_id=intent.id,
         title=f"{company.name} — Month-End Model",
         subtitle=f"{period} · {company.currency} {company.currency_unit} · final",
-        sections=[
-            ArtifactSection(heading="Summary", table=summary),
-            ArtifactSection(heading="Business Unit P&L", table=pnl),
-            ArtifactSection(heading="Variance Drivers", table=driver_table),
-            ArtifactSection(heading="Incident Impact", table=impact),
-            ArtifactSection(heading="Lineage", table=lineage, hidden=True),
-            ArtifactSection(heading="Reconciliation", table=reconciliation, hidden=True),
-        ],
+        sections=sections,
         metadata={
             "worldloom_synthetic": "true",
             "worldloom_seed": str(world.seed),
@@ -417,6 +681,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             "note": "Synthetic corpus generated by Worldloom. Not a real company.",
         },
     )
+
 
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,7 @@ from .models import (
     Authority,
     BusinessUnit,
     CanonicalFact,
+    Category,
     Company,
     CostCentre,
     Employee,
@@ -44,6 +45,7 @@ from .models import (
     LoreCommitment,
     Persona,
     Service,
+    Site,
     System,
 )
 from .validate import ValidationReport, validate
@@ -66,6 +68,8 @@ class World:
     _systems: tuple[System, ...] = ()
     _services: tuple[Service, ...] = ()
     _cost_centres: tuple[CostCentre, ...] = ()
+    _categories: tuple[Category, ...] = ()
+    _sites: tuple[Site, ...] = ()
     _personas: tuple[Persona, ...] = ()
     _access_policies: tuple[AccessPolicy, ...] = ()
     _lore: tuple[LoreCommitment, ...] = ()
@@ -88,6 +92,8 @@ class World:
     _roles: dict[str, str] = field(default_factory=dict)
     _minter: Minter | None = None
     _annual_revenue: int = 0
+    _archetype: Any = None
+    """The shape this world was built from. Needed to advance it, not to read it."""
     _rendered: tuple = ()
     """Rendered payloads, held until ``export`` writes them."""
     _narration: tuple = ()
@@ -118,6 +124,8 @@ class World:
             _systems=models("systems", System),
             _services=models("services", Service),
             _cost_centres=models("cost_centres", CostCentre),
+            _categories=models("categories", Category),
+            _sites=models("sites", Site),
             _personas=models("personas", Persona),
             _access_policies=models("access_policies", AccessPolicy),
             _lore=tuple(corpus.load_models(root / corpus.LORE_FILE, LoreCommitment)),
@@ -157,6 +165,16 @@ class World:
     @property
     def cost_centres(self) -> Collection[CostCentre]:
         return Collection(self._cost_centres, label="CostCentreCollection")
+
+    @property
+    def categories(self) -> Collection[Category]:
+        """Merchandise categories — the level a retailer reports margin at."""
+        return Collection(self._categories, label="CategoryCollection")
+
+    @property
+    def sites(self) -> Collection[Site]:
+        """Stores, distribution centres, and fulfilment sites."""
+        return Collection(self._sites, label="SiteCollection")
 
     @property
     def personas(self) -> Collection[Persona]:
@@ -323,6 +341,8 @@ class World:
             _systems=self._systems,
             _services=self._services,
             _cost_centres=self._cost_centres,
+            _categories=self._categories,
+            _sites=self._sites,
             _personas=self._personas,
             _access_policies=self._access_policies,
             _lore=self._lore,
@@ -341,6 +361,7 @@ class World:
             _roles=self._roles,
             _minter=self._minter,
             _annual_revenue=self._annual_revenue,
+            _archetype=self._archetype,
         )
 
     def compile(self) -> World:
@@ -531,6 +552,8 @@ class World:
                 "systems": [m.model_dump(mode="json") for m in self._systems],
                 "services": [m.model_dump(mode="json") for m in self._services],
                 "cost_centres": [m.model_dump(mode="json") for m in self._cost_centres],
+                "categories": [m.model_dump(mode="json") for m in self._categories],
+                "sites": [m.model_dump(mode="json") for m in self._sites],
                 "personas": [m.model_dump(mode="json") for m in self._personas],
                 "access_policies": [m.model_dump(mode="json") for m in self._access_policies],
             },
@@ -595,6 +618,8 @@ class Summary:
             ("Systems", f"{len(world.systems):,}"),
             ("Services", f"{len(world.services):,}"),
             ("Cost centres", f"{len(world.cost_centres):,}"),
+            ("Categories", f"{len(world.categories):,}"),
+            ("Sites", f"{len(world.sites):,}"),
             ("Personas", f"{len(world.personas):,}"),
             ("Lore commitments", f"{len(world.lore):,}"),
             ("Events", f"{len(world.events):,}"),

@@ -543,6 +543,42 @@ world = (
 
 A configuration file produces different coherent retailers and IT-services companies without changing application code.
 
+### What landed, and what it forced
+
+The retail half is in: `worldloom.archetypes` holds `Archetype`, and
+`RetailWorld(seed=..., archetype=...)` builds from it. `--archetype` and
+`--inspired-by` reach it from the CLI. Two shapes are registered — a mid-size
+omnichannel retailer and a large Australian supermarket group.
+
+Three things this forced that were not obvious from the plan:
+
+**An archetype has to carry the reporting hierarchy, not just the org chart.** A
+world with three business units and a five-row P&L is a proof of mechanism, not a
+corpus — nobody asks "which division moved", they ask "which category". So the
+archetype carries merchandise categories with their own margin profiles and a store
+estate with formats and regions, and both are first-class entities (`CAT-`, `SITE-`)
+rather than strings on a fact. A category has a buyer who is accountable for it; a
+store has a region that explains it.
+
+**Two decompositions of one number must be allocated, not drawn.** Categories and
+stores are independent cuts of the same unit revenue, and both must reach the same
+total. Drawing each and summing gives two contradictory answers; allocating the unit
+total with largest-remainder gives one, exactly, with no residual line. The validator
+now checks every roll-up in the hierarchy — categories→unit, stores→unit,
+units→group — rather than only the last of them.
+
+**Fan-out to the model has to be bounded separately from fan-out to the workbook.**
+The finance generator returns two views: the whole hierarchy for the workbook, and a
+group-and-unit *headline* cut for anything that gets narrated. Without that split a
+4,748-fact corpus would put thousands of facts into a variance memo's narrative
+request. With it, the same corpus produces 23 requests of at most 32 facts.
+
+`--comparatives N` adds prior months at actual only. A trend needs actuals; prior
+budgets would treble the ledger to fill a column nobody reads.
+
+Still ahead at this step: IT-services archetypes, config files rather than Python
+constants, and the lore pack pairing.
+
 ---
 
 ## 9. Add the Socratic world composer

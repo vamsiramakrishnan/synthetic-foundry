@@ -295,12 +295,18 @@ def test_the_generated_org_matches_the_fixture_in_shape(world: World) -> None:
     the same kind of world.
     """
     fixture = World.load("retail-close")
-    assert len(world.people) == len(fixture.people)
     assert len(world.business_units) == len(fixture.business_units)
     assert len(world.systems) == len(fixture.systems)
     assert len(world.services) == len(fixture.services)
     assert len(world.lore) == len(fixture.lore)
     assert world.company.name != fixture.company.name
+
+    # Headcount is a floor, not an equality: the generator mints a role table the
+    # fixture predates — every unit now has a head of buying, because a category
+    # P&L needs someone accountable for a category. The fixture's roles must all
+    # still be there, which is what "same kind of world" means.
+    assert len(world.people) >= len(fixture.people)
+    assert {p.function for p in fixture.people} <= {p.function for p in world.people}
 
 
 def test_a_generated_world_round_trips(world: World, tmp_path) -> None:

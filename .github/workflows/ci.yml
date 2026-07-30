@@ -49,6 +49,16 @@ jobs:
             --out "${{ runner.temp }}/rendered"
           worldloom validate "${{ runner.temp }}/rendered"
 
+      # Scale, with the dimensional hierarchy on. A world with 34 categories and
+      # 1,600 stores exercises roll-ups the three-unit world cannot reach, and its
+      # workbook is where a wrong SUM range would first show up.
+      - name: A large world validates
+        run: |
+          worldloom build --seed 8128 --incident \
+            --archetype australian_grocery --comparatives 11 \
+            -f xlsx -f markdown --out "${{ runner.temp }}/large"
+          worldloom validate "${{ runner.temp }}/large"
+
       # The agent handshake: a corpus asks for prose, and refuses prose that
       # restates a figure. Exercised with a scripted "agent" so the contract is
       # covered without a model in CI.

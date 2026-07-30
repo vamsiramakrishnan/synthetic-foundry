@@ -17,16 +17,18 @@ from ..ids import Minter
 from ..models import (
     AccessPolicy,
     BusinessUnit,
+    Category,
     Company,
     CostCentre,
     Employee,
     LoreCommitment,
     Persona,
     Service,
+    Site,
     System,
 )
 from ..rng import Rng
-from . import names
+from . import hierarchy, names
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,9 @@ class Organisation:
     cost_centres: tuple[CostCentre, ...]
     personas: tuple[Persona, ...]
     access_policies: tuple[AccessPolicy, ...]
+    categories: tuple[Category, ...]
+    sites: tuple[Site, ...]
+    dimensions: hierarchy.Dimensions
     roles: dict[str, str]
     """Role key to person ID, so scenarios can find the controller without guessing."""
 
@@ -63,13 +68,6 @@ _ROLES: tuple[tuple[str, str, str, str | None], ...] = (
     ("svc_incident", "Major Incident Manager", "ServiceOperations", "svc_lead"),
     ("merch_lead", "Head of Merchandising Systems", "Merchandising", "gm_md"),
     ("merch_analyst", "Merchandising Systems Analyst", "Merchandising", "merch_lead"),
-)
-
-#: Business units for the retail archetype: key, name, kind, share of revenue.
-_UNITS: tuple[tuple[str, str, str, float], ...] = (
-    ("food", "Food", "supermarkets", 0.64),
-    ("gm", "General Merchandise", "general_merchandise", 0.21),
-    ("digital", "Digital", "online", 0.15),
 )
 
 _PERSONAS: tuple[tuple[str, str, str, str, str, float, float, float, tuple[str, ...]], ...] = (
@@ -116,7 +114,16 @@ _ROLE_PERSONA = {
 }
 
 #: Business-unit finance partners all write with the same persona.
-_UNIT_ROLE_PERSONA = {"_md": "PERSONA-EXEC", "_bp": "PERSONA-FIN-BP"}
+_UNIT_ROLE_PERSONA = {"_md": "PERSONA-EXEC", "_bp": "PERSONA-FIN-BP", "buyer": "PERSONA-MERCH-LEAD"}
+
+
+def _merch_unit(unit_ids: dict[str, str]) -> str:
+    """Which unit merchandising systems sits under.
+
+    General merchandise when there is one, since that is where range architecture
+    is fought over; otherwise the first unit.
+    """
+    return "gm" if "gm" in unit_ids else next(iter(unit_ids))
 
 
 def _persona_traits(lore: tuple[LoreCommitment, ...], role_ids: dict[str, str]) -> dict[str, dict[str, float]]:
@@ -143,22 +150,24 @@ def generate(
     rng: Rng,
     minter: Minter,
     *,
+    archetype,  # type: ignore[no-untyped-def]
     lore: tuple[LoreCommitment, ...] = (),
-    employees_total: int = 80_000,
 ) -> Organisation:
-    """Build the organisation. Same seed, same graph, same IDs."""
+    """Build the organisation for an archetype. Same seed, same graph, same IDs."""
     company_rng = rng.derive("company")
     company_id = minter.next("CO")
+    units = archetype.units
 
     # Business units first, so unit leaders can be assigned as people are minted.
-    unit_ids = {key: minter.next("BU") for key, *_ in _UNITS}
+    unit_ids = {unit.key: minter.next("BU") for unit in units}
 
-    # People. Unit managing directors are appended to the role table so the whole
-    # graph is minted in one pass and every manager exists before its reports.
+    # People. Per-unit roles are appended to the role table so the whole graph is
+    # minted in one pass and every manager exists before its reports.
     role_table = list(_ROLES)
-    for key, name, _, _share in _UNITS:
-        role_table.append((f"{key}_md", f"Managing Director, {name}", "Executive", "ceo"))
-        role_table.append((f"{key}_bp", f"Finance Business Partner, {name}", "Finance", "controller"))
+    for unit in units:
+        role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))
+        role_table.append((f"{unit.key}_bp", f"Finance Business Partner, {unit.name}", "Finance", "controller"))
+        role_table.append((f"{unit.key}_buyer", f"Head of Buying, {unit.name}", "Merchandising", f"{unit.key}_md"))
     role_table.sort(key=lambda row: _depth(row[0], dict((r[0], r[3]) for r in role_table)))
 
     person_names = names.people_names(rng.derive("people"), len(role_table))
@@ -174,8 +183,10 @@ def generate(
         business_unit = None
         if role.endswith(("_md", "_bp")):
             business_unit = unit_ids[role[:-3]]
+        elif role.endswith("_buyer"):
+            business_unit = unit_ids[role[:-6]]
         elif role.startswith("merch_"):
-            business_unit = unit_ids["gm"]
+            business_unit = unit_ids[_merch_unit(unit_ids)]
         people.append(
             Employee(
                 id=person_id,
@@ -189,7 +200,11 @@ def generate(
                     else platform_cc if title.endswith(("Engineer", "Data Platform"))
                     else None
                 ),
-                persona_id=_ROLE_PERSONA.get(role) or _UNIT_ROLE_PERSONA[role[-3:]],
+                persona_id=(
+                    _ROLE_PERSONA.get(role)
+                    or _UNIT_ROLE_PERSONA.get(role[-3:])
+                    or _UNIT_ROLE_PERSONA["buyer"]
+                ),
             )
         )
 
@@ -204,13 +219,20 @@ def generate(
 
     business_units = tuple(
         BusinessUnit(
-            id=unit_ids[key],
-            name=name,
+            id=unit_ids[unit.key],
+            name=unit.name,
             company_id=company_id,
-            leader_id=role_ids[f"{key}_md"],
-            kind=kind,
+            leader_id=role_ids[f"{unit.key}_md"],
+            kind=unit.kind,
         )
-        for key, name, kind, _share in _UNITS
+        for unit in units
+    )
+
+    dimensions = hierarchy.generate(
+        rng.derive("hierarchy"), minter,
+        units=units,
+        unit_ids=unit_ids,
+        buyers={unit.key: role_ids[f"{unit.key}_buyer"] for unit in units},
     )
 
     system_names = names.system_names(rng.derive("systems"))
@@ -225,15 +247,17 @@ def generate(
         System(id=commerce, name=system_names["commerce"], purpose="Online storefront, basket, and checkout",
                owner_id=role_ids["platform_engineer"], is_system_of_record_for=["online_orders"]),
         System(id=pos, name=system_names["pos"], purpose="In-store point of sale and transaction capture",
-               owner_id=role_ids["food_md"], is_system_of_record_for=["store_transactions"]),
+               owner_id=role_ids[f"{next(iter(unit_ids))}_md"], is_system_of_record_for=["store_transactions"]),
     )
 
-    valuation, hierarchy, orchestrator, checkout = (minter.next("SVC") for _ in range(4))
+    # Not named `hierarchy`: that is the dimensions module imported above, and
+    # shadowing it makes the earlier call to it fail with an unbound local.
+    valuation, hierarchy_sync, orchestrator, checkout = (minter.next("SVC") for _ in range(4))
     services = (
         Service(id=valuation, name="inventory-valuation", purpose="Values on-hand stock nightly for financial reporting",
                 owner_id=role_ids["platform_senior"], system_id=platform, criticality_tier=1,
-                depends_on=[hierarchy, platform]),
-        Service(id=hierarchy, name="product-hierarchy-sync",
+                depends_on=[hierarchy_sync, platform]),
+        Service(id=hierarchy_sync, name="product-hierarchy-sync",
                 purpose="Publishes the product hierarchy from the merchandising master to the data platform",
                 owner_id=role_ids["platform_engineer"], system_id=mdm, criticality_tier=2, depends_on=[mdm]),
         Service(id=orchestrator, name="month-end-close-orchestrator",
@@ -298,12 +322,12 @@ def generate(
     company = Company(
         id=company_id,
         name=names.company_name(company_rng),
-        industry="Omnichannel retail",
+        industry=archetype.industry,
         headquarters=names.headquarters(company_rng.derive("hq")),
-        fiscal_year_start_month=7,
-        currency="AUD",
-        currency_unit="thousands",
-        employees_total=employees_total,
+        fiscal_year_start_month=archetype.fiscal_year_start_month,
+        currency=archetype.currency,
+        currency_unit=archetype.currency_unit,
+        employees_total=archetype.employees,
     )
 
     return Organisation(
@@ -315,18 +339,19 @@ def generate(
         cost_centres=cost_centres,
         personas=personas,
         access_policies=policies,
+        categories=dimensions.categories,
+        sites=dimensions.sites,
+        dimensions=dimensions,
         roles={
             **role_ids,
-            "unit_food": unit_ids["food"],
-            "unit_gm": unit_ids["gm"],
-            "unit_digital": unit_ids["digital"],
+            **{f"unit_{unit.key}": unit_ids[unit.key] for unit in units},
             "sys_erp": erp,
             "sys_mdm": mdm,
             "sys_platform": platform,
             "sys_commerce": commerce,
             "sys_pos": pos,
             "svc_valuation": valuation,
-            "svc_hierarchy": hierarchy,
+            "svc_hierarchy": hierarchy_sync,
             "svc_orchestrator": orchestrator,
             "svc_checkout": checkout,
             "policy_all": policies[0].id,
@@ -339,9 +364,9 @@ def generate(
     )
 
 
-def unit_shares() -> dict[str, float]:
+def unit_shares(archetype) -> dict[str, float]:  # type: ignore[no-untyped-def]
     """Revenue share per unit key, used by the financial generator."""
-    return {key: share for key, _name, _kind, share in _UNITS}
+    return {unit.key: unit.share for unit in archetype.units}
 
 
 def _depth(role: str, managers: dict[str, str | None], seen: frozenset[str] = frozenset()) -> int:

@@ -205,6 +205,38 @@ class CostCentre(Entity):
     business_unit_id: str | None = None
 
 
+class Category(Entity):
+    """A merchandise category — the level a retailer actually reports margin at.
+
+    First-class rather than a string on a fact, because a category is a noun the
+    business owns: it has a unit, a buyer, and its own margin profile, and the
+    reporting hierarchy runs category → unit → group.
+    """
+
+    business_unit_id: str
+    buyer_id: str | None = None
+    margin_profile: float = Field(ge=0.0, le=1.0)
+    revenue_share: float = Field(default=0.0, ge=0.0, le=1.0)
+    """Share of the parent unit's revenue. The category rows of a unit sum to 1."""
+
+
+class Site(Entity):
+    """A store, distribution centre, or fulfilment site."""
+
+    business_unit_id: str
+    format: str
+    region: str
+    opened: str | None = None
+    revenue_weight: float = Field(default=0.0, ge=0.0)
+    """Relative trading size. Zero for a site that holds stock but sells nothing.
+
+    A weight rather than a share, because sites are allocated a unit's revenue
+    proportionally and a share would have to be recomputed every time the estate
+    changed. Distribution centres carry zero so that a store-level P&L does not
+    invent turnover for a warehouse.
+    """
+
+
 class Persona(Model):
     """How a specific author writes.
 

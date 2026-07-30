@@ -9,8 +9,9 @@ referential
 graph
     The org chart is a tree: one root, no cycles, every owner exists.
 financial
-    Business-unit figures sum to company figures, and variances equal
-    actual minus budget. This is the project's central promise.
+    Every roll-up in the reporting hierarchy adds up — categories to their
+    business unit, stores to their business unit, units to the group — and
+    variances equal actual minus budget. This is the project's central promise.
 temporal
     Facts are ordered, supersession is complete, and no artifact cites a
     fact that did not yet exist when the artifact was written.
@@ -114,6 +115,8 @@ class _Validator:
             "SYS": set(w.systems.ids()),
             "SVC": set(w.services.ids()),
             "CC": set(w.cost_centres.ids()),
+            "CAT": set(w.categories.ids()),
+            "SITE": set(w.sites.ids()),
             "PERSONA": set(w.personas.ids()),
             "LORE": set(w.lore.ids()),
             "FACT": set(w.facts.ids()),
@@ -181,6 +184,13 @@ class _Validator:
         for centre in w.cost_centres:
             self.check_ref(centre.id, "owner_id", centre.owner_id, expect="PERSON")
             self.check_ref(centre.id, "business_unit_id", centre.business_unit_id, expect="BU")
+
+        for category in w.categories:
+            self.check_ref(category.id, "business_unit_id", category.business_unit_id, expect="BU")
+            self.check_ref(category.id, "buyer_id", category.buyer_id, expect="PERSON")
+
+        for site in w.sites:
+            self.check_ref(site.id, "business_unit_id", site.business_unit_id, expect="BU")
 
         for event in w.events:
             self.check_refs(event.id, "actors", event.actors, expect="PERSON")
@@ -313,7 +323,6 @@ class _Validator:
         from disagreeing with the workbook it came from.
         """
         w = self.world
-        bu_ids = set(w.business_units.ids())
         company_id = w.company.id
 
         by_kind_period: dict[tuple[str, str | None], dict[str, float]] = defaultdict(dict)
@@ -324,26 +333,43 @@ class _Validator:
                 continue
             by_kind_period[(fact.kind, fact.period)][fact.subject] = fact.value.amount
 
+        # Every roll-up in the reporting hierarchy, not just units to group. A
+        # retailer's numbers decompose two independent ways — by category and by
+        # store — and both must reach the same unit total. Checking only one of
+        # them would let a category P&L and a store P&L disagree while each looked
+        # internally consistent.
+        rollups: list[tuple[str, str, list[str]]] = [
+            ("business units", company_id, list(w.business_units.ids()))
+        ]
+        for unit in w.business_units:
+            children = [c.id for c in w.categories if c.business_unit_id == unit.id]
+            if children:
+                rollups.append((f"categories of {unit.name}", unit.id, children))
+            estate = [s.id for s in w.sites if s.business_unit_id == unit.id]
+            if estate:
+                rollups.append((f"sites of {unit.name}", unit.id, estate))
+
         additive = ("financial.revenue.", "financial.gross_profit.")
         for (kind, period), subjects in sorted(by_kind_period.items()):
             if not kind.startswith(additive):
                 continue
-            if company_id not in subjects:
-                continue
-            unit_values = [amount for subject, amount in subjects.items() if subject in bu_ids]
-            if not unit_values:
-                continue
-            self.checks += 1
-            total = sum(unit_values)
-            stated = subjects[company_id]
-            if abs(total - stated) > RECONCILIATION_TOLERANCE:
-                self.fail(
-                    "financial",
-                    "does_not_reconcile",
-                    f"{kind}/{period}",
-                    f"business units sum to {total:,.2f} but company states {stated:,.2f}"
-                    f" (difference {total - stated:,.2f})",
-                )
+            for label, parent, children in rollups:
+                if parent not in subjects:
+                    continue
+                child_values = [subjects[child] for child in children if child in subjects]
+                if not child_values:
+                    continue
+                self.checks += 1
+                total = sum(child_values)
+                stated = subjects[parent]
+                if abs(total - stated) > RECONCILIATION_TOLERANCE:
+                    self.fail(
+                        "financial",
+                        "does_not_reconcile",
+                        f"{kind}/{period}/{parent}",
+                        f"{label} sum to {total:,.2f} but {parent} states {stated:,.2f}"
+                        f" (difference {total - stated:,.2f})",
+                    )
 
         # variance == actual - budget, for every subject that states all three
         stems = {kind.rsplit(".", 1)[0] for kind, _ in by_kind_period if kind.startswith(additive)}

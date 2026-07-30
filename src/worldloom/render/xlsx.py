@@ -50,14 +50,51 @@ def _column_letter(index: int) -> str:
     return get_column_letter(index)
 
 
-def _address(table: Table, row_key: str, column_key: str, *, first_data_row: int) -> str | None:
-    """The A1 address of one cell in a rendered table."""
-    row_index = next((i for i, row in enumerate(table.rows) if row.key == row_key), None)
-    column_index = next((i for i, col in enumerate(table.columns) if col.key == column_key), None)
-    if row_index is None or column_index is None:
-        return None
-    # +2 for the label column that precedes the data columns.
-    return f"{_column_letter(column_index + 2)}{first_data_row + row_index}"
+class _Layout:
+    """Where every row and column of every table landed on the sheet.
+
+    Built once per workbook rather than searched per cell. A store-level sheet has
+    thousands of rows and three formula columns; resolving each operand by
+    scanning the row list is quadratic and turns a one-second render into a
+    one-minute one.
+    """
+
+    __slots__ = ("rows", "columns", "first_data_row", "sheet")
+
+    def __init__(self, tables, sheet_of: dict[str, str], rows_of: dict[str, int]) -> None:
+        self.rows = {
+            table.key: {row.key: index for index, row in enumerate(table.rows)}
+            for table in tables
+        }
+        self.columns = {
+            table.key: {column.key: index for index, column in enumerate(table.columns)}
+            for table in tables
+        }
+        self.first_data_row = rows_of
+        self.sheet = sheet_of
+
+    def cell(self, table_key: str, row_key: str, column_key: str) -> tuple[int, str] | None:
+        """``(row index, A1 address)``, or ``None`` if either key is unknown."""
+        row_index = self.rows.get(table_key, {}).get(row_key)
+        column_index = self.columns.get(table_key, {}).get(column_key)
+        if row_index is None or column_index is None:
+            return None
+        # +2 for the label column that precedes the data columns.
+        return row_index, f"{_column_letter(column_index + 2)}{self.first_data_row[table_key] + row_index}"
+
+
+def _operand(table_key: str, operand: str, column_key: str) -> tuple[str, str, str]:
+    """Split a SUM operand into ``(table, row, column)``.
+
+    A bare operand names a row in the current table and the column being
+    computed. A ``table:row:column`` operand names a cell anywhere in the
+    workbook, which is how the reconciliation sheet sums the P&L's own rows
+    instead of restating them.
+    """
+    parts = operand.split(":")
+    if len(parts) == 3:
+        return parts[0], parts[1], parts[2]
+    return table_key, operand, column_key
 
 
 def _formula(
@@ -67,9 +104,7 @@ def _formula(
     column_key: str,
     cell,  # type: ignore[no-untyped-def]
     *,
-    first_data_row: int,
-    sheet_of: dict[str, str],
-    rows_of: dict[str, int],
+    layout: _Layout,
 ) -> str | None:
     """Translate a declared computation into Excel syntax.
 
@@ -79,27 +114,51 @@ def _formula(
     if cell.formula is None:
         return None
 
+    def here(target_column: str, target_row: str | None = None) -> str | None:
+        found = layout.cell(table.key, target_row or row_key, target_column)
+        return found[1] if found else None
+
     if cell.formula is FormulaKind.SUM:
-        addresses = [
-            _address(table, operand, column_key, first_data_row=first_data_row)
-            for operand in cell.operands
-        ]
-        present = [a for a in addresses if a]
-        if not present:
+        resolved = []
+        for operand in cell.operands:
+            target_table, target_row, target_column = _operand(table.key, operand, column_key)
+            found = layout.cell(target_table, target_row, target_column)
+            if found is not None:
+                resolved.append((target_table, target_column, found[0], found[1]))
+        if not resolved:
             return None
-        # Contiguous operands become a range; scattered ones stay a list.
-        if len(present) > 1 and len(present) == len(cell.operands):
-            return f"=SUM({present[0]}:{present[-1]})"
-        return f"=SUM({','.join(present)})"
+
+        def qualify(entry) -> str:  # type: ignore[no-untyped-def]
+            target_table, _, _, address = entry
+            if target_table == table.key:
+                return address
+            return f"'{layout.sheet[target_table]}'!{address}"
+
+        # A range only when the operands really are consecutive rows of one
+        # column. Collapsing a scattered set into `first:last` would silently
+        # include the rows in between — with subtotal rows on the sheet, that is
+        # every category counted twice.
+        contiguous = (
+            len(resolved) > 1
+            and len({(t, c) for t, c, _, _ in resolved}) == 1
+            and all(b[2] == a[2] + 1 for a, b in zip(resolved, resolved[1:]))
+        )
+        if contiguous:
+            target_table = resolved[0][0]
+            first, last = resolved[0][3], resolved[-1][3]
+            if target_table == table.key:
+                return f"=SUM({first}:{last})"
+            # The sheet is named once for the range, not once per endpoint: Excel
+            # rejects `'Sheet'!C4:'Sheet'!C6`.
+            return f"=SUM('{layout.sheet[target_table]}'!{first}:{last})"
+        return f"=SUM({','.join(qualify(entry) for entry in resolved)})"
 
     if cell.formula is FormulaKind.DIFFERENCE and len(cell.operands) == 2:
-        left = _address(table, row_key, cell.operands[0], first_data_row=first_data_row)
-        right = _address(table, row_key, cell.operands[1], first_data_row=first_data_row)
+        left, right = here(cell.operands[0]), here(cell.operands[1])
         return f"={left}-{right}" if left and right else None
 
     if cell.formula is FormulaKind.RATIO_PCT and len(cell.operands) == 2:
-        numerator = _address(table, row_key, cell.operands[0], first_data_row=first_data_row)
-        denominator = _address(table, row_key, cell.operands[1], first_data_row=first_data_row)
+        numerator, denominator = here(cell.operands[0]), here(cell.operands[1])
         if not (numerator and denominator):
             return None
         # Guarded, because a zero denominator in a spreadsheet is a #DIV/0! a
@@ -107,63 +166,11 @@ def _formula(
         return f"=IF({denominator}=0,0,{numerator}/{denominator})"
 
     if cell.formula is FormulaKind.REFERENCE and cell.operands:
-        target_table, _, rest = cell.operands[0].partition(":")
-        target_row, _, target_column = rest.partition(":")
-        sheet = sheet_of.get(target_table)
-        source = next((t for t in ir.tables() if t.key == target_table), None)
-        if sheet is None or source is None:
+        target_table, target_row, target_column = _operand(table.key, cell.operands[0], column_key)
+        found = layout.cell(target_table, target_row, target_column)
+        if found is None or target_table not in layout.sheet:
             return None
-        address = _address(source, target_row, target_column, first_data_row=rows_of[target_table])
-        return f"='{sheet}'!{address}" if address else None
-
-    return None
-
-
-def _reconciliation_formula(
-    ir: ArtifactIR,
-    table: Table,
-    row_key: str,
-    column_key: str,
-    *,
-    first_data_row: int,
-    sheet_of: dict[str, str],
-    rows_of: dict[str, int],
-) -> str | None:
-    """The reconciliation sheet's two computed columns.
-
-    ``summed`` sums the unit rows on the P&L sheet. ``difference`` subtracts the
-    ledger's stated total from that sum. The stated total is a literal, so this
-    compares the workbook against the corpus — subtracting the P&L's own group
-    cell would be comparing ``=SUM(units)`` with itself and could never fail.
-    """
-    pnl = next((t for t in ir.tables() if t.key == "pnl"), None)
-    sheet = sheet_of.get("pnl")
-    if pnl is None or sheet is None:
-        return None
-
-    source_column = {
-        "revenue_units_to_group": "revenue_actual",
-        "gp_units_to_group": "gp_actual",
-    }.get(row_key)
-    if source_column is None:
-        return None
-
-    if column_key == "summed":
-        unit_rows = [row for row in pnl.rows if not row.emphasis]
-        if not unit_rows:
-            return None
-        first = _address(pnl, unit_rows[0].key, source_column, first_data_row=rows_of["pnl"])
-        last = _address(pnl, unit_rows[-1].key, source_column, first_data_row=rows_of["pnl"])
-        if not (first and last):
-            return None
-        # The sheet is named once for the range, not once per endpoint: Excel
-        # rejects `'Sheet'!C4:'Sheet'!C6`.
-        return f"=SUM('{sheet}'!{first}:{last})"
-
-    if column_key == "difference":
-        left = _address(table, row_key, "summed", first_data_row=first_data_row)
-        right = _address(table, row_key, "stated", first_data_row=first_data_row)
-        return f"={left}-{right}" if left and right else None
+        return f"='{layout.sheet[target_table]}'!{found[1]}"
 
     return None
 
@@ -181,6 +188,7 @@ def render(ir: ArtifactIR) -> bytes:
     sections = [s for s in ir.sections if s.table is not None]
     sheet_of = {s.table.key: s.table.title[:31] for s in sections}
     rows_of = {s.table.key: _HEADER_ROW + 1 for s in sections}
+    layout = _Layout([s.table for s in sections], sheet_of, rows_of)
 
     bold = Font(bold=True)
     header_fill = PatternFill("solid", fgColor="EEEEEE")
@@ -214,16 +222,7 @@ def render(ir: ArtifactIR) -> bytes:
                 if cell is None:
                     continue
 
-                if table.key == "reconciliation":
-                    formula = _reconciliation_formula(
-                        ir, table, row.key, column.key,
-                        first_data_row=rows_of[table.key], sheet_of=sheet_of, rows_of=rows_of,
-                    )
-                else:
-                    formula = _formula(
-                        ir, table, row.key, column.key, cell,
-                        first_data_row=rows_of[table.key], sheet_of=sheet_of, rows_of=rows_of,
-                    )
+                formula = _formula(ir, table, row.key, column.key, cell, layout=layout)
 
                 if formula is not None:
                     target.value = formula
@@ -259,7 +258,7 @@ def render(ir: ArtifactIR) -> bytes:
     # depending on where they happen to sit.
     pnl = next((t for t in ir.tables() if t.key == "pnl"), None)
     if pnl is not None:
-        group = next((row for row in pnl.rows if row.emphasis), None)
+        group = next((row for row in reversed(pnl.rows) if row.emphasis), None)
         if group is not None:
             sheet_name = sheet_of["pnl"]
             for column_key, name in (
@@ -269,7 +268,8 @@ def render(ir: ArtifactIR) -> bytes:
                 ("gp_actual", "GroupGrossProfitActual"),
                 ("gp_variance", "GroupGrossProfitVariance"),
             ):
-                address = _address(pnl, group.key, column_key, first_data_row=rows_of["pnl"])
+                found = layout.cell("pnl", group.key, column_key)
+                address = found[1] if found else None
                 if address:
                     workbook.defined_names[name] = DefinedName(
                         name, attr_text=f"{quote_sheetname(sheet_name)}!${address[0]}${address[1:]}"

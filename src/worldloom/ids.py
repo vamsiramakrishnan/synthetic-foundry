@@ -37,6 +37,8 @@ CORE_PREFIXES = frozenset(
         "SYS",  # system of record
         "SVC",  # runtime service
         "CC",  # cost centre
+        "CAT",  # merchandise category
+        "SITE",  # store or distribution centre
         "PERSONA",
         "LORE",
         "FACT",

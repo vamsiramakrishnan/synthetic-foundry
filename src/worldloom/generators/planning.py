@@ -50,6 +50,7 @@ def artifact_intents(
     financial_facts: tuple[CanonicalFact, ...],
     period: str,
     density: float,
+    workbook_facts: tuple[CanonicalFact, ...] = (),
 ) -> tuple[ArtifactIntent, ...]:
     """Plan the artifacts this episode warrants.
 
@@ -57,8 +58,15 @@ def artifact_intents(
     the CFO report always exist because a close always produces them, and the
     incident artifacts exist only when there was an incident. A close without an
     incident does not get an RCA — the plan follows the episode, not a template.
+
+    ``financial_facts`` is the headline cut — group and unit, this period. It is
+    what the narrative artifacts cite. ``workbook_facts`` is the whole hierarchy
+    down to category and store, and only the workbook gets it: a variance memo
+    handed four thousand facts would produce four thousand narrative requests to
+    write five paragraphs.
     """
     money = [f.id for f in financial_facts]
+    detail = [f.id for f in (workbook_facts or financial_facts)]
     intents: list[ArtifactIntent] = []
 
     def intent(artifact_type: str, domain: str, audience: str, author: str,
@@ -82,7 +90,7 @@ def artifact_intents(
            "The close calendar states the committed date every period.")
 
     intent("finance_workbook", "finance", "finance", roles["reporting_manager"],
-           money + [episode.keys["fact_close_delay"]], [episode.close_event_id], "long",
+           detail + [episode.keys["fact_close_delay"]], [episode.close_event_id], "long",
            "The month-end model is the source artifact for the period and must reconcile.")
 
     intent("cfo_variance_memo", "finance", "group_cfo", roles["controller"],

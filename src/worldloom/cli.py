@@ -106,7 +106,22 @@ def build(
         None, "--incident/--no-incident",
         help="Force the operational incident on or off. Omit to let the seed and lore decide.",
     ),
-    employees: int = typer.Option(80_000, "--employees", help="Stated headcount for the company."),
+    employees: int = typer.Option(None, "--employees", help="Override the archetype's stated headcount."),
+    archetype: str = typer.Option(
+        "omnichannel_retailer", "--archetype", "-a",
+        help="Company shape to build. See `worldloom archetypes` for the list.",
+    ),
+    inspired_by: str = typer.Option(
+        None, "--inspired-by",
+        help=(
+            "Describe a real business and build a world of that shape "
+            "(e.g. 'a large Australian grocer'). Shape only — no data about it is used."
+        ),
+    ),
+    comparatives: int = typer.Option(
+        0, "--comparatives",
+        help="Prior months of actuals to generate, for a trend. 11 gives a rolling year.",
+    ),
     formats: list[str] = typer.Option(
         None, "--format", "-f",
         help="Render these formats. Repeatable. Omit to plan artifacts without rendering.",
@@ -127,10 +142,26 @@ def build(
     events, artifact plan, and evaluation cases are all generated. The same seed
     always produces the same world.
     """
+    from . import archetypes as archetype_registry
     from .retail import MonthEndClose, RetailWorld
 
-    world = RetailWorld(seed=seed, employees=employees).build()
-    world = world.run(MonthEndClose(period=period, include_operational_incident=incident))
+    if inspired_by:
+        shape = archetype_registry.inspired_by(inspired_by)
+    else:
+        try:
+            shape = archetype_registry.get(archetype)
+        except KeyError as exc:
+            err.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=2) from exc
+
+    world = RetailWorld(seed=seed, archetype=shape, employees=employees).build()
+    world = world.run(
+        MonthEndClose(
+            period=period,
+            include_operational_incident=incident,
+            comparative_months=comparatives,
+        )
+    )
 
     if narrate or replay is not None:
         from .narrative import DeterministicProvider, ProviderError, UnreachableProvider
@@ -411,6 +442,20 @@ def formats() -> None:
 
     for name in available():
         console.print(name)
+
+
+@app.command()
+def archetypes() -> None:
+    """List the company shapes `build --archetype` accepts."""
+    from . import archetypes as registry
+
+    for key in registry.available():
+        shape = registry.get(key)
+        console.print(
+            f"[bold]{key}[/bold]  {shape.label}\n"
+            f"  {len(shape.units)} business units · {shape.category_count} categories · "
+            f"{shape.site_count:,} sites · {shape.employees:,} employees"
+        )
 
 
 @app.command()

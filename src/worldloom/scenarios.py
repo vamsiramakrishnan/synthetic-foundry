@@ -66,6 +66,13 @@ class MonthEndClose:
 
     period: str
     include_operational_incident: bool | None = None
+    comparative_months: int = 0
+    """Prior months to generate at actual, for a trend. Zero keeps a close to itself.
+
+    Off by default because a scenario run twice against the same world would then
+    generate two sets of facts for the overlapping months, and the second would be
+    a duplicate rather than a revision. A caller who wants a trend asks for one.
+    """
 
     def run(self, world: World) -> World:
         """Return a new world with this episode's events, facts, and plans.
@@ -99,26 +106,37 @@ class MonthEndClose:
             force_incident=self.include_operational_incident,
         )
 
+        # Unit keys come from the world rather than a literal list, because the
+        # unit mix is an archetype decision — a grocer with a New Zealand division
+        # and a mid-size retailer without one run the same scenario.
         unit_ids = {
-            "food": roles["unit_food"],
-            "gm": roles["unit_gm"],
-            "digital": roles["unit_digital"],
+            key.removeprefix("unit_"): value
+            for key, value in roles.items()
+            if key.startswith("unit_")
         }
         from .generators.organisation import unit_shares
 
-        financial_facts = finance.generate(
+        if world._archetype is None:
+            raise ValueError("this world has no archetype; build one with RetailWorld(...)")
+
+        financials = finance.generate(
             rng.derive("finance"), minter,
             period=self.period,
             company_id=world.company.id,
             unit_ids=unit_ids,
-            unit_shares=unit_shares(),
+            unit_shares=unit_shares(world._archetype),
+            categories=world._categories,
+            sites=world._sites,
             erp_id=roles["sys_erp"],
             commerce_id=roles["sys_commerce"],
+            pos_id=roles.get("sys_pos"),
             finalised_at=episode.finalised_at,
             close_event_id=episode.close_event_id,
             annual_revenue=world._annual_revenue,
             lore_by_target=index,
+            comparative_months=self.comparative_months,
         )
+        financial_facts = financials.headline
 
         intents = planning.artifact_intents(
             minter,
@@ -127,6 +145,7 @@ class MonthEndClose:
             financial_facts=financial_facts,
             period=self.period,
             density=1.0 + density_adjustment(world, "finance/status_reports"),
+            workbook_facts=financials.facts,
         )
 
         cases = planning.evaluation_cases(
@@ -141,7 +160,7 @@ class MonthEndClose:
 
         return world.extend(
             events=episode.events,
-            facts=(*episode.facts, *financial_facts),
+            facts=(*episode.facts, *financials.facts),
             artifact_intents=intents,
             evaluations=cases,
             period=self.period,

@@ -323,13 +323,53 @@ unreachable from the CLI. It is what an agent drives, so it is the surface that
 matters most:
 
 ```bash
-worldloom build      # generate a world from a seed
-worldloom narrate    # requests / accept — the agent handshake
-worldloom render     # materialise into files
-worldloom validate   # check that every document agrees
-worldloom inspect    # show what a corpus contains
-worldloom evals      # export the evaluation set
+worldloom build       # generate a world from a seed
+worldloom narrate     # requests / accept — the agent handshake
+worldloom render      # materialise into files
+worldloom validate    # check that every document agrees
+worldloom inspect     # show what a corpus contains
+worldloom archetypes  # list the company shapes a build can take
+worldloom evals       # export the evaluation set
 ```
+
+### Shape and scale
+
+An **archetype** is the shape of a company without the company: how many divisions,
+what they sell, how thin the margins are, how many stores. Everything else — names,
+figures, people, incidents — is generated from the seed.
+
+```bash
+worldloom archetypes
+worldloom build --archetype australian_grocery --comparatives 11 -f xlsx --out ./corpus
+
+# Or describe a real business and get a world of that shape:
+worldloom build --inspired-by "a large Australian grocer" --comparatives 11 -f xlsx
+```
+
+`--inspired-by` resolves a description to an archetype and stops there. It looks up
+no data about the named company; what it borrows is unit mix, margin structure,
+category depth, and store count — the things that make a corpus *hard* in the way a
+real one is hard. The generated company has an invented name, invented divisions,
+invented stores, and invented numbers.
+
+Shape is what makes the workbook worth opening. A retailer's month does not stop at
+three divisions — it decomposes by merchandise category and, independently, by store:
+
+```
+Summary                    5 rows      Business Unit P&L        5 rows
+Category P&L              39 rows      Store Performance    1,568 rows
+Revenue Trend             39 × 12      Variance Drivers         4 rows
+Lineage (hidden)       6,294 rows      Reconciliation (hidden) 10 rows
+```
+
+Both decompositions are *allocated* from the unit total rather than drawn and summed,
+so they cannot drift; the hidden Reconciliation sheet then sums each of them back —
+across sheets, in live formulas — against what the fact ledger states. Ten checks,
+every one netting to zero when the file opens.
+
+None of this reaches the narrative side. The workbook cites 6,294 facts; the CFO memo
+cites the group and unit figures only, and a build of that size still produces 23
+narrative requests with at most 32 facts each.
 
 ---
 
