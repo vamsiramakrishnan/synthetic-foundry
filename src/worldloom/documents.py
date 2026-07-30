@@ -537,6 +537,11 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                         table="trend",
                         series=list(periods),
                         rows=trend_subtotals,
+                        # One line per division across months, not one line per
+                        # month across divisions. Drawn the other way round this
+                        # is twelve lines of a single point each, and it renders
+                        # without complaint.
+                        by_row=True,
                         category_axis="Division",
                         value_axis=f"{company.currency} {company.currency_unit}",
                         note="A line chart is only honest where the axis is ordered. It is here.",

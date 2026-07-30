@@ -274,6 +274,8 @@ def render(ir: ArtifactIR) -> bytes:
                         name, attr_text=f"{quote_sheetname(sheet_name)}!${address[0]}${address[1:]}"
                     )
 
+    _add_charts(workbook, ir, layout, sheet_of)
+
     workbook.properties.title = ir.title
     workbook.properties.subject = ir.subtitle or ""
     workbook.properties.creator = "Worldloom"
@@ -312,3 +314,106 @@ def render_all(world: World) -> list[Rendered]:
             )
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Charts
+# ---------------------------------------------------------------------------
+
+#: Where the chart source block lives. Hidden, because it is machinery rather
+#: than content — but present, and made of live cross-sheet formulas rather than
+#: pasted values, so the chart still moves when a figure does.
+_CHART_DATA = "Chart Data"
+
+_KIND = {"column": ("BarChart", "col"), "bar": ("BarChart", "bar"), "line": ("LineChart", None), "pie": ("PieChart", None)}
+
+
+def _chart_block(sheet, chart, table, layout, *, at_row: int):  # type: ignore[no-untyped-def]
+    """Write one chart's source block, and return its extent.
+
+    The block is not a copy of the data. Every value cell is a formula pointing at
+    the cell it charts, so a reader who changes a figure sees the chart move, and
+    a chart can never quietly disagree with the table it claims to plot. That is
+    the same reason the workbook keeps formulas everywhere else.
+
+    A block is needed at all because a chart's rows are frequently not contiguous
+    — the category chart plots thirty-four categories with unit subtotals sitting
+    between them — and a spreadsheet range is a rectangle.
+    """
+    source = layout.sheet[chart.table]
+
+    if chart.by_row:
+        categories, series = list(chart.series), list(chart.rows)
+    else:
+        categories, series = list(chart.rows), list(chart.series)
+
+    def label(key: str, is_row: bool) -> str:
+        if is_row:
+            row = next((r for r in table.rows if r.key == key), None)
+            return row.label if row else key
+        column = table.column(key)
+        return column.label if column else key
+
+    sheet.cell(row=at_row, column=1, value=chart.title)
+    for index, key in enumerate(series, start=2):
+        sheet.cell(row=at_row, column=index, value=label(key, chart.by_row))
+
+    for offset, category in enumerate(categories, start=1):
+        sheet.cell(row=at_row + offset, column=1, value=label(category, not chart.by_row))
+        for index, member in enumerate(series, start=2):
+            # `by_row` decides which of the pair names a row and which names a
+            # column. Resolved explicitly, because getting it backwards produces a
+            # block of empty cells and a chart that draws nothing while looking
+            # entirely well-formed.
+            row_key, column_key = (member, category) if chart.by_row else (category, member)
+            found = layout.cell(chart.table, row_key, column_key)
+            if found is not None:
+                sheet.cell(row=at_row + offset, column=index).value = f"='{source}'!{found[1]}"
+
+    return at_row + len(categories), len(series)
+
+
+def _add_charts(workbook, ir, layout, sheet_of):  # type: ignore[no-untyped-def]
+    """Draw every declared chart, reading a hidden block of live references."""
+    from openpyxl.chart import BarChart, LineChart, PieChart, Reference
+
+    charts = [(s, c) for s in ir.sections for c in s.charts if s.table is not None]
+    if not charts:
+        return
+
+    data_sheet = workbook.create_sheet(title=_CHART_DATA)
+    data_sheet.sheet_state = "hidden"
+    cursor = 1
+
+    for section, chart in charts:
+        table = section.table
+        last_row, series_count = _chart_block(data_sheet, chart, table, layout, at_row=cursor)
+        constructor = {"BarChart": BarChart, "LineChart": LineChart, "PieChart": PieChart}[
+            _KIND[chart.kind.value][0]
+        ]
+        drawn = constructor()
+        direction = _KIND[chart.kind.value][1]
+        if direction is not None:
+            drawn.type = direction
+        drawn.title = chart.title
+        if chart.category_axis:
+            drawn.x_axis.title = chart.category_axis
+        if chart.value_axis:
+            drawn.y_axis.title = chart.value_axis
+
+        drawn.add_data(
+            Reference(data_sheet, min_col=2, max_col=1 + series_count,
+                      min_row=cursor, max_row=last_row),
+            titles_from_data=True,
+        )
+        drawn.set_categories(
+            Reference(data_sheet, min_col=1, min_row=cursor + 1, max_row=last_row)
+        )
+        drawn.height, drawn.width = 8, 18
+
+        # Anchored beside the table it plots, clear of the widest column.
+        target = workbook[sheet_of[chart.table]]
+        anchor = f"{_column_letter(len(table.columns) + 3)}{_HEADER_ROW + 1 + 18 * section.charts.index(chart)}"
+        target.add_chart(drawn, anchor)
+
+        cursor = last_row + 2

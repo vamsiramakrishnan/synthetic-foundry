@@ -482,6 +482,15 @@ class Chart(Model):
     rows: list[str] = Field(default_factory=list)
     """Row keys to plot. Empty means every row that is not a subtotal — a chart
     that included the subtotals would double every bar."""
+    by_row: bool = False
+    """Whether each plotted *row* is a series, with the columns as the axis.
+
+    A P&L chart wants one series per measure across divisions. A trend wants one
+    line per division across months — the same table read the other way round.
+    Which one is meant is a semantic choice the planner makes, not something a
+    renderer can infer: a line chart drawn the wrong way round is twelve lines of
+    one month each, and it renders perfectly.
+    """
     category_axis: str = ""
     value_axis: str = ""
     note: str | None = None

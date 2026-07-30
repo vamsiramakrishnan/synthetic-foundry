@@ -140,3 +140,138 @@ def test_a_section_without_charts_still_reads_correctly(workbook: World) -> None
     every chartless section grew an "awaiting narrative" notice under its table."""
     body = markdown.render(_ir(workbook)).decode()
     assert "Awaiting narrative" not in body
+
+
+# ---------------------------------------------------------------------------
+# Native charts in the workbook
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def book(workbook: World):  # type: ignore[no-untyped-def]
+    import io
+
+    import openpyxl
+
+    rendered = workbook.render("xlsx")
+    item = next(r for r in rendered._rendered if r.path.endswith(".xlsx"))
+    return openpyxl.load_workbook(io.BytesIO(item.payload))
+
+
+def _value_cells(book):  # type: ignore[no-untyped-def]
+    """Every data cell of the chart block, skipping each block's header row.
+
+    A header row holds the series labels, which are text by design — asserting
+    that they too are formulas would be asserting the wrong thing.
+    """
+    sheet = book["Chart Data"]
+    headers = {
+        r for r in range(1, sheet.max_row + 1)
+        if isinstance(sheet.cell(row=r, column=1).value, str)
+        and sheet.cell(row=r, column=2).value is not None
+        and not str(sheet.cell(row=r, column=2).value).startswith("='")
+    }
+    return [
+        cell
+        for row in sheet.iter_rows(min_col=2)
+        for cell in row
+        if cell.value is not None and cell.row not in headers
+    ]
+
+
+def test_the_workbook_carries_native_charts(workbook: World, book) -> None:  # type: ignore[no-untyped-def]
+    """Not an image of a chart — a chart object Excel will redraw."""
+    drawn = {
+        sheet.title: [type(c).__name__ for c in getattr(sheet, "_charts", [])]
+        for sheet in book.worksheets
+        if getattr(sheet, "_charts", [])
+    }
+    assert drawn["Business Unit P&L"] == ["BarChart", "BarChart"]
+    assert drawn["Category P&L"] == ["BarChart"]
+    assert drawn["Revenue Trend"] == ["LineChart"]
+
+
+def test_chart_data_is_live_references_not_pasted_values(book) -> None:  # type: ignore[no-untyped-def]
+    """The property that makes a chart checkable.
+
+    A chart fed pasted numbers is a screenshot: change a figure and the chart
+    keeps the old story. Every value cell in the block is a cross-sheet formula,
+    so the chart moves when the sheet does.
+    """
+    sheet = book["Chart Data"]
+    assert sheet.sheet_state == "hidden"
+
+    values = 0
+    for cell in _value_cells(book):
+        assert isinstance(cell.value, str) and cell.value.startswith("='"), (
+            f"{cell.coordinate} holds a pasted value: {cell.value!r}"
+        )
+        values += 1
+    assert values > 15, f"only {values} charted cells"
+
+
+def test_every_charted_cell_resolves_to_the_figure_it_plots(workbook: World, book) -> None:  # type: ignore[no-untyped-def]
+    """Recompute the reference and compare it against the IR, cell by cell.
+
+    A block of formulas pointing at the wrong column would look exactly like a
+    block pointing at the right one.
+    """
+    from test_render import evaluate
+
+    ir = _ir(workbook)
+    tables = {table.key: table for table in ir.tables()}
+
+    charted = set()
+    for cell in _value_cells(book):
+        computed = evaluate(book, "Chart Data", cell.coordinate)
+        assert isinstance(computed, float)
+        charted.add(round(computed, 4))
+
+    # A percentage is held on the sheet as a fraction so Excel's percent format
+    # does not render 24.73 as 2473%, so a charted 0.2473 is the IR's 24.73.
+    available = set()
+    for table in tables.values():
+        for table_row in table.rows:
+            for cell in table_row.cells.values():
+                if isinstance(cell.value, (int, float)):
+                    available.add(round(float(cell.value), 4))
+                    available.add(round(float(cell.value) / 100, 4))
+
+    missing = sorted(charted - available)
+    assert not missing, f"charted values present in no table: {missing[:5]}"
+    assert len(charted) > 10
+
+
+def test_a_by_row_chart_plots_one_series_per_row(workbook: World, book) -> None:  # type: ignore[no-untyped-def]
+    """The trend wants one line per division across months.
+
+    Drawn the other way round it is one line per month across divisions — twelve
+    lines of a single point each — and it renders without complaint.
+    """
+    ir = _ir(workbook)
+    trend = next(c for c in ir.charts() if c.key == "trend_units")
+    assert trend.by_row
+
+    sheet = book["Chart Data"]
+    header = next(
+        r for r in range(1, sheet.max_row + 1)
+        if sheet.cell(row=r, column=1).value == trend.title
+    )
+    series = [
+        sheet.cell(row=header, column=c).value
+        for c in range(2, sheet.max_column + 1)
+        if sheet.cell(row=header, column=c).value
+    ]
+    categories = [
+        sheet.cell(row=r, column=1).value
+        for r in range(header + 1, header + 1 + len(trend.series))
+    ]
+    assert len(series) == len(trend.rows), "series should be divisions"
+    assert categories == list(trend.series), "the axis should be the periods, in order"
+
+
+def test_charts_do_not_break_byte_identical_rendering(workbook: World) -> None:
+    from worldloom.render import xlsx
+
+    ir = _ir(workbook)
+    assert xlsx.render(ir) == xlsx.render(ir)
