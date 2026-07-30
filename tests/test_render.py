@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import zipfile
 
 import openpyxl
 import pytest
@@ -262,6 +263,44 @@ def test_a_percentage_is_stored_as_a_fraction(rendered: World, workbook) -> None
     sheet = workbook["Business Unit P&L"]
     computed = evaluate(workbook, "Business Unit P&L", "H4")
     assert 0.0 < computed < 1.0, f"margin stored as {computed}, which would display as a percent of a percent"
+
+
+def test_the_workbook_contains_no_wall_clock_time(rendered: World) -> None:
+    """A file that records when it was rendered cannot regenerate byte for byte.
+
+    Asserted as an invariant rather than by rendering twice and comparing: two
+    renders only differ when they straddle a second boundary, so a comparison test
+    passes by luck most of the time. CI caught this defect exactly once, on the run
+    that happened to cross a second.
+
+    Two clocks leak into an XLSX — the zip's per-entry timestamps, and
+    ``dcterms:modified``, which openpyxl overwrites inside ``save``.
+    """
+    payload = next(r for r in rendered._rendered if r.path.endswith(".xlsx")).payload
+    archive = zipfile.ZipFile(io.BytesIO(payload))
+
+    assert {info.date_time for info in archive.infolist()} == {(1980, 1, 1, 0, 0, 0)}, (
+        "zip entry timestamps still come from the clock"
+    )
+
+    core = archive.read("docProps/core.xml").decode()
+    stamps = re.findall(r"<dcterms:\w+[^>]*>([^<]+)<", core)
+    assert stamps, "the workbook should declare created and modified"
+    assert len(set(stamps)) == 1, f"modified differs from created, so one is the clock: {stamps}"
+
+    # The period's close date, not today's.
+    period_year = rendered.period.split("-")[0]
+    assert all(stamp.startswith(period_year) for stamp in stamps), stamps
+
+
+def test_two_renders_of_the_same_world_are_byte_identical(rendered: World) -> None:
+    again = RetailWorld(seed=8128).build().run(
+        MonthEndClose(period=PERIOD, include_operational_incident=True)
+    ).render("xlsx")
+
+    first = next(r for r in rendered._rendered if r.path.endswith(".xlsx")).payload
+    second = next(r for r in again._rendered if r.path.endswith(".xlsx")).payload
+    assert first == second
 
 
 def test_the_workbook_declares_itself_synthetic(workbook) -> None:  # type: ignore[no-untyped-def]

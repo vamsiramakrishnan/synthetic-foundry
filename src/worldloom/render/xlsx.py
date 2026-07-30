@@ -15,6 +15,8 @@ changes and a total does not, the sheet shows it.
 
 from __future__ import annotations
 
+import re
+from datetime import datetime
 from io import BytesIO
 from typing import TYPE_CHECKING
 
@@ -281,9 +283,66 @@ def render(ir: ArtifactIR) -> bytes:
     )
     workbook.properties.keywords = "synthetic,worldloom,seed=" + ir.metadata.get("worldloom_seed", "")
 
+    # Document timestamps come from the world, never from the clock. openpyxl
+    # defaults these to `datetime.now()`, which would put the moment of rendering
+    # inside the file and break byte-identical regeneration.
+    stamp = ir.metadata.get("worldloom_created")
+    if stamp:
+        moment = datetime.fromisoformat(stamp).replace(tzinfo=None)
+        workbook.properties.created = moment
+        workbook.properties.modified = moment
+
     buffer = BytesIO()
     workbook.save(buffer)
-    return buffer.getvalue()
+    return _normalise(buffer.getvalue(), created=stamp)
+
+
+#: Fixed timestamp for every archive entry. The earliest a zip can represent, so
+#: it reads as deliberately unset rather than as a plausible date.
+_EPOCH = (1980, 1, 1, 0, 0, 0)
+
+_MODIFIED = re.compile(rb"(<dcterms:modified[^>]*>)[^<]*(</dcterms:modified>)")
+
+
+def _normalise(payload: bytes, *, created: str | None = None) -> bytes:
+    """Strip the wall clock out of a finished workbook.
+
+    Two clocks leak into an XLSX, and both break byte-identical regeneration:
+
+    - **Zip entry timestamps.** A zip records a modification time per entry, filled
+      from the clock at save. Two renders of the same workbook a second apart
+      therefore differ in bytes while being identical in content.
+    - **``dcterms:modified``.** openpyxl overwrites this with ``now()`` inside
+      ``save``, *after* any value set on ``workbook.properties``, so it cannot be
+      fixed before the fact.
+
+    Both are corrected here rather than by patching the library, so the result
+    holds for whatever openpyxl version is installed. The XML substitution is
+    deliberately narrow — one element whose content is a timestamp — which is why
+    it does not warrant an XML parser.
+
+    Discovered by CI: two runs of the replay check landed either side of a second
+    boundary and the workbooks differed. Locally they had always shared a second,
+    so the defect passed unnoticed.
+    """
+    from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+
+    source = BytesIO(payload)
+    target = BytesIO()
+    with ZipFile(source) as original, ZipFile(target, "w", ZIP_DEFLATED) as rebuilt:
+        for info in original.infolist():
+            content = original.read(info.filename)
+            if created and info.filename == "docProps/core.xml":
+                content = _MODIFIED.sub(
+                    rb"\g<1>" + created.replace("+00:00", "Z").encode() + rb"\g<2>", content
+                )
+            fixed = ZipInfo(filename=info.filename, date_time=_EPOCH)
+            fixed.compress_type = info.compress_type
+            fixed.external_attr = info.external_attr
+            fixed.internal_attr = info.internal_attr
+            fixed.create_system = 3  # Unix, so the host OS does not leak in either
+            rebuilt.writestr(fixed, content)
+    return target.getvalue()
 
 
 def render_all(world: World) -> list[Rendered]:
