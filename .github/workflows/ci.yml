@@ -71,6 +71,17 @@ jobs:
           worldloom render "${{ runner.temp }}/reference" -f docx -f xlsx -f markdown
           worldloom validate "${{ runner.temp }}/reference"
 
+      # The corpus has to be hard, not just coherent. A keyword baseline with no
+      # notion of time or authority is scored against the evaluation set, and the
+      # score is asserted to stay low on the types the corpus exists to pose. If
+      # this number rises without someone deliberately improving the retriever,
+      # the corpus got easier.
+      - name: The baseline still fails the hard questions
+        run: |
+          worldloom build --seed 8128 --incident --narrate -f markdown \
+            --out "${{ runner.temp }}/scored"
+          worldloom evaluate "${{ runner.temp }}/scored" -v
+
       # The agent handshake: a corpus asks for prose, and refuses prose that
       # restates a figure. Exercised with a scripted "agent" so the contract is
       # covered without a model in CI.

@@ -445,6 +445,36 @@ def formats() -> None:
 
 
 @app.command()
+def evaluate(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    k: int = typer.Option(5, "-k", help="How many passages the baseline may return."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every question."),
+) -> None:
+    """Score the built-in baseline retriever against the corpus's evaluation set.
+
+    A *low* score on the hard question types is the good result. The baseline has
+    no notion of when a document was written or how authoritative it is, so a
+    corpus on which it does well on temporal and authority questions is a corpus
+    that is not testing anything.
+    """
+    from .evaluate import score as run_score
+
+    world = _load(corpus)
+    if not world.artifact_irs:
+        world = world.compile()
+
+    card = run_score(world, k=k)
+    console.print(str(card))
+
+    if verbose:
+        console.print("")
+        for outcome in card.outcomes:
+            mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
+            console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
+            console.print(f"      {outcome.detail}")
+
+
+@app.command()
 def archetypes() -> None:
     """List the company shapes `build --archetype` accepts."""
     from . import archetypes as registry
