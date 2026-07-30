@@ -371,6 +371,7 @@ class World:
         ledger: tuple[GenerationLedgerEntry, ...] = (),
         people: tuple[Employee, ...] = (),
         business_units: tuple[BusinessUnit, ...] = (),
+        roles: dict[str, str] | None = None,
         period: str | None = None,
     ) -> World:
         """A copy of this world with more appended. Never mutates in place.
@@ -387,6 +388,12 @@ class World:
         validity window (sets ``left``, sets ``dissolved``), and the change is
         still witnessed by an event and a fact like every other change. The roster
         holds who is here now; the timeline holds how it got that way.
+
+        ``roles`` rebinds role keys the same way — ``{"controller": "PERSON-12"}``
+        after the controller leaves. This is what makes a departure show up in the
+        corpus at all: the next episode plans its artifacts against ``roles``, so
+        the March memo is signed by the person who actually held the post in
+        March, without any planner knowing a succession happened.
         """
         return World(
             company=self.company,
@@ -412,7 +419,7 @@ class World:
             period=period or self.period,
             root=self.root,
             schema_version=self.schema_version,
-            _roles=self._roles,
+            _roles={**self._roles, **(roles or {})},
             _minter=self._minter,
             _annual_revenue=self._annual_revenue,
             _archetype=self._archetype,
