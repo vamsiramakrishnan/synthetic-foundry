@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .ids import id_prefix, is_id
+from .models import FormulaKind
 
 if TYPE_CHECKING:  # pragma: no cover
     from .world import World
@@ -276,6 +277,67 @@ class _Validator:
             self.checks += 1
             if not (root / artifact.path).is_file():
                 self.fail("referential", "missing_file", artifact.id, f"path {artifact.path} does not exist")
+
+    def charts(self) -> None:
+        """A chart must plot data that is actually on the sheet beside it.
+
+        A chart naming a column that does not exist draws an empty series rather
+        than raising: the file opens, the chart is there, and it is blank. That is
+        the worst failure mode available — an artifact that looks complete and
+        conveys nothing — so the references are checked here rather than trusted.
+        """
+        for ir in self.world.artifact_irs:
+            tables = {table.key: table for table in ir.tables()}
+            for chart in ir.charts():
+                self.checks += 1
+                table = tables.get(chart.table)
+                if table is None:
+                    self.fail(
+                        "artifact", "chart_table_missing", f"{ir.id}/{chart.key}",
+                        f"plots table {chart.table!r}, which this artifact does not contain",
+                    )
+                    continue
+
+                columns = {column.key for column in table.columns}
+                rows = {row.key for row in table.rows}
+                for key in chart.series:
+                    self.checks += 1
+                    if key not in columns:
+                        self.fail(
+                            "artifact", "chart_series_missing", f"{ir.id}/{chart.key}",
+                            f"series {key!r} is not a column of {chart.table}",
+                        )
+                for key in chart.rows:
+                    self.checks += 1
+                    if key not in rows:
+                        self.fail(
+                            "artifact", "chart_row_missing", f"{ir.id}/{chart.key}",
+                            f"row {key!r} is not a row of {chart.table}",
+                        )
+
+                # A total plotted beside the rows that total into it draws the
+                # same money twice, and looks entirely correct while doing so.
+                # Plotting a subtotal on its own is fine — a trend chart of
+                # divisions is exactly that — so the test is overlap, not
+                # emphasis. A summing cell names its own children as operands,
+                # which makes this answerable from the IR alone.
+                plotted = set(chart.rows)
+                for row in table.rows:
+                    if row.key not in plotted:
+                        continue
+                    children = {
+                        operand
+                        for cell in row.cells.values()
+                        if cell.formula is FormulaKind.SUM
+                        for operand in cell.operands
+                    }
+                    self.checks += 1
+                    overlap = sorted(children & plotted)
+                    if overlap:
+                        self.fail(
+                            "artifact", "chart_double_counts", f"{ir.id}/{chart.key}",
+                            f"plots {row.key} and its own parts {overlap}",
+                        )
 
     # -- graph -------------------------------------------------------------
 
@@ -620,6 +682,7 @@ class _Validator:
         self.referential()
         self.access()
         self.artifact_files()
+        self.charts()
         self.graph()
         self.financial()
         self.temporal()

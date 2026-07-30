@@ -445,6 +445,48 @@ class Row(Model):
     emphasis: bool = False
 
 
+class ChartKind(StrEnum):
+    """How a chart presents its series."""
+
+    COLUMN = "column"
+    """Vertical bars. Comparing a handful of things at one moment."""
+    BAR = "bar"
+    """Horizontal bars. Many categories with long labels — a category ranking."""
+    LINE = "line"
+    """A measure over ordered periods. Only meaningful when the axis is time."""
+    PIE = "pie"
+    """Composition of a single total. One series only."""
+
+
+class Chart(Model):
+    """A chart, declared over a table that is already resolved.
+
+    Declared rather than drawn, for the same reason a formula is declared rather
+    than computed: a workbook, a document and a deck all show "revenue by
+    division", and if each renderer chose its own rows and series they would be
+    three charts of three different things wearing one title. The IR says which
+    table, which rows, which series; a renderer decides only how to draw it.
+
+    A chart never introduces a number. Every value it plots is a cell that is
+    already in the table beside it, which is why a reader can check the chart
+    against the figures without leaving the page.
+    """
+
+    key: str
+    title: str
+    kind: ChartKind
+    table: str
+    """Key of the table this chart reads. Must be a table in the same artifact."""
+    series: list[str] = Field(default_factory=list)
+    """Column keys to plot, in order."""
+    rows: list[str] = Field(default_factory=list)
+    """Row keys to plot. Empty means every row that is not a subtotal — a chart
+    that included the subtotals would double every bar."""
+    category_axis: str = ""
+    value_axis: str = ""
+    note: str | None = None
+
+
 class Table(Model):
     """A resolved table: every value present, every computation declared."""
 
@@ -478,6 +520,9 @@ class ArtifactSection(Model):
     heading: str
     body: str | None = None
     table: Table | None = None
+    charts: list[Chart] = Field(default_factory=list)
+    """Charts over this section's table. A view of data already present, never a
+    source of data of its own."""
     fact_ids: list[str] = Field(default_factory=list)
     purpose: str = ""
     """What this section has to accomplish, and for whom.
@@ -513,6 +558,10 @@ class ArtifactIR(Model):
     def tables(self) -> list[Table]:
         """Every table in this artifact, in order."""
         return [s.table for s in self.sections if s.table is not None]
+
+    def charts(self) -> list[Chart]:
+        """Every chart in this artifact, in order."""
+        return [chart for section in self.sections for chart in section.charts]
 
     def fact_ids(self) -> list[str]:
         """Every fact this artifact rests on, deduplicated, order preserved."""

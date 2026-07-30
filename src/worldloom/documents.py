@@ -29,6 +29,8 @@ from .models import (
     Authority,
     CanonicalFact,
     Cell,
+    Chart,
+    ChartKind,
     Column,
     FormulaKind,
     Lifecycle,
@@ -335,7 +337,36 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
 
     sections = [
         ArtifactSection(heading="Summary", table=summary),
-        ArtifactSection(heading="Business Unit P&L", table=pnl),
+        ArtifactSection(
+            heading="Business Unit P&L",
+            table=pnl,
+            # Budget beside actual, by division. The chart plots the unit rows
+            # only: including the group row would put a bar four times the height
+            # of the others next to them and make the comparison unreadable, and
+            # including it *and* the units would draw the same money twice.
+            charts=[
+                Chart(
+                    key="pnl_revenue",
+                    title="Revenue against budget by division",
+                    kind=ChartKind.COLUMN,
+                    table="pnl",
+                    series=["revenue_budget", "revenue_actual"],
+                    rows=unit_keys,
+                    category_axis="Division",
+                    value_axis=f"{company.currency} {company.currency_unit}",
+                ),
+                Chart(
+                    key="pnl_margin",
+                    title="Gross margin against budget by division",
+                    kind=ChartKind.COLUMN,
+                    table="pnl",
+                    series=["gm_pct_actual"],
+                    rows=unit_keys,
+                    category_axis="Division",
+                    value_axis="Gross margin %",
+                ),
+            ],
+        ),
     ]
 
     # -- Category P&L ------------------------------------------------------
@@ -381,7 +412,28 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                 "as with performance."
             ),
         )
-        sections.append(ArtifactSection(heading="Category P&L", table=category_table))
+        sections.append(
+            ArtifactSection(
+                heading="Category P&L",
+                table=category_table,
+                # Horizontal bars: category names are long, and there are enough
+                # of them that a column chart would stack its labels vertically
+                # and become unreadable at exactly the width a reader has.
+                charts=[
+                    Chart(
+                        key="category_variance",
+                        title="Gross profit against budget by category",
+                        kind=ChartKind.BAR,
+                        table="category",
+                        series=["gp_variance"],
+                        rows=[c.id for unit in units for c in categories_of[unit.id]],
+                        category_axis="Category",
+                        value_axis=f"{company.currency} {company.currency_unit}",
+                        note="Bars left of zero are categories behind plan.",
+                    )
+                ],
+            )
+        )
 
     # -- Store performance -------------------------------------------------
     store_columns = [
@@ -477,6 +529,19 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         sections.append(
             ArtifactSection(
                 heading="Revenue Trend",
+                charts=[
+                    Chart(
+                        key="trend_units",
+                        title="Revenue by division, by month",
+                        kind=ChartKind.LINE,
+                        table="trend",
+                        series=list(periods),
+                        rows=trend_subtotals,
+                        category_axis="Division",
+                        value_axis=f"{company.currency} {company.currency_unit}",
+                        note="A line chart is only honest where the axis is ordered. It is here.",
+                    )
+                ],
                 table=Table(
                     key="trend",
                     title="Revenue Trend",
