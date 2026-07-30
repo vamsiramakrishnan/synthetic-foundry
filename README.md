@@ -68,7 +68,9 @@ DOCX PPTX PDF      Jira ServiceNow     XLSX Confluence
 
 Three rules follow from this, and they are not negotiable:
 
-**Facts before prose.** LLMs write language. They do not invent truth. Facts are generated deterministically; narrative is generated afterwards, constrained by those facts.
+**Facts before prose.** LLMs write language. They do not invent truth. Every number, date, entity, and claim in a document is resolved from the fact ledger before a word is written.
+
+This is a rule about *prose*, not about *priors*. What the company is — its industry, history, culture, the scar tissue that still shapes its decisions — is generated first, because no org graph, service catalogue, or financial model is decidable without it. Those priors are then frozen, and every later phase reads them and none may contradict them. Coherence comes from that single frozen source, not from constraining prose at the end. See [lore](docs/lore.md) and the [pipeline order](docs/generation-model.md#when-generation-happens).
 
 **Simulation before rendering.** Events create facts. Facts create artifacts. Artifacts create files. Never the other way around.
 
@@ -387,10 +389,19 @@ Invented: employees, customers, financials, programmes, projects, incidents, int
 For worlds without a real-world referent, Worldloom can ask instead of guess — a structured interview that builds up company identity, operating model, org topology, technology landscape, financial structure, strategic priorities, historical backstory, political tensions, and information ecosystem.
 
 ```python
-World.interview()   # -> World, and a deterministic seed you can keep
+World.interview()   # -> World, plus the WorldSeed it was built from
 ```
 
-The interview is a constructor, not a mode. It produces an ordinary `World` and a seed; everything downstream is identical.
+The interview is a constructor, not a mode. It produces an ordinary `World`; everything downstream is identical.
+
+Two things are easily confused, and they are not the same object:
+
+| Term | Is |
+| --- | --- |
+| **seed** | An integer — `8128`. Drives seeded randomness |
+| **WorldSeed** | The frozen priors document — identity, lore, strategy, org intent — produced by an interview or an archetype |
+
+Reproducing a world takes both, plus the generation ledger and the generator version.
 
 ---
 
@@ -521,57 +532,52 @@ If no, the API is wrong. Not the documentation.
 
 ## Roadmap
 
-**Core**
+Worldloom is built as one coherent enterprise episode taken all the way through, then generalised — not subsystem by subsystem. The full sequence, with exit gates for each step, is in **[docs/build-order.md](docs/build-order.md)**.
 
-- [ ] World model and immutable builder
-- [ ] Fact ledger and provenance graph
-- [ ] Event engine and temporal simulation
-- [ ] Artifact planner and IR
-- [ ] Scenario DSL
-- [ ] Recipe framework
-- [ ] Permission engine
-- [ ] `validate()` coherence checks
+The first executable is `worldloom demo retail-close`, not `worldloom interview`.
 
-**Generation**
+**Gate A — Coherence.** One episode agrees with itself across facts, events, systems, and artifacts.
 
-- [ ] Generation ledger and replay
-- [ ] Propose–validate–commit loop
-- [ ] Fact reference substitution
-- [ ] World seed priors: identity, backstory, strategy, business model, org design, technology, information ecosystem
-- [ ] Personas and cross-document style
-- [ ] World evolution per tick
-- [ ] Artifact planning and outlines
-- [ ] Labelled intentional imperfections
+- [ ] Thin waist: `World`, `Event`, `Fact`, `Persona`, `ArtifactIntent`, `ArtifactIR`, `EvaluationCase`, `GenerationLedger`
+- [ ] Hand-authored golden episode: retail month-end close, no LLM
+- [ ] Library kernel: load, inspect, validate, export
+- [ ] Deterministic organisation, financial, and operational generators
+- [ ] Temporal append-only fact ledger with supersession and authority
+- [ ] Minimal lore: commitments that constrain generation
+- [ ] Same seed reproduces the corpus
 
-**Domains**
+**Gate B — Utility.** An external retrieval or agent system can ingest the corpus and be scored against it.
 
-- [ ] Finance and financial modelling
-- [ ] Engineering and delivery
-- [ ] Operations
-- [ ] People
-- [ ] Socratic interview
-- [ ] Industry packs: retail, IT services, healthcare, banking, manufacturing
+- [ ] Evaluation cases derived from canonical facts
+- [ ] Direct, cross-artifact, numerical, multi-hop, temporal, and authority question types
+- [ ] Expected abstention and required citation checking
+- [ ] In-repo baseline retriever, so the gate is self-testable
+- [ ] XLSX source model with reconciling totals and recorded fact IDs
+- [ ] Portable Jira, Confluence, and ServiceNow bundles
+- [ ] DOCX, then PPTX, then PDF derived from both
+- [ ] LLM as constrained narrative compiler: claim extraction, fact-reference substitution, validation loop
+- [ ] Deterministic fake provider and generation-ledger replay
 
-**Renderers**
+**Gate C — Generality.** A second industry works without industry-specific fields reaching the core.
 
-- [ ] XLSX
-- [ ] DOCX
-- [ ] PPTX
-- [ ] PDF
-- [ ] Confluence
-- [ ] Jira
-- [ ] ServiceNow
+- [ ] IT-services vertical: fixed-price programme, utilisation, margin erosion
+- [ ] Domain modules: `core`, `finance`, `retail`, `it_services`
+- [ ] Archetype packs and full lore packs
+- [ ] Socratic world composer, with replay and an assumption ledger
+- [ ] Scenario DSL and artifact recipes, extracted from two verticals rather than guessed
+- [ ] Bounded fan-out, size profiles, lifecycle versions
+- [ ] Enterprise mess as a separate mode: temporal versions, authority, permissions, labelled noise
 
-**Evaluation**
+**Gate D — Scale.** Large corpora without changing semantics or losing reproducibility.
 
-- [ ] Question and answer generation
-- [ ] Citations and distractors
-- [ ] Temporal cut-offs and permission variants
+- [ ] 10K artifacts, single process, resumable
+- [ ] 100K artifacts, partitioned storage and workers
+- [ ] 1M artifacts, distributed execution
+- [ ] External publishers for Jira, Confluence, ServiceNow
+- [ ] Further industry packs: healthcare, banking, manufacturing
+- [ ] Multi-company ecosystems and cross-enterprise supply chains
 
-**Later**
-
-- [ ] Multi-company ecosystems
-- [ ] Cross-enterprise supply chains
+Deliberately postponed: a web UI, multi-agent world-building, a graph database, direct SaaS publishing, and meta-generation of generators. These add surface area without proving the product.
 
 ---
 

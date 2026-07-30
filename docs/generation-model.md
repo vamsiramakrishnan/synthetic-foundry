@@ -94,6 +94,26 @@ Rejections are cheap and expected. A proposal that fails validation is regenerat
 
 ## When generation happens
 
+Note the ordering carefully, because "facts before prose" is easily misread as "structure before narrative", which is backwards. The **priors** — what the company is, its history and culture — are generated *first*, because no org graph, service catalogue, or financial model is decidable without them. They are then frozen, and every later phase reads them:
+
+```
+integer seed + intent (industry, scale, inspiration)
+        ↓
+[generative]     Priors — identity, lore, strategy, org intent, tech posture
+        ↓        frozen into the ledger, immutable thereafter
+[deterministic]  Structure — org graph, services, financial model, timeline
+        ↓
+[interleaved]    Simulation — events fire, model explains, validator commits
+        ↓
+[deterministic]  Facts
+        ↓
+[generative]     Prose
+```
+
+Coherence comes from every phase reading one frozen priors document that none may contradict. If the priors could drift mid-generation, the result would be exactly the incoherence Worldloom exists to eliminate — so freezing them before structure is built is the mechanism, not a limitation.
+
+Priors→structure is not a clean waterfall, either: priors can propose infeasible things (nine business units for two hundred people, a service graph that cannot support the claimed uptime). So it is [rule 3](#3-the-llm-never-writes-to-the-graph) applied one level up — priors state *targets*, the deterministic layer checks feasibility and pushes back, and the negotiation is recorded.
+
 The twenty generation areas do not all run at the same time, and *when* an area runs determines its caching, its cost, and its blast radius. Grouped by phase:
 
 | Phase | Runs | Areas |
@@ -159,7 +179,9 @@ So meta-generation is a **development-time activity with a human in the loop**, 
 
 # Part II — Seed time
 
-Generated once, when the world is created. These outputs *are* the world seed: a set of priors that every later phase reads and none may contradict. Expensive, cached permanently, and the reason `World()` construction is lazy — none of this runs until `.generate()`.
+Generated once, when the world is created. These outputs *are* the `WorldSeed` — a frozen priors document, distinct from the integer seed that drives randomness. Every later phase reads it and none may contradict it. Expensive, cached permanently, and the reason `World()` construction is lazy — none of this runs until `.generate()`.
+
+Areas 1–3 and 5 are the [lore](lore.md) layer, and lore is a constraint graph rather than a story: every commitment must constrain a downstream decision or it fails validation.
 
 ## 1. Enterprise identity
 
