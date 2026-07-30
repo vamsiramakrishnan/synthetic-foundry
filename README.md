@@ -1,5 +1,3 @@
-Here’s a README I’d be happy to put at the front of the repository.
-
 Worldloom
 
 Generate coherent synthetic enterprise worlds that evolve over time and materialize into realistic documents, business systems, and knowledge artifacts for AI evaluation, retrieval, and agent testing.
