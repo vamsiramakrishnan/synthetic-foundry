@@ -93,6 +93,43 @@ def demo(
 
 
 @app.command()
+def build(
+    seed: int = typer.Option(8128, "--seed", "-s", help="World seed. The same seed rebuilds the same world."),
+    period: str = typer.Option("2026-03", "--period", "-p", help="Reporting period, YYYY-MM."),
+    out: Path = typer.Option(None, "--out", "-o", help="Directory to write the corpus into."),
+    incident: bool = typer.Option(
+        None, "--incident/--no-incident",
+        help="Force the operational incident on or off. Omit to let the seed and lore decide.",
+    ),
+    employees: int = typer.Option(80_000, "--employees", help="Stated headcount for the company."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
+) -> None:
+    """Generate a world deterministically from a seed, then validate it.
+
+    Unlike `demo`, nothing here is hand-authored — the organisation, financials,
+    events, artifact plan, and evaluation cases are all generated. The same seed
+    always produces the same world.
+    """
+    from .retail import MonthEndClose, RetailWorld
+
+    world = RetailWorld(seed=seed, employees=employees).build()
+    world = world.run(MonthEndClose(period=period, include_operational_incident=incident))
+
+    console.print(_summary_table(world))
+    console.print()
+    if not _report(world):
+        raise typer.Exit(code=1)
+
+    if out is not None:
+        try:
+            written = world.export(out, overwrite=overwrite)
+        except FileExistsError as exc:
+            err.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=2) from exc
+        console.print(f"[green]✓[/green] exported to [bold]{written}[/bold]")
+
+
+@app.command()
 def inspect(
     corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
     facts: bool = typer.Option(False, "--facts", help="List facts."),

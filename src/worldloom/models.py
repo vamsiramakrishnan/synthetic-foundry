@@ -173,6 +173,13 @@ class Employee(Entity):
     function: str
     cost_centre_id: str | None = None
     persona_id: str | None = None
+    traits: dict[str, float] = Field(default_factory=dict)
+    """Per-person trait adjustments, applied by lore.
+
+    Separate from the shared ``Persona`` on purpose: a lore commitment that makes
+    one manager defensive about ownership must not make every merchandiser
+    defensive. The persona is the register; these are the individual.
+    """
 
 
 class System(Entity):

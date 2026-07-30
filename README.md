@@ -22,10 +22,12 @@ world = (
 world.export("./demo", formats=["pptx", "xlsx", "docx", "jira", "confluence"])
 ```
 
-> **Status: Gate A in progress.** The example above does *not* run yet — no world is generated, and no renderer exists. What does run today is the golden episode: a hand-authored, fully coherent corpus, and the kernel that loads, queries, validates, and exports it.
+> **Status: Gate A complete.** The example above does *not* run yet — no renderer exists, so nothing is materialised into a file. What does run today is a world generated deterministically from a seed, and the hand-authored golden episode it was built against:
 >
 > ```bash
-> pip install -e . && worldloom demo retail-close
+> pip install -e .
+> worldloom demo retail-close          # the hand-authored corpus, 1250 coherence checks
+> worldloom build --seed 8128          # generate one instead, and validate it
 > ```
 >
 > Treat the rest of this README as the target API. The [roadmap](#roadmap) marks what is built; [`docs/build-order.md`](docs/build-order.md) is the sequence and the exit gate for each step.
@@ -550,8 +552,9 @@ The first executable is `worldloom demo retail-close`, not `worldloom interview`
 - [x] Temporal append-only fact ledger with supersession and authority
 - [x] Coherence validator: referential, graph, financial reconciliation, temporal, lore, access
 - [x] Minimal lore: 5 commitments, each constraining a downstream decision
-- [ ] Deterministic organisation, financial, and operational generators
-- [ ] Same seed reproduces the corpus
+- [x] Deterministic organisation, financial, and operational generators
+- [x] Lore drives generation: incident likelihood, artifact density, persona traits
+- [x] Same seed reproduces the world; every seed produces a coherent one
 
 **Gate B — Utility.** An external retrieval or agent system can ingest the corpus and be scored against it.
 

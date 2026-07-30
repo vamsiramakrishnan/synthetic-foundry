@@ -9,6 +9,13 @@ to discover the library from autocomplete alone::
     world.validate().raise_if_failed()
     print(world.summary())
 
+Or generate one from a seed::
+
+    from worldloom import RetailWorld, MonthEndClose
+
+    world = RetailWorld(seed=8128).build()
+    world = world.run(MonthEndClose(period="2026-03"))
+
 Everything else is reachable from a ``World``.
 """
 
@@ -40,12 +47,16 @@ from .models import (
 )
 from .validate import CoherenceError, ValidationReport, Violation
 from .world import World
+from .scenarios import MonthEndClose
+from .retail import RetailWorld
 
 __version__ = "0.0.1"
 
 __all__ = [
-    # entry point
+    # entry points
     "World",
+    "RetailWorld",
+    "MonthEndClose",
     # entities
     "Company",
     "BusinessUnit",

@@ -128,6 +128,33 @@ def test_cli_demo_builds_validates_and_exports(tmp_path) -> None:
     assert (tmp_path / "retail-close" / "artifacts" / "incident-rca.md").is_file()
 
 
+def test_cli_build_generates_validates_and_exports(tmp_path) -> None:
+    out = tmp_path / "generated"
+    result = runner.invoke(app, ["build", "--seed", "8128", "--period", "2026-03", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "coherent" in result.output
+    assert (out / "facts.jsonl").is_file()
+    assert (out / "artifact-intents.jsonl").is_file()
+    # Generated, not hand-authored: no artifact bodies exist yet.
+    assert not (out / "artifacts").exists()
+
+
+def test_cli_build_is_reproducible(tmp_path) -> None:
+    first, second = tmp_path / "a", tmp_path / "b"
+    for target in (first, second):
+        assert runner.invoke(app, ["build", "--seed", "77", "--out", str(target)]).exit_code == 0
+    for name in ("facts.jsonl", "events.jsonl", "evals.jsonl", "world.json"):
+        assert (first / name).read_text() == (second / name).read_text(), name
+
+
+def test_cli_build_can_force_the_incident_off(tmp_path) -> None:
+    result = runner.invoke(app, ["build", "--seed", "8128", "--no-incident", "--out", str(tmp_path / "quiet")])
+    assert result.exit_code == 0, result.output
+    world = World.load(tmp_path / "quiet")
+    assert not world.facts.superseded()
+    assert "incident_rca" not in {i.artifact_type for i in world.artifact_intents}
+
+
 def test_cli_validate_passes_on_the_golden_episode() -> None:
     result = runner.invoke(app, ["validate", "retail-close"])
     assert result.exit_code == 0, result.output

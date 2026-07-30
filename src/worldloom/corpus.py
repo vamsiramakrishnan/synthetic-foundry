@@ -12,7 +12,8 @@ Layout::
     ├── lore.jsonl
     ├── facts.jsonl
     ├── events.jsonl
-    ├── artifact-manifest.jsonl
+    ├── artifact-intents.jsonl    planned artifacts, before rendering
+    ├── artifact-manifest.jsonl   rendered artifacts, with provenance
     ├── intentional-errors.jsonl
     ├── evals.jsonl
     └── artifacts/                 artifact bodies
@@ -33,6 +34,7 @@ WORLD_FILE = "world.json"
 LORE_FILE = "lore.jsonl"
 FACTS_FILE = "facts.jsonl"
 EVENTS_FILE = "events.jsonl"
+INTENTS_FILE = "artifact-intents.jsonl"
 MANIFEST_FILE = "artifact-manifest.jsonl"
 ERRORS_FILE = "intentional-errors.jsonl"
 EVALS_FILE = "evals.jsonl"

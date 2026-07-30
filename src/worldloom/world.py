@@ -11,7 +11,7 @@ against, so their shape matters more than their current implementation.
 from __future__ import annotations
 
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -25,8 +25,10 @@ from .collections import (
     EventCollection,
     FactCollection,
 )
+from .ids import Minter
 from .models import (
     AccessPolicy,
+    ArtifactIntent,
     ArtifactManifestEntry,
     Authority,
     BusinessUnit,
@@ -68,6 +70,7 @@ class World:
     _lore: tuple[LoreCommitment, ...] = ()
     _facts: tuple[CanonicalFact, ...] = ()
     _events: tuple[EnterpriseEvent, ...] = ()
+    _artifact_intents: tuple[ArtifactIntent, ...] = ()
     _artifacts: tuple[ArtifactManifestEntry, ...] = ()
     _intentional_errors: tuple[IntentionalError, ...] = ()
     _evaluations: tuple[EvaluationCase, ...] = ()
@@ -76,6 +79,13 @@ class World:
     period: str | None = None
     root: Path | None = None
     schema_version: int = corpus.SCHEMA_VERSION
+
+    # Generator state. Present on a world built from a seed, absent on one loaded
+    # from disk — a corpus is a result, and cannot be advanced further without
+    # rebuilding it from its seed.
+    _roles: dict[str, str] = field(default_factory=dict)
+    _minter: Minter | None = None
+    _annual_revenue: int = 0
 
     # -- construction ------------------------------------------------------
 
@@ -107,6 +117,7 @@ class World:
             _lore=tuple(corpus.load_models(root / corpus.LORE_FILE, LoreCommitment)),
             _facts=tuple(corpus.load_models(root / corpus.FACTS_FILE, CanonicalFact)),
             _events=tuple(corpus.load_models(root / corpus.EVENTS_FILE, EnterpriseEvent)),
+            _artifact_intents=tuple(corpus.load_models(root / corpus.INTENTS_FILE, ArtifactIntent)),
             _artifacts=tuple(corpus.load_models(root / corpus.MANIFEST_FILE, ArtifactManifestEntry)),
             _intentional_errors=tuple(corpus.load_models(root / corpus.ERRORS_FILE, IntentionalError)),
             _evaluations=tuple(corpus.load_models(root / corpus.EVALS_FILE, EvaluationCase)),
@@ -159,6 +170,16 @@ class World:
     @property
     def events(self) -> EventCollection:
         return EventCollection(self._events, label="EventCollection")
+
+    @property
+    def artifact_intents(self) -> Collection[ArtifactIntent]:
+        """Planned artifacts that have not been rendered.
+
+        A generated world carries intents and no manifest entries: bodies arrive
+        with the renderers at step 5, prose with the constrained compiler at
+        step 6. An intent is the decision that a document should exist.
+        """
+        return Collection(self._artifact_intents, label="ArtifactIntentCollection")
 
     @property
     def artifacts(self) -> ArtifactCollection:
@@ -249,6 +270,62 @@ class World:
         """Every deliberate imperfection, labelled and traceable."""
         return self.intentional_errors
 
+    # -- derivation --------------------------------------------------------
+
+    def run(self, scenario: Any) -> World:
+        """Run a scenario and return a new world with its events and facts.
+
+            world = RetailWorld(seed=8128).build()
+            world = world.run(MonthEndClose(period="2026-03"))
+
+        Immutable: the world this is called on is unchanged.
+        """
+        return scenario.run(self)
+
+    def extend(
+        self,
+        *,
+        events: tuple[EnterpriseEvent, ...] = (),
+        facts: tuple[CanonicalFact, ...] = (),
+        artifact_intents: tuple[ArtifactIntent, ...] = (),
+        artifacts: tuple[ArtifactManifestEntry, ...] = (),
+        evaluations: tuple[EvaluationCase, ...] = (),
+        intentional_errors: tuple[IntentionalError, ...] = (),
+        ledger: tuple[GenerationLedgerEntry, ...] = (),
+        period: str | None = None,
+    ) -> World:
+        """A copy of this world with more appended. Never mutates in place.
+
+        Append-only by construction: there is no path here that edits an existing
+        fact, because a fact that turned out to be wrong is superseded rather than
+        corrected.
+        """
+        return World(
+            company=self.company,
+            _business_units=self._business_units,
+            _people=self._people,
+            _systems=self._systems,
+            _services=self._services,
+            _cost_centres=self._cost_centres,
+            _personas=self._personas,
+            _access_policies=self._access_policies,
+            _lore=self._lore,
+            _facts=self._facts + facts,
+            _events=self._events + events,
+            _artifact_intents=self._artifact_intents + artifact_intents,
+            _artifacts=self._artifacts + artifacts,
+            _intentional_errors=self._intentional_errors + intentional_errors,
+            _evaluations=self._evaluations + evaluations,
+            _ledger=self._ledger + ledger,
+            seed=self.seed,
+            period=period or self.period,
+            root=self.root,
+            schema_version=self.schema_version,
+            _roles=self._roles,
+            _minter=self._minter,
+            _annual_revenue=self._annual_revenue,
+        )
+
     # -- operations --------------------------------------------------------
 
     def validate(self) -> ValidationReport:
@@ -293,7 +370,10 @@ class World:
         corpus.write_jsonl(target / corpus.LORE_FILE, list(self._lore))
         corpus.write_jsonl(target / corpus.FACTS_FILE, list(self._facts))
         corpus.write_jsonl(target / corpus.EVENTS_FILE, list(self._events))
-        corpus.write_jsonl(target / corpus.MANIFEST_FILE, list(self._artifacts))
+        if self._artifact_intents:
+            corpus.write_jsonl(target / corpus.INTENTS_FILE, list(self._artifact_intents))
+        if self._artifacts:
+            corpus.write_jsonl(target / corpus.MANIFEST_FILE, list(self._artifacts))
         corpus.write_jsonl(target / corpus.ERRORS_FILE, list(self._intentional_errors))
         corpus.write_jsonl(target / corpus.EVALS_FILE, list(self._evaluations))
         if self._ledger:
@@ -313,7 +393,9 @@ class World:
         return (
             f"World(name={self.company.name!r}, industry={self.company.industry!r}, "
             f"employees={self.company.employees_total:,}, period={history}, "
-            f"facts={len(self._facts)}, artifacts={len(self._artifacts)}, "
+            f"facts={len(self._facts)}, "
+            f"artifacts={len(self._artifacts) or len(self._artifact_intents)}"
+            f"{' planned' if not self._artifacts and self._artifact_intents else ''}, "
             f"evals={len(self._evaluations)})"
         )
 
@@ -341,7 +423,8 @@ class Summary:
             ("Events", f"{len(world.events):,}"),
             ("Facts", f"{len(world.facts):,}"),
             ("  superseded", f"{len(world.facts.superseded()):,}"),
-            ("Artifacts", f"{len(world.artifacts):,}"),
+            ("Artifact intents", f"{len(world.artifact_intents):,}"),
+            ("Artifacts (rendered)", f"{len(world.artifacts):,}"),
             ("Labelled imperfections", f"{len(world.intentional_errors):,}"),
             ("Evaluation cases", f"{len(world.evaluations):,}"),
             ("Generation ledger", f"{len(world.ledger):,} entries"),

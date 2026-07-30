@@ -118,7 +118,7 @@ class _Validator:
             "LORE": set(w.lore.ids()),
             "FACT": set(w.facts.ids()),
             "EV": set(w.events.ids()),
-            "ART": set(w.artifacts.ids()),
+            "ART": set(w.artifacts.ids()) | set(w.artifact_intents.ids()),
             "EVAL": set(w.evaluations.ids()),
             "POLICY": set(w.access_policies.ids()),
             "ERR": set(w.intentional_errors.ids()),
@@ -197,6 +197,11 @@ class _Validator:
             self.check_ref(fact.id, "supersedes", fact.supersedes, expect="FACT")
             self.check_refs(fact.id, "lore_ids", fact.lore_ids, expect="LORE")
 
+        for intent in w.artifact_intents:
+            self.check_ref(intent.id, "author_id", intent.author_id, expect="PERSON")
+            self.check_refs(intent.id, "required_fact_ids", intent.required_fact_ids, expect="FACT")
+            self.check_refs(intent.id, "triggered_by", intent.triggered_by, expect="EV")
+
         for artifact in w.artifacts:
             self.check_ref(artifact.id, "author_id", artifact.author_id, expect="PERSON")
             self.check_refs(artifact.id, "supporting_fact_ids", artifact.supporting_fact_ids, expect="FACT")
@@ -246,9 +251,13 @@ class _Validator:
                 )
 
     def artifact_files(self) -> None:
-        """Every manifest entry must point at a file that exists."""
+        """Every manifest entry must point at a file that exists.
+
+        Skipped for a generated world, which carries intents and no manifest —
+        there is nothing rendered yet to point at.
+        """
         root = self.world.root
-        if root is None:
+        if root is None or not self.world._artifacts:
             return
         for artifact in self.world.artifacts:
             self.checks += 1
@@ -537,6 +546,11 @@ class _Validator:
     def evaluation(self) -> None:
         """Every non-abstention answer must be derivable, and distractors must mislead."""
         w = self.world
+        planned: dict[str, bool] = {}
+        for intent in w.artifact_intents:
+            for fact_id in intent.required_fact_ids:
+                planned[fact_id] = True
+
         for case in w.evaluations:
             if case.expects_abstention:
                 self.checks += 1
@@ -559,16 +573,18 @@ class _Validator:
                     f"artifact(s) {sorted(overlap)} listed as both required and distractor",
                 )
 
-            # Every cited fact should be reachable from at least one artifact,
-            # or the question is unanswerable from the corpus.
+            # Every cited fact must be reachable, or the question is
+            # unanswerable from the corpus. A rendered artifact counts; so does a
+            # planned intent, because at step 3 nothing has been rendered yet and
+            # the plan is what will carry the fact into a document.
             for fact_id in case.expected_fact_ids:
                 self.checks += 1
-                if not w.artifacts.citing(fact_id):
+                if not (w.artifacts.citing(fact_id) or planned.get(fact_id)):
                     self.fail(
                         "evaluation",
                         "unreachable_answer",
                         case.id,
-                        f"expects {fact_id} but no artifact cites it",
+                        f"expects {fact_id} but no artifact or plan carries it",
                     )
 
     def run(self) -> ValidationReport:

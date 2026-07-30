@@ -292,6 +292,12 @@ episode = world.run(
 
 The same seed produces the same IDs, entities, facts, events, financial values, artifact plan, and evaluation answers. Changing the seed alters the world while preserving every invariant.
 
+**Structural equivalence, not byte equality.** The generator is not asked to reproduce the hand-authored fixture. Doing so would mean encoding arbitrary authored choices — that a particular person has a particular name — to satisfy a test, which corrupts the generator to flatter the fixture. The fixture stays frozen as the regression corpus and the stable benchmark. A generated world's equivalence is that it passes the same validator and answers the same exit-gate questions.
+
+**A step-3 world carries intents, not manifest entries.** Bodies arrive with the renderers at step 5 and prose at step 6, so `ArtifactIntent` is the output here: the decision that a document should exist, its author, audience, and the facts it must be able to cite. Nothing has been rendered, so there is nothing for a manifest to describe.
+
+**Generated worlds are clean corpora.** Deliberate imperfection is step 11, and introducing it here would make every coherence bug indistinguishable from a feature. The hand-authored episode demonstrates the realistic mode; the generator produces the clean one.
+
 ---
 
 ## 4. Make evaluation the first product surface
