@@ -637,10 +637,15 @@ class _Validator:
     def evaluation(self) -> None:
         """Every non-abstention answer must be derivable, and distractors must mislead."""
         w = self.world
-        planned: dict[str, bool] = {}
+        # One pass over the plan and the manifest, rather than rescanning every
+        # artifact's supporting-fact list once per expected fact. The workbook
+        # cites thousands of facts, so `citing()` per fact was the other half of
+        # the quadratic.
+        reachable: set[str] = set()
         for intent in w.artifact_intents:
-            for fact_id in intent.required_fact_ids:
-                planned[fact_id] = True
+            reachable.update(intent.required_fact_ids)
+        for artifact in w.artifacts:
+            reachable.update(artifact.supporting_fact_ids)
 
         for case in w.evaluations:
             if case.expects_abstention:
@@ -670,7 +675,7 @@ class _Validator:
             # the plan is what will carry the fact into a document.
             for fact_id in case.expected_fact_ids:
                 self.checks += 1
-                if not (w.artifacts.citing(fact_id) or planned.get(fact_id)):
+                if fact_id not in reachable:
                     self.fail(
                         "evaluation",
                         "unreachable_answer",

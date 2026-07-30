@@ -28,11 +28,13 @@ def _resolve(item: object, path: str) -> object:
 class Collection(Sequence[T], Generic[T]):
     """An immutable, filterable sequence of thin-waist models."""
 
-    __slots__ = ("_items", "_label")
+    __slots__ = ("_items", "_label", "_by_id")
 
     def __init__(self, items: Iterable[T], *, label: str | None = None) -> None:
         self._items: tuple[T, ...] = tuple(items)
         self._label = label or type(self).__name__
+        self._by_id: dict[str, T] | None = None
+        """Lazy id index. Safe to cache because a collection is immutable."""
 
     # -- Sequence protocol -------------------------------------------------
 
@@ -107,11 +109,31 @@ class Collection(Sequence[T], Generic[T]):
         return [getattr(i, "id") for i in self._items]
 
     def by_id(self, identifier: str) -> T:
-        """Look up one member by ID, raising ``KeyError`` if absent."""
-        for item in self._items:
-            if getattr(item, "id", None) == identifier:
-                return item
-        raise KeyError(f"{identifier} not found in {self._label}")
+        """Look up one member by ID, raising ``KeyError`` if absent.
+
+        Indexed on first use rather than scanned. This was a linear scan, which
+        is invisible at fifty facts and quadratic at thirty thousand: the
+        validator and the document compiler both resolve fact IDs inside loops
+        over every fact, so validating a six-period corpus took forty seconds
+        where a one-period corpus took one. Building the index lazily keeps a
+        collection that is only ever iterated free of the cost.
+        """
+        if self._by_id is None:
+            # Deliberately not a comprehension with a walrus: `:=` binds in the
+            # enclosing function scope, so naming the key `identifier` would
+            # overwrite this method's own argument with the last item's id, and
+            # every lookup would return the last member. It passes a one-item
+            # test perfectly.
+            index: dict[str, T] = {}
+            for item in self._items:
+                key = getattr(item, "id", None)
+                if key is not None:
+                    index[key] = item
+            self._by_id = index
+        try:
+            return self._by_id[identifier]
+        except KeyError:
+            raise KeyError(f"{identifier} not found in {self._label}") from None
 
     def get(self, identifier: str) -> T | None:
         """Look up one member by ID, or ``None``."""
