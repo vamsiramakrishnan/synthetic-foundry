@@ -16,6 +16,9 @@ Registered here:
     and reconciliation sheets.
 ``markdown``
     Any IR. Cheap, diffable, and the fallback that keeps every artifact readable.
+``docx``
+    The narrative artifacts as Word documents — the shape enterprise prose
+    actually arrives in.
 ``jira`` · ``confluence`` · ``servicenow``
     Portable bundles rather than live API calls — easier to test, diff, reproduce,
     and load into an arbitrary system.
@@ -50,6 +53,29 @@ class RenderError(Exception):
     """Raised when a format cannot render what it was given."""
 
 
+#: The file basename each artifact type gets, before the format's extension.
+#:
+#: Shared rather than per-renderer so one artifact is one basename across every
+#: format it is rendered in. A reader who finds `art-0003-cfo-variance-memo.docx`
+#: should be able to guess the name of its Markdown twin, and a diff of two
+#: corpora should line the pairs up.
+_SLUGS: dict[str, str] = {
+    "cfo_variance_memo": "cfo-variance-memo",
+    "executive_summary": "exec-committee-summary",
+    "incident_rca": "incident-rca",
+    "working_note": "finance-close-notes",
+    "confluence_page": "close-status-update",
+    "knowledge_article": "kb-valuation-workaround",
+    "close_calendar": "close-calendar",
+    "finance_workbook": "month-end-model",
+}
+
+
+def slug_for(artifact_type: str) -> str:
+    """The basename for an artifact of this type."""
+    return _SLUGS.get(artifact_type, artifact_type.replace("_", "-"))
+
+
 #: Format name to the function that renders it.
 _RENDERERS: dict[str, Callable[[World], list[Rendered]]] = {}
 
@@ -80,10 +106,11 @@ def _install() -> None:
     Imported lazily so an optional dependency for one format cannot break import
     of the library as a whole.
     """
-    from . import bundles, markdown, xlsx
+    from . import bundles, docx, markdown, xlsx
 
     register("markdown", markdown.render_all)
     register("xlsx", xlsx.render_all)
+    register("docx", docx.render_all)
     register("jira", bundles.render_jira)
     register("confluence", bundles.render_confluence)
     register("servicenow", bundles.render_servicenow)
@@ -91,4 +118,4 @@ def _install() -> None:
 
 _install()
 
-__all__ = ["Rendered", "RenderError", "register", "available", "renderer"]
+__all__ = ["Rendered", "RenderError", "register", "available", "renderer", "slug_for"]

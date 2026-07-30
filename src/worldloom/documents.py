@@ -745,6 +745,19 @@ _DEFAULT_OUTLINE: tuple[tuple[str, tuple[str, ...], str], ...] = (
 )
 
 
+#: Words that title-casing gets wrong. An artifact type is a snake_case key, and
+#: `.title()` turns `cfo_variance_memo` into "Cfo Variance Memo" — which no
+#: finance function has ever written on a document, and which is exactly the kind
+#: of tell that marks a corpus as generated.
+_ACRONYMS = {"Cfo": "CFO", "Ceo": "CEO", "Cio": "CIO", "Rca": "RCA", "Kb": "KB", "It": "IT"}
+
+
+def _title(artifact_type: str) -> str:
+    """A human title for an artifact type."""
+    words = artifact_type.replace("_", " ").title().split()
+    return " ".join(_ACRONYMS.get(word, word) for word in words)
+
+
 def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     """An outline: sections and a resolved fact table, no prose.
 
@@ -813,12 +826,17 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     return ArtifactIR(
         id=intent.id,
         intent_id=intent.id,
-        title=intent.artifact_type.replace("_", " ").title(),
+        title=_title(intent.artifact_type),
         subtitle=f"{author.title} · {intent.audience.replace('_', ' ')}",
         sections=sections,
         metadata={
             "worldloom_synthetic": "true",
             "worldloom_seed": str(world.seed),
+            # The moment the artifact was written, so a format with document
+            # properties stamps that rather than the clock. Derived from the facts
+            # it cites, which is the same rule the manifest date follows — the two
+            # must agree or a file's own metadata would contradict the corpus.
+            "worldloom_created": written_at(intent, {f.id: f for f in facts}).isoformat(),
             "author": author.name,
             "author_title": author.title,
             "persona": persona.label if persona else "",

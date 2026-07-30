@@ -18,24 +18,11 @@ from typing import TYPE_CHECKING
 
 from ..models import ArtifactIR, CanonicalFact, Table
 from ..narrative import references
-from . import Rendered
+from . import Rendered, slug_for
+from .values import format_value
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
-
-
-def _format_value(value: float | str | None, number_format: str | None) -> str:
-    """A cell value as text, matching how the same cell renders in a spreadsheet."""
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    if number_format and number_format.endswith("%"):
-        return f"{value:,.2f}%"
-    if number_format and "#,##0" in number_format:
-        rendered = f"{abs(value):,.0f}"
-        return f"({rendered})" if value < 0 else rendered
-    return f"{value:,.2f}" if value % 1 else f"{value:,.0f}"
 
 
 def _table(table: Table) -> str:
@@ -49,7 +36,7 @@ def _table(table: Table) -> str:
         cells = [f"**{row.label}**" if row.emphasis else row.label]
         for column in table.columns:
             cell = row.cells.get(column.key)
-            text = _format_value(cell.value, column.number_format) if cell else ""
+            text = format_value(cell.value, column.number_format) if cell else ""
             cells.append(f"**{text}**" if row.emphasis and text else text)
         lines.append("| " + " | ".join(cells) + " |")
 
@@ -112,17 +99,6 @@ _OWNED_ELSEWHERE = frozenset(
     {"finance_workbook", "jira_issues", "servicenow_incident"}
 )
 
-_SLUG = {
-    "cfo_variance_memo": "cfo-variance-memo",
-    "executive_summary": "exec-committee-summary",
-    "incident_rca": "incident-rca",
-    "working_note": "finance-close-notes",
-    "confluence_page": "close-status-update",
-    "knowledge_article": "kb-valuation-workaround",
-    "close_calendar": "close-calendar",
-}
-
-
 def render_all(world: World) -> list[Rendered]:
     """Render every artifact that has no more specific format."""
     out: list[Rendered] = []
@@ -130,11 +106,10 @@ def render_all(world: World) -> list[Rendered]:
         intent = world.artifact_intents.by_id(ir.intent_id)
         if intent.artifact_type in _OWNED_ELSEWHERE:
             continue
-        slug = _SLUG.get(intent.artifact_type, intent.artifact_type.replace("_", "-"))
         out.append(
             Rendered(
                 artifact_id=ir.id,
-                path=f"artifacts/{ir.id.lower()}-{slug}.md",
+                path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.md",
                 media_type="text/markdown",
                 payload=render(ir, {fact.id: fact for fact in world.facts}),
             )

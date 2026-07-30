@@ -505,7 +505,7 @@ def test_render_is_deterministic() -> None:
 
 
 def test_formats_are_registered_as_plugins() -> None:
-    assert set(available()) == {"markdown", "xlsx", "jira", "confluence", "servicenow"}
+    assert set(available()) == {"markdown", "xlsx", "docx", "jira", "confluence", "servicenow"}
 
 
 def test_an_unknown_format_says_what_is_available(rendered: World) -> None:

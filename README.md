@@ -12,13 +12,13 @@ No service to run. No API key. No model behind an SDK.
 **Your coding agent is the model. Worldloom is the harness.**
 
 ```bash
-pip install -e ".[xlsx]"
+pip install -e ".[xlsx,docx]"
 
 worldloom build --seed 8128 --incident --out ./corpus   # deterministic: the world
 worldloom narrate requests ./corpus -o requests.json    # what prose is needed
 #   the agent writes responses.json
 worldloom narrate accept ./corpus --from responses.json # checked against the facts
-worldloom render ./corpus -f xlsx -f jira -f confluence
+worldloom render ./corpus -f xlsx -f docx -f jira -f confluence
 worldloom validate ./corpus                             # 1,100+ coherence checks
 ```
 
@@ -34,7 +34,7 @@ supplies truth, and refuses anything that contradicts it.
 Agents start at **[AGENTS.md](AGENTS.md)**. Claude Code has a skill: `/worldloom`.
 
 > **Status: Gate A complete; renderers and the agent handshake landing.** The Python
-> builder chain further down this README, and DOCX/PPTX/PDF, are still ahead. What
+> builder chain further down this README, and PPTX/PDF, are still ahead. What
 > runs today is everything in the block above, plus:
 >
 > ```bash
@@ -632,7 +632,8 @@ The first executable is `worldloom demo retail-close`, not `worldloom interview`
 - [x] XLSX source model: real formulas, named ranges, hidden lineage and reconciliation sheets
 - [x] Portable Jira, Confluence, and ServiceNow bundles
 - [x] Markdown fallback, so every artifact stays readable and diffable
-- [ ] DOCX, then PPTX, then PDF derived from both
+- [x] DOCX for the narrative artifacts, with document dates derived from the world
+- [ ] PPTX, then PDF derived from both
 - [x] LLM as constrained narrative compiler: claim extraction, fact-reference substitution, validation loop
 - [x] Deterministic fake provider and generation-ledger replay
 

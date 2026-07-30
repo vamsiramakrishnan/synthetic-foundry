@@ -376,6 +376,36 @@ These add workflows, ownership, status history, comments, page hierarchy, operat
 
 The first rich narrative artifact: CFO variance memo · incident RCA · programme status report. One sober template. No general Office theme engine yet.
 
+**Landed.** `worldloom.render.docx` handles the six document-shaped types — CFO
+variance memo, executive summary, incident RCA, working note, knowledge article,
+close calendar. A workbook is not among them (flattening a spreadsheet into Word
+loses every formula that made it a source), and neither is a Confluence page
+(rendering it as Word would assert a filing that does not exist).
+
+Three things this forced:
+
+**Two formats of one artifact must be tested against each other, not each against
+a fixture.** The claim is that Word and Markdown of one memo say the same thing.
+So the test extracts prose and table cells from the finished `.docx` and requires
+every section heading, every prose fragment, and every formatted cell to be
+present — dropping the hidden appendix from Word fails three tests, which is what
+it should do.
+
+**The number formatter has to be shared, not duplicated.** Word and Markdown both
+write a figure as characters. Two copies of that rounding logic is two documents
+that can disagree about one fact, so `render/values.py` holds one
+`format_value` and both call it.
+
+**Document dates come from the world.** python-docx does not stamp `now()` — it
+ships its template's own 2013 timestamps, a smaller lie than the clock and still
+a wrong one. The IR now carries `worldloom_created`, derived from the newest fact
+the artifact cites plus its type's lag, and the renderer stamps that. It equals
+the manifest's `created_at` by construction; a test asserts it, because a file
+whose own properties contradict the corpus is a file the corpus cannot vouch for.
+
+The zip-timestamp defect XLSX hit is the same defect in every Office format, so
+that fix moved to `render/ooxml.py` and both formats call it. PPTX will too.
+
 ### 5.4 PPTX after DOCX
 
 One concise executive deck — executive summary · financial performance · variance drivers · operational issue · remediation · decisions required — projected from the same facts as the workbook and memo.

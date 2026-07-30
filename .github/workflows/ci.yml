@@ -29,7 +29,7 @@ jobs:
           cache: pip
 
       - name: Install
-        run: pip install -e ".[dev,polars,xlsx]"
+        run: pip install -e ".[dev,polars,xlsx,docx]"
 
       - name: Tests
         run: pytest -q
@@ -45,7 +45,7 @@ jobs:
       - name: Rendered corpus validates
         run: |
           worldloom build --seed 8128 --incident \
-            -f xlsx -f markdown -f jira -f confluence -f servicenow \
+            -f xlsx -f markdown -f docx -f jira -f confluence -f servicenow \
             --out "${{ runner.temp }}/rendered"
           worldloom validate "${{ runner.temp }}/rendered"
 
@@ -56,7 +56,7 @@ jobs:
         run: |
           worldloom build --seed 8128 --incident \
             --archetype australian_grocery --comparatives 11 \
-            -f xlsx -f markdown --out "${{ runner.temp }}/large"
+            -f xlsx -f markdown -f docx --out "${{ runner.temp }}/large"
           worldloom validate "${{ runner.temp }}/large"
 
       # The agent handshake: a corpus asks for prose, and refuses prose that
@@ -69,7 +69,7 @@ jobs:
           python3 tests/scripted_agent.py requests.json responses.json
           worldloom narrate accept "${{ runner.temp }}/agent" --from responses.json \
             --model-id ci-scripted-agent
-          worldloom render "${{ runner.temp }}/agent" -f markdown -f xlsx
+          worldloom render "${{ runner.temp }}/agent" -f markdown -f xlsx -f docx
           worldloom validate "${{ runner.temp }}/agent"
 
           # And a violation must be rejected rather than quietly accepted.
@@ -84,7 +84,7 @@ jobs:
       # central claim, enforced rather than asserted.
       - name: Narration replays byte-for-byte
         run: |
-          FORMATS="-f xlsx -f markdown -f jira -f confluence -f servicenow"
+          FORMATS="-f xlsx -f markdown -f docx -f jira -f confluence -f servicenow"
           worldloom build --seed 8128 --incident --narrate $FORMATS \
             --out "${{ runner.temp }}/narrated"
           worldloom build --seed 8128 --incident --replay "${{ runner.temp }}/narrated" \

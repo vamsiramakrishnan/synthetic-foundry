@@ -20,7 +20,7 @@ it works from Claude Code, Antigravity, or any harness that can run a terminal.
 ## Setup
 
 ```bash
-pip install -e ".[xlsx]"
+pip install -e ".[xlsx,docx]"
 worldloom --help
 ```
 
@@ -40,7 +40,7 @@ worldloom narrate requests ./corpus -o requests.json
 worldloom narrate accept ./corpus --from responses.json --model-id <your model>
 
 # 5. Materialise it.
-worldloom render ./corpus -f xlsx -f markdown -f jira -f confluence -f servicenow
+worldloom render ./corpus -f xlsx -f docx -f markdown -f jira -f confluence -f servicenow
 
 # 6. Check the whole corpus agrees with itself.
 worldloom validate ./corpus
