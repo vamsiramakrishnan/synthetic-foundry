@@ -76,6 +76,36 @@ Three rules follow from this, and they are not negotiable:
 
 ---
 
+## The generation boundary
+
+Worldloom has two engines, and the split between them is the most important design decision in the project.
+
+The **deterministic engine** owns everything that must be *correct*. The **generative engine** owns everything that must be *plausible*. Nothing is owned by both.
+
+| Deterministic | Generative |
+| --- | --- |
+| Entity identity and IDs | Names, brands, terminology |
+| Referential integrity | Culture, politics, tone |
+| The org graph and reporting lines | Team purpose and collaboration patterns |
+| Arithmetic, aggregation, reconciliation | Financial commentary and explanation |
+| The timeline and event ordering | Causes, consequences, lessons learned |
+| Permissions and visibility | Audience and register |
+| Which facts exist | What those facts mean |
+| Which artifacts exist, and their provenance | Which artifacts would plausibly exist |
+| Seeded randomness | Judgment |
+
+Three rules enforce it:
+
+**The LLM never does arithmetic.** It may reference a number; it may never restate one. Generated prose carries fact references, and the renderer substitutes values from the ledger at render time. This is the single rule that stops a board deck from disagreeing with the workbook it came from — both read the same entry, and neither holds a copy.
+
+**Every generative call is recorded, so worlds replay.** Model calls aren't reproducible, so Worldloom doesn't depend on them being reproducible. Each call is content-addressed into the world's generation ledger, keyed by seed, call site, input facts, model, and prompt version. `from_seed()` replays the ledger instead of re-prompting — regeneration touches no model at all.
+
+**The LLM never writes to the graph.** It proposes; the deterministic layer validates and commits, or rejects and retries with the violation fed back.
+
+The full division — twenty areas of generation, what the model owns in each, and what stays behind the wall — is in **[docs/generation-model.md](docs/generation-model.md)**.
+
+---
+
 ## The API
 
 The design goal is a single sentence:
@@ -374,6 +404,8 @@ World.from_seed(8128) == World.from_seed(8128)
 
 Identical organisations, projects, events, financials, artifacts, and evaluation datasets. A world is reproducible from a single integer, which means a corpus is citable — you can put a seed in a paper and have someone else regenerate exactly what you measured.
 
+This holds despite the generative layer, because a world carries its generation ledger and `from_seed()` replays it rather than re-prompting. Regeneration is offline, free, and byte-identical. Changing the model or a prompt template changes the ledger keys and therefore produces a *different* world — explicitly, and with a different seed. Worldloom will not quietly re-prompt and hand back something that no longer matches the seed you asked for.
+
 ---
 
 ## Built for evaluation
@@ -500,6 +532,17 @@ If no, the API is wrong. Not the documentation.
 - [ ] Permission engine
 - [ ] `validate()` coherence checks
 
+**Generation**
+
+- [ ] Generation ledger and replay
+- [ ] Propose–validate–commit loop
+- [ ] Fact reference substitution
+- [ ] World seed priors: identity, backstory, strategy, business model, org design, technology, information ecosystem
+- [ ] Personas and cross-document style
+- [ ] World evolution per tick
+- [ ] Artifact planning and outlines
+- [ ] Labelled intentional imperfections
+
 **Domains**
 
 - [ ] Finance and financial modelling
@@ -507,6 +550,7 @@ If no, the API is wrong. Not the documentation.
 - [ ] Operations
 - [ ] People
 - [ ] Socratic interview
+- [ ] Industry packs: retail, IT services, healthcare, banking, manufacturing
 
 **Renderers**
 
