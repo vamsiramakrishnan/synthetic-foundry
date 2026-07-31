@@ -12,15 +12,21 @@ whole runtime — observation projection, policy checks, tool validation, ledger
 write and replay — is then testable with no key, no network, and no spend, and
 the first real adapter is written against a contract that already works.
 
-**Why there is no batch handshake yet.** Narration hands an agent every request
-at once because the requests are independent. Actor decisions are not: what the
-controller sees at 09:40 depends on whether the business partner escalated at
-09:12, so a batch of invocations cannot be prepared in advance without deciding
-the episode first. A turn-by-turn handshake is the honest shape and it is real
-work — a CLI that suspends an episode mid-flight, serialises the world, and
-resumes it. Until that exists, an agent drives an episode by implementing
-``act`` in process, or by replaying decisions it made earlier through
-``TranscriptActorProvider``.
+**Why the handshake is one decision at a time.** Narration hands an agent every
+request at once because the requests are independent. Actor decisions are not:
+what the controller sees at 09:40 depends on whether the business partner
+escalated at 09:12, so a batch of invocations cannot be prepared in advance
+without deciding the episode first. ``handshake.py`` is the turn-by-turn form,
+reached from ``worldloom act``.
+
+Resuming it needed no suspend format, which was the surprise. The obvious design
+— serialise the mid-flight world — would be a second on-disk representation to
+keep in step with the first. It is unnecessary: the episode is a pure function of
+the recipe plus the recorded decisions, so each call rebuilds and replays, and
+the ledger that was already shipping is also the save file.
+
+An agent that would rather stay in process implements ``act`` directly, and the
+ledger, the policy checks, and the rejection loop all work unchanged around it.
 """
 
 from __future__ import annotations
@@ -699,11 +705,15 @@ class UnreachableActorProvider:
 class TranscriptActorProvider:
     """Decisions an agent already made, keyed by invocation and turn.
 
-    The actor counterpart of ``narrative.ResponseProvider``, and the way an
-    external agent — Claude Code, Codex, the Antigravity SDK — drives an episode
-    without this library owning credentials or a network stack. The agent runs
-    the episode once, reads each observation, writes its choices out, and this
-    serves them back so validation, rejection, and the ledger all run unchanged.
+    The actor counterpart of ``narrative.ResponseProvider``. ``worldloom act`` is
+    the ordinary way an external agent drives an episode; this is the in-process
+    form of the same idea, and it is what a caller wants when replaying a whole
+    transcript at once rather than negotiating turn by turn — a regression test
+    over a recorded episode, say, or a harness of its own that has already
+    collected the decisions.
+
+    Note it is *not* how replay works. Replay is the generation ledger, and it
+    happens inside the runtime before any provider is consulted.
     """
 
     def __init__(self, actions: dict[str, dict[str, Any]], *, model_id: str = "agent") -> None:

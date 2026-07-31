@@ -19,9 +19,13 @@ Only successful tool execution changes the world. Dialogue, reasoning, and model
 This roadmap begins after the second vertical has established which roles, tools, and enterprise nouns are genuinely generic. The first implementation may use the retail-close episode as a fixture, but actor abstractions must not be extracted from retail alone.
 
 **Status.** A0–A5 have landed, plus the parts of A10 that keep them honest.
-`src/worldloom/actors/` is the package; `worldloom build --actors` runs the
-episode and `worldloom actors <corpus>` reads the execution ledger back. A6–A9
-and A11 are not started.
+A6–A9 and A11 are not started.
+
+`src/worldloom/actors/` is the package. `worldloom build --actors scripted` runs
+the whole episode with the built-in deterministic actor; `--actors agent` leaves
+every decision to you, taken one at a time through `worldloom act requests` and
+`worldloom act accept`. `worldloom actors <corpus>` reads the execution ledger
+back afterwards, refusals included.
 
 The caveat above still stands and is now a real constraint rather than a
 precaution: everything below was built against retail, so nothing in it should be
