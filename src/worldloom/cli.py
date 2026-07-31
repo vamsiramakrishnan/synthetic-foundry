@@ -16,6 +16,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
@@ -53,7 +54,7 @@ def _load(name_or_path: str) -> World:
     try:
         return World.load(name_or_path)
     except CorpusError as exc:
-        err.print(f"[red]error:[/red] {exc}")
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
 
@@ -101,7 +102,7 @@ def demo(
     try:
         written = world.export(destination, overwrite=overwrite)
     except FileExistsError as exc:
-        err.print(f"[red]error:[/red] {exc}")
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     console.print(f"[green]✓[/green] exported to [bold]{written}[/bold]")
@@ -177,7 +178,7 @@ def build(
         try:
             shape = archetype_registry.get(archetype)
         except KeyError as exc:
-            err.print(f"[red]error:[/red] {exc}")
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
 
     world = RetailWorld(seed=seed, archetype=shape, employees=employees).build()
@@ -213,7 +214,7 @@ def build(
         try:
             written = world.export(out, overwrite=overwrite)
         except FileExistsError as exc:
-            err.print(f"[red]error:[/red] {exc}")
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
         console.print(_summary_table(world))
         console.print(
@@ -252,7 +253,7 @@ def build(
                 )
             )
         except ActorProviderError as exc:
-            err.print(f"[red]error:[/red] {exc}")
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
 
     if actors == "scripted":
@@ -280,7 +281,7 @@ def build(
         try:
             world = world.narrate(provider, ledger=ledger)
         except ProviderError as exc:
-            err.print(f"[red]error:[/red] {exc}")
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
 
         calls, replayed, rejected = world._narration
@@ -295,7 +296,7 @@ def build(
         try:
             world = world.render(*formats)
         except RenderError as exc:
-            err.print(f"[red]error:[/red] {exc}")
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
 
     console.print(_summary_table(world))
@@ -311,7 +312,7 @@ def build(
         try:
             written = world.export(out, overwrite=overwrite)
         except FileExistsError as exc:
-            err.print(f"[red]error:[/red] {exc}")
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
         console.print(f"[green]✓[/green] exported to [bold]{written}[/bold]")
 
@@ -333,7 +334,7 @@ def narrate_requests(
         try:
             world = world.compile()
         except ValueError as exc:
-            err.print(f"[red]error:[/red] {corpus}: {exc}")
+            err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
 
     document = handshake.requests_document(world)
@@ -374,7 +375,7 @@ def narrate_accept(
     try:
         responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {source}: {exc}")
+        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     verdicts = handshake.review(world, responses)
@@ -420,7 +421,7 @@ def plan_requests(
         try:
             world = world.compile()
         except ValueError as exc:
-            err.print(f"[red]error:[/red] {corpus}: {exc}")
+            err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
 
     document = handshake.requests_document(world)
@@ -461,7 +462,7 @@ def plan_accept(
     try:
         responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {source}: {exc}")
+        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     result = handshake.accept(world, responses, model_id=model_id)
@@ -496,6 +497,25 @@ def plan_accept(
         raise typer.Exit(code=1)
 
 
+def _warn_on_version_skew(world: World) -> None:
+    """Say so when a corpus is being advanced by a different release than made it.
+
+    Resume works by rebuilding from the recipe and replaying the ledger, and the
+    ledger's content-addressed keys include a digest of what each actor was
+    shown. A different release may generate a slightly different world, so keys
+    miss and decisions get re-asked — correct, but baffling without this line.
+    """
+    from . import __version__
+
+    made_by = world._generator_version
+    if made_by and made_by != __version__:
+        err.print(
+            f"[yellow]![/yellow] this corpus was generated by worldloom {made_by};"
+            f" you are running {__version__}. Replay keys may miss, and decisions"
+            " already taken may be asked again."
+        )
+
+
 @act_app.command("requests")
 def act_requests(
     corpus: str = typer.Argument(..., help="Corpus path carrying an actor episode."),
@@ -516,10 +536,11 @@ def act_requests(
     from .recipe import RecipeError
 
     world = _load(corpus)
+    _warn_on_version_skew(world)
     try:
         document = handshake.requests_document(world)
     except RecipeError as exc:
-        err.print(f"[red]error:[/red] {corpus}: {exc}")
+        err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     if document.get("complete"):
@@ -588,16 +609,17 @@ def act_accept(
     from .recipe import RecipeError
 
     world = _load(corpus)
+    _warn_on_version_skew(world)
     try:
         actions = handshake.parse_actions(json.loads(source.read_text(encoding="utf-8")))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {source}: {exc}")
+        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     try:
         outcome = handshake.accept(world, actions, model_id=model_id)
     except (RecipeError, ValueError) as exc:
-        err.print(f"[red]error:[/red] {exc}")
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     if not outcome.accepted:
@@ -643,7 +665,7 @@ def render(
     try:
         rendered = world.render(*formats)
     except (RenderError, ValueError) as exc:
-        err.print(f"[red]error:[/red] {exc}")
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     written = rendered.export(out or Path(corpus), overwrite=True)

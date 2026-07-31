@@ -190,3 +190,58 @@ jobs:
             $FORMATS --out "${{ runner.temp }}/replayed"
           diff -r "${{ runner.temp }}/narrated" "${{ runner.temp }}/replayed"
           worldloom validate "${{ runner.temp }}/replayed"
+
+  # The artifact users install, not the checkout developers test. Everything the
+  # test job proves is proven against the repo; this job proves the *wheel* —
+  # that the bundled examples ship, that a bare install (no extras) works and
+  # fails actionably where it cannot, and that the full install renders,
+  # validates, and replays byte-for-byte. Run from outside the checkout so the
+  # source tree cannot quietly stand in for the package.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: pipx run build
+
+      - name: A bare install works, and degrades legibly
+        run: |
+          python -m venv /tmp/bare
+          /tmp/bare/bin/pip install --quiet dist/*.whl
+          cd /tmp
+          /tmp/bare/bin/worldloom version
+          # The bundled golden episode must resolve from inside the wheel.
+          /tmp/bare/bin/worldloom demo retail-close --out /tmp/demo
+          # Formats with no optional dependency work out of the box.
+          /tmp/bare/bin/worldloom build --seed 8128 --incident --narrate \
+            -f markdown -f jira -f confluence -f servicenow --out /tmp/bare-corpus
+          /tmp/bare/bin/worldloom validate /tmp/bare-corpus
+          # A format whose dependency is missing must name the fix, not traceback.
+          if /tmp/bare/bin/worldloom build --seed 8128 -f xlsx --out /tmp/nope 2>/tmp/err.txt; then
+            echo "xlsx rendered without openpyxl installed"; exit 1
+          fi
+          grep -q "worldloom\[xlsx\]" /tmp/err.txt
+
+      - name: The full install renders, validates, and replays
+        run: |
+          python -m venv /tmp/full
+          WHEEL="$(ls dist/*.whl)"
+          /tmp/full/bin/pip install --quiet "worldloom[all] @ file://$WHEEL"
+          cd /tmp
+          FORMATS="-f xlsx -f docx -f pptx -f pdf -f markdown -f jira -f confluence -f servicenow"
+          /tmp/full/bin/worldloom build --seed 8128 --incident --actors scripted --narrate \
+            $FORMATS --out /tmp/one
+          /tmp/full/bin/worldloom validate /tmp/one
+          /tmp/full/bin/worldloom build --seed 8128 --incident --actors scripted \
+            --replay /tmp/one $FORMATS --out /tmp/two
+          diff -r /tmp/one /tmp/two
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

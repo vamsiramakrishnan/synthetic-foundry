@@ -4,16 +4,48 @@ build-backend = "hatchling.build"
 
 [project]
 name = "worldloom"
-version = "0.0.1"
+# Single-sourced from src/worldloom/__init__.py, so the version a corpus stamps
+# into world.json and the version PyPI shows can never disagree.
+dynamic = ["version"]
 description = "Generate coherent synthetic enterprise worlds that materialise into realistic documents, business systems, and knowledge artifacts."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+keywords = [
+    "synthetic-data",
+    "enterprise",
+    "rag",
+    "evaluation",
+    "benchmark",
+    "agents",
+    "deterministic",
+    "corpus",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
 dependencies = [
     "pydantic>=2.6",
     "typer>=0.12",
     "rich>=13.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/vamsiramakrishnan/synthetic-foundry"
+Documentation = "https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/AGENTS.md"
+Changelog = "https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/CHANGELOG.md"
+Issues = "https://github.com/vamsiramakrishnan/synthetic-foundry/issues"
 
 [project.optional-dependencies]
 xlsx = ["openpyxl>=3.1"]
@@ -23,10 +55,21 @@ pptx = ["python-pptx>=1.0"]
 polars = ["polars>=0.20"]
 pandas = ["pandas>=2.0"]
 arrow = ["pyarrow>=15.0"]
+# Every renderer at once — the ordinary way to install the tool rather than
+# the library. `pip install "worldloom[all]"`.
+all = [
+    "openpyxl>=3.1",
+    "python-docx>=1.1",
+    "reportlab>=4.0",
+    "python-pptx>=1.0",
+]
 dev = ["pytest>=8.0", "openpyxl>=3.1", "python-docx>=1.1", "reportlab>=4.0", "python-pptx>=1.0"]
 
 [project.scripts]
 worldloom = "worldloom.cli:app"
+
+[tool.hatch.version]
+path = "src/worldloom/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/worldloom"]

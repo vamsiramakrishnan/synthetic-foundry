@@ -1231,3 +1231,19 @@ def test_an_idempotent_repeat_claims_nothing(acted: World) -> None:
     assert second.accepted, "a repeat is not an error"
     assert not second.fact_ids, "a repeat must not claim the first call's ids"
     assert not second.event_ids and not second.artifact_intent_ids
+
+
+def test_a_generated_corpus_records_the_version_that_made_it(acted: World, tmp_path) -> None:
+    """The determinism contract has a version in it, and the corpus says which.
+
+    A world is reproduced from seed + recipe + ledger + the generator that ran
+    them. The first three ship in the corpus; this is the fourth. The
+    hand-authored fixtures carry none, because no generator produced them and a
+    stamp would claim otherwise.
+    """
+    import worldloom
+
+    assert acted._generator_version == worldloom.__version__
+    acted.export(tmp_path / "c")
+    assert World.load(tmp_path / "c")._generator_version == worldloom.__version__
+    assert World.load("retail-close")._generator_version is None

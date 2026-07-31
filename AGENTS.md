@@ -20,7 +20,7 @@ it works from Claude Code, Antigravity, or any harness that can run a terminal.
 ## Setup
 
 ```bash
-pip install -e ".[xlsx,docx]"
+pip install -e ".[dev]"          # from a checkout; released: pip install "worldloom[all]"
 worldloom --help
 ```
 
