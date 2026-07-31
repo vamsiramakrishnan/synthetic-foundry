@@ -1013,9 +1013,20 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
         # follows the episode, so a close without an incident gets no incident
         # sections rather than an empty heading.
         if assigned:
+            # The role is resolved here, at outline time, rather than inferred
+            # later from the heading. The outline is the only place that knows
+            # what a section is *for*; a composer reading "Commitment" downstream
+            # can only guess, and guessed wrong often enough to be worth removing
+            # from the path.
+            from .compiler.compose import infer_semantic_role
+
             sections.append(
                 ArtifactSection(
-                    heading=step.heading, body=None, fact_ids=assigned, purpose=step.purpose
+                    heading=step.heading,
+                    body=None,
+                    fact_ids=assigned,
+                    purpose=step.purpose,
+                    semantic_role=infer_semantic_role(step.heading, step.kinds),
                 )
             )
 

@@ -27,11 +27,18 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from ..documents import SectionPlan
-from ..models import ArtifactIntent, CanonicalFact
+from ..models import ArtifactIntent, ArtifactIR, CanonicalFact
 from ..rng import Rng
 from .components import ComponentSpec, roles_for
 from .grammar import GrammarViolation, check
-from .plan import DENSITY_POINTS, ArtifactPlan, EvidenceRef, NarrativeBeat, SizeClass
+from .plan import (
+    DENSITY_POINTS,
+    ArtifactPlan,
+    DensityProfile,
+    EvidenceRef,
+    NarrativeBeat,
+    SizeClass,
+)
 
 #: ``density_profile`` -> the numeric density ``ComponentSpec.fits`` expects.
 #:
@@ -259,6 +266,11 @@ _HEADING_ROLE_HINTS: tuple[tuple[str, str], ...] = (
     ("commitment", "chronology"),
     ("driver", "explain_change"),
     ("in brief", "summary"),
+    # Before the bare "summary" it contains: a workbook's Summary sheet is its
+    # headline evidence, not an executive summary, and reading it as prose is
+    # what made `finance_workbook` fail its own grammar.
+    ("reconciliation", "control"),
+    ("lineage", "provenance"),
     ("summary", "summary"),
     ("cause", "explanation"),
     ("position", "position"),
@@ -276,7 +288,7 @@ _KIND_ROLE_HINTS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _infer_semantic_role(heading: str, kinds: tuple[str, ...]) -> str:
+def infer_semantic_role(heading: str, kinds: tuple[str, ...]) -> str:
     """Guess which component family a `SectionPlan` belongs to.
 
     Honestly a heuristic, not a rule: `documents.py`'s outlines predate this
@@ -356,7 +368,7 @@ def plan_for(
                 key=_beat_key(section.heading),
                 purpose=section.purpose,
                 evidence=evidence,
-                semantic_role=_infer_semantic_role(section.heading, section.kinds),
+                semantic_role=infer_semantic_role(section.heading, section.kinds),
                 optional=False,
             )
         )
@@ -383,3 +395,62 @@ def plan_for(
 
 
 __all__ = ["Composition", "compose", "plan_for"]
+
+
+def plan_from_ir(
+    ir: ArtifactIR,
+    *,
+    artifact_type: str,
+    size_class: SizeClass = "medium",
+    density_profile: DensityProfile = "balanced",
+) -> ArtifactPlan:
+    """Derive a plan from a resolved ``ArtifactIR``.
+
+    This is the direction the spec requires and ``plan_for`` had backwards. A
+    plan is a *renderer* concern that sits after the IR, deciding how resolved
+    content is presented — not a second format-independent layer above it.
+    ``ArtifactIR`` already owns title, ordered sections, purpose, fact
+    references, resolved tables and declared charts; a plan built from the
+    intent instead re-derived most of that from a shape that was never designed
+    to carry it, and left two structures to be kept in step by hand.
+
+    Concretely: a plan may decide which component presents a section and whether
+    detail moves to an appendix. It may not decide which facts are true, which
+    rows belong in a table, or which artifacts exist. Everything in that second
+    list is already settled by the time an IR exists, which is exactly why
+    deriving from the IR makes those decisions unreachable from here rather than
+    merely discouraged.
+
+    A plan built this way is never persisted. It is rebuilt from the IR whenever
+    a format needs one, so it cannot drift from the artifact it describes.
+    """
+    beats = [
+        NarrativeBeat(
+            key=_beat_key(section.heading),
+            purpose=section.purpose,
+            # The IR's own fact list, not a re-derivation of it. A section's
+            # facts were partitioned when the outline was resolved; recomputing
+            # the partition here could only ever disagree.
+            evidence=[EvidenceRef(fact_id=fact_id, role="cited") for fact_id in section.fact_ids],
+            # Trust the IR when it states a role, infer only when it does not.
+            semantic_role=section.semantic_role or infer_semantic_role(section.heading, ()),
+            optional=section.optional,
+        )
+        for section in ir.sections
+    ]
+    # Hidden sections are included deliberately. `hidden` means "not part of the
+    # readable surface" — a workbook's Reconciliation and Lineage sheets are
+    # unmistakably part of the artifact, and a plan that skipped them reported
+    # `finance_workbook` as missing the `control` role while the control sat
+    # right there in the IR. Prose is the thing hidden sections do not get, and
+    # `ArtifactSection.hidden` already governs that downstream.
+
+    return ArtifactPlan(
+        intent_id=ir.intent_id,
+        artifact_type=artifact_type,
+        audience="",
+        intent=ir.title,
+        beats=beats,
+        size_class=size_class,
+        density_profile=density_profile,
+    )

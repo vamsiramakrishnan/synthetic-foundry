@@ -234,8 +234,16 @@ REGISTRY: tuple[ComponentSpec, ...] = (
     ),
     # -- the fallback, deliberately last ----------------------------------
     _spec(
-        "core.narrative", "evidence explanation comparison management summary context",
-        "markdown docx pptx",
+        "core.narrative",
+        # `explain_change` as well as `explanation`: the finance atoms spell the
+        # role the first way and the operational atoms the second, and a
+        # vocabulary where a paragraph can explain an incident but not a variance
+        # is an accident of naming rather than a distinction anybody intended.
+        # Both are listed instead of renaming one, because the two really are
+        # different questions — why a number moved, versus why a system failed —
+        # and collapsing them would lose that in the registry too.
+        "evidence explanation explain_change comparison chronology management summary context",
+        "markdown docx pptx xlsx",
         purpose=(
             "Prose that carries the argument for this beat: what the figures mean, what "
             "follows from them, and what the reader should do about it."

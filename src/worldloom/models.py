@@ -575,6 +575,28 @@ class ArtifactSection(Model):
     most of what separates real enterprise prose from generated prose. So the
     outline states the section's job, and the narrative request carries it.
     """
+    semantic_role: str = ""
+    """Which component family can present this section — ``evidence``,
+    ``chronology``, ``decision``.
+
+    On the IR rather than on a parallel structure beside it, because the role is
+    a property of what the section *is*, and it is known at outline time. The
+    artifact compiler originally carried this on its own plan type built from the
+    intent, which put a second format-independent layer above the one that
+    already existed and left the two to be kept in step by hand.
+
+    Empty means "unclassified", and a composer falls back to inferring it from
+    the heading. That is a migration affordance, not the design: an outline that
+    states the role is telling the truth about itself, and one that leaves it
+    blank is asking a heuristic to guess.
+    """
+    optional: bool = False
+    """Droppable when the artifact is over budget, rather than truncated.
+
+    A planning decision, not a rendering one: it says this section is genuinely
+    supporting material. Dropping a required section produces a document missing
+    part of its argument, which is a defect rather than editing.
+    """
     hidden: bool = False
     """Present in the artifact but not part of its readable surface."""
 
