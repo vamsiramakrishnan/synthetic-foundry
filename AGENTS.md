@@ -54,6 +54,11 @@ worldloom validate ./corpus
 worldloom evaluate ./corpus
 ```
 
+At any point, `worldloom status ./corpus` names the stage the corpus is at and
+the exact command that comes next — resume from that rather than from memory.
+`status`, `validate`, and every `accept` command take `--json` when you would
+rather read data than parse a table.
+
 Steps 3 and 4 repeat until every response is accepted. Rejection is normal and is
 not a failure of the harness — it is the harness working.
 

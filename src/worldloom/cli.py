@@ -67,6 +67,23 @@ def _summary_table(world: World) -> Table:
     return table
 
 
+def _compiled(world: World, corpus: str) -> World:
+    """The world with its artifact IR present, compiling if needed.
+
+    This exact dance — try to compile, translate the empty-world error into an
+    exit — appeared at seven call sites with three slightly different error
+    messages. An agent debugging a failure got a different sentence depending on
+    which command it happened to be running, for the same underlying state.
+    """
+    if world.artifact_irs:
+        return world
+    try:
+        return world.compile()
+    except ValueError as exc:
+        err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+
 def _report(world: World, *, quiet: bool = False) -> bool:
     report = world.validate()
     if report.ok:
@@ -329,13 +346,7 @@ def narrate_requests(
     """
     from .narrative import handshake
 
-    world = _load(corpus)
-    if not world.artifact_irs:
-        try:
-            world = world.compile()
-        except ValueError as exc:
-            err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+    world = _compiled(_load(corpus), corpus)
 
     document = handshake.requests_document(world)
     if not document["requests"]:
@@ -361,6 +372,10 @@ def narrate_accept(
         "agent", "--model-id",
         help="Who wrote it. Recorded in the ledger and part of the replay key.",
     ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table.",
+    ),
 ) -> None:
     """Validate agent-written prose and commit it, or report every violation.
 
@@ -369,9 +384,7 @@ def narrate_accept(
     """
     from .narrative import ResponseProvider, handshake
 
-    world = _load(corpus)
-    if not world.artifact_irs:
-        world = world.compile()
+    world = _compiled(_load(corpus), corpus)
     try:
         responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -380,6 +393,20 @@ def narrate_accept(
 
     verdicts = handshake.review(world, responses)
     rejected = {name: v for name, v in verdicts.items() if not v.accepted}
+
+    if as_json:
+        import json as json_module
+
+        typer.echo(json_module.dumps({
+            "accepted": not rejected,
+            "responses": len(verdicts),
+            "rejected": {
+                name: [{"code": v.code, "detail": v.detail} for v in verdict.violations]
+                for name, verdict in sorted(rejected.items())
+            },
+        }, indent=2))
+        if rejected:
+            raise typer.Exit(code=1)
 
     if rejected:
         err.print(
@@ -395,11 +422,12 @@ def narrate_accept(
     narrated = world.narrate(ResponseProvider(responses, model_id=model_id), retries=0)
     written = narrated.export(corpus, overwrite=True)
 
-    console.print(
-        f"[green]✓[/green] {len(verdicts)} section(s) accepted and recorded in the ledger"
-    )
-    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
-    if not _report(narrated):
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] {len(verdicts)} section(s) accepted and recorded in the ledger"
+        )
+        console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not _report(narrated, quiet=as_json):
         raise typer.Exit(code=1)
 
 
@@ -416,13 +444,7 @@ def plan_requests(
     """
     from .compiler import handshake
 
-    world = _load(corpus)
-    if not world.artifact_irs:
-        try:
-            world = world.compile()
-        except ValueError as exc:
-            err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+    world = _compiled(_load(corpus), corpus)
 
     document = handshake.requests_document(world)
     if not document["requests"]:
@@ -448,6 +470,10 @@ def plan_accept(
         "agent", "--model-id",
         help="Who proposed it. Recorded in the ledger and part of the replay key.",
     ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table.",
+    ),
 ) -> None:
     """Validate agent-proposed plans and commit them to the ledger, or report every violation.
 
@@ -456,9 +482,7 @@ def plan_accept(
     """
     from .compiler import handshake
 
-    world = _load(corpus)
-    if not world.artifact_irs:
-        world = world.compile()
+    world = _compiled(_load(corpus), corpus)
     try:
         responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -467,6 +491,20 @@ def plan_accept(
 
     result = handshake.accept(world, responses, model_id=model_id)
     rejected = {name: v for name, v in result.verdicts.items() if not v.accepted}
+
+    if as_json:
+        import json as json_module
+
+        typer.echo(json_module.dumps({
+            "accepted": not rejected,
+            "plans": len(result.verdicts),
+            "rejected": {
+                name: [{"code": v.code, "detail": v.detail} for v in verdict.violations]
+                for name, verdict in sorted(rejected.items())
+            },
+        }, indent=2))
+        if rejected:
+            raise typer.Exit(code=1)
 
     if rejected:
         err.print(
@@ -489,11 +527,12 @@ def plan_accept(
     updated = world.extend(ledger=result.ledger).compile()
     written = updated.export(corpus, overwrite=True)
 
-    console.print(
-        f"[green]✓[/green] {len(result.verdicts)} plan(s) accepted and recorded in the ledger"
-    )
-    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
-    if not _report(updated):
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] {len(result.verdicts)} plan(s) accepted and recorded in the ledger"
+        )
+        console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not _report(updated, quiet=as_json):
         raise typer.Exit(code=1)
 
 
@@ -592,6 +631,10 @@ def act_accept(
             "change mid-episode."
         ),
     ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the verdict as JSON — an agent fixing a rejection should read data, not parse a table.",
+    ),
 ) -> None:
     """Validate a decision and commit it, or report the rule it broke.
 
@@ -622,6 +665,18 @@ def act_accept(
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
+    if as_json:
+        import json as json_module
+
+        typer.echo(json_module.dumps({
+            "accepted": outcome.accepted,
+            "applied": outcome.applied,
+            "complete": outcome.complete,
+            "rejected": dict(sorted(outcome.rejections.items())),
+        }, indent=2))
+        if not outcome.accepted:
+            raise typer.Exit(code=1)
+
     if not outcome.accepted:
         err.print(
             f"[red]✗[/red] {len(outcome.rejections)} action(s) rejected. Nothing was committed."
@@ -632,23 +687,26 @@ def act_accept(
 
     assert outcome.world is not None
     written = outcome.world.export(corpus, overwrite=True)
-    console.print(
-        f"[green]✓[/green] {len(outcome.applied)} decision(s) accepted"
-        f" and recorded as [dim]{outcome.model_id}[/dim]"
-    )
-    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] {len(outcome.applied)} decision(s) accepted"
+            f" and recorded as [dim]{outcome.model_id}[/dim]"
+        )
+        console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
 
     if not outcome.complete:
-        console.print(
-            "[dim]the episode continues — run `worldloom act requests` for the next decision[/dim]"
-        )
+        if not as_json:
+            console.print(
+                "[dim]the episode continues — run `worldloom act requests` for the next decision[/dim]"
+            )
         return
 
-    console.print(
-        f"[green]✓[/green] episode complete: {len(outcome.world.actor_ledger)} tool call(s),"
-        f" {len(outcome.world.observations)} observation(s)"
-    )
-    if not _report(outcome.world):
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] episode complete: {len(outcome.world.actor_ledger)} tool call(s),"
+            f" {len(outcome.world.observations)} observation(s)"
+        )
+    if not _report(outcome.world, quiet=as_json):
         raise typer.Exit(code=1)
 
 
@@ -761,8 +819,124 @@ def inspect(
 
 
 @app.command()
-def validate(corpus: str = typer.Argument(..., help="Bundled corpus name or path.")) -> None:
+def status(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit machine-readable state instead of the table."
+    ),
+) -> None:
+    """Where this corpus is in the loop, and the exact command that comes next.
+
+    The pipeline's sequence lives in the skill files, but a sequence an agent has
+    to memorise is a sequence it will eventually resume in the wrong place — a
+    corpus picked up mid-loop looks like a directory of JSONL, and nothing in a
+    directory listing says whether prose has been written or an actor episode is
+    waiting. This makes the harness answer the question the skill used to answer
+    by prose: run `worldloom status`, do what it says, repeat.
+
+    The stage order is the loop's own: an actor episode decides which documents
+    exist, so it precedes prose; prose precedes rendering, because a rendered
+    outline is a corpus that looks finished and is not.
+    """
+    import json as json_module
+
+    from .narrative import handshake as narrate_handshake
+    from .recipe import has_actor_step
+
+    world = _load(corpus)
+
+    # Compiled in memory only — status must never write. A read command that
+    # mutates what it reports on cannot be trusted mid-loop.
+    staged = world
+    if not staged.artifact_irs and staged._artifact_intents:
+        staged = staged.compile()
+
+    actor_pending = has_actor_step(world.recipe) and not world._actor_ledger
+    prose_pending = len(narrate_handshake.pending(staged)) if staged.artifact_irs else 0
+    plans_accepted = any(entry.call_site.endswith("/plan") for entry in world.ledger)
+    rendered = sum(1 for artifact in world.artifacts if artifact.path)
+    report = world.validate()
+
+    if actor_pending:
+        stage, next_command = "awaiting actor decisions", f"worldloom act requests {corpus} -o decision.json"
+    elif prose_pending:
+        stage, next_command = (
+            f"awaiting prose ({prose_pending} section(s))",
+            f"worldloom narrate requests {corpus} -o requests.json",
+        )
+    elif not rendered:
+        stage, next_command = "compiled, not rendered", f"worldloom render {corpus} -f markdown -f xlsx"
+    elif not report.ok:
+        stage, next_command = "rendered, with violations", f"worldloom validate {corpus}"
+    else:
+        stage, next_command = "complete and coherent", f"worldloom evaluate {corpus}"
+
+    if as_json:
+        typer.echo(json_module.dumps({
+            "stage": stage,
+            "next": next_command,
+            "facts": len(world.facts),
+            "artifact_intents": len(world.artifact_intents),
+            "sections_awaiting_prose": prose_pending,
+            "plans_accepted": plans_accepted,
+            "rendered_files": rendered,
+            "actor_episode_pending": actor_pending,
+            "evaluation_cases": len(world.evaluations),
+            "generated_by": world._generator_version,
+            "validation": {
+                "ok": report.ok,
+                "checks": report.checks_run,
+                "violations": [
+                    {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
+                    for v in report.violations
+                ],
+            },
+        }, indent=2))
+        return
+
+    table = Table(title=world.company.name, title_style="bold", show_header=False, box=None)
+    table.add_column(style="dim")
+    table.add_column()
+    table.add_row("Stage", stage)
+    table.add_row("Facts", f"{len(world.facts):,}")
+    table.add_row("Artifact intents", f"{len(world.artifact_intents):,}")
+    table.add_row("Awaiting prose", f"{prose_pending:,} section(s)")
+    table.add_row("Plans accepted", "yes" if plans_accepted else "no (optional — worldloom plan requests)")
+    table.add_row("Rendered files", f"{rendered:,}")
+    table.add_row(
+        "Validation",
+        f"[green]coherent[/green] — {report.checks_run:,} checks"
+        if report.ok
+        else f"[red]{len(report.violations)} violation(s)[/red]",
+    )
+    console.print(table)
+    console.print(f"\n[bold]next:[/bold] {next_command}")
+
+
+@app.command()
+def validate(
+    corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the report as JSON — violations as data, not prose to parse.",
+    ),
+) -> None:
     """Check a corpus for coherence violations."""
+    if as_json:
+        import json as json_module
+
+        report = _load(corpus).validate()
+        typer.echo(json_module.dumps({
+            "ok": report.ok,
+            "checks": report.checks_run,
+            "violations": [
+                {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
+                for v in report.violations
+            ],
+        }, indent=2))
+        if not report.ok:
+            raise typer.Exit(code=1)
+        return
     if not _report(_load(corpus)):
         raise typer.Exit(code=1)
 
@@ -808,9 +982,7 @@ def evaluate(
     """
     from .evaluate import score as run_score
 
-    world = _load(corpus)
-    if not world.artifact_irs:
-        world = world.compile()
+    world = _compiled(_load(corpus), corpus)
 
     card = run_score(world, k=k)
     console.print(str(card))

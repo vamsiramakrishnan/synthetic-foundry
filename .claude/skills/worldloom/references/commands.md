@@ -24,6 +24,7 @@ worldloom act accept <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--from`, `-i` | Action JSON from the agent. |
+| `--json` | Emit the verdict as JSON — an agent fixing a rejection should read data, not parse a table. |
 | `--model-id` | Who decided. Recorded in the ledger and part of the replay key, so it is pinned to the corpus on the first accepted decision and cannot change mid-episode. |
 
 ### `worldloom act requests`
@@ -174,6 +175,7 @@ worldloom narrate accept <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--from`, `-i` | Response JSON from the agent. |
+| `--json` | Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table. |
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
 
 ### `worldloom narrate requests`
@@ -203,6 +205,7 @@ worldloom plan accept <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--from`, `-i` | Response JSON from the agent. |
+| `--json` | Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table. |
 | `--model-id` | Who proposed it. Recorded in the ledger and part of the replay key. |
 
 ### `worldloom plan requests`
@@ -230,6 +233,18 @@ worldloom render <CORPUS>
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
 
+### `worldloom status`
+
+Where this corpus is in the loop, and the exact command that comes next.
+
+```
+worldloom status <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit machine-readable state instead of the table. |
+
 ### `worldloom validate`
 
 Check a corpus for coherence violations.
@@ -237,6 +252,10 @@ Check a corpus for coherence violations.
 ```
 worldloom validate <CORPUS>
 ```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the report as JSON — violations as data, not prose to parse. |
 
 ### `worldloom version`
 

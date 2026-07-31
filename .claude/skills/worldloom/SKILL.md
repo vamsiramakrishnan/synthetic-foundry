@@ -33,6 +33,17 @@ worldloom evaluate ./corpus                             # 7. is it actually hard
 Steps 3 and 4 repeat until every response is accepted. **Rejection is the harness
 working, not failing.**
 
+**At any point, ask the harness where you are instead of remembering:**
+
+```bash
+worldloom status ./corpus          # the stage, and the exact next command
+worldloom status ./corpus --json   # the same, as data
+```
+
+Resuming a corpus you did not build, or one from an interrupted session, starts
+with `worldloom status`, not with a directory listing. Every `accept` command
+also takes `--json`, so a rejection arrives as data rather than a table to parse.
+
 Step 1a is a different loop and a different job. Built with
 `worldloom build --seed 8128 --incident --actors agent --out ./corpus`, the
 incident's records are not planned from the fact ledger — they are produced by
