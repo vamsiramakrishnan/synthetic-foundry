@@ -96,8 +96,18 @@ class _Taxonomy:
                 self.by_kind[(fact.kind, fact.subject)] = fact
 
         self.artifact = {intent.artifact_type: intent.id for intent in intents}
+        self.intents = intents
         self.history = history
         self.prior_intents = prior_intents
+
+        # A single id-keyed index across every fact this episode can see, for
+        # the new families below that need to look a fact up by id rather than
+        # by (kind, subject) — `org.unit_leader_changed` and `lore.milestone`
+        # both key on an id (a unit, the company) that repeats across many
+        # facts, which is exactly what `by_kind`'s per-subject dedup discards.
+        self._fact_index: dict[str, CanonicalFact] = {
+            f.id: f for f in (*history, *facts, *episode.facts)
+        }
 
     # -- helpers -----------------------------------------------------------
 
@@ -154,6 +164,42 @@ class _Taxonomy:
         """
         found = [f for s in subjects if (f := self.get(kind, s)) is not None and f.value]
         return sorted(found, key=lambda f: f.value.amount)
+
+    def _facts_of(self, kind: str) -> tuple[CanonicalFact, ...]:
+        """Every current fact of *kind*, in the order the world minted them.
+
+        For history: a personnel change or a founding milestone is one fact
+        per event, not per subject the way `by_kind` assumes — a unit can
+        change leader more than once, and every dated lore commitment shares
+        the same subject (the company). `by_kind`'s ``setdefault`` would keep
+        only the first of each and silently drop the rest, so this reads the
+        accumulated history directly instead of going through it.
+        """
+        return tuple(f for f in self.history if f.kind == kind and not f.is_superseded)
+
+    def _reachable_fact_ids(self) -> frozenset[str]:
+        """Every fact id some planned artifact actually requires.
+
+        Mirrors ``validate.py``'s own ``unreachable_answer`` check exactly —
+        deliberately, not approximately, because the two have to agree. A fact
+        no ``ArtifactIntent`` requires can never be rendered into anything a
+        retriever could find, so a case built on it is unanswerable rather
+        than merely hard. That matters here specifically because a personnel
+        change or a founding milestone is witnessed by a ``CanonicalFact`` the
+        moment it happens, but nothing today plans a document that requires
+        one: ``Hire``/``Departure``/``Reorganisation`` extend the roster and
+        the fact ledger without ever minting an ``ArtifactIntent``, and
+        ``organisation.generate``'s founding facts are never in any intent's
+        ``required_fact_ids`` either. The event occurring and the event being
+        citable are two different facts, and only the second makes a question
+        answerable — so the families below check this before ever asking one,
+        the same guard ``incident()`` applies to "did an incident happen" at
+        the top of this class.
+        """
+        ids: set[str] = set()
+        for intent in (*self.prior_intents, *self.intents):
+            ids.update(intent.required_fact_ids)
+        return frozenset(ids)
 
     # -- families ----------------------------------------------------------
 
@@ -546,6 +592,181 @@ class _Taxonomy:
         ):
             self.abstain(question, reasoning)
 
+    # -- history -------------------------------------------------------
+    #
+    # Four families against the world's own past — a reorganisation, a
+    # departure, a founding milestone, a document signed by someone who no
+    # longer holds the post — plus the abstentions that go with having a
+    # history at all. Every one of the first three is guarded by
+    # `_reachable_fact_ids`: the underlying event is always witnessed by a
+    # `CanonicalFact` the moment it happens, but nothing downstream of this
+    # module currently plans a document that requires that fact (see that
+    # method's docstring), so a case built on it would fail `validate()`'s
+    # `unreachable_answer` check — correctly, since no artifact carries it
+    # yet. That is a gap in what plans artifacts, not in what asks questions
+    # about them, so it is reported rather than worked around here.
+
+    def org_state_over_time(self) -> None:
+        """Who led a business unit, asked at a moment rather than "currently".
+
+        A `Reorganisation`, or a `Departure` that hands over a unit along with
+        the post, changes who is correct to name as the unit's leader from
+        that moment on. A system with no notion of a validity window has no
+        reason to prefer the leader who was actually in post on the date
+        asked about over whoever leads the unit today — which is exactly what
+        `org.unit_leader_changed`'s `valid_from` records and what makes this
+        a temporal question rather than a plain lookup.
+        """
+        reachable = self._reachable_fact_ids()
+        role_changes = self._facts_of("org.role_changed")
+        for change in self._facts_of("org.unit_leader_changed"):
+            if change.id not in reachable:
+                continue
+            successor = next((f for f in role_changes if f.event_id == change.event_id), None)
+            if successor is None or successor.id not in reachable:
+                continue
+            self.case(
+                f"Who led {self.subjects.name(change.subject)} as of "
+                f"{change.period or self.period}?",
+                EvaluationType.TEMPORAL_STATE,
+                self.subjects.name(successor.subject),
+                [change.id, successor.id],
+                cutoff=change.valid_from, difficulty="hard",
+                reasoning="Leadership changed within this world's history; a system with no "
+                          "validity window has no reason to prefer the post-change leader over "
+                          "whoever led the unit before.",
+            )
+
+    def succession(self) -> None:
+        """Who replaced whom — answerable only by joining two records.
+
+        `org.departed` names who left; a separate `org.role_changed` fact,
+        minted by the same event, names who took the post. Neither states the
+        other's half, so "who replaced X" is a join across two facts rather
+        than a lookup against one — the shape `CAUSAL_MULTI_HOP` exists for.
+        """
+        reachable = self._reachable_fact_ids()
+        role_changes = self._facts_of("org.role_changed")
+        for departure in self._facts_of("org.departed"):
+            if departure.id not in reachable:
+                continue
+            successor = next((f for f in role_changes if f.event_id == departure.event_id), None)
+            if successor is None or successor.id not in reachable:
+                continue
+            self.case(
+                f"Who replaced {self.subjects.name(departure.subject)} when they left "
+                "the company?",
+                EvaluationType.CAUSAL_MULTI_HOP,
+                self.subjects.name(successor.subject),
+                [departure.id, successor.id], difficulty="hard",
+                reasoning="The departure record names who left; the succession record names "
+                          "who took over. Neither states the other's half.",
+            )
+
+    def milestone_provenance(self) -> None:
+        """When a founding milestone happened — answerable only from the
+        event itself, never from a close document.
+
+        `organisation.generate` mints one `MFACT-` fact per dated lore
+        commitment, so a claim lore makes about the corpus's own past — a
+        hierarchy remap, a platform replatform — has something on the
+        timeline that actually witnesses it. No close artifact restates a
+        founding date: a close reports its own period, not the company's
+        history, so this is the one family where the finance workbook is not
+        even a plausible wrong answer.
+        """
+        reachable = self._reachable_fact_ids()
+        for milestone in self._facts_of("lore.milestone"):
+            if milestone.id not in reachable:
+                continue
+            # The assertion is often compound — the event, then its lasting
+            # consequence ("...replatformed. Conversion has been volatile
+            # since..."). Only the first clause is the dated event the
+            # question asks about; the rest is the scar, not the provenance.
+            assertion = (milestone.text_value or "").split(". ")[0].rstrip(".")
+            self.case(
+                f"According to the corpus's own history, when did this happen: {assertion}?",
+                EvaluationType.CITATION_REQUIRED,
+                milestone.valid_from.strftime("%B %Y"),
+                [milestone.id], difficulty="hard",
+                reasoning="The date is carried only by the founding milestone fact; nothing in "
+                          "a close document restates a founding date.",
+            )
+
+    def authorship_over_time(self) -> None:
+        """Who signed a role-authored document, before versus after a
+        succession moved the post to someone else.
+
+        `_period_boundary` in `scenarios.py` times a departure so the leaver
+        signs their own period's close and the successor signs the next
+        one — so the same document type, one period apart, is genuinely
+        signed by two different people. Mirrors `across_episodes`'s
+        prior-period revenue case: the current holder's name is the confident
+        wrong answer to a question about the earlier period. Unlike the three
+        families above, this one needs no new fact kind and no reachability
+        guard — the grounding fact is whichever one the document already
+        required, so it is reachable by construction.
+        """
+        if not self.prior_intents:
+            return
+        for artifact_type in ("cfo_variance_memo", "finance_workbook", "close_calendar"):
+            current = next((i for i in self.intents if i.artifact_type == artifact_type), None)
+            earlier = next(
+                (i for i in reversed(self.prior_intents) if i.artifact_type == artifact_type),
+                None,
+            )
+            if current is None or earlier is None or earlier.author_id == current.author_id:
+                continue
+            if not earlier.required_fact_ids or not current.required_fact_ids:
+                continue
+
+            label = artifact_type.replace("_", " ")
+            earlier_fact = self._fact_index.get(earlier.required_fact_ids[0])
+            earlier_period = (
+                earlier_fact.period if earlier_fact and earlier_fact.period else "the previous period"
+            )
+            self.case(
+                f"Who signed the {label} for {earlier_period}?",
+                EvaluationType.TEMPORAL_STATE, self.subjects.name(earlier.author_id),
+                [earlier.required_fact_ids[0]], difficulty="hard",
+                reasoning="The post has changed hands since; the current holder is the "
+                          "confident wrong answer to a question about the earlier period.",
+            )
+            self.case(
+                f"Who signed the {label} for {self.period}?",
+                EvaluationType.TEMPORAL_STATE, self.subjects.name(current.author_id),
+                [current.required_fact_ids[0]], difficulty="medium",
+                reasoning="The same document type after the post changed hands — included so "
+                          "a system that gets the earlier period wrong is shown getting the "
+                          "current one right.",
+            )
+            break  # one document type makes the point; a second would only repeat it.
+
+    def history_abstentions(self) -> None:
+        """History questions that stay unanswerable regardless of how large
+        the world grows.
+
+        The trap `abstentions` warns about is a question unanswerable by
+        accident — a dimension the corpus merely has not generated yet, which
+        stops being true the moment it does. Both of these are false *by
+        construction* instead: no marketing function is modelled at any world
+        size, so a Chief Marketing Officer is not a person this generator can
+        ever produce; and `organisation.generate`'s tenure formula has a fixed
+        ceiling on how far back anyone's `joined` can fall, so a date well
+        before that ceiling is before the roster at every seed, not merely
+        this one.
+        """
+        self.abstain(
+            "Who is the company's Chief Marketing Officer, and when did they join?",
+            "No marketing function is modelled in this organisation; the role, and "
+            "therefore the person, does not exist.",
+        )
+        self.abstain(
+            "Who signed the close calendar in 1995?",
+            "Presupposes a roster and a close from before this archetype's organisation "
+            "could exist — every join date this generator can produce falls well after it.",
+        )
+
 
 def evaluation_cases(
     minter: Minter,
@@ -573,4 +794,11 @@ def evaluation_cases(
     taxonomy.incident()
     taxonomy.across_episodes()
     taxonomy.abstentions()
+    # Appended after every existing family so an `EVAL-` id already minted by
+    # one of them never shifts — see AGENTS.md/CLAUDE.md on id stability.
+    taxonomy.org_state_over_time()
+    taxonomy.succession()
+    taxonomy.milestone_provenance()
+    taxonomy.authorship_over_time()
+    taxonomy.history_abstentions()
     return tuple(taxonomy.cases)

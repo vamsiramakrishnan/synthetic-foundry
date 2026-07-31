@@ -213,6 +213,60 @@ class MonthEndClose:
         )
 
 
+def _announcer(world, change):
+    """Who signs the notice: whoever the change put in post, else the leader.
+
+    Deterministic and derived rather than chosen — the notice's author must be
+    somebody the change itself names, or the artifact would cite a person with
+    no connection to the event it announces.
+    """
+    for person in change.people:
+        if person.left is None:
+            return person
+    for role_id in sorted(change.roles.values()):
+        person = world.people.get(role_id)
+        if person is not None:
+            return person
+    return world.people.by_id(world._roles["ceo"])
+
+
+def _personnel_notice(minter, change, successor, period: str) -> tuple:
+    """The document a real company would issue when somebody leaves.
+
+    Without this, an org change is a fact nobody wrote down. The corpus had a
+    history — a departure, a hand-over, a milestone — and not one artifact
+    required any of it, so `validate`'s `unreachable_answer` check correctly
+    refused every evaluation case that tried to ask about it. The history was
+    coherent and unaskable, which is the same as the feature not existing.
+
+    Deliberately small and `all_staff`: an internal announcement is exactly the
+    document that carries a succession, and making it a bounded note rather than
+    a report keeps the narrative fan-out honest — one short piece of prose, not a
+    section per fact.
+    """
+    from .models import ArtifactIntent
+
+    if not change.facts:
+        return ()
+    return (
+        ArtifactIntent(
+            id=minter.next("ART"),
+            artifact_type="personnel_notice",
+            domain="people",
+            audience="all_staff",
+            author_id=successor.id,
+            triggered_by=[event.id for event in change.events],
+            required_fact_ids=[fact.id for fact in change.facts],
+            size_profile="small",
+            rationale=(
+                "A change of post is announced to the organisation. It is the only "
+                "record that names both the person leaving and the person taking over, "
+                "which is what makes a succession answerable at all."
+            ),
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class Hire:
     """A new person joins the company, effective at the boundary of *period*.
@@ -335,6 +389,7 @@ class Departure:
             people=change.people,
             business_units=change.business_units,
             roles=change.roles,
+            artifact_intents=_personnel_notice(minter, change, _announcer(world, change), self.period),
             period=self.period,
         )
 
@@ -386,6 +441,7 @@ class Reorganisation:
             people=change.people,
             business_units=change.business_units,
             roles=change.roles,
+            artifact_intents=_personnel_notice(minter, change, _announcer(world, change), self.period),
             period=self.period,
         )
 
