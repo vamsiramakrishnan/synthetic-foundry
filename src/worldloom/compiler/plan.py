@@ -29,6 +29,36 @@ SizeClass = Literal["small", "medium", "long"]
 #: document is long and sparse, and the two fail in opposite directions.
 DensityProfile = Literal["sparse", "balanced", "dense"]
 
+#: Where each profile sits on the 0–1 axis that ``ComponentSpec.density`` bands
+#: are declared against.
+#:
+#: Here rather than in the composer, and not because this is the more natural
+#: home — the composer is what consumes it. It is here because two callers
+#: already needed it independently (component selection, and the static audit
+#: that checks no component's band is unreachable), and each was about to invent
+#: its own. Two private mappings of the same three words agree until one of them
+#: is tuned, and then a component the audit calls reachable stops being selected
+#: with nothing reporting a contradiction.
+#:
+#: The values are thirds rather than 0.0/0.5/1.0 so that the extremes are
+#: interior points: a band of (0.0, 0.7) should admit "sparse", and a profile
+#: pinned at exactly 0.0 makes every band's lower bound a special case.
+DENSITY_POINTS: dict[str, float] = {
+    "sparse": 1 / 6,
+    "balanced": 1 / 2,
+    "dense": 5 / 6,
+}
+
+
+def density_of(profile: str) -> float:
+    """The numeric density for a profile name."""
+    try:
+        return DENSITY_POINTS[profile]
+    except KeyError:
+        raise KeyError(
+            f"unknown density profile {profile!r}; known: {', '.join(DENSITY_POINTS)}"
+        ) from None
+
 
 class EvidenceRef(Model):
     """A fact the artifact rests on, and the job that fact does in the argument.
@@ -113,4 +143,12 @@ class ArtifactPlan(Model):
         return [beat for beat in self.beats if not beat.optional]
 
 
-__all__ = ["ArtifactPlan", "DensityProfile", "EvidenceRef", "NarrativeBeat", "SizeClass"]
+__all__ = [
+    "DENSITY_POINTS",
+    "ArtifactPlan",
+    "DensityProfile",
+    "EvidenceRef",
+    "NarrativeBeat",
+    "SizeClass",
+    "density_of",
+]
