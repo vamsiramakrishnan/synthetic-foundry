@@ -188,6 +188,84 @@ GRAMMARS: dict[str, Grammar] = {
         ordered_roles=(("evidence", "control"),),
         min_components=2,
     ),
+    "working_note": Grammar(
+        artifact_type="working_note",
+        # A controller's own note is always dated in its thinking: it opens
+        # from wherever the close stands, never from an already-drawn
+        # conclusion.
+        opens_with=frozenset({"chronology"}),
+        requires_roles=frozenset({"chronology", "evidence"}),
+        # "Not a report" (its own purpose text, in `documents._OUTLINES`) is a
+        # real constraint, not colour: a working note is never the place a
+        # decision gets made or a control gets signed off, because it is
+        # provisional and personal, not an artifact anyone downstream relies
+        # on.
+        forbids_roles=frozenset({"decision", "control"}),
+        min_components=2,
+    ),
+    "close_calendar": Grammar(
+        artifact_type="close_calendar",
+        opens_with=frozenset({"chronology"}),
+        # Only `chronology` is required, not `management` — a close calendar's
+        # "Commitment" section is guaranteed every period; its "Escalation"
+        # section exists only when the date actually moved
+        # (`documents._OUTLINES["close_calendar"]`), and a period that closed
+        # on time is not a defective calendar entry for lacking one. The
+        # ordering below is still stated outright: *if* an escalation is
+        # reported, it is reported after the commitment it revises, in every
+        # period that has one.
+        requires_roles=frozenset({"chronology"}),
+        ordered_roles=(("chronology", "management"),),
+        min_components=1,
+    ),
+    "confluence_page": Grammar(
+        artifact_type="confluence_page",
+        opens_with=frozenset({"position"}),
+        requires_roles=frozenset({"position", "management"}),
+        ordered_roles=(("position", "management"),),
+        # The defining property of this artifact type, stated in its own
+        # purpose text: "it knows the symptom and the first guess and nothing
+        # more... this page is never updated". A triage page that stated a
+        # confirmed root cause would be a page someone forgot to retire, not
+        # a status update — `explanation` is what the incident RCA is for.
+        forbids_roles=frozenset({"explanation"}),
+        min_components=2,
+    ),
+    # `knowledge_article`, `servicenow_incident`, and `jira_issues` are
+    # deliberately left without a grammar entry here — see this module's own
+    # docstring on why an ungrammared type is the honest default rather than
+    # an oversight, and the specific reasoning for each below.
+    #
+    # `servicenow_incident` and `jira_issues` both compose today from
+    # `documents._DEFAULT_OUTLINE` — a single generic "Summary" section
+    # (`documents._OUTLINES` has no entry for either). That is not a shape;
+    # it is the *absence* of one, identical to what any other unlisted
+    # artifact type would get. Stating a grammar would mean inventing a
+    # structure neither type's outline actually has.
+    #
+    # `knowledge_article` does have a genuine, statable shape — symptom
+    # (`evidence`), then cause (`explanation`), then procedure (`management`)
+    # — but stating it here would trip a real defect rather than describe a
+    # real rule. `ops.causal_chain` is the only component that fills
+    # `explanation` at the row counts a knowledge article's "Cause" section
+    # actually carries, in every non-xlsx format, and it declares
+    # `requires_predecessor_role="chronology"` — a constraint that is true for
+    # an incident RCA (which always has a preceding Timeline) and not true for
+    # a knowledge article (whose outline has no chronology section at all).
+    # `compose.compose` selects a component by format/density/row fit alone,
+    # with no view of which artifact type is asking, so it cannot prefer a
+    # different `explanation` component for a knowledge article than it picks
+    # for an RCA — the same atom is selected either way, and only a grammar
+    # entry would notice the precondition it fails to meet
+    # (`Grammar.check`'s per-component precondition scan runs whenever an
+    # artifact type has a `Grammar` at all, independent of what that grammar
+    # otherwise requires). Adding the grammar without also fixing that would
+    # freeze a `missing_precondition` violation into every knowledge article
+    # this corpus ever produces. The honest fix is upstream of this file —
+    # either a context-aware composer or a second, precondition-free
+    # `explanation` atom that does not collide with `ops.causal_chain`'s own
+    # coverage — and neither belongs to a grammar declaration. Left
+    # unconstrained until one of those lands.
 }
 
 

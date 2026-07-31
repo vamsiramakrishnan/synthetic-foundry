@@ -127,10 +127,18 @@ def _spec(
     )
 
 
-#: The vocabulary. Small on purpose: this is the set the existing artifact types
-#: actually need, expressed as components instead of as a hard-coded outline in
-#: `documents.py`. A vocabulary grown ahead of the artifacts that use it is a
-#: vocabulary of guesses — the same reason there is still no scenario DSL.
+#: The vocabulary. Grown from an initial 16 atoms toward the 50-80 "strong
+#: primitives" `docs/artifact-compiler.md` §3 asks for — still expressed as
+#: components instead of a hard-coded outline in `documents.py`, and still
+#: bounded by what the existing ten artifact types actually need rather than
+#: guessed ahead of them, which is the same reason there is still no scenario
+#: DSL. The growth was not "add more of the same": a 12-period corpus measured
+#: 78% of every composed component landing in the `core` family, almost
+#: entirely `core.narrative` — a single catch-all absorbing seven distinct
+#: roles because nothing more specific existed for them. Most of the new atoms
+#: below exist to give one of those roles a real, narrowly-purposed home; see
+#: `core.narrative`'s own comment, at the end of this tuple, for the account
+#: of exactly what moved where and why.
 REGISTRY: tuple[ComponentSpec, ...] = (
     # -- framing ---------------------------------------------------------
     _spec(
@@ -288,17 +296,258 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         "xlsx.lineage", "control provenance", "xlsx",
         purpose="Every figure in the workbook traced to the fact it came from.",
     ),
+    # -- framing (front matter, structure, standing record) ----------------
+    # Everything in this block is new. None of it existed when the only
+    # roles for "the document about the document" were `structure`
+    # (`core.section_divider`) and the workbook-only `control`/`provenance`
+    # pair below — a narrative artifact had nowhere to put a document-control
+    # block, an approval record, or a boundary heavier than a mid-document
+    # section break. Named `framing.*` rather than `core.*`, deliberately: the
+    # measured problem was a `core` family holding 78% of every composed
+    # component, and folding six more atoms into that same family would have
+    # regrown the thing this registry is trying to shrink.
+    _spec(
+        "framing.agenda", "structure", "markdown docx pptx pdf",
+        purpose=(
+            "The sections still to come, named up front — worth stating only once an "
+            "artifact is long enough that a reader benefits from knowing its shape before "
+            "starting."
+        ),
+        density=(0.0, 0.4),
+    ),
+    _spec(
+        "framing.document_control", "provenance", "docx markdown pdf",
+        purpose=(
+            "Author, version, and classification, stated once at the front — the standing "
+            "record of the document itself, not of what it argues."
+        ),
+    ),
+    _spec(
+        "framing.approval_table", "provenance", "docx markdown pdf",
+        purpose="Who signed off, and when — part of the document's own record, verifiable without opening a workbook.",
+        min_rows=1,
+        # An approval table with fifty rows is a mailing list, not a sign-off
+        # sheet — real approval chains are short, and a cap says so rather than
+        # letting the component silently become something else.
+        #
+        # Deliberately `provenance`, not `control`: `test_compiler.py` pins
+        # `control` as a role only `xlsx.reconciliation` (xlsx-only) can fill,
+        # to prove format-gating actually excludes a required beat rather than
+        # silently substituting something. A sign-off record genuinely is
+        # provenance — who attested to this document, not an arithmetic check
+        # on it — so the honest role also happens to be the one that does not
+        # collide with that invariant.
+        max_rows=6,
+    ),
+    _spec(
+        "framing.revision_history", "provenance", "docx markdown pdf xlsx",
+        purpose="Every prior version, one row each, so a reader can tell which draft they are holding.",
+        min_rows=1,
+    ),
+    _spec(
+        "framing.appendix_divider", "structure", "docx pptx pdf",
+        purpose=(
+            "Marks the boundary into supplementary material — heavier than a plain section "
+            "break, because what follows is not required reading."
+        ),
+        # Same role as `core.section_divider`, split by density rather than by
+        # row count (there is no row count — both are rowless): a sparse,
+        # short artifact's only subject change is a `core.section_divider`,
+        # and only a denser, longer one has enough material to need a second,
+        # heavier kind of break for its appendix. The bands touch at 0.3
+        # rather than leaving a gap, so no density value falls through both.
+        density=(0.3, 1.0),
+    ),
+    _spec(
+        "framing.distribution_list", "provenance", "docx markdown pdf",
+        purpose="Who receives this and in what capacity — a distribution a reader can audit rather than infer.",
+        min_rows=1,
+    ),
+    # -- evidence, the rows that do not make a table -----------------------
+    _spec(
+        "editorial.evidence_note", "evidence", "markdown docx pptx pdf",
+        purpose=(
+            "A fact or two, argued in a sentence rather than tabulated — the shape a "
+            "supporting-facts appendix or a one-line symptom takes when a table would be "
+            "mostly border."
+        ),
+        min_rows=0,
+        # Bounded rather than left open: `finance.variance_table` already owns
+        # every evidence-role beat with two or more rows (it is earlier in the
+        # registry, has no density restriction, and no row ceiling), so this
+        # component is only ever actually reached at 0-1 rows. The cap says
+        # what it is honestly for instead of implying it competes with a table
+        # it can never win against.
+        max_rows=1,
+    ),
+    _spec(
+        "xlsx.report_sheet", "evidence summary explain_change comparison", "xlsx",
+        purpose=(
+            "One sheet of the workbook's own reporting hierarchy, already a table before "
+            "this component ever sees it — the sheet as it stands, not a paragraph "
+            "pretending to be one."
+        ),
+        # The fix for the single largest source of `core.narrative` traffic in
+        # the measured corpus: every finance-workbook sheet (Summary, Business
+        # Unit P&L, Category P&L, Variance Drivers, Incident Impact, Store
+        # Performance) is built in `documents.finance_workbook` as a real
+        # table, but the beat `compose.plan_from_ir` derives for it carries
+        # zero evidence rows — `ArtifactSection.fact_ids` is never populated
+        # for those sections, only the table cells' own `fact_id`s are. That
+        # left every one of those beats fitting no xlsx component with a row
+        # floor, which is what routed all of them to `core.narrative` — a
+        # markdown/docx/pptx-shaped fallback rendering a workbook sheet.
+        # Rowless here for the same reason: the constraint that matters for an
+        # xlsx sheet is that it *is* a sheet, not how many rows the beat
+        # happened to carry.
+    ),
+    _spec(
+        "finance.kpi_grid", "position evidence", "markdown docx pptx xlsx pdf",
+        purpose=(
+            "A wider board of headline measures than a strip can hold without crowding — "
+            "read as a grid, not a sentence."
+        ),
+        density=(0.2, 1.0),
+        min_rows=8,
+        max_rows=20,
+        # `finance.metric_strip` already owns 3-6 measures at this same
+        # density band; `core.position` (rowless, unbounded) already owns
+        # every position-role beat at density up to 0.7 regardless of row
+        # count. That leaves a gap starting just past `metric_strip`'s own
+        # `max_rows=6` — floored at 8 rather than 7 so the boundary
+        # `test_compiler.py::test_finance_metric_strip_caps_at_six_rows` pins
+        # (seven measures overflow *every* position-role component and must
+        # raise) stays a real gap instead of one this atom quietly closes.
+        layouts="metric_cards table",
+    ),
+    _spec(
+        "finance.heatmap", "evidence", "markdown docx pptx xlsx pdf",
+        purpose="A grid of values shaded by magnitude, for when the pattern across many cells is the point, not any single figure.",
+        min_rows=4,
+    ),
+    _spec(
+        "ops.cohort_table", "evidence", "markdown docx xlsx pdf",
+        purpose="The same measure split by when its subject started, not by what it is — a shape a plain variance table cannot show.",
+        min_rows=3,
+    ),
+    # -- explanation, beyond the causal chain -------------------------------
+    _spec(
+        "editorial.evidence_and_interpretation", "explain_change explanation", "markdown docx pptx pdf",
+        purpose=(
+            "States the figure and, in the same breath, what it means — the shortest "
+            "legitimate form of 'why this moved' when there are too few drivers to justify "
+            "a bridge or a table."
+        ),
+        min_rows=0,
+        # Same reasoning as `editorial.evidence_note`: `finance.variance_table`
+        # and `finance.variance_bridge` already own every explain_change beat
+        # with two or more rows, in every format. This is only ever reached at
+        # 0-1.
+        max_rows=1,
+    ),
+    _spec(
+        "ops.before_after", "explanation", "markdown docx pptx xlsx pdf",
+        purpose=(
+            "The state before and the state after, side by side — legible only once both "
+            "halves are named, unlike a causal chain, which needs no prior chronology to "
+            "open with."
+        ),
+        min_rows=2,
+        # `ops.causal_chain` is rowless and unbounded in every format it
+        # supports (every one of these but xlsx), so it already wins any
+        # explanation-role beat there regardless of row count. This is the
+        # one format causal_chain does not reach; declared for the rest too
+        # only because a before/after state genuinely can be read in prose
+        # formats as well, not because it expects to be picked there today.
+        layouts="two_column stacked",
+    ),
+    _spec(
+        "ops.process_flow", "explanation", "markdown docx pptx pdf",
+        purpose=(
+            "The steps a system takes when it works, not the steps that happened when it "
+            "did not — the difference between how a control is supposed to behave and an "
+            "incident timeline of the one time it failed."
+        ),
+        min_rows=2,
+    ),
+    # -- management, beyond the schedule and the risk grid ------------------
+    _spec(
+        "mgmt.brief", "management", "markdown docx pptx pdf",
+        purpose="An instruction or a next step, said once, when there is not yet a list of owners and dates to tabulate.",
+        min_rows=0,
+        # `core.schedule` (rowless-eligible via `min_rows=1` but otherwise
+        # unbounded, every format) already owns every management-role beat
+        # with one or more rows. This is only ever reached at exactly zero.
+        max_rows=0,
+    ),
+    _spec(
+        "mgmt.raid_table", "management", "markdown docx xlsx pdf",
+        purpose="Risks, assumptions, issues and dependencies in one register, for a piece of work with more than one kind of open item to track.",
+        min_rows=2,
+    ),
+    _spec(
+        "mgmt.milestone_plan", "management chronology", "markdown docx xlsx pptx pdf",
+        purpose="Commitments plotted against a line of dates, when there is more than one to hold in view at once.",
+        min_rows=2,
+        layouts="compact_list table",
+    ),
+    _spec(
+        "mgmt.owner_table", "management", "markdown docx xlsx pdf",
+        purpose="Who is accountable for what, stated once and pointed to rather than repeated in every section that needs an owner.",
+        min_rows=1,
+    ),
+    _spec(
+        "mgmt.options_matrix", "decision", "markdown docx pptx pdf",
+        purpose=(
+            "The same call, laid out as a grid of options rather than a paragraph of "
+            "argument — for a page with room only for the comparison, not the reasoning "
+            "behind it."
+        ),
+        density=(0.6, 1.0),
+        # `mgmt.decision_panel` covers density 0-0.6 for the `decision` role,
+        # rowless and unbounded within that band, but its band stops there —
+        # a "dense" beat (density 0.75) currently fits neither it nor anything
+        # else, which would raise rather than compose. Same precondition as
+        # `decision_panel` and for the identical reason: a call laid out
+        # before the evidence for it exists is not a document a company would
+        # issue, dense page or not.
+        after_role="evidence",
+        layouts="two_column stacked",
+    ),
+    # -- chronology, when there is no sequence yet ---------------------------
+    _spec(
+        "ops.status_note", "chronology", "markdown docx pptx pdf",
+        purpose="Where things stand, in one line, when there is a single moment to report rather than a sequence worth a timeline.",
+        min_rows=0,
+        max_rows=0,  # `core.schedule` already owns every chronology beat at 1+ rows.
+    ),
+    # -- editorial: comparison, context, and the single confident line ------
+    _spec(
+        "editorial.callout", "comparison", "markdown docx pptx pdf",
+        purpose="A short forward-looking note naming the one or two things to watch, set apart from the surrounding prose rather than buried in it.",
+        min_rows=0,
+        # `finance.comparative_trend` owns every comparison beat with three or
+        # more rows already (rowless bands aside, it has no upper bound). This
+        # is the 0-2 row gap beneath it.
+        max_rows=2,
+    ),
+    _spec(
+        "editorial.pull_quote", "context", "markdown docx pptx pdf",
+        purpose="One line pulled out and set apart, carrying an emphasis the surrounding paragraph would otherwise bury.",
+    ),
+    _spec(
+        "editorial.statement", "summary", "markdown docx pptx pdf",
+        purpose="A single confident claim, stated once, for a page with room only for the position and nothing that argues it.",
+        # `core.position` and `core.executive_summary` cover the `summary` role
+        # up to density 0.7 and 0.6 respectively — between them, every density
+        # this compiler's three named profiles use short of "dense" (0.75).
+        # This is the one profile point neither reaches.
+        density=(0.7, 1.0),
+    ),
     # -- the fallback, deliberately last ----------------------------------
     _spec(
         "core.narrative",
-        # `explain_change` as well as `explanation`: the finance atoms spell the
-        # role the first way and the operational atoms the second, and a
-        # vocabulary where a paragraph can explain an incident but not a variance
-        # is an accident of naming rather than a distinction anybody intended.
-        # Both are listed instead of renaming one, because the two really are
-        # different questions — why a number moved, versus why a system failed —
-        # and collapsing them would lose that in the registry too.
-        "evidence explanation explain_change comparison chronology management summary context",
+        "explanation",
         "markdown docx pptx xlsx pdf",
         purpose=(
             "Prose that carries the argument for this beat: what the figures mean, what "
@@ -308,19 +557,41 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         # the composer takes the first component that fits, so every specific
         # component gets first refusal and this one catches what is left.
         #
-        # It exists because the vocabulary was wrong in a way only visible from
-        # outside: every atom above has a row floor, and composing the outlines
-        # `documents.py` already ships refused three of seven artifact types on
-        # sections like "When to use this" and "Escalation". Those are
-        # paragraphs. A component set that can only express tables cannot
-        # express most enterprise documents, which is a stranger claim than it
-        # sounds until you try it against real ones.
+        # It used to carry seven more roles — evidence, explain_change,
+        # comparison, chronology, management, summary, context — and that
+        # breadth is exactly why a 12-period corpus measured 78% of every
+        # composed component landing in the `core` family: almost every beat
+        # too short for a table's row floor, in every one of those roles,
+        # funnelled through this one atom regardless of what the beat was
+        # actually for. Each of those roles now has a component built for the
+        # shape it is really in — `editorial.evidence_note` for a fact
+        # argued in a sentence, `editorial.evidence_and_interpretation` for a
+        # driver with no table's worth of company, `editorial.callout` for a
+        # forward-looking aside, `ops.status_note` for a single moment,
+        # `mgmt.brief` for one instruction, `editorial.statement` for the one
+        # summary density band nothing else reaches, `editorial.pull_quote`
+        # for context, and `xlsx.report_sheet` for the workbook sheets that
+        # were landing here purely because their beats carry no evidence rows
+        # (see that component's own comment). None of those replacements is
+        # this same atom wearing a new name: each has its own purpose text an
+        # author would recognise, because each role really was a different
+        # kind of prose doing a different job, and a single shared purpose
+        # was the tell that they had all been pushed into one box.
         #
-        # The breadth of `semantic_roles` here does weaken the grammar — a
-        # `requires_roles` can now always be satisfied by prose. That is the
-        # honest trade: a memo section arguing a variance really is evidence,
-        # and refusing to model it would not make the grammar stronger, only
-        # narrower about which documents may exist.
+        # `explanation` is the one role kept. `ops.causal_chain` already
+        # covers it, rowless and unbounded, in every format but xlsx — so
+        # keeping it here costs nothing today and is not dead weight so much
+        # as insurance: it is the only role among the original seven for
+        # which no component in this registry can promise full coverage
+        # (a rowless, xlsx-format explanation beat has nowhere else to land).
+        # Nothing has ever asked for one. Better to keep a narrow safety net
+        # for a workbook explanation section that does not exist yet than to
+        # guess its shape and build an atom for it before a real one is seen.
+        #
+        # The remaining single role still weakens the grammar a little — a
+        # `requires_roles` of `explanation` can always be satisfied by prose
+        # — but that is the honest trade `core.narrative` has always made,
+        # now paid for one role instead of eight.
     ),
 )
 
