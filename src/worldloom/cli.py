@@ -508,5 +508,35 @@ def version() -> None:
     console.print(__version__)
 
 
+@app.command()
+def docs(
+    check: bool = typer.Option(
+        False, "--check", help="Exit non-zero if the checked-in reference is stale."
+    ),
+) -> None:
+    """Regenerate the agent-facing command reference from this CLI."""
+    from pathlib import Path
+
+    from . import docs as generator
+
+    target = Path(generator.REFERENCE_PATH)
+    current = generator.reference()
+
+    if check:
+        existing = target.read_text() if target.exists() else ""
+        if existing == current:
+            console.print(f"[green]✓[/green] {target} is current")
+            return
+        # Deliberately not written in --check mode: the point is to fail the
+        # build, and a checker that fixes the thing it is checking would make CI
+        # pass while the commit stays wrong.
+        console.print(f"[red]✗[/red] {target} is stale — run `worldloom docs`")
+        raise typer.Exit(1)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(current)
+    console.print(f"[green]✓[/green] wrote {target}")
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()

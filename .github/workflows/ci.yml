@@ -34,6 +34,15 @@ jobs:
       - name: Tests
         run: pytest -q
 
+      # The agent-facing documents must describe the harness that exists. These
+      # are what an agent reads before it knows anything, so a stale flag there
+      # does not surface as an error it can reason about — it surfaces as a
+      # thinner corpus with no sign anything was missed. The skill went fifteen
+      # commits without mentioning `worldloom evaluate`; this is what catches
+      # that class of drift.
+      - name: The docs still describe the CLI
+        run: worldloom docs --check
+
       # The coherence gate, enforced rather than advisory: the golden episode
       # must validate, and a generated world must too.
       - name: Golden episode validates

@@ -44,6 +44,9 @@ worldloom render ./corpus -f xlsx -f docx -f markdown -f jira -f confluence -f s
 
 # 6. Check the whole corpus agrees with itself.
 worldloom validate ./corpus
+
+# 7. Find out whether it is actually hard, not merely coherent.
+worldloom evaluate ./corpus
 ```
 
 Steps 3 and 4 repeat until every response is accepted. Rejection is normal and is
@@ -143,8 +146,8 @@ was given unit figures precisely so it does not restate the group position.
 
 ## What the harness will not let you do
 
-`worldloom validate` runs over a thousand checks and treats any of these as a
-defect, not a warning:
+`worldloom validate` prints the number of checks it ran — tens of thousands on a
+large world — and treats any of these as a defect, not a warning:
 
 - A total that does not equal the sum of its parts
 - A variance that is not actual less budget
@@ -193,6 +196,8 @@ Two consequences for you:
 | `src/worldloom/render/` | Formats. Read the IR and nothing else |
 | `src/worldloom/validate.py` | The guardrails. Start here to understand the rules |
 | `examples/retail-close/` | The hand-authored reference corpus. Frozen |
+| `examples/grocery-close/` | Real agent-written prose, accepted whole. Replayed by CI |
+| `.claude/skills/worldloom/` | The procedure, progressively disclosed by stage |
 | `docs/build-order.md` | What gets built next, and the gate it must pass |
 | `docs/generation-model.md` | Which engine owns what, and why |
 | `docs/lore.md` | Lore as a constraint graph |
@@ -200,9 +205,17 @@ Two consequences for you:
 ## Working on the harness itself
 
 ```bash
-pytest -q                                   # 183 tests
+pytest -q
 worldloom validate retail-close             # the reference corpus must stay coherent
+worldloom docs --check                      # the docs still describe the CLI
 ```
+
+`worldloom docs --check` is not a formality. `AGENTS.md` and the skill under
+`.claude/` are what an agent reads *before* it knows anything, so a stale flag
+there does not produce an error it can reason about — it produces a thinner
+corpus and no sign that anything was missed. `tests/test_harness_docs.py` parses
+every command in every agent-facing document and requires it to exist, and
+requires every command to be documented somewhere.
 
 Read `docs/build-order.md` before adding a subsystem. It sequences the work and
 states an exit gate for each step, and the ordering is deliberate — several steps
