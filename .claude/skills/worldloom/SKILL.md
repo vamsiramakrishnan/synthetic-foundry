@@ -44,6 +44,7 @@ Do not read these up front. Each is loaded for one stage of the journey.
 | 3. Write | `references/writing-prose.md` | The rules, the rejection cycle, and what good prose looks like here |
 | 5. Render | `references/rendering.md` | What each format is for and what it carries |
 | 7. Evaluate | `references/evaluating.md` | Reading the scorecard, and what a *rising* score means |
+| Any stage | `references/diversity.md` | Whether the batch is structurally varied, or one document photocopied |
 | Changing the repo | `references/extending.md` | Adding a format, scenario, industry, or coherence rule |
 | Any stage | `references/commands.md` | Every command and flag. Generated from the CLI |
 

@@ -468,10 +468,22 @@ class World:
         available = self._ledger if ledger is None else ledger
         result = compiler.narrate(staged, provider, ledger=available, retries=retries)
 
+        # Merge rather than replace. `compiler.narrate` returns only the entries
+        # it generated or replayed, so assigning its result dropped every
+        # *planning* entry the world already carried — and a corpus whose ledger
+        # has lost its accepted plans can still show the planned shape once, then
+        # regenerate a differently-shaped one on replay. That is the determinism
+        # contract failing silently, which is worse than failing loudly.
+        #
+        # Keyed by ledger key rather than appended, because narration legitimately
+        # re-records an entry it replayed and two rows for one content address
+        # would make "which call produced this" ambiguous.
+        merged = {entry.key: entry for entry in self._ledger}
+        merged.update({entry.key: entry for entry in result.ledger})
         return replace(
             staged,
             _artifact_irs=result.irs,
-            _ledger=result.ledger,
+            _ledger=tuple(merged.values()),
             _narration=(result.provider_calls, result.replayed, result.rejected),
         )
 
@@ -628,6 +640,28 @@ class World:
         loading the result yields an equal world.
         """
         target = Path(destination)
+        # An in-place export — loading a corpus and writing it back over itself,
+        # which is exactly what `narrate accept` and `plan accept` do — used to
+        # delete the source and then look for rendered artifacts inside the
+        # directory it had just removed. Every rendered file vanished while the
+        # manifest kept pointing at it, so the very next validate reported
+        # `missing_file` for a corpus that had been intact a second earlier.
+        # Staging first costs one copy and makes the destructive step
+        # recoverable; deleting last means a failure part-way leaves the
+        # original where it was.
+        staged: Path | None = None
+        source_artifacts = self.root / "artifacts" if self.root else None
+        in_place = (
+            source_artifacts is not None
+            and source_artifacts.exists()
+            and target.resolve() == self.root.resolve()  # type: ignore[union-attr]
+        )
+        if in_place:
+            staged = target.parent / f".{target.name}.artifacts.staged"
+            if staged.exists():
+                shutil.rmtree(staged)
+            shutil.copytree(source_artifacts, staged)  # type: ignore[arg-type]
+
         if target.exists():
             if not overwrite and any(target.iterdir()):
                 raise FileExistsError(
@@ -635,6 +669,10 @@ class World:
                 )
             shutil.rmtree(target)
         target.mkdir(parents=True)
+
+        if staged is not None:
+            shutil.copytree(staged, target / "artifacts")
+            shutil.rmtree(staged)
 
         corpus.write_json(
             target / corpus.WORLD_FILE,

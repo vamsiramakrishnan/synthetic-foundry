@@ -73,11 +73,62 @@ def validate(
                 )
             )
 
-    # 3. Every reference must resolve.
+    # 3. Every reference must resolve — and resolve to a fact this author was
+    #    actually given. Checking only against the global ledger let prose cite
+    #    anything in the world: a reference outside the request resolved fine,
+    #    and if the responder simply left it out of `claims` the stray-claim
+    #    check above never saw it either. The request is the boundary, so a
+    #    reference outside it is the same defect as a claim outside it, and it
+    #    was reachable through prose alone.
     for fact_id in references.unresolved(narrative.text, facts):
         violations.append(
             Violation(code="unresolvable_reference", detail=f"{fact_id} does not exist")
         )
+    for fact_id in sorted(set(references.referenced(narrative.text))):
+        if fact_id in facts and fact_id not in allowed:
+            violations.append(
+                Violation(
+                    code="unsupported_claim",
+                    detail=(
+                        f"prose references {fact_id}, which exists but is outside"
+                        " the facts this request allows"
+                    ),
+                )
+            )
+
+    # 3b. Prose that asserts must be backed. Claim validation only ever inspected
+    #     the claims a responder chose to supply, so an empty `claims` list with
+    #     the required references sprinkled through the text passed every check —
+    #     including prose asserting things the corpus never said. That is the
+    #     harness's central promise failing in the one place nobody was looking.
+    #
+    #     The rule is deliberately about *substance*, not sentence count: a
+    #     section carrying prose must carry at least one claim, and its claims
+    #     must between them cite every fact the prose references. A tighter rule
+    #     — one claim per sentence — would reject legitimate writing, since a
+    #     sentence of connective tissue supports nothing and should not have to
+    #     pretend otherwise.
+    prose = narrative.text.strip()
+    if prose and not narrative.claims:
+        violations.append(
+            Violation(
+                code="unsupported_claim",
+                detail="prose was supplied with no claims; every assertion must cite its facts",
+            )
+        )
+    elif prose:
+        claimed = {f for claim in narrative.claims for f in claim.supporting_fact_ids}
+        for fact_id in sorted(set(references.referenced(narrative.text)) - claimed):
+            violations.append(
+                Violation(
+                    code="unsupported_claim",
+                    detail=(
+                        f"prose references {fact_id} but no claim cites it;"
+                        " a figure in the text with nothing standing behind it"
+                        " cannot be checked"
+                    ),
+                )
+            )
 
     # 4. Everything the artifact exists to say must be said.
     cited = {f for claim in narrative.claims for f in claim.supporting_fact_ids}

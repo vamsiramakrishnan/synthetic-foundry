@@ -398,7 +398,14 @@ def plan_accept(
                 err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
         raise typer.Exit(code=1)
 
-    updated = world.extend(ledger=result.ledger)
+    # Recompile, and do it *after* the ledger holds the accepted plans — the
+    # outline reads them from there. Recording the plans and stopping left the
+    # corpus with the IR it had compiled before the plans existed, and because
+    # every later step skips `compile()` when `artifact_irs` is already
+    # populated, narration and rendering both went on using the fixed outline.
+    # The plans were accepted, stored, and silently ignored: the whole point of
+    # the handshake, lost between two lines that each looked correct.
+    updated = world.extend(ledger=result.ledger).compile()
     written = updated.export(corpus, overwrite=True)
 
     console.print(
@@ -578,6 +585,104 @@ def evaluate(
             mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
             console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
             console.print(f"      {outcome.detail}")
+
+
+@app.command()
+def diversity(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v",
+        help="Show the per-artifact-type breakdown and every distinct shape within it.",
+    ),
+    check_quotas: bool = typer.Option(
+        False, "--check-quotas",
+        help=(
+            "Exit non-zero if the batch fails a declared Quotas threshold (see "
+            "compiler/diversity.py). For CI: assert the corpus does not get more "
+            "monotonous over time."
+        ),
+    ),
+) -> None:
+    """Fingerprint every compilable artifact and report how structurally varied the batch is.
+
+    `worldloom evaluate`'s sibling: that command asks whether the corpus is hard
+    to retrieve from, this one asks whether it looks the same artifact repeated
+    with different numbers. Neither question is answerable from one document —
+    a single artifact cannot be "diverse", only a batch can (see
+    `compiler.diversity`'s module docstring) — so this always reports on the
+    whole corpus at once, the same way `evaluate` always scores the whole
+    evaluation set at once.
+    """
+    from .compiler.compose import compose, plan_from_ir
+    from .compiler.diversity import Fingerprint, Quotas, check, fingerprint, report
+    from .render.docx import HANDLES as DOCX_ARTIFACT_TYPES
+    from .render.xlsx import HANDLES as XLSX_ARTIFACT_TYPES
+
+    world = _load(corpus)
+    if not world.artifact_irs:
+        try:
+            world = world.compile()
+        except ValueError:
+            # A world with no artifact intents planned at all — `compile()` raises
+            # rather than returning an empty result. Left uncaught this would be a
+            # traceback for what is really the same case as `fingerprints` ending up
+            # empty below: there is nothing yet for this command to fingerprint.
+            # `world.artifact_irs` stays `()`, so the loop below simply does not run
+            # and falls into that same "nothing compilable" branch — one message,
+            # not two different tracebacks for two ways of having nothing.
+            pass
+
+    fingerprints: list[Fingerprint] = []
+    for ir in world.artifact_irs:
+        intent = world.artifact_intents.by_id(ir.intent_id)
+        # A workbook composes with fmt="xlsx" — its lineage sheet is xlsx-only, so
+        # composing it as "docx" raises `ValueError` about a component that does
+        # not fit. Every other handled type composes with fmt="docx". Anything
+        # neither renderer claims (a Jira, Confluence, or ServiceNow bundle) is a
+        # record projection rather than a component composition (see
+        # `docs/artifact-compiler.md` §9.5) and has no shape to fingerprint — the
+        # same split `tests/test_diversity.py`'s own regression fixture draws.
+        if intent.artifact_type in XLSX_ARTIFACT_TYPES:
+            fmt = "xlsx"
+        elif intent.artifact_type in DOCX_ARTIFACT_TYPES:
+            fmt = "docx"
+        else:
+            continue
+        plan = plan_from_ir(ir, artifact_type=intent.artifact_type, size_class=intent.size_profile)
+        fingerprints.append(fingerprint(compose(plan, fmt=fmt)))
+
+    if not fingerprints:
+        console.print("[green]✓[/green] nothing compilable to fingerprint")
+    else:
+        batch = report(fingerprints)
+        console.print(str(batch))
+
+        if verbose:
+            # `DiversityReport.__str__` already gives a distinct-shape *count* per
+            # artifact type; verbose additionally names the shapes themselves —
+            # the actual component sequences — so an agent deciding whether a
+            # regression matters can see what repeated, not just how much did.
+            console.print("")
+            shapes_by_type: dict[str, dict[str, Fingerprint]] = {}
+            for fp in fingerprints:
+                shapes_by_type.setdefault(fp.artifact_type, {}).setdefault(fp.digest(), fp)
+            for artifact_type, shapes in shapes_by_type.items():
+                console.print(f"[bold]{artifact_type}[/bold]")
+                for digest, fp in shapes.items():
+                    shape = " → ".join(fp.components) if fp.components else "(no components)"
+                    console.print(f"  [dim]{digest[:12]}[/dim]  {shape}")
+
+    # Checked even when `fingerprints` is empty: an empty batch trivially meets
+    # every quota (nothing to be repetitive or concentrated about yet — see
+    # `check`'s own docstring), so `--check-quotas` must not fail a corpus that
+    # simply has nothing in it yet.
+    if check_quotas:
+        violations = check(fingerprints, Quotas())
+        if violations:
+            err.print(f"\n[red]✗[/red] {len(violations)} quota violation(s)")
+            for violation in violations:
+                err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
+            raise typer.Exit(code=1)
 
 
 @app.command()

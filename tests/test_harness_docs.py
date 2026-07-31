@@ -41,6 +41,7 @@ DOCUMENTS = (
     ".claude/skills/worldloom/references/writing-prose.md",
     ".claude/skills/worldloom/references/rendering.md",
     ".claude/skills/worldloom/references/evaluating.md",
+    ".claude/skills/worldloom/references/diversity.md",
     ".claude/skills/worldloom/references/extending.md",
     ".claude/commands/worldloom-build.md",
     ".claude/commands/worldloom-narrate.md",

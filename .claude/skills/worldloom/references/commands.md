@@ -46,6 +46,19 @@ worldloom demo <NAME>
 | `--out`, `-o` | Directory to write the corpus into. |
 | `--overwrite` | Replace the destination if it exists. |
 
+### `worldloom diversity`
+
+Fingerprint every compilable artifact and report how structurally varied the batch is.
+
+```
+worldloom diversity <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--check-quotas` | Exit non-zero if the batch fails a declared Quotas threshold (see compiler/diversity.py). For CI: assert the corpus does not get more monotonous over time. |
+| `--verbose`, `-v` | Show the per-artifact-type breakdown and every distinct shape within it. |
+
 ### `worldloom docs`
 
 Regenerate the agent-facing command reference from this CLI.
