@@ -29,7 +29,7 @@ jobs:
           cache: pip
 
       - name: Install
-        run: pip install -e ".[dev,polars,xlsx,docx]"
+        run: pip install -e ".[dev,polars,xlsx,docx,pdf,pptx]"
 
       - name: Tests
         run: pytest -q
@@ -130,7 +130,12 @@ jobs:
       # central claim, enforced rather than asserted.
       - name: Narration replays byte-for-byte
         run: |
-          FORMATS="-f xlsx -f markdown -f docx -f jira -f confluence -f servicenow"
+          # Every format, including the two fixed-canvas ones. PPTX and PDF are
+          # the formats most likely to leak a clock — python-pptx stamps zip
+          # entry timestamps, and reportlab derives /CreationDate and the /ID
+          # digest from time.time() unless told not to. If either regresses,
+          # this diff is where it shows up.
+          FORMATS="-f xlsx -f markdown -f docx -f pptx -f pdf -f jira -f confluence -f servicenow"
           worldloom build --seed 8128 --incident --narrate $FORMATS \
             --out "${{ runner.temp }}/narrated"
           worldloom build --seed 8128 --incident --replay "${{ runner.temp }}/narrated" \

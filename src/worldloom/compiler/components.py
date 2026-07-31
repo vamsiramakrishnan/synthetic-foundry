@@ -123,7 +123,7 @@ def _spec(
 REGISTRY: tuple[ComponentSpec, ...] = (
     # -- framing ---------------------------------------------------------
     _spec(
-        "core.position", "position summary", "markdown docx pptx",
+        "core.position", "position summary", "markdown docx pptx pdf",
         purpose=(
             "State the result and say plainly whether the period was acceptable. "
             "Lead with the figure that matters most, not the first one in the list."
@@ -131,18 +131,18 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         density=(0.0, 0.7),
     ),
     _spec(
-        "core.executive_summary", "summary", "markdown docx pptx",
+        "core.executive_summary", "summary", "markdown docx pptx pdf",
         purpose="The whole argument in a paragraph, for a reader who will read no further.",
         density=(0.0, 0.6),
     ),
     _spec(
-        "core.section_divider", "structure", "pptx docx",
+        "core.section_divider", "structure", "pptx docx pdf",
         purpose="Marks a change of subject in a long artifact.",
         density=(0.0, 0.3),
     ),
     # -- numerical evidence ----------------------------------------------
     _spec(
-        "finance.variance_table", "evidence explain_change", "markdown docx xlsx pptx",
+        "finance.variance_table", "evidence explain_change", "markdown docx xlsx pptx pdf",
         purpose=(
             "Attribute a movement to its parts, largest first. A reader should be able "
             "to check every figure against the total without leaving the table."
@@ -153,14 +153,14 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         # shape of a real close pack.
     ),
     _spec(
-        "finance.metric_strip", "evidence position", "markdown docx pptx",
+        "finance.metric_strip", "evidence position", "markdown docx pptx pdf",
         purpose="Three to six headline measures, each with its comparison. No commentary.",
         density=(0.2, 0.8),
         min_rows=3,
         max_rows=6,
     ),
     _spec(
-        "finance.variance_bridge", "explain_change evidence", "markdown docx pptx xlsx",
+        "finance.variance_bridge", "explain_change evidence", "markdown docx pptx xlsx pdf",
         purpose=(
             "Open at the baseline, walk each driver, close at the actual. Used when the "
             "question is why a number moved rather than what it is."
@@ -170,13 +170,13 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         after_role="position",
     ),
     _spec(
-        "finance.comparative_trend", "evidence comparison", "markdown docx xlsx pptx",
+        "finance.comparative_trend", "evidence comparison", "markdown docx xlsx pptx pdf",
         purpose="The same measure across ordered periods, so a reader can see direction rather than a point.",
         min_rows=3,
     ),
     # -- schedule ---------------------------------------------------------
     _spec(
-        "core.schedule", "chronology management", "markdown docx xlsx pptx",
+        "core.schedule", "chronology management", "markdown docx xlsx pptx pdf",
         purpose=(
             "The dates being committed to, and who owns each. What the reader is being "
             "held to, stated plainly enough to be checked against later."
@@ -191,7 +191,7 @@ REGISTRY: tuple[ComponentSpec, ...] = (
     ),
     # -- operational ------------------------------------------------------
     _spec(
-        "ops.incident_timeline", "chronology evidence", "markdown docx pptx",
+        "ops.incident_timeline", "chronology evidence", "markdown docx pptx pdf",
         purpose=(
             "What happened and when, in the order it happened. Each entry states what was "
             "known at that moment, not what is known now."
@@ -199,19 +199,19 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         min_rows=3,
     ),
     _spec(
-        "ops.causal_chain", "explanation", "markdown docx pptx",
+        "ops.causal_chain", "explanation", "markdown docx pptx pdf",
         purpose="From trigger to effect, naming the control that should have caught it.",
         after_role="chronology",
     ),
     _spec(
-        "ops.remediation_table", "management", "markdown docx xlsx pptx",
+        "ops.remediation_table", "management", "markdown docx xlsx pptx pdf",
         purpose="What will be done, by whom, by when — separating the control fix from the detection fix.",
         min_rows=1,
         after_role="explanation",
     ),
     # -- decision ---------------------------------------------------------
     _spec(
-        "mgmt.decision_panel", "decision", "markdown docx pptx",
+        "mgmt.decision_panel", "decision", "markdown docx pptx pdf",
         purpose="The call being asked for, the options, and the recommendation.",
         density=(0.0, 0.6),
         # The constraint the grammar exists for: a decision request that arrives
@@ -219,7 +219,7 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         after_role="evidence",
     ),
     _spec(
-        "mgmt.risk_matrix", "management", "markdown docx pptx",
+        "mgmt.risk_matrix", "management", "markdown docx pptx pdf",
         purpose="Open risks by likelihood and impact, with an owner against each.",
         min_rows=1,
     ),
@@ -243,7 +243,7 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         # different questions — why a number moved, versus why a system failed —
         # and collapsing them would lose that in the registry too.
         "evidence explanation explain_change comparison chronology management summary context",
-        "markdown docx pptx xlsx",
+        "markdown docx pptx xlsx pdf",
         purpose=(
             "Prose that carries the argument for this beat: what the figures mean, what "
             "follows from them, and what the reader should do about it."

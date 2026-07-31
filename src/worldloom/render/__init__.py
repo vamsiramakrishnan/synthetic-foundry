@@ -19,6 +19,10 @@ Registered here:
 ``docx``
     The narrative artifacts as Word documents — the shape enterprise prose
     actually arrives in.
+``pdf``
+    The same narrative artifacts as a deterministic native PDF projection of
+    the IR — not a DOCX conversion, so it can be a byte-reproducible corpus
+    artifact rather than only a preview. See `render/pdf.py`.
 ``jira`` · ``confluence`` · ``servicenow``
     Portable bundles rather than live API calls — easier to test, diff, reproduce,
     and load into an arbitrary system.
@@ -106,11 +110,13 @@ def _install() -> None:
     Imported lazily so an optional dependency for one format cannot break import
     of the library as a whole.
     """
-    from . import bundles, docx, markdown, xlsx
+    from . import bundles, docx, markdown, pdf, pptx, xlsx
 
     register("markdown", markdown.render_all)
     register("xlsx", xlsx.render_all)
     register("docx", docx.render_all)
+    register("pdf", pdf.render_all)
+    register("pptx", pptx.render_all)
     register("jira", bundles.render_jira)
     register("confluence", bundles.render_confluence)
     register("servicenow", bundles.render_servicenow)

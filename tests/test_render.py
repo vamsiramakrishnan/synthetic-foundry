@@ -505,7 +505,13 @@ def test_render_is_deterministic() -> None:
 
 
 def test_formats_are_registered_as_plugins() -> None:
-    assert set(available()) == {"markdown", "xlsx", "docx", "jira", "confluence", "servicenow"}
+    # A superset assertion, not equality. Equality made adding a renderer fail a
+    # test about the *registry* rather than about the renderer, which says
+    # nothing true — the property worth holding is that every format the rest of
+    # the suite and CI depend on is still registered, not that nobody may add a
+    # seventh. A renderer that disappears still fails this; one that arrives no
+    # longer does.
+    assert {"markdown", "xlsx", "docx", "jira", "confluence", "servicenow"} <= set(available())
 
 
 def test_an_unknown_format_says_what_is_available(rendered: World) -> None:
