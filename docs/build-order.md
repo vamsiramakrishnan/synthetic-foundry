@@ -542,6 +542,39 @@ Extract a generic abstraction only after both implementations require it. Do not
 
 Both verticals share the fact ledger, event model, artifact IR, manifest, evaluation schema, renderer interfaces, and provenance system. Domain-specific economics stay outside the core.
 
+### Open: which second vertical
+
+IT services is the choice recorded above and it is a good one — a genuinely different economic engine, which is the thing that stresses the dimension and finance abstractions hardest.
+
+There is a case for **banking / regulatory** instead, and it is worth stating so the decision is made rather than inherited. IT services differs from retail in its *nouns and economics* while sharing retail's rhythm and its authority shape: a monthly cycle, a simple preparer-to-approver chain. Banking differs in three things nothing has yet tested:
+
+- **Cadence.** Four rhythms at once — daily liquidity, monthly close, quarterly capital, annual ICAAP — where retail has one. Scenario scheduling currently assumes a single period cadence.
+- **Authority topology.** Three lines of defence means a document has a preparer, an independent reviewer and audit, with genuinely different standing. `Authority` and `AccessPolicy` assume the retail chain.
+- **Immutability.** A filed regulatory return cannot be edited; a correction is a *restatement*, which is a fourth artifact relationship beside `supersedes`, `derived_from` and `revises`.
+
+The measured retail coupling, for whichever is chosen:
+
+| Module | Retail-specific mentions |
+| --- | --- |
+| `documents.py` | 142 |
+| `generators/finance.py` | 105 |
+| `generators/evaluation.py` | 49 |
+| `validate.py` | 20 |
+| `models.py` | 16 |
+| `narrative/providers.py` | 9 |
+
+`documents.py` is the largest by a wide margin, and almost all of it is the hard-coded `_OUTLINES`. The plan handshake removes that coupling as a side effect of the diversity work — which is why the sequence below puts diversity first. Diversity and multi-industry are the same refactor approached from two directions.
+
+---
+
+## 7a. Sequence, confirmed
+
+1. **Diversity** (artifact compiler §14.B) — style genomes, layout families, fingerprints and batch quotas, and the plan handshake that lets a model propose structure under grammar validation. The measured baseline it must beat: a 12-period corpus of 120 artifacts carries only **11 distinct section shapes**, and DOCX sizes across 72 files span 38,658–40,618 bytes. Every close pack in the estate is the same document with different numbers.
+2. **The second vertical**, per the open question above.
+3. **Extract the industry-pack interface from the two**, never before. A pack API designed against one industry encodes that industry's assumptions in the shape of the abstraction — the same reason there is still no scenario DSL.
+
+An industry pack, once extracted, has to carry eight things and only about three are nouns: archetype, dimensions, fact kinds and their units, lore, artifact types and grammars, scenario verbs and cadence, roles and personas, evaluation families. A pack that renames nouns and stops produces retail with different words.
+
 ---
 
 ## 8. Build config-driven world generation
