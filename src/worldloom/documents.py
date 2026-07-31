@@ -953,6 +953,66 @@ def _title(artifact_type: str) -> str:
     return " ".join(_ACRONYMS.get(word, word) for word in words)
 
 
+def _planned_sections(
+    world: World, intent: ArtifactIntent, facts: list[CanonicalFact]
+) -> list[ArtifactSection]:
+    """Sections from an accepted plan, if this artifact has one.
+
+    The hard-coded outline below is the fallback, not the default — but it stays
+    the fallback rather than being replaced, because a world that was never
+    planned must still compile. That is every existing corpus, the golden
+    episode, and every CI step that does not run `plan accept`.
+
+    An accepted plan lives in the generation ledger keyed by call site, which is
+    what makes this replay for free: the ledger already travels with the corpus
+    and is already the thing a rebuild reads instead of calling a model. Nothing
+    new has to be persisted for a planned world to regenerate byte-for-byte.
+
+    Facts are re-bound here against the artifact's own required set rather than
+    trusted from the plan. The handshake already rejected any plan citing a fact
+    outside that set, so this cannot narrow a legitimate plan — it is the second
+    of the two checks, and the one that would catch a ledger edited by hand.
+    """
+    entry = next(
+        (e for e in world.ledger if e.call_site == f"{intent.id}/plan"),
+        None,
+    )
+    if entry is None:
+        return []
+
+    allowed = {fact.id for fact in facts}
+    sections: list[ArtifactSection] = []
+    for beat in entry.output.get("beats", ()):
+        assigned = [
+            reference["fact_id"]
+            for reference in beat.get("evidence", ())
+            if reference.get("fact_id") in allowed
+        ]
+        # Same rule as the outline path: a section with nothing to say does not
+        # belong in the document. A plan may legitimately name a beat whose facts
+        # this episode did not produce — an incident section in a clean close.
+        if not assigned:
+            continue
+        sections.append(
+            ArtifactSection(
+                # `key`, not `heading`. `NarrativeBeat` has no heading field —
+                # the handshake deliberately stores the author's heading *as*
+                # the beat key, since a beat's identity and its title are the
+                # same thing once a human has named it. Worth knowing that
+                # `compose.plan_from_ir` slugifies its keys instead, so the two
+                # plan sources spell keys differently; nothing joins on them
+                # today, and anything that starts to must normalise first.
+                heading=beat["key"],
+                body=None,
+                fact_ids=assigned,
+                purpose=beat.get("purpose", ""),
+                semantic_role=beat.get("semantic_role", ""),
+                optional=bool(beat.get("optional", False)),
+            )
+        )
+    return sections
+
+
 def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     """An outline: sections and a resolved fact table, no prose.
 
@@ -1001,8 +1061,8 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     author = world.people.by_id(intent.author_id)
     persona = world.personas.get(author.persona_id) if author.persona_id else None
 
-    sections: list[ArtifactSection] = []
-    for step in plan:
+    sections: list[ArtifactSection] = _planned_sections(world, intent, facts)
+    for step in plan if not sections else ():
         assigned = [
             fact.id
             for fact in facts
