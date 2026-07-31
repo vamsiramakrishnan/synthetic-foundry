@@ -174,6 +174,21 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         purpose="The same measure across ordered periods, so a reader can see direction rather than a point.",
         min_rows=3,
     ),
+    # -- schedule ---------------------------------------------------------
+    _spec(
+        "core.schedule", "chronology management", "markdown docx xlsx pptx",
+        purpose=(
+            "The dates being committed to, and who owns each. What the reader is being "
+            "held to, stated plainly enough to be checked against later."
+        ),
+        min_rows=1,
+        # Exists because `ops.incident_timeline` was the only component filling
+        # `chronology`, and it floors at three rows because an incident with two
+        # entries is not a timeline. A close calendar commits to a single date and
+        # is still a chronology, so every calendar-shaped artifact was refused
+        # outright — found by composing the outlines `documents.py` already
+        # ships, which is the only reason it surfaced before the vocabulary grew.
+    ),
     # -- operational ------------------------------------------------------
     _spec(
         "ops.incident_timeline", "chronology evidence", "markdown docx pptx",
@@ -216,6 +231,32 @@ REGISTRY: tuple[ComponentSpec, ...] = (
     _spec(
         "xlsx.lineage", "control provenance", "xlsx",
         purpose="Every figure in the workbook traced to the fact it came from.",
+    ),
+    # -- the fallback, deliberately last ----------------------------------
+    _spec(
+        "core.narrative", "evidence explanation comparison management summary context",
+        "markdown docx pptx",
+        purpose=(
+            "Prose that carries the argument for this beat: what the figures mean, what "
+            "follows from them, and what the reader should do about it."
+        ),
+        # Last in the registry on purpose. `roles_for` returns registry order and
+        # the composer takes the first component that fits, so every specific
+        # component gets first refusal and this one catches what is left.
+        #
+        # It exists because the vocabulary was wrong in a way only visible from
+        # outside: every atom above has a row floor, and composing the outlines
+        # `documents.py` already ships refused three of seven artifact types on
+        # sections like "When to use this" and "Escalation". Those are
+        # paragraphs. A component set that can only express tables cannot
+        # express most enterprise documents, which is a stranger claim than it
+        # sounds until you try it against real ones.
+        #
+        # The breadth of `semantic_roles` here does weaken the grammar — a
+        # `requires_roles` can now always be satisfied by prose. That is the
+        # honest trade: a memo section arguing a variance really is evidence,
+        # and refusing to model it would not make the grammar stronger, only
+        # narrower about which documents may exist.
     ),
 )
 

@@ -40,13 +40,24 @@ DensityProfile = Literal["sparse", "balanced", "dense"]
 #: is tuned, and then a component the audit calls reachable stops being selected
 #: with nothing reporting a contradiction.
 #:
-#: The values are thirds rather than 0.0/0.5/1.0 so that the extremes are
-#: interior points: a band of (0.0, 0.7) should admit "sparse", and a profile
-#: pinned at exactly 0.0 makes every band's lower bound a special case.
+#: The values are chosen against the bands components actually declare, not as
+#: even thirds. A mapping that always lands mid-band would never exclude
+#: anything, which would make the density field decorative:
+#:
+#: - "dense" at 0.75 sits above every prose-shaped component's ceiling
+#:   (``core.position`` 0.7, ``core.executive_summary`` and
+#:   ``mgmt.decision_panel`` 0.6) while staying inside
+#:   ``finance.metric_strip``'s 0.2–0.8. A one-page dashboard should reach for
+#:   a headline strip and not for a paragraph of framing.
+#: - "sparse" at 0.15 sits below that same strip's floor of 0.2. A twenty-page
+#:   discussion document should not open with a row of numbers built for a
+#:   reader who will look at it for three seconds.
+#: - "balanced" at 0.5 clears every band, and is where most existing artifact
+#:   types genuinely fall.
 DENSITY_POINTS: dict[str, float] = {
-    "sparse": 1 / 6,
-    "balanced": 1 / 2,
-    "dense": 5 / 6,
+    "sparse": 0.15,
+    "balanced": 0.5,
+    "dense": 0.75,
 }
 
 

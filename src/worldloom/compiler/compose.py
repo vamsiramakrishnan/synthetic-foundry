@@ -31,29 +31,19 @@ from ..models import ArtifactIntent, CanonicalFact
 from ..rng import Rng
 from .components import ComponentSpec, roles_for
 from .grammar import GrammarViolation, check
-from .plan import ArtifactPlan, DensityProfile, EvidenceRef, NarrativeBeat, SizeClass
+from .plan import DENSITY_POINTS, ArtifactPlan, EvidenceRef, NarrativeBeat, SizeClass
 
 #: ``density_profile`` -> the numeric density ``ComponentSpec.fits`` expects.
 #:
-#: Chosen to fall on the *outside* of a band deliberately, not merely inside a
-#: plausible range, because the bands in ``components.py`` exist to keep a
-#: component out of the wrong artifact and a mapping that always lands mid-band
-#: would never exercise that. At 0.75, "dense" sits above every prose-shaped
-#: component's ceiling (`core.position` 0.7, `core.executive_summary` 0.6,
-#: `mgmt.decision_panel` 0.6, `core.section_divider` 0.3) — a one-page dashboard
-#: should not reach for a paragraph of framing — while staying inside
-#: `finance.metric_strip`'s band (0.2-0.8): a headline strip is exactly what a
-#: dense dashboard wants, unlike the components it is excluded alongside. At
-#: 0.15, "sparse" sits below `finance.metric_strip`'s floor of 0.2 — a
-#: twenty-page discussion document should not reach for a headline strip built
-#: for a reader who will look at it for three seconds. "balanced" at 0.5 clears
-#: every band above and is the profile under which most of the existing
-#: artifact types would in fact fall.
-_DENSITY_BY_PROFILE: dict[DensityProfile, float] = {
-    "sparse": 0.15,
-    "balanced": 0.5,
-    "dense": 0.75,
-}
+#: Taken from `plan.py` rather than defined here. These values were worked out
+#: in this module first — chosen against the bands the registry actually
+#: declares, so that each profile's extreme excludes something and the density
+#: field is not decorative — but `audit.py` needed the identical numbers to
+#: decide whether a component's band is reachable at all, and two private
+#: copies of the same three words is exactly the kind of duplication that
+#: agrees until one of them is tuned. `plan.py` is the shared home, next to the
+#: profile names both callers already interpret the same way.
+_DENSITY_BY_PROFILE = DENSITY_POINTS
 
 #: ``size_class`` -> the maximum number of components the artifact may end up
 #: with, after optional beats are dropped.
@@ -224,7 +214,14 @@ def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composit
 
     components = tuple(spec.component_id for _, spec in selected)
     beats = tuple(beat.key for beat, _ in selected)
-    violations = tuple(check(plan.artifact_type, list(components)))
+    selected_roles = tuple(beat.semantic_role for beat, _ in selected)
+    # Passing the role each component was *selected* for, not the roles it
+    # declares. A component filling two roles would otherwise be read as
+    # occupying both at that position, which reports orderings that are not
+    # there — see `Grammar.check`.
+    violations = tuple(
+        check(plan.artifact_type, list(components), list(selected_roles))
+    )
 
     return Composition(
         artifact_type=plan.artifact_type,

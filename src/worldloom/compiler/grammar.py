@@ -53,10 +53,40 @@ class Grammar:
     max_components: int | None = None
     min_components: int = 1
 
-    def check(self, component_ids: list[str]) -> list[GrammarViolation]:
+    def check(
+        self,
+        component_ids: list[str],
+        selected_roles: list[str] | None = None,
+    ) -> list[GrammarViolation]:
+        """Every way this sequence fails to be a valid artifact of this type.
+
+        ``selected_roles`` is the role each component was actually chosen to
+        play, parallel to *component_ids*. Supply it whenever it is known —
+        which the composer always does, because a beat names the role it needs.
+
+        Without it, a component is treated as filling every role it declares,
+        and that reads violations that are not there. ``core.schedule`` fills
+        both ``chronology`` and ``management``; an RCA that opens its timeline
+        with one is playing chronology, but a check over declared roles sees
+        ``management`` appear before ``explanation`` and reports the document
+        out of order. The sequence was right and the grammar was wrong.
+
+        The permissive fallback is still the correct default: a caller holding
+        only a list of component ids genuinely does not know which role each was
+        for, and guessing one would be worse than considering all of them.
+        """
         violations: list[GrammarViolation] = []
         specs = [component(cid) for cid in component_ids]
-        roles: list[frozenset[str]] = [spec.semantic_roles for spec in specs]
+        if selected_roles is not None and len(selected_roles) != len(specs):
+            raise ValueError(
+                f"selected_roles has {len(selected_roles)} entries for"
+                f" {len(specs)} components; they must be parallel"
+            )
+        roles: list[frozenset[str]] = (
+            [frozenset({role}) for role in selected_roles]
+            if selected_roles is not None
+            else [spec.semantic_roles for spec in specs]
+        )
         present: set[str] = set().union(*roles) if roles else set()
 
         if len(specs) < self.min_components:
@@ -161,7 +191,11 @@ GRAMMARS: dict[str, Grammar] = {
 }
 
 
-def check(artifact_type: str, component_ids: list[str]) -> list[GrammarViolation]:
+def check(
+    artifact_type: str,
+    component_ids: list[str],
+    selected_roles: list[str] | None = None,
+) -> list[GrammarViolation]:
     """Every way *component_ids* fails to be a valid *artifact_type*.
 
     An unknown artifact type is not a violation. Artifact types are added by
@@ -171,7 +205,7 @@ def check(artifact_type: str, component_ids: list[str]) -> list[GrammarViolation
     grammar = GRAMMARS.get(artifact_type)
     if grammar is None:
         return []
-    return grammar.check(component_ids)
+    return grammar.check(component_ids, selected_roles)
 
 
 __all__ = ["GRAMMARS", "Grammar", "GrammarViolation", "check"]
