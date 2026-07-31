@@ -125,6 +125,23 @@ jobs:
             exit 1
           fi
 
+      # The actor episode: employees produce the incident's records by calling
+      # tools on what they observed. Held to exactly the same standard as
+      # narration, because it is the same claim — a decision taken by an actor is
+      # a generative call, and a corpus whose decisions cannot be replayed is one
+      # run's output rather than an artifact. Both providers are made unreachable
+      # on the second pass, so a fallback that quietly regenerated would show up
+      # as a diff rather than as a pass.
+      - name: The actor episode replays byte-for-byte
+        run: |
+          FORMATS="-f xlsx -f markdown -f docx -f jira -f confluence -f servicenow"
+          worldloom build --seed 8128 --incident --actors --narrate $FORMATS \
+            --out "${{ runner.temp }}/acted"
+          worldloom validate "${{ runner.temp }}/acted"
+          worldloom build --seed 8128 --incident --actors \
+            --replay "${{ runner.temp }}/acted" $FORMATS --out "${{ runner.temp }}/acted-again"
+          diff -r "${{ runner.temp }}/acted" "${{ runner.temp }}/acted-again"
+
       # Narrate, then regenerate from the ledger with the provider unreachable,
       # and require the two corpora to be byte-identical. This is the project's
       # central claim, enforced rather than asserted.
