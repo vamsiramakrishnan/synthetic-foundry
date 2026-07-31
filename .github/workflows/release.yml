@@ -69,7 +69,7 @@ jobs:
       - name: The wheel renders, validates, and replays with every extra
         run: |
           python -m venv /tmp/full
-          WHEEL="$(ls dist/*.whl)"
+          WHEEL="$(readlink -f dist/*.whl)"
           /tmp/full/bin/pip install --quiet "worldloom[all] @ file://$WHEEL"
           cd /tmp
           FORMATS="-f xlsx -f docx -f pptx -f pdf -f markdown -f jira -f confluence -f servicenow"
