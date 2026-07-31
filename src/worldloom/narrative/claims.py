@@ -3,8 +3,8 @@
 The LLM may choose emphasis and wording. It may not choose reality.
 
 Every generated narrative is checked against the fact ledger before it is accepted,
-and a failure is fed back for a retry rather than patched. Six checks, each closing
-a way a plausible document can be wrong:
+and a failure is fed back for a retry rather than patched. Seven checks, each
+closing a way a plausible document can be wrong:
 
 ``bare_number``
     A digit outside a fact reference. The arithmetic rule, enforced lexically: a
