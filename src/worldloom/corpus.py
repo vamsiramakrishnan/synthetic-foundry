@@ -16,6 +16,10 @@ Layout::
     ├── artifact-manifest.jsonl   rendered artifacts, with provenance
     ├── intentional-errors.jsonl
     ├── evals.jsonl
+    ├── actor-observations.jsonl  who knew what, when, and how
+    ├── actor-messages.jsonl      what one employee told another
+    ├── actor-tasks.jsonl         obligations, and who owns them
+    ├── actor-ledger.jsonl        every tool call, accepted and rejected
     └── artifacts/                 artifact bodies
 """
 
@@ -40,6 +44,14 @@ MANIFEST_FILE = "artifact-manifest.jsonl"
 ERRORS_FILE = "intentional-errors.jsonl"
 EVALS_FILE = "evals.jsonl"
 LEDGER_FILE = "generation-ledger.jsonl"
+# The actor layer, written only when an episode ran. Four files rather than one
+# because they answer four different questions — who knew what, who was told
+# what, who owes what, and who did what — and folding them together would make
+# every one of those a filter over a mixed stream.
+OBSERVATIONS_FILE = "actor-observations.jsonl"
+MESSAGES_FILE = "actor-messages.jsonl"
+TASKS_FILE = "actor-tasks.jsonl"
+ACTOR_LEDGER_FILE = "actor-ledger.jsonl"
 ARTIFACTS_DIR = "artifacts"
 
 T = TypeVar("T", bound=BaseModel)

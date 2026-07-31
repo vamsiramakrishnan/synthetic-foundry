@@ -138,6 +138,13 @@ def build(
         None, "--format", "-f",
         help="Render these formats. Repeatable. Omit to plan artifacts without rendering.",
     ),
+    actors: bool = typer.Option(
+        False, "--actors",
+        help=(
+            "Let employees produce the incident's records by calling tools on what "
+            "they observed, instead of planning them from the whole fact ledger."
+        ),
+    ),
     narrate: bool = typer.Option(
         False, "--narrate",
         help="Generate prose with the built-in deterministic provider (no network, no key).",
@@ -168,18 +175,46 @@ def build(
 
     world = RetailWorld(seed=seed, archetype=shape, employees=employees).build()
 
+    # The actor provider is resolved before the loop, and a replay makes it
+    # unreachable for the same reason a replayed narration does: a fallback that
+    # quietly generated instead would not be a replay.
+    actor_provider = None
+    actor_ledger: tuple = ()
+    if actors:
+        from .actors import ScriptedActorProvider, UnreachableActorProvider
+
+        actor_provider = ScriptedActorProvider()
+        if replay is not None:
+            actor_provider = UnreachableActorProvider()
+            actor_ledger = _load(str(replay))._ledger
+
     # Consecutive closes on one world. Comparatives belong to the first only: they
     # backfill months before it, and a later episode asking for them again would
     # generate a second set of facts for months the corpus already has.
     year, month = (int(part) for part in period.split("-"))
+    from .actors import ActorProviderError
+
     for index in range(max(1, periods)):
         stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
-        world = world.run(
-            MonthEndClose(
-                period=stamp,
-                include_operational_incident=incident,
-                comparative_months=comparatives if index == 0 else 0,
+        try:
+            world = world.run(
+                MonthEndClose(
+                    period=stamp,
+                    include_operational_incident=incident,
+                    comparative_months=comparatives if index == 0 else 0,
+                    actors=actor_provider,
+                    actor_ledger=actor_ledger,
+                )
             )
+        except ActorProviderError as exc:
+            err.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=2) from exc
+
+    if actors:
+        accepted = sum(1 for entry in world.actor_ledger if entry.result.accepted)
+        console.print(
+            f"[dim]actors:[/dim] {len(world.actor_ledger)} tool call(s), {accepted} accepted"
+            f", {len(world.observations)} observation(s)\n"
         )
 
     if narrate or replay is not None:
@@ -683,6 +718,89 @@ def diversity(
             for violation in violations:
                 err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
             raise typer.Exit(code=1)
+
+
+@app.command()
+def actors(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    rejected: bool = typer.Option(
+        False, "--rejected", help="Show only the calls that were refused, and why."
+    ),
+    observations: bool = typer.Option(
+        False, "--observations", help="Show what each actor knew when it acted."
+    ),
+) -> None:
+    """Show the actor execution ledger: who did what, on what they could see.
+
+    The audit surface. `inspect` answers what the corpus contains; this answers
+    how the incident's records came to exist — which accepted tool call produced
+    each one, and which attempts were refused for exceeding a role's authority.
+    Rejections are shown alongside acceptances rather than hidden, because a
+    policy layer that never refuses anything is decoration.
+    """
+    world = _load(corpus)
+    entries = list(world.actor_ledger)
+    if not entries:
+        console.print("[dim]no actor episode in this corpus[/dim]")
+        return
+
+    # An abstention is not a rejection. `--rejected` is for finding calls the
+    # policy or a precondition refused; showing "I have nothing further to do"
+    # alongside them would bury the interesting rows under the ordinary ones.
+    shown = (
+        [e for e in entries if not e.result.accepted and e.action.tool_name]
+        if rejected
+        else entries
+    )
+    table = Table(title="Actor execution ledger", box=None)
+    table.add_column("#", style="dim", justify="right")
+    table.add_column("when")
+    table.add_column("role")
+    table.add_column("tool")
+    table.add_column("")
+    table.add_column("changed", overflow="fold")
+    for entry in shown:
+        result = entry.result
+        changed = ", ".join(
+            [*result.fact_ids, *result.event_ids, *result.artifact_intent_ids, *result.task_ids]
+        )
+        table.add_row(
+            str(entry.sequence),
+            entry.acted_at.strftime("%Y-%m-%d %H:%M"),
+            entry.invocation.role_key,
+            entry.action.tool_name or "—",
+            "[green]ok[/green]"
+            if result.accepted
+            else ("[dim]abstained[/dim]" if entry.action.tool_name is None else "[yellow]refused[/yellow]"),
+            changed
+            or (entry.action.abstention_reason if entry.action.tool_name is None else "")
+            or (result.rejection_reason or ""),
+        )
+    console.print(table, "")
+
+    if observations:
+        # Deliberately per invocation rather than per call: what makes the ledger
+        # worth reading is that two people woken by the same failure saw
+        # different things, and that is a property of the invocation.
+        seen: set[str] = set()
+        table = Table(title="What each actor could see", box=None)
+        table.add_column("role")
+        table.add_column("at")
+        table.add_column("facts", justify="right")
+        table.add_column("messages", justify="right")
+        table.add_column("tasks", justify="right")
+        for entry in entries:
+            if entry.invocation.id in seen:
+                continue
+            seen.add(entry.invocation.id)
+            table.add_row(
+                entry.invocation.role_key,
+                entry.observation.observed_at.strftime("%Y-%m-%d %H:%M"),
+                str(len(entry.observation.visible_fact_ids)),
+                str(len(entry.observation.message_ids)),
+                str(len(entry.observation.task_ids)),
+            )
+        console.print(table, "")
 
 
 @app.command()

@@ -52,6 +52,7 @@ def artifact_intents(
     density: float,
     workbook_facts: tuple[CanonicalFact, ...] = (),
     prior_intents: tuple[ArtifactIntent, ...] = (),
+    actor_authored: bool = False,
 ) -> tuple[ArtifactIntent, ...]:
     """Plan the artifacts this episode warrants.
 
@@ -65,6 +66,15 @@ def artifact_intents(
     down to category and store, and only the workbook gets it: a variance memo
     handed four thousand facts would produce four thousand narrative requests to
     write five paragraphs.
+
+    ``actor_authored`` withholds the incident block. When an actor episode runs,
+    those seven documents are produced by employees calling ``draft_artifact``,
+    each citing the facts *that employee had observed* — which is the whole point
+    of the exercise, and is undermined entirely if the planner has already
+    written the same documents from an omniscient view of the fact ledger. The
+    close's standing outputs stay here: the calendar, the workbook, and the
+    variance memo exist every period whether or not anything went wrong, so
+    nobody decides to write them.
     """
     money = [f.id for f in financial_facts]
     detail = [f.id for f in (workbook_facts or financial_facts)]
@@ -128,7 +138,7 @@ def artifact_intents(
            [episode.close_event_id], "medium",
            "Variance commentary is produced for every close.")
 
-    if episode.had_incident:
+    if episode.had_incident and not actor_authored:
         k = episode.keys
         intent("working_note", "finance", "finance", roles["controller"],
                [k["fact_feed_status"], k["fact_hypothesis"], k["fact_cause"], k["fact_close_delayed"]],

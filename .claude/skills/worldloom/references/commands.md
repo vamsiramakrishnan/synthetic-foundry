@@ -9,6 +9,19 @@ cannot describe a flag that does not exist.
 Load this when you need the exact spelling of an option. The procedure — what to
 run and in what order — is in `SKILL.md`; this is the lookup table.
 
+### `worldloom actors`
+
+Show the actor execution ledger: who did what, on what they could see.
+
+```
+worldloom actors <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--observations` | Show what each actor knew when it acted. |
+| `--rejected` | Show only the calls that were refused, and why. |
+
 ### `worldloom archetypes`
 
 List the company shapes `build --archetype` accepts.
@@ -19,6 +32,7 @@ Generate a world deterministically from a seed, then validate it.
 
 | Option | Purpose |
 | --- | --- |
+| `--actors` | Let employees produce the incident's records by calling tools on what they observed, instead of planning them from the whole fact ledger. |
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
 | `--employees` | Override the archetype's stated headcount. |

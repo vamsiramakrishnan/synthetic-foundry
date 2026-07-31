@@ -11,9 +11,9 @@ build-order step 7, once IT services has shown which parts actually repeat.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .generators.operations import business_days_after, period_end
 from .rng import Rng
@@ -100,6 +100,20 @@ class MonthEndClose:
     generate two sets of facts for the overlapping months, and the second would be
     a duplicate rather than a revision. A caller who wants a trend asks for one.
     """
+    actors: Any = field(default=None, compare=False)
+    """An ``ActorProvider``. ``None`` keeps the deterministic plan.
+
+    When set, the incident's *organisational* layer — the ticket, the work notes,
+    the assignments, the close decision, and the seven documents that come out of
+    it — is produced by employees calling tools on what they had actually
+    observed, rather than by a planner reading the whole fact ledger. What does
+    not change is the world's physics: the pipeline still fails because the
+    operational generator says so, and the cause is still the stale mapping,
+    because an actor that could choose the root cause would be authoring
+    canonical truth.
+    """
+    actor_ledger: tuple = field(default=(), compare=False)
+    """Recorded actor decisions to replay instead of asking the provider."""
 
     def run(self, world: World) -> World:
         """Return a new world with this episode's events, facts, and plans.
@@ -179,7 +193,40 @@ class MonthEndClose:
             density=1.0 + density_adjustment(world, "finance/status_reports"),
             workbook_facts=financials.facts,
             prior_intents=world._artifact_intents,
+            actor_authored=self.actors is not None,
         )
+
+        # The world has to carry this period's events, facts, and standing
+        # documents before anyone can observe them — an actor woken by a
+        # pipeline failure that is not yet in the world would see nothing.
+        prior_intents = world._artifact_intents
+        advanced = world.extend(
+            events=episode.events,
+            facts=(*episode.facts, *financials.facts),
+            artifact_intents=intents,
+            period=self.period,
+        )
+        actor_state: dict[str, tuple] = {}
+        if self.actors is not None:
+            from .actors.runtime import run_episode
+
+            run = run_episode(
+                advanced, self.actors, period=self.period, ledger=self.actor_ledger
+            )
+            advanced = run.world
+            actor_state = {
+                "observations": run.observations,
+                "messages": run.messages,
+                "tasks": run.tasks,
+                "actor_ledger": run.entries,
+                "ledger": run.generation_ledger,
+            }
+            # Evaluation runs against everything this period produced, actor
+            # documents included. Generating cases from the deterministic plan
+            # alone would silently drop every incident family the moment actors
+            # were switched on — the facts are carried, just by a document the
+            # planner did not write.
+            intents = tuple(advanced._artifact_intents[len(prior_intents):])
 
         cases = evaluation.evaluation_cases(
             minter,
@@ -201,16 +248,20 @@ class MonthEndClose:
             intents=intents,
             period=self.period,
             history=world._facts,
-            prior_intents=world._artifact_intents,
+            prior_intents=prior_intents,
         )
 
-        return world.extend(
-            events=episode.events,
-            facts=(*episode.facts, *financials.facts),
-            artifact_intents=intents,
-            evaluations=cases,
-            period=self.period,
-        )
+        if self.actors is not None:
+            from .actors import evaluation as actor_evaluation
+
+            cases = (
+                *cases,
+                *actor_evaluation.cases(minter, world=advanced, entries=actor_state["actor_ledger"],
+                                        observations=actor_state["observations"],
+                                        tasks=actor_state["tasks"], period=self.period),
+            )
+
+        return advanced.extend(evaluations=cases, period=self.period, **actor_state)
 
 
 def _announcer(world, change):

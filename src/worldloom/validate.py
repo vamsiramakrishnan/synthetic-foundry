@@ -17,6 +17,10 @@ temporal
     fact that did not yet exist when the artifact was written.
 lore
     Every commitment constrains something, and its references resolve.
+actors
+    Nobody cited what they had not observed, nobody exceeded their authority,
+    every mutation has exactly one accepted tool call behind it, and a rejected
+    call left nothing behind.
 
 A violation is an error unless it is explained by a registered
 ``IntentionalError`` — that is the whole point of labelling deliberate mess.
@@ -142,6 +146,12 @@ class _Validator:
             "EVAL": set(w.evaluations.ids()),
             "POLICY": set(w.access_policies.ids()),
             "ERR": set(w.intentional_errors.ids()),
+            "OBS": {o.id for o in w.observations},
+            "MSG": {m.id for m in w.messages},
+            "TASK": {t.id for t in w.tasks},
+            "ALOG": {e.id for e in w.actor_ledger},
+            "AOBS": {e.observation.id for e in w.actor_ledger},
+            "INV": {e.invocation.id for e in w.actor_ledger},
         }
         self._known = groups
         self._all = set().union(*groups.values())
@@ -852,6 +862,191 @@ class _Validator:
                     f" {fact.id} states {canonical!r}",
                 )
 
+
+    # -- actors ------------------------------------------------------------
+
+    def actors(self) -> None:
+        """The invariants that make an actor episode auditable rather than decorative.
+
+        Every one of these is a claim the roadmap makes about the runtime, checked
+        against what actually shipped in the corpus files rather than against the
+        code that wrote them. That distinction matters: the runtime enforces the
+        observation boundary while it runs, but the artifact a reader is handed is
+        a directory, and a directory can be edited. A check that only re-asserts
+        what the generator already guaranteed proves nothing about the thing
+        somebody downloaded.
+        """
+        w = self.world
+        if not w._actor_ledger and not w._observations:
+            return
+
+        from .actors.policy import decision_right, policy_for, policy_role
+
+        fact_ids = set(w.facts.ids())
+        event_ids = set(w.events.ids())
+        intent_ids = set(w.artifact_intents.ids())
+        facts = {fact.id: fact for fact in w.facts}
+        task_ids = {task.id for task in w.tasks}
+        message_ids = {message.id for message in w.messages}
+
+        # -- the knowledge ledger itself ----------------------------------
+        for observation in w.observations:
+            self.check_ref(observation.id, "observer_id", observation.observer_id, expect="PERSON")
+            self.check_ref(observation.id, "fact_id", observation.fact_id, expect=FACT_REFS)
+            fact = facts.get(observation.fact_id)
+            if fact is None:
+                continue
+            self.checks += 1
+            if observation.learned_at < fact.valid_from:
+                # Knowing something before it was true is not early awareness, it
+                # is a broken clock — and every temporal evaluation built on the
+                # observation ledger would inherit the error silently.
+                self.fail(
+                    "actors",
+                    "premature_observation",
+                    observation.id,
+                    f"learned {fact.id} at {observation.learned_at.isoformat()},"
+                    f" before it was valid at {fact.valid_from.isoformat()}",
+                )
+
+        for message in w.messages:
+            self.check_ref(message.id, "sender_id", message.sender_id, expect="PERSON")
+            self.check_refs(message.id, "recipient_ids", message.recipient_ids, expect="PERSON")
+            self.check_refs(
+                message.id, "disclosed_fact_ids", message.disclosed_fact_ids, expect=FACT_REFS
+            )
+
+        for task in w.tasks:
+            self.check_ref(task.id, "created_by", task.created_by, expect="PERSON")
+            self.check_ref(task.id, "owner_id", task.owner_id, expect="PERSON")
+            self.check_refs(task.id, "fact_ids", task.fact_ids, expect=FACT_REFS)
+            owner = w.people.get(task.owner_id) if task.owner_id else None
+            if owner is None:
+                continue
+            self.checks += 1
+            if owner.left is not None and owner.left <= task.created_at:
+                # "Every action owner exists at the action time" — the obligation
+                # side of `author_already_departed`. A ticket assigned to somebody
+                # who had already gone is an obligation nobody holds.
+                self.fail(
+                    "actors",
+                    "owner_already_departed",
+                    task.id,
+                    f"assigned to {owner.id}, who left at {owner.left.isoformat()}",
+                )
+
+        # -- the execution ledger ------------------------------------------
+        claimed: dict[str, str] = {}
+        for entry in w.actor_ledger:
+            subject = entry.id
+            result = entry.result
+            observed = set(entry.observation.visible_fact_ids)
+
+            self.check_ref(subject, "actor_id", entry.invocation.actor_id, expect="PERSON")
+
+            if not result.accepted:
+                self.checks += 1
+                if result.event_ids or result.fact_ids or result.artifact_intent_ids or result.task_ids:
+                    self.fail(
+                        "actors",
+                        "residue_after_rejection",
+                        subject,
+                        "a rejected call names state it cannot have created",
+                    )
+                continue
+
+            policy = policy_for(entry.invocation.role_key)
+            self.checks += 1
+            if entry.action.tool_name and (policy is None or not policy.permits(entry.action.tool_name)):
+                self.fail(
+                    "actors",
+                    "tool_exceeds_authority",
+                    subject,
+                    f"{entry.invocation.role_key} is recorded calling"
+                    f" {entry.action.tool_name}, which its policy does not grant",
+                )
+
+            # Every fact id in the arguments must be one the recorded observation
+            # actually contained. This is the corpus-level form of "no actor cites
+            # an unobserved fact", and it reads the shipped observation rather
+            # than recomputing one — a projection recomputed here would agree with
+            # itself by construction and check nothing.
+            for name, value in entry.action.arguments.items():
+                if not name.endswith(("fact_id", "fact_ids")):
+                    continue
+                for cited in [value] if isinstance(value, str) else (value or ()):
+                    if not isinstance(cited, str) or not is_id(cited):
+                        continue
+                    if id_prefix(cited) not in FACT_REFS:
+                        continue
+                    self.checks += 1
+                    if cited not in observed:
+                        self.fail(
+                            "actors",
+                            "cites_unobserved_fact",
+                            subject,
+                            f"{entry.invocation.actor_id} cited {cited}, which its"
+                            f" observation at {entry.observation.observed_at.isoformat()}"
+                            " did not contain",
+                        )
+
+            # A decision needs standing, not merely a tool. Checked separately
+            # from the allow-list because "may call this" and "is entitled to
+            # decide this" are different questions — the second is a property of
+            # the decision type and lives in the decision-rights table.
+            for tool_name, decision_type in (
+                ("decide_close_schedule", "close_schedule"),
+                ("approve_change", "production_change"),
+                ("post_journal", "journal_posting"),
+            ):
+                if entry.action.tool_name != tool_name:
+                    continue
+                right = decision_right(decision_type)
+                self.checks += 1
+                role = policy_role(entry.invocation.role_key)
+                if right is None or role not in {right.accountable_role, *right.approver_roles}:
+                    self.fail(
+                        "actors",
+                        "decision_without_right",
+                        subject,
+                        f"{entry.invocation.role_key} decided {decision_type} without standing",
+                    )
+
+            for kind, ids, known in (
+                ("fact", result.fact_ids, fact_ids),
+                ("event", result.event_ids, event_ids),
+                ("artifact", result.artifact_intent_ids, intent_ids),
+                ("task", result.task_ids, task_ids),
+                ("message", result.message_ids, message_ids),
+            ):
+                for created in ids:
+                    self.checks += 1
+                    if created not in known:
+                        self.fail(
+                            "actors",
+                            "phantom_mutation",
+                            subject,
+                            f"claims to have created {kind} {created}, which the corpus"
+                            " does not contain",
+                        )
+                        continue
+                    # "Every mutation has one accepted tool result." A second
+                    # claim on the same id means either a duplicate record or two
+                    # calls that both think they made it, and either way the
+                    # provenance question has two answers.
+                    if kind in {"fact", "event", "artifact"}:
+                        self.checks += 1
+                        owner = claimed.get(created)
+                        if owner is not None:
+                            self.fail(
+                                "actors",
+                                "duplicate_mutation",
+                                subject,
+                                f"{kind} {created} is already claimed by {owner}",
+                            )
+                        else:
+                            claimed[created] = subject
+
     # -- evaluation --------------------------------------------------------
 
     def evaluation(self) -> None:
@@ -914,6 +1109,7 @@ class _Validator:
         self.temporal()
         self.lore()
         self.intentional()
+        self.actors()
         self.evaluation()
         return ValidationReport(violations=self.violations, checks_run=self.checks)
 

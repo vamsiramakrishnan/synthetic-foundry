@@ -48,6 +48,16 @@ CORE_PREFIXES = frozenset(
         "POLICY",
         "ERR",  # intentional error
         "GEN",  # generation ledger entry
+        # The actor layer. Separate prefixes rather than reusing "EV"/"FACT"
+        # because these are records *about* the world's records — who knew a
+        # fact, who was told one — and an id that cannot be told apart from the
+        # thing it describes is one that will eventually be.
+        "OBS",  # epistemic observation: one person learning one fact
+        "AOBS",  # the bounded projection handed to one actor
+        "INV",  # actor invocation
+        "MSG",  # message between employees
+        "TASK",  # obligation
+        "ALOG",  # execution ledger entry
     }
 )
 

@@ -57,6 +57,64 @@ worldloom evaluate ./corpus
 Steps 3 and 4 repeat until every response is accepted. Rejection is normal and is
 not a failure of the harness — it is the harness working.
 
+
+---
+
+## Actors, optionally
+
+`worldloom build --actors` changes who decides what the incident's records say.
+
+Without it, the planner writes the incident documents from the whole fact ledger:
+it knows the root cause, the control failure, and the remediation, and it hands
+each document the facts a document of that type should carry. With it, the
+documents are produced by employees calling tools on **what they had actually
+observed at the time**, and nothing else:
+
+```bash
+worldloom build --seed 8128 --incident --actors --narrate -f markdown --out ./corpus
+worldloom actors ./corpus --observations
+```
+
+```
+pipeline fails
+  → the service desk analyst is paged, opens the incident, puts up a status page
+  → the engineer inspects the dependency chain and records a first assessment
+  → the divisional finance partner reads the ledger and raises a close dependency
+  → the controller is told, and writes a working note
+  → the incident commander asks for evidence and names an owner
+  → the engineer reads the ERP logs and confirms the cause
+  → the controller decides the close moves, with the CFO named as approver
+  → the platform lead raises two fixes and says which one fixes the control
+  → the CFO writes a short summary, and leaves the control failure out of it
+```
+
+Four things are true of every step, and they are what the actor layer is for:
+
+- **An actor sees a projection, never the world.** A provider is handed an
+  observation and a tool catalogue. There is no accessor on either that reaches a
+  `World`.
+- **Only an accepted tool call changes anything.** Refusals are recorded with the
+  rule they broke and change nothing — `worldloom actors ./corpus --rejected`
+  shows them.
+- **Canonical truth is still deterministic.** The pipeline fails because the
+  operational generator says so, and the cause is the stale hierarchy mapping
+  because 2024 lore made it so. An actor chooses *when the organisation finds
+  out, who records it, and what gets written down* — never what happened.
+- **It replays.** Every decision is content-addressed into the same generation
+  ledger narration uses, so `--replay` regenerates the episode byte-for-byte with
+  no provider at all.
+
+The last one is why the CFO's summary omitting the control failure is worth
+something: it is a citation that one person did not make, reproducibly, rather
+than a rule in a template.
+
+Writing a real actor adapter is one method — `act(view, tools) -> ActorAction` —
+and the ledger, the policy checks, and the rejection loop all work unchanged
+around it. There is no batch request/response handshake the way narration has
+one, and the reason is in `actors/providers.py`: actor decisions are sequential,
+so the invocations cannot be prepared in advance without deciding the episode
+first.
+
 ---
 
 ## Writing responses
@@ -198,6 +256,7 @@ Two consequences for you:
 | `src/worldloom/models.py` | The thin waist. Every subsystem speaks these types |
 | `src/worldloom/generators/` | Deterministic generation. No model, no clock |
 | `src/worldloom/narrative/` | The contract with you: requests, claims, ledger |
+| `src/worldloom/actors/` | Employees, their observations, tools, and the execution ledger |
 | `src/worldloom/render/` | Formats. Read the IR and nothing else |
 | `src/worldloom/validate.py` | The guardrails. Start here to understand the rules |
 | `examples/retail-close/` | The hand-authored reference corpus. Frozen |
@@ -206,6 +265,7 @@ Two consequences for you:
 | `docs/build-order.md` | What gets built next, and the gate it must pass |
 | `docs/generation-model.md` | Which engine owns what, and why |
 | `docs/lore.md` | Lore as a constraint graph |
+| `docs/actor-simulation.md` | LLMs as bounded employees, and the gates for it |
 
 ## Working on the harness itself
 

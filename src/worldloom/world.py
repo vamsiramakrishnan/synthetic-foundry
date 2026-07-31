@@ -48,6 +48,11 @@ from .models import (
     Site,
     System,
 )
+# Eagerly, not lazily: `World` declares fields of these types. `actors.models`
+# imports only `models`, so there is no cycle to work around — the rest of the
+# actors package, which does reach back into `world`, is imported inside the
+# methods that use it.
+from .actors.models import ActorLedgerEntry, ActorMessage, ActorTask, Observation
 from .validate import ValidationReport, validate
 
 
@@ -81,6 +86,14 @@ class World:
     _intentional_errors: tuple[IntentionalError, ...] = ()
     _evaluations: tuple[EvaluationCase, ...] = ()
     _ledger: tuple[GenerationLedgerEntry, ...] = ()
+    # The actor layer. Empty on every world that never ran an episode, which is
+    # every corpus built before this existed — the files are written only when
+    # there is something in them, so an actorless corpus is byte-identical to
+    # what it was.
+    _observations: tuple[Observation, ...] = ()
+    _messages: tuple[ActorMessage, ...] = ()
+    _tasks: tuple[ActorTask, ...] = ()
+    _actor_ledger: tuple[ActorLedgerEntry, ...] = ()
     seed: int | None = None
     period: str | None = None
     root: Path | None = None
@@ -137,6 +150,10 @@ class World:
             _intentional_errors=tuple(corpus.load_models(root / corpus.ERRORS_FILE, IntentionalError)),
             _evaluations=tuple(corpus.load_models(root / corpus.EVALS_FILE, EvaluationCase)),
             _ledger=tuple(corpus.load_models(root / corpus.LEDGER_FILE, GenerationLedgerEntry)),
+            _observations=tuple(corpus.load_models(root / corpus.OBSERVATIONS_FILE, Observation)),
+            _messages=tuple(corpus.load_models(root / corpus.MESSAGES_FILE, ActorMessage)),
+            _tasks=tuple(corpus.load_models(root / corpus.TASKS_FILE, ActorTask)),
+            _actor_ledger=tuple(corpus.load_models(root / corpus.ACTOR_LEDGER_FILE, ActorLedgerEntry)),
             seed=header.get("seed"),
             period=header.get("period"),
             root=root,
@@ -231,6 +248,36 @@ class World:
     def ledger(self) -> Collection[GenerationLedgerEntry]:
         """The generation ledger. Empty at Gate A — no generative calls yet."""
         return Collection(self._ledger, label="GenerationLedgerCollection")
+
+    @property
+    def observations(self) -> Collection[Observation]:
+        """Who knew what, when, and through which channel.
+
+        A separate ledger from ``facts`` on purpose: a fact valid from 08:15 is
+        not thereby known to anyone at 08:15, and a corpus that cannot tell those
+        apart cannot pose an information-asymmetry question.
+        """
+        return Collection(self._observations, label="ObservationCollection")
+
+    @property
+    def messages(self) -> Collection[ActorMessage]:
+        """What one employee told another, and which facts it carried."""
+        return Collection(self._messages, label="ActorMessageCollection")
+
+    @property
+    def tasks(self) -> Collection[ActorTask]:
+        """Obligations created by accepted tool calls, and who owns them."""
+        return Collection(self._tasks, label="ActorTaskCollection")
+
+    @property
+    def actor_ledger(self) -> Collection[ActorLedgerEntry]:
+        """Every actor tool call, accepted and rejected.
+
+        Rejections are in here deliberately. A ledger of only accepted calls
+        answers "what happened" and loses "what was attempted and refused",
+        which is the half that proves the policy layer is load-bearing.
+        """
+        return Collection(self._actor_ledger, label="ActorLedgerCollection")
 
     def entity_names(self) -> dict[str, str]:
         """Every entity ID to the name a person would use for it.
@@ -368,6 +415,10 @@ class World:
         evaluations: tuple[EvaluationCase, ...] = (),
         intentional_errors: tuple[IntentionalError, ...] = (),
         ledger: tuple[GenerationLedgerEntry, ...] = (),
+        observations: tuple[Observation, ...] = (),
+        messages: tuple[ActorMessage, ...] = (),
+        tasks: tuple[ActorTask, ...] = (),
+        actor_ledger: tuple[ActorLedgerEntry, ...] = (),
         people: tuple[Employee, ...] = (),
         business_units: tuple[BusinessUnit, ...] = (),
         roles: dict[str, str] | None = None,
@@ -414,6 +465,13 @@ class World:
             _intentional_errors=self._intentional_errors + intentional_errors,
             _evaluations=self._evaluations + evaluations,
             _ledger=self._ledger + ledger,
+            _observations=self._observations + observations,
+            _messages=self._messages + messages,
+            # Tasks merge by id for the same reason people do: an assignment
+            # changes who is on the hook for an obligation, it does not create a
+            # second obligation.
+            _tasks=_merged(self._tasks, tasks),
+            _actor_ledger=self._actor_ledger + actor_ledger,
             seed=self.seed,
             period=period or self.period,
             root=self.root,
@@ -705,6 +763,16 @@ class World:
         corpus.write_jsonl(target / corpus.EVALS_FILE, list(self._evaluations))
         if self._ledger:
             corpus.write_jsonl(target / corpus.LEDGER_FILE, list(self._ledger))
+        # Written only when populated. A corpus with no actor episode should not
+        # grow four empty files, and CI diffs whole directories.
+        if self._observations:
+            corpus.write_jsonl(target / corpus.OBSERVATIONS_FILE, list(self._observations))
+        if self._messages:
+            corpus.write_jsonl(target / corpus.MESSAGES_FILE, list(self._messages))
+        if self._tasks:
+            corpus.write_jsonl(target / corpus.TASKS_FILE, list(self._tasks))
+        if self._actor_ledger:
+            corpus.write_jsonl(target / corpus.ACTOR_LEDGER_FILE, list(self._actor_ledger))
 
         # Rendered bodies, when this world was rendered in memory.
         for item in self._rendered:
