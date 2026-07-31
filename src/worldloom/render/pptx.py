@@ -41,8 +41,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..compiler.compose import compose, plan_from_ir
+from ..compiler.style import StyleGenome, genome
 from ..models import ArtifactIR, CanonicalFact, Row, Table
 from ..narrative import references
+from ..rng import Rng
 from . import Rendered, RenderError, ooxml, slug_for
 from .values import format_value
 
@@ -298,10 +300,11 @@ def _plan(ir: ArtifactIR) -> PresentationPlan:
 # Style
 # ---------------------------------------------------------------------------
 
-#: The same palette `docx.py` uses (its ``_HEADER_FILL`` and negative red),
-#: reused rather than re-derived — a reader who has seen the memo should
-#: recognise the deck as the same company's document, not a different colour
-#: scheme wearing the same title.
+#: The palette `genome(rng, archetype="house")` reproduces exactly — the pptx
+#: analogue of `docx.py`'s own `_HEADER_FILL`/`_SUBTOTAL_FILL` pair. Kept as
+#: the fixed reference point the sampling space is built around and as the
+#: source of `_HOUSE_GENOME` below; the renderer itself now reads every
+#: colour off that document's own world-seeded genome instead.
 _HEADER_FILL = "2F4858"
 _ACCENT_FILL = "EDF2F4"
 _NEGATIVE = "9B2226"
@@ -335,6 +338,101 @@ def _pt(size: int):  # type: ignore[no-untyped-def]
     return Pt(size)
 
 
+# ---------------------------------------------------------------------------
+# The style genome
+# ---------------------------------------------------------------------------
+
+#: `type_scale` band indices — see `compiler/style.py::_TYPE_BANDS`. Named so
+#: call sites read `_clamped_pt(g.type_scale[_TS_HEADING])` rather than an
+#: unlabelled tuple index — the same convention `docx.py` uses for the same
+#: five bands.
+_TS_TITLE, _TS_HEADING, _TS_SUBHEADING, _TS_BODY, _TS_CAPTION = range(5)
+
+#: `spacing_scale` band indices — see `compiler/style.py::_SPACING_BANDS`.
+_SP_HEADING, _SP_SUBHEADING, _SP_PARAGRAPH, _SP_CELL = range(4)
+
+#: See `docx.py`'s identical constant: `table_density` scales the tightest
+#: spacing band a second time, since density and the sampled scale are
+#: independent knobs in `style.py`.
+_DENSITY_FACTOR: dict[str, float] = {"airy": 1.4, "normal": 1.0, "tight": 0.65}
+
+#: Fallback genome for the handful of draw functions this module exposes
+#: without a leading underscore or that `tests/test_pptx.py` reaches directly,
+#: rather than through `render()` — `draw_metric_cards`, `_draw_prose_content`,
+#: `_draw_table_content`, `_draw_divider`, `_draw_cover` are all exercised
+#: that way, on shapes built with no `ArtifactIR` (and so no world seed) in
+#: hand at all. `archetype="house"` pins the colour and structural fields
+#: regardless of which seed derives it (see `style.genome`'s own docstring —
+#: only `type_scale`/`spacing_scale`/`rule_weight`/`whitespace_bias` vary by
+#: seed under `"house"`), so a caller that supplies no genome of its own gets
+#: exactly the look this renderer has always had, not an arbitrary sampled
+#: one; seed 0 is as good as any seed for a fallback that isn't tied to a
+#: real world.
+_HOUSE_GENOME = genome(Rng(0).derive("style"), archetype="house")
+
+
+def _genome_for(ir: ArtifactIR) -> StyleGenome:
+    """This artifact's world-derived style genome — see `docx.py::_genome_for`
+    for the full reasoning; both renderers derive it identically so the deck
+    and the memo for one world always agree on how it looks.
+
+        from ..compiler.style import genome
+        from ..rng import Rng
+        g = genome(Rng(world.seed).derive("style"))
+    """
+    raw = ir.metadata.get("worldloom_seed")
+    seed = int(raw) if raw and raw != "None" else 0
+    return genome(Rng(seed).derive("style"))
+
+
+def _clamped_pt(value: float) -> int:
+    """A genome's `type_scale` can legitimately sample below `MIN_FONT_PT` —
+    its body band is 10-11pt, comfortably readable on the A4 page `docx.py`
+    prints, but this renderer's floor exists for a different reason (a slide
+    read at arm's length, not held close — see `MIN_FONT_PT`'s own
+    docstring). The floor is the invariant a rendered deck must never
+    violate, so it wins over the sampled value here rather than the other way
+    around: a genome that asked for 10pt body copy gets 12pt on a slide,
+    every time, and every genome-derived size in this module is required to
+    pass through here before it reaches `_pt`/`_write`/`_style_cell`.
+    """
+    return max(MIN_FONT_PT, round(value))
+
+
+def _space_pt(g: StyleGenome, band: int) -> float:
+    """One `spacing_scale` band in points, anchored to this genome's own body
+    type size — see `docx.py::_space_pt`, the same reasoning applies here."""
+    return g.spacing_scale[band] * g.type_scale[_TS_BODY]
+
+
+def _cell_padding_pt(g: StyleGenome) -> float:
+    """Table cell padding: the tightest spacing band, scaled again by
+    `table_density` — see `docx.py::_cell_padding_pt`."""
+    return _space_pt(g, _SP_CELL) * _DENSITY_FACTOR[g.table_density]
+
+
+def _negative_text(value: float, text: str, convention: str) -> str:
+    """Return *text* unchanged. The genome's `number_negatives` is deliberately
+    not applied here.
+
+    It was, briefly, and `tests/test_docx.py` caught it: a table rendered
+    `-10,200` in Word while the same table rendered `(10,200)` in Markdown, and
+    `render/values.py` exists precisely so that cannot happen — "one function,
+    so there is one answer". A per-renderer override of how a number is spelled
+    reintroduces the divergence that module was written to eliminate, and it
+    does so invisibly, because each format is internally consistent.
+
+    Varying the convention is still legitimate diversity; it just has to be a
+    corpus-wide decision applied in one place. The honest route is the IR's own
+    `number_format` — a column declaring `#,##0;-#,##0` would reach every
+    renderer through `format_value` and they would all agree. That is a
+    compile-time change, not a render-time one, so it is not smuggled in here.
+
+    Kept as a function rather than deleted at the call sites so the reason
+    survives next to the temptation.
+    """
+    del convention
+    return text
 def _textbox(slide, box: Box, *, fill: str | None = None):  # type: ignore[no-untyped-def]
     """A text box at *box*, transparent unless *fill* is given.
 
@@ -375,6 +473,7 @@ def _write(
     bold: bool = False,
     italic: bool = False,
     align=None,  # type: ignore[no-untyped-def]
+    space_after_pt: float | None = None,
 ) -> None:
     """Fill a text frame with one paragraph per string, uniformly styled.
 
@@ -382,7 +481,16 @@ def _write(
     theme default — inheritance is exactly what would let a run slip under
     ``MIN_FONT_PT`` unnoticed, since nothing would ever assign it a size to
     check.
+
+    *space_after_pt* — a genome's `spacing_scale` reaching this module — only
+    ever changes room *between* paragraphs inside one already-fixed textbox;
+    it cannot move a shape's own box (`_assert_in_bounds`'s rectangle is set
+    before any text goes in), so it is free to vary by genome without risking
+    this renderer's non-overlap guarantee the way changing `_GUTTER` or
+    `_MARGIN` themselves would.
     """
+    from pptx.util import Pt
+
     first = True
     for text in paragraphs:
         if not text:
@@ -392,6 +500,8 @@ def _write(
         paragraph.text = text
         if align is not None:
             paragraph.alignment = align
+        if space_after_pt is not None:
+            paragraph.space_after = Pt(space_after_pt)
         run = paragraph.runs[0]
         run.font.size = _pt(size)
         run.font.bold = bold
@@ -399,15 +509,19 @@ def _write(
         run.font.color.rgb = _rgb(colour)
 
 
-def _new_slide(prs, heading: str, *, footer_text: str):  # type: ignore[no-untyped-def]
+def _new_slide(prs, heading: str, *, footer_text: str, g: StyleGenome = _HOUSE_GENOME):  # type: ignore[no-untyped-def]
     """A blank slide with the two bands every content slide shares."""
     from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # "Blank" — see module docstring
 
-    header = _textbox(slide, HEADER, fill=_HEADER_FILL)
+    header = _textbox(slide, HEADER, fill=g.colour_roles["header_fill"])
     header.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
-    _write(header.text_frame, [heading], size=24, colour=_WHITE, bold=True)
+    heading_align = PP_ALIGN.LEFT if g.title_alignment == "left" else PP_ALIGN.CENTER
+    _write(
+        header.text_frame, [heading], size=_clamped_pt(g.type_scale[_TS_HEADING]),
+        colour=g.colour_roles["header_text"], bold=True, align=heading_align,
+    )
 
     footer = _textbox(slide, FOOTER)
     footer.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
@@ -421,7 +535,7 @@ def _new_slide(prs, heading: str, *, footer_text: str):  # type: ignore[no-untyp
 # ---------------------------------------------------------------------------
 
 
-def _draw_cover(prs, plan: PresentationPlan) -> None:  # type: ignore[no-untyped-def]
+def _draw_cover(prs, plan: PresentationPlan, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
     """The title slide. Structural, like `docx.py`'s ``_cover`` — not a
     compiler component, because it carries no beat of the argument."""
     from pptx.enum.text import PP_ALIGN
@@ -433,13 +547,16 @@ def _draw_cover(prs, plan: PresentationPlan) -> None:  # type: ignore[no-untyped
     )
 
     title = _textbox(slide, title_box)
-    _write(title.text_frame, [plan.title], size=40, colour=_INK, bold=True, align=PP_ALIGN.CENTER)
+    _write(
+        title.text_frame, [plan.title], size=_clamped_pt(g.type_scale[_TS_TITLE]),
+        colour=g.colour_roles["body_text"], bold=True, align=PP_ALIGN.CENTER,
+    )
 
     if plan.subtitle:
         subtitle = _textbox(slide, subtitle_box)
         _write(
-            subtitle.text_frame, [plan.subtitle], size=18, colour=_SUBTITLE_INK,
-            italic=True, align=PP_ALIGN.CENTER,
+            subtitle.text_frame, [plan.subtitle], size=_clamped_pt(g.type_scale[_TS_SUBHEADING]),
+            colour=_SUBTITLE_INK, italic=True, align=PP_ALIGN.CENTER,
         )
 
     author = plan.metadata.get("author")
@@ -447,7 +564,10 @@ def _draw_cover(prs, plan: PresentationPlan) -> None:  # type: ignore[no-untyped
         author_title = plan.metadata.get("author_title")
         byline_text = f"{author}, {author_title}" if author_title else author
         byline = _textbox(slide, byline_box)
-        _write(byline.text_frame, [byline_text], size=16, colour=_INK, bold=True, align=PP_ALIGN.CENTER)
+        _write(
+            byline.text_frame, [byline_text], size=_clamped_pt(g.type_scale[_TS_BODY]),
+            colour=g.colour_roles["body_text"], bold=True, align=PP_ALIGN.CENTER,
+        )
 
     company = plan.metadata.get("company", "")
     note = plan.metadata.get("note", "Synthetic corpus generated by Worldloom. Not a real company.")
@@ -460,7 +580,7 @@ def _draw_cover(prs, plan: PresentationPlan) -> None:  # type: ignore[no-untyped
     )
 
 
-def _draw_divider(prs, heading: str) -> None:  # type: ignore[no-untyped-def]
+def _draw_divider(prs, heading: str, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
     """A section-divider slide — ``core.section_divider``.
 
     Used once, ahead of the appendix, to mark the change of subject the same
@@ -472,43 +592,54 @@ def _draw_divider(prs, heading: str) -> None:  # type: ignore[no-untyped-def]
     slide = prs.slides.add_slide(prs.slide_layouts[6])
 
     band_box = Box(0, _in(2.6), SLIDE_W, _in(1.3))
-    band = _textbox(slide, band_box, fill=_HEADER_FILL)
+    band = _textbox(slide, band_box, fill=g.colour_roles["header_fill"])
     band.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
-    _write(band.text_frame, [heading], size=32, colour=_WHITE, bold=True, align=PP_ALIGN.CENTER)
+    _write(
+        band.text_frame, [heading], size=_clamped_pt(g.type_scale[_TS_TITLE]),
+        colour=g.colour_roles["header_text"], bold=True, align=PP_ALIGN.CENTER,
+    )
 
     note_box = Box(_CONTENT_X, band_box.bottom + _GUTTER, _CONTENT_W, _in(0.5))
     note = _textbox(slide, note_box)
-    _write(note.text_frame, [_HIDDEN_NOTE], size=14, colour=_MUTED, italic=True, align=PP_ALIGN.CENTER)
+    _write(
+        note.text_frame, [_HIDDEN_NOTE], size=_clamped_pt(g.type_scale[_TS_SUBHEADING]),
+        colour=_MUTED, italic=True, align=PP_ALIGN.CENTER,
+    )
 
 
-def _draw_closing(prs, plan: PresentationPlan) -> None:  # type: ignore[no-untyped-def]
+def _draw_closing(prs, plan: PresentationPlan, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
     """The closing slide. Carries the same author-voice line `docx.py`'s
     closing paragraph does, off the same metadata — not a new statement."""
     footer_text = f"{plan.metadata.get('company', '')} · {plan.title}"
-    slide = _new_slide(prs, "Closing", footer_text=footer_text)
+    slide = _new_slide(prs, "Closing", footer_text=footer_text, g=g)
     voice = plan.metadata.get("voice", "")
     persona = plan.metadata.get("persona", "")
     body = _textbox(slide, BODY)
-    _write(body.text_frame, [f"Author voice: {voice}. Persona: {persona}."], size=16, colour=_MUTED, italic=True)
+    _write(
+        body.text_frame, [f"Author voice: {voice}. Persona: {persona}."],
+        size=_clamped_pt(g.type_scale[_TS_BODY]), colour=_MUTED, italic=True,
+    )
 
 
-#: Per-component visual treatment for a prose slide. ``accent`` draws a narrow
-#: coloured bar down the left of the body box — a cheap, cheap-to-verify way
-#: to give ``core.schedule`` and ``mgmt.decision_panel`` a distinct silhouette
-#: from a plain narrative slide without inventing content neither carries.
+#: Per-component visual treatment for a prose slide, keyed by `type_scale`
+#: band rather than a literal pt size — see `_TS_HEADING` etc. ``accent``
+#: draws a narrow coloured bar down the left of the body box — a cheap,
+#: cheap-to-verify way to give ``core.schedule`` and ``mgmt.decision_panel``
+#: a distinct silhouette from a plain narrative slide without inventing
+#: content neither carries.
 _PROSE_STYLE: dict[str, dict] = {
-    "core.position": {"size": 22, "bold": True},
-    "core.executive_summary": {"size": 20},
-    "core.schedule": {"size": 18, "accent": True},
-    "mgmt.decision_panel": {"size": 18, "accent": True},
+    "core.position": {"band": _TS_HEADING, "bold": True},
+    "core.executive_summary": {"band": _TS_SUBHEADING},
+    "core.schedule": {"band": _TS_SUBHEADING, "accent": True},
+    "mgmt.decision_panel": {"band": _TS_SUBHEADING, "accent": True},
 }
-_DEFAULT_PROSE_STYLE = {"size": 18}
+_DEFAULT_PROSE_STYLE = {"band": _TS_BODY}
 
 
-def _draw_prose_content(prs, slide_plan, facts, footer_text: str) -> None:  # type: ignore[no-untyped-def]
+def _draw_prose_content(prs, slide_plan, facts, footer_text: str, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
     """A section whose content is prose — ``core.position``, ``core.narrative``
     and the rest of the text-shaped components in the registry."""
-    slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text)
+    slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
     resolved = references.substitute(slide_plan.body, facts) if facts else slide_plan.body
     # Blank lines are paragraph breaks — the same convention `docx.py` follows
     # for the identical reason: a single run holding newlines renders as one
@@ -519,11 +650,15 @@ def _draw_prose_content(prs, slide_plan, facts, footer_text: str) -> None:  # ty
     box = BODY
     if style.get("accent"):
         bar_w = _in(0.08)
-        _textbox(slide, Box(BODY.x, BODY.y, bar_w, BODY.cy), fill=_HEADER_FILL)
+        _textbox(slide, Box(BODY.x, BODY.y, bar_w, BODY.cy), fill=g.colour_roles["accent"])
         box = Box(BODY.x + bar_w + _GUTTER, BODY.y, BODY.cx - bar_w - _GUTTER, BODY.cy)
 
     text = _textbox(slide, box)
-    _write(text.text_frame, paragraphs, size=style["size"], colour=_INK, bold=style.get("bold", False))
+    _write(
+        text.text_frame, paragraphs, size=_clamped_pt(g.type_scale[style["band"]]),
+        colour=g.colour_roles["body_text"], bold=style.get("bold", False),
+        space_after_pt=_space_pt(g, _SP_PARAGRAPH),
+    )
 
 
 #: Row budget per table slide. Not derived from `ComponentSpec.max_rows` —
@@ -567,7 +702,62 @@ def _column_widths(table: Table, total: int) -> list[int]:
     return widths
 
 
-def _style_cell(cell, *, size: int, colour: str, bold: bool = False, fill: str | None = None, align=None) -> None:  # type: ignore[no-untyped-def]
+def _apply_cell_borders(cell, policy: str, weight_pt: float) -> None:  # type: ignore[no-untyped-def]
+    """Draw one table cell's own edges per the genome's `gridline_policy` —
+    the pptx analogue of `docx.py::_apply_table_borders`, done per cell
+    because python-pptx's own table-cell schema has no table-wide equivalent
+    of Word's ``tblBorders`` (`CT_TableCellProperties` models fill and
+    margins but no ``lnL``/``lnR``/``lnT``/``lnB``), so the border elements
+    are built directly.
+
+    Must run before `cell.fill.solid()` (only ever called from `_style_cell`,
+    which does exactly that) — DrawingML's own schema requires the four
+    ``ln*`` border elements to precede the fill choice group in document
+    order, and python-pptx has no insertion helper for a pair of elements it
+    never modeled.
+    """
+    from lxml import etree
+
+    from pptx.oxml.ns import qn
+
+    edges = {"all": ("lnL", "lnR", "lnT", "lnB"), "horizontal": ("lnT", "lnB"), "none": ()}[policy]
+    # EMU, not eighths of a point (DrawingML's own line-width unit) — floored
+    # at a quarter point for the same reason `docx.py`'s own `sz` is: the
+    # lightest sampled `rule_weight` (0.25) should still draw a visible
+    # hairline rather than rounding away to nothing.
+    width = max(3175, round(weight_pt * 12700))
+    tc_pr = cell._tc.get_or_add_tcPr()
+    for tag in ("lnL", "lnR", "lnT", "lnB"):
+        element = etree.SubElement(tc_pr, qn(f"a:{tag}"))
+        element.set("w", str(width))
+        element.set("cap", "flat")
+        if tag in edges:
+            fill = etree.SubElement(element, qn("a:solidFill"))
+            colour = etree.SubElement(fill, qn("a:srgbClr"))
+            colour.set("val", "808080")
+        else:
+            etree.SubElement(element, qn("a:noFill"))
+
+
+def _apply_table_density(table, pad_pt: float) -> None:  # type: ignore[no-untyped-def]
+    """Table-wide cell padding — `table_density`'s render-time effect,
+    mirroring `docx.py::_apply_cell_padding`. Left/right stay python-pptx's
+    own default; only the vertical axis a genome's "airy" vs "tight" table
+    actually changes moves."""
+    from pptx.util import Pt
+
+    pad = Pt(pad_pt)
+    for cell in table.iter_cells():
+        cell.margin_top = pad
+        cell.margin_bottom = pad
+
+
+def _style_cell(
+    cell, *, size: int, colour: str, bold: bool = False, fill: str | None = None, align=None,  # type: ignore[no-untyped-def]
+    borders: tuple[str, float] | None = None,
+) -> None:
+    if borders is not None:
+        _apply_cell_borders(cell, *borders)
     if fill is not None:
         cell.fill.solid()
         cell.fill.fore_color.rgb = _rgb(fill)
@@ -582,13 +772,14 @@ def _style_cell(cell, *, size: int, colour: str, bold: bool = False, fill: str |
             run.font.color.rgb = _rgb(colour)
 
 
-def _draw_table(slide, table: Table, rows: list[Row], *, note: str | None) -> None:  # type: ignore[no-untyped-def]
+def _draw_table(slide, table: Table, rows: list[Row], *, note: str | None, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
     """One table, or one page of a paginated one, as a native PPTX table.
 
     Mirrors `docx.py`'s ``_table``: a label column then one column per
     measure, right-aligned numbers, subtotal rows shaded, negatives marked
-    twice over (parenthesised by ``format_value`` and coloured) so the sign
-    survives a black-and-white printout of a slide as readily as a page.
+    twice over (parenthesised or minus-signed by `number_negatives` and
+    coloured) so the sign survives a black-and-white printout of a slide as
+    readily as a page.
     """
     from pptx.enum.text import PP_ALIGN
 
@@ -604,6 +795,11 @@ def _draw_table(slide, table: Table, rows: list[Row], *, note: str | None) -> No
     grid = graphic.table
     for column, width in zip(grid.columns, _column_widths(table, box.cx)):
         column.width = width
+    _apply_table_density(grid, _cell_padding_pt(g))
+    borders = (g.gridline_policy, g.rule_weight)
+
+    body_size = _clamped_pt(g.type_scale[_TS_BODY])
+    header_size = _clamped_pt(g.type_scale[_TS_SUBHEADING])
 
     header_cells = grid.rows[0].cells
     header_cells[0].text = table.title
@@ -611,34 +807,44 @@ def _draw_table(slide, table: Table, rows: list[Row], *, note: str | None) -> No
         header_cells[index].text = column.label
     for index, cell in enumerate(header_cells):
         _style_cell(
-            cell, size=13, colour=_WHITE, bold=True, fill=_HEADER_FILL,
-            align=PP_ALIGN.LEFT if index == 0 else PP_ALIGN.RIGHT,
+            cell, size=header_size, colour=g.colour_roles["header_text"], bold=True,
+            fill=g.colour_roles["header_fill"], align=PP_ALIGN.LEFT if index == 0 else PP_ALIGN.RIGHT,
+            borders=borders,
         )
 
     for row_index, row in enumerate(rows, start=1):
         cells = grid.rows[row_index].cells
         cells[0].text = row.label
-        _style_cell(cells[0], size=MIN_FONT_PT, colour=_INK, bold=row.emphasis)
+        # A subtotal row's own text colour always wins over the
+        # negative-figure colour — see `docx.py::_table`'s identical
+        # reasoning: `subtotal_text` is the only colour `style.py` ever
+        # proves legible against `subtotal_fill`.
+        row_colour = g.colour_roles["subtotal_text"] if row.emphasis else g.colour_roles["body_text"]
+        _style_cell(cells[0], size=body_size, colour=row_colour, bold=row.emphasis, borders=borders)
         for column_index, column in enumerate(table.columns, start=1):
             cell = row.cells.get(column.key)
             value = cell.value if cell else None
-            cells[column_index].text = format_value(value, column.number_format) if cell else ""
             negative = isinstance(value, (int, float)) and value < 0
+            text = format_value(value, column.number_format) if cell else ""
+            if negative:
+                text = _negative_text(value, text, g.number_negatives)
+            cells[column_index].text = text
+            cell_colour = g.colour_roles["negative_text"] if negative and not row.emphasis else row_colour
             _style_cell(
-                cells[column_index], size=MIN_FONT_PT, colour=_NEGATIVE if negative else _INK,
-                bold=row.emphasis, align=PP_ALIGN.RIGHT,
+                cells[column_index], size=body_size, colour=cell_colour, bold=row.emphasis,
+                align=PP_ALIGN.RIGHT, borders=borders,
             )
         if row.emphasis:
             for cell in cells:
                 cell.fill.solid()
-                cell.fill.fore_color.rgb = _rgb(_ACCENT_FILL)
+                cell.fill.fore_color.rgb = _rgb(g.colour_roles["subtotal_fill"])
 
     if note_box is not None:
         note_shape = _textbox(slide, note_box)
         _write(note_shape.text_frame, [note], size=MIN_FONT_PT, colour=_MUTED, italic=True)
 
 
-def draw_metric_cards(slide, table: Table) -> None:  # type: ignore[no-untyped-def]
+def draw_metric_cards(slide, table: Table, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
     """A small table as a strip of KPI cards — ``finance.metric_strip`` — one
     box per row, each showing the row's first measure large and its label
     beneath.
@@ -655,11 +861,21 @@ def draw_metric_cards(slide, table: Table) -> None:  # type: ignore[no-untyped-d
     """
     from pptx.enum.text import PP_ALIGN
 
+    value_size = _clamped_pt(g.type_scale[_TS_TITLE])
+    label_size = _clamped_pt(g.type_scale[_TS_SUBHEADING])
+
     measure = table.columns[0] if table.columns else None
     for box, row in zip(_columns(BODY, len(table.rows)), table.rows):
-        card = _textbox(slide, box, fill=_ACCENT_FILL)
+        # `subtotal_fill`/`subtotal_text`, not `accent` — a card is a light
+        # tinted tile (the pptx analogue of `docx.py`'s shaded subtotal row),
+        # not the dark header band `accent` reuses; `subtotal_text` is the
+        # one colour `style.py` proves legible against `subtotal_fill`.
+        card = _textbox(slide, box, fill=g.colour_roles["subtotal_fill"])
         cell = row.cells.get(measure.key) if measure else None
-        value_text = format_value(cell.value, measure.number_format) if cell else ""
+        value = cell.value if cell else None
+        value_text = format_value(value, measure.number_format) if cell else ""
+        if isinstance(value, (int, float)) and value < 0:
+            value_text = _negative_text(value, value_text, g.number_negatives)
         frame = card.text_frame
         first = True
         for index, line in enumerate(text for text in (value_text, row.label) if text):
@@ -668,12 +884,18 @@ def draw_metric_cards(slide, table: Table) -> None:  # type: ignore[no-untyped-d
             paragraph.text = line
             paragraph.alignment = PP_ALIGN.CENTER
             run = paragraph.runs[0]
-            run.font.size = _pt(24 if index == 0 else 13)
+            # `subtotal_text` throughout, sign or no sign — see
+            # `docx.py::_table`'s identical rule: `subtotal_text` is the
+            # only colour `style.py` proves legible against `subtotal_fill`,
+            # so a card's negative figure marks itself by the
+            # parenthesised/minus convention, never by a second, unverified
+            # colour painted over this fill.
             run.font.bold = index == 0
-            run.font.color.rgb = _rgb(_HEADER_FILL if index == 0 else _MUTED)
+            run.font.size = _pt(value_size if index == 0 else label_size)
+            run.font.color.rgb = _rgb(g.colour_roles["subtotal_text"])
 
 
-def _draw_table_content(prs, slide_plan, footer_text: str) -> None:  # type: ignore[no-untyped-def]
+def _draw_table_content(prs, slide_plan, footer_text: str, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
     table = slide_plan.table
     assert table is not None
 
@@ -683,8 +905,8 @@ def _draw_table_content(prs, slide_plan, footer_text: str) -> None:  # type: ign
     # table the compiler tagged that way for beat-level reasons but that is
     # actually wide or long still gets the table it can honestly hold.
     if slide_plan.component_id == "finance.metric_strip" and 1 <= len(table.rows) <= 6 and len(table.columns) <= 3:
-        slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text)
-        draw_metric_cards(slide, table)
+        slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
+        draw_metric_cards(slide, table, g)
         return
 
     chunks = [
@@ -697,14 +919,16 @@ def _draw_table_content(prs, slide_plan, footer_text: str) -> None:  # type: ign
         # bare-number rule in `AGENTS.md` does not stop applying just because
         # the number in question is furniture rather than a fact.
         heading = slide_plan.heading if index == 0 else f"{slide_plan.heading} (continued)"
-        slide = _new_slide(prs, heading, footer_text=footer_text)
+        slide = _new_slide(prs, heading, footer_text=footer_text, g=g)
         # The note belongs to the table, not to any one page of it — shown
         # once, on the first slide, rather than repeated on every
         # continuation where it would read as new information each time.
-        _draw_table(slide, table, rows, note=table.note if index == 0 else None)
+        _draw_table(slide, table, rows, note=table.note if index == 0 else None, g=g)
 
 
-def _draw_content(prs, plan: PresentationPlan, slide_plan, facts: dict[str, CanonicalFact]) -> None:  # type: ignore[no-untyped-def]
+def _draw_content(  # type: ignore[no-untyped-def]
+    prs, plan: PresentationPlan, slide_plan, facts: dict[str, CanonicalFact], g: StyleGenome = _HOUSE_GENOME
+) -> None:
     """Dispatch one resolved section to a table or prose slide.
 
     Dispatch is on the section's own shape — whether it carries a ``table`` or
@@ -717,13 +941,13 @@ def _draw_content(prs, plan: PresentationPlan, slide_plan, facts: dict[str, Cano
     """
     footer_text = f"{plan.metadata.get('company', '')} · {plan.title}"
     if slide_plan.table is not None:
-        _draw_table_content(prs, slide_plan, footer_text)
+        _draw_table_content(prs, slide_plan, footer_text, g)
     elif slide_plan.body:
-        _draw_prose_content(prs, slide_plan, facts, footer_text)
+        _draw_prose_content(prs, slide_plan, facts, footer_text, g)
     else:
-        slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text)
+        slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
         body = _textbox(slide, BODY)
-        _write(body.text_frame, [_AWAITING], size=16, colour=_MUTED, italic=True)
+        _write(body.text_frame, [_AWAITING], size=_clamped_pt(g.type_scale[_TS_BODY]), colour=_MUTED, italic=True)
 
 
 # ---------------------------------------------------------------------------
@@ -740,6 +964,7 @@ def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> byt
     """
     pptx_pkg = _require_pptx()
     plan = _plan(ir)
+    g = _genome_for(ir)
 
     presentation = pptx_pkg.Presentation()
     presentation.slide_width = SLIDE_W
@@ -747,13 +972,13 @@ def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> byt
 
     for slide_plan in plan.slides:
         if slide_plan.kind == "cover":
-            _draw_cover(presentation, plan)
+            _draw_cover(presentation, plan, g)
         elif slide_plan.kind == "divider":
-            _draw_divider(presentation, slide_plan.heading)
+            _draw_divider(presentation, slide_plan.heading, g)
         elif slide_plan.kind == "closing":
-            _draw_closing(presentation, plan)
+            _draw_closing(presentation, plan, g)
         else:
-            _draw_content(presentation, plan, slide_plan, facts)
+            _draw_content(presentation, plan, slide_plan, facts, g)
 
     properties = presentation.core_properties
     properties.title = ir.title

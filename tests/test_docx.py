@@ -289,10 +289,18 @@ def test_long_documents_get_a_contents_field(rendered: World) -> None:
 
 def test_table_headers_are_shaded_and_negatives_are_marked(rendered: World) -> None:
     """A financial table nobody can scan is a financial table nobody reads."""
-    from worldloom.render.docx import _HEADER_FILL
+    from worldloom.compiler.style import genome
+    from worldloom.rng import Rng
 
     document = _one(rendered, "cfo-variance-memo")
-    assert _HEADER_FILL in document.element.xml
+    # The genome's fill, not the module constant. This used to assert
+    # `docx._HEADER_FILL` and was right to until the look became a property of
+    # the world rather than of the renderer. Asserting the constant now would
+    # only pass for whichever seed happened to sample the house palette, and
+    # would quietly stop testing anything for every other seed — so it derives
+    # the expected fill exactly as the renderer does.
+    expected = genome(Rng(rendered.seed).derive("style")).colour_roles["header_fill"]
+    assert expected in document.element.xml
     # Parenthesised, so the sign survives a black-and-white printer; the colour
     # is the second signal, never the only one.
     assert any("(" in cell.text for table in document.tables for row in table.rows for cell in row.cells)

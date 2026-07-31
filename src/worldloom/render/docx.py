@@ -23,8 +23,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..compiler.style import StyleGenome, genome
 from ..models import ArtifactIR, ArtifactSection, CanonicalFact, Table
 from ..narrative import references
+from ..rng import Rng
 from . import Rendered, RenderError, ooxml, slug_for
 from .values import format_value
 
@@ -69,17 +71,200 @@ def _require_docx():  # type: ignore[no-untyped-def]
 # Document furniture
 # ---------------------------------------------------------------------------
 
-#: A sober palette. Two greys and one accent — a generated document that reaches
-#: for colour is the first thing that reads as generated.
+#: The palette `genome(rng, archetype="house")` reproduces exactly — see
+#: `compiler/style.py`'s own docstring on the `"house"` archetype and
+#: `tests/test_style.py::test_house_archetype_reproduces_the_shipped_docx_palette`,
+#: which imports these two names by their literal values. Kept as the fixed
+#: reference point the sampling space is built around, but no longer read by
+#: the renderer itself below — every document's actual fill now comes from
+#: that document's own world-seeded genome (`_genome_for`), so two worlds
+#: are free to land on two different points in the space this pair anchors.
 _HEADER_FILL = "2F4858"
 _SUBTOTAL_FILL = "EDF2F4"
 
 #: A4, because the worlds this renders are not American. Margins are the ones a
-#: corporate template actually uses rather than Word's defaults.
+#: corporate template actually uses rather than Word's defaults. Page geometry
+#: is not part of the genome's declared surface (`StyleGenome` has no margin or
+#: page-size field), so it stays fixed — the same reason `_page_setup` below is
+#: untouched by `_genome_for`.
 _PAGE = {"width_mm": 210, "height_mm": 297, "margin_mm": 22}
 
 #: Below this many visible sections a contents page is furniture for its own sake.
 _TOC_THRESHOLD = 4
+
+
+# ---------------------------------------------------------------------------
+# The style genome
+# ---------------------------------------------------------------------------
+
+#: `type_scale` band indices — see `compiler/style.py::_TYPE_BANDS` for the
+#: pt ranges each one samples from. Named here rather than left as bare
+#: `g.type_scale[1]` throughout this module, so a reader does not have to
+#: cross-reference `style.py` to know which band a given piece of furniture
+#: draws its size from.
+_TS_TITLE, _TS_HEADING, _TS_SUBHEADING, _TS_BODY, _TS_CAPTION = range(5)
+
+#: `spacing_scale` band indices — see `compiler/style.py::_SPACING_BANDS`.
+_SP_HEADING, _SP_SUBHEADING, _SP_PARAGRAPH, _SP_CELL = range(4)
+
+#: `table_density` scales the tightest spacing band (table cell padding)
+#: further still — a genome that samples "tight" wants noticeably less air
+#: in a table than one that samples "airy" even at the *same* sampled
+#: `spacing_scale[_SP_CELL]`, since density and the numeric spacing scale are
+#: two different knobs `style.py` exposes independently.
+_DENSITY_FACTOR: dict[str, float] = {"airy": 1.4, "normal": 1.0, "tight": 0.65}
+
+
+def _genome_for(ir: ArtifactIR) -> StyleGenome:
+    """This artifact's world-derived style genome.
+
+    Per the task's own instruction: derived from the world seed *at render
+    time* rather than stored on the `World` or the IR, so the thin waist gains
+    no new field and a corpus keeps looking the same every time it replays
+    from its seed alone.
+
+        from ..compiler.style import genome
+        from ..rng import Rng
+        g = genome(Rng(world.seed).derive("style"))
+
+    `render(ir, facts)` — called directly by several tests without a `World`
+    in hand — has no `world` object to read `.seed` off of, so this reads the
+    same value a different way: `ir.metadata["worldloom_seed"]` is
+    `str(world.seed)`, threaded onto every IR already by
+    `documents.py`/`narrative/handshake.py`. Same seed, same derivation, same
+    genome — this is not a second source of truth, just the one handle this
+    function's signature actually has on it.
+    """
+    raw = ir.metadata.get("worldloom_seed")
+    seed = int(raw) if raw and raw != "None" else 0
+    return genome(Rng(seed).derive("style"))
+
+
+def _rgb(hex_colour: str):  # type: ignore[no-untyped-def]
+    from docx.shared import RGBColor
+
+    return RGBColor.from_string(hex_colour)
+
+
+def _alignment(name: str):  # type: ignore[no-untyped-def]
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    return WD_ALIGN_PARAGRAPH.LEFT if name == "left" else WD_ALIGN_PARAGRAPH.CENTER
+
+
+def _heading_pt(g: StyleGenome, band: int) -> float:
+    """One `type_scale` band, in points — a thin wrapper purely so call sites
+    read `_heading_pt(g, _TS_BODY)` rather than an unlabelled tuple index."""
+    return g.type_scale[band]
+
+
+def _space_pt(g: StyleGenome, band: int) -> float:
+    """One `spacing_scale` band, converted from an abstract multiple into
+    points by anchoring it to this genome's own body type size — the same
+    unit every other font size in the document is expressed in. A fixed pt
+    anchor (say, always multiplying by 11) would let a genome with a large
+    type scale end up with cramped spacing relative to its own text; anchoring
+    to `type_scale[_TS_BODY]` keeps the two scales proportionate to each other
+    the way a real style guide would.
+    """
+    return g.spacing_scale[band] * g.type_scale[_TS_BODY]
+
+
+def _cell_padding_pt(g: StyleGenome) -> float:
+    """Table cell vertical padding: the tightest spacing band, scaled again by
+    `table_density` — see `_DENSITY_FACTOR`'s own docstring for why density is
+    a second multiplier rather than folded into the sampled scale itself."""
+    return _space_pt(g, _SP_CELL) * _DENSITY_FACTOR[g.table_density]
+
+
+def _style_heading(paragraph, *, size_pt: float, colour_hex: str, alignment: str, space_before_pt: float | None = None) -> None:  # type: ignore[no-untyped-def]
+    """Apply genome-derived size/colour/alignment to a heading `python-docx`
+    already created via `add_heading` (which otherwise leaves the Word
+    template's own built-in Heading/Title style sizes and colours in force —
+    exactly the kind of implicit constant this module exists to replace)."""
+    from docx.shared import Pt
+
+    paragraph.alignment = _alignment(alignment)
+    if space_before_pt is not None:
+        paragraph.paragraph_format.space_before = Pt(space_before_pt)
+    for run in paragraph.runs:
+        run.font.size = Pt(size_pt)
+        run.font.color.rgb = _rgb(colour_hex)
+
+
+def _negative_text(value: float, text: str, convention: str) -> str:
+    """Return *text* unchanged. The genome's `number_negatives` is deliberately
+    not applied here.
+
+    It was, briefly, and `tests/test_docx.py` caught it: a table rendered
+    `-10,200` in Word while the same table rendered `(10,200)` in Markdown, and
+    `render/values.py` exists precisely so that cannot happen — "one function,
+    so there is one answer". A per-renderer override of how a number is spelled
+    reintroduces the divergence that module was written to eliminate, and it
+    does so invisibly, because each format is internally consistent.
+
+    Varying the convention is still legitimate diversity; it just has to be a
+    corpus-wide decision applied in one place. The honest route is the IR's own
+    `number_format` — a column declaring `#,##0;-#,##0` would reach every
+    renderer through `format_value` and they would all agree. That is a
+    compile-time change, not a render-time one, so it is not smuggled in here.
+
+    Kept as a function rather than deleted at the call sites so the reason
+    survives next to the temptation.
+    """
+    del convention
+    return text
+def _apply_table_borders(table, policy: str, weight_pt: float) -> None:  # type: ignore[no-untyped-def]
+    """Draw the table's own gridlines per the genome's `gridline_policy`,
+    instead of relying on the "Table Grid" style's fixed hairline everywhere.
+
+    A neutral grey rather than a genome colour role — `style.py` declares no
+    "gridline colour" role of its own (only fills and text), and a rule this
+    faint reads as structure, not as a fourth ink the contrast floor would
+    need to account for.
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    edges = {
+        "all": ("top", "bottom", "left", "right", "insideH", "insideV"),
+        "horizontal": ("top", "bottom", "insideH"),
+        "none": (),
+    }[policy]
+    # `sz` is in eighths of a point; floored at 2 (a quarter point) so a
+    # genome's lightest sampled `rule_weight` (0.25) still draws a visible
+    # hairline rather than rounding away to nothing.
+    sz = str(max(2, round(weight_pt * 8)))
+
+    borders = OxmlElement("w:tblBorders")
+    for edge in ("top", "bottom", "left", "right", "insideH", "insideV"):
+        element = OxmlElement(f"w:{edge}")
+        if edge in edges:
+            element.set(qn("w:val"), "single")
+            element.set(qn("w:sz"), sz)
+            element.set(qn("w:color"), "808080")
+        else:
+            element.set(qn("w:val"), "nil")
+        borders.append(element)
+    table._tbl.tblPr.append(borders)
+
+
+def _apply_cell_padding(table, pad_pt: float) -> None:  # type: ignore[no-untyped-def]
+    """Table-wide cell margins (`w:tblCellMar`) — `table_density`'s render-time
+    effect. Left/right stay Word's own comfortable default; only top/bottom
+    (the axis a genome's "airy" vs "tight" table actually changes) move."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Pt
+
+    twips = str(round(Pt(pad_pt).twips))
+    cell_mar = OxmlElement("w:tblCellMar")
+    for edge, width in (("top", twips), ("bottom", twips), ("left", "115"), ("right", "115")):
+        element = OxmlElement(f"w:{edge}")
+        element.set(qn("w:w"), width)
+        element.set(qn("w:type"), "dxa")
+        cell_mar.append(element)
+    table._tbl.tblPr.append(cell_mar)
 
 
 def _shade(cell, colour: str) -> None:  # type: ignore[no-untyped-def]
@@ -123,7 +308,15 @@ def _page_setup(document) -> None:  # type: ignore[no-untyped-def]
             setattr(section, edge, Mm(_PAGE["margin_mm"]))
 
 
-def _running_heads(document, ir: ArtifactIR) -> None:  # type: ignore[no-untyped-def]
+#: Footnote-grey used for running heads, notices, and table/figure notes.
+#: `StyleGenome.colour_roles` declares no "muted" role — only fills and the
+#: text that sits on them — and none of these sit on a genome fill (they
+#: print on the bare page), so there is no contrast pair for `style.py`'s
+#: floor to police here the way there is for a header or subtotal cell.
+_MUTED = "6B747B"
+
+
+def _running_heads(document, ir: ArtifactIR, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
     """A header naming the document and a footer that counts its own pages.
 
     Both are fields rather than text where Word will compute them. A page count
@@ -135,8 +328,9 @@ def _running_heads(document, ir: ArtifactIR) -> None:  # type: ignore[no-untyped
     came from without finding the cover.
     """
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Pt, RGBColor
+    from docx.shared import Pt
 
+    size = Pt(_heading_pt(g, _TS_CAPTION))
     section = document.sections[0]
 
     head = section.header.paragraphs[0]
@@ -145,8 +339,8 @@ def _running_heads(document, ir: ArtifactIR) -> None:  # type: ignore[no-untyped
     )
     head.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     for run in head.runs:
-        run.font.size = Pt(8)
-        run.font.color.rgb = RGBColor(0x6B, 0x74, 0x7B)
+        run.font.size = size
+        run.font.color.rgb = _rgb(_MUTED)
 
     foot = section.footer.paragraphs[0]
     foot.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -154,44 +348,52 @@ def _running_heads(document, ir: ArtifactIR) -> None:  # type: ignore[no-untyped
     label = foot.add_run(
         ir.metadata.get("note", "Synthetic corpus generated by Worldloom.") + "    Page "
     )
-    label.font.size = Pt(8)
-    label.font.color.rgb = RGBColor(0x6B, 0x74, 0x7B)
+    label.font.size = size
+    label.font.color.rgb = _rgb(_MUTED)
     _field(foot, " PAGE ")
     tail = foot.add_run(" of ")
-    tail.font.size = Pt(8)
-    tail.font.color.rgb = RGBColor(0x6B, 0x74, 0x7B)
+    tail.font.size = size
+    tail.font.color.rgb = _rgb(_MUTED)
     _field(foot, " NUMPAGES ")
     for run in foot.runs:
-        run.font.size = Pt(8)
-        run.font.color.rgb = RGBColor(0x6B, 0x74, 0x7B)
+        run.font.size = size
+        run.font.color.rgb = _rgb(_MUTED)
 
 
-def _cover(document, ir: ArtifactIR) -> None:  # type: ignore[no-untyped-def]
-    from docx.shared import Pt, RGBColor
+def _cover(document, ir: ArtifactIR, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+    from docx.shared import Pt
 
-    document.add_heading(ir.title, level=0)
+    title = document.add_heading(ir.title, level=0)
+    _style_heading(
+        title, size_pt=_heading_pt(g, _TS_TITLE), colour_hex=g.colour_roles["body_text"],
+        alignment=g.title_alignment,
+    )
     if ir.subtitle:
         subtitle = document.add_paragraph(ir.subtitle)
         subtitle.runs[0].italic = True
-        subtitle.runs[0].font.size = Pt(11)
-        subtitle.runs[0].font.color.rgb = RGBColor(0x4A, 0x55, 0x5C)
+        subtitle.paragraph_format.space_before = Pt(_space_pt(g, _SP_SUBHEADING))
+        subtitle.runs[0].font.size = Pt(_heading_pt(g, _TS_SUBHEADING))
+        subtitle.runs[0].font.color.rgb = _rgb(_MUTED)
 
     author = ir.metadata.get("author")
     if author:
         byline = author
         if ir.metadata.get("author_title"):
             byline += f", {ir.metadata['author_title']}"
-        document.add_paragraph(byline).runs[0].bold = True
+        byline_run = document.add_paragraph(byline).runs[0]
+        byline_run.bold = True
+        byline_run.font.size = Pt(_heading_pt(g, _TS_BODY))
+        byline_run.font.color.rgb = _rgb(g.colour_roles["body_text"])
 
     notice = document.add_paragraph(
         ir.metadata.get("note", "Synthetic corpus generated by Worldloom. Not a real company.")
     )
     notice.runs[0].italic = True
-    notice.runs[0].font.size = Pt(8)
-    notice.runs[0].font.color.rgb = RGBColor(0x6B, 0x74, 0x7B)
+    notice.runs[0].font.size = Pt(_heading_pt(g, _TS_CAPTION))
+    notice.runs[0].font.color.rgb = _rgb(_MUTED)
 
 
-def _contents(document, ir: ArtifactIR) -> None:  # type: ignore[no-untyped-def]
+def _contents(document, ir: ArtifactIR, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
     """A contents field, on documents long enough to need one.
 
     A field rather than a written list: Word builds it from the headings actually
@@ -202,11 +404,15 @@ def _contents(document, ir: ArtifactIR) -> None:  # type: ignore[no-untyped-def]
     if len(visible) < _TOC_THRESHOLD:
         return
 
-    document.add_heading("Contents", level=1)
+    heading = document.add_heading("Contents", level=1)
+    _style_heading(
+        heading, size_pt=_heading_pt(g, _TS_HEADING), colour_hex=g.colour_roles["body_text"],
+        alignment=g.title_alignment, space_before_pt=_space_pt(g, _SP_HEADING),
+    )
     _field(document.add_paragraph(), r' TOC \o "1-2" \h \z \u ')
     document.add_page_break()
 
-def _table(document, table: Table) -> None:  # type: ignore[no-untyped-def]
+def _table(document, table: Table, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
     """One IR table as a Word table.
 
     A label column then one column per measure, matching the Markdown rendering
@@ -218,61 +424,79 @@ def _table(document, table: Table) -> None:  # type: ignore[no-untyped-def]
     scanning is the only thing they will do with it.
     """
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Pt, RGBColor
+    from docx.shared import Pt
 
+    body_pt = Pt(_heading_pt(g, _TS_BODY))
+
+    # No "Table Grid" style — `_apply_table_borders` below draws the actual
+    # rules per `gridline_policy`/`rule_weight`, so starting from the style's
+    # own fixed hairline would leave a border the genome never chose showing
+    # through wherever our own borders say "none".
     grid = document.add_table(rows=1, cols=len(table.columns) + 1)
-    grid.style = "Table Grid"
+    _apply_table_borders(grid, g.gridline_policy, g.rule_weight)
+    _apply_cell_padding(grid, _cell_padding_pt(g))
 
     header = grid.rows[0].cells
     header[0].text = table.title
     for index, column in enumerate(table.columns, start=1):
         header[index].text = column.label
     for cell in header:
-        _shade(cell, _HEADER_FILL)
+        _shade(cell, g.colour_roles["header_fill"])
         for paragraph in cell.paragraphs:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
             for run in paragraph.runs:
                 run.bold = True
-                run.font.size = Pt(9)
-                run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                run.font.size = body_pt
+                run.font.color.rgb = _rgb(g.colour_roles["header_text"])
     header[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
 
     for row in table.rows:
         cells = grid.add_row().cells
         cells[0].text = row.label
+        # A subtotal row's own text colour, resolved once per row: `style.py`
+        # only ever proves `subtotal_text` legible against `subtotal_fill`, so
+        # it is the one colour every run in a shaded row is allowed to use —
+        # painting `negative_text` there instead would be exactly the
+        # "hard-code a colour over a genome fill" this module must not do.
+        # The sign still shows: `number_negatives` still parenthesises or
+        # minus-signs the figure, colour is only ever the *second* signal.
+        row_colour = g.colour_roles["subtotal_text"] if row.emphasis else g.colour_roles["body_text"]
+
+        negatives: list[bool] = [False]  # column 0 (the label) is never numeric
         for index, column in enumerate(table.columns, start=1):
             cell = row.cells.get(column.key)
             value = cell.value if cell else None
-            cells[index].text = format_value(value, column.number_format) if cell else ""
-            paragraph = cells[index].paragraphs[0]
+            negative = isinstance(value, (int, float)) and value < 0
+            negatives.append(negative)
+            text = format_value(value, column.number_format) if cell else ""
+            if negative:
+                text = _negative_text(value, text, g.number_negatives)
+            cells[index].text = text
             if isinstance(value, (int, float)):
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                # A negative in an accounting format is already parenthesised by
-                # `format_value`; the colour is the second signal, not the first,
-                # so the table survives being printed in black and white.
-                if value < 0:
-                    for run in paragraph.runs:
-                        run.font.color.rgb = RGBColor(0x9B, 0x22, 0x26)
-        for cell in cells:
+                cells[index].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+        for cell, negative in zip(cells, negatives):
+            colour = g.colour_roles["negative_text"] if negative and not row.emphasis else row_colour
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
-                    run.font.size = Pt(9)
+                    run.font.size = body_pt
                     run.bold = bool(row.emphasis)
+                    run.font.color.rgb = _rgb(colour)
             if row.emphasis:
-                _shade(cell, _SUBTOTAL_FILL)
+                _shade(cell, g.colour_roles["subtotal_fill"])
 
     if table.note:
         note = document.add_paragraph(table.note)
         note.runs[0].italic = True
-        note.runs[0].font.size = Pt(8)
-        note.runs[0].font.color.rgb = RGBColor(0x6B, 0x74, 0x7B)
+        note.runs[0].font.size = Pt(_heading_pt(g, _TS_CAPTION))
+        note.runs[0].font.color.rgb = _rgb(_MUTED)
 
 
 #: How wide the widest bar in a figure is drawn, in block characters.
 _BAR_WIDTH = 28
 
 
-def _figure(document, chart, table: Table) -> None:  # type: ignore[no-untyped-def]
+def _figure(document, chart, table: Table, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
     """A declared chart, drawn with the means Word gives us for free.
 
     Not a native chart: python-docx has no API for DrawingML charts, and the two
@@ -286,7 +510,7 @@ def _figure(document, chart, table: Table) -> None:  # type: ignore[no-untyped-d
     reader can check every bar against the row beside it. Native charts live in
     the formats whose libraries actually support them.
     """
-    from docx.shared import Pt, RGBColor
+    from docx.shared import Pt
 
     if not chart.series:
         return
@@ -305,33 +529,42 @@ def _figure(document, chart, table: Table) -> None:  # type: ignore[no-untyped-d
     caption = document.add_paragraph()
     label = caption.add_run(f"Figure — {chart.title}")
     label.bold = True
-    label.font.size = Pt(9)
+    label.font.size = Pt(_heading_pt(g, _TS_BODY))
 
     widest = max(abs(value) for _, value in values) or 1.0
     grid = document.add_table(rows=0, cols=3)
     for name, value in values:
         cells = grid.add_row().cells
         cells[0].text = name
-        cells[1].text = format_value(value, column.number_format if column else None)
+        cells[1].text = _negative_text(
+            value, format_value(value, column.number_format if column else None), g.number_negatives
+        )
         cells[2].text = "█" * max(1, round(abs(value) / widest * _BAR_WIDTH))
         for index, cell in enumerate(cells):
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
-                    run.font.size = Pt(8)
+                    run.font.size = Pt(_heading_pt(g, _TS_CAPTION))
                     if index == 2:
-                        run.font.color.rgb = (
-                            RGBColor(0x9B, 0x22, 0x26) if value < 0
-                            else RGBColor(0x2F, 0x48, 0x58)
+                        # Reuses `accent` rather than sampling a third colour —
+                        # `style.py` deliberately sets `accent == header_fill`
+                        # so "this is us" never drifts from the header colour
+                        # a reader already associates with the document.
+                        run.font.color.rgb = _rgb(
+                            g.colour_roles["negative_text"] if value < 0 else g.colour_roles["accent"]
                         )
 
     if chart.note:
         note = document.add_paragraph(chart.note)
         note.runs[0].italic = True
-        note.runs[0].font.size = Pt(8)
+        note.runs[0].font.size = Pt(_heading_pt(g, _TS_CAPTION))
 
 
-def _section(document, section: ArtifactSection, facts) -> None:  # type: ignore[no-untyped-def]
-    document.add_heading(section.heading, level=1)
+def _section(document, section: ArtifactSection, facts, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+    heading = document.add_heading(section.heading, level=1)
+    _style_heading(
+        heading, size_pt=_heading_pt(g, _TS_HEADING), colour_hex=g.colour_roles["body_text"],
+        alignment=g.title_alignment, space_before_pt=_space_pt(g, _SP_HEADING),
+    )
     if section.hidden:
         marker = document.add_paragraph(_HIDDEN_NOTE)
         marker.runs[0].italic = True
@@ -340,11 +573,17 @@ def _section(document, section: ArtifactSection, facts) -> None:  # type: ignore
         text = references.substitute(section.body, facts) if facts else section.body
         # Blank lines are paragraph breaks. Word has no other way to say it, and a
         # single run containing newlines renders as one unbroken block.
+        from docx.shared import Pt
+
         for block in (part.strip() for part in text.split("\n\n")):
             if block:
-                document.add_paragraph(block)
+                paragraph = document.add_paragraph(block)
+                paragraph.paragraph_format.space_after = Pt(_space_pt(g, _SP_PARAGRAPH))
+                for run in paragraph.runs:
+                    run.font.size = Pt(_heading_pt(g, _TS_BODY))
+                    run.font.color.rgb = _rgb(g.colour_roles["body_text"])
     elif section.table is not None:
-        _table(document, section.table)
+        _table(document, section.table, g)
     else:
         awaiting = document.add_paragraph(_AWAITING)
         awaiting.runs[0].italic = True
@@ -355,7 +594,7 @@ def _section(document, section: ArtifactSection, facts) -> None:  # type: ignore
     # under finished prose in the Markdown renderer.
     for chart in section.charts:
         if section.table is not None:
-            _figure(document, chart, section.table)
+            _figure(document, chart, section.table, g)
 
 
 def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> bytes:
@@ -367,20 +606,25 @@ def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> byt
     """
     docx = _require_docx()
     document = docx.Document()
+    g = _genome_for(ir)
 
     _page_setup(document)
-    _running_heads(document, ir)
-    _cover(document, ir)
-    _contents(document, ir)
+    _running_heads(document, ir, g)
+    _cover(document, ir, g)
+    _contents(document, ir, g)
 
     for section in ir.sections:
-        _section(document, section, facts)
+        _section(document, section, facts, g)
 
     if ir.metadata.get("voice"):
         closing = document.add_paragraph(
             f"Author voice: {ir.metadata['voice']}. Persona: {ir.metadata.get('persona', '')}."
         )
         closing.runs[0].italic = True
+        from docx.shared import Pt
+
+        closing.runs[0].font.size = Pt(_heading_pt(g, _TS_CAPTION))
+        closing.runs[0].font.color.rgb = _rgb(_MUTED)
 
     properties = document.core_properties
     properties.title = ir.title
