@@ -408,6 +408,8 @@ class World:
             "parents": list(artifact.derived_from),
             "children": [a.id for a in self._artifacts if artifact.id in a.derived_from],
             "supersedes": artifact.supersedes,
+            "restates": artifact.restates,
+            "restated_by": [a.id for a in self._artifacts if a.restates == artifact.id],
             "known_imperfections": [
                 e.error_type.value for e in self._intentional_errors if e.artifact_id == artifact.id
             ],
@@ -635,6 +637,11 @@ class World:
         # a v2 existing — the number is a fact about the chain, not a label.
         revises = {i.id: i.revises for i in self._artifact_intents if i.revises}
         replaced |= set(revises.values())
+        # `restates` is conspicuously absent from `replaced`, and that absence is
+        # the relationship's defining property: a restated filing stays on the
+        # record in its own lifecycle. Adding it here would turn a formal
+        # correction into an edit of an immutable document, which is exactly the
+        # thing regulated filings exist to make impossible.
 
         def version_of(intent_id: str) -> int:
             version, seen = 1, {intent_id}
@@ -681,6 +688,7 @@ class World:
                     supersedes=intent.supersedes,
                     derived_from=list(intent.derived_from),
                     revises=intent.revises,
+                    restates=intent.restates,
                     version=version_of(intent.id),
                     access_policy_id=self._policy_for(intent.audience),
                     recipe=intent.artifact_type,

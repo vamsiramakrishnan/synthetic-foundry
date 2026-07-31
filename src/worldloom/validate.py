@@ -246,6 +246,7 @@ class _Validator:
             self.check_refs(artifact.id, "lore_ids", artifact.lore_ids, expect="LORE")
             self.check_refs(artifact.id, "derived_from", artifact.derived_from, expect="ART")
             self.check_ref(artifact.id, "supersedes", artifact.supersedes, expect="ART")
+            self.check_ref(artifact.id, "restates", artifact.restates, expect="ART")
             self.check_ref(artifact.id, "access_policy_id", artifact.access_policy_id, expect="POLICY")
 
         for case in w.evaluations:
@@ -476,6 +477,80 @@ class _Validator:
                 self.fail(
                     "referential", "revised_not_marked", earlier.id,
                     f"revised by {entry.id} but still {earlier.lifecycle.value}",
+                )
+
+        # Restatement is the fourth relationship, and its contract inverts the
+        # other two: the predecessor must *stay* on the record. A filed return
+        # is immutable — that is what makes it a filing — so a correction is a
+        # new document that says which figures moved, while the original keeps
+        # its lifecycle. The checks below hold both halves: the restating
+        # document must be a well-formed correction, and the restated one must
+        # not have been quietly retired.
+        restated_by: dict[str, str] = {}
+        for entry in self.world.artifacts:
+            if not entry.restates:
+                continue
+            earlier = entries.get(entry.restates)
+
+            self.checks += 1
+            if entry.restates == entry.id:
+                self.fail("referential", "self_restated", entry.id, "restates itself")
+
+            self.checks += 1
+            if entry.revises or entry.supersedes:
+                self.fail(
+                    "referential", "conflated_relationship", entry.id,
+                    "restates is exclusive with revises/supersedes — a correction"
+                    " that retires the original is an edit of an immutable filing"
+                    " wearing a different name",
+                )
+
+            self.checks += 1
+            if entry.restates in restated_by:
+                self.fail(
+                    "referential", "restated_twice", entry.restates,
+                    f"restated by both {restated_by[entry.restates]} and {entry.id}"
+                    " — a second correction restates the first restatement, so the"
+                    " chain stays a line the reader can follow",
+                )
+            restated_by[entry.restates] = entry.id
+
+            if earlier is None:
+                continue
+
+            self.checks += 1
+            if earlier.created_at > entry.created_at:
+                self.fail(
+                    "temporal", "restates_later_artifact", entry.id,
+                    f"restates {earlier.id}, which was written later"
+                    f" ({earlier.created_at.isoformat()})",
+                )
+
+            self.checks += 1
+            if earlier.artifact_type != entry.artifact_type:
+                self.fail(
+                    "referential", "restates_different_kind", entry.id,
+                    f"a {entry.artifact_type} cannot restate a {earlier.artifact_type}",
+                )
+
+        # The other half of the contract, checked from the original's side: being
+        # restated must not have retired it. SUPERSEDED is only legitimate on a
+        # restated artifact when something *else* genuinely replaced it.
+        for artifact_id, corrector in restated_by.items():
+            entry = entries.get(artifact_id)
+            if entry is None:
+                continue
+            self.checks += 1
+            if (
+                entry.lifecycle is Lifecycle.SUPERSEDED
+                and artifact_id not in replaced_by
+                and artifact_id not in revised_by
+            ):
+                self.fail(
+                    "referential", "restated_original_retired", artifact_id,
+                    f"restated by {corrector} but marked superseded — a filing"
+                    " stays on the record; the restatement corrects it without"
+                    " removing it",
                 )
 
         # Derivation is not replacement: an earlier review of an earlier incident
