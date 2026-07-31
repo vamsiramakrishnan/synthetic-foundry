@@ -1,19 +1,22 @@
 # Worldloom design documents
 
-Worldloom is in design. These documents are the specification being built toward; nothing is implemented yet.
+Worldloom is being implemented as a deterministic, library-first harness. These documents are the architectural contracts for what has landed and what comes next.
 
 | Document | Answers |
 | --- | --- |
-| [build-order.md](build-order.md) | What gets built, in what order, and what gate each step must pass |
+| [build-order.md](build-order.md) | What gets built, in what order, what has landed, and what gate each step must pass |
 | [generation-model.md](generation-model.md) | Which engine owns what, across all twenty generation areas |
 | [lore.md](lore.md) | What lore is as a data structure, and how lore generators are authored |
+| [artifact-compiler.md](artifact-compiler.md) | How one resolved ArtifactIR becomes diverse PPTX, DOCX, XLSX, and PDF outputs through components, grammars, constraints, validation, and bounded repair |
 
-Read them in that order. The build order is the plan; the generation model is the contract every step must honour; lore is the layer everything else is derived from.
+Read the build order first. The generation model is the ownership contract. Lore supplies the priors from which a world is derived. The artifact compiler extends the existing renderer boundary without allowing formats or models to invent truth.
 
-## The three load-bearing decisions
+## The four load-bearing decisions
 
 **The generation boundary.** The deterministic engine owns everything that must be *correct* — arithmetic, identity, referential integrity, the graph, the timeline, permissions. The generative engine owns everything that must be *plausible*. Nothing is owned by both. → [generation-model.md](generation-model.md)
 
 **Determinism survives the LLM.** Every generative call is content-addressed into a generation ledger keyed by seed, call site, input facts, model, and prompt version. `from_seed()` replays the ledger instead of re-prompting, so regeneration is offline and byte-identical. → [generation-model.md](generation-model.md#2-every-generative-call-is-recorded-so-worlds-replay)
 
-**One coherent episode before any subsystem.** The first executable is `worldloom demo retail-close`, producing a hand-authored corpus with no LLM involved, so the product contract is fixed before prompt behaviour can shape the architecture. → [build-order.md](build-order.md)
+**One coherent episode before any subsystem.** The first executable is `worldloom demo retail-close`, producing a bounded corpus whose truth, lineage, evaluations, and cross-format projections can be falsified. → [build-order.md](build-order.md)
+
+**One resolved structure, many native artifacts.** PPTX, DOCX, XLSX, and PDF are compiled from the same `ArtifactIR`. Atomic components, format grammars, layout constraints, and diversity search may change presentation; they may never change facts, tables, formulas, or provenance. → [artifact-compiler.md](artifact-compiler.md)
