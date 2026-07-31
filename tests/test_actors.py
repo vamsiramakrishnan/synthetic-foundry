@@ -779,3 +779,218 @@ def test_an_episode_needs_a_seeded_world() -> None:
     loaded = World.load("retail-close")
     with pytest.raises(EpisodeError):
         run_episode(loaded, ScriptedActorProvider(), period=PERIOD)
+
+
+# ---------------------------------------------------------------------------
+# The handshake: driving an episode from the CLI, one decision at a time
+# ---------------------------------------------------------------------------
+
+
+def pending_world() -> World:
+    """A world whose recipe names an actor close nobody has decided yet."""
+    from dataclasses import replace as _replace
+
+    from worldloom.recipe import with_step
+
+    world = RetailWorld(seed=8128).build()
+    return _replace(
+        world,
+        _recipe=with_step(
+            world._recipe, "MonthEndClose", period=PERIOD, incident=True,
+            comparatives=0, actors=True,
+        ),
+    )
+
+
+def test_a_world_records_how_it_was_made(acted: World) -> None:
+    """A corpus that cannot say how it was made cannot be rebuilt."""
+    from worldloom import recipe as recipe_module
+
+    assert acted.recipe["seed"] == 8128
+    assert acted.recipe["archetype"] == "omnichannel_retailer"
+    assert acted.recipe["steps"] == [
+        {"scenario": "MonthEndClose", "period": PERIOD, "incident": True,
+         "comparatives": 0, "actors": True}
+    ]
+    rebuilt = recipe_module.rebuild(acted.recipe, actors=ScriptedActorProvider())
+    assert [f.id for f in rebuilt.facts] == [f.id for f in acted.facts]
+
+
+def test_the_recipe_survives_a_round_trip(acted: World, tmp_path) -> None:
+    acted.export(tmp_path / "corpus")
+    assert World.load(tmp_path / "corpus").recipe == acted.recipe
+
+
+def test_a_recipe_may_only_name_a_scenario_the_rebuilder_knows() -> None:
+    from worldloom.recipe import RecipeError, build_recipe, with_step
+
+    with pytest.raises(RecipeError, match="unknown scenario"):
+        with_step(build_recipe(archetype="omnichannel_retailer", seed=1), "DeleteEverything")
+
+
+def test_a_corpus_with_no_recipe_says_so_rather_than_guessing() -> None:
+    from worldloom.recipe import RecipeError, rebuild
+
+    with pytest.raises(RecipeError, match="cannot be rebuilt"):
+        rebuild({})
+
+
+def test_the_handshake_pauses_at_the_first_undecided_turn() -> None:
+    from worldloom.actors import handshake
+
+    document = handshake.requests_document(pending_world())
+    assert document["complete"] is False
+    decision = document["decision"]
+    assert decision["id"] == "INV-0001#0"
+    assert decision["role"] == "svc_desk"
+    assert decision["trigger"]["kind"] == "pipeline_failed"
+    assert decision["facts"], "the first responder can see nothing at all"
+    assert decision["tools"], "no tools were offered"
+
+
+def test_the_decision_document_is_answerable_without_the_corpus() -> None:
+    """The claim the whole handshake rests on.
+
+    An agent that had to open `facts.jsonl` to decide what the analyst should do
+    would be reading the world rather than that analyst's position in it, and
+    every information-asymmetry property would quietly stop holding. So the
+    scripted actor is given the document and nothing else.
+    """
+    import sys
+
+    sys.path.insert(0, "tests")
+    from scripted_actor import choose  # type: ignore[import-not-found]
+
+    from worldloom.actors import handshake
+
+    document = handshake.requests_document(pending_world())
+    action = choose(document["decision"])
+    assert action["tool_name"] in {tool["name"] for tool in document["decision"]["tools"]}
+
+
+def test_an_accepted_decision_advances_the_episode() -> None:
+    from worldloom.actors import handshake
+
+    world = pending_world()
+    first = handshake.requests_document(world)["decision"]
+    outcome = handshake.accept(
+        world,
+        {first["id"]: {"tool_name": "search_incidents", "arguments": {"query": "valuation"}}},
+    )
+    assert outcome.accepted, outcome.rejections
+    assert outcome.applied == [first["id"]]
+    assert not outcome.complete
+    assert outcome.world is not None
+
+    # And the next call resumes past it rather than re-asking it.
+    second = handshake.requests_document(outcome.world)["decision"]
+    assert second["id"] != first["id"]
+
+
+def test_an_illegal_action_is_refused_and_commits_nothing() -> None:
+    from worldloom.actors import handshake
+
+    world = pending_world()
+    decision = handshake.requests_document(world)["decision"]
+    outcome = handshake.accept(
+        world,
+        {decision["id"]: {"tool_name": "post_journal",
+                          "arguments": {"request_fact_id": decision["facts"][0]["id"],
+                                        "amount": 1.0}}},
+    )
+    assert not outcome.accepted
+    assert "not_authorised" in outcome.rejections[decision["id"]]
+    assert outcome.world is None
+
+
+def test_answering_a_decision_that_is_not_pending_is_refused() -> None:
+    from worldloom.actors import handshake
+
+    outcome = handshake.accept(
+        pending_world(),
+        {"INV-9999#7": {"tool_name": "search_incidents", "arguments": {"query": "x"}}},
+    )
+    assert not outcome.accepted
+    assert "no decision with this id was pending" in outcome.rejections["INV-9999#7"]
+
+
+def test_an_abstention_must_explain_itself_at_the_boundary_too() -> None:
+    from worldloom.actors import handshake
+
+    with pytest.raises(ValueError, match="abstention_reason"):
+        handshake.parse_actions({"actions": [{"id": "INV-0001#0", "tool_name": None}]})
+
+
+def test_the_model_id_is_pinned_once_the_episode_has_started() -> None:
+    """Answering under a second id would silently restart the episode."""
+    from worldloom.actors import handshake
+
+    world = pending_world()
+    decision = handshake.requests_document(world)["decision"]
+    outcome = handshake.accept(
+        world,
+        {decision["id"]: {"tool_name": "search_incidents", "arguments": {"query": "valuation"}}},
+        model_id="first-model",
+    )
+    assert outcome.world is not None
+    with pytest.raises(ValueError, match="would miss every key"):
+        handshake.accept(outcome.world, {}, model_id="second-model")
+
+
+def test_a_corpus_with_no_actor_episode_says_so() -> None:
+    from worldloom.actors import handshake
+    from worldloom.recipe import RecipeError
+
+    plain = RetailWorld(seed=8128).build().run(
+        MonthEndClose(period=PERIOD, include_operational_incident=True)
+    )
+    with pytest.raises(RecipeError, match="no actor episode"):
+        handshake.requests_document(plain)
+
+
+def test_an_actor_is_only_offered_artifact_types_it_may_author() -> None:
+    """Narrowing what is offered, so a budget is not spent on refusals."""
+    from worldloom.actors.tools import catalogue
+
+    def types(role: str) -> tuple[str, ...]:
+        policy = policy_module.policy_for(role)
+        assert policy is not None
+        spec = next(s for s in catalogue(policy) if s.name == "draft_artifact")
+        return next(a.choices for a in spec.arguments if a.name == "artifact_type")
+
+    assert "executive_summary" in types("cfo")
+    assert "executive_summary" not in types("svc_desk")
+    assert "servicenow_incident" in types("svc_desk")
+    assert "servicenow_incident" not in types("cfo")
+
+
+def test_the_handshake_drives_the_whole_episode_to_completion() -> None:
+    """The end-to-end claim, in process: forty-odd turns, and a coherent corpus.
+
+    Slow by the standards of this file and worth it — it is the only test that
+    exercises resume-by-rebuild across every turn, which is where an off-by-one
+    in the ledger keys would show up as an episode that never terminates.
+    """
+    import sys
+
+    sys.path.insert(0, "tests")
+    from scripted_actor import choose  # type: ignore[import-not-found]
+
+    from worldloom.actors import handshake
+
+    world = pending_world()
+    for _ in range(120):
+        document = handshake.requests_document(world)
+        if document.get("complete"):
+            break
+        decision = document["decision"]
+        outcome = handshake.accept(world, {decision["id"]: choose(decision)})
+        assert outcome.accepted, (decision["id"], outcome.rejections)
+        assert outcome.world is not None
+        world = outcome.world
+    else:  # pragma: no cover - only reached if the loop never terminates
+        pytest.fail("the episode never completed")
+
+    assert world.actor_ledger
+    assert world.recipe["actor_model_id"] == "agent"
+    world.validate().raise_if_failed()

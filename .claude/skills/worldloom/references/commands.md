@@ -9,6 +9,35 @@ cannot describe a flag that does not exist.
 Load this when you need the exact spelling of an option. The procedure — what to
 run and in what order — is in `SKILL.md`; this is the lookup table.
 
+### `worldloom act`
+
+Drive an actor episode: one employee's decision at a time, validated before it changes anything.
+
+### `worldloom act accept`
+
+Validate a decision and commit it, or report the rule it broke.
+
+```
+worldloom act accept <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--from`, `-i` | Action JSON from the agent. |
+| `--model-id` | Who decided. Recorded in the ledger and part of the replay key, so it is pinned to the corpus on the first accepted decision and cannot change mid-episode. |
+
+### `worldloom act requests`
+
+Emit the next decision an employee has to make.
+
+```
+worldloom act requests <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write JSON here instead of stdout. |
+
 ### `worldloom actors`
 
 Show the actor execution ledger: who did what, on what they could see.
@@ -32,7 +61,7 @@ Generate a world deterministically from a seed, then validate it.
 
 | Option | Purpose |
 | --- | --- |
-| `--actors` | Let employees produce the incident's records by calling tools on what they observed, instead of planning them from the whole fact ledger. |
+| `--actors` | Let employees produce the incident's records by calling tools on what they observed. `scripted` runs the built-in deterministic actor (no network, no key); `agent` leaves every decision for you to make through `worldloom act`. |
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
 | `--employees` | Override the archetype's stated headcount. |

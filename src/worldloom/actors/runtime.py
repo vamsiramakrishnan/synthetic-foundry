@@ -71,6 +71,18 @@ class EpisodeError(Exception):
     """Raised when an episode cannot proceed."""
 
 
+def _pending_decision_type() -> type[BaseException]:
+    """``handshake.PendingDecision``, imported at call time.
+
+    Deferred because ``handshake`` imports ``recipe``, which imports ``retail``,
+    which imports ``world`` — a cycle if taken at module scope, and the runtime
+    has no other reason to know the handshake exists.
+    """
+    from .handshake import PendingDecision
+
+    return PendingDecision
+
+
 @dataclass(frozen=True)
 class ActorEpisode:
     """Everything one episode produced."""
@@ -356,6 +368,7 @@ def run_episode(
 
     by_key = {entry.key: entry for entry in ledger}
     roles = dict(world._roles)
+    pending_decision = _pending_decision_type()
 
     observations: tuple[Observation, ...] = ()
     messages: tuple[ActorMessage, ...] = ()
@@ -467,7 +480,16 @@ def run_episode(
                 replayed += 1
                 recorded.append(existing)
             else:
-                action = provider.act(view, tool_base.catalogue(policy))
+                try:
+                    action = provider.act(view, tool_base.catalogue(policy))
+                except pending_decision as pending:
+                    # The handshake's provider stopping the episode at a decision
+                    # nobody has taken. Everything replayed on the way here has to
+                    # travel out with it: that ledger is what the caller commits,
+                    # and losing it would make each turn re-ask every earlier one.
+                    pending.ledger = tuple(recorded)
+                    pending.entries = tuple(entries)
+                    raise
                 provider_calls += 1
                 recorded.append(
                     GenerationLedgerEntry(

@@ -39,6 +39,11 @@ plan_app = typer.Typer(
     help="Hand artifact-shape requests to an agent, and validate what comes back against the grammar.",
 )
 app.add_typer(plan_app, name="plan")
+act_app = typer.Typer(
+    no_args_is_help=True,
+    help="Drive an actor episode: one employee's decision at a time, validated before it changes anything.",
+)
+app.add_typer(act_app, name="act")
 
 console = Console()
 err = Console(stderr=True)
@@ -138,11 +143,13 @@ def build(
         None, "--format", "-f",
         help="Render these formats. Repeatable. Omit to plan artifacts without rendering.",
     ),
-    actors: bool = typer.Option(
-        False, "--actors",
+    actors: str = typer.Option(
+        None, "--actors",
         help=(
             "Let employees produce the incident's records by calling tools on what "
-            "they observed, instead of planning them from the whole fact ledger."
+            "they observed. `scripted` runs the built-in deterministic actor (no "
+            "network, no key); `agent` leaves every decision for you to make "
+            "through `worldloom act`."
         ),
     ),
     narrate: bool = typer.Option(
@@ -178,9 +185,47 @@ def build(
     # The actor provider is resolved before the loop, and a replay makes it
     # unreachable for the same reason a replayed narration does: a fallback that
     # quietly generated instead would not be a replay.
+    if actors is not None and actors not in {"scripted", "agent"}:
+        err.print(f"[red]error:[/red] --actors takes `scripted` or `agent`, not {actors!r}")
+        raise typer.Exit(code=2)
+
+    # `agent` exports the world *before* the episode, carrying a recipe that says
+    # an actor close is expected. There is no half-run episode to serialise —
+    # `worldloom act` resumes by rebuilding from that recipe and the ledger — so
+    # the honest artifact at this point is the organisation and nothing else.
+    if actors == "agent":
+        from dataclasses import replace as _replace
+
+        from .recipe import with_step
+
+        intended = world._recipe
+        year, month = (int(part) for part in period.split("-"))
+        for index in range(max(1, periods)):
+            stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
+            intended = with_step(
+                intended, "MonthEndClose", period=stamp, incident=incident,
+                comparatives=comparatives if index == 0 else 0, actors=True,
+            )
+        world = _replace(world, _recipe=intended)
+        if out is None:
+            err.print("[red]error:[/red] --actors agent needs --out; the episode is driven from a corpus")
+            raise typer.Exit(code=2)
+        try:
+            written = world.export(out, overwrite=overwrite)
+        except FileExistsError as exc:
+            err.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=2) from exc
+        console.print(_summary_table(world))
+        console.print(
+            f"\n[green]✓[/green] exported to [bold]{written}[/bold]"
+            f"\n[dim]{len(intended['steps'])} actor episode(s) awaiting decisions."
+            f" Run `worldloom act requests {written}` to see the first.[/dim]"
+        )
+        return
+
     actor_provider = None
     actor_ledger: tuple = ()
-    if actors:
+    if actors == "scripted":
         from .actors import ScriptedActorProvider, UnreachableActorProvider
 
         actor_provider = ScriptedActorProvider()
@@ -210,7 +255,7 @@ def build(
             err.print(f"[red]error:[/red] {exc}")
             raise typer.Exit(code=2) from exc
 
-    if actors:
+    if actors == "scripted":
         accepted = sum(1 for entry in world.actor_ledger if entry.result.accepted)
         console.print(
             f"[dim]actors:[/dim] {len(world.actor_ledger)} tool call(s), {accepted} accepted"
@@ -448,6 +493,124 @@ def plan_accept(
     )
     console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
     if not _report(updated):
+        raise typer.Exit(code=1)
+
+
+@act_app.command("requests")
+def act_requests(
+    corpus: str = typer.Argument(..., help="Corpus path carrying an actor episode."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the next decision an employee has to make.
+
+    Self-describing: the facts this person has actually observed and how they
+    came to know each one, the messages they were sent, the obligations they
+    hold, the tools their role permits, and the rules in full. There is no other
+    context — an actor that went looking for some would be reading the world
+    rather than its own position in it.
+
+    One decision at a time, because the next one depends on this one. See
+    `worldloom.actors.handshake` for why there is no batch form.
+    """
+    from .actors import handshake
+    from .recipe import RecipeError
+
+    world = _load(corpus)
+    try:
+        document = handshake.requests_document(world)
+    except RecipeError as exc:
+        err.print(f"[red]error:[/red] {corpus}: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    if document.get("complete"):
+        console.print("[green]✓[/green] the episode is complete — nothing left to decide")
+        return
+
+    payload = handshake.dump(document)
+    if out is None:
+        typer.echo(payload, nl=False)
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(payload, encoding="utf-8")
+    decision = document["decision"]
+    console.print(
+        f"[green]✓[/green] [bold]{decision['id']}[/bold] — {decision['title']}"
+        f" woken by {decision['trigger']['kind']}"
+    )
+    console.print(
+        f"[dim]{len(decision['facts'])} observed fact(s), {len(decision['tools'])} tool(s)"
+        f" available. Written to {out}[/dim]"
+    )
+
+
+@act_app.command("accept")
+def act_accept(
+    corpus: str = typer.Argument(..., help="Corpus path to record the decision into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Action JSON from the agent."),
+    model_id: str = typer.Option(
+        None, "--model-id",
+        help=(
+            "Who decided. Recorded in the ledger and part of the replay key, so it "
+            "is pinned to the corpus on the first accepted decision and cannot "
+            "change mid-episode."
+        ),
+    ),
+) -> None:
+    """Validate a decision and commit it, or report the rule it broke.
+
+    Nothing is committed unless the action is legal: a tool beyond the role's
+    authority, a fact the actor never observed, or a failed precondition comes
+    back with the rule and the corpus is untouched. That is the same contract
+    `narrate accept` has — rejection is the harness working.
+
+    While the episode is still running this commits the *ledger*, because
+    mid-episode there is no finished world to write and the ledger is what the
+    next call resumes from. When the last decision lands, the completed world is
+    written whole.
+    """
+    from .actors import handshake
+    from .recipe import RecipeError
+
+    world = _load(corpus)
+    try:
+        actions = handshake.parse_actions(json.loads(source.read_text(encoding="utf-8")))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {source}: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    try:
+        outcome = handshake.accept(world, actions, model_id=model_id)
+    except (RecipeError, ValueError) as exc:
+        err.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    if not outcome.accepted:
+        err.print(
+            f"[red]✗[/red] {len(outcome.rejections)} action(s) rejected. Nothing was committed."
+        )
+        for name, reason in sorted(outcome.rejections.items()):
+            err.print(f"\n[bold]{name}[/bold]\n  [yellow]{reason}[/yellow]")
+        raise typer.Exit(code=1)
+
+    assert outcome.world is not None
+    written = outcome.world.export(corpus, overwrite=True)
+    console.print(
+        f"[green]✓[/green] {len(outcome.applied)} decision(s) accepted"
+        f" and recorded as [dim]{outcome.model_id}[/dim]"
+    )
+    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+
+    if not outcome.complete:
+        console.print(
+            "[dim]the episode continues — run `worldloom act requests` for the next decision[/dim]"
+        )
+        return
+
+    console.print(
+        f"[green]✓[/green] episode complete: {len(outcome.world.actor_ledger)} tool call(s),"
+        f" {len(outcome.world.observations)} observation(s)"
+    )
+    if not _report(outcome.world):
         raise typer.Exit(code=1)
 
 

@@ -16,6 +16,7 @@ It is the CFO citing four facts and not a fifth.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from ...documents import standing
@@ -77,6 +78,34 @@ class DraftArtifact(Tool):
                      required=False),
     )
     cites = ("cite_fact_ids",)
+
+    @classmethod
+    def spec_for(cls, policy):  # type: ignore[no-untyped-def]
+        """Only the artifact types this role may actually author.
+
+        Without this an actor is offered eight types, may write three, and finds
+        out which by being refused. The check in `validate` stays — narrowing
+        what is *offered* is a courtesy, and a courtesy is not a permission
+        boundary.
+        """
+        writable = {*policy.writable_domains}
+        allowed = tuple(
+            sorted(
+                artifact_type
+                for artifact_type, (domain, _, _) in DRAFTABLE.items()
+                if domain in writable or _ARTIFACT_DOMAIN_ALIASES.get(domain) in writable
+            )
+        )
+        base = cls.spec()
+        return replace(
+            base,
+            arguments=tuple(
+                replace(argument, choices=allowed)
+                if argument.name == "artifact_type"
+                else argument
+                for argument in base.arguments
+            ),
+        )
 
     def authorise(self, ctx: ToolContext) -> None:
         # `draft_artifact` is domain-agnostic on purpose: the domain that matters

@@ -187,6 +187,7 @@ class RetailWorld:
         Every dated lore commitment arrives with a matching event and fact
         already on the timeline — the world's beginning, not yet any close.
         """
+        from . import recipe as recipe_module
         from .generators import organisation
 
         rng = Rng(self.seed)
@@ -217,6 +218,12 @@ class RetailWorld:
             _minter=minter,
             _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
             _archetype=self.archetype,
+            _recipe=recipe_module.build_recipe(
+                archetype=self.archetype.key,
+                seed=self.seed,
+                employees=self.employees,
+                annual_revenue=self.annual_revenue,
+            ),
         )
 
 

@@ -261,7 +261,24 @@ class MonthEndClose:
                                         tasks=actor_state["tasks"], period=self.period),
             )
 
-        return advanced.extend(evaluations=cases, period=self.period, **actor_state)
+        from .recipe import with_step
+
+        return advanced.extend(
+            evaluations=cases,
+            period=self.period,
+            # Recorded on the world rather than left to the caller's shell
+            # history. A corpus that cannot say how it was made cannot be
+            # rebuilt, and the actor handshake resumes an episode by rebuilding.
+            recipe=with_step(
+                world._recipe,
+                "MonthEndClose",
+                period=self.period,
+                incident=self.include_operational_incident,
+                comparatives=self.comparative_months,
+                actors=self.actors is not None,
+            ),
+            **actor_state,
+        )
 
 
 def _announcer(world, change):
@@ -372,6 +389,8 @@ class Hire:
         )
         new_person = change.people[0]
 
+        from .recipe import with_step
+
         return world.extend(
             events=change.events,
             facts=change.facts,
@@ -379,6 +398,10 @@ class Hire:
             business_units=change.business_units,
             roles={**change.roles, self.role_key: new_person.id},
             period=self.period,
+            recipe=with_step(
+                world._recipe, "Hire", period=self.period, role_key=self.role_key,
+                title=self.title, function=self.function, unit_key=self.unit_key,
+            ),
         )
 
 
@@ -434,6 +457,8 @@ class Departure:
             period=self.period,
         )
 
+        from .recipe import with_step
+
         return world.extend(
             events=change.events,
             facts=change.facts,
@@ -442,6 +467,9 @@ class Departure:
             roles=change.roles,
             artifact_intents=_personnel_notice(minter, change, _announcer(world, change), self.period),
             period=self.period,
+            recipe=with_step(
+                world._recipe, "Departure", period=self.period, role_key=self.role_key
+            ),
         )
 
 
@@ -486,6 +514,8 @@ class Reorganisation:
             period=self.period,
         )
 
+        from .recipe import with_step
+
         return world.extend(
             events=change.events,
             facts=change.facts,
@@ -494,6 +524,10 @@ class Reorganisation:
             roles=change.roles,
             artifact_intents=_personnel_notice(minter, change, _announcer(world, change), self.period),
             period=self.period,
+            recipe=with_step(
+                world._recipe, "Reorganisation", period=self.period,
+                unit_key=self.unit_key, new_leader_role=self.new_leader_role,
+            ),
         )
 
 

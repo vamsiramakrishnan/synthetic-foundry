@@ -18,6 +18,8 @@ facts.
 pip install -e ".[xlsx,docx]"
 
 worldloom build --seed 8128 --incident --out ./corpus   # 1. a world
+worldloom act requests ./corpus -o decision.json        # 1a. optional: be the employees
+worldloom act accept ./corpus --from action.json        #     (see below — needs --actors agent)
 worldloom plan requests ./corpus -o plans.json          # 1b. what shape each doc takes
 worldloom plan accept ./corpus --from plans.json        #     validated against the grammar
 worldloom narrate requests ./corpus -o requests.json    # 2. what prose it needs
@@ -31,6 +33,14 @@ worldloom evaluate ./corpus                             # 7. is it actually hard
 Steps 3 and 4 repeat until every response is accepted. **Rejection is the harness
 working, not failing.**
 
+Step 1a is a different loop and a different job. Built with
+`worldloom build --seed 8128 --incident --actors agent --out ./corpus`, the
+incident's records are not planned from the fact ledger — they are produced by
+employees calling tools on what each of them had actually observed. You are those
+employees, one decision at a time, until `act requests` says the episode is
+complete. Skip it and the deterministic planner writes those documents instead;
+run it and the corpus can be asked who knew what, when, and on whose authority.
+
 If `worldloom` is not on PATH, use `python3 -m worldloom.cli` throughout.
 
 ## Load what you need, when you need it
@@ -40,6 +50,7 @@ Do not read these up front. Each is loaded for one stage of the journey.
 | Stage | Read | For |
 | --- | --- | --- |
 | 1. Build | `references/building.md` | Seeds, archetypes, scale, multiple periods, org change over time |
+| 1a. Act | `references/acting.md` | Being an employee: observations, tools, authority, and why an action is refused |
 | 1b. Shape | `references/planning-structure.md` | Proposing an artifact's sections under grammar validation |
 | 3. Write | `references/writing-prose.md` | The rules, the rejection cycle, and what good prose looks like here |
 | 5. Render | `references/rendering.md` | What each format is for and what it carries |
@@ -69,6 +80,9 @@ surfacing, in order:
 
 - After **build**: the summary table — company, headcount, facts, artifacts,
   evaluation cases. If you ran several periods, say so; recurrence is the point.
+- After **act**: `worldloom actors ./corpus --observations`. Two people woken by
+  the same failure with different numbers of visible facts is the whole claim,
+  and it is invisible in the summary table.
 - After **accept**: how many passes it took and what was rejected. A first-pass
   rejection is informative, not embarrassing — it shows the guardrail is real.
 - After **validate**: the check count. A large world runs tens of thousands.

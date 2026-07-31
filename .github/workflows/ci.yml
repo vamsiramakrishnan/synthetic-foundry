@@ -125,6 +125,37 @@ jobs:
             exit 1
           fi
 
+      # The actor handshake: the CLI hands out one employee's decision at a time
+      # and refuses an illegal one. Driven by a scripted stand-in that reads only
+      # the decision document — never the corpus — because an agent that opened
+      # `facts.jsonl` to decide what the analyst should do would be reading the
+      # world rather than that analyst's position in it, and every
+      # information-asymmetry property would quietly stop holding.
+      - name: The actor handshake accepts, refuses, and completes
+        run: |
+          CORPUS="${{ runner.temp }}/driven"
+          worldloom build --seed 8128 --incident --actors agent --out "$CORPUS"
+
+          # An overreaching call must be refused, and must commit nothing.
+          worldloom act requests "$CORPUS" -o decision.json
+          python3 tests/scripted_actor.py decision.json bad.json --overreach
+          if worldloom act accept "$CORPUS" --from bad.json; then
+            echo "a tool beyond the role's authority was accepted"
+            exit 1
+          fi
+
+          # Then drive it to the end. The bound is generous; the episode is ~40
+          # turns and a loop that does not terminate is the failure worth
+          # catching here.
+          for _ in $(seq 1 120); do
+            worldloom act requests "$CORPUS" -o decision.json | tee out.txt
+            grep -q "episode is complete" out.txt && break
+            python3 tests/scripted_actor.py decision.json action.json
+            worldloom act accept "$CORPUS" --from action.json
+          done
+          grep -q "episode is complete" out.txt || { echo "episode never completed"; exit 1; }
+          worldloom validate "$CORPUS"
+
       # The actor episode: employees produce the incident's records by calling
       # tools on what they observed. Held to exactly the same standard as
       # narration, because it is the same claim — a decision taken by an actor is
@@ -135,10 +166,10 @@ jobs:
       - name: The actor episode replays byte-for-byte
         run: |
           FORMATS="-f xlsx -f markdown -f docx -f jira -f confluence -f servicenow"
-          worldloom build --seed 8128 --incident --actors --narrate $FORMATS \
+          worldloom build --seed 8128 --incident --actors scripted --narrate $FORMATS \
             --out "${{ runner.temp }}/acted"
           worldloom validate "${{ runner.temp }}/acted"
-          worldloom build --seed 8128 --incident --actors \
+          worldloom build --seed 8128 --incident --actors scripted \
             --replay "${{ runner.temp }}/acted" $FORMATS --out "${{ runner.temp }}/acted-again"
           diff -r "${{ runner.temp }}/acted" "${{ runner.temp }}/acted-again"
 

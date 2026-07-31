@@ -192,6 +192,20 @@ class Tool:
     # -- description -------------------------------------------------------
 
     @classmethod
+    def spec_for(cls, policy: ActorPolicy) -> ToolSpec:
+        """This tool as *this role* sees it.
+
+        The default is the whole schema, which is right for a tool whose
+        arguments mean the same thing to everyone. It is overridable because
+        "never show an actor a tool it cannot call" does not go far enough on
+        its own: `draft_artifact` accepts eight artifact types and any given
+        role may author three of them, so an actor reading the unnarrowed schema
+        has to guess and be refused. A budget spent on refusals is an episode
+        that does nothing.
+        """
+        return cls.spec()
+
+    @classmethod
     def spec(cls) -> ToolSpec:
         return ToolSpec(
             name=cls.name,
@@ -551,7 +565,7 @@ def catalogue(policy: ActorPolicy) -> tuple[ToolSpec, ...]:
     an episode's tool budget spent on refusals is an episode that does nothing.
     """
     return tuple(
-        _REGISTRY[name].spec()
+        _REGISTRY[name].spec_for(policy)
         for name in sorted(policy.allowed_tools)
         if name in _REGISTRY and policy.permits(name)
     )

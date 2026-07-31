@@ -63,6 +63,8 @@ not a failure of the harness — it is the harness working.
 ## Actors, optionally
 
 `worldloom build --actors` changes who decides what the incident's records say.
+It takes `scripted` — the built-in deterministic actor, no network and no key —
+or `agent`, which leaves every decision for you.
 
 Without it, the planner writes the incident documents from the whole fact ledger:
 it knows the root cause, the control failure, and the remediation, and it hands
@@ -71,8 +73,16 @@ documents are produced by employees calling tools on **what they had actually
 observed at the time**, and nothing else:
 
 ```bash
-worldloom build --seed 8128 --incident --actors --narrate -f markdown --out ./corpus
-worldloom actors ./corpus --observations
+# You make every decision, one at a time, through the same kind of handshake
+# narration uses. Roughly forty turns for this episode.
+worldloom build --seed 8128 --incident --actors agent --out ./corpus
+worldloom act requests ./corpus -o decision.json      # what one employee can see
+#                                                       you write action.json
+worldloom act accept ./corpus --from action.json      # validated before it changes anything
+worldloom actors ./corpus --observations              # who could see what, when
+
+# Or let the scripted actor run the whole episode, for CI and for a quick look.
+worldloom build --seed 8128 --incident --actors scripted --narrate -f markdown --out ./corpus
 ```
 
 ```
@@ -108,12 +118,24 @@ The last one is why the CFO's summary omitting the control failure is worth
 something: it is a citation that one person did not make, reproducibly, rather
 than a rule in a template.
 
-Writing a real actor adapter is one method — `act(view, tools) -> ActorAction` —
-and the ledger, the policy checks, and the rejection loop all work unchanged
-around it. There is no batch request/response handshake the way narration has
-one, and the reason is in `actors/providers.py`: actor decisions are sequential,
-so the invocations cannot be prepared in advance without deciding the episode
-first.
+**One decision per exchange, and that is not a limitation to route around.**
+Narration hands you every request at once because a memo's third section does not
+depend on its second. An episode does: what the controller can see at 09:40
+depends on whether the business partner escalated at 09:12, so the later
+invocations do not exist until the earlier decisions are made.
+
+Resuming needs no suspend format. Each call rebuilds the world from the corpus's
+recipe, replays every decision the ledger already holds — the provider is never
+asked for those — and stops at the first one nobody has taken. The ledger was
+already shipping; it is now also the save file. Two consequences: `--model-id` is
+pinned to the corpus on the first accepted decision, because answering turn nine
+under a different id would miss every key before it and silently restart the
+episode; and hand-editing a corpus mid-episode makes the rebuild produce a
+different world from the one your earlier decisions were taken in.
+
+In-process is the other route: implement `act(view, tools) -> ActorAction` and
+the ledger, the policy checks, and the rejection loop all work unchanged around
+it.
 
 ---
 
@@ -257,6 +279,7 @@ Two consequences for you:
 | `src/worldloom/generators/` | Deterministic generation. No model, no clock |
 | `src/worldloom/narrative/` | The contract with you: requests, claims, ledger |
 | `src/worldloom/actors/` | Employees, their observations, tools, and the execution ledger |
+| `src/worldloom/recipe.py` | How a world was made, so a corpus can rebuild itself |
 | `src/worldloom/render/` | Formats. Read the IR and nothing else |
 | `src/worldloom/validate.py` | The guardrails. Start here to understand the rules |
 | `examples/retail-close/` | The hand-authored reference corpus. Frozen |

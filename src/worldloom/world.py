@@ -17,6 +17,12 @@ from pathlib import Path
 from typing import Any
 
 from . import corpus
+
+# Eagerly, not lazily: `World` declares fields of these types. `actors.models`
+# imports only `models`, so there is no cycle to work around — the rest of the
+# actors package, which does reach back into `world`, is imported inside the
+# methods that use it.
+from .actors.models import ActorLedgerEntry, ActorMessage, ActorTask, Observation
 from .collections import (
     ArtifactCollection,
     Collection,
@@ -48,11 +54,6 @@ from .models import (
     Site,
     System,
 )
-# Eagerly, not lazily: `World` declares fields of these types. `actors.models`
-# imports only `models`, so there is no cycle to work around — the rest of the
-# actors package, which does reach back into `world`, is imported inside the
-# methods that use it.
-from .actors.models import ActorLedgerEntry, ActorMessage, ActorTask, Observation
 from .validate import ValidationReport, validate
 
 
@@ -107,6 +108,12 @@ class World:
     _annual_revenue: int = 0
     _archetype: Any = None
     """The shape this world was built from. Needed to advance it, not to read it."""
+    _recipe: dict[str, Any] = field(default_factory=dict)
+    """How this world was made: archetype, seed, and the ordered scenario steps.
+
+    Unlike the rest of the generator state above, this *does* survive a round
+    trip to disk — it is what lets a corpus be rebuilt rather than merely read.
+    See ``worldloom.recipe``."""
     _rendered: tuple = ()
     """Rendered payloads, held until ``export`` writes them."""
     _narration: tuple = ()
@@ -158,6 +165,7 @@ class World:
             period=header.get("period"),
             root=root,
             schema_version=version,
+            _recipe=header.get("recipe", {}),
         )
 
     # -- accessors ---------------------------------------------------------
@@ -278,6 +286,11 @@ class World:
         which is the half that proves the policy layer is load-bearing.
         """
         return Collection(self._actor_ledger, label="ActorLedgerCollection")
+
+    @property
+    def recipe(self) -> dict[str, Any]:
+        """How this world was made. Empty on a corpus written before recipes existed."""
+        return dict(self._recipe)
 
     def entity_names(self) -> dict[str, str]:
         """Every entity ID to the name a person would use for it.
@@ -423,6 +436,7 @@ class World:
         business_units: tuple[BusinessUnit, ...] = (),
         roles: dict[str, str] | None = None,
         period: str | None = None,
+        recipe: dict[str, Any] | None = None,
     ) -> World:
         """A copy of this world with more appended. Never mutates in place.
 
@@ -480,6 +494,7 @@ class World:
             _minter=self._minter,
             _annual_revenue=self._annual_revenue,
             _archetype=self._archetype,
+            _recipe=recipe if recipe is not None else self._recipe,
         )
 
     def compile(self) -> World:
@@ -738,6 +753,7 @@ class World:
                 "schema_version": self.schema_version,
                 "seed": self.seed,
                 "period": self.period,
+                "recipe": self._recipe,
                 "company": self.company.model_dump(mode="json"),
                 "business_units": [m.model_dump(mode="json") for m in self._business_units],
                 "people": [m.model_dump(mode="json") for m in self._people],

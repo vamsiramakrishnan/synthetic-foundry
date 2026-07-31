@@ -801,4 +801,23 @@ def evaluation_cases(
     taxonomy.milestone_provenance()
     taxonomy.authorship_over_time()
     taxonomy.history_abstentions()
-    return tuple(taxonomy.cases)
+
+    # One last pass of the rule every family is supposed to apply for itself.
+    #
+    # It was incidental until actors landed, because which facts reached a
+    # document was a planner's decision and the planner always carried the
+    # incident set. It is a *choice* now: an actor cites what it observed, so a
+    # close where nobody wrote the RCA leaves the control-failure facts in no
+    # document at all, and a family that asked about them anyway would emit a
+    # question with no answer in the corpus. The validator catches that as
+    # `unreachable_answer`; catching it here means the case is never generated
+    # rather than generated and then explained away.
+    #
+    # Nothing is dropped on the deterministic path — every case there was
+    # already reachable, which is what the existing corpora prove.
+    reachable = taxonomy._reachable_fact_ids()
+    return tuple(
+        case
+        for case in taxonomy.cases
+        if case.expects_abstention or set(case.expected_fact_ids) <= reachable
+    )
