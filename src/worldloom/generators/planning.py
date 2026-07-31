@@ -80,9 +80,20 @@ def artifact_intents(
         found = [i.id for i in prior_intents if i.artifact_type == artifact_type]
         return found[-1] if found else None
 
+    def latest_intent(artifact_type: str) -> ArtifactIntent | None:
+        """Like ``latest``, but the intent itself rather than only its id.
+
+        A revision needs more than its predecessor's id: it needs what the
+        predecessor actually said, so it can carry that forward rather than
+        starting from nothing at version two.
+        """
+        found = [i for i in prior_intents if i.artifact_type == artifact_type]
+        return found[-1] if found else None
+
     def intent(artifact_type: str, domain: str, audience: str, author: str,
                facts: list[str], events: list[str], size: str, rationale: str,
-               *, supersedes: str | None = None, derived_from: list[str] | None = None) -> None:
+               *, supersedes: str | None = None, derived_from: list[str] | None = None,
+               revises: str | None = None) -> None:
         intents.append(
             ArtifactIntent(
                 id=minter.next("ART"),
@@ -96,6 +107,7 @@ def artifact_intents(
                 rationale=rationale,
                 supersedes=supersedes,
                 derived_from=[a for a in (derived_from or []) if a],
+                revises=revises,
             )
         )
 
@@ -123,10 +135,44 @@ def artifact_intents(
                [k["event_pipeline_failed"], k["event_close_delayed"]], "small",
                "The controller keeps a running note through a disrupted close.")
 
+        # A status page is one persistent operational record — "known issue:
+        # inventory valuation pipeline" — edited in place across occurrences,
+        # unlike its ServiceNow neighbour below whose ticket number is minted
+        # fresh every incident and can never be the same document twice. That
+        # is what makes this the `revises` case rather than a new page each
+        # period: the identity survives, only the content grows.
+        #
+        # It still never gains the confirmed cause. That omission is the
+        # deliberate imperfection `generators/evaluation.py` builds a whole
+        # family of authority-resolution cases against ("which record still
+        # carries the initial hypothesis"), so a revision that fixed it would
+        # retire the very thing it exists to test. What a later revision does
+        # gain honestly is the running log: a "known issue" page does not
+        # discard its own history, so each occurrence's entry is appended to
+        # what the page already said, plus the recurrence link a first
+        # occurrence has no way to know. That is what keeps the growth real
+        # rather than a one-off bonus fact that stops a third revision from
+        # citing more than the second did.
+        #
+        # Gated on an earlier page existing at all, not merely on there being
+        # an incident this period: a world that has never run before has no
+        # earlier page to revise, and minting one anyway would insert an extra
+        # intent ahead of jira_issues, knowledge_article and executive_summary
+        # and shift every id minted after it — exactly what would break
+        # examples/grocery-close/narration.json, which is real prose keyed to
+        # the ids a single-period build mints today. The author is the same
+        # service-desk role every time; nothing here changes hands.
+        stale_page = latest_intent("confluence_page")
         intent("confluence_page", "operations", "all_staff", roles["svc_desk"],
-               [k["fact_feed_status"], k["fact_incident_ref"], k["fact_hypothesis"]],
-               [k["event_incident_opened"], k["event_hypothesis"]], "small",
-               "A status page is raised at triage, before the cause is known. It goes stale.")
+               list(stale_page.required_fact_ids if stale_page else [])
+               + [k["fact_feed_status"], k["fact_incident_ref"], k["fact_hypothesis"]]
+               + ([k["fact_recurrence"]] if stale_page else []),
+               list(stale_page.triggered_by if stale_page else [])
+               + [k["event_incident_opened"], k["event_hypothesis"]]
+               + ([k["event_root_cause"]] if stale_page else []),
+               "small",
+               "A status page is raised at triage, before the cause is known. It goes stale.",
+               revises=stale_page.id if stale_page else None)
 
         intent("servicenow_incident", "operations", "technology", roles["svc_desk"],
                [k["fact_feed_status"], k["fact_incident_ref"], k["fact_hypothesis"], k["fact_cause"],

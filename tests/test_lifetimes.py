@@ -1,16 +1,21 @@
 """Tests for temporal lifetimes and the third artifact relationship.
 
-Nothing in the corpus yet sets `joined`, `left`, `formed`, `dissolved`, or
-`revises`, so the whole suite passes vacuously against generated worlds. These
-tests hand-build the cases the fields exist for — a departure, a unit that
-closes, a revision chain — so the semantics are pinned down before a generator
-has to honour them.
+These tests hand-build the cases the fields exist for — a departure, a unit that
+closes, a revision chain — rather than relying on a generator to produce them.
+That is deliberate and worth keeping even now that generators do: a violation
+has to be constructed to prove a check fires at all, and a coherent world by
+definition contains none.
+
+Everything here is timezone-aware. The corpus stores UTC throughout, and a naive
+datetime does not fail visibly — it raises on the first comparison against a
+generated value, which is a break these tests cannot see while the fields they
+cover are still empty.
 """
 
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -25,6 +30,19 @@ from worldloom.models import (
     Lifecycle,
     Quantity,
 )
+
+
+def at(*parts: int) -> datetime:
+    """A UTC instant.
+
+    Everything the corpus stores is timezone-aware, so a naive datetime here is
+    not merely untidy — it raises `can't compare offset-naive and offset-aware`
+    on the first comparison against a generated `joined`. That only became
+    reachable once the organisation generator started populating windows, which
+    is precisely the kind of latent break a test written against empty fields
+    cannot see.
+    """
+    return datetime(*parts, tzinfo=timezone.utc)
 
 
 @pytest.fixture(scope="module")
@@ -87,15 +105,24 @@ def _violation_codes(world: World) -> set[str]:
 def test_org_at_returns_the_whole_roster_when_nobody_joins_or_leaves(world: World) -> None:
     """joined=None/left=None is the compatibility guarantee: a world that
     predates windows must answer org_at the same way at every moment, which is
-    exactly what it did before windows existed."""
-    everybody = set(world.people.ids())
-    for moment in (datetime(2000, 1, 1), datetime(2026, 3, 15), datetime(2099, 12, 31)):
-        assert set(world.org_at(moment).ids()) == everybody
+    exactly what it did before windows existed.
+
+    The windows are stripped rather than assumed absent. Asserting this against
+    a freshly built world would silently stop testing the guarantee the moment a
+    generator began populating `joined` — which is what happened.
+    """
+    unwindowed = replace(
+        world,
+        _people=tuple(p.model_copy(update={"joined": None, "left": None}) for p in world.people),
+    )
+    everybody = set(unwindowed.people.ids())
+    for moment in (at(2000, 1, 1), at(2026, 3, 15), at(2099, 12, 31)):
+        assert set(unwindowed.org_at(moment).ids()) == everybody
 
 
 def test_org_at_is_present_from_the_instant_joined(world: World) -> None:
     person_id = world.people[5].id
-    joined = datetime(2026, 6, 1, 9, 0)
+    joined = at(2026, 6, 1, 9, 0)
     doctored = _employee_with(world, person_id, joined=joined)
 
     assert person_id not in doctored.org_at(joined - timedelta(days=1)).ids()
@@ -108,7 +135,7 @@ def test_org_at_left_is_exclusive_at_the_instant(world: World) -> None:
     is a day they worked, so `left` is the instant the window closes rather
     than the last instant inside it."""
     person_id = world.people[5].id
-    left = datetime(2026, 6, 1, 17, 0)
+    left = at(2026, 6, 1, 17, 0)
     doctored = _employee_with(world, person_id, left=left)
 
     assert person_id in doctored.org_at(left - timedelta(microseconds=1)).ids()
@@ -135,7 +162,7 @@ def test_extend_keeps_the_replacements_original_position(world: World) -> None:
     updates instead would reshuffle a world merely because someone left."""
     person_id = world.people[10].id
     original_index = world.people.ids().index(person_id)
-    updated = world.people.by_id(person_id).model_copy(update={"left": datetime(2026, 6, 1)})
+    updated = world.people.by_id(person_id).model_copy(update={"left": at(2026, 6, 1)})
 
     grown = world.extend(people=(updated,))
 
@@ -154,7 +181,7 @@ def test_extend_appends_a_new_person_at_the_tail(world: World) -> None:
 def test_extend_mixes_replacement_and_append_in_one_call(world: World) -> None:
     replaced_id = world.people[7].id
     original_index = world.people.ids().index(replaced_id)
-    replaced = world.people.by_id(replaced_id).model_copy(update={"left": datetime(2026, 6, 1)})
+    replaced = world.people.by_id(replaced_id).model_copy(update={"left": at(2026, 6, 1)})
     new_person = Employee(id="PERSON-9998", name="New Hire", title="Analyst", function="Finance")
 
     grown = world.extend(people=(replaced, new_person))
@@ -167,14 +194,14 @@ def test_extend_mixes_replacement_and_append_in_one_call(world: World) -> None:
 def test_extend_merges_business_units_by_id_the_same_way(world: World) -> None:
     unit_id = world.business_units[0].id
     original_index = world.business_units.ids().index(unit_id)
-    dissolved = world.business_units.by_id(unit_id).model_copy(update={"dissolved": datetime(2026, 6, 1)})
+    dissolved = world.business_units.by_id(unit_id).model_copy(update={"dissolved": at(2026, 6, 1)})
     new_unit = BusinessUnit(id="BU-9999", name="New Unit", company_id=world.company.id, leader_id=world.people[0].id, kind="test")
 
     grown = world.extend(business_units=(dissolved, new_unit))
 
     assert len(grown.business_units) == len(world.business_units) + 1
     assert grown.business_units.ids().index(unit_id) == original_index
-    assert grown.business_units.by_id(unit_id).dissolved == datetime(2026, 6, 1)
+    assert grown.business_units.by_id(unit_id).dissolved == at(2026, 6, 1)
     assert grown.business_units.ids()[-1] == "BU-9999"
 
 
@@ -223,7 +250,7 @@ def test_extend_never_mutates_the_original_world(world: World) -> None:
 
 def test_author_not_yet_employed_fires_and_clears(world: World) -> None:
     author_id = world.people[8].id
-    created_at = datetime(2026, 3, 15)
+    created_at = at(2026, 3, 15)
     artifact = _artifact("ART-TEST-JOIN", author_id=author_id, created_at=created_at)
 
     too_late = _with_artifacts(_employee_with(world, author_id, joined=created_at + timedelta(days=1)), artifact)
@@ -238,7 +265,7 @@ def test_author_already_departed_boundary_matches_org_ats_exclusivity(world: Wor
     the strict `<=` in the check, matching org_at's exclusive `left`. One
     microsecond later, the same artifact is fine."""
     author_id = world.people[9].id
-    created_at = datetime(2026, 3, 15, 9, 0)
+    created_at = at(2026, 3, 15, 9, 0)
     artifact = _artifact("ART-TEST-LEFT", author_id=author_id, created_at=created_at)
 
     exactly_at_left = _with_artifacts(_employee_with(world, author_id, left=created_at), artifact)
@@ -253,26 +280,26 @@ def test_author_already_departed_boundary_matches_org_ats_exclusivity(world: Wor
 def test_employment_reversed_fires_when_left_precedes_joined(world: World) -> None:
     person_id = world.people[6].id
 
-    reversed_world = _employee_with(world, person_id, joined=datetime(2026, 6, 1), left=datetime(2026, 1, 1))
+    reversed_world = _employee_with(world, person_id, joined=at(2026, 6, 1), left=at(2026, 1, 1))
     assert "employment_reversed" in _violation_codes(reversed_world)
 
-    ordered_world = _employee_with(world, person_id, joined=datetime(2026, 1, 1), left=datetime(2026, 6, 1))
+    ordered_world = _employee_with(world, person_id, joined=at(2026, 1, 1), left=at(2026, 6, 1))
     assert "employment_reversed" not in _violation_codes(ordered_world)
 
 
 def test_unit_window_reversed_fires_when_dissolved_precedes_formed(world: World) -> None:
     unit_id = world.business_units[0].id
 
-    reversed_world = _unit_with(world, unit_id, formed=datetime(2026, 6, 1), dissolved=datetime(2026, 1, 1))
+    reversed_world = _unit_with(world, unit_id, formed=at(2026, 6, 1), dissolved=at(2026, 1, 1))
     assert "unit_window_reversed" in _violation_codes(reversed_world)
 
-    ordered_world = _unit_with(world, unit_id, formed=datetime(2026, 1, 1), dissolved=datetime(2026, 6, 1))
+    ordered_world = _unit_with(world, unit_id, formed=at(2026, 1, 1), dissolved=at(2026, 6, 1))
     assert "unit_window_reversed" not in _violation_codes(ordered_world)
 
 
 def test_leader_not_yet_employed_fires_when_leader_joins_after_the_unit_forms(world: World) -> None:
     unit = world.business_units[0]
-    formed = datetime(2026, 3, 1)
+    formed = at(2026, 3, 1)
 
     late_leader = _employee_with(world, unit.leader_id, joined=formed + timedelta(days=1))
     violating = _unit_with(late_leader, unit.id, formed=formed)
@@ -295,7 +322,7 @@ def _chained_intents(world: World, count: int, *, revise: bool, artifact_type: s
         kind="test.chain",
         subject=world.company.id,
         value=Quantity(amount=1.0, unit="unit"),
-        valid_from=datetime(2026, 1, 1),
+        valid_from=at(2026, 1, 1),
         authority=Authority.CONFIRMED,
     )
     author_id = world.people[0].id
@@ -349,7 +376,7 @@ def test_a_world_with_no_revisions_has_every_artifact_at_version_one(world: Worl
 
 def test_self_revised_is_caught(world: World) -> None:
     author_id = world.people[0].id
-    entry = _artifact("ART-SELFREV", author_id=author_id, created_at=datetime(2026, 3, 1), revises="ART-SELFREV")
+    entry = _artifact("ART-SELFREV", author_id=author_id, created_at=at(2026, 3, 1), revises="ART-SELFREV")
 
     doctored = _with_artifacts(world, entry)
     assert "self_revised" in _violation_codes(doctored)
@@ -359,12 +386,12 @@ def test_revised_twice_is_caught(world: World) -> None:
     """A version history is a line, not a tree: one predecessor cannot have two
     successors both claiming to be the next version of it."""
     author_id = world.people[0].id
-    original = _artifact("ART-REV-ORIG", author_id=author_id, created_at=datetime(2026, 3, 1))
+    original = _artifact("ART-REV-ORIG", author_id=author_id, created_at=at(2026, 3, 1))
     first_revision = _artifact(
-        "ART-REV-A", author_id=author_id, created_at=datetime(2026, 3, 2), revises="ART-REV-ORIG", version=2
+        "ART-REV-A", author_id=author_id, created_at=at(2026, 3, 2), revises="ART-REV-ORIG", version=2
     )
     second_revision = _artifact(
-        "ART-REV-B", author_id=author_id, created_at=datetime(2026, 3, 3), revises="ART-REV-ORIG", version=2
+        "ART-REV-B", author_id=author_id, created_at=at(2026, 3, 3), revises="ART-REV-ORIG", version=2
     )
 
     doctored = _with_artifacts(world, original, first_revision, second_revision)
@@ -373,9 +400,9 @@ def test_revised_twice_is_caught(world: World) -> None:
 
 def test_version_not_advanced_is_caught(world: World) -> None:
     author_id = world.people[0].id
-    original = _artifact("ART-VER-ORIG", author_id=author_id, created_at=datetime(2026, 3, 1), version=2)
+    original = _artifact("ART-VER-ORIG", author_id=author_id, created_at=at(2026, 3, 1), version=2)
     stalled = _artifact(
-        "ART-VER-NEW", author_id=author_id, created_at=datetime(2026, 3, 2), revises="ART-VER-ORIG", version=2
+        "ART-VER-NEW", author_id=author_id, created_at=at(2026, 3, 2), revises="ART-VER-ORIG", version=2
     )
 
     doctored = _with_artifacts(world, original, stalled)
@@ -385,12 +412,12 @@ def test_version_not_advanced_is_caught(world: World) -> None:
 def test_revises_different_kind_is_caught(world: World) -> None:
     author_id = world.people[0].id
     original = _artifact(
-        "ART-KIND-ORIG", author_id=author_id, created_at=datetime(2026, 3, 1), artifact_type="working_note"
+        "ART-KIND-ORIG", author_id=author_id, created_at=at(2026, 3, 1), artifact_type="working_note"
     )
     revision = _artifact(
         "ART-KIND-NEW",
         author_id=author_id,
-        created_at=datetime(2026, 3, 2),
+        created_at=at(2026, 3, 2),
         artifact_type="knowledge_article",
         revises="ART-KIND-ORIG",
         version=2,

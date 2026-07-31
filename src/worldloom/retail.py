@@ -182,7 +182,11 @@ class RetailWorld:
         return cls(seed=seed, archetype=archetypes.inspired_by(description))
 
     def build(self) -> World:
-        """Generate the organisation and its lore. No events yet."""
+        """Generate the organisation, its lore, and the lore's founding milestones.
+
+        Every dated lore commitment arrives with a matching event and fact
+        already on the timeline — the world's beginning, not yet any close.
+        """
         from .generators import organisation
 
         rng = Rng(self.seed)
@@ -206,6 +210,8 @@ class RetailWorld:
             _personas=org.personas,
             _access_policies=org.access_policies,
             _lore=commitments,
+            _events=org.milestones,
+            _facts=org.founding_facts,
             seed=self.seed,
             _roles=org.roles,
             _minter=minter,

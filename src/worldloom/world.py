@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -266,8 +266,7 @@ class World:
         This is what makes a temporal question meaningful: the world of
         09:30 genuinely differs from the world of 14:00.
         """
-        when = datetime.fromisoformat(moment) if isinstance(moment, str) else moment
-        return self.facts.at(when)
+        return self.facts.at(_moment(moment))
 
     def org_at(self, moment: datetime | str) -> EmployeeCollection:
         """Who worked here at *moment* — the org chart's ``as_of``.
@@ -283,7 +282,7 @@ class World:
         author, so ``left`` is the instant the window closes rather than the last
         instant inside it.
         """
-        when = datetime.fromisoformat(moment) if isinstance(moment, str) else moment
+        when = _moment(moment)
         return EmployeeCollection(
             tuple(
                 person
@@ -695,6 +694,24 @@ class World:
             f"{' planned' if not self._artifacts and self._artifact_intents else ''}, "
             f"evals={len(self._evaluations)})"
         )
+
+
+def _moment(moment: datetime | str) -> datetime:
+    """Parse a temporal cut-off, and assume UTC when the caller did not say.
+
+    Everything the corpus stores is timezone-aware UTC, so a naive input can only
+    ever raise ``can't compare offset-naive and offset-aware datetimes`` on the
+    very next line. Rejecting it would be defensible; assuming UTC is better,
+    because ``as_of("2026-04-01T10:00:00")`` is the obvious way to write the call
+    and there is exactly one timezone it could mean.
+
+    ``org_at`` made this urgent rather than theoretical. ``as_of`` had the same
+    hole from the start, but a naive string only reaches a comparison when some
+    field is actually populated — and until entities had validity windows, every
+    ``joined`` was ``None`` and the comparison was skipped.
+    """
+    when = datetime.fromisoformat(moment) if isinstance(moment, str) else moment
+    return when if when.tzinfo is not None else when.replace(tzinfo=timezone.utc)
 
 
 def _merged(existing: tuple, incoming: tuple) -> tuple:

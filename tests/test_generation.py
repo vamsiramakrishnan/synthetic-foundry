@@ -108,24 +108,44 @@ def test_streams_are_independent_of_each_other(world: World) -> None:
 
 def test_ids_are_minted_in_a_stable_order(world: World) -> None:
     assert world.people.ids() == sorted(world.people.ids())
-    assert world.facts.ids()[0] == "FACT-0001"
     assert world.company.id == "CO-0001"
 
 
-def test_building_does_no_scenario_work() -> None:
-    """Lazy: constructing and building yields an organisation, not an episode."""
+def test_the_first_scenario_fact_is_still_fact_0001(world: World) -> None:
+    """Founding milestones draw from their own "MFACT" sequence, and this is the
+    reason. A scenario's first fact has always been FACT-0001, and the reference
+    narration cites facts by exact id — so a milestone taking even one "FACT"
+    number would shift every later fact down and reject real, checked-in prose.
+    """
+    episode = world.run(MonthEndClose(period="2026-03", include_operational_incident=True))
+    minted = [f.id for f in episode.facts if f.id.startswith("FACT-")]
+    assert minted[0] == "FACT-0001"
+
+
+def test_building_yields_an_organisation_and_its_founding_but_no_episode() -> None:
+    """Lazy, but not empty. A build produces the org and the milestones its lore
+    already asserts dates for — otherwise the corpus states when the replatform
+    happened and nothing on the timeline witnesses it. What a build must not do
+    is episode work: no close, no incident, no evaluation cases.
+    """
     base = RetailWorld(seed=8128).build()
     assert len(base.people) > 0
-    assert len(base.events) == 0
-    assert len(base.facts) == 0
     assert len(base.evaluations) == 0
+    assert len(base.artifact_intents) == 0
+
+    # Every event at build is a founding milestone, and each is witnessed by a
+    # fact that names the lore commitment it came from.
+    assert len(base.events) == len(base.facts) > 0
+    assert all(f.lore_ids for f in base.facts)
+    assert {f.id.split("-")[0] for f in base.facts} == {"MFACT"}
 
 
 def test_running_a_scenario_does_not_mutate_the_source() -> None:
     base = RetailWorld(seed=8128).build()
+    founding = len(base.facts)
     first = base.run(MonthEndClose(period="2026-03", include_operational_incident=True))
-    assert len(base.facts) == 0, "the built world must be untouched"
-    assert len(first.facts) > 0
+    assert len(base.facts) == founding, "the built world must be untouched"
+    assert len(first.facts) > founding
 
 
 def test_a_loaded_corpus_cannot_be_advanced() -> None:

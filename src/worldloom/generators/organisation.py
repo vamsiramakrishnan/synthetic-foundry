@@ -12,16 +12,21 @@ topology, and ``persona_trait`` adjusts how specific people write.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from ..ids import Minter
 from ..models import (
     AccessPolicy,
+    Authority,
     BusinessUnit,
+    CanonicalFact,
     Category,
     Company,
     CostCentre,
     Employee,
+    EnterpriseEvent,
     LoreCommitment,
+    LoreKind,
     Persona,
     Service,
     Site,
@@ -48,6 +53,16 @@ class Organisation:
     dimensions: hierarchy.Dimensions
     roles: dict[str, str]
     """Role key to person ID, so scenarios can find the controller without guessing."""
+    milestones: tuple[EnterpriseEvent, ...]
+    """One event per dated lore commitment, so the corpus's own timeline carries
+    the assertions its lore makes. See ``founding_facts`` for the paired fact —
+    kept as two fields rather than one combined type because callers already
+    consume events and facts as two separate streams (``World._events`` and
+    ``World._facts``), and a combined type would just be unzipped again at every
+    call site."""
+    founding_facts: tuple[CanonicalFact, ...]
+    """The fact half of each founding milestone. Same length and order as
+    ``milestones``; ``founding_facts[i].event_id == milestones[i].id``."""
 
 
 #: The people every retail-close episode needs, in reporting order. Titles are
@@ -116,6 +131,146 @@ _ROLE_PERSONA = {
 #: Business-unit finance partners all write with the same persona.
 _UNIT_ROLE_PERSONA = {"_md": "PERSONA-EXEC", "_bp": "PERSONA-FIN-BP", "buyer": "PERSONA-MERCH-LEAD"}
 
+# ---------------------------------------------------------------------------
+# Founding: milestones, and validity windows
+# ---------------------------------------------------------------------------
+
+#: What kind of milestone event a lore commitment becomes. A DECISION reads
+#: differently on the timeline from an EVENT — "the mapping was decided" is not
+#: "the checkout stack was replatformed" — so the distinction the lore already
+#: carries is preserved onto the event rather than collapsing every commitment
+#: into one generic "milestone" kind that a reader could not tell apart.
+_MILESTONE_KIND: dict[LoreKind, str] = {
+    LoreKind.EVENT: "milestone_occurred",
+    LoreKind.DECISION: "milestone_decided",
+    LoreKind.NORM: "milestone_norm_adopted",
+    LoreKind.CONSTRAINT: "milestone_constraint_identified",
+    LoreKind.TENSION: "milestone_tension_surfaced",
+}
+
+#: No one can appear to have joined later than this and still safely author
+#: every artifact this corpus writes. Close periods start in 2026 at the
+#: earliest (the CLI's own default period is "2026-03"), so this sits most of a
+#: year ahead of that — comfortable margin without inspecting any actual period,
+#: which `generate()` has no reason to know about.
+_LATEST_JOIN = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+
+def _month_start(effective_from: str) -> datetime:
+    """The first instant of an ``"YYYY-MM"`` lore date, UTC.
+
+    Split-and-int rather than a date-parsing library: the value is constrained
+    to exactly this shape by every commitment in ``retail.lore()``, and pulling
+    in a calendar parser for it would be a dependency to cover a format string
+    already this simple.
+    """
+    year, month = effective_from.split("-")
+    return datetime(int(year), int(month), 1, tzinfo=timezone.utc)
+
+
+def _earliest_effective(lore: tuple[LoreCommitment, ...]) -> datetime:
+    """The earliest dated lore commitment, anchoring business-unit formation.
+
+    Falls back to ``_LATEST_JOIN`` when there is no lore to anchor to —
+    ``generate()``'s ``lore`` parameter defaults to ``()`` for a caller that only
+    wants the org graph — so a unit still gets a formation date either way.
+    """
+    dated = [c.effective_from for c in lore if c.effective_from]
+    if not dated:
+        return _LATEST_JOIN
+    # "YYYY-MM" strings sort lexicographically in calendar order, so a plain
+    # `min` over the raw strings is exact — no need to parse before comparing.
+    return _month_start(min(dated))
+
+
+def _joined_date(rng: Rng, role: str, depth: int) -> datetime:
+    """A join date for *role*, further back the closer it sits to the org root.
+
+    An executive who has been here a decade and an analyst hired last year is a
+    more useful world than one where everyone started the same day — it is what
+    makes ``World.org_at`` produce a different roster at different moments.
+    ``depth`` (distance from the CEO in the reporting tree — see ``_depth``)
+    stands in for seniority, since every leadership role sorts shallow and every
+    individual-contributor role sorts deep by construction of ``_ROLES``.
+
+    Tenure is drawn from a stream named after the role, not after draw order —
+    consistent with the rest of this module — so adding a role elsewhere can
+    never reshuffle anyone else's join date.
+    """
+    tenure_rng = rng.derive(f"joined/{role}")
+    # Six years of headroom per level, floored at half a year so even the
+    # deepest role has clearly joined before the corpus's close periods rather
+    # than landing on day zero.
+    min_years = max(0.5, 6.0 - depth * 2.0)
+    max_years = min_years + 6.0
+    tenure_days = tenure_rng.number(min_years, max_years) * 365.25
+    return _LATEST_JOIN - timedelta(days=tenure_days)
+
+
+def _founding_milestones(
+    minter: Minter, lore: tuple[LoreCommitment, ...], company_id: str
+) -> tuple[tuple[EnterpriseEvent, ...], tuple[CanonicalFact, ...]]:
+    """One milestone event and fact per dated lore commitment.
+
+    Every commitment in ``retail.lore()`` carries an ``effective_from``, so this
+    turns each into a witness on the corpus's own timeline: without it, lore
+    asserts dated things ("remapped in 2024-08") that no event or fact records,
+    and a reader asking "when" gets an answer from prose that nothing backs.
+
+    Called last, from ``generate()``, once every entity is minted — so adding
+    this feature never renumbers a PERSON, BU, CAT, or SITE id that already
+    existed. Events still take the shared "EV" sequence (``validate.py``'s
+    ``fact_precedes_event``/referential checks require a fact's ``event_id`` to
+    resolve to something with prefix "EV", so there is no other choice), which
+    does shift where a *scenario's* first event lands — acceptable, because
+    nothing addresses an event by literal id across a build.
+
+    Facts are different, and get their own "MFACT" sequence rather than
+    "FACT". A generated world's very first scenario-minted fact — the close
+    calendar's due date — has always been ``FACT-0001``, and
+    ``examples/grocery-close/narration.json`` cites it by exactly that id (and
+    everything after it, by exact id, all the way through the workbook). If
+    founding facts took even one "FACT" number before the first close ran,
+    every fact a scenario mints afterwards would shift down and that reference
+    narration — real prose, checked in and replayed byte-for-byte in CI —
+    would reject outright. A milestone fact is standing background, not
+    something any scenario-era artifact currently cites, so it costing nothing
+    against the "FACT" sequence is exactly the property that keeps the
+    existing corpus's fact identity untouched.
+    """
+    events: list[EnterpriseEvent] = []
+    facts: list[CanonicalFact] = []
+    for commitment in lore:
+        if not commitment.effective_from:
+            continue
+        occurred_at = _month_start(commitment.effective_from)
+        event = EnterpriseEvent(
+            id=minter.next("EV"),
+            kind=_MILESTONE_KIND[commitment.kind],
+            occurred_at=occurred_at,
+            summary=commitment.assertion,
+            lore_ids=[commitment.id],
+        )
+        events.append(event)
+        facts.append(
+            CanonicalFact(
+                id=minter.next("MFACT"),
+                kind="lore.milestone",
+                subject=company_id,
+                text_value=commitment.assertion,
+                # Must equal the event's `occurred_at`: `validate.py`'s
+                # `fact_precedes_event` check rejects a fact that claims validity
+                # before the event it cites actually happened.
+                valid_from=occurred_at,
+                authority=Authority.CONFIRMED,
+                event_id=event.id,
+                # The whole point: a document citing this fact reaches the lore
+                # that shaped it via `World.provenance()`.
+                lore_ids=[commitment.id],
+            )
+        )
+    return tuple(events), tuple(facts)
+
 
 def _merch_unit(unit_ids: dict[str, str]) -> str:
     """Which unit merchandising systems sits under.
@@ -168,11 +323,17 @@ def generate(
         role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))
         role_table.append((f"{unit.key}_bp", f"Finance Business Partner, {unit.name}", "Finance", "controller"))
         role_table.append((f"{unit.key}_buyer", f"Head of Buying, {unit.name}", "Merchandising", f"{unit.key}_md"))
-    role_table.sort(key=lambda row: _depth(row[0], dict((r[0], r[3]) for r in role_table)))
+    managers = {row[0]: row[3] for row in role_table}
+    role_table.sort(key=lambda row: _depth(row[0], managers))
+    # Reused below to spread join dates: how far a role sits from the CEO is a
+    # proxy for seniority, since every leadership role is shallow and every
+    # individual-contributor role is deep by construction of `_ROLES`.
+    depth_of = {row[0]: _depth(row[0], managers) for row in role_table}
 
     person_names = names.people_names(rng.derive("people"), len(role_table))
     role_ids: dict[str, str] = {}
     people: list[Employee] = []
+    founding_rng = rng.derive("founding")
 
     finance_cc = minter.next("CC")
     platform_cc = minter.next("CC")
@@ -192,6 +353,10 @@ def generate(
                 id=person_id,
                 name=person_name,
                 title=title,
+                joined=_joined_date(founding_rng, role, depth_of[role]),
+                # Departures are a scenario's concern (another agent's work), not
+                # the beginning's — everyone is still here at build.
+                left=None,
                 manager_id=None,  # filled below, once every role has an ID
                 business_unit_id=business_unit,
                 function=function,
@@ -217,6 +382,16 @@ def generate(
         for person in people
     ]
 
+    # Anchored to the earliest dated lore commitment rather than an arbitrary
+    # constant: lore asserts things happened by certain dates, so the unit those
+    # things happened *to* must already have existed by then. Clamped forward of
+    # the leader's own join — never back — because a unit cannot form before the
+    # person leading it was here to lead it; `validate.py`'s
+    # `leader_not_yet_employed` enforces exactly that. Clamping is simpler than
+    # reordering minting here, since every leader's `joined` is already known by
+    # this point (people, and their join dates, are built above).
+    joined_by_person = {p.id: p.joined for p in people}
+    lore_anchor = _earliest_effective(lore)
     business_units = tuple(
         BusinessUnit(
             id=unit_ids[unit.key],
@@ -224,6 +399,9 @@ def generate(
             company_id=company_id,
             leader_id=role_ids[f"{unit.key}_md"],
             kind=unit.kind,
+            formed=max(lore_anchor, joined_by_person[role_ids[f"{unit.key}_md"]]),
+            # `dissolved` stays `None`: no unit has closed at build, same as no
+            # one has left.
         )
         for unit in units
     )
@@ -330,6 +508,11 @@ def generate(
         employees_total=archetype.employees,
     )
 
+    # Last of all: every entity above already has its id, so founding milestones
+    # can only ever append to the "EV"/"FACT" sequences, never disturb one that
+    # names a person, unit, category, or site.
+    milestones, founding_facts = _founding_milestones(minter, lore, company_id)
+
     return Organisation(
         company=company,
         business_units=business_units,
@@ -342,6 +525,8 @@ def generate(
         categories=dimensions.categories,
         sites=dimensions.sites,
         dimensions=dimensions,
+        milestones=milestones,
+        founding_facts=founding_facts,
         roles={
             **role_ids,
             **{f"unit_{unit.key}": unit_ids[unit.key] for unit in units},

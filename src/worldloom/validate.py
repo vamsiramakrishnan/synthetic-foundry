@@ -39,6 +39,22 @@ if TYPE_CHECKING:  # pragma: no cover
 #: larger is a genuine reconciliation failure.
 RECONCILIATION_TOLERANCE = 1.0
 
+#: The prefixes a reference to a canonical fact may carry.
+#:
+#: Two sequences exist because founding milestones are minted at build, before
+#: any scenario runs, and taking "FACT" numbers there would shift every
+#: scenario-minted fact down — which would invalidate the reference narration in
+#: ``examples/grocery-close/narration.json``, real prose that cites facts by
+#: exact id and is replayed in CI.
+#:
+#: That is an honest reason for the split, but it is not on its own a reason to
+#: make milestone facts second-class. They started that way: every reference site
+#: expected the literal "FACT", so nothing could cite one, and an evaluation case
+#: asking when the replatform happened was unrepresentable — the exact question
+#: founding milestones exist to make answerable. Both prefixes are canonical
+#: facts and both are citable; only the sequence they draw from differs.
+FACT_REFS = frozenset({"FACT", "MFACT"})
+
 
 @dataclass(frozen=True)
 class Violation:
@@ -205,17 +221,17 @@ class _Validator:
             self.check_ref(fact.id, "subject", fact.subject)
             self.check_ref(fact.id, "source_system", fact.source_system, expect="SYS")
             self.check_ref(fact.id, "event_id", fact.event_id, expect="EV")
-            self.check_ref(fact.id, "supersedes", fact.supersedes, expect="FACT")
+            self.check_ref(fact.id, "supersedes", fact.supersedes, expect=FACT_REFS)
             self.check_refs(fact.id, "lore_ids", fact.lore_ids, expect="LORE")
 
         for intent in w.artifact_intents:
             self.check_ref(intent.id, "author_id", intent.author_id, expect="PERSON")
-            self.check_refs(intent.id, "required_fact_ids", intent.required_fact_ids, expect="FACT")
+            self.check_refs(intent.id, "required_fact_ids", intent.required_fact_ids, expect=FACT_REFS)
             self.check_refs(intent.id, "triggered_by", intent.triggered_by, expect="EV")
 
         for artifact in w.artifacts:
             self.check_ref(artifact.id, "author_id", artifact.author_id, expect="PERSON")
-            self.check_refs(artifact.id, "supporting_fact_ids", artifact.supporting_fact_ids, expect="FACT")
+            self.check_refs(artifact.id, "supporting_fact_ids", artifact.supporting_fact_ids, expect=FACT_REFS)
             self.check_refs(artifact.id, "event_ids", artifact.event_ids, expect="EV")
             self.check_refs(artifact.id, "lore_ids", artifact.lore_ids, expect="LORE")
             self.check_refs(artifact.id, "derived_from", artifact.derived_from, expect="ART")
@@ -223,13 +239,13 @@ class _Validator:
             self.check_ref(artifact.id, "access_policy_id", artifact.access_policy_id, expect="POLICY")
 
         for case in w.evaluations:
-            self.check_refs(case.id, "expected_fact_ids", case.expected_fact_ids, expect="FACT")
+            self.check_refs(case.id, "expected_fact_ids", case.expected_fact_ids, expect=FACT_REFS)
             self.check_refs(case.id, "required_artifact_ids", case.required_artifact_ids, expect="ART")
             self.check_refs(case.id, "distractor_artifact_ids", case.distractor_artifact_ids, expect="ART")
 
         for error in w.intentional_errors:
             self.check_ref(error.id, "artifact_id", error.artifact_id, expect="ART")
-            self.check_ref(error.id, "canonical_fact_id", error.canonical_fact_id, expect="FACT")
+            self.check_ref(error.id, "canonical_fact_id", error.canonical_fact_id, expect=FACT_REFS)
 
         for policy in w.access_policies:
             self.check_refs(policy.id, "allow_people", policy.allow_people, expect="PERSON")

@@ -12,12 +12,39 @@ build-order step 7, once IT services has shown which parts actually repeat.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from .generators.operations import business_days_after, period_end
 from .rng import Rng
 
 if TYPE_CHECKING:  # pragma: no cover
     from .world import World
+
+
+def _period_boundary(period: str) -> datetime:
+    """The instant an org change belonging to *period* happens at.
+
+    Not the calendar end of the period — after it, once that period's close
+    could have finished. Planning picks authors by role key, so a controller
+    who departs here signs their own final close and the successor signs the
+    next one, and `author_already_departed` holds without either planner
+    knowing a succession happened. A departure placed mid-period would need
+    every artifact in the period re-authored instead.
+
+    Eight business days after period end is deliberately generous rather than
+    the tightest bound that works. `operations.generate` can delay a close by
+    one business day on an incident, and the slowest artifact any episode
+    plans — the executive summary — is written up to a further day and 15
+    hours after that. Eight business days clears the worst combination of
+    both by more than a day in every month from 1900 to 2100 (checked by
+    brute force when this constant was chosen); a tighter bound would drift
+    back into `author_already_departed` the moment either lag changes. Pure
+    arithmetic on the period string, the same style as `finance._closed_at`
+    and `finance.previous_periods` — no clock, so replay stays byte-identical.
+    """
+    day = business_days_after(period_end(period), 8)
+    return datetime(day.year, day.month, day.day, 23, 59, 59, tzinfo=timezone.utc)
 
 
 def lore_index(world: World) -> dict[str, list[str]]:
@@ -186,4 +213,189 @@ class MonthEndClose:
         )
 
 
-__all__ = ["MonthEndClose", "lore_index", "likelihood_multiplier", "density_adjustment"]
+@dataclass(frozen=True)
+class Hire:
+    """A new person joins the company, effective at the boundary of *period*.
+
+    ``role_key`` becomes reachable through the world's role table from this
+    point on, exactly like every role the organisation generator mints — a
+    later scenario can ask for ``roles[role_key]`` without knowing whether the
+    person behind it has been here since the world was built or started this
+    period.
+    """
+
+    period: str
+    role_key: str
+    title: str
+    function: str
+    unit_key: str
+
+    def run(self, world: World) -> World:
+        from .generators import personnel
+
+        if world.seed is None:
+            raise ValueError("a scenario needs a seeded world; use RetailWorld(seed=...).build()")
+        if world._minter is None:
+            raise ValueError("this world was loaded from disk and cannot be advanced; build one from a seed")
+
+        rng = Rng(world.seed).derive(f"scenario/{type(self).__name__}/{self.period}/{self.role_key}")
+        minter = world._minter
+        roles = dict(world._roles)
+        at = _period_boundary(self.period)
+
+        change = personnel.hire(
+            rng, minter,
+            company_id=world.company.id,
+            title=self.title,
+            function=self.function,
+            business_unit_id=roles[f"unit_{self.unit_key}"],
+            # The unit's managing director is the default line for a new
+            # position in that unit. A caller wanting a different manager has
+            # no way to say so yet — this verb does not expose one — which is
+            # fine for the shapes this corpus needs so far and a real gap the
+            # day it does not.
+            manager_id=roles[f"{self.unit_key}_md"],
+            # Neither cost centres nor personas are per-unit in this world
+            # (only Finance and the data platform have one; see
+            # `organisation.generate`), so there is no sensible non-null
+            # default for either and guessing one would be worse than leaving
+            # it unset — both fields are optional on `Employee`.
+            cost_centre_id=None,
+            persona_id=None,
+            at=at,
+            period=self.period,
+        )
+        new_person = change.people[0]
+
+        return world.extend(
+            events=change.events,
+            facts=change.facts,
+            people=change.people,
+            business_units=change.business_units,
+            roles={**change.roles, self.role_key: new_person.id},
+            period=self.period,
+        )
+
+
+@dataclass(frozen=True)
+class Departure:
+    """The holder of *role_key* leaves; the world names a successor.
+
+    The successor is never invented — chosen deterministically from people
+    already employed at the departure moment. A direct report is preferred,
+    since promoting from within is the ordinary case; failing that, someone
+    else in the same function, since a controller with no reports still has
+    Finance peers who could plausibly take the role. Ties break on the
+    lowest person id, which is also the most senior by hire order — a
+    defensible tie-break that does not require inventing a performance model.
+    """
+
+    period: str
+    role_key: str
+
+    def run(self, world: World) -> World:
+        from .generators import personnel
+
+        if world.seed is None:
+            raise ValueError("a scenario needs a seeded world; use RetailWorld(seed=...).build()")
+        if world._minter is None:
+            raise ValueError("this world was loaded from disk and cannot be advanced; build one from a seed")
+
+        rng = Rng(world.seed).derive(f"scenario/{type(self).__name__}/{self.period}/{self.role_key}")
+        minter = world._minter
+        roles = dict(world._roles)
+        at = _period_boundary(self.period)
+
+        leaver = world.people.by_id(roles[self.role_key])
+        employed = world.org_at(at)
+
+        reports = [p for p in employed if p.manager_id == leaver.id]
+        peers = [p for p in employed if p.id != leaver.id and p.function == leaver.function]
+        candidates = reports or peers
+        if not candidates:
+            raise ValueError(
+                f"no eligible successor for {leaver.id} ({leaver.title}): no direct reports and "
+                f"nobody else in {leaver.function} is employed at {at.isoformat()}"
+            )
+        successor = min(candidates, key=lambda p: p.id)
+
+        change = personnel.depart(
+            rng, minter,
+            person=leaver,
+            successor=successor,
+            roles=roles,
+            units=world._business_units,
+            at=at,
+            period=self.period,
+        )
+
+        return world.extend(
+            events=change.events,
+            facts=change.facts,
+            people=change.people,
+            business_units=change.business_units,
+            roles=change.roles,
+            period=self.period,
+        )
+
+
+@dataclass(frozen=True)
+class Reorganisation:
+    """A business unit changes hands without anyone leaving.
+
+    Distinct from ``Departure`` on purpose: the outgoing leader stays
+    employed, so no ``left`` window closes and nothing but the unit's own
+    leadership moves. ``new_leader_role`` names the role key of the person
+    taking over — they must already be in this unit, or the graph check that
+    a unit's leader belongs to it would fail the moment this scenario ran.
+    """
+
+    period: str
+    unit_key: str
+    new_leader_role: str
+
+    def run(self, world: World) -> World:
+        from .generators import personnel
+
+        if world.seed is None:
+            raise ValueError("a scenario needs a seeded world; use RetailWorld(seed=...).build()")
+        if world._minter is None:
+            raise ValueError("this world was loaded from disk and cannot be advanced; build one from a seed")
+
+        rng = Rng(world.seed).derive(f"scenario/{type(self).__name__}/{self.period}/{self.unit_key}")
+        minter = world._minter
+        roles = dict(world._roles)
+        at = _period_boundary(self.period)
+
+        unit = world.business_units.by_id(roles[f"unit_{self.unit_key}"])
+        new_leader = world.people.by_id(roles[self.new_leader_role])
+
+        change = personnel.promote(
+            rng, minter,
+            person=new_leader,
+            title=f"Managing Director, {unit.name}",
+            role_key=f"{self.unit_key}_md",
+            units=(unit,),
+            at=at,
+            period=self.period,
+        )
+
+        return world.extend(
+            events=change.events,
+            facts=change.facts,
+            people=change.people,
+            business_units=change.business_units,
+            roles=change.roles,
+            period=self.period,
+        )
+
+
+__all__ = [
+    "MonthEndClose",
+    "Hire",
+    "Departure",
+    "Reorganisation",
+    "lore_index",
+    "likelihood_multiplier",
+    "density_adjustment",
+]
