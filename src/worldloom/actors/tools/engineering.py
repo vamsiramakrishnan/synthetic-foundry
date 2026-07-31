@@ -164,6 +164,40 @@ class RecordHypothesis(Tool):
         super().validate(arguments, ctx)
         if not arguments["cite_fact_ids"]:
             raise ToolRejection("no_evidence", "an assessment must cite what it rests on")
+        if arguments["status"] != "confirmed":
+            return
+
+        # A confirmation has to rest on the cause the world actually established.
+        #
+        # Without this the evidence gate is the only thing standing between an
+        # actor and an `Authority.CONFIRMED` fact saying whatever it likes: call
+        # `query_logs`, then confirm a network outage in a world whose cause is a
+        # stale mapping table, and it lands in the RCA with the standing of a
+        # confirmed finding. That is an actor authoring canonical truth, which is
+        # the one thing this package exists to prevent.
+        #
+        # What is checked is *standing*, not wording. Comparing the engineer's
+        # sentence against the canonical text would need semantics nothing here
+        # has; requiring the confirmation to cite the deterministic finding is
+        # both checkable and the right constraint — the account is the engineer's,
+        # the authority comes from the world.
+        canonical = [
+            ctx.world.facts.by_id(fact_id)
+            for fact_id in arguments["cite_fact_ids"]
+        ]
+        established = [
+            fact
+            for fact in canonical
+            if fact.kind == "ops.cause"
+            and fact.authority is Authority.CONFIRMED
+            and not fact.is_superseded
+        ]
+        if not established:
+            raise ToolRejection(
+                "unfounded_confirmation",
+                "a confirmed assessment must cite the confirmed cause the world has"
+                " established; record this as a hypothesis until one exists",
+            )
 
     def run(self, arguments: dict[str, Any], ctx: ToolContext) -> ToolResult:
         status = arguments["status"]
@@ -173,6 +207,18 @@ class RecordHypothesis(Tool):
             summary=f"{ctx.actor.title} recorded a {status} assessment: {arguments['assessment']}",
             services=[arguments["service_id"]],
         )
+        # A confirmation is sourced to the system that established the cause, not
+        # to the engineer who wrote it up. That is what makes the provenance of a
+        # confirmed finding traceable past the person who typed it.
+        source = next(
+            (
+                ctx.world.facts.by_id(f).source_system
+                for f in arguments["cite_fact_ids"]
+                if ctx.world.facts.by_id(f).kind == "ops.cause"
+                and ctx.world.facts.by_id(f).authority is Authority.CONFIRMED
+            ),
+            None,
+        ) if status == "confirmed" else None
         fact = self.emit_fact(
             ctx,
             kind="ops.cause_assessment",
@@ -180,6 +226,7 @@ class RecordHypothesis(Tool):
             text=arguments["assessment"],
             authority=self._AUTHORITY[status],
             event_id=event.id,
+            source_system=source,
             period=ctx.period,
             supersedes=arguments.get("supersedes_fact_id"),
         )

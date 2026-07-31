@@ -324,7 +324,21 @@ def _engineer_first_look(view: ObservationView) -> list[ActorAction]:
 def _engineer_confirm(view: ObservationView) -> list[ActorAction]:
     """Read the logs, confirm, tell the ticket, propose the fix, write the RCA."""
     symptom = view.latest("ops.feed_status")
-    cause = view.latest("ops.cause")
+    # Exactly `ops.cause`, at confirmed standing — not a prefix match. Prefix
+    # matching also catches `ops.cause_assessment`, so this play was citing the
+    # engineer's own earlier hunch as the cause it was confirming, and the
+    # circularity was invisible until `record_hypothesis` started requiring a
+    # confirmation to rest on the world's established finding.
+    cause = next(
+        (
+            fact
+            for fact in reversed(view.facts)
+            if fact["kind"] == "ops.cause"
+            and fact["authority"] == "confirmed"
+            and not fact["superseded"]
+        ),
+        None,
+    )
     if symptom is None or cause is None:
         return []
     service = symptom["subject"]

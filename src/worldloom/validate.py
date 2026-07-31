@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .ids import id_prefix, is_id
-from .models import FormulaKind, Lifecycle
+from .models import Authority, FormulaKind, Lifecycle
 
 if TYPE_CHECKING:  # pragma: no cover
     from .world import World
@@ -989,6 +989,31 @@ class _Validator:
                             f" observation at {entry.observation.observed_at.isoformat()}"
                             " did not contain",
                         )
+
+            # A confirmed cause has to rest on one the world established. The
+            # tool refuses this at execution; checking it again here is the same
+            # argument the rest of this group makes — the runtime guards the run,
+            # and the corpus is what somebody downloads.
+            if entry.action.tool_name == "record_hypothesis" and (
+                entry.action.arguments.get("status") == "confirmed"
+            ):
+                self.checks += 1
+                cited = entry.action.arguments.get("cite_fact_ids") or []
+                established = any(
+                    (fact := facts.get(cited_id)) is not None
+                    and fact.kind == "ops.cause"
+                    and fact.authority is Authority.CONFIRMED
+                    for cited_id in cited
+                )
+                if not established:
+                    self.fail(
+                        "actors",
+                        "unfounded_confirmation",
+                        subject,
+                        "a confirmed cause assessment that cites no confirmed"
+                        " ops.cause — the actor asserted what the world did not"
+                        " establish",
+                    )
 
             # A decision needs standing, not merely a tool. Checked separately
             # from the allow-list because "may call this" and "is entitled to

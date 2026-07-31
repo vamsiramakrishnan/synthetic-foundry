@@ -327,11 +327,19 @@ def _execute(
         tool.validate(checked, ctx)
         key = tool.idempotency_key(checked, ctx)
         if key is not None and key in seen:
-            # A repeat is accepted and changes nothing. Returning the first
-            # result rather than a rejection is deliberate: the caller asked for
-            # a state that already holds, and refusing would push a retry loop
-            # into the actor for something that is not an error.
-            return seen[key], key
+            # A repeat is accepted and changes nothing. Accepted rather than
+            # refused on purpose: the caller asked for a state that already
+            # holds, and refusing would push a retry loop into the actor for
+            # something that is not an error.
+            #
+            # It returns an *empty* result rather than the first call's. Handing
+            # back the original ids meant two ledger entries claimed the same
+            # fact, which is exactly what `duplicate_mutation` exists to catch —
+            # "every mutation has one accepted tool result" has to survive the
+            # deduplication that makes it true. The repeat is still recorded, so
+            # the attempt stays auditable; it reports what it actually changed,
+            # which is nothing.
+            return ToolResult(accepted=True), key
         result = tool.run(checked, ctx)
     except tool_base.ToolRejection as rejection:
         return (

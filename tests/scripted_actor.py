@@ -47,58 +47,88 @@ def choose(decision: dict[str, Any]) -> dict[str, Any]:
     *handshake* under test, not the episode. What matters is that a plausible
     call can be composed from the decision document alone — if it cannot, the
     document is not self-describing and no real agent could answer it either.
+
+    It advances on ``turn`` rather than re-deciding from scratch each time. An
+    earlier version picked the first matching tool every turn, which meant
+    ``search_incidents`` — offered to every role — matched forever: the episode
+    burned each invocation's whole budget repeating one read, and the call count
+    looked healthy while nothing progressed.
     """
     offered = {tool["name"] for tool in decision["tools"]}
+    turn = decision["turn"]
     symptom = _latest(decision, "ops.feed_status", "ops.incident_opened", "ops.incident_state")
 
-    # A read, when one is offered. Reading first is what every role in this
-    # episode actually does, and it is always legal.
-    for tool in decision["tools"]:
-        if tool["mutates"]:
-            continue
-        if tool["name"] in {"query_logs"} and "sys_erp" in decision["resources"]:
+    if turn == 0:
+        # Look first. Every role in this episode does, and it is always legal.
+        if "query_logs" in offered and "sys_erp" in decision["resources"]:
             return {"tool_name": "query_logs",
                     "arguments": {"system_id": decision["resources"]["sys_erp"]}}
-        if tool["name"] in {"read_ledger", "query_budget"} and "company" in decision["resources"]:
-            return {"tool_name": tool["name"],
-                    "arguments": {"subject_id": decision["resources"]["company"]}}
-        if tool["name"] == "inspect_dependencies" and symptom:
+        if "inspect_dependencies" in offered and symptom:
             return {"tool_name": "inspect_dependencies",
                     "arguments": {"service_id": symptom["subject"]}}
-        if tool["name"] == "search_incidents":
+        for name in ("read_ledger", "query_budget"):
+            if name in offered and "company" in decision["resources"]:
+                return {"tool_name": name,
+                        "arguments": {"subject_id": decision["resources"]["company"]}}
+        if "search_incidents" in offered:
             return {"tool_name": "search_incidents", "arguments": {"query": "valuation"}}
 
-    # Then write something down. The artifact types offered are already narrowed
-    # to the ones this role may author, so the first is always legal — which is
-    # the whole reason the catalogue narrows them.
-    draft = next((tool for tool in decision["tools"] if tool["name"] == "draft_artifact"), None)
-    if draft is not None and decision["facts"]:
-        choices = next(
-            (a.get("choices", []) for a in draft["arguments"] if a["name"] == "artifact_type"),
-            [],
-        )
-        cited = _facts(decision, "ops.", "close.") or [decision["facts"][0]["id"]]
-        if choices:
+    if turn == 1:
+        # Raise the ticket, if that is this role's job. Without it no incident is
+        # ever recorded, every gated downstream route stays shut, and the episode
+        # ends after two invocations.
+        # The failing feed specifically, not `symptom` — that helper takes the
+        # newest of several kinds, and once the incident-opened fact is in view
+        # it wins, which left the guard below never matching.
+        failure = _latest(decision, "ops.feed_status")
+        if "create_incident" in offered and failure is not None:
             return {
-                "tool_name": "draft_artifact",
+                "tool_name": "create_incident",
                 "arguments": {
-                    "artifact_type": choices[0],
-                    # Bounded, because an actor woken late has observed more than
-                    # any one document should carry — the tool refuses past forty.
-                    "cite_fact_ids": cited[:40],
-                    "rationale": "The record of what this role could see at the time.",
+                    "service_id": failure["subject"],
+                    "priority": "P2",
+                    "summary": "Feed failure reported against this service.",
+                    "evidence_fact_ids": [failure["id"]],
+                    "notify_role_keys": [
+                        k for k in ("svc_incident", "platform_senior")
+                        if k in decision["roles"]
+                    ],
+                },
+            }
+        if "add_work_note" in offered and symptom:
+            return {
+                "tool_name": "add_work_note",
+                "arguments": {
+                    "service_id": symptom["subject"],
+                    "note": "Reviewed what is on the record so far.",
+                    "cite_fact_ids": [symptom["id"]],
                 },
             }
 
-    if "add_work_note" in offered and symptom:
-        return {
-            "tool_name": "add_work_note",
-            "arguments": {
-                "service_id": symptom["subject"],
-                "note": "Reviewed what is on the record so far; nothing further to add yet.",
-                "cite_fact_ids": [symptom["id"]],
-            },
-        }
+    if turn == 2:
+        # Write something down. The artifact types offered are already narrowed
+        # to the ones this role may author, so the first is always legal.
+        draft = next(
+            (t for t in decision["tools"] if t["name"] == "draft_artifact"), None
+        )
+        if draft is not None and decision["facts"]:
+            choices = next(
+                (a.get("choices", []) for a in draft["arguments"]
+                 if a["name"] == "artifact_type"),
+                [],
+            )
+            cited = _facts(decision, "ops.", "close.") or [decision["facts"][0]["id"]]
+            if choices:
+                return {
+                    "tool_name": "draft_artifact",
+                    "arguments": {
+                        "artifact_type": choices[0],
+                        # Bounded: an actor woken late has observed more than any
+                        # one document should carry, and the tool refuses past 40.
+                        "cite_fact_ids": cited[:40],
+                        "rationale": "The record of what this role could see at the time.",
+                    },
+                }
 
     # Nothing legal and useful left. Abstention is a real answer here, and the
     # harness records it as one.

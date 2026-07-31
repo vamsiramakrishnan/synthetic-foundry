@@ -146,9 +146,33 @@ class DraftArtifact(Tool):
                 "domain_not_writable",
                 f"{ctx.role_key} may not author a {artifact_type} ({domain})",
             )
+        # The same visibility check the other three artifact tools use. Existence
+        # is not visibility: deriving from a document this actor cannot read
+        # would let it claim lineage from a paper it has no standing with, by
+        # guessing an id.
         parent = arguments.get("derived_from_artifact_id")
-        if parent is not None and ctx.world.artifact_intents.get(parent) is None:
-            raise ToolRejection("unknown_artifact", f"{parent} is not a planned artifact")
+        if parent is not None:
+            _visible_intent(parent, ctx)
+
+        # An author has to be able to read what they wrote. The audience decides
+        # the access policy, so an override can put a document outside its own
+        # author's reach — and the failure lands as `author_cannot_see_own_artifact`
+        # at validation time, after the corpus has been exported. Refusing here
+        # costs one lookup and turns a post-hoc corpus defect into a rejection the
+        # actor can act on.
+        audience = arguments.get("audience")
+        if audience is not None:
+            policy_id = ctx.world._policy_for(audience)
+            policy = next(
+                (p for p in ctx.world.access_policies if p.id == policy_id), None
+            )
+            if policy is not None and not policy.permits(ctx.actor):
+                raise ToolRejection(
+                    "author_excluded_by_audience",
+                    f"an audience of {audience!r} resolves to {policy.label!r}, which"
+                    f" does not admit {ctx.role_key}; you cannot file a document you"
+                    " could not then read",
+                )
 
     def idempotency_key(self, arguments: dict[str, Any], ctx: ToolContext) -> str:
         # One document of a type per author per episode. A second draft is a

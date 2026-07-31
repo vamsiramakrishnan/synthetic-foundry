@@ -216,7 +216,14 @@ def test_a_departed_employee_observes_nothing() -> None:
 # ---------------------------------------------------------------------------
 
 
-def refuse(world: World, *, role_key: str, tool: str, arguments: dict) -> ToolResult:
+def refuse(
+    world: World,
+    *,
+    role_key: str,
+    tool: str,
+    arguments: dict,
+    evidence: frozenset[str] = frozenset(),
+) -> ToolResult:
     """Run one tool call for one role and return whatever the runtime decided.
 
     Built against the real world and the real policies rather than a stub, so a
@@ -254,6 +261,7 @@ def refuse(world: World, *, role_key: str, tool: str, arguments: dict) -> ToolRe
         at=at,
         period=PERIOD,
         roles=dict(world._roles),
+        evidence=evidence,
     )
     result, _ = _execute(tool, arguments, ctx, seen={})
     return result
@@ -994,3 +1002,232 @@ def test_the_handshake_drives_the_whole_episode_to_completion() -> None:
     assert world.actor_ledger
     assert world.recipe["actor_model_id"] == "agent"
     world.validate().raise_if_failed()
+
+
+# ---------------------------------------------------------------------------
+# Holes an automated review found, each closed and each pinned
+# ---------------------------------------------------------------------------
+
+
+def test_a_cause_cannot_be_confirmed_against_something_the_world_never_established(
+    acted: World,
+) -> None:
+    """The sharpest of the five: an actor minting confirmed truth.
+
+    The evidence gate was the only thing between an actor and an
+    `Authority.CONFIRMED` fact saying anything at all. Read a log, then confirm a
+    network outage in a world whose cause is a stale mapping table, and it lands
+    in the RCA with the standing of a confirmed finding — an actor authoring
+    canonical truth, which is the one thing this package exists to prevent.
+    """
+    symptom = next(f for f in acted.facts if f.kind == "ops.feed_status")
+    invented = refuse(
+        acted,
+        role_key="platform_senior",
+        tool="record_hypothesis",
+        arguments={
+            "service_id": acted._roles["svc_valuation"],
+            "status": "confirmed",
+            "assessment": "Confirmed: a core network outage in the southern region.",
+            # Real facts, observed — but none of them is the established cause.
+            "cite_fact_ids": [symptom.id],
+        },
+        # Past the evidence gate on purpose. This actor did go and look; the
+        # point is that looking does not entitle it to assert what it likes.
+        evidence=frozenset({"system_of_record"}),
+    )
+    assert not invented.accepted
+    assert "unfounded_confirmation" in (invented.rejection_reason or "")
+
+
+def test_the_scripted_engineer_confirms_against_the_canonical_cause(acted: World) -> None:
+    """And the episode's own confirmation rests on the world's finding.
+
+    Regression for a circularity the check exposed: the play selected its cause
+    with a prefix match, which also caught `ops.cause_assessment`, so the
+    engineer was confirming against its own earlier hunch.
+    """
+    entry = next(
+        e
+        for e in acted.actor_ledger
+        if e.action.tool_name == "record_hypothesis"
+        and e.action.arguments.get("status") == "confirmed"
+    )
+    cited = [acted.facts.by_id(f) for f in entry.action.arguments["cite_fact_ids"]]
+    assert any(f.kind == "ops.cause" and f.authority.value == "confirmed" for f in cited)
+
+
+def test_the_validator_catches_a_confirmation_with_nothing_behind_it(acted: World) -> None:
+    entry = next(
+        e
+        for e in acted.actor_ledger
+        if e.action.tool_name == "record_hypothesis"
+        and e.action.arguments.get("status") == "confirmed"
+    )
+    stripped = entry.model_copy(
+        update={
+            "action": entry.action.model_copy(
+                update={
+                    "arguments": {
+                        **entry.action.arguments,
+                        "cite_fact_ids": [
+                            f
+                            for f in entry.action.arguments["cite_fact_ids"]
+                            if acted.facts.by_id(f).kind != "ops.cause"
+                        ],
+                    }
+                }
+            )
+        }
+    )
+    broken = replace(
+        acted,
+        _actor_ledger=tuple(
+            stripped if e.id == entry.id else e for e in acted._actor_ledger
+        ),
+    )
+    assert "unfounded_confirmation" in {v.code for v in broken.validate().violations}
+
+
+def test_nothing_downstream_happens_if_the_incident_was_never_recorded() -> None:
+    """The claim `scheduler.py` makes about itself, made true.
+
+    Four of nine routes were unconditional, so an engineer confirmed a cause and
+    a lead raised remediation against a ticket that did not exist. The world's
+    own events fire whether or not anybody noticed; only the actor-recorded
+    incident state says the organisation did.
+    """
+    from worldloom.actors.providers import _abstain
+    from worldloom.actors.scheduler import ROUTES
+
+    gated = {
+        route.event_kind
+        for route in ROUTES
+        if "incident_open" in route.required_conditions
+    }
+    assert {
+        "incident_opened",
+        "hypothesis_recorded",
+        "root_cause_confirmed",
+        "control_failure_identified",
+        "remediation_created",
+    } <= gated
+    # The close is briefed every period, incident or not, so this one stays open.
+    assert "close_finalised" not in gated
+
+    class Silent:
+        """An analyst who never opens the ticket."""
+
+        id = "scripted-actor-1"
+
+        def act(self, view, tools):
+            return _abstain(view, "not raising this")
+
+    world = episode_world(Silent())
+    assert not [f for f in world.facts if f.kind == "ops.incident_state"]
+    # Nobody in engineering or service management is woken: every route that
+    # depends on an incident having been *recorded* stayed shut.
+    woken = {e.invocation.role_key for e in world.actor_ledger}
+    assert not woken & {"platform_senior", "platform_lead", "svc_incident"}, (
+        f"woken despite no incident: {woken}"
+    )
+    # The controller and the CFO still are, and should be. The close really was
+    # delayed and really did finalise — that is world state, not something an
+    # actor recorded — so the calendar decision and the executive briefing are
+    # theirs to make regardless of whether anyone opened a ticket.
+    assert woken <= {"svc_desk", "controller", "cfo"}, f"unexpected: {woken}"
+    world.validate().raise_if_failed()
+
+
+def test_an_audience_that_excludes_the_author_is_refused(acted: World) -> None:
+    """Refused at the tool, not discovered by the validator after export."""
+    visible = [f.id for f in acted.facts if f.kind.startswith("close.")][:3]
+    result = refuse(
+        acted,
+        role_key="controller",
+        tool="draft_artifact",
+        arguments={
+            "artifact_type": "working_note",
+            "cite_fact_ids": visible,
+            "rationale": "filed where I could not read it",
+            "audience": "technology",
+        },
+    )
+    assert not result.accepted
+    assert "author_excluded_by_audience" in (result.rejection_reason or "")
+
+
+def test_deriving_from_an_invisible_artifact_is_refused(acted: World) -> None:
+    """`derived_from` used a bare existence check while three sibling tools
+    used the visibility helper. Guessing an id was enough to claim lineage."""
+    unseen = next(
+        i.id for i in acted.artifact_intents if i.artifact_type == "executive_summary"
+    )
+    visible = [f.id for f in acted.facts if f.kind.startswith("ops.")][:3]
+    result = refuse(
+        acted,
+        role_key="svc_desk",
+        tool="draft_artifact",
+        arguments={
+            "artifact_type": "confluence_page",
+            "cite_fact_ids": visible,
+            "rationale": "claiming lineage from a paper I cannot read",
+            "derived_from_artifact_id": unseen,
+        },
+    )
+    assert not result.accepted
+    assert (
+        "unobserved_artifact" in (result.rejection_reason or "")
+        or "unknown_artifact" in (result.rejection_reason or "")
+    )
+
+
+def test_an_idempotent_repeat_claims_nothing(acted: World) -> None:
+    """A repeat is accepted, changes nothing, and says so.
+
+    It used to return the first call's result, so two ledger entries named the
+    same fact and `duplicate_mutation` fired on a corpus the runtime had built
+    correctly. The deduplication that makes "one mutation, one accepted result"
+    true has to not break it.
+    """
+    from worldloom.actors.runtime import _execute, _visible_intents
+
+    policy = policy_module.policy_for("svc_desk")
+    assert policy is not None
+    actor_id = acted._roles["svc_desk"]
+    at = acted._facts[-1].valid_from
+    observed = observation_module.project(
+        acted,
+        actor_id=actor_id,
+        role_key="svc_desk",
+        policy=policy,
+        at=at,
+        trigger_event_id=None,
+        observations=observation_module.observations_for(
+            acted, actor_id=actor_id, policy=policy, at=at, minter=Minter()
+        ),
+        messages=(),
+        tasks=(),
+        minter=Minter(),
+        artifact_ids=_visible_intents(acted, actor_id=actor_id, at=at),
+    )
+    ctx = tool_base.ToolContext(
+        world=acted, minter=Minter(), actor=acted.people.by_id(actor_id),
+        role_key="svc_desk", policy=policy, observation=observed, at=at,
+        period=PERIOD, roles=dict(acted._roles),
+    )
+    note = {
+        "service_id": acted._roles["svc_valuation"],
+        "note": "same note twice",
+        "cite_fact_ids": [],
+    }
+    seen: dict = {}
+    first, key = _execute("add_work_note", dict(note), ctx, seen=seen)
+    assert first.accepted and first.fact_ids
+    assert key is not None
+    seen[key] = first
+
+    second, _ = _execute("add_work_note", dict(note), ctx, seen=seen)
+    assert second.accepted, "a repeat is not an error"
+    assert not second.fact_ids, "a repeat must not claim the first call's ids"
+    assert not second.event_ids and not second.artifact_intent_ids

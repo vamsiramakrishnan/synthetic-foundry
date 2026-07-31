@@ -523,6 +523,22 @@ def act_requests(
         raise typer.Exit(code=2) from exc
 
     if document.get("complete"):
+        # "Complete" and "committed" are not the same thing, and conflating them
+        # was a dead end. `requests_document` rebuilds to find the next decision
+        # and throws the rebuilt world away, because reading is not writing. If
+        # the rebuild finished without needing anybody — a routing table that
+        # wakes no one for this world — then the corpus on disk is still the
+        # pre-episode organisation, and saying "complete" while leaving it that
+        # way gives the user no command that would commit it.
+        if not world.actor_ledger:
+            console.print(
+                "[yellow]![/yellow] this episode requires no decisions, and nothing"
+                " has been committed yet.\n"
+                "[dim]Commit it with an empty action set:"
+                ' `echo \'{"actions": []}\' > none.json &&'
+                f" worldloom act accept {corpus} --from none.json`[/dim]"
+            )
+            return
         console.print("[green]✓[/green] the episode is complete — nothing left to decide")
         return
 

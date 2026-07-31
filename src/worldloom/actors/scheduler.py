@@ -106,6 +106,13 @@ ROUTES: tuple[TriggerRoute, ...] = (
         # and the runtime's monotonic clock guarantees the second actor starts
         # after the first has finished rather than merely later on paper.
         eligible_roles=["platform_senior", "svc_desk"],
+        # Gated, like the two routes above it. The world's own
+        # `root_cause_confirmed` event happens whether or not anybody noticed the
+        # failure, so without this the engineer confirms a cause against a ticket
+        # that was never raised — and the claim in this file's header, that a
+        # world where the service desk abstained produces nothing downstream, is
+        # false for the four routes that used to be unconditional.
+        required_conditions=["incident_open"],
         max_actors=2,
         max_tool_calls=6,
         deadline_minutes=300,
@@ -121,6 +128,7 @@ ROUTES: tuple[TriggerRoute, ...] = (
     TriggerRoute(
         event_kind="control_failure_identified",
         eligible_roles=["platform_lead"],
+        required_conditions=["incident_open"],
         max_actors=1,
         max_tool_calls=3,
         deadline_minutes=480,
@@ -132,12 +140,16 @@ ROUTES: tuple[TriggerRoute, ...] = (
         # engineer woken first would produce an RCA with an empty Actions
         # section — which is the document's whole point missing.
         eligible_roles=["platform_lead", "platform_senior"],
+        required_conditions=["incident_open"],
         max_actors=2,
         max_tool_calls=5,
         deadline_minutes=720,
     ),
     TriggerRoute(
         event_kind="close_finalised",
+        # Deliberately ungated: a close finalises every period and the executive
+        # committee is briefed on it whether or not anything went wrong. Gating
+        # this one on an incident would mean a clean month produced no summary.
         eligible_roles=["cfo"],
         max_actors=1,
         max_tool_calls=3,
