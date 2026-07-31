@@ -34,6 +34,11 @@ narrate_app = typer.Typer(
     help="Hand prose requests to an agent, and validate what comes back.",
 )
 app.add_typer(narrate_app, name="narrate")
+plan_app = typer.Typer(
+    no_args_is_help=True,
+    help="Hand artifact-shape requests to an agent, and validate what comes back against the grammar.",
+)
+app.add_typer(plan_app, name="plan")
 
 console = Console()
 err = Console(stderr=True)
@@ -314,6 +319,93 @@ def narrate_accept(
     )
     console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
     if not _report(narrated):
+        raise typer.Exit(code=1)
+
+
+@plan_app.command("requests")
+def plan_requests(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the artifact-shape requests an agent needs to answer.
+
+    Each request is self-describing: the facts it may cite, the vocabulary of
+    beat roles the compiler can spell, this artifact type's grammar stated in
+    plain terms, and the headings this author has already used elsewhere.
+    """
+    from .compiler import handshake
+
+    world = _load(corpus)
+    if not world.artifact_irs:
+        try:
+            world = world.compile()
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] {corpus}: {exc}")
+            raise typer.Exit(code=2) from exc
+
+    document = handshake.requests_document(world)
+    if not document["requests"]:
+        console.print("[green]✓[/green] nothing to plan")
+        return
+
+    payload = handshake.dump(document)
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(
+            f"[green]✓[/green] {len(document['requests'])} request(s) written to [bold]{out}[/bold]"
+        )
+
+
+@plan_app.command("accept")
+def plan_accept(
+    corpus: str = typer.Argument(..., help="Corpus path to record plans into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Response JSON from the agent."),
+    model_id: str = typer.Option(
+        "agent", "--model-id",
+        help="Who proposed it. Recorded in the ledger and part of the replay key.",
+    ),
+) -> None:
+    """Validate agent-proposed plans and commit them to the ledger, or report every violation.
+
+    Nothing is committed unless every response passes. A partial commit would leave
+    a corpus half-planned with no record of which half.
+    """
+    from .compiler import handshake
+
+    world = _load(corpus)
+    if not world.artifact_irs:
+        world = world.compile()
+    try:
+        responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {source}: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    result = handshake.accept(world, responses, model_id=model_id)
+    rejected = {name: v for name, v in result.verdicts.items() if not v.accepted}
+
+    if rejected:
+        err.print(
+            f"[red]✗[/red] {len(rejected)} of {len(result.verdicts)} plan(s) rejected."
+            " Nothing was committed."
+        )
+        for name, verdict in sorted(rejected.items()):
+            err.print(f"\n[bold]{name}[/bold]")
+            for violation in verdict.violations:
+                err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
+        raise typer.Exit(code=1)
+
+    updated = world.extend(ledger=result.ledger)
+    written = updated.export(corpus, overwrite=True)
+
+    console.print(
+        f"[green]✓[/green] {len(result.verdicts)} plan(s) accepted and recorded in the ledger"
+    )
+    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not _report(updated):
         raise typer.Exit(code=1)
 
 

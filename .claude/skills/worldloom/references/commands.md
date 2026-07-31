@@ -132,6 +132,35 @@ worldloom narrate requests <CORPUS>
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
 
+### `worldloom plan`
+
+Hand artifact-shape requests to an agent, and validate what comes back against the grammar.
+
+### `worldloom plan accept`
+
+Validate agent-proposed plans and commit them to the ledger, or report every violation.
+
+```
+worldloom plan accept <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--from`, `-i` | Response JSON from the agent. |
+| `--model-id` | Who proposed it. Recorded in the ledger and part of the replay key. |
+
+### `worldloom plan requests`
+
+Emit the artifact-shape requests an agent needs to answer.
+
+```
+worldloom plan requests <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write JSON here instead of stdout. |
+
 ### `worldloom render`
 
 Render an existing corpus into files.

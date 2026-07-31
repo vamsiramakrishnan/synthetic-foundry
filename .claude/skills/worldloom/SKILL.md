@@ -18,6 +18,8 @@ facts.
 pip install -e ".[xlsx,docx]"
 
 worldloom build --seed 8128 --incident --out ./corpus   # 1. a world
+worldloom plan requests ./corpus -o plans.json          # 1b. what shape each doc takes
+worldloom plan accept ./corpus --from plans.json        #     validated against the grammar
 worldloom narrate requests ./corpus -o requests.json    # 2. what prose it needs
 #                                                         3. you write responses.json
 worldloom narrate accept ./corpus --from responses.json # 4. submit; expect rejection
@@ -38,6 +40,7 @@ Do not read these up front. Each is loaded for one stage of the journey.
 | Stage | Read | For |
 | --- | --- | --- |
 | 1. Build | `references/building.md` | Seeds, archetypes, scale, multiple periods, org change over time |
+| 1b. Shape | `references/planning-structure.md` | Proposing an artifact's sections under grammar validation |
 | 3. Write | `references/writing-prose.md` | The rules, the rejection cycle, and what good prose looks like here |
 | 5. Render | `references/rendering.md` | What each format is for and what it carries |
 | 7. Evaluate | `references/evaluating.md` | Reading the scorecard, and what a *rising* score means |

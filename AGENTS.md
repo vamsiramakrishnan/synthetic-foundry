@@ -30,6 +30,11 @@ worldloom --help
 # 1. Build a world. Same seed, same world, every time.
 worldloom build --seed 8128 --incident --out ./corpus
 
+# 1b. Optional: choose each document's shape before writing any of it. Without
+#     this, structure comes from a fixed outline and every memo looks the same.
+worldloom plan requests ./corpus -o plans.json
+worldloom plan accept ./corpus --from plans.json --model-id <your model>
+
 # 2. Ask what prose is needed.
 worldloom narrate requests ./corpus -o requests.json
 
