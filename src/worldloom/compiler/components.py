@@ -75,6 +75,15 @@ class ComponentSpec:
     """What this component is for, in an author's words. Reaches the narrative
     request, so it is prose rather than a label."""
 
+    layouts: frozenset[str] = frozenset()
+    """Visual layout families this component can be drawn in, e.g. ``table`` vs
+    ``compact_list``. Empty for the (large) majority of the registry, which has
+    exactly one honest presentation — a section divider does not have a second
+    way to be a section divider. Populated only where a component's data can
+    genuinely take more than one legible shape; see `compiler/style.layout_for`,
+    which is the only thing that reads this field and picks among the declared
+    families by data shape, not by taste."""
+
     def fits(self, *, fmt: Format, density: float, rows: int | None = None) -> bool:
         """Whether this component can be spelled in *fmt* at *density*."""
         if fmt not in self.supported_formats:
@@ -101,6 +110,7 @@ def _spec(
     max_rows: int | None = None,
     after_role: str | None = None,
     incompatible: str = "",
+    layouts: str = "",
 ) -> ComponentSpec:
     """Terse constructor. Space-separated strings beat repeating `frozenset({...})`."""
     return ComponentSpec(
@@ -113,6 +123,7 @@ def _spec(
         requires_predecessor_role=after_role,
         incompatible_with=frozenset(incompatible.split()) if incompatible else frozenset(),
         purpose=purpose,
+        layouts=frozenset(layouts.split()) if layouts else frozenset(),
     )
 
 
@@ -151,6 +162,14 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         # Unbounded in a workbook, which is why the cap lives on the slide-facing
         # component below rather than here. A thirty-row table is the normal
         # shape of a real close pack.
+        #
+        # Two layouts: a two- or three-row variance is a fact pattern, not a
+        # table anybody scans down a column for, and a full grid around it is
+        # mostly border. A thirty-row close pack is exactly the opposite case.
+        # `style.layout_for` picks between them by row count, which is the one
+        # honest signal here — the same component, the same data, just more or
+        # less of it.
+        layouts="table compact_list",
     ),
     _spec(
         "finance.metric_strip", "evidence position", "markdown docx pptx pdf",
@@ -158,6 +177,10 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         density=(0.2, 0.8),
         min_rows=3,
         max_rows=6,
+        # Always 3-6 measures (the component's own bound). Four sit two-by-two
+        # as cards without crowding a page or slide; five or six start to
+        # overflow a card grid and read better as one linear list.
+        layouts="metric_cards compact_list",
     ),
     _spec(
         "finance.variance_bridge", "explain_change evidence", "markdown docx pptx xlsx pdf",
@@ -168,11 +191,21 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         min_rows=3,
         max_rows=9,
         after_role="position",
+        # A waterfall reads at a glance up to six or seven steps; past that the
+        # bars compress until the shape the layout exists to show is gone, and
+        # a plain table of the same drivers is more legible than a bridge that
+        # has stopped looking like one.
+        layouts="bridge table",
     ),
     _spec(
         "finance.comparative_trend", "evidence comparison", "markdown docx xlsx pptx pdf",
         purpose="The same measure across ordered periods, so a reader can see direction rather than a point.",
         min_rows=3,
+        # Direction across four or fewer periods reads off a small stacked
+        # trend; more periods than that need the grid a table gives to keep
+        # every column addressable, which is arithmetic on column count rather
+        # than on row count the way the other layout splits above are.
+        layouts="stacked table",
     ),
     # -- schedule ---------------------------------------------------------
     _spec(
@@ -188,6 +221,11 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         # is still a chronology, so every calendar-shaped artifact was refused
         # outright — found by composing the outlines `documents.py` already
         # ships, which is the only reason it surfaced before the vocabulary grew.
+        #
+        # One or two commitments read as a short list; several dates against
+        # several owners want the alignment a table gives so a date and its
+        # owner stay readable on one line.
+        layouts="compact_list table",
     ),
     # -- operational ------------------------------------------------------
     _spec(
@@ -197,6 +235,11 @@ REGISTRY: tuple[ComponentSpec, ...] = (
             "known at that moment, not what is known now."
         ),
         min_rows=3,
+        # A short incident reads as a vertical sequence of moments — the shape
+        # a reader already has in their head for "what happened". Past roughly
+        # eight entries that sequence gets too tall to scan as a whole and a
+        # table's fixed row height keeps the whole timeline in view at once.
+        layouts="stacked table",
     ),
     _spec(
         "ops.causal_chain", "explanation", "markdown docx pptx pdf",
@@ -208,6 +251,9 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         purpose="What will be done, by whom, by when — separating the control fix from the detection fix.",
         min_rows=1,
         after_role="explanation",
+        # Same split as `finance.variance_table`: a couple of action items is a
+        # list, a real remediation plan with many owners and dates is a table.
+        layouts="compact_list table",
     ),
     # -- decision ---------------------------------------------------------
     _spec(
@@ -217,11 +263,21 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         # The constraint the grammar exists for: a decision request that arrives
         # before the evidence establishing it is a document nobody would issue.
         after_role="evidence",
+        # A binary choice reads well side by side; three or more options run
+        # out of horizontal room together and read better stacked so each gets
+        # its full case made before the next one starts.
+        layouts="two_column stacked",
     ),
     _spec(
         "mgmt.risk_matrix", "management", "markdown docx pptx pdf",
         purpose="Open risks by likelihood and impact, with an owner against each.",
         min_rows=1,
+        # A handful of risks fit a likelihood/impact grid without crowding it;
+        # many risks crowd a 2D grid before they crowd a list, so they fall
+        # back to one. In between, a grid and a list are both genuinely
+        # legible — see `style.layout_for`, which is where that band is
+        # actually a tie broken by `rng` rather than an arithmetic call.
+        layouts="full_width table",
     ),
     # -- workbook-only ----------------------------------------------------
     _spec(
