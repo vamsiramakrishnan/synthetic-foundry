@@ -192,6 +192,7 @@ worldloom narrate auto <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
+| `--harness` | Answer each request with an agent harness instead of a bare model: `claude-code` (the claude CLI in headless mode, its own auth) or `antigravity` (a Google Antigravity Agent; `worldloom[antigravity]`, GEMINI_API_KEY). `--model` passes through to the harness. |
 | `--model` | Model id. A `gemini-*` id routes to the Gemini provider (`worldloom[gemini]`, GEMINI_API_KEY); anything else — and the default — routes to Anthropic (`worldloom[llm]`, ANTHROPIC_API_KEY). Defaults: `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL` / `GEMINI_DEFAULT_MODEL`. |
 | `--retries` | Rejections the compiler will absorb per section before giving up. |
 

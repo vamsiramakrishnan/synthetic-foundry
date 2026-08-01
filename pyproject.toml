@@ -62,6 +62,11 @@ llm = ["anthropic>=0.40"]
 # transitively by `pip install google-antigravity` too — Google's agent SDK
 # depends on google-genai — so an Antigravity environment needs no extra step.
 gemini = ["google-genai>=1.0"]
+# The Antigravity *harness* route (`narrate auto --harness antigravity`): a
+# whole Agent runtime answers each request, not a bare model call. Brings the
+# gemini extra's SDK along as its own dependency. The claude-code harness has
+# no extra — it needs the `claude` CLI on PATH, not a Python package.
+antigravity = ["google-antigravity>=0.1"]
 # Every renderer at once — the ordinary way to install the tool rather than
 # the library. `pip install "worldloom[all]"`.
 all = [

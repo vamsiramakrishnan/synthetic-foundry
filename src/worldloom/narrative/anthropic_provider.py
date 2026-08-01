@@ -31,7 +31,12 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from .prompts import Prompt
-from .providers import ProviderError, malformed_narrative, parse_structured_narrative
+from .providers import (
+    RESPONSE_JSON_SCHEMA,
+    ProviderError,
+    malformed_narrative,
+    parse_structured_narrative,
+)
 from .requests import GeneratedClaim, GeneratedNarrative, NarrativeRequest
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -51,26 +56,7 @@ DEFAULT_MODEL = "claude-sonnet-5"
 #: path in `complete()` below is the exceptional case rather than the common one —
 #: schema-constrained output narrows "the model wrote something else" down to "the
 #: model wrote well-formed JSON with a claim that doesn't validate", which is rare.
-_RESPONSE_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "text": {"type": "string"},
-        "claims": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "text": {"type": "string"},
-                    "supporting_fact_ids": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["text", "supporting_fact_ids"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    "required": ["text", "claims"],
-    "additionalProperties": False,
-}
+_RESPONSE_SCHEMA = RESPONSE_JSON_SCHEMA
 
 #: Restates the response shape in words as well as schema. The schema stops the
 #: model from returning the wrong *shape*; it says nothing about what should be

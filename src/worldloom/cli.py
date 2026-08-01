@@ -629,6 +629,13 @@ def narrate_auto(
         2, "--retries",
         help="Rejections the compiler will absorb per section before giving up.",
     ),
+    harness: str = typer.Option(
+        None, "--harness",
+        help="Answer each request with an agent harness instead of a bare model:"
+        " `claude-code` (the claude CLI in headless mode, its own auth) or"
+        " `antigravity` (a Google Antigravity Agent; `worldloom[antigravity]`,"
+        " GEMINI_API_KEY). `--model` passes through to the harness.",
+    ),
 ) -> None:
     """Run requests -> generate -> validate -> accept in-process, against a live model.
 
@@ -653,16 +660,50 @@ def narrate_auto(
     from .narrative import (
         ANTHROPIC_DEFAULT_MODEL,
         AnthropicProvider,
+        AntigravityProvider,
+        ClaudeCodeProvider,
         GeminiProvider,
         NarrationError,
         ProviderError,
     )
 
+    # `--harness` names an agent runtime and overrides the model-prefix
+    # routing below — a harness picks (or is told) its model itself, so the
+    # prefix stops being the routing signal the moment one is named.
+    if harness is not None:
+        if harness == "claude-code":
+            # Preflight here, not just in the provider, so the failure comes
+            # before a corpus is loaded — same shape as the key checks below.
+            import shutil as _shutil
+
+            if _shutil.which("claude") is None:
+                err.print(
+                    "[red]error:[/red] --harness claude-code needs the `claude`"
+                    " CLI on PATH. Install it from https://claude.com/claude-code"
+                    " and run it once to authenticate."
+                )
+                raise typer.Exit(code=2)
+            make_provider = lambda: ClaudeCodeProvider(model=model)  # noqa: E731
+        elif harness == "antigravity":
+            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            if not api_key:
+                err.print(
+                    "[red]error:[/red] --harness antigravity needs GEMINI_API_KEY"
+                    " (GOOGLE_API_KEY also works). Export one before running"
+                    " `worldloom narrate auto`."
+                )
+                raise typer.Exit(code=2)
+            make_provider = lambda: AntigravityProvider(model=model, api_key=api_key)  # noqa: E731
+        else:
+            err.print(
+                f"[red]error:[/red] --harness takes claude-code or antigravity, not {harness!r}"
+            )
+            raise typer.Exit(code=2)
     # Routed by model-id prefix rather than a separate --provider flag: every
     # Gemini id starts with "gemini-" and no Anthropic id does, so the prefix
     # is unambiguous, and one flag that means one thing beats two flags that
     # can contradict each other.
-    if model and model.startswith("gemini"):
+    elif model and model.startswith("gemini"):
         api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             err.print(

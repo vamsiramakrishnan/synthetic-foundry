@@ -34,8 +34,13 @@ same request/validate/reject loop above, with an Anthropic model answering in
 place of the agent and `ANTHROPIC_API_KEY` in the environment. A `--model
 gemini-*` id routes the identical loop to Gemini instead
 (`pip install "worldloom[gemini]"`, or `google-antigravity`, which carries the
-same SDK; `GEMINI_API_KEY`). Everything else in this repository, including
-both loops' own tests, runs with no key at all.
+same SDK; `GEMINI_API_KEY`). And `--harness claude-code` or `--harness
+antigravity` puts a whole agent harness behind each request rather than a bare
+model call — Claude Code in headless mode (its own auth, no key here) or a
+Google Antigravity `Agent` (`pip install "worldloom[antigravity]"`) — one
+fresh session per section, because the request is the whole of what that
+author may know. Everything else in this repository, including every one of
+those loops' own tests, runs with no key at all.
 
 That division is the design. The agent supplies judgement and language. The harness
 supplies truth, and refuses anything that contradicts it.

@@ -27,6 +27,7 @@ from .anthropic_provider import AnthropicProvider
 from .anthropic_provider import DEFAULT_MODEL as ANTHROPIC_DEFAULT_MODEL
 from .gemini_provider import GeminiProvider
 from .gemini_provider import DEFAULT_MODEL as GEMINI_DEFAULT_MODEL
+from .harness import AntigravityProvider, ClaudeCodeProvider
 from .claims import validate
 from .compiler import Narration, NarrationError, ledger_key, narrate
 from .prompts import Prompt, SECTION_PROSE, get, register, versions
@@ -70,6 +71,8 @@ __all__ = [
     "ANTHROPIC_DEFAULT_MODEL",
     "GeminiProvider",
     "GEMINI_DEFAULT_MODEL",
+    "ClaudeCodeProvider",
+    "AntigravityProvider",
     "handshake",
     "UnreachableProvider",
     "ViolatingProvider",

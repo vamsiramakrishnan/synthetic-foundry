@@ -345,3 +345,32 @@ def malformed_narrative() -> GeneratedNarrative:
         ),
         claims=[],
     )
+
+
+#: The response shape every API- or harness-backed adapter asks a model for —
+#: one narrative object, claims each citing their facts. Shared here because it
+#: is the contract's shape (a serialisation of `GeneratedNarrative`), not any
+#: vendor's: Anthropic enforces it via `output_config`, Antigravity via
+#: `LocalAgentConfig(response_schema=...)`, and prompt-only adapters restate it
+#: in words — but they must all be asking for the same thing, or the shared
+#: parser below would need to know who it is parsing for.
+RESPONSE_JSON_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "text": {"type": "string"},
+        "claims": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "supporting_fact_ids": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["text", "supporting_fact_ids"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["text", "claims"],
+    "additionalProperties": False,
+}
