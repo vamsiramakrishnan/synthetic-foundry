@@ -198,4 +198,52 @@ def artifact_intents(
                [k["event_close_delayed"]], "small",
                "The executive committee receives a short summary. It omits the control failure.")
 
+    # ------------------------------------------------------------------
+    # The fan-out block. Appended strictly after everything above, because
+    # ART order is identity: the reference narration in examples/ cites the
+    # ids the blocks above mint, and an intent inserted before them would
+    # renumber every one. Anything added to this planner in future goes
+    # below this comment, never above it.
+    # ------------------------------------------------------------------
+
+    # Per-unit close commentary: the finance business partner's page for each
+    # division, citing only that unit's own headline facts. This is where the
+    # corpus stops reporting the month exclusively from the centre — and it is
+    # the fan-out that scales with the archetype rather than with this file.
+    if density > 0.0:
+        unit_keys = [key.removeprefix("unit_") for key in roles if key.startswith("unit_")]
+        for unit_key in unit_keys:
+            unit_id = roles[f"unit_{unit_key}"]
+            unit_facts = [f.id for f in financial_facts if f.subject == unit_id]
+            if not unit_facts:
+                continue
+            intent("unit_close_commentary", "finance", "finance", roles[f"{unit_key}_bp"],
+                   unit_facts, [episode.close_event_id], "small",
+                   "Each division's close is argued by the person who partners it, "
+                   "not only summed by the centre.")
+
+    if episode.had_incident and not actor_authored:
+        k = episode.keys
+        # The escalation meeting, minuted. Fully structured — attendees,
+        # tabled material, decisions — so it costs the narration loop nothing
+        # and still gives who-was-in-the-room questions a source document.
+        intent("meeting_minutes", "finance", "finance", roles["controller"],
+               [k["fact_cause"], k["fact_close_delayed"], k["fact_revised_date"],
+                k["fact_workaround"], k["fact_close_delay"]],
+               [k["event_close_delayed"]], "small",
+               "The decision to move the close was taken in a meeting, and a meeting "
+               "that moves a group commitment gets minutes.")
+
+        # The escalation thread: one message per moment, each bounded to what
+        # its sender knew then. The first report cannot name the cause,
+        # because the cause was not a fact yet — the thread is the corpus's
+        # cleanest record of knowledge arriving in order.
+        intent("email_thread", "operations", "technology", roles["svc_desk"],
+               [k["fact_feed_status"], k["fact_incident_ref"], k["fact_hypothesis"],
+                k["fact_cause_ruled_out"], k["fact_cause"], k["fact_close_delayed"]],
+               [k["event_incident_opened"], k["event_hypothesis"],
+                k["event_root_cause"], k["event_close_delayed"]], "small",
+               "The incident was escalated by email before any formal record existed; "
+               "the thread is what people actually knew, when.")
+
     return tuple(intents)

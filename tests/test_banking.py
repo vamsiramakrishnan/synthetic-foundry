@@ -59,8 +59,10 @@ def test_the_episode_is_coherent(compiled: World) -> None:
 
 
 def test_the_shape_of_the_episode(world: World) -> None:
-    """Nine artifacts, two labelled omissions, and the three cadences' facts."""
-    assert len(world.artifact_intents) == 9
+    """Eleven artifacts — the nine records plus the approval minutes and the
+    pre-lodgement thread — two labelled omissions, and the three cadences'
+    facts."""
+    assert len(world.artifact_intents) == 11
     assert len(world.intentional_errors) == 2
     kinds = {f.kind for f in world.facts}
     # Retail's kinds reused verbatim — the cross-vertical sharing evidence.

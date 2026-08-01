@@ -223,12 +223,7 @@ def narrate(
 
     prompt = prompts.get(prompt_name)
     facts = {fact.id: fact for fact in world.facts}
-    entity_names = frozenset(
-        [world.company.name]
-        + [unit.name for unit in world.business_units]
-        + [person.name for person in world.people]
-        + [system.name for system in world.systems]
-    )
+    entity_names = claim_checks.known_entity_names(world)
 
     by_key = {entry.key: entry for entry in ledger}
     minter = Minter()

@@ -708,6 +708,53 @@ class _Taxonomy:
             )
             break  # one document type makes the point; a second would only repeat it.
 
+    def communications(self) -> None:
+        """Who was in the room, and who was told when.
+
+        Askable only because the meeting and the thread are documents now. The
+        facts these cases expect appear in half the corpus; what makes them
+        hard is that the *pairing* — attendance beside decision, moment beside
+        channel — exists in exactly one document each, and that document is
+        neither the largest nor the most authoritative-looking source.
+        """
+        if not self.episode.had_incident:
+            return
+        k = self.episode.keys
+        by_id = {f.id: f for f in self.episode.facts}
+
+        minutes = self.artifact.get("meeting_minutes")
+        if minutes:
+            cause = by_id[k["fact_cause"]]
+            self.case(
+                "Who attended the meeting that moved the close, and what did the "
+                "minutes record as the cause?",
+                EvaluationType.CROSS_ARTIFACT,
+                "The Group Financial Controller and the Group Chief Financial "
+                f"Officer; the minutes record: {cause.text_value}.",
+                [k["fact_cause"], k["fact_close_delayed"]], difficulty="hard",
+                reasoning="The cause appears in many documents; attendance exists "
+                          "only in the minutes, so the pairing has one source.",
+                sources=[minutes], distractors=[self.artifact.get("confluence_page")],
+            )
+        thread = self.artifact.get("email_thread")
+        if thread:
+            delayed = by_id[k["fact_close_delayed"]]
+            self.case(
+                "When was the Group CFO first told the close was at risk, and "
+                "through what channel?",
+                # Cross-artifact, not temporal-state: there is no cutoff to
+                # reason at — the question joins a fact many documents carry
+                # with a channel and moment only the thread records.
+                EvaluationType.CROSS_ARTIFACT,
+                "By email, within the hour of the close being recorded as delayed "
+                f"on {delayed.valid_from.date().isoformat()} — before any formal "
+                "report existed.",
+                [k["fact_close_delayed"]], difficulty="hard",
+                reasoning="The RCA and the memo carry the fact; only the thread "
+                          "carries when it reached the CFO, and through what.",
+                sources=[thread], distractors=[self.artifact.get("incident_rca")],
+            )
+
     def history_abstentions(self) -> None:
         """History questions that stay unanswerable regardless of how large
         the world grows.
@@ -767,6 +814,9 @@ def evaluation_cases(
     taxonomy.milestone_provenance()
     taxonomy.authorship_over_time()
     taxonomy.history_abstentions()
+    # Appended after every family above for the same id-stability reason, and
+    # gated inside on the fan-out documents actually being planned.
+    taxonomy.communications()
 
     # One last pass of the rule every family is supposed to apply for itself.
     #

@@ -70,13 +70,16 @@ jobs:
 
       # The reference narration: real agent-written prose, accepted whole. Guards
       # the requests rather than the prose — a change that makes a request harder
-      # to answer well shows up here and nowhere else.
+      # to answer well shows up here and nowhere else. The model id is a
+      # collective label: the file's prose has been written by more than one
+      # Claude model over time (the close artifacts first, the fan-out layer's
+      # commentary and thread later), each accepted through this same gate.
       - name: The reference narration is still accepted
         run: |
           worldloom build --seed 8128 --incident --archetype australian_grocery \
             --comparatives 11 --out "${{ runner.temp }}/reference"
           worldloom narrate accept "${{ runner.temp }}/reference" \
-            --from examples/grocery-close/narration.json --model-id claude-opus-5
+            --from examples/grocery-close/narration.json --model-id claude-agents
           worldloom render "${{ runner.temp }}/reference" -f docx -f xlsx -f markdown
           worldloom validate "${{ runner.temp }}/reference"
 

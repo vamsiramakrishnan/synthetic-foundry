@@ -954,6 +954,20 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "without understanding the cause.",
         ),
     ),
+    "unit_close_commentary": (
+        SectionPlan(
+            "Performance", ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."), "unit",
+            "One unit's month, argued by the person who partners it. Say what the "
+            "unit delivered against plan and why, in a finance business partner's "
+            "commercial register — this is the paragraph the divisional MD forwards. "
+            "Do not restate the group position; the unit is the whole subject.",
+        ),
+        SectionPlan(
+            "Watch items", ("metric.",), "any",
+            "What this unit should watch next period, if the metrics given warrant "
+            "anything. One or two sentences; skip gracefully if nothing does.",
+        ),
+    ),
     "close_calendar": (
         SectionPlan(
             "Commitment", ("close.due_date",), "any",
@@ -1224,8 +1238,31 @@ def _divisional_summary(
 #: Artifact types whose IR is built by a dedicated function rather than the
 #: generic outline. The workbook was the only entry until banking registered
 #: its capital return; the dict exists so a domain module's source artifact
-#: does not need a branch here naming it.
-_COMPILERS: dict[str, Any] = {"finance_workbook": finance_workbook}
+#: does not need a branch here naming it. Minutes and threads are core entries
+#: because they are mechanism any vertical plans — a projection of an event
+#: and its facts, with no domain vocabulary of their own.
+from .generators.communications import MESSAGE_LAG, MINUTES_LAG, minutes_ir, thread_ir
+
+_COMPILERS: dict[str, Any] = {
+    "finance_workbook": finance_workbook,
+    "meeting_minutes": minutes_ir,
+    "email_thread": thread_ir,
+}
+_STANDING.update({
+    # Circulated minutes are the approved record of the meeting; a thread is a
+    # record too, but an informal one — the authority gap between them is what
+    # a who-was-told-when evaluation resolves against.
+    "meeting_minutes": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
+    "email_thread": (Authority.UNOFFICIAL_NOTE, Lifecycle.PUBLISHED),
+    "unit_close_commentary": (Authority.WORKING_DOCUMENT, Lifecycle.PUBLISHED),
+})
+_LAG.update({
+    # The same constants the communications compilers stamp into their IR
+    # metadata — see the coupling note beside them.
+    "meeting_minutes": MINUTES_LAG,
+    "email_thread": MESSAGE_LAG,
+    "unit_close_commentary": timedelta(hours=20),
+})
 
 
 def compile_intent(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:

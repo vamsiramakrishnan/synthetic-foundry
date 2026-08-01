@@ -38,6 +38,29 @@ from . import references
 from .requests import GeneratedNarrative, NarrativeRequest, Verdict, Violation
 
 if TYPE_CHECKING:  # pragma: no cover
+    from ..world import World
+
+
+def known_entity_names(world: World) -> frozenset[str]:
+    """Every name prose may treat as an entity of this world.
+
+    One definition, shared by the compiler and the handshake, because two
+    hand-maintained copies is how categories went missing from both: the list
+    was written when only companies, units, people, and systems were ever
+    named in prose, and the banking vertical's product books — categories —
+    were rejected as inventions by a validator that had simply never been told
+    they exist.
+    """
+    return frozenset(
+        [world.company.name]
+        + [unit.name for unit in world.business_units]
+        + [person.name for person in world.people]
+        + [system.name for system in world.systems]
+        + [category.name for category in world.categories]
+        + [site.name for site in world.sites]
+    )
+
+if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact
 
 
@@ -163,10 +186,22 @@ def validate(
             )
 
     # 7. No invented entities, when the caller supplies the world's names.
+    #
+    # A run that sits *inside* a known name is that name, seen through the
+    # extractor's acronym blind spot: `_capitalised_runs` breaks a run at an
+    # all-caps token, so "SME Secured Lending" surfaces as "Secured Lending" —
+    # found when the banking vertical's own fixture provider was refused for
+    # naming a product book the world genuinely contains. Containment is
+    # checked instead of teaching the extractor acronyms, because widening the
+    # matcher would start flagging ordinary prose like "CFO Approved" as an
+    # entity, and a validator that rejects real names is worse than one that
+    # is lenient about fragments of them.
     if entity_names:
         prose = references.strip_references(narrative.text)
         for word in _capitalised_runs(prose):
-            if word not in entity_names and len(word.split()) > 1:
+            if len(word.split()) > 1 and word not in entity_names and not any(
+                word in name for name in entity_names
+            ):
                 violations.append(
                     Violation(code="unknown_entity", detail=f"{word!r} is not an entity in this world")
                 )

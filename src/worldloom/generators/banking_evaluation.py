@@ -237,6 +237,37 @@ def evaluation_cases(
         sources=[summary],
     )
 
+    # -- the approval meeting, on the record ----------------------------------
+    # The minutes are the one document that tables the challenge beside the
+    # decision to file — the pairing the return omits and the summary never
+    # mentions — so these cases have exactly one honest source. (Inserting
+    # before the abstention shifts its EVAL id, which is safe here: unlike the
+    # retail reference corpus, nothing checked-in cites banking ids.)
+    minutes = next((i.id for i in intents if i.artifact_type == "meeting_minutes"), None)
+    if minutes:
+        case(
+            "Did the meeting that approved the return for lodgement have the "
+            "second-line challenge in front of it?",
+            EvaluationType.CROSS_ARTIFACT,
+            "Yes — the minutes table the challenge and its open status beside the "
+            "decision to lodge at the preparer's figure.",
+            [k["fact_challenge"], k["fact_challenge_open"], k["fact_approval"]],
+            reasoning="The filing is silent by labelled omission and the challenge "
+                      "memo predates the meeting; only the minutes hold both the "
+                      "challenge and the decision in one record.",
+            sources=[minutes], distractors=[filed],
+        )
+        case(
+            "Who attended the meeting at which the return was approved for "
+            "lodgement?",
+            EvaluationType.CROSS_ARTIFACT,
+            "The Group Chief Financial Officer and the Regulatory Reporting "
+            "Manager.",
+            [k["fact_approval"]], difficulty="medium",
+            reasoning="Attendance is recorded only in the minutes.",
+            sources=[minutes],
+        )
+
     # -- what the corpus deliberately cannot answer ---------------------------
     builder.abstain(
         "What action did the Prudential Standards Authority take in response to "

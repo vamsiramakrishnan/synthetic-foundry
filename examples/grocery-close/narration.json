@@ -486,6 +486,252 @@
           ]
         }
       ]
+    },
+    {
+      "id": "ART-0011/Performance",
+      "text": "Australian Food delivered {{fact:FACT-1341}} against a plan of {{fact:FACT-1380}}, a shortfall of {{fact:FACT-1419}}. The revenue miss is one thing. Margin is the story: gross profit came in at {{fact:FACT-6147}} against a budgeted {{fact:FACT-6186}}, producing {{fact:FACT-6225}}. Gross margin contracted to {{fact:FACT-6264}} against {{fact:FACT-6303}} budgeted, down from {{fact:FACT-1302}} the prior month. The division carried the group's miss.",
+      "claims": [
+        {
+          "text": "Australian Food revenue finished below plan.",
+          "supporting_fact_ids": [
+            "FACT-1341",
+            "FACT-1380",
+            "FACT-1419"
+          ]
+        },
+        {
+          "text": "Gross profit miss exceeded the revenue miss.",
+          "supporting_fact_ids": [
+            "FACT-6147",
+            "FACT-6186",
+            "FACT-6225"
+          ]
+        },
+        {
+          "text": "Gross margin declined both against budget and against the prior month.",
+          "supporting_fact_ids": [
+            "FACT-6264",
+            "FACT-6303",
+            "FACT-1302"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0011/Watch items",
+      "text": "Promotional depth moved {{fact:FACT-6309}} this period. Watch whether that margin impact holds or whether the following month improves, and whether the commercial partnership with General Merchandise on joint campaigns continues at that intensity.",
+      "claims": [
+        {
+          "text": "Australian Food experienced significant promotional-driven margin impact.",
+          "supporting_fact_ids": [
+            "FACT-6309"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0012/Performance",
+      "text": "New Zealand Food closed at {{fact:FACT-1342}} against {{fact:FACT-1381}}, {{fact:FACT-1420}} against plan. Gross profit finished at {{fact:FACT-6148}} against a budgeted {{fact:FACT-6187}}, producing {{fact:FACT-6226}}. Margin stood at {{fact:FACT-6265}} against {{fact:FACT-6304}} budgeted. The division performed close to plan on both revenue and margin.",
+      "claims": [
+        {
+          "text": "New Zealand Food revenue finished slightly below plan.",
+          "supporting_fact_ids": [
+            "FACT-1342",
+            "FACT-1381",
+            "FACT-1420"
+          ]
+        },
+        {
+          "text": "Gross profit and margin were also close to budget.",
+          "supporting_fact_ids": [
+            "FACT-6148",
+            "FACT-6187",
+            "FACT-6226",
+            "FACT-6265",
+            "FACT-6304"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0013/Performance",
+      "text": "General Merchandise reported {{fact:FACT-1343}} against {{fact:FACT-1382}}, {{fact:FACT-1421}} against plan. Gross profit was {{fact:FACT-6149}} against a budget of {{fact:FACT-6188}}, for {{fact:FACT-6227}}. Margin sat at {{fact:FACT-6266}} against {{fact:FACT-6305}} budgeted. The division was close to plan on both lines.",
+      "claims": [
+        {
+          "text": "General Merchandise revenue finished marginally below plan.",
+          "supporting_fact_ids": [
+            "FACT-1343",
+            "FACT-1382",
+            "FACT-1421"
+          ]
+        },
+        {
+          "text": "Gross profit and margin were also in line with budget.",
+          "supporting_fact_ids": [
+            "FACT-6149",
+            "FACT-6188",
+            "FACT-6227",
+            "FACT-6266",
+            "FACT-6305"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0014/Performance",
+      "text": "Digital and Marketplace delivered {{fact:FACT-1344}} against {{fact:FACT-1383}}, {{fact:FACT-1422}} against plan. Gross profit came to {{fact:FACT-6150}} against {{fact:FACT-6189}} budgeted, or {{fact:FACT-6228}}. Margin ran at {{fact:FACT-6267}} against a budgeted {{fact:FACT-6306}}. The revenue shortfall is modest. The margin holds above budget in absolute terms, but the forecast assumptions have not been refreshed since the platform replatform, which makes the forecast-to-actual gap worth monitoring.",
+      "claims": [
+        {
+          "text": "Digital and Marketplace revenue finished below plan.",
+          "supporting_fact_ids": [
+            "FACT-1344",
+            "FACT-1383",
+            "FACT-1422"
+          ]
+        },
+        {
+          "text": "Gross profit missed plan.",
+          "supporting_fact_ids": [
+            "FACT-6150",
+            "FACT-6189",
+            "FACT-6228"
+          ]
+        },
+        {
+          "text": "Margin exceeded budget but forecasting assumptions remain stale.",
+          "supporting_fact_ids": [
+            "FACT-6267",
+            "FACT-6306"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0014/Watch items",
+      "text": "Online conversion came in at {{fact:FACT-6311}} against a forecast of {{fact:FACT-6310}}. The gap reflects post-replatform volatility and a forecast that has not been re-baselined. Watch whether conversion stabilises and whether a realistic forecast baseline can be established for the channel.",
+      "claims": [
+        {
+          "text": "Online conversion rate ran below forecast.",
+          "supporting_fact_ids": [
+            "FACT-6310",
+            "FACT-6311"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0016/1 \u00b7 Adaeze Haverkamp to Solveig Rasmussen \u00b7 01 Apr 08:37",
+      "text": "{{fact:FACT-0003}}. The valuation feed is {{fact:FACT-0002}}. Raising to you for triage. Platform team to investigate.",
+      "claims": [
+        {
+          "text": "An incident has been opened at priority P2.",
+          "supporting_fact_ids": [
+            "FACT-0003"
+          ]
+        },
+        {
+          "text": "The valuation feed has failed.",
+          "supporting_fact_ids": [
+            "FACT-0002"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0016/2 \u00b7 Adaeze Haverkamp \u00b7 01 Apr 09:31",
+      "text": "Position update on {{fact:FACT-0003}}. Triage assessment: {{fact:FACT-0004}}. Run was overnight batch. The feed is {{fact:FACT-0002}}. No immediate mitigation yet. Platform running diagnostics now.",
+      "claims": [
+        {
+          "text": "The incident is attributed to an overnight platform outage.",
+          "supporting_fact_ids": [
+            "FACT-0004"
+          ]
+        },
+        {
+          "text": "The failure occurred in an overnight batch run.",
+          "supporting_fact_ids": [
+            "FACT-0003"
+          ]
+        },
+        {
+          "text": "The valuation feed has failed.",
+          "supporting_fact_ids": [
+            "FACT-0002"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0016/3 \u00b7 Grethe Mwangi-Turner to Rosalind Vandermolen \u00b7 01 Apr 13:52",
+      "text": "Escalation on {{fact:FACT-0003}}. The overnight hypothesis did not hold: {{fact:FACT-0005}}. Root cause confirmed: {{fact:FACT-0006}}. The feed is {{fact:FACT-0002}}. Initial assessment was {{fact:FACT-0004}}, but that did not survive testing. Scope is material. Applying manual workaround now. Finance will need a recovery run before the ledger can lock.",
+      "claims": [
+        {
+          "text": "An incident has been escalated.",
+          "supporting_fact_ids": [
+            "FACT-0003"
+          ]
+        },
+        {
+          "text": "The initial overnight outage hypothesis was ruled out by log evidence.",
+          "supporting_fact_ids": [
+            "FACT-0005"
+          ]
+        },
+        {
+          "text": "The confirmed cause is a stale product hierarchy mapping.",
+          "supporting_fact_ids": [
+            "FACT-0006"
+          ]
+        },
+        {
+          "text": "The valuation feed has failed.",
+          "supporting_fact_ids": [
+            "FACT-0002"
+          ]
+        },
+        {
+          "text": "The initial diagnosis was an overnight outage.",
+          "supporting_fact_ids": [
+            "FACT-0004"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0016/4 \u00b7 Isaura Trbojevic to Takoda Fitzmaurice \u00b7 02 Apr 09:25",
+      "text": "Incident on {{fact:FACT-0003}} continues. {{fact:FACT-0002}} confirmed. The position is {{fact:FACT-0004}}; that was the initial triage, but the root cause is now confirmed as {{fact:FACT-0006}}. Workaround is in progress. Close will not complete on the committed date. {{fact:FACT-0011}} as of this morning and escalation has gone to the CFO per the standing protocol. Valuation team is priority; everything downstream is blocked until that completes.",
+      "claims": [
+        {
+          "text": "The incident remains open.",
+          "supporting_fact_ids": [
+            "FACT-0003"
+          ]
+        },
+        {
+          "text": "The valuation feed remains failed.",
+          "supporting_fact_ids": [
+            "FACT-0002"
+          ]
+        },
+        {
+          "text": "Initial assessment was an overnight outage.",
+          "supporting_fact_ids": [
+            "FACT-0004"
+          ]
+        },
+        {
+          "text": "The confirmed cause is a stale hierarchy mapping.",
+          "supporting_fact_ids": [
+            "FACT-0006"
+          ]
+        },
+        {
+          "text": "The close has been recorded as delayed.",
+          "supporting_fact_ids": [
+            "FACT-0011"
+          ]
+        }
+      ]
     }
   ]
 }

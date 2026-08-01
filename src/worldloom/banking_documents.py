@@ -214,6 +214,37 @@ def artifact_intents(
         derived_from=[restatement.id, audit_review.id],
     )
 
+    # ------------------------------------------------------------------
+    # The fan-out block: appended after the nine artifacts above, never
+    # inserted, because tests and any checked-in prose key on their order.
+    # ------------------------------------------------------------------
+
+    # 10 — the approval meeting, minuted. The single most eval-dense document
+    # the episode can add: the minutes record that the open challenge was
+    # tabled and that the decision to file was taken anyway — the exact
+    # sequence the filed return omits and the board summary never mentions.
+    intent(
+        "meeting_minutes", "finance", "finance_and_risk", roles["reg_reporting_manager"],
+        [k["fact_challenge"], k["fact_challenge_open"], k["fact_wp_ratio"],
+         k["fact_return_due"], k["fact_approval"]],
+        [k["event_return_approved"]], "small",
+        "The return was approved in a meeting with the challenge on the table; the "
+        "minutes are the only document that records both in one place.",
+    )
+
+    # 11 — the pre-lodgement thread: working paper issued, challenge raised,
+    # approval anyway. Each message knows only what its moment had
+    # established, so the thread carries the disagreement as it was lived.
+    intent(
+        "email_thread", "risk", "finance_and_risk", roles["reg_analyst"],
+        [k["fact_wp_ratio"], k["fact_treatment_working"], k["fact_challenge"],
+         k["fact_treatment_challenged"], k["fact_challenge_open"], k["fact_approval"]],
+        [k["event_working_paper_issued"], k["event_challenge_raised"],
+         k["event_return_approved"]], "small",
+        "The challenge was argued by email before it was memoed; the thread is the "
+        "live disagreement, message by message.",
+    )
+
     errors = (
         IntentionalError(
             id=minter.next("ERR"),

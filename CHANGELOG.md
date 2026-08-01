@@ -54,6 +54,25 @@ One coherent enterprise, taken all the way through. Two, in fact.
   `--replay` regenerates byte-identically with no provider reachable, and CI
   proves it on every push, from the installed wheel as well as the checkout.
 
+- **The communications fan-out.** Episodes publish their long tail: meeting
+  minutes for the decisions that were taken in a room (the escalation that
+  moved the retail close; the banking meeting that approved the return with
+  the challenge on the table), email threads whose every message knows only
+  what its sender knew at that moment, and per-unit close commentary from
+  each division's finance partner. Minutes are fully structured — attendees,
+  tabled material, decisions — and cost the narration loop nothing; threads
+  and commentary are prose under the same fact constraints as everything
+  else. New evaluation families ask who was in the room and who was told
+  what, when.
+
+### Generation
+
+- The fan-out documents change what every seed generates: a corpus built
+  before this release will not regenerate byte-identically under it (new
+  artifacts, new evaluation cases, and category/site names admitted to the
+  narrative entity check). Corpora built earlier remain loadable and
+  validatable; regenerate from the seed to adopt the new layer.
+
 ### Packaging
 
 - Installable with `pip install worldloom`; renderers with optional

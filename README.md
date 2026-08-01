@@ -400,12 +400,13 @@ From the retail close episode (the default build):
 
 | Domain | Artifacts |
 | --- | --- |
-| **Finance** | Month-end workbook with live formulas · CFO variance memo · working notes · close calendar |
+| **Finance** | Month-end workbook with live formulas · CFO variance memo · per-division close commentary · working notes · close calendar |
 | **Operations** | ServiceNow incident records · Confluence status pages · knowledge articles |
 | **Engineering** | Incident RCAs · Jira remediation issues |
+| **Communications** | Meeting minutes with attendance and decisions · email threads whose early messages honestly don't know the ending |
 | **Strategy** | Executive committee summaries |
 | **People** | Personnel notices, when someone joins, leaves, or a unit changes hands |
-| **Evaluation** | Question sets over all of it: direct, cross-artifact, numerical, causal, temporal, authority, abstention |
+| **Evaluation** | Question sets over all of it: direct, cross-artifact, numerical, causal, temporal, authority, abstention — including who was in the room, and who was told what, when |
 
 And from the banking episode (`--archetype midsize_adi`): a quarterly capital
 return challenged by the second line before lodgement, filed anyway under a
@@ -670,7 +671,8 @@ The first executable is `worldloom demo retail-close`, not `worldloom interview`
 - [ ] Archetype packs as config, and full lore packs
 - [ ] Socratic world composer, with replay and an assumption ledger
 - [ ] Scenario DSL and artifact recipes
-- [ ] Bounded fan-out, size profiles, lifecycle versions
+- [x] Bounded fan-out, first slice: minutes, email threads, and per-unit commentary projected from each episode's own facts, in both verticals
+- [ ] Bounded fan-out at scale: wider document families, size profiles, lifecycle versions, actor-message threads
 - [ ] Enterprise mess as a separate mode: temporal versions, authority, permissions, labelled noise
 
 **Gate D — Scale.** Large corpora without changing semantics or losing reproducibility.
