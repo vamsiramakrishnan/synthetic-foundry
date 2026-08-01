@@ -43,6 +43,12 @@ class Domain:
     single_episode: Callable[[str], Any] | None = None
     """``period -> scenario`` for a domain whose build runs exactly one
     episode. ``None`` for retail, whose close loop the CLI drives itself."""
+    period_step_months: int = 1
+    """How many months apart consecutive ``--periods`` runs land for a
+    single-episode domain. Core, not banking, is what ``cli.py`` may name —
+    the thin-waist ratchet test forbids "quarter" in core code — so the
+    stepping arithmetic is generic and each domain states its own cadence
+    here; banking registers 3."""
     consulted_targets: tuple[tuple[str, str], ...] = ()
     """The lore-constraint targets this engine's generators actually read,
     as ``(target, what it changes)`` pairs. Published so a pack author — human

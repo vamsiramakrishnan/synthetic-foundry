@@ -86,8 +86,10 @@ challenged by the second line, filed anyway under a lodgement norm, invalidated
 by a reconciliation break the daily liquidity cadence catches, and corrected by
 a *restatement* — a new lodgement that leaves the original on the record, which
 is the one thing `revises` and `supersedes` both may not do. Same loop from
-step 1b on; the retail-only flags (`--incident`, `--periods`, `--comparatives`,
-`--actors`) are refused rather than ignored.
+step 1b on; the retail-only flags (`--incident`, `--comparatives`, `--actors`)
+are refused rather than ignored. `--periods` still applies — `N` consecutive
+quarters, each one a `QuarterlyCapitalReturn` chained onto the last, stepping
+three months at a time rather than retail's one.
 
 
 ---

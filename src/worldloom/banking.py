@@ -444,11 +444,24 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # authority differs (a working paper and a review finding may disagree),
     # a defect when it ties, because then nothing in the corpus can say which
     # one a reader should believe.
+    #
+    # `liquidity.*` is scoped out. Every liquidity.* kind is a single-threaded
+    # observation, never two authorities disagreeing about one fact:
+    # `liquidity.lcr`'s current fact is just the latest reading in its chain
+    # (group g's cadence check owns that invariant), and
+    # `liquidity.reconciliation_break` is minted once per quarter with
+    # nothing to contest it. This check never caught anything real there —
+    # until a second quarter's own, unrelated observation stream started
+    # tying with the first's under (kind, subject, period=None), which a
+    # two-quarter `validate()` run surfaced as a false positive: two
+    # unconnected streams' latest facts are not a live disagreement, so
+    # scoping them out is narrowing the check to what it actually verifies,
+    # not loosening it.
     contested: dict[tuple[str, str, str | None], list] = {}
     for fact in facts:
         if fact.is_superseded:
             continue
-        if fact.kind.startswith(("capital.", "review.", "liquidity.")):
+        if fact.kind.startswith(("capital.", "review.")):
             contested.setdefault((fact.kind, fact.subject, fact.period), []).append(fact)
     for (kind, subject, period), group in sorted(contested.items()):
         if len(group) < 2:
@@ -464,35 +477,57 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                      " subject and period — a contest is legal across authority"
                      " levels and unreadable within one")
 
-    # -- (g) the daily cadence has no silent gaps ---------------------------
+    # -- (g) the daily cadence has no silent gaps, within one quarter -------
     # The concurrency argument rests on the liquidity series actually running
     # through the window; a generator bug that dropped a day would erase the
-    # "two clocks" structure while every document still asserted it.
-    lcr = sorted(
-        (f for f in facts if f.kind == "liquidity.lcr"),
+    # "two clocks" structure while every document still asserted it. A global
+    # sort across all quarters used to enforce this, which was right for one
+    # quarter and wrong for two: consecutive quarters' windows sit weeks
+    # apart by design (`_LIQUIDITY_START_BD` business days after each period
+    # end), and a two-quarter `validate()` run correctly flagged that
+    # deliberate gap as a defect. Walking supersession chains instead of a
+    # global sort fixes it: each quarter's chain starts fresh — its first
+    # observation supersedes nothing (`generators/regulatory.generate`) — so
+    # gaplessness is demanded inside a chain and never expected between
+    # chains, which is where the corpus actually has no observations at all.
+    lcr_by_id = {f.id: f for f in facts if f.kind == "liquidity.lcr"}
+    next_in_chain = {f.supersedes: f for f in lcr_by_id.values() if f.supersedes}
+    chain_starts = sorted(
+        (f for f in lcr_by_id.values() if f.supersedes is None),
         key=lambda f: f.valid_from,
     )
-    for earlier, later in zip(lcr, lcr[1:]):
-        checks += 1
-        expected = business_days_after(earlier.valid_from.date(), 1)
-        if later.valid_from.date() != expected:
-            fail("liquidity_cadence_gap", later.id,
-                 f"follows {earlier.valid_from.date().isoformat()} but is dated"
-                 f" {later.valid_from.date().isoformat()}, not the next business day")
-        checks += 1
-        if earlier.valid_to != later.valid_from:
-            fail("liquidity_window_torn", earlier.id,
-                 "its validity does not hand over exactly at the next observation")
+    for earlier in chain_starts:
+        while earlier.id in next_in_chain:
+            later = next_in_chain[earlier.id]
+            checks += 1
+            expected = business_days_after(earlier.valid_from.date(), 1)
+            if later.valid_from.date() != expected:
+                fail("liquidity_cadence_gap", later.id,
+                     f"follows {earlier.valid_from.date().isoformat()} but is dated"
+                     f" {later.valid_from.date().isoformat()}, not the next business day")
+            checks += 1
+            if earlier.valid_to != later.valid_from:
+                fail("liquidity_window_torn", earlier.id,
+                     "its validity does not hand over exactly at the next observation")
+            earlier = later
 
     # -- reconciliation, for the balance sheet the core check cannot see ----
     # validate.financial() covers financial.*; capital.* is this module's
     # vocabulary, so its roll-up discipline is enforced here: at any moment a
     # total holds, the books holding at that moment sum to it exactly.
+    # Scoped to the total's own period (`f.period == total.period`), which a
+    # single quarter never needed to state: only one quarter's books could
+    # ever be open at once. A second quarter's by-book facts for the books
+    # the error never touched have no reason to close (nothing corrects
+    # them), so with two quarters they stay open simultaneously — matching
+    # `holds_at` alone without the period filter double-counts them against
+    # a total that only ever meant its own quarter's books.
     for total in (f for f in facts if f.kind == "capital.rwa_total"
                   and f.authority is Authority.SYSTEM_OF_RECORD and f.value):
         books = [
             f for f in facts
             if f.kind == "capital.rwa_by_book" and f.value
+            and f.period == total.period
             and f.holds_at(total.valid_from)
         ]
         if not books:
@@ -504,15 +539,23 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                  f"books holding at {total.valid_from.isoformat()} sum to {summed:,.0f}"
                  f" but the total states {total.value.amount:,.0f}")
 
-    # A stated ratio is the division of the amounts that hold beside it.
+    # A stated ratio is the division of the amounts that hold beside it, in
+    # its own period — the same reconciliation-scope reasoning as the books
+    # above applies to the capital and RWA amounts a ratio is derived from,
+    # once a second quarter's own (also never-superseded, for the same
+    # reason) amounts can otherwise be picked up alongside the first's.
     capital_amounts = [f for f in facts if f.kind == "capital.cet1_capital" and f.value]
     rwa_totals = [f for f in facts if f.kind == "capital.rwa_total"
                   and f.authority is Authority.SYSTEM_OF_RECORD and f.value]
     for ratio in (f for f in facts
                   if f.kind in ("capital.cet1_ratio", "capital.cet1_ratio_as_filed")
                   and f.authority is Authority.SYSTEM_OF_RECORD and f.value):
-        capital_at = [f for f in capital_amounts if f.holds_at(ratio.valid_from)]
-        rwa_at = [f for f in rwa_totals if f.holds_at(ratio.valid_from)]
+        capital_at = [
+            f for f in capital_amounts if f.period == ratio.period and f.holds_at(ratio.valid_from)
+        ]
+        rwa_at = [
+            f for f in rwa_totals if f.period == ratio.period and f.holds_at(ratio.valid_from)
+        ]
         if not capital_at or not rwa_at:
             continue
         checks += 1
@@ -571,6 +614,9 @@ register_domain(Domain(
     archetype_keys=BANKING_ARCHETYPES,
     world=BankingWorld,
     single_episode=QuarterlyCapitalReturn,
+    # A period is always the quarter-end month: three consecutive `--periods`
+    # runs step March, June, September, never March, April, May.
+    period_step_months=3,
     consulted_targets=CONSULTED_TARGETS,
     system_slots=(
         ("core_banking", "core banking ledger and general ledger of record"),

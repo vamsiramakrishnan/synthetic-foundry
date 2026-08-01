@@ -74,7 +74,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--overwrite` | Replace the destination if it exists. |
 | `--pack` | Build from an industry pack: a JSON file carrying the company shape, lore, and name. See `worldloom pack template` to start one and `worldloom pack check` to lint it. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
-| `--periods` | Run this many consecutive closes. More than one gives recurrence, superseded documents, and the evaluation questions a single close cannot pose. |
+| `--periods` | Run this many consecutive episodes — closes for the retail vertical, or a single-episode vertical's own cadence (a domain's period_step_months). More than one gives recurrence, superseded documents, and the evaluation questions a single episode cannot pose. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
 

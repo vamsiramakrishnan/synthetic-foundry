@@ -18,6 +18,7 @@ from dataclasses import replace
 from datetime import timedelta
 
 import pytest
+from typer.testing import CliRunner
 
 from worldloom import (
     Authority,
@@ -27,10 +28,14 @@ from worldloom import (
     World,
 )
 from worldloom.banking import FILING_TYPES
+from worldloom.cli import app
 from worldloom.evaluate import score
 from worldloom.models import EvaluationType
 
+runner = CliRunner()
+
 PERIOD = "2026-03"
+SECOND_PERIOD = "2026-06"
 SEED = 8128
 
 
@@ -42,6 +47,20 @@ def world() -> World:
 @pytest.fixture(scope="module")
 def compiled(world: World) -> World:
     return world.compile()
+
+
+@pytest.fixture(scope="module")
+def two_quarters() -> World:
+    """A second consecutive quarter on the same world — the coherence surface
+    ``QuarterlyCapitalReturn.run`` and the banking check group were reworked
+    for. Three months apart (``PERIOD`` to ``SECOND_PERIOD``), matching the
+    domain's registered ``period_step_months`` rather than one month, so this
+    fixture exercises the same stepping a `--periods 2` CLI build performs."""
+    return (
+        BankingWorld(seed=SEED).build()
+        .run(QuarterlyCapitalReturn(period=PERIOD))
+        .run(QuarterlyCapitalReturn(period=SECOND_PERIOD))
+    )
 
 
 def codes(world: World) -> set[str]:
@@ -372,6 +391,192 @@ def test_export_then_replay_is_byte_identical(world: World, tmp_path) -> None:
     for left, right in zip(one, two):
         if left.is_file():
             assert left.read_bytes() == right.read_bytes(), left.name
+
+
+# ---------------------------------------------------------------------------
+# Consecutive quarters
+# ---------------------------------------------------------------------------
+#
+# A second ``QuarterlyCapitalReturn`` on the same world, and the three
+# blockers fixing it surfaced: the standing CET1 minimum minted twice, the
+# daily cadence check sorting both quarters' liquidity series into one global
+# timeline, and the reconciliation checks summing a second quarter's books
+# against a first quarter's total because neither was ever period-scoped
+# when only one quarter could ever exist. Each test below pins one of those,
+# or the two-quarter `validate()` run that found the rest.
+
+
+def _lcr_chains(world: World) -> tuple[list, list]:
+    """The two quarters' LCR observations, split chronologically.
+
+    ``liquidity.lcr`` carries no ``period`` (see the comment where it is
+    minted, in ``generators/regulatory.py``) — a chain's own ``supersedes``
+    links are what relate its facts, not a period label — so tests split
+    quarters the same way the corpus does: the windows sit months apart by
+    design, so a plain chronological sort never interleaves them."""
+    lcr = sorted(world.facts.where(kind="liquidity.lcr"), key=lambda f: f.valid_from)
+    midpoint = len(lcr) // 2
+    return lcr[:midpoint], lcr[midpoint:]
+
+
+def test_two_consecutive_quarters_are_coherent(two_quarters: World) -> None:
+    report = two_quarters.compile().validate()
+    assert report.ok, "\n".join(str(v) for v in report.violations)
+
+
+def test_the_standing_minimum_is_not_re_minted(two_quarters: World) -> None:
+    """1a: a second quarter reuses the world's standing CET1 floor rather
+    than minting a duplicate — two would tie at SYSTEM_OF_RECORD for the same
+    (kind, subject), which `contested_at_equal_authority` exists to catch."""
+    minimums = two_quarters.facts.where(kind="capital.minimum_cet1_requirement")
+    assert len(minimums) == 1
+    # Both quarters' filings cite the one standing fact, not one each.
+    returns = [i for i in two_quarters.artifact_intents if i.artifact_type == "capital_return"]
+    filed = [i for i in returns if not i.restates]
+    assert len(filed) == 2
+    for intent in filed:
+        assert minimums[0].id in intent.required_fact_ids
+
+
+def test_each_quarter_files_and_restates_independently(two_quarters: World) -> None:
+    """Two periods, two independent filed+restated pairs: the restatement
+    contract repeats per quarter rather than a second quarter's correction
+    reaching into the first's."""
+    returns = [i for i in two_quarters.artifact_intents if i.artifact_type == "capital_return"]
+    filed = [i for i in returns if not i.restates]
+    restated = [i for i in returns if i.restates]
+    assert len(filed) == 2
+    assert len(restated) == 2
+    assert {i.restates for i in restated} == {i.id for i in filed}
+
+    def period_of(intent: object) -> str:
+        for fact_id in intent.required_fact_ids:  # type: ignore[attr-defined]
+            fact = two_quarters.facts.by_id(fact_id)
+            if fact.period:
+                return fact.period
+        raise AssertionError(f"{intent.id} carries no period-bearing fact")  # type: ignore[attr-defined]
+
+    filed_periods = {i.id: period_of(i) for i in filed}
+    assert set(filed_periods.values()) == {PERIOD, SECOND_PERIOD}
+    for restatement in restated:
+        assert period_of(restatement) == filed_periods[restatement.restates]
+
+
+def test_supersession_completes_across_the_quarter_boundary(two_quarters: World) -> None:
+    """1c: the first quarter's last LCR observation stays open — never
+    superseded — rather than being closed by the second quarter's first
+    observation. Closing it would need a cross-quarter `supersedes` edge
+    asserting the reading held continuously across the months between
+    windows, which nothing in this corpus observed; left open,
+    `supersession_incomplete` (a fact with no ``valid_to`` needs no
+    superseder) must not fire for it, and the second quarter's own chain
+    still starts fresh (`supersedes=None`)."""
+    assert "supersession_incomplete" not in codes(two_quarters)
+    first_quarter_lcr, second_quarter_lcr = _lcr_chains(two_quarters)
+    assert first_quarter_lcr[-1].valid_to is None
+    assert not first_quarter_lcr[-1].is_superseded
+    assert second_quarter_lcr[0].supersedes is None
+
+
+def test_no_spurious_gap_between_quarters(two_quarters: World) -> None:
+    """1b: the cadence check walks supersession chains, not a global sort —
+    the months between the two quarters' windows must never read as a
+    dropped day."""
+    assert "liquidity_cadence_gap" not in codes(two_quarters)
+    assert "liquidity_window_torn" not in codes(two_quarters)
+
+
+def test_a_dropped_day_in_the_second_quarter_is_still_caught(two_quarters: World) -> None:
+    """The chain-walk rewrite must still have teeth inside a quarter's own
+    chain once a second quarter's chain sits beside it in the same world —
+    the point of walking chains is to tell the two apart, not to stop
+    checking either one. Mirrors ``test_a_dropped_liquidity_day_is_caught``,
+    scoped to the second quarter."""
+    _, second_quarter_lcr = _lcr_chains(two_quarters)
+    assert len(second_quarter_lcr) == 6
+    victim = second_quarter_lcr[2]
+    kept = []
+    for f in two_quarters._facts:
+        if f.id == victim.id:
+            continue
+        if f.id == second_quarter_lcr[1].id:
+            f = f.model_copy(update={"valid_to": second_quarter_lcr[3].valid_from})
+        if f.id == second_quarter_lcr[3].id:
+            f = f.model_copy(update={"supersedes": second_quarter_lcr[1].id})
+        kept.append(f)
+    assert "liquidity_cadence_gap" in codes(replace(two_quarters, _facts=tuple(kept)))
+
+
+def test_the_recipe_rebuilds_two_quarters(two_quarters: World, tmp_path) -> None:
+    """1.3: each quarter appends its own step (``with_step``, already generic
+    over scenario name), so a two-quarter corpus rebuilds byte-for-byte from
+    its recipe with no ledger on hand — the same discipline
+    ``test_the_recipe_rebuilds_the_world`` pins for one."""
+    from worldloom.recipe import rebuild
+
+    exported = two_quarters.compile().export(tmp_path / "bank2")
+    loaded = World.load(exported)
+    assert len(loaded.recipe["steps"]) == 2
+    again = rebuild(loaded.recipe)
+    assert [f.model_dump() for f in again.facts] == [f.model_dump() for f in two_quarters.facts]
+
+
+def test_two_quarter_export_then_replay_is_byte_identical(two_quarters: World, tmp_path) -> None:
+    """The two-quarter counterpart of ``test_export_then_replay_is_byte_identical``:
+    narration, rendering, and replay must all still be exact once a second
+    episode is in the mix."""
+    from worldloom.narrative import DeterministicProvider, UnreachableProvider
+
+    formats = ("xlsx", "docx", "markdown", "servicenow")
+    first = two_quarters.narrate(DeterministicProvider()).render(*formats)
+    first.export(tmp_path / "one")
+
+    again = (
+        BankingWorld(seed=SEED).build()
+        .run(QuarterlyCapitalReturn(period=PERIOD))
+        .run(QuarterlyCapitalReturn(period=SECOND_PERIOD))
+    )
+    again = again.narrate(UnreachableProvider(), ledger=first._ledger)
+    again = again.render(*formats)
+    again.export(tmp_path / "two")
+
+    one = sorted((tmp_path / "one").rglob("*"))
+    two = sorted((tmp_path / "two").rglob("*"))
+    assert [p.relative_to(tmp_path / "one") for p in one] == [
+        p.relative_to(tmp_path / "two") for p in two
+    ]
+    for left, right in zip(one, two):
+        if left.is_file():
+            assert left.read_bytes() == right.read_bytes(), left.name
+
+
+def test_cli_periods_steps_by_the_domains_own_cadence(two_quarters: World, tmp_path) -> None:
+    """2: `--periods` is no longer refused for a single-episode domain — it
+    runs that many consecutive episodes, stepping by the registered
+    ``period_step_months`` (3, for banking) rather than one month at a time.
+    The CLI path must land on exactly the periods ``two_quarters`` built
+    directly, and produce the identical fact ledger."""
+    out = tmp_path / "two-quarter-cli"
+    result = runner.invoke(app, [
+        "build", "--seed", str(SEED), "--period", PERIOD, "--archetype", "midsize_adi",
+        "--periods", "2", "--out", str(out),
+    ])
+    assert result.exit_code == 0, result.output
+    world = World.load(out)
+    assert [step["period"] for step in world.recipe["steps"]] == [PERIOD, SECOND_PERIOD]
+    assert [f.model_dump() for f in world.facts] == [f.model_dump() for f in two_quarters.facts]
+
+
+def test_cli_still_refuses_the_retail_only_flags_for_banking(tmp_path) -> None:
+    """The refusal narrows, it does not disappear: `--incident`, `--actors`,
+    and `--comparatives` still belong to the retail close alone."""
+    result = runner.invoke(app, [
+        "build", "--archetype", "midsize_adi", "--incident", "--out", str(tmp_path / "x"),
+    ])
+    assert result.exit_code == 2
+    assert "belong(s) to the retail close" in result.output
+    assert "--incident" in result.output
+    assert "--periods" not in result.output
 
 
 # ---------------------------------------------------------------------------

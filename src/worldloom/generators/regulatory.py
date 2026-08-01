@@ -167,6 +167,7 @@ def generate(
     affected_unit_id: str,
     lore_by_target: dict[str, list[str]],
     text: Mapping[str, str] | None = None,
+    existing_minimum: CanonicalFact | None = None,
 ) -> ReturnEpisode:
     """Generate the challenged return for the quarter ending *period*.
 
@@ -175,6 +176,10 @@ def generate(
     unit key. This used to be ``roles["unit_business"]``, which crashed for
     any pack whose units were named for its own business rather than the stock
     archetype's: the same leak class ``operations._affected_unit`` fixes.
+
+    ``existing_minimum`` is the standard's floor already on the world's
+    record, if a prior quarter minted one — see the standing-fact comment
+    where it is used, below.
     """
     t = episode_text.merged(TEXT, text)
     events: list[EnterpriseEvent] = []
@@ -252,13 +257,27 @@ def generate(
                        event=prep.id, source=portal, period=period))
     keys["fact_return_due"] = facts[-1].id
     # The standard's floor: standing, never superseded, and no period — the
-    # minimum does not belong to a quarter.
-    facts.append(CanonicalFact(
-        id=minter.next("FACT"), kind="capital.minimum_cet1_requirement", subject=company_id,
-        value=Quantity(amount=position.minimum_pct, unit=PCT), valid_from=prep.occurred_at,
-        authority=Authority.SYSTEM_OF_RECORD, source_system=portal, event_id=prep.id,
-    ))
-    keys["fact_minimum"] = facts[-1].id
+    # minimum does not belong to a quarter. That "no period" is exactly why a
+    # second quarter must not mint its own: two current SYSTEM_OF_RECORD facts
+    # for the same (kind, subject) with nothing to tell them apart is what the
+    # banking check group's `contested_at_equal_authority` exists to catch,
+    # and a two-quarter `validate()` run caught it. `existing_minimum` is the
+    # caller's answer to "does the world already carry a current one" — reuse
+    # it rather than mint a duplicate. Either way the fact lands in `facts`
+    # here, so the `by_id` lookups this episode's own callers build from
+    # `episode.facts` resolve identically regardless of which quarter this
+    # is; `QuarterlyCapitalReturn.run` is what keeps a reused fact from being
+    # appended into the world a second time.
+    if existing_minimum is not None:
+        minimum_fact = existing_minimum
+    else:
+        minimum_fact = CanonicalFact(
+            id=minter.next("FACT"), kind="capital.minimum_cet1_requirement", subject=company_id,
+            value=Quantity(amount=position.minimum_pct, unit=PCT), valid_from=prep.occurred_at,
+            authority=Authority.SYSTEM_OF_RECORD, source_system=portal, event_id=prep.id,
+        )
+    facts.append(minimum_fact)
+    keys["fact_minimum"] = minimum_fact.id
 
     wp = event(
         "working_paper_issued", _at(bd(10), 17, 20),
@@ -404,6 +423,28 @@ def generate(
         index = [d for d, _ in liquidity.observations].index(day)
         if index + 1 < len(liquidity.observations):
             next_at = _at(liquidity.observations[index + 1][0], 8, 30)
+        # No `period` here, deliberately — unlike every capital.* fact. A
+        # daily observation belongs to the moment it was taken
+        # (`valid_from`), and its chain (via `supersedes`) is what relates it
+        # to the rest of its own quarter; tagging it with the quarter label
+        # too would be a second, redundant way to say the same thing, and
+        # only one needs to be right.
+        #
+        # The chain restarts fresh each quarter (`supersedes=None` on the
+        # first day) rather than the new quarter's first observation
+        # superseding the prior quarter's last one. Superseding would assert
+        # the prior reading held continuously across the months between
+        # windows, which this corpus never observed; leaving the prior
+        # quarter's last fact open (never superseded) is the honest
+        # statement that the record simply stops there. Two consequences,
+        # both in `banking._checks`: the cadence check (group g) walks
+        # supersession chains, so gaplessness is required inside one
+        # quarter's chain and never expected across the deliberate gap
+        # between chains; and the coexistence check (group f) excludes
+        # `liquidity.*` entirely, because two chains' still-open tails are
+        # two unrelated observations, not two authorities disagreeing about
+        # one fact — a two-quarter `validate()` run is what told the two
+        # apart.
         lcr = CanonicalFact(
             id=minter.next("FACT"), kind="liquidity.lcr", subject=company_id,
             value=Quantity(amount=value, unit=PCT), valid_from=at, valid_to=next_at,

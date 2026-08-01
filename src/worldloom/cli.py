@@ -63,6 +63,21 @@ def _load(name_or_path: str) -> World:
         raise typer.Exit(code=2) from exc
 
 
+def _step_period(period: str, index: int, step_months: int) -> str:
+    """*period* advanced by *index* steps of *step_months* months.
+
+    Generic over the step size so a single-episode domain's own cadence never
+    needs a domain name in this file — the thin-waist ratchet test forbids
+    engine vocabulary here, so "how far apart do this domain's periods sit"
+    has to be data (`Domain.period_step_months`) the domain hands back, not a
+    fact this function is allowed to know.
+    """
+    year, month = (int(part) for part in period.split("-"))
+    total_months = year * 12 + (month - 1) + index * step_months
+    year, month = divmod(total_months, 12)
+    return f"{year:04d}-{month + 1:02d}"
+
+
 def _summary_table(world: World) -> Table:
     table = Table(title=world.company.name, title_style="bold", show_header=False, box=None)
     table.add_column(style="dim")
@@ -166,8 +181,10 @@ def build(
     periods: int = typer.Option(
         1, "--periods",
         help=(
-            "Run this many consecutive closes. More than one gives recurrence, "
-            "superseded documents, and the evaluation questions a single close cannot pose."
+            "Run this many consecutive episodes — closes for the retail vertical, "
+            "or a single-episode vertical's own cadence (a domain's period_step_months). "
+            "More than one gives recurrence, superseded documents, and the evaluation "
+            "questions a single episode cannot pose."
         ),
     ),
     formats: list[str] = typer.Option(
@@ -250,9 +267,14 @@ def build(
 
     # The archetype names its domain, and the domain says how a build runs. A
     # single-episode domain (banking, and any vertical after it) constructs its
-    # world and runs one episode; every close-loop flag is refused rather than
-    # ignored, because a flag that silently does nothing teaches the wrong
-    # lesson about the tool. The retail close keeps its bespoke loop below.
+    # world and runs one episode per period; the close-loop flags that make no
+    # sense outside retail's own incident/actor machinery are refused rather
+    # than ignored, because a flag that silently does nothing teaches the
+    # wrong lesson about the tool. `--periods` is not among them — it is the
+    # one close-loop flag with an honest single-episode reading, "run this
+    # many consecutive episodes", so it steps by the domain's own cadence
+    # (`period_step_months`) instead. The retail close keeps its bespoke loop
+    # below.
     single_episode = domain.single_episode if domain is not None else None
 
     if single_episode is not None:
@@ -261,7 +283,6 @@ def build(
                 ("--actors", actors is not None),
                 ("--incident/--no-incident", incident is not None),
                 ("--comparatives", comparatives > 0),
-                ("--periods", periods > 1),
             ) if given
         ]
         if refused:
@@ -276,7 +297,9 @@ def build(
             if pack_obj is not None
             else domain.world(seed=seed, archetype=shape, employees=employees)
         )
-        world = builder.build().run(single_episode(period))
+        world = builder.build()
+        for index in range(max(1, periods)):
+            world = world.run(single_episode(_step_period(period, index, domain.period_step_months)))
     else:
         builder = (
             RetailWorld.from_pack(pack_obj, seed=seed)

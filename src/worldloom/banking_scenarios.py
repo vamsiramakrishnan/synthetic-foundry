@@ -93,6 +93,15 @@ class QuarterlyCapitalReturn:
         affected_book = next(
             c for c in world._categories if c.id == roles["cat_sme_secured"]
         )
+        # The standard's floor is standing, not quarterly (see
+        # `regulatory.generate`'s comment on `existing_minimum`): a second
+        # consecutive quarter on this world must reuse the one the world
+        # already carries rather than mint a duplicate, so this is resolved
+        # from the *world's* facts, not the episode's — the episode has not
+        # generated anything yet. `period=None` (the default) is deliberate:
+        # the minimum fact itself never carries a period, so a lookup scoped
+        # to one would never find it.
+        existing_minimum = world.authoritative("capital.minimum_cet1_requirement", world.company.id)
         episode = regulatory.generate(
             rng.derive("regulatory"), minter,
             period=self.period,
@@ -108,6 +117,7 @@ class QuarterlyCapitalReturn:
             # Pack episode-text overrides ride the recipe, so a pack-built
             # corpus rebuilds them with no pack file on hand.
             text=(world._recipe.get("pack") or {}).get("episode_text") or None,
+            existing_minimum=existing_minimum,
         )
 
         intents, errors = banking_documents.artifact_intents(
@@ -123,9 +133,21 @@ class QuarterlyCapitalReturn:
 
         from .recipe import with_step
 
+        # `episode.facts` carries the standing minimum fact whether this
+        # quarter minted it or reused one already on the world's record (see
+        # above) — `regulatory.generate` needs it there either way so its
+        # own `by_id` lookups resolve identically regardless of which
+        # quarter this is. `world.extend` is append-only, so a reused fact
+        # must be filtered back out here before extending: appending an id
+        # the world already carries would duplicate the record under one
+        # id, which is worse than the duplicate-mint bug this whole path
+        # exists to avoid.
+        known_fact_ids = set(world.facts.ids())
+        new_facts = tuple(f for f in episode.facts if f.id not in known_fact_ids)
+
         return world.extend(
             events=episode.events,
-            facts=episode.facts,
+            facts=new_facts,
             artifact_intents=intents,
             intentional_errors=errors,
             evaluations=cases,

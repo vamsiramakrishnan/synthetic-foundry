@@ -51,8 +51,9 @@ close; `midsize_adi` (a fictional Australian bank) runs the quarterly
 capital-return episode instead — a second-line challenge filed over by a
 lodgement norm, a reconciliation break caught by the daily liquidity cadence,
 and a restatement whose original filing stays on the record. The retail-only
-flags (`--incident`, `--periods`, `--comparatives`, `--actors`) are refused on
-a banking build rather than silently ignored.
+flags (`--incident`, `--comparatives`, `--actors`) are refused on a banking
+build rather than silently ignored; `--periods` still applies, stepping three
+months at a time instead of retail's one — see "Multiple periods" below.
 
 `--inspired-by "a large Australian grocer"` resolves a description to the
 archetype of that shape — it is a lookup over phrases like "woolies" or
@@ -98,9 +99,12 @@ cheaper to narrate and just as coherent.
 worldloom build --seed 8128 --periods 3 --out ./corpus
 ```
 
-`--period` names where the *first* close lands (`YYYY-MM`); `--periods` runs
-that many consecutive closes from there, each one a `MonthEndClose` chained
-onto the last. This is the single most important scale knob and the one most
+`--period` names where the *first* episode lands (`YYYY-MM`); `--periods` runs
+that many consecutive episodes from there, each one chained onto the last —
+a `MonthEndClose` for retail, stepping one month at a time; a
+`QuarterlyCapitalReturn` for `midsize_adi`, stepping three (a domain's own
+cadence, so a third vertical registers its own step rather than guessing at
+retail's). This is the single most important scale knob and the one most
 likely to be skipped, because a one-period build already produces a coherent,
 validating corpus — it just cannot pose several kinds of question that a
 real enterprise's document set answers routinely:
