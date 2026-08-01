@@ -229,6 +229,19 @@ class RetailWorld:
         )
 
 
+# Retail owns its archetypes in the domain registry, like every vertical. No
+# single_episode: the close loop's flags (periods, incident, comparatives,
+# actors) are retail's own, and the CLI drives them directly rather than
+# flattening them into the shared interface.
+from .domains import Domain, register_domain
+
+register_domain(Domain(
+    name="retail",
+    archetype_keys=frozenset({AUSTRALIAN_GROCERY.key, OMNICHANNEL_RETAILER.key}),
+    world=RetailWorld,
+))
+
+
 __all__ = [
     "RetailWorld",
     "MonthEndClose",

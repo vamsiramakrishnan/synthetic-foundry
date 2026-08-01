@@ -20,16 +20,9 @@ corpus rather than explained afterwards.
 from __future__ import annotations
 
 from ..ids import Minter
-from ..models import ArtifactIntent, CanonicalFact, EvaluationCase, EvaluationType
+from ..models import ArtifactIntent, EvaluationCase, EvaluationType
+from .cases import CaseBuilder, answerable, fmt as _fmt, reachable_fact_ids
 from .regulatory import ReturnEpisode
-
-
-def _fmt(fact: CanonicalFact) -> str:
-    if fact.value is not None:
-        amount = fact.value.amount
-        rendered = f"{int(amount):,}" if float(amount).is_integer() else f"{amount:,.2f}"
-        return f"{rendered} {fact.value.unit}"
-    return fact.text_value or ""
 
 
 def evaluation_cases(
@@ -54,24 +47,18 @@ def evaluation_cases(
         (i.id for i in intents if i.artifact_type == "board_risk_committee_summary"), None
     )
 
-    cases: list[EvaluationCase] = []
+    # The shared builder defaults difficulty to "medium"; this vertical's
+    # families are hard by design, so the wrapper flips the default rather
+    # than repeating "hard" at every call.
+    builder = CaseBuilder(minter)
 
     def case(question: str, kind: EvaluationType, answer: str, facts: list[str], *,
              cutoff=None, difficulty: str = "hard", reasoning: str = "",  # type: ignore[no-untyped-def]
              sources: list[str | None] | None = None,
              distractors: list[str | None] | None = None) -> None:
-        cases.append(EvaluationCase(
-            id=minter.next("EVAL"),
-            question=question,
-            evaluation_type=kind,
-            expected_answer=answer,
-            expected_fact_ids=facts,
-            required_artifact_ids=[a for a in (sources or []) if a],
-            distractor_artifact_ids=[a for a in (distractors or []) if a],
-            temporal_cutoff=cutoff,
-            difficulty=difficulty,  # type: ignore[arg-type]
-            reasoning=reasoning,
-        ))
+        builder.case(question, kind, answer, facts, cutoff=cutoff,
+                     difficulty=difficulty, reasoning=reasoning,
+                     sources=sources, distractors=distractors)
 
     ratio_filed = by_id[k["fact_ratio_filed"]]
     ratio_corrected = by_id[k["fact_ratio_corrected"]]
@@ -251,25 +238,14 @@ def evaluation_cases(
     )
 
     # -- what the corpus deliberately cannot answer ---------------------------
-    cases.append(EvaluationCase(
-        id=minter.next("EVAL"),
-        question="What action did the Prudential Standards Authority take in response "
-                 "to the restatement?",
-        evaluation_type=EvaluationType.EXPECTED_ABSTENTION,
-        expected_answer="Not present in the corpus.",
-        expects_abstention=True,
-        difficulty="hard",
-        reasoning="The corpus records the bank's notification and deliberately nothing "
-                  "after it — the regulator's side is out of world, so this stays "
-                  "unanswerable at every corpus size.",
-    ))
+    builder.abstain(
+        "What action did the Prudential Standards Authority take in response to "
+        "the restatement?",
+        "The corpus records the bank's notification and deliberately nothing "
+        "after it — the regulator's side is out of world, so this stays "
+        "unanswerable at every corpus size.",
+    )
 
     # The same gate the retail taxonomy ends with: a case is generated only if
     # every fact it expects is carried by some planned artifact.
-    reachable: set[str] = set()
-    for intent in intents:
-        reachable.update(intent.required_fact_ids)
-    return tuple(
-        case for case in cases
-        if case.expects_abstention or set(case.expected_fact_ids) <= reachable
-    )
+    return answerable(builder.cases, reachable_fact_ids(intents))

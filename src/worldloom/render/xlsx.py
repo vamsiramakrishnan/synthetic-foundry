@@ -25,8 +25,21 @@ from . import Rendered, RenderError, ooxml, slug_for
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
 
-#: Artifact types this renderer handles. Everything else belongs to another format.
-HANDLES = frozenset({"finance_workbook"})
+#: Artifact types this renderer handles. Everything else belongs to another
+#: format. A mutable set with a registration function, not a frozenset: which
+#: types are workbooks is domain vocabulary, and a vertical's source artifact
+#: (banking's capital return) registers from its own module rather than being
+#: named here — the same seam `documents.register_artifact_types` provides.
+HANDLES = {"finance_workbook"}
+
+
+def register(*artifact_types: str) -> None:
+    """Claim *artifact_types* for the XLSX renderer.
+
+    Called at domain-module import, like every registration seam, so a corpus
+    renders the same set of files in every process.
+    """
+    HANDLES.update(artifact_types)
 
 _HEADER_ROW = 3
 """Row 1 is the title, row 2 the subtitle, row 3 the column headers."""

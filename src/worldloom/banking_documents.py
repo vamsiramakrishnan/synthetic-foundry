@@ -486,6 +486,24 @@ def capital_return_ir(world, intent: ArtifactIntent, minter: Minter) -> Artifact
 # Registration
 # ---------------------------------------------------------------------------
 
+# Which format renders what. The return is a workbook — its IR declares the
+# formulas — so it belongs to the sheet the way the finance workbook does, and
+# markdown must not shadow it with a flat projection. The narrative documents
+# are Word (and therefore PDF); markdown keeps rendering those as well, the
+# same dual treatment retail's memos get. Import here is safe on a bare
+# install: renderer modules import their optional dependency lazily, at render
+# time, precisely so registration costs nothing.
+from .render import docx as _docx, markdown as _markdown, xlsx as _xlsx
+
+_xlsx.register("capital_return")
+_markdown.own_elsewhere("capital_return")
+_docx.register(
+    "rwa_working_paper",
+    "second_line_challenge_memo",
+    "internal_audit_review",
+    "board_risk_committee_summary",
+)
+
 documents.register_artifact_types(
     standing={
         # Both lodgements of a return sit at SYSTEM_OF_RECORD — the rank tie is

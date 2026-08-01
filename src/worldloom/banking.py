@@ -3,11 +3,16 @@
 The second vertical, and therefore the first test of the thin waist: everything
 here had to be expressible without touching a core model. It was — ``restates``
 and its six validator checks were already in core (landed ahead of this module,
-deliberately), and the rest of what banking needs arrives through the three
-registration seams built for it: a validator check group
+deliberately), and the rest of what banking needs arrives through registration
+seams any vertical can use: a validator check group
 (``validate.register_domain_checks``), artifact types
-(``documents.register_artifact_types``), and an archetype (``archetypes.py``,
-data only).
+(``documents.register_artifact_types``), renderer ownership
+(``render.xlsx.register`` and friends), the domain registry (``domains.py``,
+which is how the CLI and the recipe rebuilder find this module from an
+archetype key), and an archetype (``archetypes.py``, data only). The build
+mechanics both verticals share — org minting, evaluation-case plumbing — live
+in ``generators/org_builder.py`` and ``generators/cases.py``, extracted after
+the second vertical existed, per §7a.
 
 Two misfits are deliberately *not* modelled, and recording them is part of this
 module's job — the §7a pack interface gets extracted from strain evidence, not
@@ -513,6 +518,18 @@ def _checks(world: World) -> tuple[list[Violation], int]:
 
 
 validate_module.register_domain_checks("banking", _checks)
+
+# The domain registry entry: how the CLI and the recipe rebuilder find this
+# vertical from an archetype key, without either naming banking in core.
+from .banking_scenarios import QuarterlyCapitalReturn  # noqa: E402
+from .domains import Domain, register_domain  # noqa: E402
+
+register_domain(Domain(
+    name="banking",
+    archetype_keys=BANKING_ARCHETYPES,
+    world=BankingWorld,
+    single_episode=QuarterlyCapitalReturn,
+))
 
 
 __all__ = [

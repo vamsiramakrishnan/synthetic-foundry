@@ -37,17 +37,27 @@ MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 
 #: Artifact types that are documents. A Jira bundle and a workbook are not, and a
 #: Confluence page belongs to Confluence — rendering it as Word would assert a
-#: filing that does not exist.
-HANDLES = frozenset(
-    {
-        "cfo_variance_memo",
-        "executive_summary",
-        "incident_rca",
-        "working_note",
-        "knowledge_article",
-        "close_calendar",
-    }
-)
+#: filing that does not exist. A mutable set, registered into by domain
+#: modules (`register` below); the PDF renderer reads this same object, so a
+#: registered type gains both formats at once — deliberately, since PDF is the
+#: print form of the same document set.
+HANDLES = {
+    "cfo_variance_memo",
+    "executive_summary",
+    "incident_rca",
+    "working_note",
+    "knowledge_article",
+    "close_calendar",
+}
+
+
+def register(*artifact_types: str) -> None:
+    """Claim *artifact_types* as Word documents (and therefore PDFs).
+
+    Called at domain-module import, like every registration seam, so a corpus
+    renders the same set of files in every process.
+    """
+    HANDLES.update(artifact_types)
 
 _AWAITING = (
     "Awaiting narrative. Structure and supporting facts are resolved; "

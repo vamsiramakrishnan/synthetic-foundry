@@ -112,7 +112,7 @@ jobs:
       # Python API would be a vertical the tool's own front door cannot reach.
       - name: The banking vertical validates and replays
         run: |
-          FORMATS="-f markdown -f servicenow"
+          FORMATS="-f xlsx -f docx -f pdf -f markdown -f servicenow"
           worldloom build --seed 8128 --archetype midsize_adi --narrate $FORMATS \
             --out "${{ runner.temp }}/bank"
           worldloom validate "${{ runner.temp }}/bank"

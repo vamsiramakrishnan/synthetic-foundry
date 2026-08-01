@@ -341,14 +341,25 @@ def test_the_recipe_rebuilds_the_world(world: World, tmp_path) -> None:
 
 
 def test_export_then_replay_is_byte_identical(world: World, tmp_path) -> None:
+    """Including the vertical's native formats: the return renders as a real
+    workbook and the rulings as Word documents, through the renderer
+    registration seam — and the whole set must still replay exactly."""
     from worldloom.narrative import DeterministicProvider, UnreachableProvider
 
-    first = world.narrate(DeterministicProvider()).render("markdown", "servicenow")
+    formats = ("xlsx", "docx", "markdown", "servicenow")
+    first = world.narrate(DeterministicProvider()).render(*formats)
     first.export(tmp_path / "one")
+    rendered = {p.name for p in (tmp_path / "one" / "artifacts").iterdir()}
+    assert "art-0001-capital-return.xlsx" in rendered
+    assert "art-0006-capital-return.xlsx" in rendered
+    assert "art-0008-internal-audit-review.docx" in rendered
+    assert not any(n.startswith("art-0001") and n.endswith(".md") for n in rendered), (
+        "the return is a workbook; markdown must not shadow it with a flat projection"
+    )
 
     again = BankingWorld(seed=SEED).build().run(QuarterlyCapitalReturn(period=PERIOD))
     again = again.narrate(UnreachableProvider(), ledger=first._ledger)
-    again = again.render("markdown", "servicenow")
+    again = again.render(*formats)
     again.export(tmp_path / "two")
 
     one = sorted((tmp_path / "one").rglob("*"))

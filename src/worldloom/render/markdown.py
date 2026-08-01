@@ -122,9 +122,16 @@ def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> byt
 
 #: Types with a native format of their own. Markdown still renders them on
 #: request, but ``render_all`` leaves them to the format that owns them.
-_OWNED_ELSEWHERE = frozenset(
-    {"finance_workbook", "jira_issues", "servicenow_incident"}
-)
+#: Types markdown must not render because a dedicated format owns them — a
+#: workbook belongs to its sheet, a ticket to its bundle. Domain modules add
+#: their own source artifacts via `own_elsewhere` when they register a
+#: dedicated renderer for them.
+_OWNED_ELSEWHERE = {"finance_workbook", "jira_issues", "servicenow_incident"}
+
+
+def own_elsewhere(*artifact_types: str) -> None:
+    """Exclude *artifact_types* from the markdown fallback."""
+    _OWNED_ELSEWHERE.update(artifact_types)
 
 def render_all(world: World) -> list[Rendered]:
     """Render every artifact that has no more specific format."""

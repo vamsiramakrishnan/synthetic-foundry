@@ -198,15 +198,17 @@ def build(
             err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
 
-    # A banking archetype builds a banking world and runs the capital-return
-    # episode; every retail-only flag is refused rather than ignored, because a
-    # flag that silently does nothing teaches the wrong lesson about the tool.
-    from .banking import BANKING_ARCHETYPES
+    # The archetype names its domain, and the domain says how a build runs. A
+    # single-episode domain (banking, and any vertical after it) constructs its
+    # world and runs one episode; every close-loop flag is refused rather than
+    # ignored, because a flag that silently does nothing teaches the wrong
+    # lesson about the tool. The retail close keeps its bespoke loop below.
+    from . import domains
 
-    if shape.key in BANKING_ARCHETYPES:
-        from .banking import BankingWorld
-        from .banking_scenarios import QuarterlyCapitalReturn
+    domain = domains.for_archetype(shape.key)
+    single_episode = domain.single_episode if domain is not None else None
 
+    if single_episode is not None:
         refused = [
             flag for flag, given in (
                 ("--actors", actors is not None),
@@ -218,12 +220,12 @@ def build(
         if refused:
             err.print(
                 f"[red]error:[/red] {', '.join(refused)} belong(s) to the retail close;"
-                " the banking vertical runs one capital-return cycle per build"
+                f" the {domain.name} vertical runs one episode per build"
             )
             raise typer.Exit(code=2)
 
-        world = BankingWorld(seed=seed, archetype=shape, employees=employees).build()
-        world = world.run(QuarterlyCapitalReturn(period=period))
+        world = domain.world(seed=seed, archetype=shape, employees=employees).build()
+        world = world.run(single_episode(period))
     else:
         world = RetailWorld(seed=seed, archetype=shape, employees=employees).build()
 
@@ -280,12 +282,12 @@ def build(
 
     # Consecutive closes on one world. Comparatives belong to the first only: they
     # backfill months before it, and a later episode asking for them again would
-    # generate a second set of facts for months the corpus already has. The
-    # banking world already ran its episode above, so it skips the close loop.
+    # generate a second set of facts for months the corpus already has. A
+    # single-episode domain already ran its episode above and skips this loop.
     year, month = (int(part) for part in period.split("-"))
     from .actors import ActorProviderError
 
-    for index in range(max(1, periods) if shape.key not in BANKING_ARCHETYPES else 0):
+    for index in range(max(1, periods) if single_episode is None else 0):
         stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
         try:
             world = world.run(

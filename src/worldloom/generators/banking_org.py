@@ -7,10 +7,12 @@ narration replay depends on, and threading a second role table through it would
 have to preserve that order forever. Two small machines that cannot disturb each
 other beat one configurable machine that must never be touched.
 
-The cost is a duplicated minting idiom — depth-sorted roles, per-role join-date
-streams, manager wiring — which is exactly the duplication build-order §7a step 3
-extracts *after* two verticals exist. This module and ``organisation.py`` are the
-two implementations that extraction will read; keep them recognisably parallel.
+The minting *mechanism* the two machines share — depth-sorted roles, per-role
+join-date streams, manager wiring, unit formation, founding milestones — was
+extracted to ``org_builder`` once both existed, per §7a's extract-after-two
+rule. What stays here is banking content: the role table with its three lines
+of defence, the personas, the systems a bank runs, and the policies its
+filings are read under.
 
 What banking's shape adds that retail's could not express: the three lines of
 defence. The Chief Risk Officer reports to the CEO, **not** the CFO — the
@@ -44,12 +46,13 @@ from ..models import (
 )
 from ..rng import Rng
 from . import hierarchy, names
-from .organisation import (
-    _depth,
-    _earliest_effective,
-    _founding_milestones,
-    _joined_date,
-    _persona_traits,
+from .org_builder import (
+    apply_traits,
+    form_units,
+    founding_milestones,
+    mint_people,
+    sorted_roles,
+    wire_managers,
 )
 
 
@@ -166,67 +169,30 @@ def generate(
     role_table = list(_ROLES)
     for unit in units:
         role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))
-    managers = {row[0]: row[3] for row in role_table}
-    role_table.sort(key=lambda row: _depth(row[0], managers))
-    depth_of = {row[0]: _depth(row[0], managers) for row in role_table}
-
-    person_names = names.people_names(rng.derive("people"), len(role_table))
-    role_ids: dict[str, str] = {}
-    people: list[Employee] = []
-    founding_rng = rng.derive("founding")
+    role_table, depth_of = sorted_roles(role_table)
 
     finance_cc = minter.next("CC")
     risk_cc = minter.next("CC")
 
-    for (role, title, function, manager_role), person_name in zip(role_table, person_names):
-        person_id = minter.next("PERSON")
-        role_ids[role] = person_id
+    def assign(role: str, title: str, function: str):  # type: ignore[no-untyped-def]
+        """Banking's one decision per person: MDs sit in their unit and the
+        treasury desk in its own; cost centres split finance-side from
+        risk-and-platform; personas come from the role table."""
         business_unit = None
         if role.endswith("_md"):
             business_unit = unit_ids[role[:-3]]
         elif role in ("treasurer", "liquidity_analyst") and "treasury" in unit_ids:
             business_unit = unit_ids["treasury"]
-        people.append(
-            Employee(
-                id=person_id,
-                name=person_name,
-                title=title,
-                joined=_joined_date(founding_rng, role, depth_of[role]),
-                left=None,
-                manager_id=None,  # wired below, once every role has an id
-                business_unit_id=business_unit,
-                function=function,
-                cost_centre_id=(
-                    finance_cc if function in ("Finance", "Audit", "Treasury")
-                    else risk_cc if function in ("Risk", "Technology")
-                    else None
-                ),
-                persona_id=_ROLE_PERSONA.get(role, "PERSONA-BANK-EXEC"),
-            )
+        cost_centre = (
+            finance_cc if function in ("Finance", "Audit", "Treasury")
+            else risk_cc if function in ("Risk", "Technology")
+            else None
         )
+        return business_unit, cost_centre, _ROLE_PERSONA.get(role, "PERSONA-BANK-EXEC")
 
-    manager_of = {row[0]: row[3] for row in role_table}
-    role_of_person = {pid: role for role, pid in role_ids.items()}
-    people = [
-        person.model_copy(
-            update={"manager_id": role_ids.get(manager_of[role_of_person[person.id]] or "", None)}
-        )
-        for person in people
-    ]
-
-    joined_by_person = {p.id: p.joined for p in people}
-    lore_anchor = _earliest_effective(lore)
-    business_units = tuple(
-        BusinessUnit(
-            id=unit_ids[unit.key],
-            name=unit.name,
-            company_id=company_id,
-            leader_id=role_ids[f"{unit.key}_md"],
-            kind=unit.kind,
-            formed=max(lore_anchor, joined_by_person[role_ids[f"{unit.key}_md"]]),
-        )
-        for unit in units
-    )
+    role_ids, people = mint_people(rng, minter, role_table, depth_of, assign=assign)
+    people = wire_managers(people, role_table, role_ids)
+    business_units = form_units(units, unit_ids, role_ids, people, company_id, lore)
 
     # Product books and the branch estate through the shared dimension
     # machinery. `buyers` is empty on purpose: a book's accountable executive is
@@ -298,7 +264,6 @@ def generate(
                 criticality_tier=1, depends_on=[reg_portal]),
     )
 
-    traits = _persona_traits(lore, role_ids)
     personas = tuple(
         Persona(
             id=persona_id, label=label, voice=voice,
@@ -309,10 +274,7 @@ def generate(
         )
         for persona_id, label, voice, complexity, depth, optimism, risk, political, phrases in _PERSONAS
     )
-    people = tuple(
-        person if person.id not in traits else person.model_copy(update={"traits": traits[person.id]})
-        for person in people
-    )
+    people = apply_traits(people, lore, role_ids)
 
     cost_centres = (
         CostCentre(id=finance_cc, name="Finance and Treasury Shared Services",
@@ -371,7 +333,7 @@ def generate(
         employees_total=archetype.employees,
     )
 
-    milestones, founding_facts = _founding_milestones(minter, lore, company_id)
+    milestones, founding_facts = founding_milestones(minter, lore, company_id)
 
     # The SME Secured book gets a named handle because the episode's error is
     # scoped to it — the affected-book fact and the correction-scope check both

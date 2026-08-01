@@ -25,11 +25,12 @@ really testing authority resolution.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact, EvaluationCase, EvaluationType
+from .cases import CaseBuilder, adverse as _adverse, answerable, fmt as _fmt
 from .operations import CloseEpisode
 
 
@@ -45,24 +46,6 @@ class Subjects:
 
     def name(self, subject_id: str) -> str:
         return self.names.get(subject_id, subject_id)
-
-
-def _fmt(fact: CanonicalFact) -> str:
-    """A fact's value as a reader would write it."""
-    if fact.value is not None:
-        amount = fact.value.amount
-        rendered = f"{int(amount):,}" if float(amount).is_integer() else f"{amount:,.2f}"
-        return f"{rendered} {fact.value.unit}"
-    return fact.text_value or ""
-
-
-def _adverse(fact: CanonicalFact) -> str:
-    """A variance as a reader states it: magnitude and direction, not a sign."""
-    if fact.value is None:
-        return fact.text_value or ""
-    amount = fact.value.amount
-    magnitude = f"{abs(int(amount)):,}" if float(amount).is_integer() else f"{abs(amount):,.2f}"
-    return f"{magnitude} {fact.value.unit} {'below' if amount < 0 else 'above'} budget"
 
 
 class _Taxonomy:
@@ -84,7 +67,10 @@ class _Taxonomy:
         self.episode = episode
         self.subjects = subjects
         self.period = period
-        self.cases: list[EvaluationCase] = []
+        # The builder owns minting; `self.cases` is the same list, so the
+        # family methods and the final gate read one accumulator.
+        self._build = CaseBuilder(minter)
+        self.cases = self._build.cases
 
         self.by_kind: dict[tuple[str, str], CanonicalFact] = {}
         for fact in facts:
@@ -124,33 +110,14 @@ class _Taxonomy:
         sources: list[str] | None = None,
         distractors: list[str] | None = None,
     ) -> None:
-        self.cases.append(
-            EvaluationCase(
-                id=self.minter.next("EVAL"),
-                question=question,
-                evaluation_type=kind,
-                expected_answer=answer,
-                expected_fact_ids=facts,
-                required_artifact_ids=[a for a in (sources or []) if a],
-                distractor_artifact_ids=[a for a in (distractors or []) if a],
-                temporal_cutoff=cutoff,
-                difficulty=difficulty,  # type: ignore[arg-type]
-                reasoning=reasoning,
-            )
+        self._build.case(
+            question, kind, answer, facts,
+            cutoff=cutoff, difficulty=difficulty, reasoning=reasoning,
+            sources=sources, distractors=distractors,
         )
 
     def abstain(self, question: str, reasoning: str) -> None:
-        self.cases.append(
-            EvaluationCase(
-                id=self.minter.next("EVAL"),
-                question=question,
-                evaluation_type=EvaluationType.EXPECTED_ABSTENTION,
-                expected_answer="Not present in the corpus.",
-                expects_abstention=True,
-                difficulty="hard",
-                reasoning=reasoning,
-            )
-        )
+        self._build.abstain(question, reasoning)
 
     def get(self, kind: str, subject: str) -> CanonicalFact | None:
         return self.by_kind.get((kind, subject))
@@ -180,26 +147,25 @@ class _Taxonomy:
     def _reachable_fact_ids(self) -> frozenset[str]:
         """Every fact id some planned artifact actually requires.
 
-        Mirrors ``validate.py``'s own ``unreachable_answer`` check exactly —
-        deliberately, not approximately, because the two have to agree. A fact
-        no ``ArtifactIntent`` requires can never be rendered into anything a
-        retriever could find, so a case built on it is unanswerable rather
-        than merely hard. That matters here specifically because a personnel
-        change or a founding milestone is witnessed by a ``CanonicalFact`` the
-        moment it happens, but nothing today plans a document that requires
-        one: ``Hire``/``Departure``/``Reorganisation`` extend the roster and
-        the fact ledger without ever minting an ``ArtifactIntent``, and
-        ``organisation.generate``'s founding facts are never in any intent's
-        ``required_fact_ids`` either. The event occurring and the event being
-        citable are two different facts, and only the second makes a question
-        answerable — so the families below check this before ever asking one,
-        the same guard ``incident()`` applies to "did an incident happen" at
-        the top of this class.
+        The shared ``cases.reachable_fact_ids``, over this episode's intents
+        and everything planned before it. A fact no ``ArtifactIntent``
+        requires can never be rendered into anything a retriever could find,
+        so a case built on it is unanswerable rather than merely hard. That
+        matters here specifically because a personnel change or a founding
+        milestone is witnessed by a ``CanonicalFact`` the moment it happens,
+        but nothing today plans a document that requires one:
+        ``Hire``/``Departure``/``Reorganisation`` extend the roster and the
+        fact ledger without ever minting an ``ArtifactIntent``, and the
+        founding facts are never in any intent's ``required_fact_ids`` either.
+        The event occurring and the event being citable are two different
+        facts, and only the second makes a question answerable — so the
+        families below check this before ever asking one, the same guard
+        ``incident()`` applies to "did an incident happen" at the top of this
+        class.
         """
-        ids: set[str] = set()
-        for intent in (*self.prior_intents, *self.intents):
-            ids.update(intent.required_fact_ids)
-        return frozenset(ids)
+        from .cases import reachable_fact_ids
+
+        return reachable_fact_ids(self.prior_intents, self.intents)
 
     # -- families ----------------------------------------------------------
 
@@ -815,9 +781,4 @@ def evaluation_cases(
     #
     # Nothing is dropped on the deterministic path — every case there was
     # already reachable, which is what the existing corpora prove.
-    reachable = taxonomy._reachable_fact_ids()
-    return tuple(
-        case
-        for case in taxonomy.cases
-        if case.expects_abstention or set(case.expected_fact_ids) <= reachable
-    )
+    return answerable(taxonomy.cases, taxonomy._reachable_fact_ids())

@@ -587,6 +587,17 @@ The measured retail coupling, for whichever is chosen:
 2. **The second vertical**, per the open question above.
 3. **Extract the industry-pack interface from the two**, never before. A pack API designed against one industry encodes that industry's assumptions in the shape of the abstraction — the same reason there is still no scenario DSL.
 
+   *Partially done, mechanically.* Once banking landed, the mechanism the two
+   verticals genuinely repeat was extracted: `generators/org_builder.py` (role
+   minting, join dates, manager wiring, unit formation, founding milestones),
+   `generators/cases.py` (evaluation-case minting and the reachability gate),
+   `domains.py` (archetype → world/episode, so the CLI and recipe rebuilder
+   never name a vertical), and renderer ownership registration. What remains
+   deliberately unextracted is the pack *content* interface — lore packs, name
+   pools, fact-kind namespaces — which should be designed against the strain
+   evidence recorded in `worldloom/banking.py`'s docstring, and the scenario
+   DSL, which two structurally different episodes still do not justify.
+
 An industry pack, once extracted, has to carry eight things and only about three are nouns: archetype, dimensions, fact kinds and their units, lore, artifact types and grammars, scenario verbs and cadence, roles and personas, evaluation families. A pack that renames nouns and stops produces retail with different words.
 
 ---

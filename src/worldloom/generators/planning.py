@@ -19,29 +19,6 @@ from ..models import ArtifactIntent, CanonicalFact
 from .operations import CloseEpisode
 
 
-def _fmt(fact: CanonicalFact) -> str:
-    """A fact's value as text, for an expected answer."""
-    if fact.value is not None:
-        amount = fact.value.amount
-        rendered = f"{int(amount):,}" if float(amount).is_integer() else f"{amount:,.2f}"
-        return f"{rendered} {fact.value.unit}"
-    return fact.text_value or ""
-
-
-def _adverse(fact: CanonicalFact) -> str:
-    """A variance as a reader would state it: magnitude plus direction, not a sign.
-
-    An expected answer is graded against a system's prose, so "7,200 below budget"
-    is a fairer target than "-7200".
-    """
-    if fact.value is None:
-        return fact.text_value or ""
-    amount = fact.value.amount
-    magnitude = f"{abs(int(amount)):,}" if float(amount).is_integer() else f"{abs(amount):,.2f}"
-    direction = "below" if amount < 0 else "above"
-    return f"{magnitude} {fact.value.unit} {direction} budget"
-
-
 def artifact_intents(
     minter: Minter,
     *,

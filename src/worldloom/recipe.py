@@ -93,10 +93,8 @@ def rebuild(
     episode ran here*, and the caller supplies whoever is answering this time —
     the scripted fake, a paused handshake, or nothing at all.
     """
-    from . import archetypes
-    from .banking import BANKING_ARCHETYPES, BankingWorld
+    from . import archetypes, domains
     from .banking_scenarios import QuarterlyCapitalReturn
-    from .retail import RetailWorld
     from .scenarios import Departure, Hire, MonthEndClose, Reorganisation
 
     missing = [key for key in ("archetype", "seed") if recipe.get(key) is None]
@@ -112,12 +110,17 @@ def rebuild(
     except KeyError as exc:
         raise RecipeError(str(exc)) from None
 
-    # The archetype names the domain module that knows how to build it. Keyed
-    # on the archetype rather than a stored class name, for the same reason
+    # The archetype names the domain that knows how to build it — resolved
+    # through the registry rather than a stored class name, for the same reason
     # STEPS is a closed vocabulary: a recipe must never be able to import and
     # execute an arbitrary callable on load.
-    builder = BankingWorld if shape.key in BANKING_ARCHETYPES else RetailWorld
-    world = builder(
+    domain = domains.for_archetype(shape.key)
+    if domain is None:
+        raise RecipeError(
+            f"archetype {shape.key!r} belongs to no registered domain; the module"
+            " that owns it was never imported, so this corpus cannot be rebuilt"
+        )
+    world = domain.world(
         seed=recipe["seed"],
         archetype=shape,
         employees=recipe.get("employees"),
