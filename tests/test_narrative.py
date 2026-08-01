@@ -125,7 +125,7 @@ def test_foreign_ledger_entries_are_harmless_to_replay(narrated: World) -> None:
         update={"id": "GEN-9999", "key": "not-a-narration-key", "model_id": "scripted-actor-1"}
     )
     replayed = fresh().narrate(
-        UnreachableProvider(), ledger=narrated.ledger + (foreign,)
+        UnreachableProvider(), ledger=tuple(narrated.ledger) + (foreign,)
     )
     assert prose_of(replayed) == prose_of(narrated)
     assert replayed._narration[0] == 0
