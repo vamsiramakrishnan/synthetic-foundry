@@ -108,6 +108,28 @@ One coherent enterprise, taken all the way through. Two, in fact.
   scope to their own period. A two-quarter corpus validates coherent and
   replays byte-for-byte.
 
+- **Narration at scale.** `worldloom narrate auto` drives the whole
+  requests→generate→validate→accept loop in-process against the Anthropic API
+  (`worldloom[llm]` extra), behind the same Provider contract and the same
+  validators as hand-written prose. Every response lands in the generation
+  ledger, so a narrated corpus still replays byte-for-byte offline — proven by
+  a test whose fake provider answers differently on every call.
+
+- **A benchmark that scales with the world.** `build --eval-density
+  {low,standard,high}` grows the evaluation set and the fan-out layer from
+  what the world already has — more categories and sites feed lookups and
+  comparisons, more periods feed temporal and recurrence cases — reachability-
+  gated like every existing case, with the default byte-identical to before.
+  A three-period high-density grocery build carries `168` cases against `44`,
+  and its hard families still score near zero, which is the point.
+
+- **The haystack.** `build --distractors <n>` adds provenance-true noise:
+  superseded drafts, derived personal copies, and routine notices — real
+  authors, real lineage, real dates, citing only subsets of facts real
+  documents already carry. No new facts means grading stays safe by
+  construction: a distractor can never become the only home of an answer or
+  make an abstention question answerable. Off by default; rides the recipe.
+
 - **`/worldloom-design`.** The command for asks that arrive without a seed —
   "a hard corpus for insurance RAG" — driving elicit → decide engine/pack →
   build → measure (`evaluate --json`, `diversity`) → iterate → deliver, with
