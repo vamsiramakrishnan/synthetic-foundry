@@ -1824,8 +1824,15 @@ def pack_template(
 ) -> None:
     """Print a minimal valid pack to start from.
 
-    The shipped examples are the fuller reference: examples/packs/ carries a
-    general insurer on the retail engine and a mutual bank on the banking one.
+    Not shown here, because every one of them is optional and defaults to the
+    engine's own behaviour: ``system_brands``, ``voices``, ``episode_text``,
+    ``evaluation_text``, and the locale trio — ``name_pools`` (given/family
+    name pools for the people the engine mints), ``headquarters`` (the
+    company's one location), and ``regions`` (labels for the site estate,
+    e.g. the abbreviations behind a stock site's "Branch NSW 001"). The
+    shipped examples are the fuller reference: examples/packs/ carries a
+    general insurer on the retail engine and a mutual bank on the banking
+    one, and the insurer sets all three locale fields.
     """
     import json as json_module
 

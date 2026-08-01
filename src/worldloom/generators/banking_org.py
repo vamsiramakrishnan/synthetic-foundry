@@ -162,13 +162,18 @@ def generate(
     company_name: str | None = None,
     system_brands: dict[str, str] | None = None,
     voices: dict[str, Any] | None = None,
+    name_pools: dict[str, list[str]] | None = None,
+    headquarters: str | None = None,
+    regions: tuple[str, ...] | None = None,
 ) -> BankOrganisation:
     """Build the bank for an archetype. Same seed, same graph, same ids.
 
-    ``company_name``, ``system_brands`` and ``voices`` are the pack override
-    trio — see ``organisation.generate``. Overrides can never reshuffle a
-    downstream stream: the company name is drawn regardless, and each system
-    name comes from its own derived stream that nothing else reads.
+    ``company_name``, ``system_brands``, ``voices``, ``name_pools``,
+    ``headquarters`` and ``regions`` are the pack override set — see
+    ``organisation.generate`` for what each means. Overrides can never
+    reshuffle a downstream stream: the company name and headquarters are
+    drawn regardless, and each system name comes from its own derived stream
+    that nothing else reads.
     """
     company_rng = rng.derive("company")
     brands = system_brands or {}
@@ -208,7 +213,11 @@ def generate(
         persona = pack_voice_ids.get(role) or _ROLE_PERSONA.get(role, "PERSONA-BANK-EXEC")
         return business_unit, cost_centre, persona
 
-    role_ids, people = mint_people(rng, minter, role_table, depth_of, assign=assign)
+    pools = name_pools or {}
+    role_ids, people = mint_people(
+        rng, minter, role_table, depth_of, assign=assign,
+        given=pools.get("given") or None, family=pools.get("family") or None,
+    )
     people = wire_managers(people, role_table, role_ids)
     business_units = form_units(units, unit_ids, role_ids, people, company_id, lore)
 
@@ -224,6 +233,7 @@ def generate(
         units=units,
         unit_ids=unit_ids,
         buyers={},
+        regions=regions if regions else hierarchy.REGIONS,
     )
 
     core = minter.next("SYS")
@@ -361,11 +371,12 @@ def generate(
     )
 
     generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(_BANK_SUFFIX)}"
+    generated_hq = names.headquarters(company_rng.derive("hq"))
     company = Company(
         id=company_id,
         name=company_name or generated_name,
         industry=archetype.industry,
-        headquarters=names.headquarters(company_rng.derive("hq")),
+        headquarters=headquarters or generated_hq,
         fiscal_year_start_month=archetype.fiscal_year_start_month,
         currency=archetype.currency,
         currency_unit=archetype.currency_unit,

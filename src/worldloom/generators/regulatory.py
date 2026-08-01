@@ -168,6 +168,7 @@ def generate(
     lore_by_target: dict[str, list[str]],
     text: Mapping[str, str] | None = None,
     existing_minimum: CanonicalFact | None = None,
+    money_unit: str = MONEY,
 ) -> ReturnEpisode:
     """Generate the challenged return for the quarter ending *period*.
 
@@ -180,6 +181,11 @@ def generate(
     ``existing_minimum`` is the standard's floor already on the world's
     record, if a prior quarter minted one — see the standing-fact comment
     where it is used, below.
+
+    ``money_unit`` is the archetype's own currency; it defaults to ``MONEY``
+    so the one registered banking archetype (AUD, millions) is unaffected —
+    every RWA and CET1-capital fact used to say "AUD_millions" regardless of
+    what a pack's ``currency``/``currency_unit`` actually named.
     """
     t = episode_text.merged(TEXT, text)
     events: list[EnterpriseEvent] = []
@@ -293,7 +299,7 @@ def generate(
     keys["fact_wp_ratio"] = facts[-1].id
     facts.append(CanonicalFact(
         id=minter.next("FACT"), kind="capital.rwa_total", subject=company_id, period=period,
-        value=Quantity(amount=position.rwa_filed, unit=MONEY), valid_from=wp.occurred_at,
+        value=Quantity(amount=position.rwa_filed, unit=money_unit), valid_from=wp.occurred_at,
         authority=Authority.WORKING_DOCUMENT, source_system=risk_platform, event_id=wp.id,
     ))
     keys["fact_wp_rwa"] = facts[-1].id
@@ -358,7 +364,7 @@ def generate(
     restated_at = _at(bd(29), 10, 15)
 
     def money(kind: str, subject: str, amount: float, *, at: datetime, event_id: str,
-              unit: str = MONEY, authority: Authority = Authority.SYSTEM_OF_RECORD,
+              unit: str = money_unit, authority: Authority = Authority.SYSTEM_OF_RECORD,
               source: str | None = None, until: datetime | None = None,
               supersedes: str | None = None) -> CanonicalFact:
         fact = CanonicalFact(

@@ -292,6 +292,9 @@ class BankingWorld:
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
             voices=dict(self.pack.voices) if self.pack is not None else None,
+            name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
+            headquarters=self.pack.headquarters if self.pack is not None else None,
+            regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
         )
 
         return World(

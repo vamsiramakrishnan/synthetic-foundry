@@ -22,6 +22,14 @@ from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
 from ..rng import Rng
 from . import episode_text
 
+#: The engine default currency unit — the same value `finance.py`'s `MONEY`
+#: holds, and the one every retail archetype in this repository resolves to.
+#: `generate`'s `money_unit` parameter overrides it for a pack with a
+#: different currency; this module only mints one bare-money fact
+#: (`financial.incident_pl_impact`, always zero-valued, below), so it is a
+#: parameter rather than a whole `_Ledger`-style plumbing exercise.
+MONEY = "AUD_thousands"
+
 #: The close engine's surface text: every sentence an event carries and every
 #: prose fact the episode states, keyed so a pack can re-voice the narration
 #: without touching the causality underneath (see `generators/episode_text`).
@@ -150,11 +158,15 @@ def generate(
     force_incident: bool | None = None,
     prior_incident_periods: tuple[str, ...] = (),
     text: Mapping[str, str] | None = None,
+    money_unit: str = MONEY,
 ) -> CloseEpisode:
     """Generate the close, and an incident if lore and the seed conspire.
 
     ``text`` overrides entries of ``TEXT`` — the surface a pack re-voices,
-    over causality it cannot touch.
+    over causality it cannot touch. ``money_unit`` is the archetype's own
+    currency (``f"{currency}_{currency_unit}"``); it defaults to the stock
+    retail unit so a caller that never sets it reproduces every corpus this
+    engine has ever built.
     """
     t = episode_text.merged(TEXT, text)
     events: list[EnterpriseEvent] = []
@@ -195,7 +207,8 @@ def generate(
                                company_id=company_id, roles=roles,
                                incident_lore=incident_lore, calendar_lore=calendar_lore,
                                ownership_lore=ownership_lore, previous_event=start,
-                               prior_incident_periods=prior_incident_periods, t=t)
+                               prior_incident_periods=prior_incident_periods, t=t,
+                               money_unit=money_unit)
         events.extend(chain["events"])
         facts.extend(chain["facts"])
         keys.update(chain["keys"])
@@ -263,7 +276,7 @@ def _incident_chain(
     rng: Rng, minter: Minter, *, period: str, day: date, company_id: str, roles: dict[str, str],
     incident_lore: list[str], calendar_lore: list[str], ownership_lore: list[str],
     previous_event: EnterpriseEvent, prior_incident_periods: tuple[str, ...] = (),
-    t: Mapping[str, str] = TEXT,
+    t: Mapping[str, str] = TEXT, money_unit: str = MONEY,
 ) -> dict:
     """The eight-step incident: detect, triage, be wrong, be corrected, work around, escalate."""
     events: list[EnterpriseEvent] = []
@@ -413,7 +426,7 @@ def _incident_chain(
                   event=remediation.id, lore=ownership_lore)
     impact = CanonicalFact(
         id=minter.next("FACT"), kind="financial.incident_pl_impact", subject=company_id, period=period,
-        value=Quantity(amount=0, unit="AUD_thousands"),
+        value=Quantity(amount=0, unit=money_unit),
         valid_from=_at(business_days_after(period_end(period), 5), 16, 40),
         authority=Authority.SYSTEM_OF_RECORD, source_system=erp, event_id=None,
     )

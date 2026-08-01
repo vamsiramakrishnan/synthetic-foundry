@@ -111,14 +111,22 @@ def _season(period: str) -> float:
 class _Ledger:
     """Accumulates facts, so the generator reads as arithmetic rather than plumbing."""
 
-    def __init__(self, minter: Minter) -> None:
+    def __init__(self, minter: Minter, money_unit: str = MONEY) -> None:
         self.minter = minter
         self.facts: list[CanonicalFact] = []
+        # A pack's currency was already a build-time field (`Company.currency`/
+        # `currency_unit`) that this generator quietly ignored — every fact it
+        # minted said "AUD_thousands" regardless, which is only invisible
+        # because both stock archetypes happen to use that unit. `money_unit`
+        # defaults to `MONEY` so a caller that never passes it (there is none
+        # left; every call site now threads the archetype's own unit) still
+        # gets the old constant, which is what keeps stock output unchanged.
+        self.money_unit = money_unit
 
     def money(self, kind: str, subject: str, period: str, amount: int, *,
               at: datetime, source: str, event: str | None,
               lore: list[str] | None = None) -> CanonicalFact:
-        return self.measure(kind, subject, period, amount, MONEY,
+        return self.measure(kind, subject, period, amount, self.money_unit,
                             at=at, source=source, event=event, lore=lore)
 
     def measure(self, kind: str, subject: str, period: str, amount: float, unit: str, *,
@@ -162,6 +170,7 @@ def generate(
     annual_revenue: int,
     lore_by_target: dict[str, list[str]],
     comparative_months: int = 0,
+    money_unit: str = MONEY,
 ) -> Financials:
     """Generate a company's financial facts for one period, plus a trend behind it.
 
@@ -172,8 +181,13 @@ def generate(
     ``comparative_months`` adds prior periods at actual only. A trend needs
     actuals; it does not need every prior month's budget, and generating them
     would triple the fact count to fill a column nobody reads.
+
+    ``money_unit`` is the archetype's own ``f"{currency}_{currency_unit}"`` —
+    every retail archetype in this repository resolves to ``MONEY``, which is
+    what keeps stock output unchanged, but a pack with a different currency
+    now gets facts that actually say so instead of a silent "AUD_thousands".
     """
-    ledger = _Ledger(minter)
+    ledger = _Ledger(minter, money_unit=money_unit)
     monthly = annual_revenue // 12
     key_of_unit = {unit_id: key for key, unit_id in unit_ids.items()}
 

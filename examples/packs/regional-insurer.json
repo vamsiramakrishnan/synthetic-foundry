@@ -4,10 +4,25 @@
   "description": "Mid-size general insurer, run through the month-end close engine",
   "company_name": "Harbourline Insurance Group",
   "industry": "General insurance",
-  "currency": "AUD",
+  "currency": "GBP",
   "currency_unit": "thousands",
   "annual_revenue": 5200000,
   "employees": 6000,
+  "headquarters": "Plymouth, United Kingdom",
+  "regions": ["Devon", "Cornwall", "Somerset", "Dorset", "Bristol", "Gloucestershire", "Wiltshire", "Hampshire"],
+  "name_pools": {
+    "given": [
+      "Oliver", "Amelia", "Freddie", "Poppy", "Arthur", "Isla", "George", "Ivy",
+      "Noah", "Florence", "Jack", "Matilda", "Charlie", "Rosie", "Henry", "Evie",
+      "Thomas", "Daisy", "Alfie", "Grace", "Leo", "Phoebe", "Harry", "Millie"
+    ],
+    "family": [
+      "Ashworth", "Whitfield", "Pemberton", "Hargreaves", "Fairweather", "Sutcliffe",
+      "Winstanley", "Thorncroft", "Radcliffe", "Holloway", "Crawshaw", "Beaumont",
+      "Fenwick", "Blackwood", "Sinclair", "Harrington", "Calloway", "Sherwood",
+      "Fletcher", "Kingswood", "Whitlock", "Ravensworth", "Ashcombe", "Netherfield"
+    ]
+  },
   "system_brands": {
     "erp": "Ledgerstone Core",
     "mdm": "Policy and Claims Register",

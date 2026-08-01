@@ -118,6 +118,9 @@ class QuarterlyCapitalReturn:
             # corpus rebuilds them with no pack file on hand.
             text=(world._recipe.get("pack") or {}).get("episode_text") or None,
             existing_minimum=existing_minimum,
+            # The archetype's own currency — every RWA and CET1-capital fact
+            # used to say "AUD_millions" regardless of what a pack named.
+            money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
         )
 
         intents, errors = banking_documents.artifact_intents(

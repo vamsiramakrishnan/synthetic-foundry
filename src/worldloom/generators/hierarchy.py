@@ -75,7 +75,11 @@ class Dimensions:
     sites_by_unit: dict[str, tuple[str, ...]]
 
 
-#: Australian state and territory abbreviations, for regional attribution.
+#: Australian state and territory abbreviations, for regional attribution — the
+#: engine default, drawn whenever a pack leaves ``Pack.regions`` empty. Every
+#: other geographic string the corpus prints (``headquarters``) is a single
+#: pack-authored value, not a pool; this one is a pool because a site estate
+#: needs several regions to distribute across, cycled by ``generate`` below.
 REGIONS: tuple[str, ...] = ("NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT")
 
 
@@ -86,8 +90,20 @@ def generate(
     units: tuple[UnitSpec, ...],
     unit_ids: dict[str, str],
     buyers: dict[str, str],
+    regions: tuple[str, ...] = REGIONS,
 ) -> Dimensions:
-    """Build the category and site dimensions for a set of business units."""
+    """Build the category and site dimensions for a set of business units.
+
+    ``regions`` defaults to the module's own pool; a pack overrides it via
+    ``Pack.regions`` (threaded through ``organisation``/``banking_org``), the
+    only geography besides ``headquarters`` a generated corpus surfaces.
+    Cycled by index rather than drawn, same as before the override existed —
+    the sequence must stay exhaustive and evenly spread across a large estate,
+    which an rng draw would not guarantee. An empty tuple here is a caller
+    bug, not a valid "no locale" state — ``Pack.regions`` treats an empty list
+    as "use the default pool" and the callers below never forward an empty
+    one past that point, so this parameter should never actually see one.
+    """
     categories: list[Category] = []
     sites: list[Site] = []
     categories_by_unit: dict[str, list[str]] = {}
@@ -113,7 +129,7 @@ def generate(
         site_rng = rng.derive(f"sites/{unit.key}")
         for fmt in unit.site_formats:
             for index in range(fmt.count):
-                region = REGIONS[index % len(REGIONS)]
+                region = regions[index % len(regions)]
                 # Store sizes vary within a format, so the weight is jittered.
                 # A zero-revenue format stays exactly zero rather than becoming a
                 # small non-zero number — a distribution centre with $40k of

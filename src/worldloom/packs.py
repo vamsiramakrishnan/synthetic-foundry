@@ -116,6 +116,34 @@ class PackVoice(PackModel):
     phrases: list[str] = Field(default_factory=list, max_length=4)
 
 
+class PackNamePools(PackModel):
+    """Given and family name pools for minting people — de-hardcoding ladder
+    rung 4 (``docs/build-order.md`` §7a): the same pools ``generators/names.py``
+    ships as engine defaults, now data a pack may author instead of edit.
+
+    Either half left empty keeps the engine's default for *that half only* —
+    an author who wants Welsh family names but is indifferent to given names
+    is not forced to write out forty given names just to say so. Both halves
+    are sized against the archetype at lint time (``lint``'s
+    ``name_pools`` finding): a pool narrower than the people the engine mints
+    would recycle a name onto a second person, which is not a smaller pool,
+    it is a coherence bug — two employees who are, to every reader, one.
+    """
+
+    given: list[str] = Field(default_factory=list)
+    family: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _no_blank_names(self) -> PackNamePools:
+        for label, pool in (("given", self.given), ("family", self.family)):
+            for name in pool:
+                if not name.strip():
+                    raise ValueError(
+                        f"name_pools.{label} contains a blank or whitespace-only name"
+                    )
+        return self
+
+
 class Pack(PackModel):
     """One industry pack. See the module docstring for what it can and cannot do."""
 
@@ -156,6 +184,26 @@ class Pack(PackModel):
     graded against is the engine's, only the phrasing is the pack's. An
     override may use any subset of its default's placeholders and nothing
     else."""
+    name_pools: PackNamePools = Field(default_factory=PackNamePools)
+    """Given and family name pools for the people the engine mints — see
+    ``PackNamePools``. Leaving this at its default keeps the engine's own
+    pools, which is why a corpus was never forced to be one particular
+    country's names to begin with, but a pack that wants its people to read
+    as one place now can say so."""
+    headquarters: str = ""
+    """The company's one headquarters, e.g. ``"Bristol, United Kingdom"``.
+    Empty keeps the engine's own draw — the same override discipline as
+    ``company_name``: drawn regardless of whether a pack sets this, so no
+    other stream ever reshuffles depending on whether it did. A pool would be
+    the wrong shape here; a company has exactly one headquarters, never a
+    choice of several."""
+    regions: list[str] = Field(default_factory=list)
+    """Region labels for the site estate (``generators/hierarchy.py``'s
+    ``region`` field and the site names built from it — e.g. a site named
+    "Branch NSW 001" by the engine default). Empty keeps the engine's own
+    pool (Australian state/territory abbreviations); this and
+    ``headquarters`` are the only two places a generated corpus prints bare
+    geography."""
 
     @model_validator(mode="after")
     def _units_sum_to_the_group(self) -> Pack:
@@ -165,6 +213,13 @@ class Pack(PackModel):
                 f"unit shares sum to {total:.3f}, not 1 — the group must decompose"
                 " into its units exactly"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _regions_are_not_blank(self) -> Pack:
+        for region in self.regions:
+            if not region.strip():
+                raise ValueError("regions contains a blank or whitespace-only entry")
         return self
 
 
@@ -270,6 +325,30 @@ def lint(pack: Pack) -> list[str]:
                 f" {pack.units[0].key}{domain.unit_role_suffixes[0]})"
             )
 
+    # A pool narrower than the engine's own headcount for this pack recycles a
+    # name onto a second person — `people_names` would raise at build time,
+    # but a lint finding names the shortfall before an author gets that far,
+    # and against the *effective* pool (a pack's own, or the engine default it
+    # falls back to), since a pack-less-but-huge unit count could exhaust the
+    # default pool too. The count matches `org_builder.sorted_roles`'s role
+    # table exactly: the engine's fixed roles plus one row per unit per
+    # unit-role suffix — see `retail.py`/`banking.py`'s registration.
+    from .generators.names import FAMILY as _DEFAULT_FAMILY, GIVEN as _DEFAULT_GIVEN
+
+    required_people = len(domain.role_keys) + len(pack.units) * len(domain.unit_role_suffixes)
+    for label, pool, default_pool in (
+        ("given", pack.name_pools.given, _DEFAULT_GIVEN),
+        ("family", pack.name_pools.family, _DEFAULT_FAMILY),
+    ):
+        effective = pool or default_pool
+        if len(effective) < required_people:
+            findings.append(
+                f"name_pools.{label} holds {len(effective)} names but the {pack.base} engine"
+                f" mints {required_people} people for this pack's units — a pool this size"
+                " recycles a name mid-corpus, which turns two people into one;"
+                f" supply at least {required_people}"
+            )
+
     from .generators.episode_text import check_overrides
 
     findings.extend(check_overrides(dict(domain.episode_text), pack.episode_text))
@@ -317,4 +396,6 @@ def to_recipe(pack: Pack) -> dict[str, Any]:
     return json.loads(pack.model_dump_json())
 
 
-__all__ = ["Pack", "PackCommitment", "archetype_of", "lint", "load", "lore_of", "to_recipe"]
+__all__ = [
+    "Pack", "PackCommitment", "PackNamePools", "archetype_of", "lint", "load", "lore_of", "to_recipe",
+]

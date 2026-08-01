@@ -140,6 +140,11 @@ class MonthEndClose:
             raise ValueError("a scenario needs a seeded world; use RetailWorld(seed=...).build()")
         if world._minter is None:
             raise ValueError("this world was loaded from disk and cannot be advanced; build one from a seed")
+        # Checked here rather than only where `finance.generate` needs it
+        # below: `operations.generate` now also reads the archetype, for the
+        # currency its one financial fact is stated in.
+        if world._archetype is None:
+            raise ValueError("this world has no archetype; build one with RetailWorld(...)")
 
         rng = Rng(world.seed).derive(f"scenario/{type(self).__name__}/{self.period}")
         minter = world._minter
@@ -166,6 +171,7 @@ class MonthEndClose:
             # A pack's episode-text overrides ride the recipe, which is what
             # lets a pack-built corpus rebuild them with no pack file on hand.
             text=(world._recipe.get("pack") or {}).get("episode_text") or None,
+            money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
         )
 
         # Unit keys come from the world rather than a literal list, because the
@@ -177,9 +183,6 @@ class MonthEndClose:
             if key.startswith("unit_")
         }
         from .generators.organisation import unit_shares
-
-        if world._archetype is None:
-            raise ValueError("this world has no archetype; build one with RetailWorld(...)")
 
         financials = finance.generate(
             rng.derive("finance"), minter,
@@ -197,6 +200,11 @@ class MonthEndClose:
             annual_revenue=world._annual_revenue,
             lore_by_target=index,
             comparative_months=self.comparative_months,
+            # The archetype's own currency, not the generator's constant — a
+            # pack's `currency`/`currency_unit` used to reach every other
+            # surface (documents, narrative rendering) except the fact ledger
+            # itself, which minted "AUD_thousands" regardless.
+            money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
         )
         financial_facts = financials.headline
 
@@ -421,6 +429,12 @@ class Hire:
         roles = dict(world._roles)
         at = _period_boundary(self.period)
 
+        # A pack's own name pools, if any — so a person hired mid-corpus
+        # reads as the same locale as everyone the world minted at the
+        # beginning, rather than falling back to the engine's defaults the
+        # moment the roster grows. Same recipe-riding trick as `episode_text`.
+        pack_pools = (world._recipe.get("pack") or {}).get("name_pools") or {}
+
         change = personnel.hire(
             rng, minter,
             company_id=world.company.id,
@@ -442,6 +456,8 @@ class Hire:
             persona_id=None,
             at=at,
             period=self.period,
+            given=pack_pools.get("given") or None,
+            family=pack_pools.get("family") or None,
         )
         new_person = change.people[0]
 

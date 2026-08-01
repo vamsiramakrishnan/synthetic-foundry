@@ -119,15 +119,28 @@ insurer on the retail engine, a mutual bank on the banking one). Then:
   and authored answer, keyed in the same `worldloom pack texts` output — so
   a re-voiced episode's own evaluation set stops asking about "merchandise
   category" in a world that no longer has one.
+- **Locale: name pools and headquarters/regions.** A pack-less corpus is
+  Australian by default — the engine's own given/family name pools, its
+  headquarters draw, and its site-region abbreviations (NSW, VIC, ...) all
+  come from `generators/names.py`/`generators/hierarchy.py`. `name_pools`
+  (`{"given": [...], "family": [...]}`) replaces either or both halves of the
+  person-name pools; `pack check` flags a pool too small for the archetype's
+  headcount before a build silently recycles a name onto two people.
+  `headquarters` is a single string (the company has one, not a pool of
+  candidates); `regions` replaces the labels the site estate cycles through.
+  Leave any of the three unset and that piece stays the engine's default —
+  setting only `name_pools` and leaving `headquarters` empty is legal and
+  common for a pack whose story does not hinge on where the head office sits.
 - **Re-voice in consistent pairs, not isolated fields.** A pack's `lore`,
   `system_brands`, `voices`, and `episode_text` all have to agree with each
   other and with the `company_name`/`industry` you set at the top — an
   insurer whose ERP is still branded like a retail POS validates and still
-  doesn't read as an insurer. Set the identity fields first, then work
-  outward through brands → voices → episode text. Override `episode_text` in
-  story pairs: a fact and the event that recorded it tell one story (the
-  insurer example re-voices the hypothesis fact and both its events
-  together).
+  doesn't read as an insurer. The same discipline covers locale: a
+  `headquarters` in one country reads oddly beside `name_pools` built for
+  another. Set the identity fields first, then work outward through brands →
+  voices → episode text. Override `episode_text` in story pairs: a fact and
+  the event that recorded it tell one story (the insurer example re-voices
+  the hypothesis fact and both its events together).
 - **Fiction only.** Never a real company, brand, or regulator — in the
   identity fields, the lore, or anywhere a narrated document could end up
   stating it as fact. Shape and scale may resemble an industry; no figure,

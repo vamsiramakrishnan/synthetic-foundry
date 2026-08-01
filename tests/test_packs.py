@@ -46,6 +46,27 @@ def test_a_pack_names_its_own_fiction(insurer, mutual) -> None:
     assert bank.company.name == "Fairmont Mutual Bank"
 
 
+def test_a_pack_sets_its_own_locale(insurer, mutual) -> None:
+    """Rung 4 of the de-hardcoding ladder: name pools and headquarters/
+    regions are pack-authored, not just the company's own name. The insurer
+    sets all three; the mutual bank sets none and gets the engine's own
+    Australian defaults, proving the override is genuinely optional."""
+    pack, world = insurer
+    assert world.company.headquarters == pack.headquarters == "Plymouth, United Kingdom"
+    given_pool = set(pack.name_pools.given)
+    family_pool = set(pack.name_pools.family)
+    for person in world.people:
+        first, _, last = person.name.partition(" ")
+        assert first in given_pool, f"{person.name} was not drawn from the pack's given-name pool"
+        assert last in family_pool, f"{person.name} was not drawn from the pack's family-name pool"
+    assert set(pack.regions) == {site.region for site in world.sites}
+
+    _, bank = mutual
+    assert bank.company.headquarters == "Sydney, Australia", (
+        "a pack that never sets headquarters keeps the engine's own draw"
+    )
+
+
 def test_pack_worlds_are_coherent(insurer, mutual) -> None:
     for _, world in (insurer, mutual):
         report = world.compile().validate()
@@ -89,6 +110,26 @@ def test_pack_worlds_rebuild_from_their_own_recipes(insurer, mutual) -> None:
         assert [f.model_dump() for f in again.facts] == [
             f.model_dump() for f in world.facts
         ]
+
+
+def test_a_pack_states_its_own_currency(insurer) -> None:
+    """`Company.currency`/`currency_unit` were already pack fields, but three
+    generators minted every financial fact in a hardcoded "AUD_thousands"
+    regardless — invisible only because no pack had ever set a different
+    currency until this one did. A fact's unit must actually say GBP."""
+    _, world = insurer
+    # Revenue and gross profit are the actual money kinds `financial.` mints;
+    # `financial.gross_margin_pct.*` shares the prefix but is a percentage,
+    # not an amount, so it is excluded rather than asserted GBP.
+    money_facts = [
+        f for f in world.facts
+        if f.kind.startswith(("financial.revenue.", "financial.gross_profit.", "financial.incident_pl_impact"))
+    ]
+    assert money_facts, "the insurer's close mints financial facts to check"
+    for fact in money_facts:
+        assert fact.value.unit.startswith("GBP"), (
+            f"{fact.id} ({fact.kind}) is stated in {fact.value.unit!r}, not the pack's own currency"
+        )
 
 
 def test_a_pack_brands_its_systems(insurer, mutual) -> None:
@@ -197,6 +238,34 @@ def test_the_lint_names_unknown_slots_and_roles() -> None:
     findings = packs.lint(packs.load(pack_dict))
     assert any("system_brands['core_banking']" in f for f in findings)
     assert any("voices['prudential_risk_head']" in f for f in findings)
+
+
+def test_the_lint_names_an_undersized_name_pool() -> None:
+    """A pool narrower than the archetype's headcount would recycle a name
+    onto a second person mid-build — `people_names` catches it too late (at
+    `build`), so the lint has to catch it at `check`, before an author gets
+    that far."""
+    pack_dict = json.loads(open(INSURER).read())
+    pack_dict["name_pools"]["given"] = ["Oliver", "Amelia"]
+    findings = packs.lint(packs.load(pack_dict))
+    assert any(
+        "name_pools.given holds 2 names" in f and "supply at least" in f for f in findings
+    )
+    # The family pool is untouched and still large enough — only the pool
+    # that is actually short gets a finding.
+    assert not any(f.startswith("name_pools.family") for f in findings)
+
+
+def test_the_schema_rejects_blank_names_and_regions() -> None:
+    pack_dict = json.loads(open(INSURER).read())
+    pack_dict["name_pools"]["given"].append("   ")
+    with pytest.raises(Exception, match="blank or whitespace-only name"):
+        packs.load(pack_dict)
+
+    pack_dict = json.loads(open(INSURER).read())
+    pack_dict["regions"].append("")
+    with pytest.raises(Exception, match="blank or whitespace-only entry"):
+        packs.load(pack_dict)
 
 
 def test_the_lint_names_inert_lore() -> None:

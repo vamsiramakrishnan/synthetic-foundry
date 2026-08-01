@@ -171,14 +171,21 @@ def generate(
     company_name: str | None = None,
     system_brands: dict[str, str] | None = None,
     voices: dict[str, Any] | None = None,
+    name_pools: dict[str, list[str]] | None = None,
+    headquarters: str | None = None,
+    regions: tuple[str, ...] | None = None,
 ) -> Organisation:
     """Build the organisation for an archetype. Same seed, same graph, same IDs.
 
     ``company_name`` lets a pack name its own fiction; ``system_brands``
     re-brands system slots (keys per ``names.system_names``); ``voices`` maps
-    role keys to voice overrides (``packs.PackVoice``-shaped). Every generated
-    value is still drawn either way, so a pack that overrides any of them
-    never reshuffles a single downstream draw relative to one that does not.
+    role keys to voice overrides (``packs.PackVoice``-shaped); ``name_pools``
+    supplies ``given``/``family`` person-name pools (``packs.PackNamePools``-
+    shaped); ``headquarters`` and ``regions`` are the pack's locale (a single
+    string and a pool of region labels, respectively — see
+    ``generators/hierarchy.REGIONS``). Every generated value is still drawn
+    either way, so a pack that overrides any of them never reshuffles a single
+    downstream draw relative to one that does not.
     """
     company_rng = rng.derive("company")
     company_id = minter.next("CO")
@@ -233,7 +240,11 @@ def generate(
         )
         return business_unit, cost_centre, pack_voice_ids.get(role) or _persona_for(role)
 
-    role_ids, people = mint_people(rng, minter, role_table, depth_of, assign=assign)
+    pools = name_pools or {}
+    role_ids, people = mint_people(
+        rng, minter, role_table, depth_of, assign=assign,
+        given=pools.get("given") or None, family=pools.get("family") or None,
+    )
     people = wire_managers(people, role_table, role_ids)
     business_units = form_units(units, unit_ids, role_ids, people, company_id, lore)
 
@@ -242,6 +253,9 @@ def generate(
         units=units,
         unit_ids=unit_ids,
         buyers={unit.key: role_ids[f"{unit.key}_buyer"] for unit in units},
+        # Empty (the field's default) means "no override" — the module's own
+        # REGIONS pool applies, exactly as if the pack had never mentioned it.
+        regions=regions if regions else hierarchy.REGIONS,
     )
 
     # Drawn first, then re-branded: a pack renames the products, never the
@@ -342,13 +356,15 @@ def generate(
     )
 
     # Drawn before the override is applied — see the docstring: a pack naming
-    # the company must not change what any other stream draws.
+    # the company (or its headquarters) must not change what any other stream
+    # draws.
     generated_name = names.company_name(company_rng)
+    generated_hq = names.headquarters(company_rng.derive("hq"))
     company = Company(
         id=company_id,
         name=company_name or generated_name,
         industry=archetype.industry,
-        headquarters=names.headquarters(company_rng.derive("hq")),
+        headquarters=headquarters or generated_hq,
         fiscal_year_start_month=archetype.fiscal_year_start_month,
         currency=archetype.currency,
         currency_unit=archetype.currency_unit,

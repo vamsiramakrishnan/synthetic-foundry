@@ -156,6 +156,8 @@ def mint_people(
     depth_of: dict[str, int],
     *,
     assign: Callable[[str, str, str], Assignment],
+    given: Sequence[str] | None = None,
+    family: Sequence[str] | None = None,
 ) -> tuple[dict[str, str], list[Employee]]:
     """Mint one person per role row, in table order.
 
@@ -165,11 +167,19 @@ def mint_people(
     mechanism: name pools, id sequence, join date, and a ``left`` of ``None``,
     because departures are a scenario's concern, not the beginning's.
 
+    ``given``/``family`` pass straight through to ``names.people_names`` —
+    ``None`` for the engine's own pools, or a pack's ``name_pools`` handed
+    down by the domain module. This is mechanism deciding *how many* names it
+    needs and *which* pools to draw them from; it is still not the mechanism's
+    business to know why one pool was chosen over another.
+
     Draw order is contract: names from ``rng.derive("people")``, join dates
     from ``rng.derive("founding")`` — the labels both original generators used,
     kept so existing seeds reproduce their worlds.
     """
-    person_names = names.people_names(rng.derive("people"), len(role_table))
+    person_names = names.people_names(
+        rng.derive("people"), len(role_table), given=given, family=family
+    )
     founding_rng = rng.derive("founding")
     role_ids: dict[str, str] = {}
     people: list[Employee] = []

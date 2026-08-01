@@ -628,7 +628,36 @@ The measured retail coupling, for whichever is chosen:
       read straight off the ledger has no authored wrapper to re-voice.
       This paid down rung 1's known residue (retail evaluation answers that
       hardcoded their phrasing).
-   4. *Name pools* — the placeholder `names.py` already promises this.
+   4. *Name pools* — **done.** `generators/names.py`'s `GIVEN`/`FAMILY` and
+      `generators/hierarchy.py`'s `REGIONS` are the engine defaults, extracted
+      verbatim (proven by stash-diff on both engines, same discipline as
+      rungs 1 and 3); `packs.Pack.name_pools`, `.headquarters`, and `.regions`
+      are the authored form, threaded through
+      `organisation.generate`/`banking_org.generate` on the same override
+      contract as `company_name` — drawn regardless, replaced after, so a
+      pack that sets or skips any of them never reshuffles a downstream draw
+      relative to one that does the opposite. The second consumer this rung
+      was gated on is the pack surface itself: the placeholder `names.py` had
+      exactly one calling context (the two org generators, direct from
+      Python) until `packs.py` became a second, and at that point "the pools
+      a maintainer edits in this file" and "the pools a pack edits in JSON"
+      had to be one set of pools, not two that could drift apart. `pack
+      check` lints a pool narrower than the archetype's headcount — a pool
+      that recycles a name mid-corpus turns two people into one, which is a
+      coherence bug, not a smaller cast. Currency rode along: three
+      generators (`finance.py`, `operations.py`, `regulatory.py`) minted every
+      financial fact in a hardcoded `"AUD_thousands"`/`"AUD_millions"`
+      regardless of what `Company.currency`/`currency_unit` — already a pack
+      field — actually said, invisible only because every registered
+      archetype happens to use one of those two units; a `money_unit`
+      parameter on each, derived from the archetype, closed it. What stays
+      code: the company-name pools (`COMPANY_FIRST`/`COMPANY_SECOND`,
+      banking's `_BANK_SUFFIX`) — `Pack.company_name` is required, so no pack
+      ever reaches them — and the system-name pools (`ERP`/`MDM`/`PLATFORM`/…,
+      banking's `_CORE`/`_COLLATERAL`/…) — a pack already gets a strictly
+      stronger override for those in `system_brands` (one exact name per
+      slot, which is what an author actually wants, not a pool to draw an
+      exact name from).
    5. *The scenario DSL* — still not justified; two episodes share a
       prologue and an epilogue and nothing in between. The third vertical is
       now decided — insurance reserving, `docs/design/insurance-reserving.md`
