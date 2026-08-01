@@ -616,14 +616,18 @@ The measured retail coupling, for whichever is chosen:
       both engines); packs override through `episode_text`, slot-checked at
       lint and at build, published by `worldloom pack texts`. Machine values
       — statuses, dates, "unassigned" — are deliberately not templates,
-      because other checks match on them. Known residue: a handful of retail
-      evaluation *answers* hardcode their phrasing rather than deriving from
-      fact text, which is rung 3's work.
+      because other checks match on them.
    2. *Role tables as pack data* — engines publish required role keys
       (episodes index by them); packs add or retitle the rest. The voices
       surface already proved the publish-and-lint half.
-   3. *Evaluation phrasing* — question templates per family; answer
-      derivation stays engine code.
+   3. *Evaluation phrasing* — **done.** Every question and authored answer
+      is a keyed template in the engine's `EVAL_TEXT` table (same verbatim
+      extraction, same stash-diff proof); packs override through
+      `evaluation_text`, and `pack texts --json` publishes both tables.
+      What stays code: reasoning strings and bare fact playback — a value
+      read straight off the ledger has no authored wrapper to re-voice.
+      This paid down rung 1's known residue (retail evaluation answers that
+      hardcoded their phrasing).
    4. *Name pools* — the placeholder `names.py` already promises this.
    5. *The scenario DSL* — still not justified; two episodes share a
       prologue and an epilogue and nothing in between.

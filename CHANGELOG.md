@@ -90,6 +90,30 @@ One coherent enterprise, taken all the way through. Two, in fact.
   experiment had predicted (`unit_gm`, the merch lead's manager, and the
   banking error's unit) — each engine now derives those from the world it was
   given.
+  And packs re-voice the benchmark: every evaluation question and authored
+  answer is a keyed template too (``EVAL_TEXT``, published beside the episode
+  tables by ``pack texts``), overridden through ``evaluation_text`` under the
+  same slot contract — the insurer's evaluation set asks about classes of
+  business and gross written premium, never a merchandise category. The fact
+  each case is graded against stays the engine's.
+
+- **Consecutive banking quarters.** `--periods` now works for single-episode
+  domains, stepping by the domain's own cadence (`period_step_months`;
+  banking registers 3, so two periods are two quarter-ends). Each quarter
+  runs the full challenged-return episode on the world the last one left:
+  the standard's minimum-CET1 floor is minted once and reused as the
+  standing fact it is, each quarter's liquidity cadence is its own
+  supersession chain (gaplessness is enforced inside a chain, never across
+  the deliberate gap between windows), and the capital reconciliation checks
+  scope to their own period. A two-quarter corpus validates coherent and
+  replays byte-for-byte.
+
+- **`/worldloom-design`.** The command for asks that arrive without a seed —
+  "a hard corpus for insurance RAG" — driving elicit → decide engine/pack →
+  build → measure (`evaluate --json`, `diversity`) → iterate → deliver, with
+  `references/designing.md` carrying the judgment: the elicitation table,
+  the archetype / `--inspired-by` / pack cost ladder, symptom-level
+  weak-family diagnostics, and the corpus-card delivery format.
 
 ### Generation
 
