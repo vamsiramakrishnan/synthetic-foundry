@@ -180,6 +180,19 @@ worldloom narrate accept <CORPUS>
 | `--json` | Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table. |
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
 
+### `worldloom narrate auto`
+
+Run requests -> generate -> validate -> accept in-process, against a live model.
+
+```
+worldloom narrate auto <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--model` | Anthropic model id. Omit to use the provider's default (see `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL`). |
+| `--retries` | Rejections the compiler will absorb per section before giving up. |
+
 ### `worldloom narrate requests`
 
 Emit the prose requests an agent needs to answer.

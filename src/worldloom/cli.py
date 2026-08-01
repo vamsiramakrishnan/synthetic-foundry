@@ -540,6 +540,79 @@ def narrate_accept(
         raise typer.Exit(code=1)
 
 
+@narrate_app.command("auto")
+def narrate_auto(
+    corpus: str = typer.Argument(..., help="Corpus path to narrate."),
+    model: str = typer.Option(
+        None, "--model",
+        help="Anthropic model id. Omit to use the provider's default"
+        " (see `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL`).",
+    ),
+    retries: int = typer.Option(
+        2, "--retries",
+        help="Rejections the compiler will absorb per section before giving up.",
+    ),
+) -> None:
+    """Run requests -> generate -> validate -> accept in-process, against a live model.
+
+    Same loop `narrate requests` / write / `narrate accept` drives by hand, minus the
+    human round trip: the compiler's own retry loop (`compiler._generate`) calls the
+    model directly and feeds a rejection's violations back as the next attempt's
+    prompt, so this is the existing retry mechanism with a live model behind it, not
+    a second one. Every call still lands in the generation ledger keyed on
+    (seed, call site, fact digest, model id, prompt version) exactly like the
+    deterministic and hand-written paths, which is what makes a later
+    `--replay` build reproduce this corpus byte-for-byte with no model, key, or
+    network involved — `test_a_world_replays_with_the_provider_unreachable` and
+    `test_an_exported_corpus_replays_byte_for_byte` in tests/test_narrative.py prove
+    that property already, generically over any `Provider`; they just happen to have
+    only ever been exercised against deterministic ones.
+    `test_anthropic_narrate_auto_ledger_replays_offline` in
+    tests/test_anthropic_provider.py closes that gap for this specific,
+    non-deterministic provider.
+    """
+    import os
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        err.print(
+            "[red]error:[/red] ANTHROPIC_API_KEY is not set."
+            " Export it before running `worldloom narrate auto`."
+        )
+        raise typer.Exit(code=2)
+
+    from .narrative import ANTHROPIC_DEFAULT_MODEL, AnthropicProvider, NarrationError, ProviderError
+
+    world = _compiled(_load(corpus), corpus)
+
+    try:
+        provider = AnthropicProvider(model=model or ANTHROPIC_DEFAULT_MODEL, api_key=api_key)
+        narrated = world.narrate(provider, retries=retries)
+    except (ProviderError, NarrationError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    written = narrated.export(corpus, overwrite=True)
+
+    calls, replayed, rejected = narrated._narration
+    # `calls` counts every attempt including rejected ones (`1 + attempts` per new
+    # section, see compiler.narrate); subtracting `rejected` back out leaves exactly
+    # the count of sections that were newly generated this run, so the two together
+    # give the sections-narrated total the summary promises without the compiler
+    # needing to expose a fourth number for it.
+    generated = calls - rejected
+    console.print(
+        f"[green]✓[/green] {generated + replayed} section(s) narrated with [bold]{provider.id}[/bold]"
+    )
+    console.print(
+        f"[dim]narration:[/dim] {calls} provider call(s), {replayed} replayed from"
+        f" the ledger, {rejected} rejected attempt(s)\n"
+    )
+    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not _report(narrated):
+        raise typer.Exit(code=1)
+
+
 @plan_app.command("requests")
 def plan_requests(
     corpus: str = typer.Argument(..., help="Corpus path or bundled name."),

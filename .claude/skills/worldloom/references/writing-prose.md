@@ -226,6 +226,9 @@ to restructure the sentence, not to drop the requirement.
 
 ## When not to write it yourself
 
+There are three tiers here, not two, and which one fits depends on what the
+prose is for.
+
 `worldloom build ... --narrate` (or `worldloom demo`) fills every section using
 the built-in `DeterministicProvider` — no model, no network, template sentences
 keyed on fact kind. It is useful for a smoke test of the pipeline, and it is
@@ -233,7 +236,31 @@ exactly what its own docstring says it is: "not a stand-in for a language
 model... it exists to exercise the contract, not to write well." It gets every
 rule right and produces one flat sentence per fact, always in the same shape.
 Reach for it only when you need *a* corpus fast and prose quality does not
-matter to what you're testing. The moment someone needs documents that read like
-the real thing a controller or a service desk actually wrote — varied emphasis,
-an argued position, register that shifts with the audience — that's the
-narrate-requests / write / narrate-accept loop, and that's what this file is for.
+matter to what you're testing.
+
+```bash
+worldloom narrate auto ./corpus --model claude-sonnet-5
+```
+
+`worldloom narrate auto` sits between that and this file's loop. It runs the
+exact same request → generate → validate → accept cycle described above —
+`facts` table, `must_not_claim`, `knows_as_of`, the `{{fact:ID}}` rule, the
+claims JSON shape, every rejection code in this document — except an Anthropic
+model answers each request in-process instead of you, and a rejection is
+retried against that model automatically rather than coming back to you to
+fix. The result is not template sentences: it is real, varied prose, checked
+by the identical validator this file describes, at whatever volume a live
+model can produce. What it is *not* is the top bar. A model under time
+pressure to clear the validator on the fewest retries writes to the letter of
+the rules, not always to the spirit of "lead with the position" and "weight
+facts by what they're worth" further up this file — the difference between
+prose that passes and prose that argues. Reach for it when you need good bulk
+prose and narrating every section by hand does not scale to the corpus size;
+reach for the hand-written loop when a document is worth getting exactly
+right, or when you are the one deciding what "exactly right" means for a
+scenario nobody has written prose for yet.
+
+The moment someone needs documents that read like the real thing a controller
+or a service desk actually wrote — varied emphasis, an argued position,
+register that shifts with the audience — that's either loop, and this file is
+the contract both of them are held to.

@@ -28,6 +28,12 @@ comes back is **checked against the fact ledger**. Restate a number, cite someth
 you were not given, or mention an entity that does not exist, and the prose is
 rejected with the reason.
 
+Narrating by hand doesn't scale past a handful of documents. For bulk prose,
+`pip install "worldloom[llm]"` and run `worldloom narrate auto ./corpus` — the
+same request/validate/reject loop above, with an Anthropic model answering in
+place of the agent and `ANTHROPIC_API_KEY` in the environment. Everything else
+in this repository, including that loop's own tests, runs with neither.
+
 That division is the design. The agent supplies judgement and language. The harness
 supplies truth, and refuses anything that contradicts it.
 

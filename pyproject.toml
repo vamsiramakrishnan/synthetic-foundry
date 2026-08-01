@@ -55,6 +55,9 @@ pptx = ["python-pptx>=1.0"]
 polars = ["polars>=0.20"]
 pandas = ["pandas>=2.0"]
 arrow = ["pyarrow>=15.0"]
+# `worldloom narrate auto` — the only stage that calls a model, so it is the only
+# stage that needs this. Everything else in the package runs with no API key.
+llm = ["anthropic>=0.40"]
 # Every renderer at once — the ordinary way to install the tool rather than
 # the library. `pip install "worldloom[all]"`.
 all = [
