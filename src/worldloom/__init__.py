@@ -57,6 +57,12 @@ from .retail import RetailWorld
 from .banking import BankingWorld
 from .banking_scenarios import QuarterlyCapitalReturn
 
+# Same contract as the banking imports above: importing this is what registers
+# the `routine_notice` artifact type (build --distractors's plainest family),
+# and a corpus that carries one must compile identically whether this process
+# built it or is only reading it back.
+from .generators import distractors as _distractors  # noqa: F401
+
 __version__ = "0.1.0"
 
 __all__ = [

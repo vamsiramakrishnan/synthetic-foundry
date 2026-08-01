@@ -65,6 +65,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--actors` | Let employees produce the incident's records by calling tools on what they observed. `scripted` runs the built-in deterministic actor (no network, no key); `agent` leaves every decision for you to make through `worldloom act`. |
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
+| `--distractors` | Add this many provenance-true noise artifacts once the episode(s) finish: superseded drafts, personal working copies, and routine notices — real authors, real dates, real facts, answering nothing an evaluation case needs. 0 (the default) touches nothing. |
 | `--employees` | Override the archetype's stated headcount. |
 | `--eval-density` | How much of the world's own size the evaluation set and its fan-out documents are allowed to exploit: `low` trims the optional close documents to the floor a benchmark needs; `standard` is today's corpus, unchanged; `high` adds direct-lookup, comparison, and cross-period cases (and the documents to source them from) that only exist once a world has more units, categories, sites, or periods to ask about. `standard` reproduces every existing corpus byte for byte. |
 | `--format`, `-f` | Render these formats. Repeatable. Omit to plan artifacts without rendering. |

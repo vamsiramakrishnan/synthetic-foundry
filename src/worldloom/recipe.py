@@ -45,6 +45,12 @@ STEPS: dict[str, tuple[str, ...]] = {
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
     "QuarterlyCapitalReturn": ("period",),
+    # Not a scenario in the sense the others are — it mints no event and no
+    # fact, only documents over what already happened — but it rides the same
+    # step list for the same reason `--incident`/`--comparatives` do: a corpus
+    # that carries noise must say so on its own recipe, or `--replay` would
+    # silently rebuild a cleaner world than the one that shipped.
+    "Distractors": ("count",),
 }
 
 
@@ -109,6 +115,7 @@ def rebuild(
     """
     from . import archetypes, domains
     from .banking_scenarios import QuarterlyCapitalReturn
+    from .generators import distractors
     from .scenarios import Departure, Hire, MonthEndClose, Reorganisation
 
     missing = [key for key in ("archetype", "seed") if recipe.get(key) is None]
@@ -198,6 +205,8 @@ def rebuild(
             )
         elif name == "QuarterlyCapitalReturn":
             world = world.run(QuarterlyCapitalReturn(period=step["period"]))
+        elif name == "Distractors":
+            world = distractors.apply(world, count=step["count"])
         else:
             raise RecipeError(f"unknown scenario {name!r} in recipe")
     return world

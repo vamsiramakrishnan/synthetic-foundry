@@ -212,6 +212,27 @@ fact a scenario mints afterwards would shift and that checked-in narration
 would stop matching. A milestone fact costing nothing against `FACT` is what
 keeps existing fact ids stable as this feature was added.
 
+## Noise
+
+```bash
+worldloom build --seed 8128 --incident --distractors 20 --out ./corpus
+```
+
+Every corpus built so far is dense with hard-but-interesting documents. A real
+enterprise estate is not: it is mostly drafts nobody threw away, someone's
+personal copy of the real memo, and routine notices that say "no change" every
+period. `--distractors <n>` adds that haystack once the episode(s) finish,
+opt-in (default 0) and entirely from what already exists — no new fact, no new
+entity, no new event, so it cannot make an `expected_abstention` question
+answerable and cannot become the only document carrying an answer a real one
+already carries (`tests/test_distractors.py` states why, structurally). Three
+kinds, tried in that priority order per document budget: a superseded draft
+(an earlier, partial version of a real document, `revises` pointing back at
+it), a derived personal copy (a partial extract in a different register,
+`derived_from` the real document), and a routine notice (an on-plan figure
+nobody needed to know twice). Rides the recipe, so `--replay` reproduces the
+noise exactly as it reproduces everything else.
+
 ## Replay
 
 ```bash

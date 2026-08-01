@@ -466,6 +466,16 @@ class World:
         still witnessed by an event and a fact like every other change. The roster
         holds who is here now; the timeline holds how it got that way.
 
+        ``artifact_intents`` merges by id too, for a narrower reason: a noise
+        distractor (``generators/distractors.py``) attaches a provenance edge to
+        a document the planner already minted — "this is version two, and it
+        revises that earlier draft" — and the only honest way to record that is
+        on the real intent's own ``revises`` field, not a second intent with the
+        same id wearing a costume. Every existing call site mints fresh ids and
+        never collides, so this is invisible to them; only a caller that
+        deliberately reuses an id gets the replace-in-place behaviour, the same
+        contract ``people`` already offers.
+
         ``roles`` rebinds role keys the same way — ``{"controller": "PERSON-12"}``
         after the controller leaves. This is what makes a departure show up in the
         corpus at all: the next episode plans its artifacts against ``roles``, so
@@ -486,7 +496,7 @@ class World:
             _lore=self._lore,
             _facts=self._facts + facts,
             _events=self._events + events,
-            _artifact_intents=self._artifact_intents + artifact_intents,
+            _artifact_intents=_merged(self._artifact_intents, artifact_intents),
             _artifact_irs=self._artifact_irs,
             _artifacts=self._artifacts + artifacts,
             _intentional_errors=self._intentional_errors + intentional_errors,

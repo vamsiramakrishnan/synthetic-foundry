@@ -231,6 +231,15 @@ def build(
         None, "--replay",
         help="Replay narration from an existing corpus's generation ledger instead of generating.",
     ),
+    distractors: int = typer.Option(
+        0, "--distractors",
+        help=(
+            "Add this many provenance-true noise artifacts once the episode(s) "
+            "finish: superseded drafts, personal working copies, and routine "
+            "notices — real authors, real dates, real facts, answering nothing "
+            "an evaluation case needs. 0 (the default) touches nothing."
+        ),
+    ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
 ) -> None:
     """Generate a world deterministically from a seed, then validate it.
@@ -250,6 +259,9 @@ def build(
         )
         raise typer.Exit(code=2)
     eval_density_value = _EVAL_DENSITY_LEVELS[eval_density]
+    if distractors < 0:
+        err.print("[red]error:[/red] --distractors takes a non-negative count")
+        raise typer.Exit(code=2)
 
     pack_obj = None
     if pack is not None:
@@ -357,6 +369,14 @@ def build(
     # an actor close is expected. There is no half-run episode to serialise —
     # `worldloom act` resumes by rebuilding from that recipe and the ledger — so
     # the honest artifact at this point is the organisation and nothing else.
+    if actors == "agent" and distractors:
+        err.print(
+            "[red]error:[/red] --distractors belongs after the episode that plans "
+            "the documents it drafts and copies; --actors agent exports before "
+            "that episode has run"
+        )
+        raise typer.Exit(code=2)
+
     if actors == "agent":
         from dataclasses import replace as _replace
 
@@ -431,6 +451,17 @@ def build(
             f"[dim]actors:[/dim] {len(world.actor_ledger)} tool call(s), {accepted} accepted"
             f", {len(world.observations)} observation(s)\n"
         )
+
+    # After every episode this build runs, never before — a distractor drafts
+    # or copies a real document the planner already produced, so it needs the
+    # full plan (both branches above, single-episode or the retail loop) in
+    # front of it, and it must run before `narrate`/`render` so its sections
+    # enter the ordinary awaiting-prose pipeline rather than a second one.
+    if distractors:
+        from .generators import distractors as distractors_module
+
+        world = distractors_module.apply(world, count=distractors)
+        console.print(f"[dim]distractors:[/dim] {distractors} requested\n")
 
     if narrate or replay is not None:
         from .narrative import DeterministicProvider, ProviderError, UnreachableProvider
