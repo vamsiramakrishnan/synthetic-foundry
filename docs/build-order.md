@@ -630,7 +630,12 @@ The measured retail coupling, for whichever is chosen:
       hardcoded their phrasing).
    4. *Name pools* — the placeholder `names.py` already promises this.
    5. *The scenario DSL* — still not justified; two episodes share a
-      prologue and an epilogue and nothing in between.
+      prologue and an epilogue and nothing in between. The third vertical is
+      now decided — insurance reserving, `docs/design/insurance-reserving.md`
+      — and was deliberately shaped to fit inside `single_episode`, so the
+      DSL stays unjustified until the committed follow-on (a second episode
+      interleaved on the retail engine, same decision record) produces the
+      second data point.
 
 An industry pack, once extracted, has to carry eight things and only about three are nouns: archetype, dimensions, fact kinds and their units, lore, artifact types and grammars, scenario verbs and cadence, roles and personas, evaluation families. A pack that renames nouns and stops produces retail with different words.
 
