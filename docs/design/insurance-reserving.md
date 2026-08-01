@@ -1,5 +1,13 @@
 # Decided: the third vertical is insurance reserving
 
+> **Status: increment 1 shipped** — `worldloom build --archetype
+> midsize_general_insurer` builds, validates (42 insurance checks), evaluates
+> (all seven families, hard ones hard under both retrievers), and replays
+> byte-for-byte; the recipe-step registry landed with it, paying down both
+> pre-existing thin-waist exceptions. Increments 2 (phase 2/3, chain-walking
+> and emergence-gating checks, the retrospective artifacts) and 3 (the
+> reference insurer pack) remain as scoped below.
+
 **"The Living Estimate" — `worldloom.insurance`, `InsuranceWorld` plus the `QuarterlyReserving` episode.**
 
 ---

@@ -108,12 +108,46 @@ One coherent enterprise, taken all the way through. Two, in fact.
   scope to their own period. A two-quarter corpus validates coherent and
   replays byte-for-byte.
 
+- **A third vertical: insurance reserving, increment 1.** "The Living
+  Estimate" — a mid-size general insurer's quarterly reserving cycle, from
+  the decided design record (`docs/design/insurance-reserving.md`): the
+  development triangle as append-only observations, estimate chains whose
+  superseded links were correct when made, and the estate's first permanent
+  two-authority record — the actuarial central estimate and the booked
+  reserve legitimately disagree, reconciled only by an explicit margin fact.
+  Landing it triggered the rule of three: recipe steps are now a registry
+  (`recipe.register_step`) each vertical seeds from its own module, and two
+  thin-waist exceptions were paid down rather than a third added.
+
+- **Two retrievers, so hardness claims survive a change of heuristic.**
+  `evaluate --retriever {bm25,tfidf,both}` — the existing baseline was
+  already BM25, so the second family is TF-IDF cosine with shared
+  tokenization, and the scorecard reports per-family agreement: a family
+  hard under both ranking families is structurally hard. On the shipped
+  corpora, every designed-hard family is. `worldloom stats` reports what a
+  buyer can recompute: length distributions, vocabulary, exact
+  near-duplicate rates, fact-citation density — no invented benchmarks.
+
+- **Name pools and locale as pack data** (ladder rung 4). Person names,
+  site regions, and headquarters are engine defaults a pack may replace,
+  linted against the archetype's headcount, riding the recipe. Found and
+  fixed en route: financial facts stamped AUD units regardless of the
+  company's declared currency, in three generators. The insurer example is
+  no longer Australian, and proves it byte-reproducibly.
+
 - **Narration at scale.** `worldloom narrate auto` drives the whole
   requests→generate→validate→accept loop in-process against the Anthropic API
   (`worldloom[llm]` extra), behind the same Provider contract and the same
   validators as hand-written prose. Every response lands in the generation
   ledger, so a narrated corpus still replays byte-for-byte offline — proven by
-  a test whose fake provider answers differently on every call.
+  a test whose fake provider answers differently on every call. The same
+  command routes `--model gemini-*` to Gemini (`worldloom[gemini]`), and
+  `--harness claude-code` / `--harness antigravity` put a whole agent harness
+  behind each request — one fresh session per section, because the request is
+  the whole of what an author knows. At size: `--concurrency N` fans sections
+  out with byte-identical output at any worker count, accepted sections
+  checkpoint incrementally so a crash never loses paid model output, and a
+  preflight counts the work before the first call.
 
 - **A benchmark that scales with the world.** `build --eval-density
   {low,standard,high}` grows the evaluation set and the fan-out layer from
