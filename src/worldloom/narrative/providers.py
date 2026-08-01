@@ -232,10 +232,23 @@ class UnreachableProvider:
     Used to prove replay: regenerate a world whose ledger is present, hand it this,
     and every call must be served from the ledger. A single ``ProviderError`` means
     replay is incomplete.
+
+    ``id`` must equal the id that *recorded* the ledger, because it is a component
+    of every key. It was a fixed string until the first live harness-narrated
+    corpus failed CLI replay on its first section: a fixed id can only replay the
+    deterministic provider's own corpora, and the generic replay tests never
+    noticed because they handed the same provider instance back in. The CLI now
+    derives it from the ledger being replayed.
     """
 
     id = "deterministic-fake-1"
-    """Matches the fake's ID on purpose — a replay must hit the same keys."""
+    """The class-level default matches the deterministic fake, preserving every
+    bare-construction use — and staying a class attribute so subclasses that
+    override it keep working (the constructor only writes when given an id)."""
+
+    def __init__(self, id: str | None = None) -> None:
+        if id is not None:
+            self.id = id
 
     def complete(self, request, prompt, facts, *, feedback=""):  # type: ignore[no-untyped-def]
         raise ProviderError(

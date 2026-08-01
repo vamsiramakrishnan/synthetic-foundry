@@ -475,8 +475,19 @@ def build(
                 err.print(f"[red]error:[/red] {replay} carries no generation ledger to replay")
                 raise typer.Exit(code=2)
             # Unreachable on purpose: a replay that quietly falls back to
-            # generating would not be a replay.
-            provider = UnreachableProvider()
+            # generating would not be a replay. Its id comes from the ledger
+            # itself — the id is a key component, so replaying a corpus
+            # narrated by any other provider (anthropic, gemini, a harness)
+            # under a fixed id missed every key.
+            recorded_ids = {entry.model_id for entry in ledger}
+            if len(recorded_ids) > 1:
+                err.print(
+                    f"[red]error:[/red] {replay}'s ledger was recorded by several"
+                    f" providers ({', '.join(sorted(recorded_ids))}); one narrate"
+                    " pass replays one provider's keys"
+                )
+                raise typer.Exit(code=2)
+            provider = UnreachableProvider(id=next(iter(recorded_ids)))
 
         try:
             world = world.narrate(provider, ledger=ledger)

@@ -24,6 +24,18 @@ if TYPE_CHECKING:  # pragma: no cover
 
 REFERENCE = re.compile(r"\{\{fact:(?P<id>[A-Z][A-Z0-9]*-[A-Z0-9-]+)\}\}")
 
+#: Anything *shaped* like a reference, however malformed its id. ``REFERENCE``
+#: alone is not enough for validation, and the gap was found live, not in
+#: review: Gemini, asked for ``{{fact:FACT-0001}}``, wrote ``{{fact:0001}}`` —
+#: which ``REFERENCE`` does not match (so it was never checked against the
+#: ledger) and whose digits ``BARE_NUMBER``'s trailing ``(?!\}\})`` lookahead
+#: excuses (that escape exists for digits inside *well-formed* references).
+#: Each pattern's escape hatch sat exactly over the other's blind spot, and the
+#: malformed reference sailed through to render as literal mustache in the
+#: document. Validation therefore checks everything reference-shaped; only
+#: ``REFERENCE`` itself is used for substitution.
+REFERENCE_SHAPED = re.compile(r"\{\{fact:(?P<id>[^{}]*)\}\}")
+
 #: A digit run outside a reference. Prose is not allowed to contain one — that is
 #: the arithmetic rule, enforced lexically.
 BARE_NUMBER = re.compile(r"(?<!\{)\b\d[\d,.]*\b(?!\}\})")
@@ -114,5 +126,17 @@ def substitute(text: str, facts: dict[str, CanonicalFact]) -> str:
 
 
 def unresolved(text: str, facts: dict[str, CanonicalFact]) -> list[str]:
-    """References in *text* that *facts* cannot resolve."""
-    return [fact_id for fact_id in referenced(text) if fact_id not in facts]
+    """Everything reference-shaped in *text* that *facts* cannot resolve.
+
+    Scans ``REFERENCE_SHAPED``, not ``REFERENCE``: a malformed id
+    (``{{fact:0001}}``) is exactly as unresolvable as a well-formed unknown one
+    (``{{fact:FACT-9999}}``), and it is the render-time substitution — which
+    only matches well-formed references — that makes catching it here the last
+    line of defence before literal mustache lands in a document.
+    """
+    seen: dict[str, None] = {}
+    for match in REFERENCE_SHAPED.finditer(text):
+        fact_id = match.group("id")
+        if fact_id not in facts:
+            seen.setdefault(fact_id, None)
+    return list(seen)

@@ -89,6 +89,32 @@ def test_a_world_replays_with_the_provider_unreachable(narrated: World) -> None:
     assert replays == len(narrated.ledger)
 
 
+def test_a_foreign_provider_corpus_replays_under_its_recorded_id() -> None:
+    """The first live harness-narrated corpus failed CLI replay on its first
+    section, because UnreachableProvider's id was a fixed string matching only
+    the deterministic fake — the id is a ledger-key component, so a corpus
+    narrated by anyone else missed every key. This is that failure, minimally:
+    a provider with a foreign id narrates, and replay must present the same id
+    the ledger recorded (`{e.model_id for e in ledger}`, as the CLI now does)
+    or serve nothing.
+    """
+
+    class _Foreign(DeterministicProvider):
+        id = "antigravity:gemini-2.5-flash"
+
+    narrated = fresh().narrate(_Foreign())
+
+    replayed = fresh().narrate(
+        UnreachableProvider(id=next(iter({e.model_id for e in narrated.ledger}))),
+        ledger=narrated.ledger,
+    )
+    assert prose_of(replayed) == prose_of(narrated)
+    assert replayed._narration[0] == 0, "a replay must not call the provider at all"
+
+    with pytest.raises(ProviderError):
+        fresh().narrate(UnreachableProvider(), ledger=narrated.ledger)
+
+
 def test_an_exported_corpus_replays_byte_for_byte(narrated: World, tmp_path) -> None:
     """The end-to-end promise: same seed plus ledger, no model, identical files.
 
@@ -250,6 +276,21 @@ def test_an_unresolvable_reference_is_left_visible() -> None:
     assert references.substitute("was {{fact:FACT-9999}}", {}) == "was [missing FACT-9999]"
 
 
+def test_a_malformed_reference_is_unresolvable_not_invisible() -> None:
+    """Found live, not in review: Gemini wrote `{{fact:0001}}` for FACT-0001,
+    which the well-formed REFERENCE pattern never matched (so it was never
+    checked against the ledger) and whose digits BARE_NUMBER's trailing
+    lookahead excused — each pattern's escape hatch sat over the other's blind
+    spot, and the mustache would have rendered literally into the document.
+    `unresolved` now scans everything reference-shaped."""
+    facts: dict = {}
+    assert references.unresolved("was {{fact:0001}}", facts) == ["0001"]
+    assert references.unresolved("was {{fact:}}", facts) == [""]
+    # A well-formed reference to a known fact is untouched by the wider scan.
+    known = {"FACT-0001": None}
+    assert references.unresolved("was {{fact:FACT-0001}}", known) == []  # type: ignore[arg-type]
+
+
 # ---------------------------------------------------------------------------
 # Generation proposes; the deterministic layer decides
 # ---------------------------------------------------------------------------
@@ -381,6 +422,45 @@ def test_an_invented_entity_is_rejected(narrated: World) -> None:
     )
     assert not verdict.accepted
     assert any(v.code == "unknown_entity" for v in verdict.violations)
+
+
+def test_a_possessive_of_a_known_entity_is_not_an_invented_one(narrated: World) -> None:
+    """Found by the first live harness narration: "Meridian Retail Group's
+    revenue" tripped the entity check because the possessive is longer than
+    the name, so the containment rule could not save it. Real prose is full
+    of possessives; the apostrophe is stripped before matching."""
+    facts = {f.id: f for f in narrated.facts}
+    fact = narrated.facts.first()
+    company = narrated.company.name
+    verdict = validate(
+        _request(allowed_fact_ids=[fact.id]),
+        GeneratedNarrative(
+            text=f"{company}'s position was {{{{fact:{fact.id}}}}}.",
+            claims=[GeneratedClaim(text="The position.", supporting_fact_ids=[fact.id])],
+        ),
+        facts,
+        entity_names=frozenset({company}),
+    )
+    assert not any(v.code == "unknown_entity" for v in verdict.violations), verdict.violations
+
+
+def test_a_truncated_reference_gets_feedback_naming_the_exact_id(narrated: World) -> None:
+    """The other live finding: a model that writes {{fact:0015}} for FACT-0015
+    burns every retry unless the rejection says what right looks like. When
+    exactly one allowed id ends with the fragment, the detail names it."""
+    facts = {f.id: f for f in narrated.facts}
+    fact = narrated.facts.first()
+    verdict = validate(
+        _request(allowed_fact_ids=[fact.id]),
+        GeneratedNarrative(
+            text=f"The position was {{{{fact:{fact.id.split('-')[-1]}}}}}.",
+            claims=[GeneratedClaim(text="The position.", supporting_fact_ids=[fact.id])],
+        ),
+        facts,
+    )
+    assert not verdict.accepted
+    detail = next(v.detail for v in verdict.violations if v.code == "unresolvable_reference")
+    assert f"{{{{fact:{fact.id}}}}}" in detail
 
 
 def test_a_claim_must_cite_something() -> None:
