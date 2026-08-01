@@ -234,7 +234,7 @@ worldloom pack texts <ENGINE>
 
 | Option | Purpose |
 | --- | --- |
-| `--json` | Emit the key → default-template table as JSON, for an agent authoring overrides. |
+| `--json` | Emit both key → default-template tables as JSON, for an agent authoring overrides. |
 
 ### `worldloom plan`
 

@@ -19,10 +19,99 @@ corpus rather than explained afterwards.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from ..ids import Minter
 from ..models import ArtifactIntent, EvaluationCase, EvaluationType
+from . import episode_text
 from .cases import CaseBuilder, answerable, fmt as _fmt, reachable_fact_ids
 from .regulatory import ReturnEpisode
+
+#: This taxonomy's surface text, keyed exactly as `evaluation.EVAL_TEXT` is —
+#: one pack-overridable entry per question and per authored answer, extracted
+#: verbatim from the f-strings this module always built. See that module's
+#: table comment for why reasoning strings and bare fact values (a fact's
+#: `text_value` read straight off the ledger, with no authored wrapper) are
+#: deliberately absent: neither is what a retriever is graded against in a
+#: way that re-voicing would change.
+EVAL_TEXT: dict[str, str] = {
+    "q.direct.cet1_capital":
+        "What was the bank's Common Equity Tier 1 capital for the quarter ended {period}?",
+    "a.direct.cet1_capital": "{value}",
+    "q.direct.minimum_ratio": "What minimum CET1 ratio does PSA 110 require?",
+    "a.direct.minimum_ratio": "{value}",
+    "q.direct.affected_facilities":
+        "How many loan facilities were carried at stale collateral values?",
+    "a.direct.affected_facilities": "{value}",
+    "q.authority.cet1_ratio": "What was the bank's CET1 ratio for the quarter ended {period}?",
+    "a.authority.cet1_ratio":
+        "{corrected} — the restated figure. The originally filed {filed} was"
+        " corrected by the restatement.",
+    "q.authority.current_lodgement":
+        "Which lodgement is the current statement of the bank's capital position for"
+        " the quarter ended {period}, and how can that be established?",
+    "a.authority.current_lodgement":
+        "The restatement — it restates the original return, which remains on the"
+        " record but no longer states the current figures.",
+    "q.authority.second_line_confirmation":
+        "Did the second line confirm the SME Secured collateral treatment before the"
+        " return was filed?",
+    "a.authority.second_line_confirmation":
+        "No. Prudential Risk challenged the treatment on the record before lodgement"
+        " and the challenge was still open when the CFO approved the filing. The"
+        " return itself is silent on the challenge.",
+    "q.temporal.reported_ratio_as_of":
+        "As of {date}, what CET1 ratio had the bank reported for the quarter ended"
+        " {period}?",
+    "a.temporal.reported_ratio_as_of":
+        "{value} — the figure as filed, which the later restatement proved wrong but"
+        " which was the reported position on that date.",
+    "q.temporal.challenge_vs_approval":
+        "Was the second-line challenge raised before or after the CFO approved the"
+        " return for lodgement?",
+    "a.temporal.challenge_vs_approval":
+        "Before — the challenge was logged on {challenge_date} and the CFO approved"
+        " the return on {approval_date}.",
+    "q.temporal.filed_vs_break":
+        "Was the return filed before or after the reconciliation break was detected?",
+    "a.temporal.filed_vs_break":
+        "Before — the return was lodged on {filed_date}, and the break was detected"
+        " on {break_date}.",
+    "q.cross.first_surfaced":
+        "Which routine process first surfaced the error in the quarterly capital"
+        " return?",
+    "a.cross.first_surfaced":
+        "The daily liquidity coverage calculation — its reconciliation of collateral"
+        " positions against the register flagged the break that led to the confirmed"
+        " cause.",
+    "q.causal.why_restated": "Why was the capital return for the quarter ended {period} restated?",
+    "a.causal.why_restated":
+        "{cause}. Risk-weighted assets were understated by {understatement}, the"
+        " corrected ratio fell by {delta}, and the error was material under PSA 110.",
+    "q.cross.summary_disclosure":
+        "Did the board risk committee summary disclose that the second-line challenge"
+        " predated the filing?",
+    "a.cross.summary_disclosure":
+        "No. The summary reports the restatement and the corrected position but"
+        " neither the challenge nor its sequence; the audit review records both.",
+    "q.numerical.bps_reduction":
+        "By how many basis points did the restatement reduce the reported CET1 ratio,"
+        " and did the ratio remain above the PSA 110 minimum?",
+    "a.numerical.bps_reduction": "{delta}; yes — {corrected} against a {minimum} minimum.",
+    "q.cross.meeting_had_challenge":
+        "Did the meeting that approved the return for lodgement have the second-line"
+        " challenge in front of it?",
+    "a.cross.meeting_had_challenge":
+        "Yes — the minutes table the challenge and its open status beside the"
+        " decision to lodge at the preparer's figure.",
+    "q.cross.meeting_attendance":
+        "Who attended the meeting at which the return was approved for lodgement?",
+    "a.cross.meeting_attendance":
+        "The Group Chief Financial Officer and the Regulatory Reporting Manager.",
+    "q.abstain.regulator_action":
+        "What action did the Prudential Standards Authority take in response to the"
+        " restatement?",
+}
 
 
 def evaluation_cases(
@@ -31,8 +120,15 @@ def evaluation_cases(
     episode: ReturnEpisode,
     intents: tuple[ArtifactIntent, ...],
     period: str,
+    text: Mapping[str, str] | None = None,
 ) -> tuple[EvaluationCase, ...]:
-    """Derive the evaluation set for one challenged-return episode."""
+    """Derive the evaluation set for one challenged-return episode.
+
+    ``text`` overrides entries of ``EVAL_TEXT`` — a pack re-voicing the
+    benchmark itself, the same seam ``evaluation.evaluation_cases`` exposes
+    for retail (see `generators/episode_text`).
+    """
+    t = episode_text.merged(EVAL_TEXT, text, field="evaluation_text")
     k = episode.keys
     by_id = {f.id: f for f in episode.facts}
 
@@ -70,23 +166,26 @@ def evaluation_cases(
     # against: if a keyword baseline cannot pass these, a low score on the
     # authority families would prove nothing about hardness.
     case(
-        f"What was the bank's Common Equity Tier 1 capital for the quarter ended {period}?",
-        EvaluationType.DIRECT_LOOKUP, _fmt(by_id[k["fact_cet1_capital"]]),
+        t["q.direct.cet1_capital"].format(period=period),
+        EvaluationType.DIRECT_LOOKUP,
+        t["a.direct.cet1_capital"].format(value=_fmt(by_id[k["fact_cet1_capital"]])),
         [k["fact_cet1_capital"]], difficulty="easy",
         reasoning="Single lookup; the figure is unchanged by the restatement, so every "
                   "source agrees.",
         sources=[filed],
     )
     case(
-        "What minimum CET1 ratio does PSA 110 require?",
-        EvaluationType.DIRECT_LOOKUP, _fmt(minimum), [k["fact_minimum"]],
+        t["q.direct.minimum_ratio"],
+        EvaluationType.DIRECT_LOOKUP, t["a.direct.minimum_ratio"].format(value=_fmt(minimum)),
+        [k["fact_minimum"]],
         difficulty="easy",
         reasoning="Standing figure, stated wherever the position is.",
         sources=[filed],
     )
     case(
-        "How many loan facilities were carried at stale collateral values?",
-        EvaluationType.DIRECT_LOOKUP, _fmt(by_id[k["fact_affected"]]),
+        t["q.direct.affected_facilities"],
+        EvaluationType.DIRECT_LOOKUP,
+        t["a.direct.affected_facilities"].format(value=_fmt(by_id[k["fact_affected"]])),
         [k["fact_affected"]], difficulty="easy",
         reasoning="Stated in the incident record and the RCA.",
         sources=[rca, incident],
@@ -94,10 +193,11 @@ def evaluation_cases(
 
     # -- the contested figure: rank ties, only the relationship resolves ------
     case(
-        f"What was the bank's CET1 ratio for the quarter ended {period}?",
+        t["q.authority.cet1_ratio"].format(period=period),
         EvaluationType.AUTHORITY_RESOLUTION,
-        f"{_fmt(ratio_corrected)} — the restated figure. The originally filed "
-        f"{_fmt(ratio_filed)} was corrected by the restatement.",
+        t["a.authority.cet1_ratio"].format(
+            corrected=_fmt(ratio_corrected), filed=_fmt(ratio_filed)
+        ),
         # The corrected fact only. Listing the filed figure beside it — the
         # retail pattern for contested pairs — would let a retriever that
         # surfaced the wrong lodgement claim it carried "an" expected fact;
@@ -110,11 +210,9 @@ def evaluation_cases(
         sources=[restatement], distractors=[filed],
     )
     case(
-        "Which lodgement is the current statement of the bank's capital position for "
-        f"the quarter ended {period}, and how can that be established?",
+        t["q.authority.current_lodgement"].format(period=period),
         EvaluationType.AUTHORITY_RESOLUTION,
-        "The restatement — it restates the original return, which remains on the "
-        "record but no longer states the current figures.",
+        t["a.authority.current_lodgement"],
         [k["fact_status_restated"], k["fact_ratio_corrected"]],
         reasoning="Nothing distinguishes the two lodgements by authority or type; the "
                   "restates relationship is the only discriminator.",
@@ -123,12 +221,9 @@ def evaluation_cases(
 
     # -- contested standing: the official document omits the answer -----------
     case(
-        "Did the second line confirm the SME Secured collateral treatment before the "
-        "return was filed?",
+        t["q.authority.second_line_confirmation"],
         EvaluationType.AUTHORITY_RESOLUTION,
-        "No. Prudential Risk challenged the treatment on the record before lodgement "
-        "and the challenge was still open when the CFO approved the filing. The "
-        "return itself is silent on the challenge.",
+        t["a.authority.second_line_confirmation"],
         [k["fact_challenge"], k["fact_challenge_open"], k["fact_approval"]],
         reasoning="Keyword retrieval surfaces the filing — the highest-authority, "
                   "densest document — which omits the answer by labelled omission. "
@@ -140,12 +235,13 @@ def evaluation_cases(
     # -- the temporal inverse, generated with the contested figure always -----
     between = episode.filed_at + (episode.restated_at - episode.filed_at) / 2
     case(
-        f"As of {between.date().isoformat()}, what CET1 ratio had the bank reported "
-        f"for the quarter ended {period}?",
+        t["q.temporal.reported_ratio_as_of"].format(
+            date=between.date().isoformat(), period=period
+        ),
         EvaluationType.TEMPORAL_STATE,
-        f"{_fmt(by_id[k['fact_ratio_as_filed']])} — the figure as filed, which the "
-        "later restatement proved wrong but which was the reported position on that "
-        "date.",
+        t["a.temporal.reported_ratio_as_of"].format(
+            value=_fmt(by_id[k["fact_ratio_as_filed"]])
+        ),
         [k["fact_ratio_as_filed"]], cutoff=between,
         reasoning="The deliberate pair to the contested-figure case: a retriever "
                   "biased toward the restatement answers that one and fails this; "
@@ -158,11 +254,12 @@ def evaluation_cases(
     challenge = by_id[k["fact_challenge"]]
     approval = by_id[k["fact_approval"]]
     case(
-        "Was the second-line challenge raised before or after the CFO approved the "
-        "return for lodgement?",
+        t["q.temporal.challenge_vs_approval"],
         EvaluationType.TEMPORAL_STATE,
-        f"Before — the challenge was logged on {challenge.valid_from.date().isoformat()} "
-        f"and the CFO approved the return on {approval.valid_from.date().isoformat()}.",
+        t["a.temporal.challenge_vs_approval"].format(
+            challenge_date=challenge.valid_from.date().isoformat(),
+            approval_date=approval.valid_from.date().isoformat(),
+        ),
         [k["fact_challenge"], k["fact_approval"]],
         reasoning="The dates live in different documents; neither mentions the other's "
                   "event, so the order is recoverable only by joining timestamps.",
@@ -170,10 +267,12 @@ def evaluation_cases(
     )
     breach = by_id[k["fact_break"]]
     case(
-        "Was the return filed before or after the reconciliation break was detected?",
+        t["q.temporal.filed_vs_break"],
         EvaluationType.TEMPORAL_STATE,
-        f"Before — the return was lodged on {episode.filed_at.date().isoformat()}, and "
-        f"the break was detected on {breach.valid_from.date().isoformat()}.",
+        t["a.temporal.filed_vs_break"].format(
+            filed_date=episode.filed_at.date().isoformat(),
+            break_date=breach.valid_from.date().isoformat(),
+        ),
         [k["fact_filed_at"], k["fact_break"]],
         reasoning="The filing metadata and the incident record never reference each "
                   "other; the order is a cross-document join on timestamps.",
@@ -182,12 +281,9 @@ def evaluation_cases(
 
     # -- the cadence join: no document contains both ends ----------------------
     case(
-        "Which routine process first surfaced the error in the quarterly capital "
-        "return?",
+        t["q.cross.first_surfaced"],
         EvaluationType.CROSS_ARTIFACT,
-        "The daily liquidity coverage calculation — its reconciliation of collateral "
-        "positions against the register flagged the break that led to the confirmed "
-        "cause.",
+        t["a.cross.first_surfaced"],
         [k["fact_break"], k["fact_cause"]],
         reasoning="The incident record never says 'quarterly return' and the "
                   "restatement never says 'liquidity'; the bridge is the shared "
@@ -198,11 +294,13 @@ def evaluation_cases(
 
     # -- the causal chain, with the wrong hypothesis as the dense answer ------
     case(
-        f"Why was the capital return for the quarter ended {period} restated?",
+        t["q.causal.why_restated"].format(period=period),
         EvaluationType.CAUSAL_MULTI_HOP,
-        f"{cause.text_value}. Risk-weighted assets were understated by "
-        f"{_fmt(by_id[k['fact_understatement']])}, the corrected ratio fell by "
-        f"{_fmt(delta)}, and the error was material under PSA 110.",
+        t["a.causal.why_restated"].format(
+            cause=cause.text_value,
+            understatement=_fmt(by_id[k["fact_understatement"]]),
+            delta=_fmt(delta),
+        ),
         [k["fact_break"], k["fact_cause"], k["fact_understatement"],
          k["fact_materiality"], k["fact_restatement_reason"]],
         reasoning="The chain runs break → incident → ruled-out FX hypothesis → stale "
@@ -214,22 +312,20 @@ def evaluation_cases(
 
     # -- information asymmetry: absence proved against presence ---------------
     case(
-        "Did the board risk committee summary disclose that the second-line challenge "
-        "predated the filing?",
+        t["q.cross.summary_disclosure"],
         EvaluationType.CROSS_ARTIFACT,
-        "No. The summary reports the restatement and the corrected position but "
-        "neither the challenge nor its sequence; the audit review records both.",
+        t["a.cross.summary_disclosure"],
         [k["fact_challenge"], k["fact_approval"]],
         reasoning="Requires establishing absence in one artifact against presence in "
                   "another — the labelled omission made falsifiable.",
         sources=[summary, audit],
     )
     case(
-        "By how many basis points did the restatement reduce the reported CET1 ratio, "
-        "and did the ratio remain above the PSA 110 minimum?",
+        t["q.numerical.bps_reduction"],
         EvaluationType.NUMERICAL_COMPARISON,
-        f"{_fmt(delta)}; yes — {_fmt(ratio_corrected)} against a {_fmt(minimum)} "
-        "minimum.",
+        t["a.numerical.bps_reduction"].format(
+            delta=_fmt(delta), corrected=_fmt(ratio_corrected), minimum=_fmt(minimum)
+        ),
         [k["fact_delta"], k["fact_ratio_corrected"], k["fact_minimum"]],
         difficulty="medium",
         reasoning="Both figures are stated as quantities, so the comparison is read, "
@@ -246,11 +342,9 @@ def evaluation_cases(
     minutes = next((i.id for i in intents if i.artifact_type == "meeting_minutes"), None)
     if minutes:
         case(
-            "Did the meeting that approved the return for lodgement have the "
-            "second-line challenge in front of it?",
+            t["q.cross.meeting_had_challenge"],
             EvaluationType.CROSS_ARTIFACT,
-            "Yes — the minutes table the challenge and its open status beside the "
-            "decision to lodge at the preparer's figure.",
+            t["a.cross.meeting_had_challenge"],
             [k["fact_challenge"], k["fact_challenge_open"], k["fact_approval"]],
             reasoning="The filing is silent by labelled omission and the challenge "
                       "memo predates the meeting; only the minutes hold both the "
@@ -258,11 +352,9 @@ def evaluation_cases(
             sources=[minutes], distractors=[filed],
         )
         case(
-            "Who attended the meeting at which the return was approved for "
-            "lodgement?",
+            t["q.cross.meeting_attendance"],
             EvaluationType.CROSS_ARTIFACT,
-            "The Group Chief Financial Officer and the Regulatory Reporting "
-            "Manager.",
+            t["a.cross.meeting_attendance"],
             [k["fact_approval"]], difficulty="medium",
             reasoning="Attendance is recorded only in the minutes.",
             sources=[minutes],
@@ -270,8 +362,7 @@ def evaluation_cases(
 
     # -- what the corpus deliberately cannot answer ---------------------------
     builder.abstain(
-        "What action did the Prudential Standards Authority take in response to "
-        "the restatement?",
+        t["q.abstain.regulator_action"],
         "The corpus records the bank's notification and deliberately nothing "
         "after it — the regulator's side is out of world, so this stays "
         "unanswerable at every corpus size.",

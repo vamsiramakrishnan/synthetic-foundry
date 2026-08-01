@@ -115,6 +115,10 @@ insurer on the retail engine, a mutual bank on the banking one). Then:
   use any subset of its default's `{placeholders}` and nothing else, and it
   re-voices the sentence, never the underlying causality — what fails, when,
   what supersedes what, what gets filed stays the engine's.
+  `evaluation_text` re-voices the benchmark the same way — every question
+  and authored answer, keyed in the same `worldloom pack texts` output — so
+  a re-voiced episode's own evaluation set stops asking about "merchandise
+  category" in a world that no longer has one.
 - **Re-voice in consistent pairs, not isolated fields.** A pack's `lore`,
   `system_brands`, `voices`, and `episode_text` all have to agree with each
   other and with the `company_name`/`industry` you set at the top — an

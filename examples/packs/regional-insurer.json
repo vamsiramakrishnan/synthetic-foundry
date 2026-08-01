@@ -35,6 +35,14 @@
     "fact.cause": "Stale legacy-to-new peril-code mapping in the Policy and Claims Register",
     "fact.classification": "control_failure: the peril-code mapping has no registered owner and no required reviewer"
   },
+  "evaluation_text": {
+    "q.numerical.worst_category": "Which class of business lost the most gross profit against plan in {period}?",
+    "a.numerical.worst_category": "{name}, at {value}.",
+    "q.numerical.best_category": "Which class of business held up best against plan on gross profit in {period}?",
+    "a.numerical.best_category": "{name}, at {value}.",
+    "q.direct.unit_revenue": "What gross written premium did {name} report for {period}?",
+    "a.direct.unit_revenue": "{value}"
+  },
   "units": [
     {
       "key": "personal",

@@ -63,6 +63,14 @@ class Domain:
     """The engine's surface-text templates as ``(key, default)`` pairs — every
     event sentence and prose fact the episode states. A pack overrides by key
     through ``episode_text``; slots are checked against the default's."""
+    evaluation_text: tuple[tuple[str, str], ...] = ()
+    """The engine's evaluation-taxonomy templates as ``(key, default)``
+    pairs — every question and authored answer the benchmark asks, the same
+    seam as ``episode_text`` but over the evaluation set rather than the
+    episode: a pack that re-voices the episode's narration but not its own
+    benchmark still asks about "merchandise category" in an insurer's world.
+    A pack overrides by key through ``evaluation_text``; slots are checked
+    against the default's, exactly as ``episode_text``'s are."""
 
 
 _DOMAINS: dict[str, Domain] = {}

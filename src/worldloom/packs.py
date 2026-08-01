@@ -148,6 +148,14 @@ class Pack(PackModel):
     episode's own narration — the event sentences and prose facts — over
     causality it cannot touch. An override may use any subset of its
     default's placeholders and nothing else."""
+    evaluation_text: dict[str, str] = Field(default_factory=dict)
+    """Overrides of the engine's evaluation-taxonomy templates, keyed by the
+    keys ``worldloom pack texts`` lists. This is where a pack re-voices the
+    benchmark itself — the question and the authored answer, over the same
+    boundary ``episode_text`` draws for the episode: the fact each case is
+    graded against is the engine's, only the phrasing is the pack's. An
+    override may use any subset of its default's placeholders and nothing
+    else."""
 
     @model_validator(mode="after")
     def _units_sum_to_the_group(self) -> Pack:
@@ -265,6 +273,9 @@ def lint(pack: Pack) -> list[str]:
     from .generators.episode_text import check_overrides
 
     findings.extend(check_overrides(dict(domain.episode_text), pack.episode_text))
+    findings.extend(check_overrides(
+        dict(domain.evaluation_text), pack.evaluation_text, field="evaluation_text"
+    ))
 
     consulted: dict[str, str] = dict(domain.consulted_targets)
     for index, commitment in enumerate(pack.lore):

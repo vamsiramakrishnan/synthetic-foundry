@@ -1370,15 +1370,18 @@ def pack_texts(
     engine: str = typer.Argument(..., help="Engine name: retail or banking."),
     as_json: bool = typer.Option(
         False, "--json",
-        help="Emit the key → default-template table as JSON, for an agent authoring overrides.",
+        help="Emit both key → default-template tables as JSON, for an agent"
+             " authoring overrides.",
     ),
 ) -> None:
     """List the engine's surface-text templates a pack may override.
 
-    Every event sentence and prose fact the episode states, keyed. An
-    `episode_text` override re-voices the narration; the causality underneath
-    — what happens, when, what supersedes what — stays the engine's. An
-    override may use any subset of its default's {placeholders} and no others.
+    Two tables. `episode_text` covers every event sentence and prose fact the
+    episode states; `evaluation_text` covers every question and authored
+    answer the benchmark asks. An override in either re-voices the surface —
+    the causality underneath (episode_text) or the fact graded against
+    (evaluation_text) stays the engine's. An override may use any subset of
+    its default's {placeholders} and no others.
     """
     import json as json_module
 
@@ -1389,9 +1392,19 @@ def pack_texts(
         err.print(f"[red]error:[/red] no engine named {engine!r}; registered: {', '.join(domains.names())}")
         raise typer.Exit(code=2)
     if as_json:
-        typer.echo(json_module.dumps(dict(domain.episode_text), indent=2))
+        typer.echo(json_module.dumps(
+            {
+                "episode_text": dict(domain.episode_text),
+                "evaluation_text": dict(domain.evaluation_text),
+            },
+            indent=2,
+        ))
         return
+    console.print("[underline]episode_text[/underline]")
     for key, default in domain.episode_text:
+        console.print(f"[bold]{key}[/bold]\n  [dim]{escape(default)}[/dim]")
+    console.print("[underline]evaluation_text[/underline]")
+    for key, default in domain.evaluation_text:
         console.print(f"[bold]{key}[/bold]\n  [dim]{escape(default)}[/dim]")
 
 

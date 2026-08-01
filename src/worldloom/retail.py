@@ -283,6 +283,7 @@ class RetailWorld:
 # flattening them into the shared interface.
 from .domains import Domain, register_domain
 
+from .generators.evaluation import EVAL_TEXT as _RETAIL_EVAL_TEXT
 from .generators.operations import TEXT as _RETAIL_TEXT
 from .generators.organisation import _ROLES as _RETAIL_ROLES
 
@@ -301,6 +302,7 @@ register_domain(Domain(
     role_keys=tuple(row[0] for row in _RETAIL_ROLES),
     unit_role_suffixes=("_md", "_bp", "_buyer"),
     episode_text=tuple(_RETAIL_TEXT.items()),
+    evaluation_text=tuple(_RETAIL_EVAL_TEXT.items()),
 ))
 
 

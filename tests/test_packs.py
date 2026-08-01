@@ -145,6 +145,28 @@ def test_episode_text_overrides_survive_the_recipe(insurer) -> None:
     assert "peril-code mapping" in cause.text_value
 
 
+def test_a_pack_revoices_its_evaluation_set(insurer) -> None:
+    """The costume problem, one layer further: an insurer's benchmark should
+    not still ask about "merchandise category" just because the episode
+    itself was re-voiced. `evaluation_text` is the seam that fixes it."""
+    _, world = insurer
+    questions = [case.question for case in world.evaluations]
+    assert not any("merchandise category" in q for q in questions), (
+        "the pack overrides this pair; the stock retail phrasing must not leak through"
+    )
+    assert any("class of business" in q for q in questions)
+    assert any("gross written premium" in q for q in questions)
+
+
+def test_evaluation_text_overrides_survive_the_recipe(insurer) -> None:
+    """Same discipline as `episode_text`: a re-voiced benchmark rebuilds its
+    own voice with no pack file on hand."""
+    _, world = insurer
+    again = rebuild(world.recipe)
+    questions = [case.question for case in again.evaluations]
+    assert any("class of business" in q for q in questions)
+
+
 def test_the_lint_names_unknown_text_keys_and_slots() -> None:
     pack_dict = json.loads(open(INSURER).read())
     pack_dict["episode_text"]["event.no_such_moment"] = "words"
@@ -152,6 +174,20 @@ def test_the_lint_names_unknown_text_keys_and_slots() -> None:
     findings = packs.lint(packs.load(pack_dict))
     assert any("event.no_such_moment" in f for f in findings)
     assert any("'hour'" in f for f in findings)
+
+
+def test_the_lint_names_unknown_evaluation_text_keys_and_slots() -> None:
+    """The same contract as `episode_text`'s lint, over the evaluation
+    surface: an unknown key and an invented placeholder are both findings,
+    and each names `evaluation_text` rather than `episode_text` — the two
+    tables share the checking machinery but must not share the message."""
+    pack_dict = json.loads(open(INSURER).read())
+    pack_dict["evaluation_text"]["q.no_such_question"] = "words"
+    pack_dict["evaluation_text"]["q.numerical.worst_category"] = "What about {widget}?"
+    findings = packs.lint(packs.load(pack_dict))
+    assert any("evaluation_text['q.no_such_question']" in f for f in findings)
+    assert any("evaluation_text['q.numerical.worst_category']" in f and "'widget'" in f
+               for f in findings)
 
 
 def test_the_lint_names_unknown_slots_and_roles() -> None:

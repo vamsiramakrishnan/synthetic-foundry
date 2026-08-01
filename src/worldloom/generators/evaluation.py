@@ -25,13 +25,170 @@ really testing authority resolution.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
 from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact, EvaluationCase, EvaluationType
+from . import episode_text
 from .cases import CaseBuilder, adverse as _adverse, answerable, fmt as _fmt
 from .operations import CloseEpisode
+
+#: The retail taxonomy's surface text: every question and expected answer it
+#: asks, keyed so a pack can re-voice the benchmark the way `operations.TEXT`
+#: lets it re-voice the episode (see `generators/episode_text`) — the fix for
+#: a pack-built insurer whose evaluation set still asked about "merchandise
+#: category" and "stores" no matter how thoroughly the episode itself had
+#: been re-voiced. Defaults are the strings this taxonomy always used,
+#: extracted verbatim, so stock evaluation sets are byte-identical whether or
+#: not this table exists.
+#:
+#: Reasoning strings are deliberately not here: they exist for a human
+#: reading the corpus afterwards, never for the retriever under test, so
+#: re-voicing them would not change what is measured — only entertain the
+#: reader. What each key below covers is exactly what the evaluator sees:
+#: the question and the answer it is graded against. Where an original answer
+#: was a bare fact value with no authored prose around it (`_fmt(fact)`,
+#: `hypothesis.text_value`, a computed date) there is deliberately no key —
+#: the same "machine values stay out of the template surface" rule
+#: `episode_text` states, extended to facts read straight off the ledger.
+EVAL_TEXT: dict[str, str] = {
+    # -- direct lookup ------------------------------------------------------
+    "q.direct.group_revenue": "What was total revenue for {period}?",
+    "a.direct.group_revenue": "{value}",
+    "q.direct.group_gross_profit": "What was group gross profit for {period}?",
+    "a.direct.group_gross_profit": "{value}",
+    "q.direct.group_gross_margin": "What was the group gross margin for {period}?",
+    "a.direct.group_gross_margin": "{value}",
+    "q.direct.unit_revenue": "What revenue did {name} report for {period}?",
+    "a.direct.unit_revenue": "{value}",
+    "q.direct.category_revenue":
+        "What revenue did the {category} category in {unit} report for {period}?",
+    "a.direct.category_revenue": "{value}",
+    # -- numerical comparison -------------------------------------------------
+    "q.numerical.revenue_vs_budget":
+        "By how much did revenue miss budget in {period}, in absolute terms and as"
+        " a percentage?",
+    "a.numerical.revenue_vs_budget": "{adverse}, or {pct:.2f}%.",
+    "q.numerical.worst_unit_variance":
+        "Which business unit carried the {superlative} adverse {label} variance"
+        " in {period}?",
+    "a.numerical.worst_unit_variance": "{name}, at {value}.",
+    "q.numerical.worst_category":
+        "Which merchandise category lost the most gross profit against plan in {period}?",
+    "a.numerical.worst_category": "{name}, at {value}.",
+    "q.numerical.best_category":
+        "Which merchandise category held up best against plan on gross profit in {period}?",
+    "a.numerical.best_category": "{name}, at {value}.",
+    "q.numerical.thinnest_margin_category":
+        "Which category traded on the thinnest gross margin in {period}?",
+    "a.numerical.thinnest_margin_category": "{name}, at {value}.",
+    "q.numerical.category_reconciliation":
+        "Do the category revenues for {unit} sum to the divisional total in {period}?",
+    "a.numerical.category_reconciliation": "Yes — the categories sum exactly to the division.",
+    "q.numerical.unit_group_reconciliation":
+        "Does gross profit variance reconcile between the units and the group for {period}?",
+    "a.numerical.unit_group_reconciliation": "Yes — the unit variances sum to the group variance.",
+    # -- incident: causal chains ----------------------------------------------
+    "q.incident.why_delayed": "Why was the {period} close delayed?",
+    "a.incident.why_delayed":
+        "{cause}, which stopped valuation and pushed the close by {days} business day(s).",
+    "q.incident.undetected":
+        "What allowed the valuation failure to reach production undetected?",
+    "a.incident.undetected":
+        "The mapping table has no registered owner and no required reviewer, so no"
+        " control would have caught it.",
+    "q.incident.recurrence":
+        "Has this failure happened before, and did the earlier response prevent it?",
+    "a.incident.recurrence":
+        "Yes — a comparable valuation failure was traced to the same mapping table, and"
+        " the response restored service without assigning ownership.",
+    # -- incident: temporal state ----------------------------------------------
+    "q.incident.hypothesis_at_time":
+        "At the time triage first recorded a cause, what was believed to be the cause?",
+    "q.incident.expected_on_time":
+        "Before the incident was closed, was the close still expected to meet its"
+        " committed date?",
+    "a.incident.expected_on_time": "No — the close was recorded as delayed at that point.",
+    "q.incident.status_at_finalised": "What was the close status once the period was finalised?",
+    # -- incident: authority ---------------------------------------------------
+    "q.authority.confirmed_cause": "What is the confirmed root cause of the valuation failure?",
+    "q.authority.stale_record":
+        "Which record still carries the initial hypothesis rather than the confirmed cause?",
+    "a.authority.stale_record":
+        "The triage status page, which was never updated after the hypothesis was ruled out.",
+    "q.authority.close_status_source":
+        "Which source was authoritative for the close status at the end of the period?",
+    "a.authority.close_status_source":
+        "The finance system of record, reporting the close as {status}.",
+    # -- incident: citation and cross-artifact ----------------------------------
+    "q.citation.mapping_owner": "Who owns the product hierarchy mapping table?",
+    "a.citation.mapping_owner": "Nobody — the owner is unassigned.",
+    "q.citation.evidence_ruled_out":
+        "What evidence ruled out the initial explanation, and where is it recorded?",
+    "q.citation.affected_records":
+        "How many records were affected, and which document states it?",
+    "a.citation.affected_records": "{value}",
+    "q.cross.remediation_choice":
+        "Which remediation addresses the underlying control failure rather than only"
+        " detection?",
+    "a.cross.remediation_choice":
+        "The ownership assignment. The validation ticket addresses detection only.",
+    "q.cross.pl_impact": "What was the P&L impact of the incident on the {period} result?",
+    "a.cross.pl_impact":
+        "Zero — valuation completed before the ledger closed. The impact was on the"
+        " calendar only.",
+    # -- across episodes ---------------------------------------------------------
+    "q.across.current_calendar":
+        "Which close calendar states the committed date currently in force?",
+    "a.across.current_calendar": "The calendar published for {period}, committing to {date}.",
+    "q.across.recurrence":
+        "When did a comparable valuation failure last occur, and did the response"
+        " prevent it recurring?",
+    "a.across.recurrence":
+        "In {prior_period}. It did not — the same mapping table failed again in"
+        " {period}, and ownership is still unassigned.",
+    "q.across.incident_count":
+        "How many valuation incidents has the group opened up to and including {period}?",
+    "a.across.incident_count": "{count}.",
+    "q.across.prior_period_revenue": "What was total revenue in {period}?",
+    "a.across.prior_period_revenue": "{value}",
+    # -- abstentions ---------------------------------------------------------
+    "q.abstain.previous_close_cause":
+        "What was the root cause of the previous period's close delay?",
+    "q.abstain.ceo_remuneration":
+        "What is the Group Chief Executive Officer's total remuneration?",
+    "q.abstain.supplier_shortfall":
+        "Which supplier was responsible for the shortfall in fresh produce?",
+    "q.abstain.nps": "What was the group's net promoter score this period?",
+    "q.abstain.staff_costs": "How much did the group spend on staff costs this period?",
+    "q.abstain.market_share": "What is the group's market share against its nearest competitor?",
+    "q.abstain.next_audit": "When is the next scheduled audit of the mapping table?",
+    # -- history ---------------------------------------------------------------
+    "q.history.unit_leader_as_of": "Who led {unit} as of {period}?",
+    "q.history.succession": "Who replaced {person} when they left the company?",
+    "q.history.milestone_provenance":
+        "According to the corpus's own history, when did this happen: {assertion}?",
+    "q.history.signed_earlier": "Who signed the {doc_type} for {period}?",
+    "q.history.signed_current": "Who signed the {doc_type} for {period}?",
+    "q.abstain.cmo":
+        "Who is the company's Chief Marketing Officer, and when did they join?",
+    "q.abstain.close_calendar_1995": "Who signed the close calendar in 1995?",
+    # -- communications ----------------------------------------------------------
+    "q.comms.meeting_attendance_cause":
+        "Who attended the meeting that moved the close, and what did the minutes"
+        " record as the cause?",
+    "a.comms.meeting_attendance_cause":
+        "The Group Financial Controller and the Group Chief Financial Officer; the"
+        " minutes record: {cause}.",
+    "q.comms.cfo_notified":
+        "When was the Group CFO first told the close was at risk, and through what"
+        " channel?",
+    "a.comms.cfo_notified":
+        "By email, within the hour of the close being recorded as delayed on"
+        " {date} — before any formal report existed.",
+}
 
 
 @dataclass(frozen=True)
@@ -62,11 +219,17 @@ class _Taxonomy:
         period: str,
         history: tuple[CanonicalFact, ...] = (),
         prior_intents: tuple[ArtifactIntent, ...] = (),
+        text: Mapping[str, str] = EVAL_TEXT,
     ) -> None:
         self.minter = minter
         self.episode = episode
         self.subjects = subjects
         self.period = period
+        # Already merged with any pack override by the caller — see
+        # `evaluation_cases`. Stored as `self.text` rather than merged again
+        # here, so the lint-time contract (`episode_text.merged` raises once,
+        # naming the bad key) is enforced exactly once per build.
+        self.text = text
         # The builder owns minting; `self.cases` is the same list, so the
         # family methods and the final gate read one accumulator.
         self._build = CaseBuilder(minter)
@@ -118,6 +281,11 @@ class _Taxonomy:
 
     def abstain(self, question: str, reasoning: str) -> None:
         self._build.abstain(question, reasoning)
+
+    def t(self, key: str, **slots: object) -> str:
+        """Render one `EVAL_TEXT` entry — the question or answer surface a
+        pack re-voices, filled with whatever this case computed."""
+        return self.text[key].format(**slots)
 
     def get(self, kind: str, subject: str) -> CanonicalFact | None:
         return self.by_kind.get((kind, subject))
@@ -172,16 +340,18 @@ class _Taxonomy:
     def direct_lookup(self) -> None:
         """One fact, one document. The floor — a baseline should pass these."""
         company = self.subjects.company_id
-        for kind, phrasing in (
-            ("financial.revenue.actual", "What was total revenue for {period}?"),
-            ("financial.gross_profit.actual", "What was group gross profit for {period}?"),
-            ("financial.gross_margin_pct.actual", "What was the group gross margin for {period}?"),
+        for kind, qkey, akey in (
+            ("financial.revenue.actual", "q.direct.group_revenue", "a.direct.group_revenue"),
+            ("financial.gross_profit.actual",
+             "q.direct.group_gross_profit", "a.direct.group_gross_profit"),
+            ("financial.gross_margin_pct.actual",
+             "q.direct.group_gross_margin", "a.direct.group_gross_margin"),
         ):
             fact = self.get(kind, company)
             if fact:
                 self.case(
-                    phrasing.format(period=self.period), EvaluationType.DIRECT_LOOKUP,
-                    _fmt(fact), [fact.id], difficulty="easy",
+                    self.t(qkey, period=self.period), EvaluationType.DIRECT_LOOKUP,
+                    self.t(akey, value=_fmt(fact)), [fact.id], difficulty="easy",
                     reasoning="Single lookup against the system of record.",
                     sources=[self.artifact.get("finance_workbook")],
                 )
@@ -190,8 +360,10 @@ class _Taxonomy:
             fact = self.get("financial.revenue.actual", unit_id)
             if fact:
                 self.case(
-                    f"What revenue did {self.subjects.name(unit_id)} report for {self.period}?",
-                    EvaluationType.DIRECT_LOOKUP, _fmt(fact), [fact.id], difficulty="easy",
+                    self.t("q.direct.unit_revenue", name=self.subjects.name(unit_id),
+                           period=self.period),
+                    EvaluationType.DIRECT_LOOKUP,
+                    self.t("a.direct.unit_revenue", value=_fmt(fact)), [fact.id], difficulty="easy",
                     reasoning="Divisional lookup; the group figure is the tempting wrong answer.",
                     sources=[self.artifact.get("finance_workbook")],
                 )
@@ -204,9 +376,11 @@ class _Taxonomy:
             if len(ranked) >= 2:
                 biggest = ranked[-1]
                 self.case(
-                    f"What revenue did the {self.subjects.name(biggest.subject)} category in "
-                    f"{self.subjects.name(unit_id)} report for {self.period}?",
-                    EvaluationType.DIRECT_LOOKUP, _fmt(biggest), [biggest.id],
+                    self.t("q.direct.category_revenue",
+                           category=self.subjects.name(biggest.subject),
+                           unit=self.subjects.name(unit_id), period=self.period),
+                    EvaluationType.DIRECT_LOOKUP,
+                    self.t("a.direct.category_revenue", value=_fmt(biggest)), [biggest.id],
                     reasoning="Requires reading below divisional level.",
                     sources=[self.artifact.get("finance_workbook")],
                 )
@@ -222,10 +396,9 @@ class _Taxonomy:
         if revenue and budget and variance and budget.value.amount:
             pct = abs(variance.value.amount / budget.value.amount * 100)
             self.case(
-                f"By how much did revenue miss budget in {self.period}, in absolute terms "
-                "and as a percentage?",
+                self.t("q.numerical.revenue_vs_budget", period=self.period),
                 EvaluationType.NUMERICAL_COMPARISON,
-                f"{_adverse(variance)}, or {pct:.2f}%.",
+                self.t("a.numerical.revenue_vs_budget", adverse=_adverse(variance), pct=pct),
                 [revenue.id, budget.id, variance.id], difficulty="easy",
                 reasoning="Actual, budget, and the derived percentage must agree.",
                 sources=[self.artifact.get("finance_workbook")],
@@ -239,10 +412,11 @@ class _Taxonomy:
             if len(ranked) >= 2:
                 worst = ranked[0]
                 self.case(
-                    f"Which business unit carried the {superlative} adverse {label} "
-                    f"variance in {self.period}?",
+                    self.t("q.numerical.worst_unit_variance", superlative=superlative,
+                           label=label, period=self.period),
                     EvaluationType.NUMERICAL_COMPARISON,
-                    f"{self.subjects.name(worst.subject)}, at {_adverse(worst)}.",
+                    self.t("a.numerical.worst_unit_variance",
+                           name=self.subjects.name(worst.subject), value=_adverse(worst)),
                     [f.id for f in ranked],
                     reasoning="Requires comparing every unit rather than reading one.",
                     sources=[self.artifact.get("finance_workbook")],
@@ -255,18 +429,20 @@ class _Taxonomy:
         if len(ranked) >= 3:
             worst = ranked[0]
             self.case(
-                f"Which merchandise category lost the most gross profit against plan in {self.period}?",
+                self.t("q.numerical.worst_category", period=self.period),
                 EvaluationType.NUMERICAL_COMPARISON,
-                f"{self.subjects.name(worst.subject)}, at {_adverse(worst)}.",
+                self.t("a.numerical.worst_category",
+                       name=self.subjects.name(worst.subject), value=_adverse(worst)),
                 [f.id for f in ranked[:5]], difficulty="hard",
                 reasoning="Thirty-plus categories must be compared; no single page ranks them.",
                 sources=[self.artifact.get("finance_workbook")],
             )
             best = ranked[-1]
             self.case(
-                f"Which merchandise category held up best against plan on gross profit in {self.period}?",
+                self.t("q.numerical.best_category", period=self.period),
                 EvaluationType.NUMERICAL_COMPARISON,
-                f"{self.subjects.name(best.subject)}, at {_adverse(best)}.",
+                self.t("a.numerical.best_category",
+                       name=self.subjects.name(best.subject), value=_adverse(best)),
                 [f.id for f in ranked[-5:]], difficulty="hard",
                 reasoning="The same comparison in the other direction, which a summary omits.",
                 sources=[self.artifact.get("finance_workbook")],
@@ -276,9 +452,10 @@ class _Taxonomy:
         if len(margins) >= 3:
             thinnest = margins[0]
             self.case(
-                f"Which category traded on the thinnest gross margin in {self.period}?",
+                self.t("q.numerical.thinnest_margin_category", period=self.period),
                 EvaluationType.NUMERICAL_COMPARISON,
-                f"{self.subjects.name(thinnest.subject)}, at {_fmt(thinnest)}.",
+                self.t("a.numerical.thinnest_margin_category",
+                       name=self.subjects.name(thinnest.subject), value=_fmt(thinnest)),
                 [f.id for f in margins[:5]], difficulty="hard",
                 reasoning="Margin rate, not margin money — the two rank differently.",
                 sources=[self.artifact.get("finance_workbook")],
@@ -290,10 +467,10 @@ class _Taxonomy:
             parts = [f for c in members if (f := self.get("financial.revenue.actual", c))]
             if unit_fact and len(parts) >= 2:
                 self.case(
-                    f"Do the category revenues for {self.subjects.name(unit_id)} sum to the "
-                    f"divisional total in {self.period}?",
+                    self.t("q.numerical.category_reconciliation",
+                           unit=self.subjects.name(unit_id), period=self.period),
                     EvaluationType.NUMERICAL_COMPARISON,
-                    "Yes — the categories sum exactly to the division.",
+                    self.t("a.numerical.category_reconciliation"),
                     [unit_fact.id] + [f.id for f in parts], difficulty="hard",
                     reasoning="Tests the roll-up the whole corpus rests on.",
                     sources=[self.artifact.get("finance_workbook")],
@@ -303,9 +480,9 @@ class _Taxonomy:
         gp = [f for s in (*units, company) if (f := self.get("financial.gross_profit.variance", s))]
         if len(gp) > len(units):
             self.case(
-                f"Does gross profit variance reconcile between the units and the group for {self.period}?",
+                self.t("q.numerical.unit_group_reconciliation", period=self.period),
                 EvaluationType.NUMERICAL_COMPARISON,
-                "Yes — the unit variances sum to the group variance.",
+                self.t("a.numerical.unit_group_reconciliation"),
                 [f.id for f in gp],
                 reasoning="Tests the property the whole corpus rests on.",
                 sources=[self.artifact.get("finance_workbook")],
@@ -331,28 +508,26 @@ class _Taxonomy:
 
         # -- causal chains -------------------------------------------------
         self.case(
-            f"Why was the {self.period} close delayed?", EvaluationType.CAUSAL_MULTI_HOP,
-            f"{cause.text_value}, which stopped valuation and pushed the close by "
-            f"{int(delay.value.amount)} business day(s).",
+            self.t("q.incident.why_delayed", period=self.period), EvaluationType.CAUSAL_MULTI_HOP,
+            self.t("a.incident.why_delayed", cause=cause.text_value,
+                   days=int(delay.value.amount)),
             [k["fact_feed_status"], cause.id, delayed.id, delay.id], difficulty="hard",
             reasoning="Failure to cause to workaround to calendar impact.",
             sources=[rca, record], distractors=[stale],
         )
         self.case(
-            "What allowed the valuation failure to reach production undetected?",
+            self.t("q.incident.undetected"),
             EvaluationType.CAUSAL_MULTI_HOP,
-            "The mapping table has no registered owner and no required reviewer, so no "
-            "control would have caught it.",
+            self.t("a.incident.undetected"),
             [k["fact_cause"], k["fact_classification"], k["fact_owner"]], difficulty="hard",
             reasoning="The condition behind the cause, which the incident record states "
                       "and the status page does not.",
             sources=[rca], distractors=[stale],
         )
         self.case(
-            "Has this failure happened before, and did the earlier response prevent it?",
+            self.t("q.incident.recurrence"),
             EvaluationType.CAUSAL_MULTI_HOP,
-            "Yes — a comparable valuation failure was traced to the same mapping table, and "
-            "the response restored service without assigning ownership.",
+            self.t("a.incident.recurrence"),
             [k["fact_recurrence"], k["fact_owner"], k["fact_classification"]], difficulty="hard",
             reasoning="Recurrence plus an unassigned owner is the finding; either alone is not.",
             sources=[rca],
@@ -364,7 +539,7 @@ class _Taxonomy:
         if hypothesis.valid_to is not None:
             midpoint = hypothesis.valid_from + (hypothesis.valid_to - hypothesis.valid_from) / 2
             self.case(
-                "At the time triage first recorded a cause, what was believed to be the cause?",
+                self.t("q.incident.hypothesis_at_time"),
                 EvaluationType.TEMPORAL_STATE, hypothesis.text_value or "", [hypothesis.id],
                 cutoff=midpoint, difficulty="hard",
                 reasoning="At this cut-off the superseded answer is the correct one.",
@@ -377,15 +552,15 @@ class _Taxonomy:
             # and caught by `answer_unavailable_at_cutoff` rather than by review.
             during = delayed.valid_from + (delayed.valid_to - delayed.valid_from) / 2
             self.case(
-                "Before the incident was closed, was the close still expected to meet its committed date?",
+                self.t("q.incident.expected_on_time"),
                 EvaluationType.TEMPORAL_STATE,
-                "No — the close was recorded as delayed at that point.",
+                self.t("a.incident.expected_on_time"),
                 [delayed.id], cutoff=during, difficulty="hard",
                 reasoning="The final status supersedes this; asking earlier must not return it.",
                 sources=[note], distractors=[rca],
             )
         self.case(
-            "What was the close status once the period was finalised?",
+            self.t("q.incident.status_at_finalised"),
             EvaluationType.TEMPORAL_STATE, final.text_value or "", [final.id],
             cutoff=final.valid_from, difficulty="medium",
             reasoning="The same question at a later cut-off, where the answer changed.",
@@ -394,24 +569,24 @@ class _Taxonomy:
 
         # -- authority -------------------------------------------------------
         self.case(
-            "What is the confirmed root cause of the valuation failure?",
+            self.t("q.authority.confirmed_cause"),
             EvaluationType.AUTHORITY_RESOLUTION, cause.text_value or "",
             [cause.id, hypothesis.id], difficulty="hard",
             reasoning="Two documents state a cause. Only one was updated after it was ruled out.",
             sources=[rca, record], distractors=[stale],
         )
         self.case(
-            "Which record still carries the initial hypothesis rather than the confirmed cause?",
+            self.t("q.authority.stale_record"),
             EvaluationType.AUTHORITY_RESOLUTION,
-            "The triage status page, which was never updated after the hypothesis was ruled out.",
+            self.t("a.authority.stale_record"),
             [hypothesis.id, cause.id], difficulty="hard",
             reasoning="Requires recognising a stale source as stale.",
             sources=[stale],
         )
         self.case(
-            "Which source was authoritative for the close status at the end of the period?",
+            self.t("q.authority.close_status_source"),
             EvaluationType.AUTHORITY_RESOLUTION,
-            f"The finance system of record, reporting the close as {final.text_value}.",
+            self.t("a.authority.close_status_source", status=final.text_value),
             [final.id], cutoff=final.valid_from, difficulty="hard",
             reasoning="Working documents may still show the close as open; they are not the record.",
             distractors=[note],
@@ -419,13 +594,13 @@ class _Taxonomy:
 
         # -- citation and cross-artifact -------------------------------------
         self.case(
-            "Who owns the product hierarchy mapping table?", EvaluationType.CITATION_REQUIRED,
-            "Nobody — the owner is unassigned.", [k["fact_owner"]],
+            self.t("q.citation.mapping_owner"), EvaluationType.CITATION_REQUIRED,
+            self.t("a.citation.mapping_owner"), [k["fact_owner"]],
             reasoning="The correct answer is that the field is empty, which is not abstaining.",
             sources=[rca, jira],
         )
         self.case(
-            "What evidence ruled out the initial explanation, and where is it recorded?",
+            self.t("q.citation.evidence_ruled_out"),
             EvaluationType.CITATION_REQUIRED,
             by_id[k["fact_cause_ruled_out"]].text_value or "",
             [k["fact_cause_ruled_out"], hypothesis.id], difficulty="hard",
@@ -434,26 +609,26 @@ class _Taxonomy:
             sources=[rca], distractors=[stale],
         )
         self.case(
-            "How many records were affected, and which document states it?",
+            self.t("q.citation.affected_records"),
             EvaluationType.CITATION_REQUIRED,
-            _fmt(by_id[k["fact_affected"]]),
+            self.t("a.citation.affected_records", value=_fmt(by_id[k["fact_affected"]])),
             [k["fact_affected"]],
             reasoning="The figure appears in more than one place; the citation is the test.",
             sources=[rca, record],
         )
         self.case(
-            "Which remediation addresses the underlying control failure rather than only detection?",
+            self.t("q.cross.remediation_choice"),
             EvaluationType.CROSS_ARTIFACT,
-            "The ownership assignment. The validation ticket addresses detection only.",
+            self.t("a.cross.remediation_choice"),
             [k["fact_classification"], k["fact_remediation"], k["fact_remediation_scope"]],
             difficulty="hard",
             reasoning="Both tickets are plausible; the classification separates them.",
             sources=[rca, jira],
         )
         self.case(
-            f"What was the P&L impact of the incident on the {self.period} result?",
+            self.t("q.cross.pl_impact", period=self.period),
             EvaluationType.CROSS_ARTIFACT,
-            "Zero — valuation completed before the ledger closed. The impact was on the calendar only.",
+            self.t("a.cross.pl_impact"),
             [k["fact_pl_impact"], delay.id],
             reasoning="A plausible wrong answer attributes the revenue shortfall to the incident.",
             sources=[self.artifact.get("executive_summary")], distractors=[rca],
@@ -481,9 +656,9 @@ class _Taxonomy:
             due = self.get("close.due_date", self.subjects.company_id)
             if due:
                 self.case(
-                    "Which close calendar states the committed date currently in force?",
+                    self.t("q.across.current_calendar"),
                     EvaluationType.AUTHORITY_RESOLUTION,
-                    f"The calendar published for {self.period}, committing to {due.text_value}.",
+                    self.t("a.across.current_calendar", period=self.period, date=due.text_value),
                     [due.id], difficulty="hard",
                     reasoning="Earlier calendars are published, look identical, and are superseded.",
                     sources=[current_calendar], distractors=calendars,
@@ -493,19 +668,17 @@ class _Taxonomy:
             k = self.episode.keys
             previous = earlier_incidents[-1]
             self.case(
-                "When did a comparable valuation failure last occur, and did the response "
-                "prevent it recurring?",
+                self.t("q.across.recurrence"),
                 EvaluationType.CAUSAL_MULTI_HOP,
-                f"In {previous.period}. It did not — the same mapping table failed again in "
-                f"{self.period}, and ownership is still unassigned.",
+                self.t("a.across.recurrence", prior_period=previous.period, period=self.period),
                 [previous.id, k["fact_recurrence"], k["fact_owner"]], difficulty="hard",
                 reasoning="Spans two episodes. A single close cannot answer it at all.",
                 sources=[self.artifact.get("incident_rca")],
             )
             self.case(
-                f"How many valuation incidents has the group opened up to and including {self.period}?",
+                self.t("q.across.incident_count", period=self.period),
                 EvaluationType.NUMERICAL_COMPARISON,
-                f"{len(earlier_incidents) + 1}.",
+                self.t("a.across.incident_count", count=len(earlier_incidents) + 1),
                 [f.id for f in earlier_incidents] + [k["fact_incident_ref"]], difficulty="hard",
                 reasoning="Requires counting across periods rather than reading one record.",
             )
@@ -523,8 +696,9 @@ class _Taxonomy:
         if prior_revenue:
             earlier = prior_revenue[-1]
             self.case(
-                f"What was total revenue in {earlier.period}?",
-                EvaluationType.TEMPORAL_STATE, _fmt(earlier), [earlier.id],
+                self.t("q.across.prior_period_revenue", period=earlier.period),
+                EvaluationType.TEMPORAL_STATE,
+                self.t("a.across.prior_period_revenue", value=_fmt(earlier)), [earlier.id],
                 difficulty="hard",
                 reasoning="The current period's figure is the confident wrong answer.",
                 sources=[self.artifact.get("finance_workbook")],
@@ -540,23 +714,23 @@ class _Taxonomy:
         phrased against things the model deliberately does not carry: people
         costs, suppliers, customers, competitors, and any period but this one.
         """
-        for question, reasoning in (
-            ("What was the root cause of the previous period's close delay?",
+        for key, reasoning in (
+            ("q.abstain.previous_close_cause",
              "Presupposes an event this corpus does not contain."),
-            ("What is the Group Chief Executive Officer's total remuneration?",
+            ("q.abstain.ceo_remuneration",
              "The person exists; the fact does not."),
-            ("Which supplier was responsible for the shortfall in fresh produce?",
+            ("q.abstain.supplier_shortfall",
              "Suppliers are not modelled at all, and the question presumes one is."),
-            ("What was the group's net promoter score this period?",
+            ("q.abstain.nps",
              "A plausible retail metric the corpus does not measure."),
-            ("How much did the group spend on staff costs this period?",
+            ("q.abstain.staff_costs",
              "Revenue and gross profit are modelled; operating costs are not."),
-            ("What is the group's market share against its nearest competitor?",
+            ("q.abstain.market_share",
              "No competitor exists in this world."),
-            ("When is the next scheduled audit of the mapping table?",
+            ("q.abstain.next_audit",
              "Forward-looking; the corpus records what happened, not what is planned."),
         ):
-            self.abstain(question, reasoning)
+            self.abstain(self.t(key), reasoning)
 
     # -- history -------------------------------------------------------
     #
@@ -592,8 +766,9 @@ class _Taxonomy:
             if successor is None or successor.id not in reachable:
                 continue
             self.case(
-                f"Who led {self.subjects.name(change.subject)} as of "
-                f"{change.period or self.period}?",
+                self.t("q.history.unit_leader_as_of",
+                       unit=self.subjects.name(change.subject),
+                       period=change.period or self.period),
                 EvaluationType.TEMPORAL_STATE,
                 self.subjects.name(successor.subject),
                 [change.id, successor.id],
@@ -620,8 +795,7 @@ class _Taxonomy:
             if successor is None or successor.id not in reachable:
                 continue
             self.case(
-                f"Who replaced {self.subjects.name(departure.subject)} when they left "
-                "the company?",
+                self.t("q.history.succession", person=self.subjects.name(departure.subject)),
                 EvaluationType.CAUSAL_MULTI_HOP,
                 self.subjects.name(successor.subject),
                 [departure.id, successor.id], difficulty="hard",
@@ -651,7 +825,7 @@ class _Taxonomy:
             # question asks about; the rest is the scar, not the provenance.
             assertion = (milestone.text_value or "").split(". ")[0].rstrip(".")
             self.case(
-                f"According to the corpus's own history, when did this happen: {assertion}?",
+                self.t("q.history.milestone_provenance", assertion=assertion),
                 EvaluationType.CITATION_REQUIRED,
                 milestone.valid_from.strftime("%B %Y"),
                 [milestone.id], difficulty="hard",
@@ -692,14 +866,14 @@ class _Taxonomy:
                 earlier_fact.period if earlier_fact and earlier_fact.period else "the previous period"
             )
             self.case(
-                f"Who signed the {label} for {earlier_period}?",
+                self.t("q.history.signed_earlier", doc_type=label, period=earlier_period),
                 EvaluationType.TEMPORAL_STATE, self.subjects.name(earlier.author_id),
                 [earlier.required_fact_ids[0]], difficulty="hard",
                 reasoning="The post has changed hands since; the current holder is the "
                           "confident wrong answer to a question about the earlier period.",
             )
             self.case(
-                f"Who signed the {label} for {self.period}?",
+                self.t("q.history.signed_current", doc_type=label, period=self.period),
                 EvaluationType.TEMPORAL_STATE, self.subjects.name(current.author_id),
                 [current.required_fact_ids[0]], difficulty="medium",
                 reasoning="The same document type after the post changed hands — included so "
@@ -726,11 +900,9 @@ class _Taxonomy:
         if minutes:
             cause = by_id[k["fact_cause"]]
             self.case(
-                "Who attended the meeting that moved the close, and what did the "
-                "minutes record as the cause?",
+                self.t("q.comms.meeting_attendance_cause"),
                 EvaluationType.CROSS_ARTIFACT,
-                "The Group Financial Controller and the Group Chief Financial "
-                f"Officer; the minutes record: {cause.text_value}.",
+                self.t("a.comms.meeting_attendance_cause", cause=cause.text_value),
                 [k["fact_cause"], k["fact_close_delayed"]], difficulty="hard",
                 reasoning="The cause appears in many documents; attendance exists "
                           "only in the minutes, so the pairing has one source.",
@@ -740,15 +912,12 @@ class _Taxonomy:
         if thread:
             delayed = by_id[k["fact_close_delayed"]]
             self.case(
-                "When was the Group CFO first told the close was at risk, and "
-                "through what channel?",
+                self.t("q.comms.cfo_notified"),
                 # Cross-artifact, not temporal-state: there is no cutoff to
                 # reason at — the question joins a fact many documents carry
                 # with a channel and moment only the thread records.
                 EvaluationType.CROSS_ARTIFACT,
-                "By email, within the hour of the close being recorded as delayed "
-                f"on {delayed.valid_from.date().isoformat()} — before any formal "
-                "report existed.",
+                self.t("a.comms.cfo_notified", date=delayed.valid_from.date().isoformat()),
                 [k["fact_close_delayed"]], difficulty="hard",
                 reasoning="The RCA and the memo carry the fact; only the thread "
                           "carries when it reached the CFO, and through what.",
@@ -770,12 +939,12 @@ class _Taxonomy:
         this one.
         """
         self.abstain(
-            "Who is the company's Chief Marketing Officer, and when did they join?",
+            self.t("q.abstain.cmo"),
             "No marketing function is modelled in this organisation; the role, and "
             "therefore the person, does not exist.",
         )
         self.abstain(
-            "Who signed the close calendar in 1995?",
+            self.t("q.abstain.close_calendar_1995"),
             "Presupposes a roster and a close from before this archetype's organisation "
             "could exist — every join date this generator can produce falls well after it.",
         )
@@ -791,16 +960,22 @@ def evaluation_cases(
     period: str,
     history: tuple[CanonicalFact, ...] = (),
     prior_intents: tuple[ArtifactIntent, ...] = (),
+    text: Mapping[str, str] | None = None,
 ) -> tuple[EvaluationCase, ...]:
     """Derive the evaluation set for one episode.
 
     ``history`` and ``prior_intents`` are what the world already contained. A
     second episode asks questions the first could not — which is the only way the
     hard families get past a handful of cases each.
+
+    ``text`` overrides entries of ``EVAL_TEXT`` — a pack re-voicing the
+    benchmark itself, not just the episode it is drawn from (see
+    `generators/episode_text` and this module's `EVAL_TEXT`).
     """
     taxonomy = _Taxonomy(
         minter, episode=episode, facts=facts, subjects=subjects, intents=intents,
         period=period, history=history, prior_intents=prior_intents,
+        text=episode_text.merged(EVAL_TEXT, text, field="evaluation_text"),
     )
     taxonomy.direct_lookup()
     taxonomy.numerical_comparison()

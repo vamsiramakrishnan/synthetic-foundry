@@ -252,6 +252,10 @@ class MonthEndClose:
             period=self.period,
             history=world._facts,
             prior_intents=prior_intents,
+            # A pack's evaluation-text overrides ride the recipe, the same
+            # seam `episode_text` uses for the episode itself, so a
+            # re-voiced benchmark rebuilds with no pack file on hand.
+            text=(world._recipe.get("pack") or {}).get("evaluation_text") or None,
         )
 
         if self.actors is not None:

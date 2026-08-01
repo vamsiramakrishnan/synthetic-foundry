@@ -115,6 +115,10 @@ class QuarterlyCapitalReturn:
         )
         cases = banking_evaluation.evaluation_cases(
             minter, episode=episode, intents=intents, period=self.period,
+            # A pack's evaluation-text overrides ride the recipe too, so a
+            # re-voiced benchmark rebuilds with no pack file on hand — the
+            # same seam `episode_text` uses for the episode itself.
+            text=(world._recipe.get("pack") or {}).get("evaluation_text") or None,
         )
 
         from .recipe import with_step
