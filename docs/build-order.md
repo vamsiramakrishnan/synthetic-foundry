@@ -592,11 +592,37 @@ The measured retail coupling, for whichever is chosen:
    minting, join dates, manager wiring, unit formation, founding milestones),
    `generators/cases.py` (evaluation-case minting and the reachability gate),
    `domains.py` (archetype → world/episode, so the CLI and recipe rebuilder
-   never name a vertical), and renderer ownership registration. What remains
-   deliberately unextracted is the pack *content* interface — lore packs, name
-   pools, fact-kind namespaces — which should be designed against the strain
-   evidence recorded in `worldloom/banking.py`'s docstring, and the scenario
-   DSL, which two structurally different episodes still do not justify.
+   never name a vertical), and renderer ownership registration. Industry
+   packs then landed the content interface's first pieces: archetype, lore,
+   company name, system brands, and per-role voices as validated JSON.
+
+   **The rule is now enforced, not asserted.** `tests/test_thin_waist.py`
+   scans every core module's code (comments and docstrings excluded) for
+   engine vocabulary and fails on any occurrence outside an explicit
+   exceptions ledger, where each entry is either a registry seed or a named
+   debt with its extraction. Paying a debt down forces its ledger entry to be
+   deleted, so the measurement cannot go stale. Anything an LLM generates
+   lands as schema — a pack, a registered type, a check group — validated at
+   a handshake and, where generated per-corpus, recorded in the generation
+   ledger for replay; core stays a machine that has never heard of an
+   industry, and the ratchet is what makes "stays" true.
+
+   **The de-hardcoding ladder**, in extraction order, each gated on a second
+   consumer:
+
+   1. *Episode surface text* — event summaries and fact `text_value`s are
+      prose the engines currently hardcode; a template schema (per event
+      kind, slot-checked) would let a pack re-voice the episode's narration
+      without touching its causality. Evaluation answers derive from facts,
+      so they follow automatically.
+   2. *Role tables as pack data* — engines publish required role keys
+      (episodes index by them); packs add or retitle the rest. The voices
+      surface already proved the publish-and-lint half.
+   3. *Evaluation phrasing* — question templates per family; answer
+      derivation stays engine code.
+   4. *Name pools* — the placeholder `names.py` already promises this.
+   5. *The scenario DSL* — still not justified; two episodes share a
+      prologue and an epilogue and nothing in between.
 
 An industry pack, once extracted, has to carry eight things and only about three are nouns: archetype, dimensions, fact kinds and their units, lore, artifact types and grammars, scenario verbs and cadence, roles and personas, evaluation families. A pack that renames nouns and stops produces retail with different words.
 
