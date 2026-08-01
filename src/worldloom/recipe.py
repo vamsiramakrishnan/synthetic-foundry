@@ -40,7 +40,7 @@ class RecipeError(Exception):
 #: and importing it — would make a corpus file able to execute arbitrary code on
 #: load, which is a lot to accept for the convenience of not writing a line here.
 STEPS: dict[str, tuple[str, ...]] = {
-    "MonthEndClose": ("period", "incident", "comparatives", "actors"),
+    "MonthEndClose": ("period", "incident", "comparatives", "actors", "eval_density"),
     "Hire": ("period", "role_key", "title", "function", "unit_key"),
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
@@ -169,6 +169,11 @@ def rebuild(
                     comparative_months=step.get("comparatives", 0),
                     actors=actors if step.get("actors") else None,
                     actor_ledger=actor_ledger if step.get("actors") else (),
+                    # `.get(..., 1.0)` rather than a required key: a recipe
+                    # written before this field existed carries no
+                    # `eval_density` at all, and 1.0 is exactly what that
+                    # corpus was built with — the knob's own default.
+                    eval_density=step.get("eval_density", 1.0),
                 )
             )
         elif name == "Hire":

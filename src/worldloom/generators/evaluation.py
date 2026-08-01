@@ -21,6 +21,21 @@ the record, knowing when the corpus is silent.
 status page that confidently states a cause later ruled out is the most
 instructive wrong answer in the corpus, and a case that does not name it is not
 really testing authority resolution.
+
+``density`` (``_Taxonomy``'s and ``evaluation_cases``'s, not ``planning.py``'s
+lore-driven artifact ``density``, a different knob despite the name) is how a
+build asks for more than the fixed set every close always produces, once the
+world actually has more to ask about. It defaults to ``1.0``, at which every
+family below emits exactly what it always has — the byte-identity a stock
+build depends on. Above ``1.0`` two things happen, both already latent in data
+this module always received but never fully used: ``Subjects.sites_by_unit``
+was populated by every caller and read by none, so a large archetype's store
+estate could not make the benchmark any harder than a small one's; and
+``across_episodes`` only ever looked at the *most recent* prior period, so a
+five-period build asked the same "prior period" question a two-period build
+did. Density does not touch the hard families — incident, authority, causal —
+because padding a fixed-size, already-hard family with easy rephrasings would
+lower its average difficulty, not test the corpus at scale.
 """
 
 from __future__ import annotations
@@ -66,6 +81,8 @@ EVAL_TEXT: dict[str, str] = {
     "q.direct.category_revenue":
         "What revenue did the {category} category in {unit} report for {period}?",
     "a.direct.category_revenue": "{value}",
+    "q.direct.site_revenue": "What revenue did {site} in {unit} report for {period}?",
+    "a.direct.site_revenue": "{value}",
     # -- numerical comparison -------------------------------------------------
     "q.numerical.revenue_vs_budget":
         "By how much did revenue miss budget in {period}, in absolute terms and as"
@@ -78,6 +95,9 @@ EVAL_TEXT: dict[str, str] = {
     "q.numerical.worst_category":
         "Which merchandise category lost the most gross profit against plan in {period}?",
     "a.numerical.worst_category": "{name}, at {value}.",
+    "q.numerical.worst_site_variance":
+        "Which site carried the largest adverse revenue variance in {period}?",
+    "a.numerical.worst_site_variance": "{name}, at {value}.",
     "q.numerical.best_category":
         "Which merchandise category held up best against plan on gross profit in {period}?",
     "a.numerical.best_category": "{name}, at {value}.",
@@ -220,11 +240,15 @@ class _Taxonomy:
         history: tuple[CanonicalFact, ...] = (),
         prior_intents: tuple[ArtifactIntent, ...] = (),
         text: Mapping[str, str] = EVAL_TEXT,
+        density: float = 1.0,
     ) -> None:
         self.minter = minter
         self.episode = episode
         self.subjects = subjects
         self.period = period
+        # See the module docstring: 1.0 reproduces every family's historical
+        # count exactly; only the families below that check it can differ.
+        self.density = density
         # Already merged with any pack override by the caller — see
         # `evaluation_cases`. Stored as `self.text` rather than merged again
         # here, so the lint-time contract (`episode_text.merged` raises once,
@@ -371,10 +395,16 @@ class _Taxonomy:
         # Category and store lookups exist because the corpus reports at those
         # levels and nothing was asking about them. Chosen by rank rather than at
         # random: the largest category is a thing someone would ask about.
+        #
+        # `topn` reads as 1 at the default density (today's behaviour, exactly:
+        # only the single biggest category) and grows with the knob — `round`
+        # rather than a hardcoded per-tier table so a future numeric density
+        # between the CLI's named tiers degrades gracefully instead of falling
+        # through to whichever tier's branch happened to be written.
         for unit_id, members in self.subjects.categories_by_unit.items():
             ranked = self.ranked("financial.revenue.actual", members)
-            if len(ranked) >= 2:
-                biggest = ranked[-1]
+            topn = max(1, min(len(ranked), round(self.density)))
+            for biggest in reversed(ranked[-topn:]) if len(ranked) >= 2 else ():
                 self.case(
                     self.t("q.direct.category_revenue",
                            category=self.subjects.name(biggest.subject),
@@ -382,6 +412,30 @@ class _Taxonomy:
                     EvaluationType.DIRECT_LOOKUP,
                     self.t("a.direct.category_revenue", value=_fmt(biggest)), [biggest.id],
                     reasoning="Requires reading below divisional level.",
+                    sources=[self.artifact.get("finance_workbook")],
+                )
+
+        # Store-level lookups only start existing above the default density.
+        # `sites_by_unit` has been on `Subjects` since it was introduced and no
+        # family here ever read it — a large archetype's estate (~1,300 stores
+        # for the Australian grocer, versus a handful for the mid-size
+        # retailer) could not make the benchmark any harder than a small one's,
+        # which is exactly the toy-sized-regardless-of-world-size gap this
+        # knob exists to close.
+        if self.density > 1.0:
+            for unit_id, site_ids in self.subjects.sites_by_unit.items():
+                ranked_sites = self.ranked("financial.revenue.actual", site_ids)
+                if len(ranked_sites) < 2:
+                    continue
+                biggest_site = ranked_sites[-1]
+                self.case(
+                    self.t("q.direct.site_revenue",
+                           site=self.subjects.name(biggest_site.subject),
+                           unit=self.subjects.name(unit_id), period=self.period),
+                    EvaluationType.DIRECT_LOOKUP,
+                    self.t("a.direct.site_revenue", value=_fmt(biggest_site)), [biggest_site.id],
+                    reasoning="Requires reading below category level, to the store estate — "
+                              "only the workbook goes this far down.",
                     sources=[self.artifact.get("finance_workbook")],
                 )
 
@@ -460,6 +514,25 @@ class _Taxonomy:
                 reasoning="Margin rate, not margin money — the two rank differently.",
                 sources=[self.artifact.get("finance_workbook")],
             )
+
+        # The store-level analogue of `worst_category`, gated the same way as
+        # `direct_lookup`'s site cases: it needs an estate large enough to be
+        # worth comparing, which only a high-density build asks for.
+        if self.density > 1.0:
+            every_site = [s for members in self.subjects.sites_by_unit.values() for s in members]
+            ranked_sites = self.ranked("financial.revenue.variance", every_site)
+            if len(ranked_sites) >= 3:
+                worst_site = ranked_sites[0]
+                self.case(
+                    self.t("q.numerical.worst_site_variance", period=self.period),
+                    EvaluationType.NUMERICAL_COMPARISON,
+                    self.t("a.numerical.worst_site_variance",
+                           name=self.subjects.name(worst_site.subject), value=_adverse(worst_site)),
+                    [f.id for f in ranked_sites[:5]], difficulty="hard",
+                    reasoning="A thousand-store estate must be compared; no summary page ranks "
+                              "individual sites.",
+                    sources=[self.artifact.get("finance_workbook")],
+                )
 
         # Reconciliation, asked as a question rather than assumed as a property.
         for unit_id, members in self.subjects.categories_by_unit.items():
@@ -693,8 +766,16 @@ class _Taxonomy:
             and f.period
             and f.period != self.period
         ]
-        if prior_revenue:
-            earlier = prior_revenue[-1]
+        # Only the immediately preceding period at the default density — every
+        # corpus this family has ever shipped in. Above it, a build with more
+        # than two periods can finally ask about *each* earlier one instead of
+        # just the last: a five-period build and a two-period build produced
+        # the identical single case here otherwise, which is the fixed-size
+        # symptom this whole knob exists to fix — more periods genuinely means
+        # more distinct "what did this period say" questions, not a rephrasing
+        # of the same one.
+        targets = prior_revenue if self.density > 1.0 else prior_revenue[-1:]
+        for earlier in targets:
             self.case(
                 self.t("q.across.prior_period_revenue", period=earlier.period),
                 EvaluationType.TEMPORAL_STATE,
@@ -961,6 +1042,7 @@ def evaluation_cases(
     history: tuple[CanonicalFact, ...] = (),
     prior_intents: tuple[ArtifactIntent, ...] = (),
     text: Mapping[str, str] | None = None,
+    density: float = 1.0,
 ) -> tuple[EvaluationCase, ...]:
     """Derive the evaluation set for one episode.
 
@@ -971,11 +1053,16 @@ def evaluation_cases(
     ``text`` overrides entries of ``EVAL_TEXT`` — a pack re-voicing the
     benchmark itself, not just the episode it is drawn from (see
     `generators/episode_text` and this module's `EVAL_TEXT`).
+
+    ``density`` is the ``--eval-density`` knob's numeric value, riding the
+    recipe via ``MonthEndClose.eval_density`` — see the module docstring for
+    what it does and does not change.
     """
     taxonomy = _Taxonomy(
         minter, episode=episode, facts=facts, subjects=subjects, intents=intents,
         period=period, history=history, prior_intents=prior_intents,
         text=episode_text.merged(EVAL_TEXT, text, field="evaluation_text"),
+        density=density,
     )
     taxonomy.direct_lookup()
     taxonomy.numerical_comparison()

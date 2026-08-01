@@ -78,6 +78,17 @@ def _step_period(period: str, index: int, step_months: int) -> str:
     return f"{year:04d}-{month + 1:02d}"
 
 
+#: `--eval-density`'s named tiers, mapped to the numeric value that rides the
+#: recipe. Named rather than a bare float on the CLI for the same reason
+#: `--actors` takes `scripted`/`agent` rather than an internal class name: the
+#: three words are what a user reasons about, and the float is an
+#: implementation detail `MonthEndClose.eval_density` happens to want. `1.0`
+#: is `standard` and not, say, `0`, because it is also the multiplier the
+#: knob's consumers apply to their own counts — see `scenarios.py` and
+#: `generators/evaluation.py`'s docstrings for what each value changes.
+_EVAL_DENSITY_LEVELS: dict[str, float] = {"low": 0.0, "standard": 1.0, "high": 2.0}
+
+
 def _summary_table(world: World) -> Table:
     table = Table(title=world.company.name, title_style="bold", show_header=False, box=None)
     table.add_column(style="dim")
@@ -191,6 +202,18 @@ def build(
         None, "--format", "-f",
         help="Render these formats. Repeatable. Omit to plan artifacts without rendering.",
     ),
+    eval_density: str = typer.Option(
+        "standard", "--eval-density",
+        help=(
+            "How much of the world's own size the evaluation set and its fan-out "
+            "documents are allowed to exploit: `low` trims the optional close "
+            "documents to the floor a benchmark needs; `standard` is today's "
+            "corpus, unchanged; `high` adds direct-lookup, comparison, and "
+            "cross-period cases (and the documents to source them from) that only "
+            "exist once a world has more units, categories, sites, or periods to "
+            "ask about. `standard` reproduces every existing corpus byte for byte."
+        ),
+    ),
     actors: str = typer.Option(
         None, "--actors",
         help=(
@@ -219,6 +242,14 @@ def build(
     from . import archetypes as archetype_registry
     from . import domains
     from .retail import MonthEndClose, RetailWorld
+
+    if eval_density not in _EVAL_DENSITY_LEVELS:
+        err.print(
+            f"[red]error:[/red] --eval-density takes {', '.join(_EVAL_DENSITY_LEVELS)},"
+            f" not {eval_density!r}"
+        )
+        raise typer.Exit(code=2)
+    eval_density_value = _EVAL_DENSITY_LEVELS[eval_density]
 
     pack_obj = None
     if pack is not None:
@@ -283,6 +314,13 @@ def build(
                 ("--actors", actors is not None),
                 ("--incident/--no-incident", incident is not None),
                 ("--comparatives", comparatives > 0),
+                # Retail-only for now: the knob's growth (category commentary,
+                # site-level cases) is argued entirely from retail's own
+                # hierarchy in `scenarios.py`/`generators/evaluation.py`.
+                # Refused rather than silently ignored at a non-default value,
+                # same reasoning as its neighbours above; `standard` is a
+                # no-op everywhere, so it alone is let through.
+                ("--eval-density", eval_density != "standard"),
             ) if given
         ]
         if refused:
@@ -331,6 +369,10 @@ def build(
             intended = with_step(
                 intended, "MonthEndClose", period=stamp, incident=incident,
                 comparatives=comparatives if index == 0 else 0, actors=True,
+                # Only recorded away from its default — see `scenarios.py`'s
+                # matching call for why an unconditional write here would
+                # break the byte-identity gate every default build depends on.
+                **({} if eval_density_value == 1.0 else {"eval_density": eval_density_value}),
             )
         world = _replace(world, _recipe=intended)
         if out is None:
@@ -376,6 +418,7 @@ def build(
                     comparative_months=comparatives if index == 0 else 0,
                     actors=actor_provider,
                     actor_ledger=actor_ledger,
+                    eval_density=eval_density_value,
                 )
             )
         except ActorProviderError as exc:

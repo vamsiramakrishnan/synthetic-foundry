@@ -115,6 +115,19 @@ class MonthEndClose:
     actor_ledger: tuple = field(default=(), compare=False)
     """Recorded actor decisions to replay instead of asking the provider."""
 
+    eval_density: float = 1.0
+    """The ``--eval-density`` knob's numeric value: 0.0/1.0/2.0 for
+    low/standard/high, or any value a caller composes directly.
+
+    Threads into both `generators.evaluation.evaluation_cases` (more direct
+    lookups, comparisons, and cross-period questions once the world actually
+    has more to ask about — see that module's docstring) and this method's
+    own `planning.artifact_intents` call (more fan-out documents to ask
+    those questions of). ``1.0`` reproduces every build this scenario has
+    ever produced, byte for byte; that is the default for exactly that
+    reason, not because 1.0 is an otherwise meaningful point on the scale.
+    """
+
     def run(self, world: World) -> World:
         """Return a new world with this episode's events, facts, and plans.
 
@@ -187,16 +200,44 @@ class MonthEndClose:
         )
         financial_facts = financials.headline
 
+        # Built once, for both the planner (which categories does a high
+        # `eval_density` argue below unit level) and the taxonomy's `Subjects`
+        # below — the same grouping, so a category that got a commentary
+        # document and a category the benchmark asks about are never computed
+        # two different ways that could quietly disagree.
+        categories_by_unit = {
+            unit.id: [c.id for c in world.categories if c.business_unit_id == unit.id]
+            for unit in world.business_units
+        }
+
+        # The lore-driven artifact density (status reporting swells during a
+        # close the way LORE-0003 says it does) and `eval_density` are
+        # deliberately independent knobs added to the same total: a pack's
+        # in-world reason for more status reporting must not be silently
+        # cancelled by someone asking for a small benchmark, and `--eval-
+        # density low` must not depend on which lore a particular archetype
+        # happens to carry to have any effect at all. `<= 0.5` is `low`'s
+        # numeric value (0.0) with headroom for a caller-composed knob that
+        # lands just above it; `low` is the one setting allowed to override
+        # lore, because it is asking for the floor a retriever benchmark
+        # needs to exist at all, not the floor a plausible company would
+        # produce.
+        artifact_density = 1.0 + density_adjustment(world, "finance/status_reports")
+        if self.eval_density <= 0.5:
+            artifact_density = 0.0
+
         intents = planning.artifact_intents(
             minter,
             episode=episode,
             roles=roles,
             financial_facts=financial_facts,
             period=self.period,
-            density=1.0 + density_adjustment(world, "finance/status_reports"),
+            density=artifact_density,
             workbook_facts=financials.facts,
             prior_intents=world._artifact_intents,
             actor_authored=self.actors is not None,
+            categories_by_unit=categories_by_unit,
+            eval_density=self.eval_density,
         )
 
         # The world has to carry this period's events, facts, and standing
@@ -239,10 +280,7 @@ class MonthEndClose:
                 company_id=world.company.id,
                 unit_ids=unit_ids,
                 names=world.entity_names(),
-                categories_by_unit={
-                    unit.id: [c.id for c in world.categories if c.business_unit_id == unit.id]
-                    for unit in world.business_units
-                },
+                categories_by_unit=categories_by_unit,
                 sites_by_unit={
                     unit.id: [s.id for s in world.sites if s.business_unit_id == unit.id]
                     for unit in world.business_units
@@ -252,6 +290,7 @@ class MonthEndClose:
             period=self.period,
             history=world._facts,
             prior_intents=prior_intents,
+            density=self.eval_density,
             # A pack's evaluation-text overrides ride the recipe, the same
             # seam `episode_text` uses for the episode itself, so a
             # re-voiced benchmark rebuilds with no pack file on hand.
@@ -283,6 +322,16 @@ class MonthEndClose:
                 incident=self.include_operational_incident,
                 comparatives=self.comparative_months,
                 actors=self.actors is not None,
+                # Recorded only away from its default, unlike its neighbours
+                # above — this field did not exist before this knob did, and
+                # every corpus already built or documented was built at 1.0.
+                # Writing it unconditionally would put a new key in every
+                # future recipe for a value that changes nothing, which is
+                # exactly the byte-for-byte default-build diff the project's
+                # own CI gate exists to catch. `rebuild` below defaults an
+                # absent key to 1.0, so an old recipe and an explicit `1.0`
+                # recipe replay identically either way.
+                **({} if self.eval_density == 1.0 else {"eval_density": self.eval_density}),
             ),
             **actor_state,
         )

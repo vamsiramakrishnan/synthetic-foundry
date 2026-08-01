@@ -66,6 +66,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
 | `--employees` | Override the archetype's stated headcount. |
+| `--eval-density` | How much of the world's own size the evaluation set and its fan-out documents are allowed to exploit: `low` trims the optional close documents to the floor a benchmark needs; `standard` is today's corpus, unchanged; `high` adds direct-lookup, comparison, and cross-period cases (and the documents to source them from) that only exist once a world has more units, categories, sites, or periods to ask about. `standard` reproduces every existing corpus byte for byte. |
 | `--format`, `-f` | Render these formats. Repeatable. Omit to plan artifacts without rendering. |
 | `--incident` | Force the operational incident on or off. Omit to let the seed and lore decide. |
 | `--inspired-by` | Describe a real business and build a world of that shape (e.g. 'a large Australian grocer'). Shape only — no data about it is used. |
