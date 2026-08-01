@@ -294,3 +294,54 @@ def digest(facts: list[CanonicalFact]) -> str:
         )
         parts.append(f"{fact.id}|{fact.kind}|{rendered}|{fact.valid_from.isoformat()}")
     return content_key(*parts)
+
+
+def parse_structured_narrative(raw: str) -> GeneratedNarrative:
+    """Turn a model's JSON text into a narrative, or a guaranteed rejection.
+
+    Shared by every API-backed adapter (Anthropic, Gemini) because the property
+    it guards is the *contract's*, not any one vendor's: the compiler's retry
+    loop has no code path for an exception out of ``complete()``, so a response
+    that cannot be read has to come back as something the validators will
+    reject — see ``malformed_narrative`` for why that rejection is guaranteed.
+    Schema-constrained output narrows this to the rare case, but no API mode
+    can force a claim to cite at least one fact, so the path stays load-bearing.
+    """
+    import json
+
+    try:
+        payload = json.loads(raw)
+        return GeneratedNarrative(
+            text=payload["text"],
+            claims=[
+                GeneratedClaim(
+                    text=claim["text"],
+                    supporting_fact_ids=list(claim.get("supporting_fact_ids", [])),
+                )
+                for claim in payload.get("claims", [])
+            ],
+        )
+    except Exception:
+        return malformed_narrative()
+
+
+def malformed_narrative() -> GeneratedNarrative:
+    """A narrative shaped to fail validation, deliberately.
+
+    Empty claims against non-empty text always trips ``unsupported_claim`` in
+    ``claims.py`` ("prose was supplied with no claims"), regardless of what the
+    request required — the one violation code guaranteed to fire no matter
+    which facts or requirements the section carries. That violation becomes the
+    next attempt's feedback, so the model sees it and self-corrects. The raw
+    response is not echoed into ``text``: a stray digit or ``{{fact:``-shaped
+    substring in whatever the model actually sent would trip an unrelated check
+    and bury the one signal that matters under noise the model didn't cause.
+    """
+    return GeneratedNarrative(
+        text=(
+            "The previous response could not be read as the required JSON object"
+            " — a `text` string plus a `claims` array, each claim citing at least"
+            " one fact. Re-read the response shape and try again."
+        ),
+        claims=[],
+    )

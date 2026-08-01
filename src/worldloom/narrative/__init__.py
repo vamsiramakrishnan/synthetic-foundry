@@ -25,6 +25,8 @@ the rest testable with no key, no network, and no spend.
 from . import handshake
 from .anthropic_provider import AnthropicProvider
 from .anthropic_provider import DEFAULT_MODEL as ANTHROPIC_DEFAULT_MODEL
+from .gemini_provider import GeminiProvider
+from .gemini_provider import DEFAULT_MODEL as GEMINI_DEFAULT_MODEL
 from .claims import validate
 from .compiler import Narration, NarrationError, ledger_key, narrate
 from .prompts import Prompt, SECTION_PROSE, get, register, versions
@@ -66,6 +68,8 @@ __all__ = [
     "ResponseProvider",
     "AnthropicProvider",
     "ANTHROPIC_DEFAULT_MODEL",
+    "GeminiProvider",
+    "GEMINI_DEFAULT_MODEL",
     "handshake",
     "UnreachableProvider",
     "ViolatingProvider",

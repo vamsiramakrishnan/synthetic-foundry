@@ -31,7 +31,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from .prompts import Prompt
-from .providers import ProviderError
+from .providers import ProviderError, malformed_narrative, parse_structured_narrative
 from .requests import GeneratedClaim, GeneratedNarrative, NarrativeRequest
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -176,54 +176,8 @@ class AnthropicProvider:
             None,
         )
         if text is None:
-            return _malformed()
-        return _parse_narrative(text)
-
-
-def _parse_narrative(raw: str) -> GeneratedNarrative:
-    """Turn the model's JSON text into a narrative, or a guaranteed rejection.
-
-    `output_config.format` constrains *shape*; it does not stop a claim from
-    citing no facts (`GeneratedClaim.supporting_fact_ids` requires at least one,
-    which the JSON Schema subset the API accepts cannot express — no `minItems`
-    on arrays, see the schema-limitations note in the `claude-api` skill) or the
-    top level from being missing a key the schema marked required but the model
-    dropped anyway. Either failure lands here rather than raising, because a
-    raised exception has no path back into the compiler's retry loop.
-    """
-    try:
-        payload = json.loads(raw)
-        return GeneratedNarrative(
-            text=payload["text"],
-            claims=[
-                GeneratedClaim(
-                    text=claim["text"],
-                    supporting_fact_ids=list(claim.get("supporting_fact_ids", [])),
-                )
-                for claim in payload.get("claims", [])
-            ],
-        )
-    except Exception:
-        return _malformed()
-
-
-def _malformed() -> GeneratedNarrative:
-    """A narrative shaped to fail validation, deliberately.
-
-    Empty claims against non-empty text always trips `unsupported_claim` in
-    `claims.py` ("prose was supplied with no claims"), regardless of what this
-    particular request required — the one violation code guaranteed to fire no
-    matter which facts or requirements the section carries. That violation
-    becomes next attempt's `feedback`, so the model sees it and self-corrects.
-    The raw response is not echoed into `text`: a stray digit or `{{fact:`-shaped
-    substring in whatever the model actually sent would trip an unrelated check
-    and bury the one signal that matters under noise the model didn't cause.
-    """
-    return GeneratedNarrative(
-        text=(
-            "The previous response could not be read as the required JSON object"
-            " — a `text` string plus a `claims` array, each claim citing at least"
-            " one fact. Re-read the response shape and try again."
-        ),
-        claims=[],
-    )
+            return malformed_narrative()
+        # `output_config.format` constrains *shape*; it cannot stop a claim from
+        # citing no facts (the JSON Schema subset the API accepts has no
+        # `minItems`), so the parse-or-guaranteed-rejection path stays live.
+        return parse_structured_narrative(text)

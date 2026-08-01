@@ -58,6 +58,10 @@ arrow = ["pyarrow>=15.0"]
 # `worldloom narrate auto` — the only stage that calls a model, so it is the only
 # stage that needs this. Everything else in the package runs with no API key.
 llm = ["anthropic>=0.40"]
+# The Gemini route through the same command (`--model gemini-*`). Satisfied
+# transitively by `pip install google-antigravity` too — Google's agent SDK
+# depends on google-genai — so an Antigravity environment needs no extra step.
+gemini = ["google-genai>=1.0"]
 # Every renderer at once — the ordinary way to install the tool rather than
 # the library. `pip install "worldloom[all]"`.
 all = [

@@ -192,7 +192,7 @@ worldloom narrate auto <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
-| `--model` | Anthropic model id. Omit to use the provider's default (see `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL`). |
+| `--model` | Model id. A `gemini-*` id routes to the Gemini provider (`worldloom[gemini]`, GEMINI_API_KEY); anything else — and the default — routes to Anthropic (`worldloom[llm]`, ANTHROPIC_API_KEY). Defaults: `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL` / `GEMINI_DEFAULT_MODEL`. |
 | `--retries` | Rejections the compiler will absorb per section before giving up. |
 
 ### `worldloom narrate requests`

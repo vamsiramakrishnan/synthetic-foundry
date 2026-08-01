@@ -31,8 +31,11 @@ rejected with the reason.
 Narrating by hand doesn't scale past a handful of documents. For bulk prose,
 `pip install "worldloom[llm]"` and run `worldloom narrate auto ./corpus` — the
 same request/validate/reject loop above, with an Anthropic model answering in
-place of the agent and `ANTHROPIC_API_KEY` in the environment. Everything else
-in this repository, including that loop's own tests, runs with neither.
+place of the agent and `ANTHROPIC_API_KEY` in the environment. A `--model
+gemini-*` id routes the identical loop to Gemini instead
+(`pip install "worldloom[gemini]"`, or `google-antigravity`, which carries the
+same SDK; `GEMINI_API_KEY`). Everything else in this repository, including
+both loops' own tests, runs with no key at all.
 
 That division is the design. The agent supplies judgement and language. The harness
 supplies truth, and refuses anything that contradicts it.

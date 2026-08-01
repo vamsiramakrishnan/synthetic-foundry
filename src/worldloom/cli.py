@@ -619,8 +619,11 @@ def narrate_auto(
     corpus: str = typer.Argument(..., help="Corpus path to narrate."),
     model: str = typer.Option(
         None, "--model",
-        help="Anthropic model id. Omit to use the provider's default"
-        " (see `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL`).",
+        help="Model id. A `gemini-*` id routes to the Gemini provider"
+        " (`worldloom[gemini]`, GEMINI_API_KEY); anything else — and the"
+        " default — routes to Anthropic (`worldloom[llm]`, ANTHROPIC_API_KEY)."
+        " Defaults: `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL` /"
+        " `GEMINI_DEFAULT_MODEL`.",
     ),
     retries: int = typer.Option(
         2, "--retries",
@@ -647,20 +650,43 @@ def narrate_auto(
     """
     import os
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        err.print(
-            "[red]error:[/red] ANTHROPIC_API_KEY is not set."
-            " Export it before running `worldloom narrate auto`."
-        )
-        raise typer.Exit(code=2)
+    from .narrative import (
+        ANTHROPIC_DEFAULT_MODEL,
+        AnthropicProvider,
+        GeminiProvider,
+        NarrationError,
+        ProviderError,
+    )
 
-    from .narrative import ANTHROPIC_DEFAULT_MODEL, AnthropicProvider, NarrationError, ProviderError
+    # Routed by model-id prefix rather than a separate --provider flag: every
+    # Gemini id starts with "gemini-" and no Anthropic id does, so the prefix
+    # is unambiguous, and one flag that means one thing beats two flags that
+    # can contradict each other.
+    if model and model.startswith("gemini"):
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            err.print(
+                "[red]error:[/red] GEMINI_API_KEY is not set (GOOGLE_API_KEY also"
+                " works). Export one before running `worldloom narrate auto`."
+            )
+            raise typer.Exit(code=2)
+        make_provider = lambda: GeminiProvider(model=model, api_key=api_key)  # noqa: E731
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            err.print(
+                "[red]error:[/red] ANTHROPIC_API_KEY is not set."
+                " Export it before running `worldloom narrate auto`."
+            )
+            raise typer.Exit(code=2)
+        make_provider = lambda: AnthropicProvider(  # noqa: E731
+            model=model or ANTHROPIC_DEFAULT_MODEL, api_key=api_key
+        )
 
     world = _compiled(_load(corpus), corpus)
 
     try:
-        provider = AnthropicProvider(model=model or ANTHROPIC_DEFAULT_MODEL, api_key=api_key)
+        provider = make_provider()
         narrated = world.narrate(provider, retries=retries)
     except (ProviderError, NarrationError) as exc:
         err.print(f"[red]error:[/red] {escape(str(exc))}")
