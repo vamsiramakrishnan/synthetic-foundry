@@ -475,19 +475,32 @@ def build(
                 err.print(f"[red]error:[/red] {replay} carries no generation ledger to replay")
                 raise typer.Exit(code=2)
             # Unreachable on purpose: a replay that quietly falls back to
-            # generating would not be a replay. Its id comes from the ledger
-            # itself — the id is a key component, so replaying a corpus
-            # narrated by any other provider (anthropic, gemini, a harness)
-            # under a fixed id missed every key.
-            recorded_ids = {entry.model_id for entry in ledger}
-            if len(recorded_ids) > 1:
+            # generating would not be a replay. Its id comes from what the
+            # artifacts record as `narrated_by` — the id is a key component,
+            # so replaying a corpus narrated by any other provider (anthropic,
+            # gemini, a harness) under a fixed id missed every key. It is NOT
+            # derived from the ledger's model_ids: an actor-mode corpus's
+            # ledger legitimately carries the actor provider's entries beside
+            # the narration's (CI's package job proved it, the first commit of
+            # this fix having refused exactly that), and extra entries are
+            # harmless — a key either matches or it doesn't.
+            narrated_ids = {
+                ir.metadata["narrated_by"]
+                for ir in source._artifact_irs
+                if "narrated_by" in ir.metadata
+            }
+            if len(narrated_ids) > 1:
                 err.print(
-                    f"[red]error:[/red] {replay}'s ledger was recorded by several"
-                    f" providers ({', '.join(sorted(recorded_ids))}); one narrate"
-                    " pass replays one provider's keys"
+                    f"[red]error:[/red] {replay} was narrated by several providers"
+                    f" ({', '.join(sorted(narrated_ids))}); one narrate pass"
+                    " replays one provider's keys"
                 )
                 raise typer.Exit(code=2)
-            provider = UnreachableProvider(id=next(iter(recorded_ids)))
+            provider = (
+                UnreachableProvider(id=narrated_ids.pop())
+                if narrated_ids
+                else UnreachableProvider()
+            )
 
         try:
             world = world.narrate(provider, ledger=ledger)

@@ -115,6 +115,22 @@ def test_a_foreign_provider_corpus_replays_under_its_recorded_id() -> None:
         fresh().narrate(UnreachableProvider(), ledger=narrated.ledger)
 
 
+def test_foreign_ledger_entries_are_harmless_to_replay(narrated: World) -> None:
+    """CI's package job caught the first version of the replay-id fix refusing
+    any ledger recorded by more than one provider — but an actor-mode corpus
+    legitimately carries the actor provider's entries beside the narration's
+    (scripted-actor-1 next to deterministic-fake-1). Extra entries must never
+    block a replay: a key either matches or it doesn't."""
+    foreign = narrated.ledger[0].model_copy(
+        update={"id": "GEN-9999", "key": "not-a-narration-key", "model_id": "scripted-actor-1"}
+    )
+    replayed = fresh().narrate(
+        UnreachableProvider(), ledger=narrated.ledger + (foreign,)
+    )
+    assert prose_of(replayed) == prose_of(narrated)
+    assert replayed._narration[0] == 0
+
+
 def test_an_exported_corpus_replays_byte_for_byte(narrated: World, tmp_path) -> None:
     """The end-to-end promise: same seed plus ledger, no model, identical files.
 
