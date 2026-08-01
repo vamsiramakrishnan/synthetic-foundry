@@ -24,6 +24,15 @@ pip install -e ".[dev]"          # from a checkout; released: pip install "world
 worldloom --help
 ```
 
+If the ask is loose — an industry, a purpose, a hardness bar, but no seed or
+shape yet chosen — start one level up from the loop below:
+`.claude/skills/worldloom/references/designing.md` is the decision guide for
+turning that kind of ask into a build (stock archetype vs. authoring an
+industry pack, which hardness families to force, deterministic prose vs.
+writing it yourself), and in Claude Code `/worldloom-design` drives the whole
+thing end to end — decide, author, build, measure, iterate, deliver. The loop
+below assumes those decisions are already made.
+
 ## The loop
 
 ```bash

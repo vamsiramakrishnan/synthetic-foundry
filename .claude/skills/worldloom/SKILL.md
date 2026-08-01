@@ -12,6 +12,10 @@ facts.
 
 `AGENTS.md` in the repository root is the contract. This is the procedure.
 
+For an open-ended ask rather than a named stage, drive the whole thing with
+`/worldloom-design`; the stages below are each their own command too
+(`/worldloom-build`, `/worldloom-narrate`, `/worldloom-render`, `/worldloom-evaluate`).
+
 ## The journey
 
 ```bash

@@ -48,6 +48,7 @@ DOCUMENTS = (
     ".claude/commands/worldloom-narrate.md",
     ".claude/commands/worldloom-render.md",
     ".claude/commands/worldloom-evaluate.md",
+    ".claude/commands/worldloom-design.md",
     "docs/generation-model.md",
     "docs/lore.md",
     # `docs/build-order.md` is deliberately absent. It is the roadmap, so it names
