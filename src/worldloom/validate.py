@@ -29,6 +29,7 @@ A violation is an error unless it is explained by a registered
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -113,6 +114,38 @@ class CoherenceError(Exception):
         self.report = report
         lines = "\n".join(f"  {v}" for v in report.violations)
         super().__init__(f"{len(report.violations)} coherence violation(s):\n{lines}")
+
+
+#: Check groups owned by domain modules, run after the core groups.
+#:
+#: The registry exists so a vertical's invariants can live beside the vertical
+#: rather than here — a banking rule that names ``capital.cet1_ratio`` in core
+#: would put domain vocabulary in the thin waist, which is the contamination
+#: build-order §7a exists to prevent. Registration happens at package import
+#: (``worldloom/__init__`` imports each domain module), never lazily at first
+#: use: a check that runs only when somebody happened to import the right
+#: module is a check that passes on machines where it never ran, and
+#: ``worldloom validate <corpus>`` in a fresh process is exactly that machine.
+#:
+#: Each group is a callable ``world -> (violations, checks_run)`` and must
+#: return quickly with no violations on a world its domain never touched —
+#: the same early-return contract ``_Validator.actors`` follows.
+_DOMAIN_CHECKS: dict[str, Callable[["World"], tuple[list[Violation], int]]] = {}
+
+
+def register_domain_checks(
+    name: str, checks: Callable[["World"], tuple[list[Violation], int]]
+) -> None:
+    """Register a domain-owned check group under *name*.
+
+    Idempotent for the same callable — module reloads re-register harmlessly —
+    but two different callables under one name is a programming error, not a
+    merge: the second would silently shadow invariants the first held.
+    """
+    existing = _DOMAIN_CHECKS.get(name)
+    if existing is not None and existing is not checks:
+        raise ValueError(f"a different check group is already registered as {name!r}")
+    _DOMAIN_CHECKS[name] = checks
 
 
 class _Validator:
@@ -1211,6 +1244,12 @@ class _Validator:
         self.intentional()
         self.actors()
         self.evaluation()
+        # Domain groups last, in name order so the report is stable however
+        # registration happened to be sequenced.
+        for name in sorted(_DOMAIN_CHECKS):
+            found, ran = _DOMAIN_CHECKS[name](self.world)
+            self.violations.extend(found)
+            self.checks += ran
         return ValidationReport(violations=self.violations, checks_run=self.checks)
 
 

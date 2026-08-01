@@ -44,6 +44,7 @@ STEPS: dict[str, tuple[str, ...]] = {
     "Hire": ("period", "role_key", "title", "function", "unit_key"),
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
+    "QuarterlyCapitalReturn": ("period",),
 }
 
 
@@ -93,6 +94,8 @@ def rebuild(
     the scripted fake, a paused handshake, or nothing at all.
     """
     from . import archetypes
+    from .banking import BANKING_ARCHETYPES, BankingWorld
+    from .banking_scenarios import QuarterlyCapitalReturn
     from .retail import RetailWorld
     from .scenarios import Departure, Hire, MonthEndClose, Reorganisation
 
@@ -109,7 +112,12 @@ def rebuild(
     except KeyError as exc:
         raise RecipeError(str(exc)) from None
 
-    world = RetailWorld(
+    # The archetype names the domain module that knows how to build it. Keyed
+    # on the archetype rather than a stored class name, for the same reason
+    # STEPS is a closed vocabulary: a recipe must never be able to import and
+    # execute an arbitrary callable on load.
+    builder = BankingWorld if shape.key in BANKING_ARCHETYPES else RetailWorld
+    world = builder(
         seed=recipe["seed"],
         archetype=shape,
         employees=recipe.get("employees"),
@@ -148,6 +156,8 @@ def rebuild(
                     new_leader_role=step["new_leader_role"],
                 )
             )
+        elif name == "QuarterlyCapitalReturn":
+            world = world.run(QuarterlyCapitalReturn(period=step["period"]))
         else:
             raise RecipeError(f"unknown scenario {name!r} in recipe")
     return world

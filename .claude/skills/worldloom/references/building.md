@@ -46,6 +46,14 @@ one produces. Pick one when the corpus needs to exercise a particular kind of
 hierarchy — a single-division retailer poses different roll-up questions than
 a four-division grocer with a New Zealand food arm.
 
+The archetype also chooses the *episode*. Retail archetypes run the month-end
+close; `midsize_adi` (a fictional Australian bank) runs the quarterly
+capital-return episode instead — a second-line challenge filed over by a
+lodgement norm, a reconciliation break caught by the daily liquidity cadence,
+and a restatement whose original filing stays on the record. The retail-only
+flags (`--incident`, `--periods`, `--comparatives`, `--actors`) are refused on
+a banking build rather than silently ignored.
+
 `--inspired-by "a large Australian grocer"` resolves a description to the
 archetype of that shape — it is a lookup over phrases like "woolies" or
 "large australian supermarket", not a data fetch. **No figure, name, or fact

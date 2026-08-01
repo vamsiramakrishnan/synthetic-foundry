@@ -62,6 +62,15 @@ rather read data than parse a table.
 Steps 3 and 4 repeat until every response is accepted. Rejection is normal and is
 not a failure of the harness — it is the harness working.
 
+The default build is the retail month-end close. `--archetype midsize_adi`
+builds the banking vertical instead: a quarterly capital return that is
+challenged by the second line, filed anyway under a lodgement norm, invalidated
+by a reconciliation break the daily liquidity cadence catches, and corrected by
+a *restatement* — a new lodgement that leaves the original on the record, which
+is the one thing `revises` and `supersedes` both may not do. Same loop from
+step 1b on; the retail-only flags (`--incident`, `--periods`, `--comparatives`,
+`--actors`) are refused rather than ignored.
+
 
 ---
 

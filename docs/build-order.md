@@ -542,9 +542,23 @@ Extract a generic abstraction only after both implementations require it. Do not
 
 Both verticals share the fact ledger, event model, artifact IR, manifest, evaluation schema, renderer interfaces, and provenance system. Domain-specific economics stay outside the core.
 
-### Open: which second vertical
+### Decided, and landed: banking
 
-IT services is the choice recorded above and it is a good one — a genuinely different economic engine, which is the thing that stresses the dimension and finance abstractions hardest.
+The decision below resolved in banking's favour, and the vertical shipped as
+`worldloom.banking` — `BankingWorld` plus the `QuarterlyCapitalReturn` episode
+("The Challenged Return": a second-line challenge filed over by a lodgement
+norm, the daily liquidity cadence catching the quarterly cadence's error, and a
+restatement whose original stays on the record). What decided it: the three
+structures listed below are exactly what the A10 measurement said the retail
+episode could not generate, and `restates` — the fourth relationship — was
+already core schema waiting for its first user. The exit gate held: zero core
+model changes; banking's checks, artifact types, and archetype all arrive
+through registration seams (`validate.register_domain_checks`,
+`documents.register_artifact_types`, `archetypes.py` data). The misfits the
+pack extraction must read are recorded in `worldloom/banking.py`'s docstring.
+
+The IT-services shape below remains a good third vertical; the reasoning is
+kept because it documents what the choice was made against.
 
 There is a case for **banking / regulatory** instead, and it is worth stating so the decision is made rather than inherited. IT services differs from retail in its *nouns and economics* while sharing retail's rhythm and its authority shape: a monthly cycle, a simple preparer-to-approver chain. Banking differs in three things nothing has yet tested:
 

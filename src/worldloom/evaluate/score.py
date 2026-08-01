@@ -156,9 +156,22 @@ def score(world: World, *, k: int = DEFAULT_K) -> Scorecard:
             if not carrying or not found:
                 passed, detail = False, "no passage carries the expected fact"
             else:
+                # Both halves are required. Rank alone passed a retriever whose
+                # top hit was the *wrong* document at the right authority —
+                # invisible while every corpus discriminated by rank, exposed
+                # the moment the banking vertical put two lodgements at
+                # SYSTEM_OF_RECORD on purpose: surfacing the superseded filing
+                # scored as authority resolution while carrying none of the
+                # answer. Resolving authority means surfacing the document the
+                # answer actually rests on, at the standing the answer needs.
                 best_rank = max(p.authority_rank for p in carrying)
-                passed = found[0].authority_rank >= best_rank
-                detail = f"top passage authority {found[0].authority.value}"
+                top = found[0]
+                answers = bool(set(case.expected_fact_ids) & top.fact_ids)
+                passed = top.authority_rank >= best_rank and answers
+                detail = (
+                    f"top passage authority {top.authority.value}"
+                    + ("" if answers else ", and it carries none of the expected facts")
+                )
 
         else:
             passed = _covers(found, case)

@@ -105,6 +105,22 @@ jobs:
             --replay "${{ runner.temp }}/series" $FORMATS --out "${{ runner.temp }}/series-again"
           diff -r "${{ runner.temp }}/series" "${{ runner.temp }}/series-again"
 
+      # The second vertical, end to end: the banking world builds, narrates,
+      # renders, validates, and replays byte-for-byte with the provider
+      # unreachable. Exercised here as well as in pytest because this is the
+      # CLI's dispatch path — a banking corpus that only worked through the
+      # Python API would be a vertical the tool's own front door cannot reach.
+      - name: The banking vertical validates and replays
+        run: |
+          FORMATS="-f markdown -f servicenow"
+          worldloom build --seed 8128 --archetype midsize_adi --narrate $FORMATS \
+            --out "${{ runner.temp }}/bank"
+          worldloom validate "${{ runner.temp }}/bank"
+          worldloom evaluate "${{ runner.temp }}/bank"
+          worldloom build --seed 8128 --archetype midsize_adi \
+            --replay "${{ runner.temp }}/bank" $FORMATS --out "${{ runner.temp }}/bank-again"
+          diff -r "${{ runner.temp }}/bank" "${{ runner.temp }}/bank-again"
+
       # The agent handshake: a corpus asks for prose, and refuses prose that
       # restates a figure. Exercised with a scripted "agent" so the contract is
       # covered without a model in CI.

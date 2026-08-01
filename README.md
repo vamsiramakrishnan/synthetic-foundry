@@ -396,7 +396,7 @@ a question with a checkable answer. The full contract is in
 
 ## What Worldloom generates
 
-Today, from one retail close episode:
+From the retail close episode (the default build):
 
 | Domain | Artifacts |
 | --- | --- |
@@ -407,11 +407,22 @@ Today, from one retail close episode:
 | **People** | Personnel notices, when someone joins, leaves, or a unit changes hands |
 | **Evaluation** | Question sets over all of it: direct, cross-artifact, numerical, causal, temporal, authority, abstention |
 
+And from the banking episode (`--archetype midsize_adi`): a quarterly capital
+return challenged by the second line before lodgement, filed anyway under a
+lodgement norm, invalidated by a reconciliation break the *daily* liquidity
+cadence catches, and corrected by a **restatement** that leaves the original
+filing on the record — capital return and its restatement, RWA working papers
+(v1 revised to v2), the second-line challenge memo, incident record and RCA,
+the internal audit ruling, and a board summary with a labelled omission. Both
+lodgements sit at the same authority, so nothing but the restatement
+relationship and fact validity can say which figure is current — which is
+exactly the question the evaluation set asks.
+
 Rendered natively to **XLSX**, **DOCX**, **PPTX**, **PDF**, **Markdown**, and
 portable **Jira**, **Confluence**, and **ServiceNow** bundles. Renderers are
 plugins; adding one never touches the world model. The wider artifact families —
-board packs, PRDs, account plans, workforce plans — arrive with the second
-vertical and bounded fan-out, per the [roadmap](#roadmap).
+board packs, PRDs, account plans, workforce plans — arrive with bounded
+fan-out, per the [roadmap](#roadmap).
 
 ---
 
@@ -650,11 +661,11 @@ The first executable is `worldloom demo retail-close`, not `worldloom interview`
 - [x] The retail-close incident as an actor episode, replayable byte-for-byte
 - [x] The `worldloom act` handshake: one decision at a time, resumable by rebuild
 - [ ] Actor memory, meetings, incentives, cross-period actors (A6–A9)
-- [ ] The measured hardness gate (A10): authority and temporal families must get *harder*
+- [x] The measured hardness gate (A10) on the banking corpus: contested authority at a deliberate rank tie, and its temporal inverse, both scoring below direct lookup — pinned as an inequality in tests
 
 **Gate C — Generality.** A second industry works without industry-specific fields reaching the core.
 
-- [ ] The second vertical: IT services or banking — deliberately still an open decision, recorded in [docs/build-order.md](docs/build-order.md) §7
+- [x] The second vertical: banking (`BankingWorld` + `QuarterlyCapitalReturn` — the challenged, restated capital return), with zero core model changes; decision recorded in [docs/build-order.md](docs/build-order.md) §7
 - [ ] Domain modules and the industry-pack interface, extracted from two verticals rather than guessed
 - [ ] Archetype packs as config, and full lore packs
 - [ ] Socratic world composer, with replay and an assumption ledger
@@ -668,7 +679,7 @@ The first executable is `worldloom demo retail-close`, not `worldloom interview`
 - [ ] 100K artifacts, partitioned storage and workers
 - [ ] 1M artifacts, distributed execution
 - [ ] External publishers for Jira, Confluence, ServiceNow
-- [ ] Further industry packs: healthcare, banking, manufacturing
+- [ ] Further industry packs: healthcare, IT services, manufacturing
 - [ ] Multi-company ecosystems and cross-enterprise supply chains
 
 Deliberately postponed: a web UI, multi-agent world-building, a graph database, direct SaaS publishing, and meta-generation of generators. These add surface area without proving the product.

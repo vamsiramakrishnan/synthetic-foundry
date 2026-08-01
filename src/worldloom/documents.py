@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .ids import Minter
 from .narrative import references
@@ -79,6 +79,39 @@ _LAG: dict[str, timedelta] = {
 def standing(artifact_type: str) -> tuple[Authority, Lifecycle]:
     """The authority and lifecycle an artifact of this type carries."""
     return _STANDING.get(artifact_type, (Authority.WORKING_DOCUMENT, Lifecycle.DRAFT))
+
+
+def register_artifact_types(
+    *,
+    standing: dict[str, tuple[Authority, Lifecycle]] | None = None,
+    lags: dict[str, "timedelta"] | None = None,
+    outlines: dict[str, tuple["SectionPlan", ...]] | None = None,
+    compilers: dict[str, Any] | None = None,
+) -> None:
+    """Add a domain module's artifact types to the compiler's tables.
+
+    The tables above are retail vocabulary and stay that way — a second
+    vertical's types are registered from its own module rather than written
+    here, so the list of what banking publishes lives beside banking's episode
+    (build-order §7a). Registration happens at package import, the same
+    contract as ``validate.register_domain_checks``: types that exist only when
+    the right module happened to be imported would make ``compile()`` differ
+    between processes, which is a determinism bug wearing a plugin's clothes.
+
+    Re-registering the same value is harmless; changing what an existing type
+    means is refused, because two modules that disagree about a type's standing
+    would make an artifact's authority depend on import order.
+    """
+    for table, additions in (
+        (_STANDING, standing),
+        (_LAG, lags),
+        (_OUTLINES, outlines),
+        (_COMPILERS, compilers),
+    ):
+        for key, value in (additions or {}).items():
+            if key in table and table[key] != value:
+                raise ValueError(f"artifact type {key!r} is already registered differently")
+            table[key] = value  # type: ignore[assignment]
 
 
 def written_at(intent: ArtifactIntent, facts: dict[str, CanonicalFact]):  # type: ignore[no-untyped-def]
@@ -1188,8 +1221,16 @@ def _divisional_summary(
     )
 
 
+#: Artifact types whose IR is built by a dedicated function rather than the
+#: generic outline. The workbook was the only entry until banking registered
+#: its capital return; the dict exists so a domain module's source artifact
+#: does not need a branch here naming it.
+_COMPILERS: dict[str, Any] = {"finance_workbook": finance_workbook}
+
+
 def compile_intent(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     """Compile one intent into an IR."""
-    if intent.artifact_type == "finance_workbook":
-        return finance_workbook(world, intent, minter)
+    builder = _COMPILERS.get(intent.artifact_type)
+    if builder is not None:
+        return builder(world, intent, minter)
     return outline(world, intent, minter)

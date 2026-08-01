@@ -198,7 +198,34 @@ def build(
             err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
 
-    world = RetailWorld(seed=seed, archetype=shape, employees=employees).build()
+    # A banking archetype builds a banking world and runs the capital-return
+    # episode; every retail-only flag is refused rather than ignored, because a
+    # flag that silently does nothing teaches the wrong lesson about the tool.
+    from .banking import BANKING_ARCHETYPES
+
+    if shape.key in BANKING_ARCHETYPES:
+        from .banking import BankingWorld
+        from .banking_scenarios import QuarterlyCapitalReturn
+
+        refused = [
+            flag for flag, given in (
+                ("--actors", actors is not None),
+                ("--incident/--no-incident", incident is not None),
+                ("--comparatives", comparatives > 0),
+                ("--periods", periods > 1),
+            ) if given
+        ]
+        if refused:
+            err.print(
+                f"[red]error:[/red] {', '.join(refused)} belong(s) to the retail close;"
+                " the banking vertical runs one capital-return cycle per build"
+            )
+            raise typer.Exit(code=2)
+
+        world = BankingWorld(seed=seed, archetype=shape, employees=employees).build()
+        world = world.run(QuarterlyCapitalReturn(period=period))
+    else:
+        world = RetailWorld(seed=seed, archetype=shape, employees=employees).build()
 
     # The actor provider is resolved before the loop, and a replay makes it
     # unreachable for the same reason a replayed narration does: a fallback that
@@ -253,11 +280,12 @@ def build(
 
     # Consecutive closes on one world. Comparatives belong to the first only: they
     # backfill months before it, and a later episode asking for them again would
-    # generate a second set of facts for months the corpus already has.
+    # generate a second set of facts for months the corpus already has. The
+    # banking world already ran its episode above, so it skips the close loop.
     year, month = (int(part) for part in period.split("-"))
     from .actors import ActorProviderError
 
-    for index in range(max(1, periods)):
+    for index in range(max(1, periods) if shape.key not in BANKING_ARCHETYPES else 0):
         stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
         try:
             world = world.run(

@@ -7,7 +7,7 @@ reproducibility even when no API moved.
 
 ## 0.1.0 — first release
 
-One coherent enterprise, taken all the way through.
+One coherent enterprise, taken all the way through. Two, in fact.
 
 ### The tool
 
@@ -16,6 +16,18 @@ One coherent enterprise, taken all the way through.
   month-end close with an optional operational incident, the documents that
   episode warrants, and an evaluation set over all of it. The same seed produces
   the same corpus, byte for byte.
+- **Two industry verticals.** The retail month-end close is the default;
+  `--archetype midsize_adi` builds a fictional bank and runs the quarterly
+  capital-return episode instead — challenged by the second line before
+  lodgement, filed anyway under a lodgement norm, invalidated by a
+  reconciliation break the daily liquidity cadence catches, and corrected by a
+  *restatement* that leaves the original filing on the record. Both lodgements
+  carry the same authority, so only the restatement relationship and fact
+  validity can say which figure is current — and the evaluation set asks
+  exactly that, paired with its temporal inverse so no retrieval bias answers
+  both. Banking adds zero fields to the core model: its validator checks,
+  artifact types, and archetype arrive through registration seams any future
+  vertical can use.
 - **Seven output formats.** XLSX with live formulas, named ranges, and hidden
   lineage and reconciliation sheets; DOCX, PPTX, and native PDF; Markdown; and
   portable Jira, Confluence, and ServiceNow bundles. All projections of one

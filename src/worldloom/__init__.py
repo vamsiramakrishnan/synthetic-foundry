@@ -50,6 +50,13 @@ from .world import World
 from .scenarios import MonthEndClose
 from .retail import RetailWorld
 
+# Imported unconditionally, not on demand: importing the banking module is what
+# registers its validator check group and artifact types, and a corpus loaded
+# in a fresh process must validate and compile identically to the process that
+# generated it. Lazy registration would make coherence depend on import order.
+from .banking import BankingWorld
+from .banking_scenarios import QuarterlyCapitalReturn
+
 __version__ = "0.1.0"
 
 __all__ = [
@@ -57,6 +64,8 @@ __all__ = [
     "World",
     "RetailWorld",
     "MonthEndClose",
+    "BankingWorld",
+    "QuarterlyCapitalReturn",
     # entities
     "Company",
     "BusinessUnit",

@@ -705,6 +705,14 @@ class World:
         if not self._access_policies:
             return None
         by_label = {policy.label.lower(): policy.id for policy in self._access_policies}
+        # A policy whose label *is* the audience wins outright. This is the
+        # generic rule — a domain module that names its policies after its
+        # audiences ("finance_and_risk" → "Finance and risk") needs no entry in
+        # the retail table below, and the table stays what it is: retail's own
+        # audience vocabulary, not a registry every vertical must edit.
+        exact = audience.replace("_", " ")
+        if exact in by_label:
+            return by_label[exact]
         wanted = {
             "all_staff": "all staff",
             "finance": "finance and audit only",

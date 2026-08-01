@@ -195,9 +195,78 @@ OMNICHANNEL_RETAILER = Archetype(
     ),
 )
 
+def _retail_bank_books() -> tuple[CategorySpec, ...]:
+    """Retail banking's product books, with a lender's margin spread.
+
+    ``share`` is the book's share of the unit's net interest income and
+    ``margin`` its net interest margin profile — the same two fields a retail
+    category uses for revenue share and gross margin, deliberately, because the
+    dimension machinery must be exercised by both verticals before §7a extracts
+    a pack interface from it. Mortgages dominate income on the thinnest margin;
+    cards are small and rich; deposits earn a spread, not a fee.
+    """
+    return (
+        CategorySpec("Residential Mortgages", 0.52, 0.019),
+        CategorySpec("Credit Cards", 0.13, 0.083),
+        CategorySpec("Personal Loans", 0.09, 0.061),
+        CategorySpec("Transaction and Savings Deposits", 0.26, 0.021),
+    )
+
+
+def _business_bank_books() -> tuple[CategorySpec, ...]:
+    return (
+        CategorySpec("SME Secured Lending", 0.47, 0.028),
+        CategorySpec("Commercial Property", 0.33, 0.024),
+        CategorySpec("Asset Finance", 0.20, 0.039),
+    )
+
+
+#: A mid-size Australian deposit-taking bank. Shape only, like the grocer: the
+#: scale is the sector's, the books are generic banking, and every figure is
+#: generated from a seed. The regulator this bank files to is fictional (see
+#: ``worldloom.banking``) — no real prudential standard or authority is named.
+MIDSIZE_ADI = Archetype(
+    key="midsize_adi",
+    label="Mid-size Australian deposit-taking bank",
+    industry="Banking",
+    currency="AUD",
+    currency_unit="millions",
+    fiscal_year_start_month=7,
+    # Net operating income, in millions — the banking analogue of revenue.
+    annual_revenue=2_400,
+    employees=12_000,
+    units=(
+        UnitSpec(
+            key="retail", name="Retail Banking", kind="retail_banking", share=0.55,
+            categories=_retail_bank_books(),
+            site_formats=(
+                SiteFormat("Branch", 118, 1.00),
+                # The operations centre is banking's distribution centre: it
+                # holds work, not income, and hierarchy.py already documents the
+                # zero-revenue-weight case for exactly this shape.
+                SiteFormat("Operations Centre", 1, 0.0),
+            ),
+        ),
+        UnitSpec(
+            key="business", name="Business Banking", kind="business_banking", share=0.30,
+            categories=_business_bank_books(),
+            site_formats=(SiteFormat("Business Banking Centre", 14, 2.4),),
+        ),
+        UnitSpec(
+            # No books and no sites, like retail's digital unit had no estate: a
+            # treasury desk's income is not decomposed by product book, and an
+            # empty tuple is the honest statement of that.
+            key="treasury", name="Treasury and Markets", kind="treasury", share=0.15,
+            categories=(),
+        ),
+    ),
+)
+
+
 _REGISTRY: dict[str, Archetype] = {
     AUSTRALIAN_GROCERY.key: AUSTRALIAN_GROCERY,
     OMNICHANNEL_RETAILER.key: OMNICHANNEL_RETAILER,
+    MIDSIZE_ADI.key: MIDSIZE_ADI,
 }
 
 #: What `inspired_by` accepts, and the archetype each phrase resolves to.
@@ -216,6 +285,13 @@ _INSPIRATION: dict[str, str] = {
     "grocery": "australian_grocery",
     "retailer": "omnichannel_retailer",
     "retail": "omnichannel_retailer",
+    "bank": "midsize_adi",
+    "banking": "midsize_adi",
+    "australian bank": "midsize_adi",
+    "regional bank": "midsize_adi",
+    # Not the bare acronym "adi": three letters that occur inside ordinary
+    # words ("trading") would hijack descriptions that never mention a bank.
+    "deposit-taking institution": "midsize_adi",
 }
 
 
