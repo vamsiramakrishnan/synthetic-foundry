@@ -240,7 +240,7 @@ matter to what you're testing.
 
 ```bash
 worldloom narrate auto ./corpus --model claude-sonnet-5
-worldloom narrate auto ./corpus --model gemini-2.5-flash    # same loop, Gemini answering
+worldloom narrate auto ./corpus --model gemini-3.6-flash    # same loop, Gemini answering
 worldloom narrate auto ./corpus --harness claude-code       # an agent harness answering,
 worldloom narrate auto ./corpus --harness antigravity       # not a bare model call
 ```

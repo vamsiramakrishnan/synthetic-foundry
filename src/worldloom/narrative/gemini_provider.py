@@ -34,9 +34,12 @@ if TYPE_CHECKING:  # pragma: no cover
 #: Flash over Pro for the same reason the Anthropic adapter defaults to Sonnet
 #: over Opus: this path exists to make *bulk* narration affordable, and a
 #: section of prose is a small, repeated, well-specified task — the shape the
-#: fast tier is priced for. Overridable per construction, and the id folds into
-#: the ledger key, so changing it yields a different world explicitly.
-DEFAULT_MODEL = "gemini-2.5-flash"
+#: fast tier is priced for. The concrete id was verified against the live
+#: models.list() rather than assumed. Overridable per construction, and the id
+#: folds into the ledger key, so changing it yields a different world
+#: explicitly — which is also why bumping this default is a deliberate act,
+#: never housekeeping.
+DEFAULT_MODEL = "gemini-3.6-flash"
 
 #: Same words as the Anthropic system prompt, restated rather than shared,
 #: because the response-shape sentence is doing vendor-specific work: here the
