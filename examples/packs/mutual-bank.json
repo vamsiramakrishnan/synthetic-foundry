@@ -1,0 +1,83 @@
+{
+  "name": "mutual-bank",
+  "base": "banking",
+  "description": "Member-owned mutual bank, run through the challenged-return engine",
+  "company_name": "Fairmont Mutual Bank",
+  "industry": "Banking",
+  "currency": "AUD",
+  "currency_unit": "millions",
+  "annual_revenue": 900,
+  "employees": 3500,
+  "system_brands": {
+    "core_banking": "MemberCore",
+    "collateral": "Security Register",
+    "risk_platform": "Prudential Analytics",
+    "reg_portal": "PSA Direct Lodgement",
+    "market_data": "Rates Desk Feed"
+  },
+  "voices": {
+    "cfo": {
+      "voice": "plain-spoken, member-first, precise about obligations",
+      "phrases": ["member value", "within the standard's window"]
+    },
+    "prudential_risk_head": {
+      "voice": "formal, unhurried, immovable on the record",
+      "phrases": ["on the record", "cannot be confirmed from the register"]
+    }
+  },
+  "episode_text": {
+    "event.working_paper_issued": "The RWA working paper was issued, treating the Owner-Occupier Home Loans book's collateral as fully secured.",
+    "event.challenge_raised": "Prudential Risk challenged the Owner-Occupier collateral treatment on the record: sampled revaluations looked stale and the fully-secured treatment could not be confirmed from the Security Register. The challenge was logged with status open.",
+    "fact.confirmed_cause": "Stale collateral-valuation mapping left over from the 2023 security-register migration; revaluations lapsed for the Owner-Occupier Home Loans book"
+  },
+  "units": [
+    {
+      "key": "members",
+      "name": "Member Banking",
+      "kind": "retail_banking",
+      "share": 0.7,
+      "categories": [
+        {"name": "Owner-Occupier Home Loans", "share": 0.62, "margin": 0.02},
+        {"name": "Member Deposits", "share": 0.38, "margin": 0.019}
+      ],
+      "site_formats": [
+        {"name": "Service Centre", "count": 22, "revenue_weight": 1.0}
+      ]
+    },
+    {
+      "key": "agri",
+      "name": "Agribusiness",
+      "kind": "business_banking",
+      "share": 0.3,
+      "categories": [
+        {"name": "Farm Term Lending", "share": 1.0, "margin": 0.027}
+      ]
+    }
+  ],
+  "lore": [
+    {
+      "kind": "decision",
+      "assertion": "The security-register migration of 2023 carried collateral-valuation mappings over as a one-off exercise, and the revaluation schedules attached to them were never re-baselined.",
+      "effective_from": "2023-09",
+      "constrains": [
+        {"kind": "event_likelihood", "target": "data_quality_incident/collateral", "effect": "Carried-over mappings drift from the register", "magnitude": 2.0}
+      ]
+    },
+    {
+      "kind": "norm",
+      "assertion": "Regulatory returns lodge on the due date; an open review challenge is logged against the return, not treated as blocking.",
+      "effective_from": "2022-01",
+      "constrains": [
+        {"kind": "risk_appetite", "target": "finance/file_over_challenge", "effect": "Filing over an open challenge is an accepted, recorded decision", "magnitude": 0.7}
+      ]
+    },
+    {
+      "kind": "norm",
+      "assertion": "The three-lines charter: audit reports functionally to the board audit committee and administratively to the CEO.",
+      "effective_from": "2021-01",
+      "constrains": [
+        {"kind": "approval_chains", "target": "regulatory_filing_signoff", "effect": "Second-line review precedes lodgement; the record shows when it was overridden", "magnitude": 1.0}
+      ]
+    }
+  ]
+}

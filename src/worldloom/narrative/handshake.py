@@ -23,7 +23,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from . import references
-from .claims import validate
+from .claims import known_entity_names, validate
 from .compiler import _request_for
 from .requests import (
     GeneratedClaim,
@@ -199,12 +199,7 @@ def review(
     fixing five violations in one pass beats five round trips.
     """
     facts = {fact.id: fact for fact in world.facts}
-    entity_names = frozenset(
-        [world.company.name]
-        + [unit.name for unit in world.business_units]
-        + [person.name for person in world.people]
-        + [system.name for system in world.systems]
-    )
+    entity_names = known_entity_names(world)
 
     verdicts: dict[str, Verdict] = {}
     for request in pending(world):

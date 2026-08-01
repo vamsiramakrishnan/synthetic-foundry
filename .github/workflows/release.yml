@@ -1,0 +1,102 @@
+name: release
+
+# Publishing is tag-driven and gated on the same proofs as every push: the full
+# test suite, the docs check, and the wheel smoke. Nothing here is a second
+# quality bar — the release exists to sign what CI already established, plus one
+# check only a release can make: that the tag and the package agree about the
+# version.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev,polars,xlsx,docx,pdf,pptx]"
+      - name: Tests
+        run: pytest -q
+      - name: The docs still describe the CLI
+        run: worldloom docs --check
+      - name: The golden episode validates
+        run: worldloom validate retail-close
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: The tag names the version the package carries
+        # A v0.2.0 tag on a tree whose __init__ says 0.1.0 would publish a
+        # package that disagrees with its own git history. Checked against the
+        # single-sourced version file, before anything is built.
+        run: |
+          grep -q "__version__ = \"${GITHUB_REF_NAME#v}\"" src/worldloom/__init__.py || {
+            echo "tag $GITHUB_REF_NAME does not match src/worldloom/__init__.py"; exit 1;
+          }
+
+      - name: Build sdist and wheel
+        run: pipx run build
+
+      - name: The wheel works bare, and degrades legibly
+        run: |
+          python -m venv /tmp/bare
+          /tmp/bare/bin/pip install --quiet dist/*.whl
+          cd /tmp
+          /tmp/bare/bin/worldloom version
+          /tmp/bare/bin/worldloom demo retail-close --out /tmp/demo
+          /tmp/bare/bin/worldloom build --seed 8128 --incident --narrate \
+            -f markdown -f jira -f confluence -f servicenow --out /tmp/bare-corpus
+          /tmp/bare/bin/worldloom validate /tmp/bare-corpus
+          if /tmp/bare/bin/worldloom build --seed 8128 -f xlsx --out /tmp/nope 2>/tmp/err.txt; then
+            echo "xlsx rendered without openpyxl installed"; exit 1
+          fi
+          grep -q "worldloom\[xlsx\]" /tmp/err.txt
+
+      - name: The wheel renders, validates, and replays with every extra
+        run: |
+          python -m venv /tmp/full
+          WHEEL="$(readlink -f dist/*.whl)"
+          /tmp/full/bin/pip install --quiet "worldloom[all] @ file://$WHEEL"
+          cd /tmp
+          FORMATS="-f xlsx -f docx -f pptx -f pdf -f markdown -f jira -f confluence -f servicenow"
+          /tmp/full/bin/worldloom build --seed 8128 --incident --actors scripted --narrate \
+            $FORMATS --out /tmp/one
+          /tmp/full/bin/worldloom validate /tmp/one
+          /tmp/full/bin/worldloom build --seed 8128 --incident --actors scripted \
+            --replay /tmp/one $FORMATS --out /tmp/two
+          diff -r /tmp/one /tmp/two
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: [test, package]
+    runs-on: ubuntu-latest
+    # Trusted publishing: PyPI is told to accept this repository, this workflow,
+    # and this environment, and no API token is stored anywhere. Configured once
+    # on PyPI per RELEASING.md.
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

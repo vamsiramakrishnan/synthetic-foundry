@@ -1,18 +1,22 @@
 """Name pools.
 
-Deliberately dull, and deliberately temporary.
+Deliberately dull on purpose. Naming is a *generative* concern — the generation
+boundary puts brands, culture, and terminology on the model's side of the wall —
+but step 3 runs with no model at all, so a pack-less world's names come from
+fixed pools combined deterministically by seed. That is enough to prove the
+deterministic spine works, and it is not enough to be interesting on its own:
+two worlds from different seeds still read as the same kind of company, only
+differing in structure and figures.
 
-Naming is a *generative* concern — the generation boundary puts brands, culture,
-and terminology on the model's side of the wall. But step 3 runs with no model at
-all, so names come from fixed pools combined deterministically by seed. That is
-enough to prove the deterministic spine works, and it is not enough to be
-interesting: two worlds from different seeds will differ in structure and figures
-but read as the same kind of company.
-
-Step 8 replaces this with archetype and lore packs, at which point identity
-becomes a recorded generative call rather than a lookup. Until then this file is
-a placeholder wearing a function signature, and the surrounding code should not
-grow to depend on the pools themselves.
+De-hardcoding ladder rung 4 (``docs/build-order.md`` §7a) promoted these pools
+from a private constant to data a pack may author: ``people_names`` accepts
+``given``/``family`` overrides, and ``packs.Pack.name_pools`` is the authored
+form. What stays code either way is the *mechanism* — sampling without
+replacement so a seed cannot mint two people sharing a name — and the pools
+below, which every pack-less build and every pack that leaves a pool empty
+still draws from. ``headquarters`` stays a single draw a pack overrides
+wholesale via ``Pack.headquarters``, the same discipline as ``company_name``:
+nobody authors a company's one headquarters as a *pool*.
 
 Names are invented. Any resemblance to a real organisation or person is not
 intended, which is also why the pools mix roots from many languages rather than
@@ -20,6 +24,8 @@ drawing on one naming tradition.
 """
 
 from __future__ import annotations
+
+from collections.abc import Sequence
 
 from ..rng import Rng
 
@@ -76,18 +82,30 @@ def headquarters(rng: Rng) -> str:
     return f"{city}, {country}"
 
 
-def people_names(rng: Rng, count: int) -> list[str]:
+def people_names(
+    rng: Rng, count: int, *,
+    given: Sequence[str] | None = None, family: Sequence[str] | None = None,
+) -> list[str]:
     """*count* distinct person names.
 
-    Given and family names are drawn from independent shuffles so a seed cannot
-    produce two identical people, which the uniqueness check would otherwise
-    catch as a coherence failure.
+    ``given``/``family`` default to the engine's own pools (``GIVEN``/
+    ``FAMILY``); a pack supplies either or both through ``Pack.name_pools``,
+    and an empty half there means "keep the engine's default for this half
+    only" — an author who cares about family names but not given ones is not
+    forced to write out forty given names to say so. Given and family names
+    are drawn from independent shuffles so a seed cannot produce two
+    identical people, which the uniqueness check would otherwise catch as a
+    coherence failure.
     """
-    if count > len(GIVEN) or count > len(FAMILY):
-        raise ValueError(f"name pools hold {min(len(GIVEN), len(FAMILY))} people, asked for {count}")
-    given = rng.derive("given").sample(GIVEN, count)
-    family = rng.derive("family").sample(FAMILY, count)
-    return [f"{g} {f}" for g, f in zip(given, family)]
+    given_pool = given if given else GIVEN
+    family_pool = family if family else FAMILY
+    if count > len(given_pool) or count > len(family_pool):
+        raise ValueError(
+            f"name pools hold {min(len(given_pool), len(family_pool))} people, asked for {count}"
+        )
+    given_names = rng.derive("given").sample(given_pool, count)
+    family_names = rng.derive("family").sample(family_pool, count)
+    return [f"{g} {f}" for g, f in zip(given_names, family_names)]
 
 
 def system_names(rng: Rng) -> dict[str, str]:

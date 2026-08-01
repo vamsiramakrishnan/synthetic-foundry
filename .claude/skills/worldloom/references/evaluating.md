@@ -8,16 +8,22 @@ but "is it actually hard to retrieve from." This stage answers that.
 worldloom evaluate ./corpus
 worldloom evaluate ./corpus -v
 worldloom evaluate ./corpus -k 3
+worldloom evaluate ./corpus --retriever both
 worldloom evals export ./corpus -o evals.jsonl
+worldloom stats ./corpus
 ```
 
 `-v`/`--verbose` prints every case with pass/fail and a one-line detail.
-`-k` changes how many passages the baseline retriever is allowed to return
-(default 5) — lowering it makes every question type harder, which is a way to
-sanity-check that a family isn't passing only because it's allowed to return
-half the corpus. `worldloom evals export` writes the evaluation set as JSONL,
-one case per line, sorted keys — the format to hand to an external retrieval
-system you want to score against this same answer key.
+`-k` changes how many passages a retriever is allowed to return (default 5) —
+lowering it makes every question type harder, which is a way to sanity-check
+that a family isn't passing only because it's allowed to return half the
+corpus. `--retriever` picks which ranking family scores the corpus — `bm25`
+(the default, unchanged), `tfidf`, or `both`; see below. `worldloom evals
+export` writes the evaluation set as JSONL, one case per line, sorted keys —
+the format to hand to an external retrieval system you want to score against
+this same answer key. `worldloom stats` is `evaluate`'s sibling for a different
+question — not "is this corpus hard to retrieve from" but "what does it
+actually contain" — see the section at the end of this file.
 
 ## What's being measured, and what isn't
 
@@ -35,7 +41,7 @@ turning each rendered artifact section into a `Passage` that carries its fact
 IDs, authority, and timestamp. Nothing about "did this read well" is scored
 here; that's the narration stage's job, enforced by `claims.py` instead.
 
-## The baseline
+## The baselines
 
 `src/worldloom/evaluate/bm25.py` is BM25 in well under a hundred lines, no
 dependency, unweighted, untuned (`K1`/`B` are textbook defaults — "a tuned
@@ -48,6 +54,49 @@ every question family this baseline gets wrong is a family the corpus is
 successfully making hard, and every family it gets right is either genuinely
 easy (single-fact lookup) or a sign the corpus isn't posing the question it
 thinks it's posing.
+
+`src/worldloom/evaluate/tfidf.py` is the second one: TF-IDF cosine, a genuinely
+different ranking family, not a second copy of the first with different
+constants. BM25 is probabilistic-relevance (term frequency *saturates* inside a
+formula tuned to approximate "probability this document is relevant", length
+normalised as a ratio to the corpus's average document length). TF-IDF cosine
+is vector-space (term frequency is log-*damped*, not saturating — a different
+nonlinearity — length normalised by each document's own Euclidean vector norm,
+and the score is an angle between two vectors rather than a sum of per-term
+relevance). Both are equally blind to time, authority, and provenance; where
+they differ is *which* keyword patterns each one happens to reward, which is
+exactly the axis the credibility reading below depends on. Tokenisation is
+shared (`tfidf.py` imports `bm25.tokens` rather than redefining it) so a
+disagreement between the two is never just the two retrievers having chunked
+the text differently.
+
+## The credibility reading: run both
+
+A hardness claim resting on one retriever proves less than it looks like it
+proves — a family that BM25 fails might just be a family keyword-overlap
+scoring happens to handle badly, with nothing structural about the corpus
+behind it. `worldloom evaluate ./corpus --retriever both` runs BM25 and TF-IDF
+cosine side by side and reports, per family, one of three readings:
+
+- **consistently hard** — both retrievers fail it. This is the good result:
+  neither probabilistic nor vector-space keyword ranking can shortcut the
+  question, so whatever is making it hard is a property of the corpus, not an
+  artifact of one heuristic's blind spot.
+- **consistently easy** — both pass it. Fine for `direct_lookup` and similar
+  floor families; a warning sign anywhere else (see the reading in "Reading
+  the scorecard" above).
+- **disagreement** — the two retrievers split on enough cases in that family
+  (a third or more; see `DISAGREEMENT_FRACTION` in `score.py`) that they are
+  not measuring the same thing. This is not evidence about hardness at all —
+  it is evidence that one heuristic happens to exploit (or miss) something
+  incidental about how that family's questions or passages are worded. Read
+  it as a finding about the corpus worth naming in a corpus card, not as a
+  number to average into the other two categories.
+
+`compare()` computes this per case, not from matching aggregate pass rates —
+two retrievers passing the same 3-of-6 for a family while failing entirely
+different three cases would look identical on an aggregate-only comparison and
+is exactly the kind of disagreement this exists to catch.
 
 ## The question families
 
@@ -157,3 +206,30 @@ abstention case that names a source is no longer really an abstention case) —
 but it can't know that a *new* generator made an old question answerable in
 prose it doesn't parse. If you add a generator that models something the
 existing abstention list presumes doesn't exist, check that list by hand.
+
+## `worldloom stats`: what's in the corpus, not how hard it is
+
+`evaluate` and `stats` (`src/worldloom/stats.py`) answer different questions and
+neither substitutes for the other. `worldloom stats ./corpus` reports document
+counts by type, per-document word/token length (min/median/p90/max), vocabulary
+size and type-token ratio, a shingled-Jaccard near-duplicate rate over passages
+(`SHINGLE_SIZE` tokens per shingle, `NEAR_DUPLICATE_THRESHOLD` similarity —
+both named constants in `stats.py`, not magic numbers), fact-reference density
+per document, the citation graph (facts per document, documents per fact, and
+how many facts nothing cites at all), and eval-case counts per family.
+
+**No fabricated reference numbers.** Nothing here is compared against a figure
+for "a real enterprise corpus" — there is no such published, auditable
+reference, so a comparison against one would be exactly the kind of
+unverifiable claim this whole effort exists to stop making. Report, don't
+grade. The one legitimate comparison this module makes is `worldloom stats
+./corpus --against ./other-corpus`, between two corpora that both actually
+exist and can both be opened and recounted by hand.
+
+`examples/retail-close` (the hand-authored golden episode) has no
+`artifact_intents` to compile — it predates the compiler pipeline entirely —
+so `stats` falls back to reading the rendered files straight off disk for it,
+with the manifest's `supporting_fact_ids` standing in for the citations
+`passages()` would otherwise compute, and reports near-duplicates as "n/a" (no
+compiled passages exist to shingle). Every generated corpus uses the compiled
+path and gets the full report, near-duplicates included.

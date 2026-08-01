@@ -70,13 +70,16 @@ jobs:
 
       # The reference narration: real agent-written prose, accepted whole. Guards
       # the requests rather than the prose — a change that makes a request harder
-      # to answer well shows up here and nowhere else.
+      # to answer well shows up here and nowhere else. The model id is a
+      # collective label: the file's prose has been written by more than one
+      # Claude model over time (the close artifacts first, the fan-out layer's
+      # commentary and thread later), each accepted through this same gate.
       - name: The reference narration is still accepted
         run: |
           worldloom build --seed 8128 --incident --archetype australian_grocery \
             --comparatives 11 --out "${{ runner.temp }}/reference"
           worldloom narrate accept "${{ runner.temp }}/reference" \
-            --from examples/grocery-close/narration.json --model-id claude-opus-5
+            --from examples/grocery-close/narration.json --model-id claude-agents
           worldloom render "${{ runner.temp }}/reference" -f docx -f xlsx -f markdown
           worldloom validate "${{ runner.temp }}/reference"
 
@@ -105,6 +108,63 @@ jobs:
             --replay "${{ runner.temp }}/series" $FORMATS --out "${{ runner.temp }}/series-again"
           diff -r "${{ runner.temp }}/series" "${{ runner.temp }}/series-again"
 
+      # The second vertical, end to end: the banking world builds, narrates,
+      # renders, validates, and replays byte-for-byte with the provider
+      # unreachable. Exercised here as well as in pytest because this is the
+      # CLI's dispatch path — a banking corpus that only worked through the
+      # Python API would be a vertical the tool's own front door cannot reach.
+      - name: The banking vertical validates and replays
+        run: |
+          FORMATS="-f xlsx -f docx -f pdf -f markdown -f servicenow"
+          worldloom build --seed 8128 --archetype midsize_adi --narrate $FORMATS \
+            --out "${{ runner.temp }}/bank"
+          worldloom validate "${{ runner.temp }}/bank"
+          worldloom evaluate "${{ runner.temp }}/bank"
+          worldloom build --seed 8128 --archetype midsize_adi \
+            --replay "${{ runner.temp }}/bank" $FORMATS --out "${{ runner.temp }}/bank-again"
+          diff -r "${{ runner.temp }}/bank" "${{ runner.temp }}/bank-again"
+
+      # The third vertical, increment 1: phase 1 only, one valuation quarter.
+      # Same shape as the banking step above — build, narrate, render,
+      # validate, evaluate, replay byte-for-byte — because a corpus that only
+      # worked through the Python API would be a vertical the tool's own
+      # front door cannot reach.
+      - name: The insurance vertical validates and replays
+        run: |
+          FORMATS="-f xlsx -f docx -f markdown"
+          worldloom build --seed 8128 --archetype midsize_general_insurer --narrate $FORMATS \
+            --out "${{ runner.temp }}/insurance"
+          worldloom validate "${{ runner.temp }}/insurance"
+          worldloom evaluate "${{ runner.temp }}/insurance"
+          worldloom build --seed 8128 --archetype midsize_general_insurer \
+            --replay "${{ runner.temp }}/insurance" $FORMATS --out "${{ runner.temp }}/insurance-again"
+          diff -r "${{ runner.temp }}/insurance" "${{ runner.temp }}/insurance-again"
+
+      # The shipped example packs, end to end: authored worlds through
+      # unmodified engines. The greps assert the texture genuinely landed —
+      # the insurer's incident speaks claims language, the mutual bank's
+      # challenge names its own book — and the replay diff proves a
+      # re-voiced corpus rebuilds its own voice from the recipe alone.
+      - name: The example packs build, re-voice, and replay
+        run: |
+          worldloom pack check examples/packs/regional-insurer.json
+          worldloom pack check examples/packs/mutual-bank.json
+          worldloom build --seed 4242 --incident --pack examples/packs/regional-insurer.json \
+            --narrate -f markdown --out "${{ runner.temp }}/insurer"
+          # The re-voiced event lives on the timeline; the re-voiced cause is
+          # cited into rendered prose. Both are asserted where they actually
+          # land — the first version of this step grepped the artifacts for an
+          # event summary and failed all three matrix jobs.
+          grep -l "claims reserving pipeline" "${{ runner.temp }}/insurer/events.jsonl" >/dev/null
+          grep -rl "peril-code mapping" "${{ runner.temp }}/insurer/artifacts" >/dev/null
+          worldloom build --seed 7 --pack examples/packs/mutual-bank.json \
+            --narrate -f markdown -f xlsx --out "${{ runner.temp }}/mutual"
+          grep -l "Owner-Occupier" "${{ runner.temp }}/mutual/events.jsonl" >/dev/null
+          worldloom build --seed 7 --pack examples/packs/mutual-bank.json \
+            --replay "${{ runner.temp }}/mutual" -f markdown -f xlsx \
+            --out "${{ runner.temp }}/mutual-again"
+          diff -r "${{ runner.temp }}/mutual" "${{ runner.temp }}/mutual-again"
+
       # The agent handshake: a corpus asks for prose, and refuses prose that
       # restates a figure. Exercised with a scripted "agent" so the contract is
       # covered without a model in CI.
@@ -125,6 +185,54 @@ jobs:
             exit 1
           fi
 
+      # The actor handshake: the CLI hands out one employee's decision at a time
+      # and refuses an illegal one. Driven by a scripted stand-in that reads only
+      # the decision document — never the corpus — because an agent that opened
+      # `facts.jsonl` to decide what the analyst should do would be reading the
+      # world rather than that analyst's position in it, and every
+      # information-asymmetry property would quietly stop holding.
+      - name: The actor handshake accepts, refuses, and completes
+        run: |
+          CORPUS="${{ runner.temp }}/driven"
+          worldloom build --seed 8128 --incident --actors agent --out "$CORPUS"
+
+          # An overreaching call must be refused, and must commit nothing.
+          worldloom act requests "$CORPUS" -o decision.json
+          python3 tests/scripted_actor.py decision.json bad.json --overreach
+          if worldloom act accept "$CORPUS" --from bad.json; then
+            echo "a tool beyond the role's authority was accepted"
+            exit 1
+          fi
+
+          # Then drive it to the end. The bound is generous; the episode is ~40
+          # turns and a loop that does not terminate is the failure worth
+          # catching here.
+          for _ in $(seq 1 120); do
+            worldloom act requests "$CORPUS" -o decision.json | tee out.txt
+            grep -q "episode is complete" out.txt && break
+            python3 tests/scripted_actor.py decision.json action.json
+            worldloom act accept "$CORPUS" --from action.json
+          done
+          grep -q "episode is complete" out.txt || { echo "episode never completed"; exit 1; }
+          worldloom validate "$CORPUS"
+
+      # The actor episode: employees produce the incident's records by calling
+      # tools on what they observed. Held to exactly the same standard as
+      # narration, because it is the same claim — a decision taken by an actor is
+      # a generative call, and a corpus whose decisions cannot be replayed is one
+      # run's output rather than an artifact. Both providers are made unreachable
+      # on the second pass, so a fallback that quietly regenerated would show up
+      # as a diff rather than as a pass.
+      - name: The actor episode replays byte-for-byte
+        run: |
+          FORMATS="-f xlsx -f markdown -f docx -f jira -f confluence -f servicenow"
+          worldloom build --seed 8128 --incident --actors scripted --narrate $FORMATS \
+            --out "${{ runner.temp }}/acted"
+          worldloom validate "${{ runner.temp }}/acted"
+          worldloom build --seed 8128 --incident --actors scripted \
+            --replay "${{ runner.temp }}/acted" $FORMATS --out "${{ runner.temp }}/acted-again"
+          diff -r "${{ runner.temp }}/acted" "${{ runner.temp }}/acted-again"
+
       # Narrate, then regenerate from the ledger with the provider unreachable,
       # and require the two corpora to be byte-identical. This is the project's
       # central claim, enforced rather than asserted.
@@ -142,3 +250,58 @@ jobs:
             $FORMATS --out "${{ runner.temp }}/replayed"
           diff -r "${{ runner.temp }}/narrated" "${{ runner.temp }}/replayed"
           worldloom validate "${{ runner.temp }}/replayed"
+
+  # The artifact users install, not the checkout developers test. Everything the
+  # test job proves is proven against the repo; this job proves the *wheel* —
+  # that the bundled examples ship, that a bare install (no extras) works and
+  # fails actionably where it cannot, and that the full install renders,
+  # validates, and replays byte-for-byte. Run from outside the checkout so the
+  # source tree cannot quietly stand in for the package.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: pipx run build
+
+      - name: A bare install works, and degrades legibly
+        run: |
+          python -m venv /tmp/bare
+          /tmp/bare/bin/pip install --quiet dist/*.whl
+          cd /tmp
+          /tmp/bare/bin/worldloom version
+          # The bundled golden episode must resolve from inside the wheel.
+          /tmp/bare/bin/worldloom demo retail-close --out /tmp/demo
+          # Formats with no optional dependency work out of the box.
+          /tmp/bare/bin/worldloom build --seed 8128 --incident --narrate \
+            -f markdown -f jira -f confluence -f servicenow --out /tmp/bare-corpus
+          /tmp/bare/bin/worldloom validate /tmp/bare-corpus
+          # A format whose dependency is missing must name the fix, not traceback.
+          if /tmp/bare/bin/worldloom build --seed 8128 -f xlsx --out /tmp/nope 2>/tmp/err.txt; then
+            echo "xlsx rendered without openpyxl installed"; exit 1
+          fi
+          grep -q "worldloom\[xlsx\]" /tmp/err.txt
+
+      - name: The full install renders, validates, and replays
+        run: |
+          python -m venv /tmp/full
+          WHEEL="$(readlink -f dist/*.whl)"
+          /tmp/full/bin/pip install --quiet "worldloom[all] @ file://$WHEEL"
+          cd /tmp
+          FORMATS="-f xlsx -f docx -f pptx -f pdf -f markdown -f jira -f confluence -f servicenow"
+          /tmp/full/bin/worldloom build --seed 8128 --incident --actors scripted --narrate \
+            $FORMATS --out /tmp/one
+          /tmp/full/bin/worldloom validate /tmp/one
+          /tmp/full/bin/worldloom build --seed 8128 --incident --actors scripted \
+            --replay /tmp/one $FORMATS --out /tmp/two
+          diff -r /tmp/one /tmp/two
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

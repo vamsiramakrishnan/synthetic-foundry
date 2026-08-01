@@ -11,9 +11,9 @@ build-order step 7, once IT services has shown which parts actually repeat.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .generators.operations import business_days_after, period_end
 from .rng import Rng
@@ -100,6 +100,33 @@ class MonthEndClose:
     generate two sets of facts for the overlapping months, and the second would be
     a duplicate rather than a revision. A caller who wants a trend asks for one.
     """
+    actors: Any = field(default=None, compare=False)
+    """An ``ActorProvider``. ``None`` keeps the deterministic plan.
+
+    When set, the incident's *organisational* layer — the ticket, the work notes,
+    the assignments, the close decision, and the seven documents that come out of
+    it — is produced by employees calling tools on what they had actually
+    observed, rather than by a planner reading the whole fact ledger. What does
+    not change is the world's physics: the pipeline still fails because the
+    operational generator says so, and the cause is still the stale mapping,
+    because an actor that could choose the root cause would be authoring
+    canonical truth.
+    """
+    actor_ledger: tuple = field(default=(), compare=False)
+    """Recorded actor decisions to replay instead of asking the provider."""
+
+    eval_density: float = 1.0
+    """The ``--eval-density`` knob's numeric value: 0.0/1.0/2.0 for
+    low/standard/high, or any value a caller composes directly.
+
+    Threads into both `generators.evaluation.evaluation_cases` (more direct
+    lookups, comparisons, and cross-period questions once the world actually
+    has more to ask about — see that module's docstring) and this method's
+    own `planning.artifact_intents` call (more fan-out documents to ask
+    those questions of). ``1.0`` reproduces every build this scenario has
+    ever produced, byte for byte; that is the default for exactly that
+    reason, not because 1.0 is an otherwise meaningful point on the scale.
+    """
 
     def run(self, world: World) -> World:
         """Return a new world with this episode's events, facts, and plans.
@@ -113,6 +140,11 @@ class MonthEndClose:
             raise ValueError("a scenario needs a seeded world; use RetailWorld(seed=...).build()")
         if world._minter is None:
             raise ValueError("this world was loaded from disk and cannot be advanced; build one from a seed")
+        # Checked here rather than only where `finance.generate` needs it
+        # below: `operations.generate` now also reads the archetype, for the
+        # currency its one financial fact is stated in.
+        if world._archetype is None:
+            raise ValueError("this world has no archetype; build one with RetailWorld(...)")
 
         rng = Rng(world.seed).derive(f"scenario/{type(self).__name__}/{self.period}")
         minter = world._minter
@@ -136,6 +168,10 @@ class MonthEndClose:
                 for fact in world.facts.where(kind="ops.incident_opened")
                 if fact.period
             ),
+            # A pack's episode-text overrides ride the recipe, which is what
+            # lets a pack-built corpus rebuild them with no pack file on hand.
+            text=(world._recipe.get("pack") or {}).get("episode_text") or None,
+            money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
         )
 
         # Unit keys come from the world rather than a literal list, because the
@@ -147,9 +183,6 @@ class MonthEndClose:
             if key.startswith("unit_")
         }
         from .generators.organisation import unit_shares
-
-        if world._archetype is None:
-            raise ValueError("this world has no archetype; build one with RetailWorld(...)")
 
         financials = finance.generate(
             rng.derive("finance"), minter,
@@ -167,8 +200,39 @@ class MonthEndClose:
             annual_revenue=world._annual_revenue,
             lore_by_target=index,
             comparative_months=self.comparative_months,
+            # The archetype's own currency, not the generator's constant — a
+            # pack's `currency`/`currency_unit` used to reach every other
+            # surface (documents, narrative rendering) except the fact ledger
+            # itself, which minted "AUD_thousands" regardless.
+            money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
         )
         financial_facts = financials.headline
+
+        # Built once, for both the planner (which categories does a high
+        # `eval_density` argue below unit level) and the taxonomy's `Subjects`
+        # below — the same grouping, so a category that got a commentary
+        # document and a category the benchmark asks about are never computed
+        # two different ways that could quietly disagree.
+        categories_by_unit = {
+            unit.id: [c.id for c in world.categories if c.business_unit_id == unit.id]
+            for unit in world.business_units
+        }
+
+        # The lore-driven artifact density (status reporting swells during a
+        # close the way LORE-0003 says it does) and `eval_density` are
+        # deliberately independent knobs added to the same total: a pack's
+        # in-world reason for more status reporting must not be silently
+        # cancelled by someone asking for a small benchmark, and `--eval-
+        # density low` must not depend on which lore a particular archetype
+        # happens to carry to have any effect at all. `<= 0.5` is `low`'s
+        # numeric value (0.0) with headroom for a caller-composed knob that
+        # lands just above it; `low` is the one setting allowed to override
+        # lore, because it is asking for the floor a retriever benchmark
+        # needs to exist at all, not the floor a plausible company would
+        # produce.
+        artifact_density = 1.0 + density_adjustment(world, "finance/status_reports")
+        if self.eval_density <= 0.5:
+            artifact_density = 0.0
 
         intents = planning.artifact_intents(
             minter,
@@ -176,10 +240,45 @@ class MonthEndClose:
             roles=roles,
             financial_facts=financial_facts,
             period=self.period,
-            density=1.0 + density_adjustment(world, "finance/status_reports"),
+            density=artifact_density,
             workbook_facts=financials.facts,
             prior_intents=world._artifact_intents,
+            actor_authored=self.actors is not None,
+            categories_by_unit=categories_by_unit,
+            eval_density=self.eval_density,
         )
+
+        # The world has to carry this period's events, facts, and standing
+        # documents before anyone can observe them — an actor woken by a
+        # pipeline failure that is not yet in the world would see nothing.
+        prior_intents = world._artifact_intents
+        advanced = world.extend(
+            events=episode.events,
+            facts=(*episode.facts, *financials.facts),
+            artifact_intents=intents,
+            period=self.period,
+        )
+        actor_state: dict[str, tuple] = {}
+        if self.actors is not None:
+            from .actors.runtime import run_episode
+
+            run = run_episode(
+                advanced, self.actors, period=self.period, ledger=self.actor_ledger
+            )
+            advanced = run.world
+            actor_state = {
+                "observations": run.observations,
+                "messages": run.messages,
+                "tasks": run.tasks,
+                "actor_ledger": run.entries,
+                "ledger": run.generation_ledger,
+            }
+            # Evaluation runs against everything this period produced, actor
+            # documents included. Generating cases from the deterministic plan
+            # alone would silently drop every incident family the moment actors
+            # were switched on — the facts are carried, just by a document the
+            # planner did not write.
+            intents = tuple(advanced._artifact_intents[len(prior_intents):])
 
         cases = evaluation.evaluation_cases(
             minter,
@@ -189,10 +288,7 @@ class MonthEndClose:
                 company_id=world.company.id,
                 unit_ids=unit_ids,
                 names=world.entity_names(),
-                categories_by_unit={
-                    unit.id: [c.id for c in world.categories if c.business_unit_id == unit.id]
-                    for unit in world.business_units
-                },
+                categories_by_unit=categories_by_unit,
                 sites_by_unit={
                     unit.id: [s.id for s in world.sites if s.business_unit_id == unit.id]
                     for unit in world.business_units
@@ -201,15 +297,51 @@ class MonthEndClose:
             intents=intents,
             period=self.period,
             history=world._facts,
-            prior_intents=world._artifact_intents,
+            prior_intents=prior_intents,
+            density=self.eval_density,
+            # A pack's evaluation-text overrides ride the recipe, the same
+            # seam `episode_text` uses for the episode itself, so a
+            # re-voiced benchmark rebuilds with no pack file on hand.
+            text=(world._recipe.get("pack") or {}).get("evaluation_text") or None,
         )
 
-        return world.extend(
-            events=episode.events,
-            facts=(*episode.facts, *financials.facts),
-            artifact_intents=intents,
+        if self.actors is not None:
+            from .actors import evaluation as actor_evaluation
+
+            cases = (
+                *cases,
+                *actor_evaluation.cases(minter, world=advanced, entries=actor_state["actor_ledger"],
+                                        observations=actor_state["observations"],
+                                        tasks=actor_state["tasks"], period=self.period),
+            )
+
+        from .recipe import with_step
+
+        return advanced.extend(
             evaluations=cases,
             period=self.period,
+            # Recorded on the world rather than left to the caller's shell
+            # history. A corpus that cannot say how it was made cannot be
+            # rebuilt, and the actor handshake resumes an episode by rebuilding.
+            recipe=with_step(
+                world._recipe,
+                "MonthEndClose",
+                period=self.period,
+                incident=self.include_operational_incident,
+                comparatives=self.comparative_months,
+                actors=self.actors is not None,
+                # Recorded only away from its default, unlike its neighbours
+                # above — this field did not exist before this knob did, and
+                # every corpus already built or documented was built at 1.0.
+                # Writing it unconditionally would put a new key in every
+                # future recipe for a value that changes nothing, which is
+                # exactly the byte-for-byte default-build diff the project's
+                # own CI gate exists to catch. `rebuild` below defaults an
+                # absent key to 1.0, so an old recipe and an explicit `1.0`
+                # recipe replay identically either way.
+                **({} if self.eval_density == 1.0 else {"eval_density": self.eval_density}),
+            ),
+            **actor_state,
         )
 
 
@@ -297,6 +429,12 @@ class Hire:
         roles = dict(world._roles)
         at = _period_boundary(self.period)
 
+        # A pack's own name pools, if any — so a person hired mid-corpus
+        # reads as the same locale as everyone the world minted at the
+        # beginning, rather than falling back to the engine's defaults the
+        # moment the roster grows. Same recipe-riding trick as `episode_text`.
+        pack_pools = (world._recipe.get("pack") or {}).get("name_pools") or {}
+
         change = personnel.hire(
             rng, minter,
             company_id=world.company.id,
@@ -318,8 +456,12 @@ class Hire:
             persona_id=None,
             at=at,
             period=self.period,
+            given=pack_pools.get("given") or None,
+            family=pack_pools.get("family") or None,
         )
         new_person = change.people[0]
+
+        from .recipe import with_step
 
         return world.extend(
             events=change.events,
@@ -328,6 +470,10 @@ class Hire:
             business_units=change.business_units,
             roles={**change.roles, self.role_key: new_person.id},
             period=self.period,
+            recipe=with_step(
+                world._recipe, "Hire", period=self.period, role_key=self.role_key,
+                title=self.title, function=self.function, unit_key=self.unit_key,
+            ),
         )
 
 
@@ -383,6 +529,8 @@ class Departure:
             period=self.period,
         )
 
+        from .recipe import with_step
+
         return world.extend(
             events=change.events,
             facts=change.facts,
@@ -391,6 +539,9 @@ class Departure:
             roles=change.roles,
             artifact_intents=_personnel_notice(minter, change, _announcer(world, change), self.period),
             period=self.period,
+            recipe=with_step(
+                world._recipe, "Departure", period=self.period, role_key=self.role_key
+            ),
         )
 
 
@@ -435,6 +586,8 @@ class Reorganisation:
             period=self.period,
         )
 
+        from .recipe import with_step
+
         return world.extend(
             events=change.events,
             facts=change.facts,
@@ -443,6 +596,10 @@ class Reorganisation:
             roles=change.roles,
             artifact_intents=_personnel_notice(minter, change, _announcer(world, change), self.period),
             period=self.period,
+            recipe=with_step(
+                world._recipe, "Reorganisation", period=self.period,
+                unit_key=self.unit_key, new_leader_role=self.new_leader_role,
+            ),
         )
 
 

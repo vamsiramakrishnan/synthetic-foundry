@@ -1,9 +1,15 @@
-"""The organisation generator.
+"""The retail organisation generator.
 
 Builds the entity graph: company, business units, people, systems, services, cost
 centres, personas, access policies. Deterministic throughout — the model proposes
 *shape* in later steps, but the graph itself is built and validated here, because
 referential integrity and acyclicity are correctness concerns.
+
+The minting mechanism — depth-sorted roles, per-role join-date streams, manager
+wiring, unit formation, founding milestones — lives in ``org_builder``, shared
+with the banking generator since the second vertical proved which parts repeat.
+What stays here is retail content: the role table, the personas, the systems a
+retailer runs, and the policies its documents are read under.
 
 Lore reaches this generator through two constraint kinds: ``org_shape`` adjusts
 topology, and ``persona_trait`` adjusts how specific people write.
@@ -12,12 +18,11 @@ topology, and ``persona_trait`` adjusts how specific people write.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from ..ids import Minter
 from ..models import (
     AccessPolicy,
-    Authority,
     BusinessUnit,
     CanonicalFact,
     Category,
@@ -26,7 +31,6 @@ from ..models import (
     Employee,
     EnterpriseEvent,
     LoreCommitment,
-    LoreKind,
     Persona,
     Service,
     Site,
@@ -34,6 +38,14 @@ from ..models import (
 )
 from ..rng import Rng
 from . import hierarchy, names
+from .org_builder import (
+    apply_traits,
+    form_units,
+    founding_milestones,
+    mint_people,
+    sorted_roles,
+    wire_managers,
+)
 
 
 @dataclass(frozen=True)
@@ -131,146 +143,15 @@ _ROLE_PERSONA = {
 #: Business-unit finance partners all write with the same persona.
 _UNIT_ROLE_PERSONA = {"_md": "PERSONA-EXEC", "_bp": "PERSONA-FIN-BP", "buyer": "PERSONA-MERCH-LEAD"}
 
-# ---------------------------------------------------------------------------
-# Founding: milestones, and validity windows
-# ---------------------------------------------------------------------------
 
-#: What kind of milestone event a lore commitment becomes. A DECISION reads
-#: differently on the timeline from an EVENT — "the mapping was decided" is not
-#: "the checkout stack was replatformed" — so the distinction the lore already
-#: carries is preserved onto the event rather than collapsing every commitment
-#: into one generic "milestone" kind that a reader could not tell apart.
-_MILESTONE_KIND: dict[LoreKind, str] = {
-    LoreKind.EVENT: "milestone_occurred",
-    LoreKind.DECISION: "milestone_decided",
-    LoreKind.NORM: "milestone_norm_adopted",
-    LoreKind.CONSTRAINT: "milestone_constraint_identified",
-    LoreKind.TENSION: "milestone_tension_surfaced",
-}
-
-#: No one can appear to have joined later than this and still safely author
-#: every artifact this corpus writes. Close periods start in 2026 at the
-#: earliest (the CLI's own default period is "2026-03"), so this sits most of a
-#: year ahead of that — comfortable margin without inspecting any actual period,
-#: which `generate()` has no reason to know about.
-_LATEST_JOIN = datetime(2025, 6, 1, tzinfo=timezone.utc)
-
-
-def _month_start(effective_from: str) -> datetime:
-    """The first instant of an ``"YYYY-MM"`` lore date, UTC.
-
-    Split-and-int rather than a date-parsing library: the value is constrained
-    to exactly this shape by every commitment in ``retail.lore()``, and pulling
-    in a calendar parser for it would be a dependency to cover a format string
-    already this simple.
-    """
-    year, month = effective_from.split("-")
-    return datetime(int(year), int(month), 1, tzinfo=timezone.utc)
-
-
-def _earliest_effective(lore: tuple[LoreCommitment, ...]) -> datetime:
-    """The earliest dated lore commitment, anchoring business-unit formation.
-
-    Falls back to ``_LATEST_JOIN`` when there is no lore to anchor to —
-    ``generate()``'s ``lore`` parameter defaults to ``()`` for a caller that only
-    wants the org graph — so a unit still gets a formation date either way.
-    """
-    dated = [c.effective_from for c in lore if c.effective_from]
-    if not dated:
-        return _LATEST_JOIN
-    # "YYYY-MM" strings sort lexicographically in calendar order, so a plain
-    # `min` over the raw strings is exact — no need to parse before comparing.
-    return _month_start(min(dated))
-
-
-def _joined_date(rng: Rng, role: str, depth: int) -> datetime:
-    """A join date for *role*, further back the closer it sits to the org root.
-
-    An executive who has been here a decade and an analyst hired last year is a
-    more useful world than one where everyone started the same day — it is what
-    makes ``World.org_at`` produce a different roster at different moments.
-    ``depth`` (distance from the CEO in the reporting tree — see ``_depth``)
-    stands in for seniority, since every leadership role sorts shallow and every
-    individual-contributor role sorts deep by construction of ``_ROLES``.
-
-    Tenure is drawn from a stream named after the role, not after draw order —
-    consistent with the rest of this module — so adding a role elsewhere can
-    never reshuffle anyone else's join date.
-    """
-    tenure_rng = rng.derive(f"joined/{role}")
-    # Six years of headroom per level, floored at half a year so even the
-    # deepest role has clearly joined before the corpus's close periods rather
-    # than landing on day zero.
-    min_years = max(0.5, 6.0 - depth * 2.0)
-    max_years = min_years + 6.0
-    tenure_days = tenure_rng.number(min_years, max_years) * 365.25
-    return _LATEST_JOIN - timedelta(days=tenure_days)
-
-
-def _founding_milestones(
-    minter: Minter, lore: tuple[LoreCommitment, ...], company_id: str
-) -> tuple[tuple[EnterpriseEvent, ...], tuple[CanonicalFact, ...]]:
-    """One milestone event and fact per dated lore commitment.
-
-    Every commitment in ``retail.lore()`` carries an ``effective_from``, so this
-    turns each into a witness on the corpus's own timeline: without it, lore
-    asserts dated things ("remapped in 2024-08") that no event or fact records,
-    and a reader asking "when" gets an answer from prose that nothing backs.
-
-    Called last, from ``generate()``, once every entity is minted — so adding
-    this feature never renumbers a PERSON, BU, CAT, or SITE id that already
-    existed. Events still take the shared "EV" sequence (``validate.py``'s
-    ``fact_precedes_event``/referential checks require a fact's ``event_id`` to
-    resolve to something with prefix "EV", so there is no other choice), which
-    does shift where a *scenario's* first event lands — acceptable, because
-    nothing addresses an event by literal id across a build.
-
-    Facts are different, and get their own "MFACT" sequence rather than
-    "FACT". A generated world's very first scenario-minted fact — the close
-    calendar's due date — has always been ``FACT-0001``, and
-    ``examples/grocery-close/narration.json`` cites it by exactly that id (and
-    everything after it, by exact id, all the way through the workbook). If
-    founding facts took even one "FACT" number before the first close ran,
-    every fact a scenario mints afterwards would shift down and that reference
-    narration — real prose, checked in and replayed byte-for-byte in CI —
-    would reject outright. A milestone fact is standing background, not
-    something any scenario-era artifact currently cites, so it costing nothing
-    against the "FACT" sequence is exactly the property that keeps the
-    existing corpus's fact identity untouched.
-    """
-    events: list[EnterpriseEvent] = []
-    facts: list[CanonicalFact] = []
-    for commitment in lore:
-        if not commitment.effective_from:
-            continue
-        occurred_at = _month_start(commitment.effective_from)
-        event = EnterpriseEvent(
-            id=minter.next("EV"),
-            kind=_MILESTONE_KIND[commitment.kind],
-            occurred_at=occurred_at,
-            summary=commitment.assertion,
-            lore_ids=[commitment.id],
-        )
-        events.append(event)
-        facts.append(
-            CanonicalFact(
-                id=minter.next("MFACT"),
-                kind="lore.milestone",
-                subject=company_id,
-                text_value=commitment.assertion,
-                # Must equal the event's `occurred_at`: `validate.py`'s
-                # `fact_precedes_event` check rejects a fact that claims validity
-                # before the event it cites actually happened.
-                valid_from=occurred_at,
-                authority=Authority.CONFIRMED,
-                event_id=event.id,
-                # The whole point: a document citing this fact reaches the lore
-                # that shaped it via `World.provenance()`.
-                lore_ids=[commitment.id],
-            )
-        )
-    return tuple(events), tuple(facts)
-
+def _persona_for(role: str) -> str:
+    """The default persona a role writes with — one lookup, used both to
+    assign people and to base a pack's voice override on."""
+    return (
+        _ROLE_PERSONA.get(role)
+        or _UNIT_ROLE_PERSONA.get(role[-3:])
+        or _UNIT_ROLE_PERSONA["buyer"]
+    )
 
 def _merch_unit(unit_ids: dict[str, str]) -> str:
     """Which unit merchandising systems sits under.
@@ -281,34 +162,31 @@ def _merch_unit(unit_ids: dict[str, str]) -> str:
     return "gm" if "gm" in unit_ids else next(iter(unit_ids))
 
 
-def _persona_traits(lore: tuple[LoreCommitment, ...], role_ids: dict[str, str]) -> dict[str, dict[str, float]]:
-    """Apply lore ``persona_trait`` constraints, keyed by person ID.
-
-    A constraint target is written ``ROLE/trait`` — a role rather than a person
-    ID, because lore is authored before the graph exists and cannot know who
-    ``PERSON-0017`` will be.
-    """
-    out: dict[str, dict[str, float]] = {}
-    for commitment in lore:
-        for constraint in commitment.constrains:
-            if constraint.kind.value != "persona_trait":
-                continue
-            role, _, trait = constraint.target.partition("/")
-            person_id = role_ids.get(role)
-            if person_id is None or not trait:
-                continue
-            out.setdefault(person_id, {})[trait] = constraint.magnitude or 0.0
-    return out
-
-
 def generate(
     rng: Rng,
     minter: Minter,
     *,
     archetype,  # type: ignore[no-untyped-def]
     lore: tuple[LoreCommitment, ...] = (),
+    company_name: str | None = None,
+    system_brands: dict[str, str] | None = None,
+    voices: dict[str, Any] | None = None,
+    name_pools: dict[str, list[str]] | None = None,
+    headquarters: str | None = None,
+    regions: tuple[str, ...] | None = None,
 ) -> Organisation:
-    """Build the organisation for an archetype. Same seed, same graph, same IDs."""
+    """Build the organisation for an archetype. Same seed, same graph, same IDs.
+
+    ``company_name`` lets a pack name its own fiction; ``system_brands``
+    re-brands system slots (keys per ``names.system_names``); ``voices`` maps
+    role keys to voice overrides (``packs.PackVoice``-shaped); ``name_pools``
+    supplies ``given``/``family`` person-name pools (``packs.PackNamePools``-
+    shaped); ``headquarters`` and ``regions`` are the pack's locale (a single
+    string and a pool of region labels, respectively — see
+    ``generators/hierarchy.REGIONS``). Every generated value is still drawn
+    either way, so a pack that overrides any of them never reshuffles a single
+    downstream draw relative to one that does not.
+    """
     company_rng = rng.derive("company")
     company_id = minter.next("CO")
     units = archetype.units
@@ -317,30 +195,37 @@ def generate(
     unit_ids = {unit.key: minter.next("BU") for unit in units}
 
     # People. Per-unit roles are appended to the role table so the whole graph is
-    # minted in one pass and every manager exists before its reports.
-    role_table = list(_ROLES)
+    # minted in one pass and every manager exists before its reports. The
+    # merchandising lead's manager in `_ROLES` is written as "gm_md", which is
+    # only a name for "the MD of whichever unit merchandising sits under" —
+    # resolved here through `_merch_unit`, because an archetype without a "gm"
+    # unit (the first insurer pack) otherwise leaves merch_lead managerless and
+    # the org tree with two roots.
+    merch_md = f"{_merch_unit(unit_ids)}_md"
+    role_table = [
+        (role, title, function, merch_md if manager == "gm_md" else manager)
+        for role, title, function, manager in _ROLES
+    ]
     for unit in units:
         role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))
         role_table.append((f"{unit.key}_bp", f"Finance Business Partner, {unit.name}", "Finance", "controller"))
         role_table.append((f"{unit.key}_buyer", f"Head of Buying, {unit.name}", "Merchandising", f"{unit.key}_md"))
-    managers = {row[0]: row[3] for row in role_table}
-    role_table.sort(key=lambda row: _depth(row[0], managers))
-    # Reused below to spread join dates: how far a role sits from the CEO is a
-    # proxy for seniority, since every leadership role is shallow and every
-    # individual-contributor role is deep by construction of `_ROLES`.
-    depth_of = {row[0]: _depth(row[0], managers) for row in role_table}
-
-    person_names = names.people_names(rng.derive("people"), len(role_table))
-    role_ids: dict[str, str] = {}
-    people: list[Employee] = []
-    founding_rng = rng.derive("founding")
+    role_table, depth_of = sorted_roles(role_table)
 
     finance_cc = minter.next("CC")
     platform_cc = minter.next("CC")
 
-    for (role, title, function, manager_role), person_name in zip(role_table, person_names):
-        person_id = minter.next("PERSON")
-        role_ids[role] = person_id
+    # A voiced role writes with a pack persona — a clone of its default one,
+    # built after the defaults below. The ids are derivable from the role
+    # alone, which is what lets `assign` name them before the clones exist.
+    pack_voice_ids = {
+        role: f"PERSONA-PACK-{role.upper().replace('_', '-')}"
+        for role in (voices or {})
+    }
+
+    def assign(role: str, title: str, function: str):  # type: ignore[no-untyped-def]
+        """Retail's one decision per person: unit by role-key convention, cost
+        centre by function, persona by role then unit-role suffix."""
         business_unit = None
         if role.endswith(("_md", "_bp")):
             business_unit = unit_ids[role[:-3]]
@@ -348,72 +233,34 @@ def generate(
             business_unit = unit_ids[role[:-6]]
         elif role.startswith("merch_"):
             business_unit = unit_ids[_merch_unit(unit_ids)]
-        people.append(
-            Employee(
-                id=person_id,
-                name=person_name,
-                title=title,
-                joined=_joined_date(founding_rng, role, depth_of[role]),
-                # Departures are a scenario's concern (another agent's work), not
-                # the beginning's — everyone is still here at build.
-                left=None,
-                manager_id=None,  # filled below, once every role has an ID
-                business_unit_id=business_unit,
-                function=function,
-                cost_centre_id=(
-                    finance_cc if function in ("Finance", "Audit")
-                    else platform_cc if title.endswith(("Engineer", "Data Platform"))
-                    else None
-                ),
-                persona_id=(
-                    _ROLE_PERSONA.get(role)
-                    or _UNIT_ROLE_PERSONA.get(role[-3:])
-                    or _UNIT_ROLE_PERSONA["buyer"]
-                ),
-            )
+        cost_centre = (
+            finance_cc if function in ("Finance", "Audit")
+            else platform_cc if title.endswith(("Engineer", "Data Platform"))
+            else None
         )
+        return business_unit, cost_centre, pack_voice_ids.get(role) or _persona_for(role)
 
-    manager_of = {row[0]: row[3] for row in role_table}
-    role_of_person = {pid: role for role, pid in role_ids.items()}
-    people = [
-        person.model_copy(
-            update={"manager_id": role_ids.get(manager_of[role_of_person[person.id]] or "", None)}
-        )
-        for person in people
-    ]
-
-    # Anchored to the earliest dated lore commitment rather than an arbitrary
-    # constant: lore asserts things happened by certain dates, so the unit those
-    # things happened *to* must already have existed by then. Clamped forward of
-    # the leader's own join — never back — because a unit cannot form before the
-    # person leading it was here to lead it; `validate.py`'s
-    # `leader_not_yet_employed` enforces exactly that. Clamping is simpler than
-    # reordering minting here, since every leader's `joined` is already known by
-    # this point (people, and their join dates, are built above).
-    joined_by_person = {p.id: p.joined for p in people}
-    lore_anchor = _earliest_effective(lore)
-    business_units = tuple(
-        BusinessUnit(
-            id=unit_ids[unit.key],
-            name=unit.name,
-            company_id=company_id,
-            leader_id=role_ids[f"{unit.key}_md"],
-            kind=unit.kind,
-            formed=max(lore_anchor, joined_by_person[role_ids[f"{unit.key}_md"]]),
-            # `dissolved` stays `None`: no unit has closed at build, same as no
-            # one has left.
-        )
-        for unit in units
+    pools = name_pools or {}
+    role_ids, people = mint_people(
+        rng, minter, role_table, depth_of, assign=assign,
+        given=pools.get("given") or None, family=pools.get("family") or None,
     )
+    people = wire_managers(people, role_table, role_ids)
+    business_units = form_units(units, unit_ids, role_ids, people, company_id, lore)
 
     dimensions = hierarchy.generate(
         rng.derive("hierarchy"), minter,
         units=units,
         unit_ids=unit_ids,
         buyers={unit.key: role_ids[f"{unit.key}_buyer"] for unit in units},
+        # Empty (the field's default) means "no override" — the module's own
+        # REGIONS pool applies, exactly as if the pack had never mentioned it.
+        regions=regions if regions else hierarchy.REGIONS,
     )
 
-    system_names = names.system_names(rng.derive("systems"))
+    # Drawn first, then re-branded: a pack renames the products, never the
+    # roles the systems play in the episode.
+    system_names = {**names.system_names(rng.derive("systems")), **(system_brands or {})}
     erp, mdm, platform, commerce, pos = (minter.next("SYS") for _ in range(5))
     systems = (
         System(id=erp, name=system_names["erp"], purpose="Group finance system of record",
@@ -446,7 +293,6 @@ def generate(
                 owner_id=role_ids["platform_engineer"], system_id=commerce, criticality_tier=1, depends_on=[commerce]),
     )
 
-    traits = _persona_traits(lore, role_ids)
     personas = tuple(
         Persona(
             id=persona_id,
@@ -462,13 +308,25 @@ def generate(
         )
         for persona_id, label, voice, complexity, depth, optimism, risk, political, phrases in _PERSONAS
     )
-
-    # Lore-driven traits attach to the person, not the shared persona, so one
-    # defensive individual does not make every merchandiser defensive.
-    people = tuple(
-        person if person.id not in traits else person.model_copy(update={"traits": traits[person.id]})
-        for person in people
-    )
+    # Pack voices: each voiced role gets a clone of its default persona with
+    # the voice and phrases swapped — a clone per role rather than an edit of
+    # the shared persona, so voicing the CFO never re-voices everyone who
+    # shares the CFO's register. Numeric temperament stays the engine's.
+    if voices:
+        by_id = {p.id: p for p in personas}
+        clones = []
+        for role, spec in sorted(voices.items()):
+            if role not in role_ids:
+                continue  # linted upstream; an unknown role must not orphan a persona
+            base = by_id[_persona_for(role)]
+            clones.append(base.model_copy(update={
+                "id": pack_voice_ids[role],
+                "label": f"{base.label} ({role})",
+                "voice": spec.voice or base.voice,
+                "favourite_phrases": list(spec.phrases) or list(base.favourite_phrases),
+            }))
+        personas += tuple(clones)
+    people = apply_traits(people, lore, role_ids)
 
     cost_centres = (
         CostCentre(id=finance_cc, name="Finance Shared Services", owner_id=role_ids["controller"], business_unit_id=None),
@@ -497,11 +355,16 @@ def generate(
         ),
     )
 
+    # Drawn before the override is applied — see the docstring: a pack naming
+    # the company (or its headquarters) must not change what any other stream
+    # draws.
+    generated_name = names.company_name(company_rng)
+    generated_hq = names.headquarters(company_rng.derive("hq"))
     company = Company(
         id=company_id,
-        name=names.company_name(company_rng),
+        name=company_name or generated_name,
         industry=archetype.industry,
-        headquarters=names.headquarters(company_rng.derive("hq")),
+        headquarters=headquarters or generated_hq,
         fiscal_year_start_month=archetype.fiscal_year_start_month,
         currency=archetype.currency,
         currency_unit=archetype.currency_unit,
@@ -509,9 +372,9 @@ def generate(
     )
 
     # Last of all: every entity above already has its id, so founding milestones
-    # can only ever append to the "EV"/"FACT" sequences, never disturb one that
+    # can only ever append to the "EV"/"MFACT" sequences, never disturb one that
     # names a person, unit, category, or site.
-    milestones, founding_facts = _founding_milestones(minter, lore, company_id)
+    milestones, founding_facts = founding_milestones(minter, lore, company_id)
 
     return Organisation(
         company=company,
@@ -552,11 +415,3 @@ def generate(
 def unit_shares(archetype) -> dict[str, float]:  # type: ignore[no-untyped-def]
     """Revenue share per unit key, used by the financial generator."""
     return {unit.key: unit.share for unit in archetype.units}
-
-
-def _depth(role: str, managers: dict[str, str | None], seen: frozenset[str] = frozenset()) -> int:
-    """Distance from the root, so people are minted parents-first."""
-    if role in seen:
-        raise ValueError(f"reporting cycle at {role}")
-    manager = managers.get(role)
-    return 0 if manager is None else 1 + _depth(manager, managers, seen | {role})

@@ -9,7 +9,9 @@ a step-3 world carries intents and no manifest entries.
 
 The evaluation taxonomy moved to ``generators/evaluation.py`` when it outgrew a
 function: cases are now organised by the capability each family demands, and they
-need the category and store hierarchy that artifact planning has no use for.
+need the category hierarchy this module also now takes, for the same reason
+(``eval_density``'s category-level fan-out, below) rather than a coincidence of
+two modules wanting the same shape.
 """
 
 from __future__ import annotations
@@ -17,29 +19,6 @@ from __future__ import annotations
 from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact
 from .operations import CloseEpisode
-
-
-def _fmt(fact: CanonicalFact) -> str:
-    """A fact's value as text, for an expected answer."""
-    if fact.value is not None:
-        amount = fact.value.amount
-        rendered = f"{int(amount):,}" if float(amount).is_integer() else f"{amount:,.2f}"
-        return f"{rendered} {fact.value.unit}"
-    return fact.text_value or ""
-
-
-def _adverse(fact: CanonicalFact) -> str:
-    """A variance as a reader would state it: magnitude plus direction, not a sign.
-
-    An expected answer is graded against a system's prose, so "7,200 below budget"
-    is a fairer target than "-7200".
-    """
-    if fact.value is None:
-        return fact.text_value or ""
-    amount = fact.value.amount
-    magnitude = f"{abs(int(amount)):,}" if float(amount).is_integer() else f"{abs(amount):,.2f}"
-    direction = "below" if amount < 0 else "above"
-    return f"{magnitude} {fact.value.unit} {direction} budget"
 
 
 def artifact_intents(
@@ -52,6 +31,9 @@ def artifact_intents(
     density: float,
     workbook_facts: tuple[CanonicalFact, ...] = (),
     prior_intents: tuple[ArtifactIntent, ...] = (),
+    actor_authored: bool = False,
+    categories_by_unit: dict[str, list[str]] | None = None,
+    eval_density: float = 1.0,
 ) -> tuple[ArtifactIntent, ...]:
     """Plan the artifacts this episode warrants.
 
@@ -65,10 +47,31 @@ def artifact_intents(
     down to category and store, and only the workbook gets it: a variance memo
     handed four thousand facts would produce four thousand narrative requests to
     write five paragraphs.
+
+    ``actor_authored`` withholds the incident block. When an actor episode runs,
+    those seven documents are produced by employees calling ``draft_artifact``,
+    each citing the facts *that employee had observed* — which is the whole point
+    of the exercise, and is undermined entirely if the planner has already
+    written the same documents from an omniscient view of the fact ledger. The
+    close's standing outputs stay here: the calendar, the workbook, and the
+    variance memo exist every period whether or not anything went wrong, so
+    nobody decides to write them.
+
+    ``eval_density`` is the ``--eval-density`` knob's numeric value. At its
+    default (``1.0``) it changes nothing here — every intent below it is
+    gated strictly above 1.0. Above it, the same finance business partner who
+    already argues a unit's month (below) also argues that unit's biggest
+    categories, reusing ``unit_close_commentary`` rather than a new artifact
+    type: the type's outline (``documents.py``) scopes its sections by the
+    intent's own ``required_fact_ids``, never by ``artifact_type``, so the
+    identical shape already argues a category's month exactly as it argues a
+    unit's. A second type here would duplicate machinery to mark a
+    distinction the rendered document does not need to make.
     """
     money = [f.id for f in financial_facts]
     detail = [f.id for f in (workbook_facts or financial_facts)]
     intents: list[ArtifactIntent] = []
+    unit_keys = [key.removeprefix("unit_") for key in roles if key.startswith("unit_")]
 
     def latest(artifact_type: str) -> str | None:
         """The most recent prior artifact of a type, if this world has run before.
@@ -128,7 +131,7 @@ def artifact_intents(
            [episode.close_event_id], "medium",
            "Variance commentary is produced for every close.")
 
-    if episode.had_incident:
+    if episode.had_incident and not actor_authored:
         k = episode.keys
         intent("working_note", "finance", "finance", roles["controller"],
                [k["fact_feed_status"], k["fact_hypothesis"], k["fact_cause"], k["fact_close_delayed"]],
@@ -210,5 +213,90 @@ def artifact_intents(
                + [k["fact_close_status_final"], k["fact_close_delay"], k["fact_pl_impact"]],
                [k["event_close_delayed"]], "small",
                "The executive committee receives a short summary. It omits the control failure.")
+
+    # ------------------------------------------------------------------
+    # The fan-out block. Appended strictly after everything above, because
+    # ART order is identity: the reference narration in examples/ cites the
+    # ids the blocks above mint, and an intent inserted before them would
+    # renumber every one. Anything added to this planner in future goes
+    # below this comment, never above it.
+    # ------------------------------------------------------------------
+
+    # Per-unit close commentary: the finance business partner's page for each
+    # division, citing only that unit's own headline facts. This is where the
+    # corpus stops reporting the month exclusively from the centre — and it is
+    # the fan-out that scales with the archetype rather than with this file.
+    if density > 0.0:
+        for unit_key in unit_keys:
+            unit_id = roles[f"unit_{unit_key}"]
+            unit_facts = [f.id for f in financial_facts if f.subject == unit_id]
+            if not unit_facts:
+                continue
+            intent("unit_close_commentary", "finance", "finance", roles[f"{unit_key}_bp"],
+                   unit_facts, [episode.close_event_id], "small",
+                   "Each division's close is argued by the person who partners it, "
+                   "not only summed by the centre.")
+
+    # High-density fan-out: one layer below the unit, only once a build has
+    # asked for it. A quarter of each unit's categories, ranked by revenue and
+    # never fewer than one — enough to be a genuine second layer of reporting
+    # on a large archetype (the Australian grocer's Food division alone has
+    # thirteen categories; a thirty-category unit does not need thirty extra
+    # documents for one knob step to make the point). The workbook already
+    # carries every category fact regardless of this block running, so
+    # skipping it changes what gets *argued*, never what is answerable.
+    if eval_density > 1.0 and categories_by_unit:
+        all_facts = workbook_facts or financial_facts
+        revenue_of_category = {
+            f.subject: f.value.amount
+            for f in all_facts
+            if f.kind == "financial.revenue.actual" and f.value is not None
+        }
+        for unit_key in unit_keys:
+            unit_id = roles[f"unit_{unit_key}"]
+            members = categories_by_unit.get(unit_id, [])
+            if len(members) < 2:
+                continue
+            ranked = sorted(members, key=lambda cid: revenue_of_category.get(cid, 0), reverse=True)
+            topn = max(1, len(ranked) // 4)
+            for category_id in ranked[:topn]:
+                category_facts = [
+                    f.id for f in all_facts
+                    if f.subject == category_id
+                    and f.kind.startswith((
+                        "financial.revenue.", "financial.gross_profit.",
+                        "financial.gross_margin_pct.",
+                    ))
+                ]
+                if not category_facts:
+                    continue
+                intent("unit_close_commentary", "finance", "finance", roles[f"{unit_key}_bp"],
+                       category_facts, [episode.close_event_id], "small",
+                       "At high density the same business partner also argues the "
+                       "categories that moved the unit, not only its total.")
+
+    if episode.had_incident and not actor_authored:
+        k = episode.keys
+        # The escalation meeting, minuted. Fully structured — attendees,
+        # tabled material, decisions — so it costs the narration loop nothing
+        # and still gives who-was-in-the-room questions a source document.
+        intent("meeting_minutes", "finance", "finance", roles["controller"],
+               [k["fact_cause"], k["fact_close_delayed"], k["fact_revised_date"],
+                k["fact_workaround"], k["fact_close_delay"]],
+               [k["event_close_delayed"]], "small",
+               "The decision to move the close was taken in a meeting, and a meeting "
+               "that moves a group commitment gets minutes.")
+
+        # The escalation thread: one message per moment, each bounded to what
+        # its sender knew then. The first report cannot name the cause,
+        # because the cause was not a fact yet — the thread is the corpus's
+        # cleanest record of knowledge arriving in order.
+        intent("email_thread", "operations", "technology", roles["svc_desk"],
+               [k["fact_feed_status"], k["fact_incident_ref"], k["fact_hypothesis"],
+                k["fact_cause_ruled_out"], k["fact_cause"], k["fact_close_delayed"]],
+               [k["event_incident_opened"], k["event_hypothesis"],
+                k["event_root_cause"], k["event_close_delayed"]], "small",
+               "The incident was escalated by email before any formal record existed; "
+               "the thread is what people actually knew, when.")
 
     return tuple(intents)

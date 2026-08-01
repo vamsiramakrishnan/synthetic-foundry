@@ -5,12 +5,14 @@ that is what ``validate`` answers — but whether it *discriminates*. A corpus o
 which a keyword baseline scores ninety-five per cent tells you nothing about the
 system under test, however beautifully it reconciles.
 
-So this ships the floor: a BM25 retriever with no notion of time, authority or
-provenance, and a scorer that reports where it succeeds and where it fails. A
-good result here is a *bad* score on the question types the corpus exists to
-pose. If the baseline answers temporal-state and authority-resolution questions
-as easily as direct lookups, the corpus is not hard and the honest thing is to
-know that.
+So this ships two floors, not one: BM25 (`bm25.py`), the original baseline, and
+TF-IDF cosine (`tfidf.py`), a genuinely different ranking family — probabilistic
+relevance versus vector-space, saturating term frequency versus log-damped, see
+`tfidf.py`'s docstring for the rest. Neither has any notion of time, authority,
+or provenance. A good result is a *bad* score on the question types the corpus
+exists to pose, from **both** — a family that only one of the two fails is a
+finding about that heuristic, not about the corpus; a family both fail is
+structurally hard. `compare()` makes that reading explicit.
 
 **Retrieval is graded, not generation.** An expected answer is free text and
 grading text against text needs a judge, which would put a model inside the
@@ -23,7 +25,31 @@ nothing but the corpus.
 from __future__ import annotations
 
 from .bm25 import Bm25
-from .index import Passage, passages
-from .score import Outcome, Scorecard, score
+from .index import Passage, document_texts, passages
+from .score import (
+    DEFAULT_RETRIEVER,
+    RETRIEVERS,
+    FamilyAgreement,
+    Outcome,
+    Scorecard,
+    compare,
+    render_agreement,
+    score,
+)
+from .tfidf import TfIdf
 
-__all__ = ["Bm25", "Passage", "passages", "Outcome", "Scorecard", "score"]
+__all__ = [
+    "Bm25",
+    "TfIdf",
+    "Passage",
+    "passages",
+    "document_texts",
+    "Outcome",
+    "Scorecard",
+    "FamilyAgreement",
+    "RETRIEVERS",
+    "DEFAULT_RETRIEVER",
+    "score",
+    "compare",
+    "render_agreement",
+]

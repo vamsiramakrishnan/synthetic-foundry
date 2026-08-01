@@ -542,9 +542,23 @@ Extract a generic abstraction only after both implementations require it. Do not
 
 Both verticals share the fact ledger, event model, artifact IR, manifest, evaluation schema, renderer interfaces, and provenance system. Domain-specific economics stay outside the core.
 
-### Open: which second vertical
+### Decided, and landed: banking
 
-IT services is the choice recorded above and it is a good one — a genuinely different economic engine, which is the thing that stresses the dimension and finance abstractions hardest.
+The decision below resolved in banking's favour, and the vertical shipped as
+`worldloom.banking` — `BankingWorld` plus the `QuarterlyCapitalReturn` episode
+("The Challenged Return": a second-line challenge filed over by a lodgement
+norm, the daily liquidity cadence catching the quarterly cadence's error, and a
+restatement whose original stays on the record). What decided it: the three
+structures listed below are exactly what the A10 measurement said the retail
+episode could not generate, and `restates` — the fourth relationship — was
+already core schema waiting for its first user. The exit gate held: zero core
+model changes; banking's checks, artifact types, and archetype all arrive
+through registration seams (`validate.register_domain_checks`,
+`documents.register_artifact_types`, `archetypes.py` data). The misfits the
+pack extraction must read are recorded in `worldloom/banking.py`'s docstring.
+
+The IT-services shape below remains a good third vertical; the reasoning is
+kept because it documents what the choice was made against.
 
 There is a case for **banking / regulatory** instead, and it is worth stating so the decision is made rather than inherited. IT services differs from retail in its *nouns and economics* while sharing retail's rhythm and its authority shape: a monthly cycle, a simple preparer-to-approver chain. Banking differs in three things nothing has yet tested:
 
@@ -572,6 +586,85 @@ The measured retail coupling, for whichever is chosen:
 1. **Diversity** (artifact compiler §14.B) — style genomes, layout families, fingerprints and batch quotas, and the plan handshake that lets a model propose structure under grammar validation. The measured baseline it must beat: a 12-period corpus of 120 artifacts carries only **11 distinct section shapes**, and DOCX sizes across 72 files span 38,658–40,618 bytes. Every close pack in the estate is the same document with different numbers.
 2. **The second vertical**, per the open question above.
 3. **Extract the industry-pack interface from the two**, never before. A pack API designed against one industry encodes that industry's assumptions in the shape of the abstraction — the same reason there is still no scenario DSL.
+
+   *Partially done, mechanically.* Once banking landed, the mechanism the two
+   verticals genuinely repeat was extracted: `generators/org_builder.py` (role
+   minting, join dates, manager wiring, unit formation, founding milestones),
+   `generators/cases.py` (evaluation-case minting and the reachability gate),
+   `domains.py` (archetype → world/episode, so the CLI and recipe rebuilder
+   never name a vertical), and renderer ownership registration. Industry
+   packs then landed the content interface's first pieces: archetype, lore,
+   company name, system brands, and per-role voices as validated JSON.
+
+   **The rule is now enforced, not asserted.** `tests/test_thin_waist.py`
+   scans every core module's code (comments and docstrings excluded) for
+   engine vocabulary and fails on any occurrence outside an explicit
+   exceptions ledger, where each entry is either a registry seed or a named
+   debt with its extraction. Paying a debt down forces its ledger entry to be
+   deleted, so the measurement cannot go stale. Anything an LLM generates
+   lands as schema — a pack, a registered type, a check group — validated at
+   a handshake and, where generated per-corpus, recorded in the generation
+   ledger for replay; core stays a machine that has never heard of an
+   industry, and the ratchet is what makes "stays" true.
+
+   **The de-hardcoding ladder**, in extraction order, each gated on a second
+   consumer:
+
+   1. *Episode surface text* — **done.** Every event sentence and prose fact
+      is a keyed template in the engine's `TEXT` table (extracted verbatim by
+      AST, so stock corpora stayed byte-identical, proven by stash-diff on
+      both engines); packs override through `episode_text`, slot-checked at
+      lint and at build, published by `worldloom pack texts`. Machine values
+      — statuses, dates, "unassigned" — are deliberately not templates,
+      because other checks match on them.
+   2. *Role tables as pack data* — engines publish required role keys
+      (episodes index by them); packs add or retitle the rest. The voices
+      surface already proved the publish-and-lint half.
+   3. *Evaluation phrasing* — **done.** Every question and authored answer
+      is a keyed template in the engine's `EVAL_TEXT` table (same verbatim
+      extraction, same stash-diff proof); packs override through
+      `evaluation_text`, and `pack texts --json` publishes both tables.
+      What stays code: reasoning strings and bare fact playback — a value
+      read straight off the ledger has no authored wrapper to re-voice.
+      This paid down rung 1's known residue (retail evaluation answers that
+      hardcoded their phrasing).
+   4. *Name pools* — **done.** `generators/names.py`'s `GIVEN`/`FAMILY` and
+      `generators/hierarchy.py`'s `REGIONS` are the engine defaults, extracted
+      verbatim (proven by stash-diff on both engines, same discipline as
+      rungs 1 and 3); `packs.Pack.name_pools`, `.headquarters`, and `.regions`
+      are the authored form, threaded through
+      `organisation.generate`/`banking_org.generate` on the same override
+      contract as `company_name` — drawn regardless, replaced after, so a
+      pack that sets or skips any of them never reshuffles a downstream draw
+      relative to one that does the opposite. The second consumer this rung
+      was gated on is the pack surface itself: the placeholder `names.py` had
+      exactly one calling context (the two org generators, direct from
+      Python) until `packs.py` became a second, and at that point "the pools
+      a maintainer edits in this file" and "the pools a pack edits in JSON"
+      had to be one set of pools, not two that could drift apart. `pack
+      check` lints a pool narrower than the archetype's headcount — a pool
+      that recycles a name mid-corpus turns two people into one, which is a
+      coherence bug, not a smaller cast. Currency rode along: three
+      generators (`finance.py`, `operations.py`, `regulatory.py`) minted every
+      financial fact in a hardcoded `"AUD_thousands"`/`"AUD_millions"`
+      regardless of what `Company.currency`/`currency_unit` — already a pack
+      field — actually said, invisible only because every registered
+      archetype happens to use one of those two units; a `money_unit`
+      parameter on each, derived from the archetype, closed it. What stays
+      code: the company-name pools (`COMPANY_FIRST`/`COMPANY_SECOND`,
+      banking's `_BANK_SUFFIX`) — `Pack.company_name` is required, so no pack
+      ever reaches them — and the system-name pools (`ERP`/`MDM`/`PLATFORM`/…,
+      banking's `_CORE`/`_COLLATERAL`/…) — a pack already gets a strictly
+      stronger override for those in `system_brands` (one exact name per
+      slot, which is what an author actually wants, not a pool to draw an
+      exact name from).
+   5. *The scenario DSL* — still not justified; two episodes share a
+      prologue and an epilogue and nothing in between. The third vertical is
+      now decided — insurance reserving, `docs/design/insurance-reserving.md`
+      — and was deliberately shaped to fit inside `single_episode`, so the
+      DSL stays unjustified until the committed follow-on (a second episode
+      interleaved on the retail engine, same decision record) produces the
+      second data point.
 
 An industry pack, once extracted, has to carry eight things and only about three are nouns: archetype, dimensions, fact kinds and their units, lore, artifact types and grammars, scenario verbs and cadence, roles and personas, evaluation families. A pack that renames nouns and stops produces retail with different words.
 

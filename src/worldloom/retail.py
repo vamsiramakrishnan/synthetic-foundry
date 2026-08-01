@@ -16,6 +16,7 @@ lore pack.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from . import archetypes
 from .archetypes import AUSTRALIAN_GROCERY, OMNICHANNEL_RETAILER, Archetype
@@ -29,6 +30,29 @@ from .world import World
 #: lore multipliers. Deliberately low: most closes are uneventful, and a corpus
 #: where every period has a crisis is not a realistic one.
 BASE_INCIDENT_LIKELIHOOD = 0.18
+
+#: The lore-constraint targets this engine's generators actually consult, and
+#: what each one changes. This is the pack author's contract: a commitment
+#: aimed anywhere else is carried and cited but changes nothing, and
+#: ``worldloom pack check`` says so by name. Kept beside the engine rather
+#: than derived, and each entry names the code that reads it, so drift is a
+#: review comment away from being caught.
+CONSULTED_TARGETS: tuple[tuple[str, str], ...] = (
+    ("data_quality_incident/inventory",
+     "multiplies the close incident likelihood (scenarios.MonthEndClose.run)"),
+    ("close_cycle_time",
+     "tags the close calendar's events and facts (operations.generate)"),
+    ("hierarchy_mapping_change",
+     "tags the control-failure chain (operations._incident_chain)"),
+    ("finance/status_reports",
+     "raises artifact density: the knowledge article and per-unit commentary (planning)"),
+    ("forecast_miss/<unit_key>",
+     "tags a unit's revenue variance with why it misses (finance.generate)"),
+    ("promotional_depth",
+     "tags the margin-impact driver metric (finance._drivers)"),
+    ("online_conversion_rate",
+     "tags the conversion metrics, when a digital unit exists (finance._drivers)"),
+)
 
 
 def lore(minter: Minter) -> tuple[LoreCommitment, ...]:
@@ -169,6 +193,10 @@ class RetailWorld:
     employees: int | None = None
     annual_revenue: int | None = None
     """Override the archetype's scale. ``None`` takes the archetype's own."""
+    pack: Any = None
+    """An industry ``Pack`` supplying the archetype, lore, and company name.
+    Set via ``from_pack``; carried on the instance so ``build`` can embed it in
+    the recipe, which is what makes a pack-built corpus rebuild itself."""
 
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> RetailWorld:
@@ -181,21 +209,45 @@ class RetailWorld:
         """
         return cls(seed=seed, archetype=archetypes.inspired_by(description))
 
+    @classmethod
+    def from_pack(cls, pack: Any, *, seed: int) -> RetailWorld:
+        """A world whose shape, lore, and name a pack authored.
+
+        The pack decides the texture; this engine keeps the physics. See
+        ``worldloom.packs`` for what that boundary means and why.
+        """
+        from . import packs as packs_module
+
+        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack)
+
     def build(self) -> World:
         """Generate the organisation, its lore, and the lore's founding milestones.
 
         Every dated lore commitment arrives with a matching event and fact
         already on the timeline — the world's beginning, not yet any close.
         """
+        from . import __version__ as worldloom_version
+        from . import recipe as recipe_module
         from .generators import organisation
 
         rng = Rng(self.seed)
         minter = Minter()
 
-        commitments = lore(minter)
+        if self.pack is not None:
+            from . import packs as packs_module
+
+            commitments = packs_module.lore_of(self.pack, minter)
+        else:
+            commitments = lore(minter)
         org = organisation.generate(
             rng.derive("organisation"), minter,
             archetype=self.archetype, lore=commitments,
+            company_name=self.pack.company_name if self.pack is not None else None,
+            system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
+            voices=dict(self.pack.voices) if self.pack is not None else None,
+            name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
+            headquarters=self.pack.headquarters if self.pack is not None else None,
+            regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
         )
 
         return World(
@@ -217,7 +269,44 @@ class RetailWorld:
             _minter=minter,
             _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
             _archetype=self.archetype,
+            _generator_version=worldloom_version,
+            _recipe=recipe_module.build_recipe(
+                archetype=self.archetype.key,
+                seed=self.seed,
+                employees=self.employees,
+                annual_revenue=self.annual_revenue,
+                pack=self.pack,
+            ),
         )
+
+
+# Retail owns its archetypes in the domain registry, like every vertical. No
+# single_episode: the close loop's flags (periods, incident, comparatives,
+# actors) are retail's own, and the CLI drives them directly rather than
+# flattening them into the shared interface.
+from .domains import Domain, register_domain
+
+from .generators.evaluation import EVAL_TEXT as _RETAIL_EVAL_TEXT
+from .generators.operations import TEXT as _RETAIL_TEXT
+from .generators.organisation import _ROLES as _RETAIL_ROLES
+
+register_domain(Domain(
+    name="retail",
+    archetype_keys=frozenset({AUSTRALIAN_GROCERY.key, OMNICHANNEL_RETAILER.key}),
+    world=RetailWorld,
+    consulted_targets=CONSULTED_TARGETS,
+    system_slots=(
+        ("erp", "group finance system of record"),
+        ("mdm", "master data: products, categories, the hierarchy the incident corrupts"),
+        ("platform", "analytical data platform running the valuation pipeline"),
+        ("commerce", "online storefront and checkout"),
+        ("pos", "in-store point of sale"),
+    ),
+    role_keys=tuple(row[0] for row in _RETAIL_ROLES),
+    unit_role_suffixes=("_md", "_bp", "_buyer"),
+    episode_text=tuple(_RETAIL_TEXT.items()),
+    evaluation_text=tuple(_RETAIL_EVAL_TEXT.items()),
+))
 
 
 __all__ = [

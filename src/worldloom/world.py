@@ -14,9 +14,15 @@ import shutil
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import corpus
+
+# Eagerly, not lazily: `World` declares fields of these types. `actors.models`
+# imports only `models`, so there is no cycle to work around — the rest of the
+# actors package, which does reach back into `world`, is imported inside the
+# methods that use it.
+from .actors.models import ActorLedgerEntry, ActorMessage, ActorTask, Observation
 from .collections import (
     ArtifactCollection,
     Collection,
@@ -31,7 +37,6 @@ from .models import (
     ArtifactIntent,
     ArtifactIR,
     ArtifactManifestEntry,
-    Authority,
     BusinessUnit,
     CanonicalFact,
     Category,
@@ -81,6 +86,14 @@ class World:
     _intentional_errors: tuple[IntentionalError, ...] = ()
     _evaluations: tuple[EvaluationCase, ...] = ()
     _ledger: tuple[GenerationLedgerEntry, ...] = ()
+    # The actor layer. Empty on every world that never ran an episode, which is
+    # every corpus built before this existed — the files are written only when
+    # there is something in them, so an actorless corpus is byte-identical to
+    # what it was.
+    _observations: tuple[Observation, ...] = ()
+    _messages: tuple[ActorMessage, ...] = ()
+    _tasks: tuple[ActorTask, ...] = ()
+    _actor_ledger: tuple[ActorLedgerEntry, ...] = ()
     seed: int | None = None
     period: str | None = None
     root: Path | None = None
@@ -94,6 +107,23 @@ class World:
     _annual_revenue: int = 0
     _archetype: Any = None
     """The shape this world was built from. Needed to advance it, not to read it."""
+    _recipe: dict[str, Any] = field(default_factory=dict)
+    """How this world was made: archetype, seed, and the ordered scenario steps.
+
+    Unlike the rest of the generator state above, this *does* survive a round
+    trip to disk — it is what lets a corpus be rebuilt rather than merely read.
+    See ``worldloom.recipe``."""
+    _generator_version: str | None = None
+    """The worldloom version that generated this world, or ``None`` for a corpus
+    written before versions were stamped (and for the hand-authored fixtures,
+    which no generator produced).
+
+    Recorded because the determinism contract has a version in it: a world is
+    reproduced from its seed, its recipe, its generation ledger, *and the
+    generator that ran them*. Rebuilding a corpus under a different release may
+    legitimately produce a different world — the ledger's content-addressed keys
+    protect correctness by missing rather than replaying stale decisions — but
+    "may differ" is only diagnosable if the corpus says who made it."""
     _rendered: tuple = ()
     """Rendered payloads, held until ``export`` writes them."""
     _narration: tuple = ()
@@ -137,10 +167,16 @@ class World:
             _intentional_errors=tuple(corpus.load_models(root / corpus.ERRORS_FILE, IntentionalError)),
             _evaluations=tuple(corpus.load_models(root / corpus.EVALS_FILE, EvaluationCase)),
             _ledger=tuple(corpus.load_models(root / corpus.LEDGER_FILE, GenerationLedgerEntry)),
+            _observations=tuple(corpus.load_models(root / corpus.OBSERVATIONS_FILE, Observation)),
+            _messages=tuple(corpus.load_models(root / corpus.MESSAGES_FILE, ActorMessage)),
+            _tasks=tuple(corpus.load_models(root / corpus.TASKS_FILE, ActorTask)),
+            _actor_ledger=tuple(corpus.load_models(root / corpus.ACTOR_LEDGER_FILE, ActorLedgerEntry)),
             seed=header.get("seed"),
             period=header.get("period"),
             root=root,
             schema_version=version,
+            _recipe=header.get("recipe", {}),
+            _generator_version=header.get("worldloom"),
         )
 
     # -- accessors ---------------------------------------------------------
@@ -231,6 +267,41 @@ class World:
     def ledger(self) -> Collection[GenerationLedgerEntry]:
         """The generation ledger. Empty at Gate A — no generative calls yet."""
         return Collection(self._ledger, label="GenerationLedgerCollection")
+
+    @property
+    def observations(self) -> Collection[Observation]:
+        """Who knew what, when, and through which channel.
+
+        A separate ledger from ``facts`` on purpose: a fact valid from 08:15 is
+        not thereby known to anyone at 08:15, and a corpus that cannot tell those
+        apart cannot pose an information-asymmetry question.
+        """
+        return Collection(self._observations, label="ObservationCollection")
+
+    @property
+    def messages(self) -> Collection[ActorMessage]:
+        """What one employee told another, and which facts it carried."""
+        return Collection(self._messages, label="ActorMessageCollection")
+
+    @property
+    def tasks(self) -> Collection[ActorTask]:
+        """Obligations created by accepted tool calls, and who owns them."""
+        return Collection(self._tasks, label="ActorTaskCollection")
+
+    @property
+    def actor_ledger(self) -> Collection[ActorLedgerEntry]:
+        """Every actor tool call, accepted and rejected.
+
+        Rejections are in here deliberately. A ledger of only accepted calls
+        answers "what happened" and loses "what was attempted and refused",
+        which is the half that proves the policy layer is load-bearing.
+        """
+        return Collection(self._actor_ledger, label="ActorLedgerCollection")
+
+    @property
+    def recipe(self) -> dict[str, Any]:
+        """How this world was made. Empty on a corpus written before recipes existed."""
+        return dict(self._recipe)
 
     def entity_names(self) -> dict[str, str]:
         """Every entity ID to the name a person would use for it.
@@ -337,6 +408,8 @@ class World:
             "parents": list(artifact.derived_from),
             "children": [a.id for a in self._artifacts if artifact.id in a.derived_from],
             "supersedes": artifact.supersedes,
+            "restates": artifact.restates,
+            "restated_by": [a.id for a in self._artifacts if a.restates == artifact.id],
             "known_imperfections": [
                 e.error_type.value for e in self._intentional_errors if e.artifact_id == artifact.id
             ],
@@ -368,10 +441,15 @@ class World:
         evaluations: tuple[EvaluationCase, ...] = (),
         intentional_errors: tuple[IntentionalError, ...] = (),
         ledger: tuple[GenerationLedgerEntry, ...] = (),
+        observations: tuple[Observation, ...] = (),
+        messages: tuple[ActorMessage, ...] = (),
+        tasks: tuple[ActorTask, ...] = (),
+        actor_ledger: tuple[ActorLedgerEntry, ...] = (),
         people: tuple[Employee, ...] = (),
         business_units: tuple[BusinessUnit, ...] = (),
         roles: dict[str, str] | None = None,
         period: str | None = None,
+        recipe: dict[str, Any] | None = None,
     ) -> World:
         """A copy of this world with more appended. Never mutates in place.
 
@@ -387,6 +465,16 @@ class World:
         validity window (sets ``left``, sets ``dissolved``), and the change is
         still witnessed by an event and a fact like every other change. The roster
         holds who is here now; the timeline holds how it got that way.
+
+        ``artifact_intents`` merges by id too, for a narrower reason: a noise
+        distractor (``generators/distractors.py``) attaches a provenance edge to
+        a document the planner already minted — "this is version two, and it
+        revises that earlier draft" — and the only honest way to record that is
+        on the real intent's own ``revises`` field, not a second intent with the
+        same id wearing a costume. Every existing call site mints fresh ids and
+        never collides, so this is invisible to them; only a caller that
+        deliberately reuses an id gets the replace-in-place behaviour, the same
+        contract ``people`` already offers.
 
         ``roles`` rebinds role keys the same way — ``{"controller": "PERSON-12"}``
         after the controller leaves. This is what makes a departure show up in the
@@ -408,12 +496,19 @@ class World:
             _lore=self._lore,
             _facts=self._facts + facts,
             _events=self._events + events,
-            _artifact_intents=self._artifact_intents + artifact_intents,
+            _artifact_intents=_merged(self._artifact_intents, artifact_intents),
             _artifact_irs=self._artifact_irs,
             _artifacts=self._artifacts + artifacts,
             _intentional_errors=self._intentional_errors + intentional_errors,
             _evaluations=self._evaluations + evaluations,
             _ledger=self._ledger + ledger,
+            _observations=self._observations + observations,
+            _messages=self._messages + messages,
+            # Tasks merge by id for the same reason people do: an assignment
+            # changes who is on the hook for an obligation, it does not create a
+            # second obligation.
+            _tasks=_merged(self._tasks, tasks),
+            _actor_ledger=self._actor_ledger + actor_ledger,
             seed=self.seed,
             period=period or self.period,
             root=self.root,
@@ -422,6 +517,8 @@ class World:
             _minter=self._minter,
             _annual_revenue=self._annual_revenue,
             _archetype=self._archetype,
+            _recipe=recipe if recipe is not None else self._recipe,
+            _generator_version=self._generator_version,
         )
 
     def compile(self) -> World:
@@ -449,6 +546,8 @@ class World:
         *,
         ledger: tuple[GenerationLedgerEntry, ...] | None = None,
         retries: int = 2,
+        concurrency: int = 1,
+        on_accepted: Callable[[GenerationLedgerEntry], None] | None = None,
     ) -> World:
         """Fill every section awaiting prose, replaying from a ledger where possible.
 
@@ -461,12 +560,20 @@ class World:
         Pass ``ledger`` to replay: every recorded call is served from the ledger and
         the provider is never asked, which is how a world regenerates byte-identical
         without depending on model calls being reproducible.
+
+        ``concurrency`` and ``on_accepted`` pass straight through to
+        ``compiler.narrate`` — see its docstring for the determinism argument
+        (why a thread pool here never changes a byte of output) and for what
+        ``on_accepted`` is for (`narrate auto --concurrency`'s checkpoint hook).
         """
         from .narrative import compiler
 
         staged = self if self._artifact_irs else self.compile()
         available = self._ledger if ledger is None else ledger
-        result = compiler.narrate(staged, provider, ledger=available, retries=retries)
+        result = compiler.narrate(
+            staged, provider, ledger=available, retries=retries,
+            concurrency=concurrency, on_accepted=on_accepted,
+        )
 
         # Merge rather than replace. `compiler.narrate` returns only the entries
         # it generated or replayed, so assigning its result dropped every
@@ -550,6 +657,11 @@ class World:
         # a v2 existing — the number is a fact about the chain, not a label.
         revises = {i.id: i.revises for i in self._artifact_intents if i.revises}
         replaced |= set(revises.values())
+        # `restates` is conspicuously absent from `replaced`, and that absence is
+        # the relationship's defining property: a restated filing stays on the
+        # record in its own lifecycle. Adding it here would turn a formal
+        # correction into an edit of an immutable document, which is exactly the
+        # thing regulated filings exist to make impossible.
 
         def version_of(intent_id: str) -> int:
             version, seen = 1, {intent_id}
@@ -596,6 +708,7 @@ class World:
                     supersedes=intent.supersedes,
                     derived_from=list(intent.derived_from),
                     revises=intent.revises,
+                    restates=intent.restates,
                     version=version_of(intent.id),
                     access_policy_id=self._policy_for(intent.audience),
                     recipe=intent.artifact_type,
@@ -612,6 +725,14 @@ class World:
         if not self._access_policies:
             return None
         by_label = {policy.label.lower(): policy.id for policy in self._access_policies}
+        # A policy whose label *is* the audience wins outright. This is the
+        # generic rule — a domain module that names its policies after its
+        # audiences ("finance_and_risk" → "Finance and risk") needs no entry in
+        # the retail table below, and the table stays what it is: retail's own
+        # audience vocabulary, not a registry every vertical must edit.
+        exact = audience.replace("_", " ")
+        if exact in by_label:
+            return by_label[exact]
         wanted = {
             "all_staff": "all staff",
             "finance": "finance and audit only",
@@ -680,6 +801,10 @@ class World:
                 "schema_version": self.schema_version,
                 "seed": self.seed,
                 "period": self.period,
+                # Written only when known: the hand-authored fixtures have no
+                # generator, and a null would claim otherwise.
+                **({"worldloom": self._generator_version} if self._generator_version else {}),
+                "recipe": self._recipe,
                 "company": self.company.model_dump(mode="json"),
                 "business_units": [m.model_dump(mode="json") for m in self._business_units],
                 "people": [m.model_dump(mode="json") for m in self._people],
@@ -705,6 +830,16 @@ class World:
         corpus.write_jsonl(target / corpus.EVALS_FILE, list(self._evaluations))
         if self._ledger:
             corpus.write_jsonl(target / corpus.LEDGER_FILE, list(self._ledger))
+        # Written only when populated. A corpus with no actor episode should not
+        # grow four empty files, and CI diffs whole directories.
+        if self._observations:
+            corpus.write_jsonl(target / corpus.OBSERVATIONS_FILE, list(self._observations))
+        if self._messages:
+            corpus.write_jsonl(target / corpus.MESSAGES_FILE, list(self._messages))
+        if self._tasks:
+            corpus.write_jsonl(target / corpus.TASKS_FILE, list(self._tasks))
+        if self._actor_ledger:
+            corpus.write_jsonl(target / corpus.ACTOR_LEDGER_FILE, list(self._actor_ledger))
 
         # Rendered bodies, when this world was rendered in memory.
         for item in self._rendered:
@@ -800,6 +935,7 @@ class Summary:
             ("Narrated sections", f"{sum(1 for ir in world.artifact_irs for s in ir.sections if s.body):,}"),
             ("Reporting period", world.period or "—"),
             ("Seed", "—" if world.seed is None else str(world.seed)),
+            ("Generated by", f"worldloom {world._generator_version}" if world._generator_version else "—"),
         ]
 
     def to_dict(self) -> dict[str, str]:

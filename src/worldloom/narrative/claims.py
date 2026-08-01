@@ -38,6 +38,29 @@ from . import references
 from .requests import GeneratedNarrative, NarrativeRequest, Verdict, Violation
 
 if TYPE_CHECKING:  # pragma: no cover
+    from ..world import World
+
+
+def known_entity_names(world: World) -> frozenset[str]:
+    """Every name prose may treat as an entity of this world.
+
+    One definition, shared by the compiler and the handshake, because two
+    hand-maintained copies is how categories went missing from both: the list
+    was written when only companies, units, people, and systems were ever
+    named in prose, and the banking vertical's product books — categories —
+    were rejected as inventions by a validator that had simply never been told
+    they exist.
+    """
+    return frozenset(
+        [world.company.name]
+        + [unit.name for unit in world.business_units]
+        + [person.name for person in world.people]
+        + [system.name for system in world.systems]
+        + [category.name for category in world.categories]
+        + [site.name for site in world.sites]
+    )
+
+if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact
 
 
@@ -81,8 +104,19 @@ def validate(
     #    reference outside it is the same defect as a claim outside it, and it
     #    was reachable through prose alone.
     for fact_id in references.unresolved(narrative.text, facts):
+        # Name the fix, not just the failure. The first harness-driven run
+        # showed a model truncating ids ({{fact:0015}} for FACT-0015) and then
+        # burning every retry the same way, because "0015 does not exist" says
+        # what is wrong without saying what right looks like. When exactly one
+        # allowed id ends with the broken fragment, the feedback can say so.
+        candidates = [known for known in request.allowed_fact_ids if known.endswith(fact_id)] if fact_id else []
+        hint = (
+            f" — write the id exactly as supplied: {{{{fact:{candidates[0]}}}}}"
+            if len(candidates) == 1
+            else " — references carry the id exactly as supplied, e.g. {{fact:FACT-0001}}"
+        )
         violations.append(
-            Violation(code="unresolvable_reference", detail=f"{fact_id} does not exist")
+            Violation(code="unresolvable_reference", detail=f"{fact_id} does not exist{hint}")
         )
     for fact_id in sorted(set(references.referenced(narrative.text))):
         if fact_id in facts and fact_id not in allowed:
@@ -163,10 +197,28 @@ def validate(
             )
 
     # 7. No invented entities, when the caller supplies the world's names.
+    #
+    # A run that sits *inside* a known name is that name, seen through the
+    # extractor's acronym blind spot: `_capitalised_runs` breaks a run at an
+    # all-caps token, so "SME Secured Lending" surfaces as "Secured Lending" —
+    # found when the banking vertical's own fixture provider was refused for
+    # naming a product book the world genuinely contains. Containment is
+    # checked instead of teaching the extractor acronyms, because widening the
+    # matcher would start flagging ordinary prose like "CFO Approved" as an
+    # entity, and a validator that rejects real names is worse than one that
+    # is lenient about fragments of them.
     if entity_names:
         prose = references.strip_references(narrative.text)
         for word in _capitalised_runs(prose):
-            if word not in entity_names and len(word.split()) > 1:
+            # A possessive is the entity, not a new one. Found live, by the
+            # first harness-driven narration run: Gemini wrote "Meridian
+            # Retail Group's revenue", the run extractor captured the "'s",
+            # and the containment rule cannot save it — the possessive is
+            # *longer* than the name it belongs to, not a fragment of it.
+            word = word.removesuffix("'s").removesuffix("’s").rstrip("'’")
+            if len(word.split()) > 1 and word not in entity_names and not any(
+                word in name for name in entity_names
+            ):
                 violations.append(
                     Violation(code="unknown_entity", detail=f"{word!r} is not an entity in this world")
                 )

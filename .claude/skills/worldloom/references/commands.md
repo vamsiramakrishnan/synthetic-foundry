@@ -9,6 +9,49 @@ cannot describe a flag that does not exist.
 Load this when you need the exact spelling of an option. The procedure — what to
 run and in what order — is in `SKILL.md`; this is the lookup table.
 
+### `worldloom act`
+
+Drive an actor episode: one employee's decision at a time, validated before it changes anything.
+
+### `worldloom act accept`
+
+Validate a decision and commit it, or report the rule it broke.
+
+```
+worldloom act accept <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--from`, `-i` | Action JSON from the agent. |
+| `--json` | Emit the verdict as JSON — an agent fixing a rejection should read data, not parse a table. |
+| `--model-id` | Who decided. Recorded in the ledger and part of the replay key, so it is pinned to the corpus on the first accepted decision and cannot change mid-episode. |
+
+### `worldloom act requests`
+
+Emit the next decision an employee has to make.
+
+```
+worldloom act requests <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write JSON here instead of stdout. |
+
+### `worldloom actors`
+
+Show the actor execution ledger: who did what, on what they could see.
+
+```
+worldloom actors <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--observations` | Show what each actor knew when it acted. |
+| `--rejected` | Show only the calls that were refused, and why. |
+
 ### `worldloom archetypes`
 
 List the company shapes `build --archetype` accepts.
@@ -19,17 +62,21 @@ Generate a world deterministically from a seed, then validate it.
 
 | Option | Purpose |
 | --- | --- |
+| `--actors` | Let employees produce the incident's records by calling tools on what they observed. `scripted` runs the built-in deterministic actor (no network, no key); `agent` leaves every decision for you to make through `worldloom act`. |
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
+| `--distractors` | Add this many provenance-true noise artifacts once the episode(s) finish: superseded drafts, personal working copies, and routine notices — real authors, real dates, real facts, answering nothing an evaluation case needs. 0 (the default) touches nothing. |
 | `--employees` | Override the archetype's stated headcount. |
+| `--eval-density` | How much of the world's own size the evaluation set and its fan-out documents are allowed to exploit: `low` trims the optional close documents to the floor a benchmark needs; `standard` is today's corpus, unchanged; `high` adds direct-lookup, comparison, and cross-period cases (and the documents to source them from) that only exist once a world has more units, categories, sites, or periods to ask about. `standard` reproduces every existing corpus byte for byte. |
 | `--format`, `-f` | Render these formats. Repeatable. Omit to plan artifacts without rendering. |
 | `--incident` | Force the operational incident on or off. Omit to let the seed and lore decide. |
 | `--inspired-by` | Describe a real business and build a world of that shape (e.g. 'a large Australian grocer'). Shape only — no data about it is used. |
 | `--narrate` | Generate prose with the built-in deterministic provider (no network, no key). |
 | `--out`, `-o` | Directory to write the corpus into. |
 | `--overwrite` | Replace the destination if it exists. |
+| `--pack` | Build from an industry pack: a JSON file carrying the company shape, lore, and name. See `worldloom pack template` to start one and `worldloom pack check` to lint it. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
-| `--periods` | Run this many consecutive closes. More than one gives recurrence, superseded documents, and the evaluation questions a single close cannot pose. |
+| `--periods` | Run this many consecutive episodes — closes for the retail vertical, or a single-episode vertical's own cadence (a domain's period_step_months). More than one gives recurrence, superseded documents, and the evaluation questions a single episode cannot pose. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
 
@@ -85,7 +132,7 @@ worldloom evals export <CORPUS>
 
 ### `worldloom evaluate`
 
-Score the built-in baseline retriever against the corpus's evaluation set.
+Score one or both baseline retrievers against the corpus's evaluation set.
 
 ```
 worldloom evaluate <CORPUS>
@@ -93,8 +140,10 @@ worldloom evaluate <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
+| `--json` | Emit the scorecard as JSON. This is the measure half of the measure-then-iterate loop — an agent deciding what to change next should read data, not parse a bar chart. |
+| `--retriever` | bm25 (default — the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family — see src/worldloom/evaluate/tfidf.py), or both (side by side, with a per-family agreement reading: a family low under both retrievers is structurally hard, not hard for one heuristic). |
 | `--verbose`, `-v` | Show every question. |
-| `-k` | How many passages the baseline may return. |
+| `-k` | How many passages a retriever may return. |
 
 ### `worldloom formats`
 
@@ -131,7 +180,24 @@ worldloom narrate accept <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--from`, `-i` | Response JSON from the agent. |
+| `--json` | Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table. |
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
+
+### `worldloom narrate auto`
+
+Run requests -> generate -> validate -> accept in-process, against a live model.
+
+```
+worldloom narrate auto <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--concurrency` | Live generation calls to run at once, across a thread pool. 1 (the default) opens no thread pool at all — today's behaviour, byte for byte. Raising it only changes when calls happen: the recorded ledger is identical at any concurrency, because completion order never reaches it (see narrative/compiler.py's module docstring). |
+| `--harness` | Answer each request with an agent harness instead of a bare model: `claude-code` (the claude CLI in headless mode, its own auth) or `antigravity` (a Google Antigravity Agent; `worldloom[antigravity]`, GEMINI_API_KEY). `--model` passes through to the harness. |
+| `--model` | Model id. A `gemini-*` id routes to the Gemini provider (`worldloom[gemini]`, GEMINI_API_KEY); anything else — and the default — routes to Anthropic (`worldloom[llm]`, ANTHROPIC_API_KEY). Defaults: `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL` / `GEMINI_DEFAULT_MODEL`. |
+| `--retries` | Rejections the compiler will absorb per section before giving up. |
+| `--yes`, `-y` | Skip the confirmation prompt after the preflight summary. Always skipped when stdin is not a terminal (CI, a script) — the summary is still printed either way. |
 
 ### `worldloom narrate requests`
 
@@ -144,6 +210,50 @@ worldloom narrate requests <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
+
+### `worldloom pack`
+
+Author and check industry packs — a world's shape and lore as data.
+
+### `worldloom pack check`
+
+Validate a pack against the schema and lint its lore against the engine.
+
+```
+worldloom pack check <SOURCE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit findings as JSON — an agent authoring a pack should read data. |
+
+### `worldloom pack targets`
+
+List the lore targets each engine consults, and what each one changes.
+
+```
+worldloom pack targets <ENGINE>
+```
+
+### `worldloom pack template`
+
+Print a minimal valid pack to start from.
+
+```
+worldloom pack template <ENGINE>
+```
+
+### `worldloom pack texts`
+
+List the engine's surface-text templates a pack may override.
+
+```
+worldloom pack texts <ENGINE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit both key → default-template tables as JSON, for an agent authoring overrides. |
 
 ### `worldloom plan`
 
@@ -160,6 +270,7 @@ worldloom plan accept <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--from`, `-i` | Response JSON from the agent. |
+| `--json` | Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table. |
 | `--model-id` | Who proposed it. Recorded in the ledger and part of the replay key. |
 
 ### `worldloom plan requests`
@@ -187,6 +298,31 @@ worldloom render <CORPUS>
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
 
+### `worldloom stats`
+
+Report what the corpus actually contains: no invented benchmark, just numbers.
+
+```
+worldloom stats <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--against` | A second corpus name or path to diff against, metric by metric. |
+| `--json` | Emit the statistics as JSON — stable keys and ordering, safe to diff in CI. |
+
+### `worldloom status`
+
+Where this corpus is in the loop, and the exact command that comes next.
+
+```
+worldloom status <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit machine-readable state instead of the table. |
+
 ### `worldloom validate`
 
 Check a corpus for coherence violations.
@@ -194,6 +330,10 @@ Check a corpus for coherence violations.
 ```
 worldloom validate <CORPUS>
 ```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the report as JSON — violations as data, not prose to parse. |
 
 ### `worldloom version`
 

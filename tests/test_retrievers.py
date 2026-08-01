@@ -1,0 +1,211 @@
+"""TF-IDF cosine as a second, genuinely different ranking family.
+
+`bm25.py` was already this repository's baseline before this file existed, and
+it already *is* BM25 — reading it first is what caught that a literal second
+BM25 would not be a second ranking family, just a spare copy of the first
+(`tfidf.py`'s module docstring has the full account). This file tests the three
+things `evaluating.md`'s credibility argument depends on:
+
+1. BM25's own numbers do not move by a hair now that `score()` takes a
+   `retriever` argument — every existing hardness claim in this repository
+   rests on those numbers, so a silent drift here would invalidate them all.
+2. TF-IDF genuinely differs from BM25 — at least one real question in the
+   fixture corpus, the two disagree on — rather than reimplementing the same
+   ranking under a different name with different variable names.
+3. `compare()` reports agreement and disagreement *per family*, not an
+   average that could hide a family one retriever aces and the other flunks.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from worldloom import MonthEndClose, RetailWorld, World
+from worldloom.evaluate import RETRIEVERS, Bm25, TfIdf, compare, passages, render_agreement, score
+from worldloom.evaluate.score import DEFAULT_RETRIEVER
+from worldloom.models import EvaluationType
+from worldloom.narrative import DeterministicProvider
+
+PERIOD = "2026-03"
+
+
+@pytest.fixture(scope="module")
+def corpus() -> World:
+    world = RetailWorld(seed=8128).build().run(
+        MonthEndClose(period=PERIOD, include_operational_incident=True)
+    )
+    return world.narrate(DeterministicProvider()).render("markdown")
+
+
+# ---------------------------------------------------------------------------
+# Registry and defaults
+# ---------------------------------------------------------------------------
+
+
+def test_both_retrievers_are_registered() -> None:
+    assert set(RETRIEVERS) == {"bm25", "tfidf"}
+    assert RETRIEVERS["bm25"] is Bm25
+    assert RETRIEVERS["tfidf"] is TfIdf
+
+
+def test_the_default_retriever_is_still_bm25() -> None:
+    """Every existing caller — `score(corpus)` with no argument, `worldloom
+    evaluate` with no flag, CI's "the baseline still fails the hard questions"
+    step — must keep meaning exactly what it always meant."""
+    assert DEFAULT_RETRIEVER == "bm25"
+
+
+def test_an_unknown_retriever_name_is_a_clear_error(corpus: World) -> None:
+    with pytest.raises(ValueError, match="unknown retriever"):
+        score(corpus, retriever="reranker-9000")
+
+
+# ---------------------------------------------------------------------------
+# Parity: BM25's numbers must not move
+# ---------------------------------------------------------------------------
+
+
+def test_score_with_no_retriever_argument_still_means_bm25(corpus: World) -> None:
+    default = score(corpus)
+    explicit = score(corpus, retriever="bm25")
+    assert default.retriever == "bm25"
+    assert [(o.case_id, o.passed, o.detail) for o in default.outcomes] == [
+        (o.case_id, o.passed, o.detail) for o in explicit.outcomes
+    ]
+
+
+def test_bm25_numbers_are_pinned_exactly(corpus: World) -> None:
+    """A regression here means either `Bm25` or the grading logic changed —
+    deliberately or not. Every hardness claim this repository makes rests on
+    these exact counts staying put across unrelated refactors (adding a second
+    retriever chief among them), so this pins the number rather than just the
+    inequalities `test_evaluate.py` already checks.
+    """
+    card = score(corpus)
+    assert card.passed == 22
+    assert card.by_type() == {
+        EvaluationType.AUTHORITY_RESOLUTION: (0, 3),
+        EvaluationType.CAUSAL_MULTI_HOP: (1, 3),
+        EvaluationType.CITATION_REQUIRED: (2, 3),
+        EvaluationType.CROSS_ARTIFACT: (4, 4),
+        EvaluationType.DIRECT_LOOKUP: (9, 9),
+        EvaluationType.EXPECTED_ABSTENTION: (0, 9),
+        EvaluationType.NUMERICAL_COMPARISON: (6, 8),
+        EvaluationType.TEMPORAL_STATE: (0, 3),
+    }
+
+
+# ---------------------------------------------------------------------------
+# TF-IDF: determinism, and genuine difference from BM25
+# ---------------------------------------------------------------------------
+
+
+def test_tfidf_ranking_is_reproducible(corpus: World) -> None:
+    pool = passages(corpus)
+    index = TfIdf([p.text for p in pool])
+    question = corpus.evaluations[0].question
+    assert index.rank(question, limit=5) == index.rank(question, limit=5)
+
+
+def test_tfidf_returns_nothing_for_nonsense(corpus: World) -> None:
+    pool = passages(corpus)
+    index = TfIdf([p.text for p in pool])
+    assert index.rank("zebra unicorn parliament", limit=5) == []
+
+
+def test_tfidf_scores_are_bounded_like_a_cosine(corpus: World) -> None:
+    """Unlike BM25's unbounded scores, cosine similarity is always in [0, 1] —
+    the clearest arithmetic signature that this is a different ranking family
+    and not BM25 wearing a different class name."""
+    pool = passages(corpus)
+    index = TfIdf([p.text for p in pool])
+    for case in corpus.evaluations:
+        for _, value in index.rank(case.question, limit=5):
+            assert 0.0 <= value <= 1.0 + 1e-9
+
+
+def test_the_two_families_disagree_on_at_least_one_question(corpus: World) -> None:
+    """If BM25 and TF-IDF ranked identically on every question, running both
+    would tell a corpus card nothing it did not already know from one. This
+    corpus's `numerical_comparison` family is where they split (see the
+    module-level scorecards in the delivery report)."""
+    bm25_card = score(corpus, retriever="bm25")
+    tfidf_card = score(corpus, retriever="tfidf")
+    bm25_outcomes = {o.case_id: o.passed for o in bm25_card.outcomes}
+    tfidf_outcomes = {o.case_id: o.passed for o in tfidf_card.outcomes}
+    assert any(bm25_outcomes[case_id] != tfidf_outcomes[case_id] for case_id in bm25_outcomes)
+
+
+def test_tfidf_also_gets_the_easy_questions(corpus: World) -> None:
+    """Same floor test `test_evaluate.py` runs for BM25: a retriever this
+    mediocre should still pass the questions the corpus itself labels easy, or
+    something is broken rather than merely hard."""
+    card = score(corpus, retriever="tfidf")
+    outcomes = {o.case_id: o for o in card.outcomes}
+    easy = [c for c in corpus.evaluations if c.difficulty == "easy"]
+    for case in easy:
+        assert outcomes[case.id].passed, f"{case.id} is labelled easy but TF-IDF failed it"
+
+
+# ---------------------------------------------------------------------------
+# compare(): the credibility reading, per family
+# ---------------------------------------------------------------------------
+
+
+def test_compare_reports_every_family(corpus: World) -> None:
+    cards = {"bm25": score(corpus, retriever="bm25"), "tfidf": score(corpus, retriever="tfidf")}
+    findings = compare(cards)
+    assert {f.evaluation_type for f in findings} == set(EvaluationType)
+    for finding in findings:
+        assert finding.finding in ("consistently hard", "consistently easy", "disagreement")
+        assert set(finding.scores) == {"bm25", "tfidf"}
+
+
+def test_a_family_both_retrievers_fail_reads_as_consistently_hard(corpus: World) -> None:
+    """`temporal_state` is the corpus's central claim (see `evaluating.md`): a
+    retriever with no notion of *when* a document was written cannot pass it,
+    regardless of which ranking family it is. Both should fail it identically,
+    which is the "structurally hard, not hard-for-one-heuristic" reading this
+    whole mechanism exists to support."""
+    cards = {"bm25": score(corpus, retriever="bm25"), "tfidf": score(corpus, retriever="tfidf")}
+    findings = {f.evaluation_type: f for f in compare(cards)}
+    temporal = findings[EvaluationType.TEMPORAL_STATE]
+    assert temporal.finding == "consistently hard"
+    assert temporal.scores["bm25"][0] == 0
+    assert temporal.scores["tfidf"][0] == 0
+
+
+def test_disagreement_is_flagged_per_case_not_by_matching_aggregate_rate() -> None:
+    """Two retrievers passing the same *count* of cases in a family while
+    disagreeing about *which* ones is a disagreement — an aggregate-only
+    comparison would miss it entirely because 1/2 == 1/2."""
+    from worldloom.evaluate.score import Outcome, Scorecard
+
+    bm25 = Scorecard(
+        outcomes=[
+            Outcome("C-1", EvaluationType.DIRECT_LOOKUP, True, ""),
+            Outcome("C-2", EvaluationType.DIRECT_LOOKUP, False, ""),
+        ],
+        retriever="bm25",
+    )
+    tfidf = Scorecard(
+        outcomes=[
+            Outcome("C-1", EvaluationType.DIRECT_LOOKUP, False, ""),
+            Outcome("C-2", EvaluationType.DIRECT_LOOKUP, True, ""),
+        ],
+        retriever="tfidf",
+    )
+    findings = compare({"bm25": bm25, "tfidf": tfidf})
+    assert len(findings) == 1
+    assert findings[0].finding == "disagreement"
+    assert findings[0].disagreements == 2
+    assert findings[0].total == 2
+
+
+def test_render_agreement_names_both_retrievers(corpus: World) -> None:
+    cards = {"bm25": score(corpus, retriever="bm25"), "tfidf": score(corpus, retriever="tfidf")}
+    text = render_agreement(compare(cards))
+    assert "BM25" in text
+    assert "TFIDF" in text
+    for kind in EvaluationType:
+        assert kind.value in text

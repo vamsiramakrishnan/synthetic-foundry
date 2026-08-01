@@ -418,6 +418,28 @@ class ArtifactIntent(Model):
     """Artifacts this one builds on without replacing. A second incident review
     citing the first is derived from it; neither supersedes the other, and both
     remain current."""
+    restates: str | None = None
+    """A formal correction of a document that cannot itself be changed.
+
+    The fourth relationship, and the one regulated industries force
+    (build-order §7): a filed return is immutable, so a correction is not a new
+    version (``revises``), not a replacement (``supersedes``), and not a
+    derivative (``derived_from``) — it is a *restatement*. The distinguishing
+    rule is what happens to the original: ``revises`` and ``supersedes`` retire
+    their predecessor, a restatement leaves it standing, because a filing that
+    vanished from the record would defeat the reason filings are immutable.
+    Both documents remain current; the restatement says which figures moved and
+    why, and the validator holds the pair to that contract."""
+
+    @model_validator(mode="after")
+    def _one_relationship_per_predecessor(self) -> ArtifactIntent:
+        if self.restates and (self.revises or self.supersedes):
+            raise ValueError(
+                f"{self.id}: restates is exclusive with revises/supersedes —"
+                " a correction that also retired the original would be an edit"
+                " of an immutable filing wearing a different name"
+            )
+        return self
 
 
 class FormulaKind(StrEnum):
@@ -668,6 +690,9 @@ class ArtifactManifestEntry(Model):
     supersedes: str | None = None
     revises: str | None = None
     """The earlier version of this same document. See ``ArtifactIntent.revises``."""
+    restates: str | None = None
+    """The immutable filing this document formally corrects, which stays on the
+    record. See ``ArtifactIntent.restates``."""
     access_policy_id: str | None = None
     recipe: str | None = None
     version: int = 1

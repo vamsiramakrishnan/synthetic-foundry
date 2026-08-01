@@ -36,6 +36,7 @@ DOCUMENTS = (
     # The progressively-disclosed half. Checked exactly like the entry point:
     # a reference loaded only when needed is *more* likely to go stale, not less,
     # because nothing routine exercises it.
+    ".claude/skills/worldloom/references/designing.md",
     ".claude/skills/worldloom/references/building.md",
     ".claude/skills/worldloom/references/planning-structure.md",
     ".claude/skills/worldloom/references/writing-prose.md",
@@ -47,6 +48,7 @@ DOCUMENTS = (
     ".claude/commands/worldloom-narrate.md",
     ".claude/commands/worldloom-render.md",
     ".claude/commands/worldloom-evaluate.md",
+    ".claude/commands/worldloom-design.md",
     "docs/generation-model.md",
     "docs/lore.md",
     # `docs/build-order.md` is deliberately absent. It is the roadmap, so it names

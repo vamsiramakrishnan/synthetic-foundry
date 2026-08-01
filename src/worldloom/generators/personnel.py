@@ -18,6 +18,7 @@ exist to answer.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -79,6 +80,8 @@ def hire(
     persona_id: str | None,
     at: datetime,
     period: str,
+    given: Sequence[str] | None = None,
+    family: Sequence[str] | None = None,
 ) -> OrgChange:
     """A new person joins, effective *at*.
 
@@ -88,6 +91,12 @@ def hire(
     shape as every other generator's (``rng, minter`` first, thin-waist ids
     after), even though a hire's own fact and event are scoped to the person,
     not the company.
+
+    ``given``/``family`` pass straight through to ``names.people_names`` —
+    a caller building this into a pack world threads the pack's
+    ``name_pools`` here, so a mid-corpus hire reads as the same locale as
+    everyone minted at the beginning, rather than quietly falling back to the
+    engine's own default pools the moment the corpus grows.
     """
     del company_id  # see docstring: kept for signature symmetry only
 
@@ -98,7 +107,7 @@ def hire(
     # whole roster through this pure function. The pools are wide relative to
     # how many people any one scenario hires, so a collision is not a
     # practical risk; nothing in this corpus asserts person names are unique.
-    [person_name] = names.people_names(rng.derive("name"), 1)
+    [person_name] = names.people_names(rng.derive("name"), 1, given=given, family=family)
 
     person_id = minter.next("PERSON")
     person = Employee(

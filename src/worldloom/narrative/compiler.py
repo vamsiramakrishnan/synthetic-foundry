@@ -16,14 +16,31 @@ a world whose ledger is present touches no provider at all: every key hits, the
 recorded prose comes back byte for byte, and the run is offline and free. Changing
 the model or bumping a prompt version changes every key, so it yields a *different*
 world — explicitly, not silently.
+
+**Concurrency must never leak into output.** ``narrate(concurrency=N)`` fans live
+generation calls out to a thread pool, but every section's *fate* — replay, empty,
+or live — and the traversal order the accepted ledger records them in are decided
+by ``_plan`` before a single thread is spun up (see ``_Slot``). A ``GEN-####`` id
+is minted in exactly one place, a single-threaded pass over that plan, strictly in
+section order — never in whichever order a worker's future happens to resolve.
+That is the whole determinism argument for concurrency: it changes *when* a call
+happens, never what it produces or where it lands.
+
+**Checkpointing rides the same plan.** ``on_accepted`` fires once per section a
+worker actually generates (never for a replay), so a long ``narrate auto`` run can
+persist accepted, paid-for prose to a sidecar as it goes rather than only at the
+end — see ``narrative/checkpoint.py``. The entry handed to that callback carries a
+scratch id, not the sequential one the finished corpus will use for that section;
+only the single-threaded assembly pass decides that, once, in order.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Callable
 
-from ..ids import Minter, content_key
+from ..ids import content_key, format_id, highest_numeric_suffix
 from ..models import ArtifactIR, ArtifactSection, GenerationLedgerEntry
 from . import claims as claim_checks
 from . import prompts, providers
@@ -202,52 +219,75 @@ def _request_for(
         allowed_fact_ids=allowed,
         required_fact_ids=required,
         forbidden_claims=_forbidden_for(intent.artifact_type),
+        # World-level, not fact-scoped: a vocabulary note holds for every
+        # section, and there are never more than a handful. Not part of the
+        # fact digest, so adding one cannot orphan a recorded narration.
+        terminology={
+            constraint.target: constraint.effect
+            for commitment in world.lore
+            for constraint in commitment.constrains
+            if constraint.kind.value == "terminology"
+        },
         target_words={"small": 70, "medium": 130, "long": 200}.get(intent.size_profile, 120),
         fact_digest=providers.digest([facts[f] for f in allowed]),
     )
 
 
-def narrate(
+@dataclass
+class _Slot:
+    """One section's place in a narration pass.
+
+    Resolved immediately (``kind`` is ``"keep"`` — already had prose or a table
+    — or ``"empty"`` — awaiting prose but nothing allowed to say it with), or
+    deferred (``"replay"``, a ledger hit with nothing to call; ``"live"``,
+    a provider call still to make). ``_plan`` builds the whole list up front,
+    in section-traversal order, before anything is dispatched — which is what
+    lets ``narrate``'s live jobs run on a thread pool while every downstream
+    decision (what a `GEN-####` id names, what order the ledger records) stays
+    a property of this list's order rather than of thread scheduling.
+    """
+
+    section: ArtifactSection
+    kind: str
+    request: NarrativeRequest | None = None
+    call_site: str = ""
+    key: str = ""
+    ordinal: int = 0
+    existing: GenerationLedgerEntry | None = None
+    future: Future | None = field(default=None, repr=False)
+    result: tuple[GeneratedNarrative, int] | None = None
+
+
+def _plan(
     world: World,
+    facts: dict[str, CanonicalFact],
+    ledger: tuple[GenerationLedgerEntry, ...],
     provider: providers.Provider,
-    *,
-    ledger: tuple[GenerationLedgerEntry, ...] = (),
-    retries: int = DEFAULT_RETRIES,
-    prompt_name: str = prompts.SECTION_PROSE.name,
-) -> Narration:
-    """Fill every section awaiting prose, replaying from *ledger* where possible."""
-    if world.seed is None:
-        raise NarrationError("narration needs a seeded world")
-    if not world._artifact_irs:
-        raise NarrationError("nothing to narrate — compile artifacts first")
+    prompt: prompts.Prompt,
+) -> tuple[list[list[_Slot]], list[_Slot]]:
+    """Decide every section's fate before calling anything.
 
-    prompt = prompts.get(prompt_name)
-    facts = {fact.id: fact for fact in world.facts}
-    entity_names = frozenset(
-        [world.company.name]
-        + [unit.name for unit in world.business_units]
-        + [person.name for person in world.people]
-        + [system.name for system in world.systems]
-    )
-
+    Shared by ``narrate`` and ``preflight`` so the two can never disagree about
+    what counts as a replay versus a live call — the numbers `narrate auto`
+    prints before spending money are the same computation the run itself does,
+    not a second estimate that could drift from it.
+    """
     by_key = {entry.key: entry for entry in ledger}
-    minter = Minter()
-    recorded: list[GenerationLedgerEntry] = []
-    filled: list[ArtifactIR] = []
-    provider_calls = replayed = rejected = 0
+    ir_slots: list[list[_Slot]] = []
+    live_jobs: list[_Slot] = []
 
     for ir in world._artifact_irs:
-        sections: list[ArtifactSection] = []
+        slots: list[_Slot] = []
         for ordinal, section in enumerate(ir.sections):
             if not section.awaiting_prose:
-                sections.append(section)
+                slots.append(_Slot(section=section, kind="keep"))
                 continue
 
             request = _request_for(world, ir, section, facts)
             if not request.allowed_fact_ids:
                 # Nothing to say and nothing to say it with. Better an empty
                 # section than prose invented to fill it.
-                sections.append(section)
+                slots.append(_Slot(section=section, kind="empty"))
                 continue
 
             call_site = f"{ir.id}/{section.heading}"
@@ -262,38 +302,242 @@ def narrate(
 
             existing = by_key.get(key)
             if existing is not None:
-                narrative = GeneratedNarrative.model_validate(existing.output)
-                replayed += 1
-                recorded.append(existing)
-            else:
-                narrative, attempts = _generate(
-                    provider, request, prompt, facts,
-                    entity_names=entity_names, retries=retries,
+                slots.append(_Slot(section=section, kind="replay", key=key, existing=existing))
+                continue
+
+            slot = _Slot(
+                section=section, kind="live", request=request,
+                call_site=call_site, key=key, ordinal=ordinal,
+            )
+            slots.append(slot)
+            live_jobs.append(slot)
+        ir_slots.append(slots)
+
+    return ir_slots, live_jobs
+
+
+def _ledger_entry(
+    *,
+    id: str,  # noqa: A002 - matches the field name it fills
+    slot: _Slot,
+    world_seed: int,
+    provider_id: str,
+    prompt_key: str,
+    narrative: GeneratedNarrative,
+    attempts: int,
+) -> GenerationLedgerEntry:
+    """Build the ledger row for one live job. *id* is the only thing that
+    differs between the checkpoint's provisional copy and the run's real one —
+    see ``narrate``."""
+    assert slot.request is not None  # only "live" slots reach here
+    return GenerationLedgerEntry(
+        id=id,
+        key=slot.key,
+        call_site=slot.call_site,
+        ordinal=slot.ordinal,
+        world_seed=world_seed,
+        input_facts_digest=slot.request.fact_digest,
+        model_id=provider_id,
+        prompt_version=prompt_key,
+        output=narrative.model_dump(mode="json"),
+        rejected_attempts=attempts,
+    )
+
+
+@dataclass(frozen=True)
+class Preflight:
+    """What a narration pass would do, computed without calling *provider* once.
+
+    ``replay_keys`` is every ledger key `narrate` would serve from *ledger*
+    without a call — a caller distinguishing "replayed from the checkpoint"
+    from "replayed from the corpus's own ledger" (`narrate auto`'s preflight
+    banner) does it by intersecting this with the set of keys its checkpoint
+    sidecar carries; `preflight` itself doesn't know which source a hit came
+    from, only that it was one.
+    """
+
+    total_sections: int
+    replay_keys: frozenset[str]
+    live_count: int
+    live_prompt_chars: int
+
+
+def preflight(
+    world: World,
+    provider: providers.Provider,
+    *,
+    ledger: tuple[GenerationLedgerEntry, ...] = (),
+    prompt_name: str = prompts.SECTION_PROSE.name,
+) -> Preflight:
+    """Count what ``narrate`` would do, without spending a single call.
+
+    Built on the exact same planning pass (`_plan`) `narrate` runs, so the
+    number an operator approves before paying for a run is the number the run
+    will actually produce.
+    """
+    if world.seed is None:
+        raise NarrationError("narration needs a seeded world")
+    if not world._artifact_irs:
+        raise NarrationError("nothing to narrate — compile artifacts first")
+
+    prompt = prompts.get(prompt_name)
+    facts = {fact.id: fact for fact in world.facts}
+    ir_slots, live_jobs = _plan(world, facts, ledger, provider, prompt)
+
+    total = sum(len(slots) for slots in ir_slots)
+    replay_keys = frozenset(
+        slot.key for slots in ir_slots for slot in slots if slot.kind == "replay"
+    )
+    # The exact prompt each live call will send, not a guess at its size — the
+    # same `Prompt.render()` `_generate` itself calls. `feedback=""` because a
+    # preflight cannot know a retry will happen; any section that gets rejected
+    # once sends more than this floor.
+    live_chars = sum(len(prompt.render(slot.request, facts)) for slot in live_jobs)
+
+    return Preflight(
+        total_sections=total,
+        replay_keys=replay_keys,
+        live_count=len(live_jobs),
+        live_prompt_chars=live_chars,
+    )
+
+
+def narrate(
+    world: World,
+    provider: providers.Provider,
+    *,
+    ledger: tuple[GenerationLedgerEntry, ...] = (),
+    retries: int = DEFAULT_RETRIES,
+    prompt_name: str = prompts.SECTION_PROSE.name,
+    concurrency: int = 1,
+    on_accepted: Callable[[GenerationLedgerEntry], None] | None = None,
+) -> Narration:
+    """Fill every section awaiting prose, replaying from *ledger* where possible.
+
+    ``concurrency`` fans live generation calls out to a thread pool of that
+    size; the default of 1 makes no thread pool at all, so it is today's
+    behaviour, byte for byte. Raising it changes *when* calls happen and never
+    what they produce: `_plan` decides every section's fate up front, and the
+    loop below that turns accepted results into ledger entries is the only
+    place a `GEN-####` id is minted, running single-threaded and strictly in
+    section order regardless of which worker's future resolves first (see the
+    module docstring).
+
+    A provider's ``complete()`` must therefore be safe to call from more than
+    one thread at once when ``concurrency > 1`` — every provider shipped here
+    is (each call is self-contained), with one exception worth flagging:
+    `harness.AntigravityProvider` calls ``asyncio.run()`` per call, which is
+    fine from a plain worker thread (no event loop already running there) but
+    would raise if it were ever invoked from a thread that already has one.
+
+    ``on_accepted``, if given, is called once per section actually generated
+    (never for a replay — nothing new happened), the moment its provider call
+    is validated and accepted, from whichever thread produced it — so it must
+    be its own thread-safe callable. That is `narrate auto --concurrency`'s
+    checkpoint hook (`narrative/checkpoint.py`): a crash can land between any
+    two workers finishing, so persistence has to happen at acceptance, not
+    after this function's own single-threaded reassembly gets around to it.
+    """
+    if world.seed is None:
+        raise NarrationError("narration needs a seeded world")
+    if not world._artifact_irs:
+        raise NarrationError("nothing to narrate — compile artifacts first")
+    if concurrency < 1:
+        raise ValueError(f"concurrency must be at least 1, got {concurrency}")
+
+    prompt = prompts.get(prompt_name)
+    facts = {fact.id: fact for fact in world.facts}
+    entity_names = claim_checks.known_entity_names(world)
+
+    ir_slots, live_jobs = _plan(world, facts, ledger, provider, prompt)
+
+    # Continue the GEN sequence rather than restarting it at 1 — mirrors
+    # `compiler/handshake.py`'s plan `accept()`, and for the same reason: this
+    # world's ledger can already carry GEN entries (an earlier narration pass,
+    # an accepted plan batch, or — the case that made this load-bearing rather
+    # than defensive — a checkpoint-resumed run, whose sidecar the caller
+    # folds into `ledger`). A fresh count starting at 1 would mint an id some
+    # already-recorded entry owns.
+    next_gen = 1 + highest_numeric_suffix("GEN", (entry.id for entry in ledger))
+
+    def _run(slot: _Slot) -> tuple[GeneratedNarrative, int]:
+        assert slot.request is not None
+        narrative, attempts = _generate(
+            provider, slot.request, prompt, facts,
+            entity_names=entity_names, retries=retries,
+        )
+        if on_accepted is not None:
+            on_accepted(
+                _ledger_entry(
+                    # A scratch id, not the sequential one this section will
+                    # carry in the finished ledger — that one is only decided
+                    # below, once, in section order. See the docstring.
+                    id=f"GEN-CKPT-{slot.key[:16].upper()}",
+                    slot=slot, world_seed=world.seed, provider_id=provider.id,
+                    prompt_key=prompt.key, narrative=narrative, attempts=attempts,
                 )
+            )
+        return narrative, attempts
+
+    if concurrency <= 1 or len(live_jobs) <= 1:
+        # No pool at all — not merely one worker — so concurrency=1 touches no
+        # threading machinery whatsoever and stays trivially "today's code".
+        for slot in live_jobs:
+            slot.result = _run(slot)
+    else:
+        pool = ThreadPoolExecutor(max_workers=concurrency)
+        try:
+            for slot in live_jobs:
+                slot.future = pool.submit(_run, slot)
+            for slot in live_jobs:
+                assert slot.future is not None
+                slot.result = slot.future.result()
+        finally:
+            # `cancel_futures` drops whatever had not yet started; anything
+            # already running is left to finish (and checkpoint) rather than
+            # abandoned, so a `NarrationError` from one exhausted section can
+            # never race the checkpoint write of a section that succeeded
+            # before it — see the failure-semantics note in `narrate auto`'s
+            # CLI wiring for what that guarantee is *for*.
+            pool.shutdown(wait=True, cancel_futures=True)
+
+    recorded: list[GenerationLedgerEntry] = []
+    filled: list[ArtifactIR] = []
+    provider_calls = replayed = rejected = 0
+
+    for ir, slots in zip(world._artifact_irs, ir_slots):
+        sections: list[ArtifactSection] = []
+        for slot in slots:
+            if slot.kind in ("keep", "empty"):
+                sections.append(slot.section)
+                continue
+
+            if slot.kind == "replay":
+                assert slot.existing is not None
+                narrative = GeneratedNarrative.model_validate(slot.existing.output)
+                replayed += 1
+                recorded.append(slot.existing)
+            else:
+                assert slot.result is not None
+                narrative, attempts = slot.result
                 provider_calls += 1 + attempts
                 rejected += attempts
                 recorded.append(
-                    GenerationLedgerEntry(
-                        id=minter.next("GEN"),
-                        key=key,
-                        call_site=call_site,
-                        ordinal=ordinal,
-                        world_seed=world.seed,
-                        input_facts_digest=request.fact_digest,
-                        model_id=provider.id,
-                        prompt_version=prompt.key,
-                        output=narrative.model_dump(mode="json"),
-                        rejected_attempts=attempts,
+                    _ledger_entry(
+                        id=format_id("GEN", next_gen),
+                        slot=slot, world_seed=world.seed, provider_id=provider.id,
+                        prompt_key=prompt.key, narrative=narrative, attempts=attempts,
                     )
                 )
+                next_gen += 1
 
             sections.append(
-                section.model_copy(
+                slot.section.model_copy(
                     update={
                         "body": narrative.text,
                         "fact_ids": sorted(
                             {f for claim in narrative.claims for f in claim.supporting_fact_ids}
-                            | set(section.fact_ids)
+                            | set(slot.section.fact_ids)
                         ),
                     }
                 )

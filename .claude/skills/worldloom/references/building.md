@@ -46,6 +46,15 @@ one produces. Pick one when the corpus needs to exercise a particular kind of
 hierarchy — a single-division retailer poses different roll-up questions than
 a four-division grocer with a New Zealand food arm.
 
+The archetype also chooses the *episode*. Retail archetypes run the month-end
+close; `midsize_adi` (a fictional Australian bank) runs the quarterly
+capital-return episode instead — a second-line challenge filed over by a
+lodgement norm, a reconciliation break caught by the daily liquidity cadence,
+and a restatement whose original filing stays on the record. The retail-only
+flags (`--incident`, `--comparatives`, `--actors`) are refused on a banking
+build rather than silently ignored; `--periods` still applies, stepping three
+months at a time instead of retail's one — see "Multiple periods" below.
+
 `--inspired-by "a large Australian grocer"` resolves a description to the
 archetype of that shape — it is a lookup over phrases like "woolies" or
 "large australian supermarket", not a data fetch. **No figure, name, or fact
@@ -90,9 +99,12 @@ cheaper to narrate and just as coherent.
 worldloom build --seed 8128 --periods 3 --out ./corpus
 ```
 
-`--period` names where the *first* close lands (`YYYY-MM`); `--periods` runs
-that many consecutive closes from there, each one a `MonthEndClose` chained
-onto the last. This is the single most important scale knob and the one most
+`--period` names where the *first* episode lands (`YYYY-MM`); `--periods` runs
+that many consecutive episodes from there, each one chained onto the last —
+a `MonthEndClose` for retail, stepping one month at a time; a
+`QuarterlyCapitalReturn` for `midsize_adi`, stepping three (a domain's own
+cadence, so a third vertical registers its own step rather than guessing at
+retail's). This is the single most important scale knob and the one most
 likely to be skipped, because a one-period build already produces a coherent,
 validating corpus — it just cannot pose several kinds of question that a
 real enterprise's document set answers routinely:
@@ -199,6 +211,27 @@ if founding milestones took even one number off the `FACT` sequence, every
 fact a scenario mints afterwards would shift and that checked-in narration
 would stop matching. A milestone fact costing nothing against `FACT` is what
 keeps existing fact ids stable as this feature was added.
+
+## Noise
+
+```bash
+worldloom build --seed 8128 --incident --distractors 20 --out ./corpus
+```
+
+Every corpus built so far is dense with hard-but-interesting documents. A real
+enterprise estate is not: it is mostly drafts nobody threw away, someone's
+personal copy of the real memo, and routine notices that say "no change" every
+period. `--distractors <n>` adds that haystack once the episode(s) finish,
+opt-in (default 0) and entirely from what already exists — no new fact, no new
+entity, no new event, so it cannot make an `expected_abstention` question
+answerable and cannot become the only document carrying an answer a real one
+already carries (`tests/test_distractors.py` states why, structurally). Three
+kinds, tried in that priority order per document budget: a superseded draft
+(an earlier, partial version of a real document, `revises` pointing back at
+it), a derived personal copy (a partial extract in a different register,
+`derived_from` the real document), and a routine notice (an on-plan figure
+nobody needed to know twice). Rides the recipe, so `--replay` reproduces the
+noise exactly as it reproduces everything else.
 
 ## Replay
 
