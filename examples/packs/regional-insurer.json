@@ -25,6 +25,16 @@
       "phrases": ["earned premium mix", "claims frequency"]
     }
   },
+  "episode_text": {
+    "event.pipeline_failed": "The claims reserving pipeline failed. Open claims could not be valued for the period.",
+    "event.hypothesis_recorded": "Initial triage attributed the failure to an overnight ledger platform outage.",
+    "event.hypothesis_superseded": "The ledger platform outage hypothesis was ruled out; platform logs showed no interruption in the window.",
+    "event.root_cause_confirmed": "Root cause confirmed as a stale legacy-to-new peril-code mapping, leaving {affected:,} open claims unmapped and unvaluable.",
+    "fact.hypothesis": "Overnight ledger platform outage",
+    "fact.hypothesis_ruled_out": "Ledger platform logs show no interruption during the reserving window",
+    "fact.cause": "Stale legacy-to-new peril-code mapping in the Policy and Claims Register",
+    "fact.classification": "control_failure: the peril-code mapping has no registered owner and no required reviewer"
+  },
   "units": [
     {
       "key": "personal",

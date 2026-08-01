@@ -150,6 +150,9 @@ class MonthEndClose:
                 for fact in world.facts.where(kind="ops.incident_opened")
                 if fact.period
             ),
+            # A pack's episode-text overrides ride the recipe, which is what
+            # lets a pack-built corpus rebuild them with no pack file on hand.
+            text=(world._recipe.get("pack") or {}).get("episode_text") or None,
         )
 
         # Unit keys come from the world rather than a literal list, because the

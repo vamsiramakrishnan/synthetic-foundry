@@ -105,6 +105,9 @@ class QuarterlyCapitalReturn:
             # derived, never assumed from a unit key a pack may not have.
             affected_unit_id=affected_book.business_unit_id,
             lore_by_target=index,
+            # Pack episode-text overrides ride the recipe, so a pack-built
+            # corpus rebuilds them with no pack file on hand.
+            text=(world._recipe.get("pack") or {}).get("episode_text") or None,
         )
 
         intents, errors = banking_documents.artifact_intents(

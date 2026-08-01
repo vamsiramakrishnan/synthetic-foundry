@@ -25,6 +25,11 @@
       "phrases": ["on the record", "cannot be confirmed from the register"]
     }
   },
+  "episode_text": {
+    "event.working_paper_issued": "The RWA working paper was issued, treating the Owner-Occupier Home Loans book's collateral as fully secured.",
+    "event.challenge_raised": "Prudential Risk challenged the Owner-Occupier collateral treatment on the record: sampled revaluations looked stale and the fully-secured treatment could not be confirmed from the Security Register. The challenge was logged with status open.",
+    "fact.confirmed_cause": "Stale collateral-valuation mapping left over from the 2023 security-register migration; revaluations lapsed for the Owner-Occupier Home Loans book"
+  },
   "units": [
     {
       "key": "members",

@@ -40,9 +40,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from collections.abc import Mapping
+
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
 from ..rng import Rng
+from . import episode_text
 from .capital import CapitalPosition
 from .liquidity import LiquiditySeries
 from .operations import _at, _text, business_days_after, period_end
@@ -56,6 +59,86 @@ BPS = "bps"
 #: demonstrably did not pause between filing and detection; short enough that
 #: the fact ledger is not padded with a quarter of identical observations.
 LIQUIDITY_DAYS = 6
+
+
+#: The challenged-return engine's surface text — see `generators/episode_text`
+#: and the identical table in `operations.py`. Defaults are the strings this
+#: engine always used, extracted verbatim by AST so stock corpora are
+#: byte-identical; a pack overrides by key through `episode_text`.
+TEXT: dict[str, str] = {
+    'event.close_started':
+        '{period} month-end close commenced; the overnight ledger sequence began.',
+    'event.close_finalised':
+        '{period} close finalised and the ledger locked on the committed date.',
+    'event.capital_return_preparation_started':
+        'Preparation of the capital adequacy return for the quarter ended {period} began from the locked ledger.',
+    'event.working_paper_issued':
+        "The RWA working paper was issued, treating the SME Secured Lending book's collateral as fully secured.",
+    'event.second_line_review_started':
+        'Prudential Risk began its pre-lodgement review of the draft return.',
+    'event.challenge_raised':
+        'Prudential Risk challenged the SME Secured collateral treatment on the record: sampled revaluations looked stale and the fully-secured treatment could not be confirmed. The challenge was logged with status open.',
+    'event.return_approved':
+        "The CFO approved the return for lodgement at the preparer's figure. The second-line challenge remained open: returns file on the due date, and open challenges are logged, not blocking.",
+    'event.capital_return_filed':
+        'The capital adequacy return for the quarter ended {period} was lodged with the Prudential Standards Authority via the filing portal.',
+    'event.liquidity_report_submitted':
+        'The daily liquidity coverage report was produced and submitted — the daily cadence running as usual after the quarterly lodgement.',
+    'event.liquidity_cadence_continued':
+        'The daily liquidity cadence continued between the lodgement and the detection that follows — the two clocks genuinely overlap.',
+    'event.reconciliation_break_detected':
+        "The daily liquidity calculator's reconciliation of collateral positions against the collateral register flagged a break. The quarterly capital path carries no such control.",
+    'event.incident_opened':
+        'Service operations opened incident {incident_ref} at priority P2 against collateral-valuation-sync.',
+    'event.hypothesis_recorded':
+        'Initial triage attributed the break to the market data service applying the end-of-day FX revaluation twice to foreign-currency collateral.',
+    'fact.initial_hypothesis':
+        'The market data service applied the end-of-day FX revaluation twice to foreign-currency collateral',
+    'event.hypothesis_superseded':
+        'The FX double-application hypothesis was ruled out: the rate log shows a single end-of-day application in the window.',
+    'event.root_cause_confirmed':
+        'Root cause confirmed: a stale collateral-valuation mapping left over from the 2023 collateral-system migration. Revaluations had lapsed for the SME Secured Lending book, leaving {affected:,} loan facilities carried at stale collateral values.',
+    'fact.confirmed_cause':
+        'Stale collateral-valuation mapping left over from the 2023 collateral-system migration; revaluations lapsed for the SME Secured Lending book',
+    'event.capital_impact_assessed':
+        'Credit risk analytics quantified the impact: risk-weighted assets for the SME Secured book were understated in the filed return, and the corrected CET1 ratio remains above the PSA 110 minimum. A restatement is required.',
+    'event.regulator_notified':
+        "The CFO notified the Prudential Standards Authority of a material error in the filed return, within the PSA 110 notification window. The regulator's response is not recorded in this corpus.",
+    'event.restatement_prepared':
+        'First-line regulatory reporting prepared the restatement of the filed return.',
+    'event.working_paper_revised':
+        'The RWA working paper was revised to version 2 with the corrected treatment — a working note may be revised, because it is not a filing.',
+    'event.restatement_reviewed':
+        'Prudential Risk reviewed the restatement and, this time, signed off.',
+    'event.restatement_approved':
+        'The CFO and CRO countersigned the restatement for lodgement.',
+    'event.return_restated':
+        'The restatement was lodged. The original return stays on the record unchanged; the restatement states which figures moved and why.',
+    'event.control_failure_identified':
+        'Internal audit upheld the second-line challenge and classified the underlying failure: the revaluation schedule has no registered owner, and the quarterly capital path carries no reconciliation control.',
+    'event.remediation_created':
+        'Two remediation tickets raised: assign revaluation-schedule ownership with a mandatory second-line reviewer, and automate revaluation-lapse detection on the quarterly path.',
+    'fact.challenge':
+        'Sampled collateral revaluations for the SME Secured Lending book appear stale; the fully-secured treatment cannot be confirmed from the register',
+    'fact.reconciliation_break':
+        'Collateral positions consumed by the daily liquidity calculation failed reconciliation against the collateral register',
+    'fact.incident_opened':
+        '{incident_ref} opened at priority P2 against collateral-valuation-sync',
+    'fact.cause_ruled_out':
+        'The FX rate log shows a single end-of-day application in the window',
+    'fact.error_materiality':
+        'material: restatement required under PSA 110',
+    'fact.notification':
+        'The bank notified the Prudential Standards Authority of a material error in the quarterly capital return within the PSA 110 notification window',
+    'fact.restatement_reason':
+        'Risk-weighted assets for the SME Secured Lending book were understated in the filed return: a stale collateral-valuation mapping from the 2023 migration left revaluations lapsed, so collateral was treated as fully secured when it was not',
+    'fact.root_cause_classification':
+        'control_failure: the revaluation schedule has no registered owner and the quarterly capital path has no reconciliation control',
+    'fact.remediation':
+        'One ticket assigns revaluation-schedule ownership with a mandatory second-line reviewer; one automates revaluation-lapse detection on the quarterly path',
+    'fact.remediation_addresses':
+        'The ownership ticket addresses the control failure; the detection ticket addresses only the detection gap',
+}
 
 
 @dataclass(frozen=True)
@@ -83,6 +166,7 @@ def generate(
     book_names: dict[str, str],
     affected_unit_id: str,
     lore_by_target: dict[str, list[str]],
+    text: Mapping[str, str] | None = None,
 ) -> ReturnEpisode:
     """Generate the challenged return for the quarter ending *period*.
 
@@ -92,6 +176,7 @@ def generate(
     any pack whose units were named for its own business rather than the stock
     archetype's: the same leak class ``operations._affected_unit`` fixes.
     """
+    t = episode_text.merged(TEXT, text)
     events: list[EnterpriseEvent] = []
     facts: list[CanonicalFact] = []
     keys: dict[str, str] = {}
@@ -131,7 +216,7 @@ def generate(
     # restatement corrects.
     close_start = event(
         "close_started", _at(bd(1), 6, 0),
-        f"{period} month-end close commenced; the overnight ledger sequence began.",
+        t["event.close_started"].format(period=period),
         actors=[roles["controller"]], systems=[core],
     )
     facts.append(_text(minter, "close.due_date", company_id, bd(4).isoformat(),
@@ -141,7 +226,7 @@ def generate(
 
     close_done = event(
         "close_finalised", _at(bd(4), 16, 40),
-        f"{period} close finalised and the ledger locked on the committed date.",
+        t["event.close_finalised"].format(period=period),
         actors=[roles["controller"]], systems=[core], caused_by=[close_start.id],
     )
     facts.append(_text(minter, "close.status", company_id, "final",
@@ -158,8 +243,7 @@ def generate(
     # -- the quarterly cadence: preparation and the working paper ------------
     prep = event(
         "capital_return_preparation_started", _at(bd(7), 9, 0),
-        f"Preparation of the capital adequacy return for the quarter ended {period} began "
-        "from the locked ledger.",
+        t["event.capital_return_preparation_started"].format(period=period),
         actors=[roles["reg_reporting_manager"], roles["reg_analyst"]],
         services=[rwa_engine], systems=[risk_platform], caused_by=[close_done.id],
     )
@@ -178,8 +262,7 @@ def generate(
 
     wp = event(
         "working_paper_issued", _at(bd(10), 17, 20),
-        "The RWA working paper was issued, treating the SME Secured Lending book's "
-        "collateral as fully secured.",
+        t["event.working_paper_issued"],
         actors=[roles["reg_analyst"]], services=[rwa_engine], systems=[risk_platform],
         caused_by=[prep.id],
     )
@@ -206,20 +289,17 @@ def generate(
     # -- the second line challenges, on the record ---------------------------
     review = event(
         "second_line_review_started", _at(bd(12), 10, 0),
-        "Prudential Risk began its pre-lodgement review of the draft return.",
+        t["event.second_line_review_started"],
         actors=[roles["prudential_risk_head"]], caused_by=[wp.id], lore=charter_lore,
     )
     challenge = event(
         "challenge_raised", _at(bd(14), 14, 30),
-        "Prudential Risk challenged the SME Secured collateral treatment on the record: "
-        "sampled revaluations looked stale and the fully-secured treatment could not be "
-        "confirmed. The challenge was logged with status open.",
+        t["event.challenge_raised"],
         actors=[roles["prudential_risk_head"]], systems=[collateral_sys],
         units=[affected_unit_id], caused_by=[review.id], lore=filing_lore,
     )
     facts.append(_text(minter, "review.challenge", sme,
-                       "Sampled collateral revaluations for the SME Secured Lending book appear "
-                       "stale; the fully-secured treatment cannot be confirmed from the register",
+                       t["fact.challenge"],
                        at=challenge.occurred_at, authority=Authority.APPROVED_REPORT,
                        event=challenge.id, source=collateral_sys, period=period))
     keys["fact_challenge"] = facts[-1].id
@@ -239,9 +319,7 @@ def generate(
     # -- the norm files over the challenge -----------------------------------
     approved = event(
         "return_approved", _at(bd(16), 11, 0),
-        "The CFO approved the return for lodgement at the preparer's figure. The "
-        "second-line challenge remained open: returns file on the due date, and open "
-        "challenges are logged, not blocking.",
+        t["event.return_approved"],
         actors=[roles["cfo"], roles["reg_reporting_manager"]],
         caused_by=[challenge.id], lore=filing_lore,
     )
@@ -254,8 +332,7 @@ def generate(
 
     filed = event(
         "capital_return_filed", _at(bd(18), 10, 15),
-        f"The capital adequacy return for the quarter ended {period} was lodged with the "
-        "Prudential Standards Authority via the filing portal.",
+        t["event.capital_return_filed"].format(period=period),
         actors=[roles["reg_reporting_manager"]], services=[gateway], systems=[portal],
         caused_by=[approved.id], lore=filing_lore,
     )
@@ -316,8 +393,7 @@ def generate(
     first_day = liquidity.observations[0][0]
     witness = event(
         "liquidity_report_submitted", _at(first_day, 8, 30),
-        "The daily liquidity coverage report was produced and submitted — the daily "
-        "cadence running as usual after the quarterly lodgement.",
+        t["event.liquidity_report_submitted"],
         actors=[roles["liquidity_analyst"]], services=[lcr_svc], systems=[risk_platform],
         caused_by=[filed.id],
     )
@@ -343,8 +419,7 @@ def generate(
     mid_day = liquidity.observations[3][0]
     event(
         "liquidity_cadence_continued", _at(mid_day, 8, 30),
-        "The daily liquidity cadence continued between the lodgement and the detection "
-        "that follows — the two clocks genuinely overlap.",
+        t["event.liquidity_cadence_continued"],
         actors=[roles["liquidity_analyst"]], services=[lcr_svc], systems=[risk_platform],
         caused_by=[witness.id],
     )
@@ -362,43 +437,37 @@ def generate(
 
     breach = event(
         "reconciliation_break_detected", detected,
-        "The daily liquidity calculator's reconciliation of collateral positions against "
-        "the collateral register flagged a break. The quarterly capital path carries no "
-        "such control.",
+        t["event.reconciliation_break_detected"],
         actors=[roles["liquidity_analyst"]], services=[lcr_svc, sync],
         systems=[collateral_sys, risk_platform], caused_by=[witness.id],
         lore=migration_lore,
     )
     facts.append(_text(minter, "liquidity.reconciliation_break", lcr_svc,
-                       "Collateral positions consumed by the daily liquidity calculation "
-                       "failed reconciliation against the collateral register",
+                       t["fact.reconciliation_break"],
                        at=detected, authority=Authority.SYSTEM_OF_RECORD,
                        event=breach.id, source=risk_platform))
     keys["fact_break"] = facts[-1].id
 
     opened = event(
         "incident_opened", opened_at,
-        f"Service operations opened incident {incident_ref} at priority P2 against "
-        "collateral-valuation-sync.",
+        t["event.incident_opened"].format(incident_ref=incident_ref),
         actors=[roles["svc_desk"], roles["svc_incident"]], services=[sync],
         systems=[collateral_sys], caused_by=[breach.id],
     )
     facts.append(_text(minter, "ops.incident_opened", sync,
-                       f"{incident_ref} opened at priority P2 against collateral-valuation-sync",
+                       t["fact.incident_opened"].format(incident_ref=incident_ref),
                        at=opened_at, authority=Authority.SYSTEM_OF_RECORD,
                        event=opened.id, source=risk_platform, period=period))
     keys["fact_incident_ref"] = facts[-1].id
 
     guessed = event(
         "hypothesis_recorded", hypothesised,
-        "Initial triage attributed the break to the market data service applying the "
-        "end-of-day FX revaluation twice to foreign-currency collateral.",
+        t["event.hypothesis_recorded"],
         actors=[roles["svc_desk"]], services=[sync], systems=[market],
         caused_by=[opened.id],
     )
     hypothesis = _text(minter, "ops.cause", sync,
-                       "The market data service applied the end-of-day FX revaluation twice "
-                       "to foreign-currency collateral",
+                       t["fact.initial_hypothesis"],
                        at=hypothesised, authority=Authority.INITIAL_HYPOTHESIS,
                        event=guessed.id, until=ruled_out)
     facts.append(hypothesis)
@@ -406,31 +475,25 @@ def generate(
 
     dismissed = event(
         "hypothesis_superseded", ruled_out,
-        "The FX double-application hypothesis was ruled out: the rate log shows a single "
-        "end-of-day application in the window.",
+        t["event.hypothesis_superseded"],
         actors=[roles["platform_senior"]], services=[sync], systems=[market],
         caused_by=[guessed.id],
     )
     facts.append(_text(minter, "ops.cause_ruled_out", sync,
-                       "The FX rate log shows a single end-of-day application in the window",
+                       t["fact.cause_ruled_out"],
                        at=ruled_out, authority=Authority.CONFIRMED,
                        event=dismissed.id, source=market))
     keys["fact_ruled_out"] = facts[-1].id
 
     found = event(
         "root_cause_confirmed", confirmed,
-        "Root cause confirmed: a stale collateral-valuation mapping left over from the "
-        "2023 collateral-system migration. Revaluations had lapsed for the SME Secured "
-        f"Lending book, leaving {affected:,} loan facilities carried at stale collateral "
-        "values.",
+        t["event.root_cause_confirmed"].format(affected=affected),
         actors=[roles["platform_senior"], roles["credit_risk_lead"]], services=[sync],
         systems=[collateral_sys], units=[affected_unit_id],
         caused_by=[dismissed.id], lore=migration_lore,
     )
     cause = _text(minter, "ops.cause", sync,
-                  "Stale collateral-valuation mapping left over from the 2023 "
-                  "collateral-system migration; revaluations lapsed for the SME Secured "
-                  "Lending book",
+                  t["fact.confirmed_cause"],
                   at=confirmed, authority=Authority.CONFIRMED, event=found.id,
                   source=collateral_sys, supersedes=hypothesis.id, lore=migration_lore)
     facts.append(cause)
@@ -446,9 +509,7 @@ def generate(
     # -- the capital impact, and the treatment resolved ----------------------
     impact = event(
         "capital_impact_assessed", impact_at,
-        "Credit risk analytics quantified the impact: risk-weighted assets for the SME "
-        "Secured book were understated in the filed return, and the corrected CET1 ratio "
-        "remains above the PSA 110 minimum. A restatement is required.",
+        t["event.capital_impact_assessed"],
         actors=[roles["credit_risk_lead"], roles["reg_reporting_manager"]],
         services=[rwa_engine], systems=[risk_platform], caused_by=[found.id],
     )
@@ -461,7 +522,7 @@ def generate(
         event_id=impact.id, unit=BPS, authority=Authority.CONFIRMED,
         source=risk_platform).id
     facts.append(_text(minter, "capital.error_materiality", company_id,
-                       "material: restatement required under PSA 110",
+                       t["fact.error_materiality"],
                        at=impact_at, authority=Authority.CONFIRMED, event=impact.id,
                        period=period))
     keys["fact_materiality"] = facts[-1].id
@@ -482,15 +543,11 @@ def generate(
 
     notified = event(
         "regulator_notified", _at(bd(26), 9, 30),
-        "The CFO notified the Prudential Standards Authority of a material error in the "
-        "filed return, within the PSA 110 notification window. The regulator's response "
-        "is not recorded in this corpus.",
+        t["event.regulator_notified"],
         actors=[roles["cfo"]], systems=[portal], caused_by=[impact.id],
     )
     facts.append(_text(minter, "regulatory.notification", company_id,
-                       "The bank notified the Prudential Standards Authority of a material "
-                       "error in the quarterly capital return within the PSA 110 "
-                       "notification window",
+                       t["fact.notification"],
                        at=notified.occurred_at, authority=Authority.SYSTEM_OF_RECORD,
                        event=notified.id, source=portal, period=period))
     keys["fact_notification"] = facts[-1].id
@@ -498,30 +555,28 @@ def generate(
     # -- the restatement ------------------------------------------------------
     prepared = event(
         "restatement_prepared", _at(bd(27), 10, 0),
-        "First-line regulatory reporting prepared the restatement of the filed return.",
+        t["event.restatement_prepared"],
         actors=[roles["reg_reporting_manager"], roles["reg_analyst"]],
         services=[rwa_engine], caused_by=[notified.id],
     )
     event(
         "working_paper_revised", _at(bd(27), 15, 0),
-        "The RWA working paper was revised to version 2 with the corrected treatment — "
-        "a working note may be revised, because it is not a filing.",
+        t["event.working_paper_revised"],
         actors=[roles["reg_analyst"]], caused_by=[prepared.id],
     )
     reviewed = event(
         "restatement_reviewed", _at(bd(28), 11, 30),
-        "Prudential Risk reviewed the restatement and, this time, signed off.",
+        t["event.restatement_reviewed"],
         actors=[roles["prudential_risk_head"]], caused_by=[prepared.id],
     )
     signed = event(
         "restatement_approved", _at(bd(28), 16, 0),
-        "The CFO and CRO countersigned the restatement for lodgement.",
+        t["event.restatement_approved"],
         actors=[roles["cfo"], roles["cro"]], caused_by=[reviewed.id],
     )
     restated = event(
         "return_restated", restated_at,
-        "The restatement was lodged. The original return stays on the record unchanged; "
-        "the restatement states which figures moved and why.",
+        t["event.return_restated"],
         actors=[roles["reg_reporting_manager"]], services=[gateway], systems=[portal],
         caused_by=[signed.id],
     )
@@ -541,10 +596,7 @@ def generate(
                        supersedes=status_filed.id))
     keys["fact_status_restated"] = facts[-1].id
     facts.append(_text(minter, "capital.restatement_reason", company_id,
-                       "Risk-weighted assets for the SME Secured Lending book were "
-                       "understated in the filed return: a stale collateral-valuation "
-                       "mapping from the 2023 migration left revaluations lapsed, so "
-                       "collateral was treated as fully secured when it was not",
+                       t["fact.restatement_reason"],
                        at=restated_at, authority=Authority.SYSTEM_OF_RECORD,
                        event=restated.id, source=portal, period=period,
                        lore=migration_lore))
@@ -553,9 +605,7 @@ def generate(
     # -- the third line rules -------------------------------------------------
     ruling = event(
         "control_failure_identified", ruling_at,
-        "Internal audit upheld the second-line challenge and classified the underlying "
-        "failure: the revaluation schedule has no registered owner, and the quarterly "
-        "capital path carries no reconciliation control.",
+        t["event.control_failure_identified"],
         actors=[roles["audit"], roles["audit_manager"]], services=[rwa_engine, sync],
         systems=[collateral_sys], caused_by=[found.id], lore=ownership_lore,
     )
@@ -565,8 +615,7 @@ def generate(
                        supersedes=keys["fact_challenge_open"]))
     keys["fact_challenge_upheld"] = facts[-1].id
     facts.append(_text(minter, "ops.root_cause_classification", rwa_engine,
-                       "control_failure: the revaluation schedule has no registered owner "
-                       "and the quarterly capital path has no reconciliation control",
+                       t["fact.root_cause_classification"],
                        at=ruling_at, authority=Authority.CONFIRMED, event=ruling.id,
                        lore=ownership_lore))
     keys["fact_classification"] = facts[-1].id
@@ -577,22 +626,17 @@ def generate(
 
     remediation = event(
         "remediation_created", _at(bd(30), 14, 0),
-        "Two remediation tickets raised: assign revaluation-schedule ownership with a "
-        "mandatory second-line reviewer, and automate revaluation-lapse detection on "
-        "the quarterly path.",
+        t["event.remediation_created"],
         actors=[roles["platform_lead"]], services=[sync, rwa_engine],
         systems=[collateral_sys], caused_by=[ruling.id], lore=ownership_lore,
     )
     facts.append(_text(minter, "ops.remediation", sync,
-                       "One ticket assigns revaluation-schedule ownership with a mandatory "
-                       "second-line reviewer; one automates revaluation-lapse detection on "
-                       "the quarterly path",
+                       t["fact.remediation"],
                        at=remediation.occurred_at, authority=Authority.SYSTEM_OF_RECORD,
                        event=remediation.id, source=collateral_sys, lore=ownership_lore))
     keys["fact_remediation"] = facts[-1].id
     facts.append(_text(minter, "ops.remediation_addresses", sync,
-                       "The ownership ticket addresses the control failure; the detection "
-                       "ticket addresses only the detection gap",
+                       t["fact.remediation_addresses"],
                        at=remediation.occurred_at, authority=Authority.CONFIRMED,
                        event=remediation.id, lore=ownership_lore))
     keys["fact_remediation_scope"] = facts[-1].id

@@ -142,6 +142,12 @@ class Pack(PackModel):
     voices: dict[str, PackVoice] = Field(default_factory=dict)
     """Per-role persona overrides, keyed by the engine's role keys. The
     highest-leverage texture a pack owns: prose is written in these voices."""
+    episode_text: dict[str, str] = Field(default_factory=dict)
+    """Overrides of the engine's surface-text templates, keyed by the keys
+    ``worldloom pack texts`` lists. This is where a pack re-voices the
+    episode's own narration — the event sentences and prose facts — over
+    causality it cannot touch. An override may use any subset of its
+    default's placeholders and nothing else."""
 
     @model_validator(mode="after")
     def _units_sum_to_the_group(self) -> Pack:
@@ -255,6 +261,10 @@ def lint(pack: Pack) -> list[str]:
                 f" {', '.join(domain.unit_role_suffixes)} (e.g."
                 f" {pack.units[0].key}{domain.unit_role_suffixes[0]})"
             )
+
+    from .generators.episode_text import check_overrides
+
+    findings.extend(check_overrides(dict(domain.episode_text), pack.episode_text))
 
     consulted: dict[str, str] = dict(domain.consulted_targets)
     for index, commitment in enumerate(pack.lore):

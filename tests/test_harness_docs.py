@@ -36,6 +36,7 @@ DOCUMENTS = (
     # The progressively-disclosed half. Checked exactly like the entry point:
     # a reference loaded only when needed is *more* likely to go stale, not less,
     # because nothing routine exercises it.
+    ".claude/skills/worldloom/references/designing.md",
     ".claude/skills/worldloom/references/building.md",
     ".claude/skills/worldloom/references/planning-structure.md",
     ".claude/skills/worldloom/references/writing-prose.md",

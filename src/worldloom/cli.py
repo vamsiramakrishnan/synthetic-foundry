@@ -1334,6 +1334,36 @@ def pack_targets(
         )
 
 
+@pack_app.command("texts")
+def pack_texts(
+    engine: str = typer.Argument(..., help="Engine name: retail or banking."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the key → default-template table as JSON, for an agent authoring overrides.",
+    ),
+) -> None:
+    """List the engine's surface-text templates a pack may override.
+
+    Every event sentence and prose fact the episode states, keyed. An
+    `episode_text` override re-voices the narration; the causality underneath
+    — what happens, when, what supersedes what — stays the engine's. An
+    override may use any subset of its default's {placeholders} and no others.
+    """
+    import json as json_module
+
+    from . import domains
+
+    domain = domains.by_name(engine)
+    if domain is None:
+        err.print(f"[red]error:[/red] no engine named {engine!r}; registered: {', '.join(domains.names())}")
+        raise typer.Exit(code=2)
+    if as_json:
+        typer.echo(json_module.dumps(dict(domain.episode_text), indent=2))
+        return
+    for key, default in domain.episode_text:
+        console.print(f"[bold]{key}[/bold]\n  [dim]{escape(default)}[/dim]")
+
+
 @pack_app.command("template")
 def pack_template(
     engine: str = typer.Argument("retail", help="Engine the pack will run on: retail or banking."),

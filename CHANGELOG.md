@@ -79,6 +79,11 @@ One coherent enterprise, taken all the way through. Two, in fact.
   everyone sharing the CFO's register, and numeric temperament stays the
   engine's. Each engine publishes its slots and role keys through
   ``worldloom pack targets``, and the lint names unknown keys.
+  Packs also re-voice the episode itself: every event sentence and prose
+  fact an engine states is a keyed template (``worldloom pack texts``), and
+  ``episode_text`` overrides them — slot-checked, riding the recipe, over
+  causality a pack cannot touch. The insurer's incident is about claims and
+  peril codes; the mutual bank's challenge names its own book.
   Shipped references: a general insurer on the close engine and a mutual bank
   on the challenged-return engine, both exercised in tests. Authoring the
   first packs surfaced and fixed three archetype-coupling leaks the telco

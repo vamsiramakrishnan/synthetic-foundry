@@ -563,6 +563,7 @@ from .banking_scenarios import QuarterlyCapitalReturn  # noqa: E402
 from .domains import Domain, register_domain  # noqa: E402
 
 from .generators.banking_org import _ROLES as _BANKING_ROLES  # noqa: E402
+from .generators.regulatory import TEXT as _BANKING_TEXT  # noqa: E402
 
 register_domain(Domain(
     name="banking",
@@ -579,6 +580,7 @@ register_domain(Domain(
     ),
     role_keys=tuple(row[0] for row in _BANKING_ROLES),
     unit_role_suffixes=("_md",),
+    episode_text=tuple(_BANKING_TEXT.items()),
 ))
 
 

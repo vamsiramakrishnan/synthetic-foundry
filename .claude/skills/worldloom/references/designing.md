@@ -66,15 +66,21 @@ banking one). Then:
   Write lore as *causes with dates*: "the 2023 migration carried mappings
   over by hand" is a decision the corpus's own timeline will witness and its
   incident will cite.
-- **Texture: brands and voices.** `system_brands` renames the engine's
-  systems for your industry (slots from `worldloom pack targets` — the
-  insurer example turns the merchandising master into "Policy and Claims
-  Register"); `voices` re-voices any role's prose (`{"cfo": {"voice": ...,
-  "phrases": [...]}}`, role keys and per-unit suffixes from the same
-  command). Know the boundary: brands and voices are yours, but the
-  episode's *concepts* — what fails, what gets filed, what the incident is
-  about — are the engine's, so choose brands that fit the concept rather
-  than fighting it.
+- **Texture: brands, voices, and the episode's own narration.**
+  `system_brands` renames the engine's systems for your industry (slots from
+  `worldloom pack targets` — the insurer example turns the merchandising
+  master into "Policy and Claims Register"); `voices` re-voices any role's
+  prose (`{"cfo": {"voice": ..., "phrases": [...]}}`, role keys from the
+  same command); and `episode_text` re-voices the episode's surface — every
+  event sentence and prose fact, keyed by `worldloom pack texts <engine>`
+  (`--json` for the full key → default table). An override may use any
+  subset of its default's `{placeholders}` and nothing else. Override in
+  consistent *pairs*: a fact and the event that recorded it tell one story
+  (the insurer example re-voices the hypothesis fact and both its events
+  together). Know the boundary: the narration is yours, but the *causality*
+  — what fails, when, what supersedes what, what gets filed — is the
+  engine's; a template cannot change what happens, only how the record
+  says it.
 - **Fiction only.** Name the company anything you invent; never a real
   organisation, regulator, or standard. Shape and scale may resemble an
   industry; no figure, person, or fact may resemble a company.

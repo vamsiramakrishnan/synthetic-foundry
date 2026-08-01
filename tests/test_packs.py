@@ -119,6 +119,41 @@ def test_a_pack_voices_its_roles(insurer) -> None:
     assert bp.persona_id == "PERSONA-PACK-PERSONAL-BP"
 
 
+def test_a_pack_revoices_the_episode(insurer, mutual) -> None:
+    """Surface text follows the pack; causality does not. The insurer's
+    incident is about claims and peril codes now — same event chain, same
+    supersession, same timestamps."""
+    _, world = insurer
+    failed = world.events.where(kind="pipeline_failed")[0]
+    assert "claims reserving pipeline" in failed.summary
+    cause = next(f for f in world.facts.where(kind="ops.cause") if not f.is_superseded)
+    assert "peril-code mapping" in cause.text_value
+    assert cause.supersedes is not None, "causality untouched: the wrong answer still expires"
+
+    _, bank = mutual
+    challenge = bank.events.where(kind="challenge_raised")[0]
+    assert "Owner-Occupier" in challenge.summary, (
+        "the pack's own book is named where the stock archetype's used to be"
+    )
+
+
+def test_episode_text_overrides_survive_the_recipe(insurer) -> None:
+    """A re-voiced corpus rebuilds its own voice with no pack file on hand."""
+    _, world = insurer
+    again = rebuild(world.recipe)
+    cause = next(f for f in again.facts.where(kind="ops.cause") if not f.is_superseded)
+    assert "peril-code mapping" in cause.text_value
+
+
+def test_the_lint_names_unknown_text_keys_and_slots() -> None:
+    pack_dict = json.loads(open(INSURER).read())
+    pack_dict["episode_text"]["event.no_such_moment"] = "words"
+    pack_dict["episode_text"]["event.pipeline_failed"] = "It broke at {hour}."
+    findings = packs.lint(packs.load(pack_dict))
+    assert any("event.no_such_moment" in f for f in findings)
+    assert any("'hour'" in f for f in findings)
+
+
 def test_the_lint_names_unknown_slots_and_roles() -> None:
     pack_dict = json.loads(open(INSURER).read())
     pack_dict["system_brands"]["core_banking"] = "Wrong Engine Brand"

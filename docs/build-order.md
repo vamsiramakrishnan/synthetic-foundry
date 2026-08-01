@@ -610,11 +610,15 @@ The measured retail coupling, for whichever is chosen:
    **The de-hardcoding ladder**, in extraction order, each gated on a second
    consumer:
 
-   1. *Episode surface text* — event summaries and fact `text_value`s are
-      prose the engines currently hardcode; a template schema (per event
-      kind, slot-checked) would let a pack re-voice the episode's narration
-      without touching its causality. Evaluation answers derive from facts,
-      so they follow automatically.
+   1. *Episode surface text* — **done.** Every event sentence and prose fact
+      is a keyed template in the engine's `TEXT` table (extracted verbatim by
+      AST, so stock corpora stayed byte-identical, proven by stash-diff on
+      both engines); packs override through `episode_text`, slot-checked at
+      lint and at build, published by `worldloom pack texts`. Machine values
+      — statuses, dates, "unassigned" — are deliberately not templates,
+      because other checks match on them. Known residue: a handful of retail
+      evaluation *answers* hardcode their phrasing rather than deriving from
+      fact text, which is rung 3's work.
    2. *Role tables as pack data* — engines publish required role keys
       (episodes index by them); packs add or retitle the rest. The voices
       surface already proved the publish-and-lint half.

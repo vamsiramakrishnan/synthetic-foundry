@@ -223,6 +223,18 @@ Print a minimal valid pack to start from.
 worldloom pack template <ENGINE>
 ```
 
+### `worldloom pack texts`
+
+List the engine's surface-text templates a pack may override.
+
+```
+worldloom pack texts <ENGINE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the key → default-template table as JSON, for an agent authoring overrides. |
+
 ### `worldloom plan`
 
 Hand artifact-shape requests to an agent, and validate what comes back against the grammar.

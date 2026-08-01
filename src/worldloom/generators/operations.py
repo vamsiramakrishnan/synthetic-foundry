@@ -13,12 +13,74 @@ than overwritten.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
 from ..rng import Rng
+from . import episode_text
+
+#: The close engine's surface text: every sentence an event carries and every
+#: prose fact the episode states, keyed so a pack can re-voice the narration
+#: without touching the causality underneath (see `generators/episode_text`).
+#: The defaults are the strings this engine always used, verbatim — stock
+#: corpora are byte-identical whether or not this table exists. Machine values
+#: (statuses, dates, "unassigned") are deliberately not here.
+TEXT: dict[str, str] = {
+    "event.close_started":
+        "{period} month-end close commenced; the orchestrator began the overnight sequence.",
+    "event.close_finalised_on_time":
+        "{period} close finalised and the ledger locked on the committed date.",
+    "event.close_finalised_delayed":
+        "{period} close finalised and the ledger locked, one business day later than the calendar commitment.",
+    "event.pipeline_failed":
+        "The inventory valuation pipeline failed. On-hand stock could not be valued for the period.",
+    "event.incident_opened":
+        "Service operations opened incident {incident_ref} at priority P2 against inventory-valuation.",
+    "event.hypothesis_recorded":
+        "Initial triage attributed the failure to an overnight ERP outage.",
+    "event.hypothesis_superseded":
+        "The ERP outage hypothesis was ruled out; ERP logs showed no interruption in the window.",
+    "event.root_cause_confirmed":
+        "Root cause confirmed as a stale legacy-to-new product hierarchy mapping, leaving "
+        "{affected:,} SKUs unmapped and unvaluable.",
+    "event.workaround_applied":
+        "A manual hierarchy mapping override was applied so valuation could complete for the period.",
+    "event.valuation_available":
+        "Inventory valuation completed for {period} following the manual override.",
+    "event.close_delayed":
+        "Final close was pushed by one business day and escalated to the Group CFO.",
+    "event.control_failure_identified":
+        "Review established the underlying failure as a control failure: the hierarchy mapping "
+        "table has no registered owner and no required reviewer.",
+    "event.remediation_created":
+        "Two remediation tickets raised: automate the mapping validation, and assign ownership "
+        "of the mapping table with a mandatory reviewer.",
+    "fact.incident_reference":
+        "{incident_ref} opened at priority P2 against inventory-valuation",
+    "fact.hypothesis": "Overnight ERP outage",
+    "fact.hypothesis_ruled_out": "ERP logs show no interruption during the valuation window",
+    "fact.cause":
+        "Stale legacy-to-new product hierarchy mapping in the merchandising master",
+    "fact.recurrence_with_period":
+        "A comparable valuation failure in {prior_period} was traced to the same mapping table,"
+        " and the response then restored service without assigning ownership",
+    "fact.recurrence_first":
+        "A comparable valuation failure was traced to the same mapping table",
+    "fact.workaround":
+        "Manual hierarchy mapping override applied to complete valuation for the period",
+    "fact.valuation_status": "Inventory valuation completed",
+    "fact.classification":
+        "control_failure: the mapping table has no registered owner and no required reviewer",
+    "fact.remediation":
+        "One ticket automates mapping validation; one assigns mapping table ownership "
+        "with a mandatory reviewer",
+    "fact.remediation_scope":
+        "The ownership ticket addresses the control failure; the validation ticket addresses "
+        "only the detection gap",
+}
 
 
 @dataclass(frozen=True)
@@ -87,8 +149,14 @@ def generate(
     incident_likelihood: float,
     force_incident: bool | None = None,
     prior_incident_periods: tuple[str, ...] = (),
+    text: Mapping[str, str] | None = None,
 ) -> CloseEpisode:
-    """Generate the close, and an incident if lore and the seed conspire."""
+    """Generate the close, and an incident if lore and the seed conspire.
+
+    ``text`` overrides entries of ``TEXT`` — the surface a pack re-voices,
+    over causality it cannot touch.
+    """
+    t = episode_text.merged(TEXT, text)
     events: list[EnterpriseEvent] = []
     facts: list[CanonicalFact] = []
     keys: dict[str, str] = {}
@@ -103,7 +171,7 @@ def generate(
 
     start = EnterpriseEvent(
         id=minter.next("EV"), kind="close_started", occurred_at=_at(day1, 6, 0),
-        summary=f"{period} month-end close commenced; the orchestrator began the overnight sequence.",
+        summary=t["event.close_started"].format(period=period),
         actors=[roles["reporting_manager"]], services=[roles["svc_orchestrator"]],
         systems=[roles["sys_erp"]], lore_ids=calendar_lore,
     )
@@ -127,7 +195,7 @@ def generate(
                                company_id=company_id, roles=roles,
                                incident_lore=incident_lore, calendar_lore=calendar_lore,
                                ownership_lore=ownership_lore, previous_event=start,
-                               prior_incident_periods=prior_incident_periods)
+                               prior_incident_periods=prior_incident_periods, t=t)
         events.extend(chain["events"])
         facts.extend(chain["facts"])
         keys.update(chain["keys"])
@@ -137,10 +205,9 @@ def generate(
     finalised_at = _at(finalised_day, 16, 40)
     finalised = EnterpriseEvent(
         id=minter.next("EV"), kind="close_finalised", occurred_at=finalised_at,
-        summary=(
-            f"{period} close finalised and the ledger locked"
-            + (", one business day later than the calendar commitment." if delay_days else " on the committed date.")
-        ),
+        summary=t[
+            "event.close_finalised_delayed" if delay_days else "event.close_finalised_on_time"
+        ].format(period=period),
         actors=[roles["controller"], roles["reporting_manager"]],
         services=[roles["svc_orchestrator"]], systems=[roles["sys_erp"]],
         caused_by=[keys.get("event_close_delayed", start.id)], lore_ids=calendar_lore,
@@ -196,6 +263,7 @@ def _incident_chain(
     rng: Rng, minter: Minter, *, period: str, day: date, company_id: str, roles: dict[str, str],
     incident_lore: list[str], calendar_lore: list[str], ownership_lore: list[str],
     previous_event: EnterpriseEvent, prior_incident_periods: tuple[str, ...] = (),
+    t: Mapping[str, str] = TEXT,
 ) -> dict:
     """The eight-step incident: detect, triage, be wrong, be corrected, work around, escalate."""
     events: list[EnterpriseEvent] = []
@@ -229,47 +297,44 @@ def _incident_chain(
     mdm, platform, erp = roles["sys_mdm"], roles["sys_platform"], roles["sys_erp"]
 
     failed = event("pipeline_failed", detected,
-                   "The inventory valuation pipeline failed. On-hand stock could not be valued for the period.",
+                   t["event.pipeline_failed"],
                    actors=[], services=[valuation, hierarchy], systems=[platform],
                    caused_by=[previous_event.id], lore=incident_lore)
     opened = event("incident_opened", raised,
-                   f"Service operations opened incident {incident_ref} at priority P2 against inventory-valuation.",
+                   t["event.incident_opened"].format(incident_ref=incident_ref),
                    actors=[roles["svc_desk"], roles["svc_incident"]], services=[valuation],
                    systems=[platform], caused_by=[failed.id])
     guessed = event("hypothesis_recorded", hypothesised,
-                    "Initial triage attributed the failure to an overnight ERP outage.",
+                    t["event.hypothesis_recorded"],
                     actors=[roles["svc_desk"]], services=[valuation], systems=[erp, platform],
                     caused_by=[opened.id])
     dismissed = event("hypothesis_superseded", ruled_out,
-                      "The ERP outage hypothesis was ruled out; ERP logs showed no interruption in the window.",
+                      t["event.hypothesis_superseded"],
                       actors=[roles["platform_senior"]], services=[valuation], systems=[erp],
                       caused_by=[guessed.id])
     found = event("root_cause_confirmed", confirmed,
-                  "Root cause confirmed as a stale legacy-to-new product hierarchy mapping, leaving "
-                  f"{affected:,} SKUs unmapped and unvaluable.",
+                  t["event.root_cause_confirmed"].format(affected=affected),
                   actors=[roles["platform_senior"], roles["merch_analyst"]], services=[hierarchy],
                   systems=[mdm], units=[_affected_unit(roles)], caused_by=[dismissed.id], lore=incident_lore)
     patched = event("workaround_applied", worked_around,
-                    "A manual hierarchy mapping override was applied so valuation could complete for the period.",
+                    t["event.workaround_applied"],
                     actors=[roles["platform_senior"], roles["merch_analyst"]],
                     services=[valuation, hierarchy], systems=[mdm, platform],
                     caused_by=[found.id], lore=calendar_lore)
     valued = event("valuation_available", available,
-                   f"Inventory valuation completed for {period} following the manual override.",
+                   t["event.valuation_available"].format(period=period),
                    actors=[roles["platform_senior"]], services=[valuation], systems=[platform],
                    caused_by=[patched.id])
     delayed = event("close_delayed", escalated,
-                    "Final close was pushed by one business day and escalated to the Group CFO.",
+                    t["event.close_delayed"],
                     actors=[roles["controller"], roles["cfo"]], services=[roles["svc_orchestrator"]],
                     systems=[erp], caused_by=[valued.id], lore=calendar_lore)
     classified = event("control_failure_identified", reviewed,
-                       "Review established the underlying failure as a control failure: the hierarchy mapping "
-                       "table has no registered owner and no required reviewer.",
+                       t["event.control_failure_identified"],
                        actors=[roles["platform_lead"], roles["audit"]], services=[hierarchy],
                        systems=[mdm], units=[_affected_unit(roles)], caused_by=[found.id], lore=ownership_lore)
     remediation = event("remediation_created", remediated,
-                        "Two remediation tickets raised: automate the mapping validation, and assign ownership "
-                        "of the mapping table with a mandatory reviewer.",
+                        t["event.remediation_created"],
                         actors=[roles["platform_lead"]], services=[hierarchy], systems=[mdm],
                         caused_by=[classified.id], lore=ownership_lore)
 
@@ -289,18 +354,18 @@ def _incident_chain(
     # Without it a later episode cannot find the earlier one, and "has this
     # happened before" stays a rhetorical question.
     reference = _text(minter, "ops.incident_opened", valuation,
-                      f"{incident_ref} opened at priority P2 against inventory-valuation",
+                      t["fact.incident_reference"].format(incident_ref=incident_ref),
                       at=raised, authority=Authority.SYSTEM_OF_RECORD, event=opened.id,
                       source=platform, period=period)
 
     # The wrong answer, with an expiry. It is superseded, never overwritten.
-    hypothesis = _text(minter, "ops.cause", valuation, "Overnight ERP outage", at=hypothesised,
+    hypothesis = _text(minter, "ops.cause", valuation, t["fact.hypothesis"], at=hypothesised,
                        authority=Authority.INITIAL_HYPOTHESIS, event=guessed.id, until=ruled_out)
     dismissal = _text(minter, "ops.cause_ruled_out", valuation,
-                      "ERP logs show no interruption during the valuation window", at=ruled_out,
+                      t["fact.hypothesis_ruled_out"], at=ruled_out,
                       authority=Authority.CONFIRMED, event=dismissed.id, source=erp)
     cause = _text(minter, "ops.cause", valuation,
-                  "Stale legacy-to-new product hierarchy mapping in the merchandising master",
+                  t["fact.cause"],
                   at=confirmed, authority=Authority.CONFIRMED, event=found.id, source=mdm,
                   supersedes=hypothesis.id, lore=incident_lore)
 
@@ -315,20 +380,18 @@ def _incident_chain(
     recurrence = _text(
         minter, "ops.previous_similar_incident", valuation,
         (
-            f"A comparable valuation failure in {prior_incident_periods[-1]} was traced to"
-            " the same mapping table, and the response then restored service without"
-            " assigning ownership"
+            t["fact.recurrence_with_period"].format(prior_period=prior_incident_periods[-1])
             if prior_incident_periods
-            else "A comparable valuation failure was traced to the same mapping table"
+            else t["fact.recurrence_first"]
         ),
         at=confirmed, authority=Authority.CONFIRMED, event=found.id,
         source=platform, lore=incident_lore,
     )
     workaround = _text(minter, "ops.workaround", valuation,
-                       "Manual hierarchy mapping override applied to complete valuation for the period",
+                       t["fact.workaround"],
                        at=worked_around, authority=Authority.CONFIRMED, event=patched.id,
                        source=platform, lore=calendar_lore)
-    valuation_status = _text(minter, "ops.valuation_status", valuation, "Inventory valuation completed",
+    valuation_status = _text(minter, "ops.valuation_status", valuation, t["fact.valuation_status"],
                              at=available, authority=Authority.SYSTEM_OF_RECORD, event=valued.id,
                              source=platform, period=period)
     delayed_status = _text(minter, "close.status", company_id, "delayed", at=escalated,
@@ -338,17 +401,15 @@ def _incident_chain(
                     business_days_after(period_end(period), 5).isoformat(), at=escalated,
                     authority=Authority.SYSTEM_OF_RECORD, event=delayed.id, source=erp, period=period)
     classification = _text(minter, "ops.root_cause_classification", hierarchy,
-                           "control_failure: the mapping table has no registered owner and no required reviewer",
+                           t["fact.classification"],
                            at=reviewed, authority=Authority.CONFIRMED, event=classified.id, lore=ownership_lore)
     owner = _text(minter, "ops.mapping_table_owner", mdm, "unassigned", at=reviewed,
                   authority=Authority.CONFIRMED, event=classified.id, source=mdm, lore=ownership_lore)
     tickets = _text(minter, "ops.remediation", hierarchy,
-                    "One ticket automates mapping validation; one assigns mapping table ownership "
-                    "with a mandatory reviewer", at=remediated, authority=Authority.SYSTEM_OF_RECORD,
+                    t["fact.remediation"], at=remediated, authority=Authority.SYSTEM_OF_RECORD,
                     event=remediation.id, source=mdm, lore=ownership_lore)
     scope = _text(minter, "ops.remediation_addresses", hierarchy,
-                  "The ownership ticket addresses the control failure; the validation ticket addresses "
-                  "only the detection gap", at=remediated, authority=Authority.CONFIRMED,
+                  t["fact.remediation_scope"], at=remediated, authority=Authority.CONFIRMED,
                   event=remediation.id, lore=ownership_lore)
     impact = CanonicalFact(
         id=minter.next("FACT"), kind="financial.incident_pl_impact", subject=company_id, period=period,

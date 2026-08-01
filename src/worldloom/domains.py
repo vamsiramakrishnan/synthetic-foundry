@@ -59,6 +59,10 @@ class Domain:
     unit_role_suffixes: tuple[str, ...] = ()
     """Suffixes of the roles minted per business unit (``_md`` everywhere;
     retail adds ``_bp`` and ``_buyer``)."""
+    episode_text: tuple[tuple[str, str], ...] = ()
+    """The engine's surface-text templates as ``(key, default)`` pairs — every
+    event sentence and prose fact the episode states. A pack overrides by key
+    through ``episode_text``; slots are checked against the default's."""
 
 
 _DOMAINS: dict[str, Domain] = {}
