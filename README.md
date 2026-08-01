@@ -427,6 +427,27 @@ fan-out, per the [roadmap](#roadmap).
 
 ---
 
+## Industry packs
+
+The shape, lore, and name of the company are data you can author — a JSON
+file run through one of the shipped engines, with the episode physics staying
+the engine's:
+
+```bash
+worldloom pack template retail > insurer.json   # start from a valid skeleton
+worldloom pack targets retail                   # which lore is load-bearing
+worldloom pack check insurer.json               # schema + inert-lore lint
+worldloom build --pack insurer.json --incident --narrate -f markdown --out ./corpus
+```
+
+Lore is the lever: a dated commitment aimed at a consulted target changes
+what the engine generates — how likely the incident is, how much gets
+written, how a person writes — and the corpus's own timeline witnesses it.
+The pack embeds into the corpus recipe, so a pack-built corpus rebuilds
+byte-for-byte with no pack file on hand. Reference packs in
+[`examples/packs/`](examples/packs/): a general insurer on the close engine,
+a mutual bank on the challenged-return engine.
+
 ## Worlds inspired by real enterprises
 
 Generate an organisation with the shape of a real one, without reproducing anything proprietary.
@@ -668,7 +689,8 @@ The first executable is `worldloom demo retail-close`, not `worldloom interview`
 
 - [x] The second vertical: banking (`BankingWorld` + `QuarterlyCapitalReturn` — the challenged, restated capital return), with zero core model changes; decision recorded in [docs/build-order.md](docs/build-order.md) §7
 - [ ] Domain modules and the industry-pack interface, extracted from two verticals rather than guessed
-- [ ] Archetype packs as config, and full lore packs
+- [x] Industry packs: archetype and lore as agent-authorable JSON (`worldloom pack`), embedded in the recipe, linted against each engine's consulted targets
+- [ ] Name pools, personas, and terminology in packs (today they stay engine-owned)
 - [ ] Socratic world composer, with replay and an assumption ledger
 - [ ] Scenario DSL and artifact recipes
 - [x] Bounded fan-out, first slice: minutes, email threads, and per-unit commentary projected from each episode's own facts, in both verticals

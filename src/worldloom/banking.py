@@ -44,6 +44,7 @@ exist; filing immutability is enforced at the manifest layer below instead.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from . import archetypes as archetype_registry
 from . import validate as validate_module
@@ -78,6 +79,19 @@ BANKING_ARCHETYPES = frozenset({MIDSIZE_ADI.key})
 #: rather than a core lifecycle flag, because "what counts as a filing" is
 #: domain vocabulary — the check group below reads this set.
 FILING_TYPES = frozenset({"capital_return"})
+
+#: The lore targets this engine's generators consult — the pack author's
+#: contract, same as ``retail.CONSULTED_TARGETS``. Each entry names its reader.
+CONSULTED_TARGETS: tuple[tuple[str, str], ...] = (
+    ("data_quality_incident/collateral",
+     "tags the reconciliation break and the confirmed cause (regulatory.generate)"),
+    ("collateral_mapping_change",
+     "tags the control-failure ruling and remediation (regulatory.generate)"),
+    ("finance/file_over_challenge",
+     "tags the file-over-the-open-challenge chain: challenge, approval, lodgement"),
+    ("regulatory_filing_signoff",
+     "tags the second-line review's place in the lodgement sequence"),
+)
 
 
 def lore(minter: Minter) -> tuple[LoreCommitment, ...]:
@@ -234,6 +248,8 @@ class BankingWorld:
     archetype: Archetype = MIDSIZE_ADI
     employees: int | None = None
     annual_revenue: int | None = None
+    pack: Any = None
+    """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
 
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> BankingWorld:
@@ -243,6 +259,19 @@ class BankingWorld:
             shape = MIDSIZE_ADI
         return cls(seed=seed, archetype=shape)
 
+    @classmethod
+    def from_pack(cls, pack: Any, *, seed: int) -> BankingWorld:
+        """A bank whose shape, lore, and name a pack authored.
+
+        One structural requirement beyond the schema: the capital-return
+        episode corrects an error scoped to one lending book, so the pack must
+        give some unit a category — the build names the affected book the way
+        ``banking_org`` does, by role handle.
+        """
+        from . import packs as packs_module
+
+        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack)
+
     def build(self) -> World:
         from . import __version__ as worldloom_version
         from . import recipe as recipe_module
@@ -251,10 +280,16 @@ class BankingWorld:
         rng = Rng(self.seed)
         minter = Minter()
 
-        commitments = lore(minter)
+        if self.pack is not None:
+            from . import packs as packs_module
+
+            commitments = packs_module.lore_of(self.pack, minter)
+        else:
+            commitments = lore(minter)
         org = banking_org.generate(
             rng.derive("organisation"), minter,
             archetype=self.archetype, lore=commitments,
+            company_name=self.pack.company_name if self.pack is not None else None,
         )
 
         return World(
@@ -282,6 +317,7 @@ class BankingWorld:
                 seed=self.seed,
                 employees=self.employees,
                 annual_revenue=self.annual_revenue,
+                pack=self.pack,
             ),
         )
 
@@ -529,6 +565,7 @@ register_domain(Domain(
     archetype_keys=BANKING_ARCHETYPES,
     world=BankingWorld,
     single_episode=QuarterlyCapitalReturn,
+    consulted_targets=CONSULTED_TARGETS,
 ))
 
 

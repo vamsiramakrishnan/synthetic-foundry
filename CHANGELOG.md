@@ -65,6 +65,21 @@ One coherent enterprise, taken all the way through. Two, in fact.
   else. New evaluation families ask who was in the room and who was told
   what, when.
 
+- **Industry packs.** A world's shape and lore as a JSON file an agent (or a
+  person) authors: units, product categories, site estate, scale, dated lore
+  commitments in the engine's closed constraint vocabulary, and the fictional
+  company's name — run through either engine, with the episode physics staying
+  the engine's. `worldloom pack template` starts one, `pack targets` publishes
+  which lore each engine actually consults, `pack check` lints inert
+  commitments by name, and `build --pack` builds it. The pack embeds in the
+  corpus recipe, so a pack-built corpus rebuilds itself with no pack file.
+  Shipped references: a general insurer on the close engine and a mutual bank
+  on the challenged-return engine, both exercised in tests. Authoring the
+  first packs surfaced and fixed three archetype-coupling leaks the telco
+  experiment had predicted (`unit_gm`, the merch lead's manager, and the
+  banking error's unit) — each engine now derives those from the world it was
+  given.
+
 ### Generation
 
 - The fan-out documents change what every seed generates: a corpus built

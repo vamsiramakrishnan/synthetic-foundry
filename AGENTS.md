@@ -62,6 +62,15 @@ rather read data than parse a table.
 Steps 3 and 4 repeat until every response is accepted. Rejection is normal and is
 not a failure of the harness — it is the harness working.
 
+For an industry that is neither retail nor banking as shipped, author an
+**industry pack** — a JSON file carrying the company's shape, lore, and name,
+run through one of the two engines. `worldloom pack template <engine>` starts
+one, `worldloom pack targets <engine>` lists which lore is load-bearing,
+`worldloom pack check` lints yours, and `worldloom build --pack pack.json`
+builds it. The pack embeds in the corpus recipe, so a pack-built corpus
+rebuilds byte-for-byte with no pack file on hand. Reference packs live in
+`examples/packs/`.
+
 The default build is the retail month-end close. `--archetype midsize_adi`
 builds the banking vertical instead: a quarterly capital return that is
 challenged by the second line, filed anyway under a lodgement norm, invalidated

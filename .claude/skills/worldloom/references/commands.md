@@ -72,6 +72,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--narrate` | Generate prose with the built-in deterministic provider (no network, no key). |
 | `--out`, `-o` | Directory to write the corpus into. |
 | `--overwrite` | Replace the destination if it exists. |
+| `--pack` | Build from an industry pack: a JSON file carrying the company shape, lore, and name. See `worldloom pack template` to start one and `worldloom pack check` to lint it. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Run this many consecutive closes. More than one gives recurrence, superseded documents, and the evaluation questions a single close cannot pose. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
@@ -189,6 +190,38 @@ worldloom narrate requests <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
+
+### `worldloom pack`
+
+Author and check industry packs — a world's shape and lore as data.
+
+### `worldloom pack check`
+
+Validate a pack against the schema and lint its lore against the engine.
+
+```
+worldloom pack check <SOURCE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit findings as JSON — an agent authoring a pack should read data. |
+
+### `worldloom pack targets`
+
+List the lore targets each engine consults, and what each one changes.
+
+```
+worldloom pack targets <ENGINE>
+```
+
+### `worldloom pack template`
+
+Print a minimal valid pack to start from.
+
+```
+worldloom pack template <ENGINE>
+```
 
 ### `worldloom plan`
 

@@ -40,6 +40,11 @@ plan_app = typer.Typer(
     help="Hand artifact-shape requests to an agent, and validate what comes back against the grammar.",
 )
 app.add_typer(plan_app, name="plan")
+pack_app = typer.Typer(
+    no_args_is_help=True,
+    help="Author and check industry packs — a world's shape and lore as data.",
+)
+app.add_typer(pack_app, name="pack")
 act_app = typer.Typer(
     no_args_is_help=True,
     help="Drive an actor episode: one employee's decision at a time, validated before it changes anything.",
@@ -146,6 +151,14 @@ def build(
             "(e.g. 'a large Australian grocer'). Shape only — no data about it is used."
         ),
     ),
+    pack: Path = typer.Option(
+        None, "--pack",
+        help=(
+            "Build from an industry pack: a JSON file carrying the company shape, "
+            "lore, and name. See `worldloom pack template` to start one and "
+            "`worldloom pack check` to lint it."
+        ),
+    ),
     comparatives: int = typer.Option(
         0, "--comparatives",
         help="Prior months of actuals to generate, for a trend. 11 gives a rolling year.",
@@ -187,25 +200,59 @@ def build(
     always produces the same world.
     """
     from . import archetypes as archetype_registry
+    from . import domains
     from .retail import MonthEndClose, RetailWorld
 
-    if inspired_by:
+    pack_obj = None
+    if pack is not None:
+        # A pack supplies the shape, the lore, and the name, so the flags that
+        # would supply them another way are refused rather than merged.
+        refused_with_pack = [
+            flag for flag, given in (
+                ("--archetype", archetype != "omnichannel_retailer"),
+                ("--inspired-by", inspired_by is not None),
+                ("--employees", employees is not None),
+            ) if given
+        ]
+        if refused_with_pack:
+            err.print(
+                f"[red]error:[/red] {', '.join(refused_with_pack)} cannot be combined"
+                " with --pack; the pack states the company's shape and scale"
+            )
+            raise typer.Exit(code=2)
+        from . import packs as packs_module
+
+        try:
+            pack_obj = packs_module.load(pack)
+        except Exception as exc:
+            err.print(f"[red]error:[/red] pack does not validate: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        for finding in packs_module.lint(pack_obj):
+            err.print(f"[yellow]pack:[/yellow] {escape(finding)}")
+        shape = packs_module.archetype_of(pack_obj)
+        domain = domains.by_name(pack_obj.base)
+        if domain is None:
+            err.print(
+                f"[red]error:[/red] pack base {pack_obj.base!r} names no registered"
+                f" engine; registered: {', '.join(domains.names())}"
+            )
+            raise typer.Exit(code=2)
+    elif inspired_by:
         shape = archetype_registry.inspired_by(inspired_by)
+        domain = domains.for_archetype(shape.key)
     else:
         try:
             shape = archetype_registry.get(archetype)
         except KeyError as exc:
             err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
+        domain = domains.for_archetype(shape.key)
 
     # The archetype names its domain, and the domain says how a build runs. A
     # single-episode domain (banking, and any vertical after it) constructs its
     # world and runs one episode; every close-loop flag is refused rather than
     # ignored, because a flag that silently does nothing teaches the wrong
     # lesson about the tool. The retail close keeps its bespoke loop below.
-    from . import domains
-
-    domain = domains.for_archetype(shape.key)
     single_episode = domain.single_episode if domain is not None else None
 
     if single_episode is not None:
@@ -224,10 +271,19 @@ def build(
             )
             raise typer.Exit(code=2)
 
-        world = domain.world(seed=seed, archetype=shape, employees=employees).build()
-        world = world.run(single_episode(period))
+        builder = (
+            domain.world.from_pack(pack_obj, seed=seed)
+            if pack_obj is not None
+            else domain.world(seed=seed, archetype=shape, employees=employees)
+        )
+        world = builder.build().run(single_episode(period))
     else:
-        world = RetailWorld(seed=seed, archetype=shape, employees=employees).build()
+        builder = (
+            RetailWorld.from_pack(pack_obj, seed=seed)
+            if pack_obj is not None
+            else RetailWorld(seed=seed, archetype=shape, employees=employees)
+        )
+        world = builder.build()
 
     # The actor provider is resolved before the loop, and a replay makes it
     # unreachable for the same reason a replayed narration does: a fallback that
@@ -1204,6 +1260,125 @@ def actors(
                 str(len(entry.observation.task_ids)),
             )
         console.print(table, "")
+
+
+@pack_app.command("check")
+def pack_check(
+    source: Path = typer.Argument(..., help="Pack JSON file to validate and lint."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit findings as JSON — an agent authoring a pack should read data.",
+    ),
+) -> None:
+    """Validate a pack against the schema and lint its lore against the engine.
+
+    Schema failures are errors. Lint findings are advisory — an inert lore
+    constraint is legal — but each one is a place where the pack's intent and
+    the engine's behaviour diverge, named before a corpus quietly ignores it.
+    """
+    import json as json_module
+
+    from . import packs as packs_module
+
+    try:
+        loaded = packs_module.load(source)
+    except Exception as exc:
+        if as_json:
+            typer.echo(json_module.dumps({"ok": False, "error": str(exc)}, indent=2))
+        else:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+
+    findings = packs_module.lint(loaded)
+    if as_json:
+        typer.echo(json_module.dumps(
+            {"ok": True, "name": loaded.name, "base": loaded.base, "findings": findings},
+            indent=2,
+        ))
+        return
+    console.print(f"[green]✓[/green] {loaded.name} validates against the {loaded.base} engine")
+    for finding in findings:
+        console.print(f"[yellow]•[/yellow] {escape(finding)}")
+    if not findings:
+        console.print("[dim]no lint findings — every commitment is load-bearing[/dim]")
+
+
+@pack_app.command("targets")
+def pack_targets(
+    engine: str = typer.Argument(None, help="Engine name; omit to list every engine."),
+) -> None:
+    """List the lore targets each engine consults, and what each one changes.
+
+    This is the pack author's contract: a lore constraint aimed at one of
+    these targets changes generation; aimed anywhere else it is carried,
+    citable, and inert. Persona traits are always consulted, as ROLE/trait.
+    """
+    from . import domains
+
+    for name in domains.names():
+        if engine is not None and name != engine:
+            continue
+        domain = domains.by_name(name)
+        console.print(f"[bold]{name}[/bold]")
+        for target, effect in domain.consulted_targets:
+            console.print(f"  {target}\n    [dim]{effect}[/dim]")
+        console.print("  <role>/<trait>\n    [dim]persona_trait: adjusts how that role's holder writes[/dim]")
+
+
+@pack_app.command("template")
+def pack_template(
+    engine: str = typer.Argument("retail", help="Engine the pack will run on: retail or banking."),
+) -> None:
+    """Print a minimal valid pack to start from.
+
+    The shipped examples are the fuller reference: examples/packs/ carries a
+    general insurer on the retail engine and a mutual bank on the banking one.
+    """
+    import json as json_module
+
+    from . import domains
+
+    if domains.by_name(engine) is None:
+        err.print(f"[red]error:[/red] no engine named {engine!r}; registered: {', '.join(domains.names())}")
+        raise typer.Exit(code=2)
+    starter = {
+        "name": "my-industry",
+        "base": engine,
+        "description": "One line on what kind of business this is",
+        "company_name": "A Fictional Name",
+        "industry": "Your industry",
+        "currency": "AUD",
+        "currency_unit": "millions" if engine == "banking" else "thousands",
+        "annual_revenue": 1000 if engine == "banking" else 1_000_000,
+        "employees": 5000,
+        "units": [
+            {
+                "key": "main", "name": "Main Division", "kind": "your_kind", "share": 1.0,
+                "categories": [
+                    {"name": "First Product Line", "share": 0.6, "margin": 0.25},
+                    {"name": "Second Product Line", "share": 0.4, "margin": 0.18},
+                ],
+                "site_formats": [{"name": "Site", "count": 10, "revenue_weight": 1.0}],
+            }
+        ],
+        "lore": [
+            {
+                "kind": "decision",
+                "assertion": "Something this company did years ago that still shapes how it fails.",
+                "effective_from": "2023-01",
+                "constrains": [
+                    {
+                        "kind": "event_likelihood",
+                        "target": "data_quality_incident/collateral" if engine == "banking"
+                        else "data_quality_incident/inventory",
+                        "effect": "Why that decision makes this failure more likely",
+                        "magnitude": 2.0,
+                    }
+                ],
+            }
+        ],
+    }
+    typer.echo(json_module.dumps(starter, indent=2))
 
 
 @app.command()

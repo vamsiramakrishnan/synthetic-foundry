@@ -157,8 +157,14 @@ def generate(
     *,
     archetype,  # type: ignore[no-untyped-def]
     lore: tuple[LoreCommitment, ...] = (),
+    company_name: str | None = None,
 ) -> Organisation:
-    """Build the organisation for an archetype. Same seed, same graph, same IDs."""
+    """Build the organisation for an archetype. Same seed, same graph, same IDs.
+
+    ``company_name`` lets a pack name its own fiction. The generated name is
+    still drawn either way, so a pack that names the company never reshuffles
+    a single downstream draw relative to one that does not.
+    """
     company_rng = rng.derive("company")
     company_id = minter.next("CO")
     units = archetype.units
@@ -167,8 +173,17 @@ def generate(
     unit_ids = {unit.key: minter.next("BU") for unit in units}
 
     # People. Per-unit roles are appended to the role table so the whole graph is
-    # minted in one pass and every manager exists before its reports.
-    role_table = list(_ROLES)
+    # minted in one pass and every manager exists before its reports. The
+    # merchandising lead's manager in `_ROLES` is written as "gm_md", which is
+    # only a name for "the MD of whichever unit merchandising sits under" —
+    # resolved here through `_merch_unit`, because an archetype without a "gm"
+    # unit (the first insurer pack) otherwise leaves merch_lead managerless and
+    # the org tree with two roots.
+    merch_md = f"{_merch_unit(unit_ids)}_md"
+    role_table = [
+        (role, title, function, merch_md if manager == "gm_md" else manager)
+        for role, title, function, manager in _ROLES
+    ]
     for unit in units:
         role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))
         role_table.append((f"{unit.key}_bp", f"Finance Business Partner, {unit.name}", "Finance", "controller"))
@@ -288,9 +303,12 @@ def generate(
         ),
     )
 
+    # Drawn before the override is applied — see the docstring: a pack naming
+    # the company must not change what any other stream draws.
+    generated_name = names.company_name(company_rng)
     company = Company(
         id=company_id,
-        name=names.company_name(company_rng),
+        name=company_name or generated_name,
         industry=archetype.industry,
         headquarters=names.headquarters(company_rng.derive("hq")),
         fiscal_year_start_month=archetype.fiscal_year_start_month,

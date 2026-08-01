@@ -159,8 +159,13 @@ def generate(
     *,
     archetype,  # type: ignore[no-untyped-def]
     lore: tuple[LoreCommitment, ...] = (),
+    company_name: str | None = None,
 ) -> BankOrganisation:
-    """Build the bank for an archetype. Same seed, same graph, same ids."""
+    """Build the bank for an archetype. Same seed, same graph, same ids.
+
+    ``company_name`` lets a pack name its fiction; the generated name is drawn
+    regardless so the override never reshuffles a downstream stream.
+    """
     company_rng = rng.derive("company")
     company_id = minter.next("CO")
     units = archetype.units
@@ -322,9 +327,10 @@ def generate(
         ),
     )
 
+    generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(_BANK_SUFFIX)}"
     company = Company(
         id=company_id,
-        name=f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(_BANK_SUFFIX)}",
+        name=company_name or generated_name,
         industry=archetype.industry,
         headquarters=names.headquarters(company_rng.derive("hq")),
         fiscal_year_start_month=archetype.fiscal_year_start_month,
@@ -335,13 +341,21 @@ def generate(
 
     milestones, founding_facts = founding_milestones(minter, lore, company_id)
 
-    # The SME Secured book gets a named handle because the episode's error is
+    # The affected book gets a named handle because the episode's error is
     # scoped to it — the affected-book fact and the correction-scope check both
-    # need to name one book, and finding it by string at every site would make
-    # a rename a silent behaviour change.
+    # need to name one book. The stock archetype's is SME Secured Lending by
+    # name; a pack that names its books differently gets the heaviest book by
+    # group weight (unit share × category share), which is deterministic and
+    # is also the book a real revaluation lapse would hurt most.
     sme_book = next(
         (c.id for c in dimensions.categories if c.name == "SME Secured Lending"), None
     )
+    if sme_book is None and dimensions.categories:
+        unit_share = {unit_ids[unit.key]: unit.share for unit in units}
+        sme_book = max(
+            dimensions.categories,
+            key=lambda c: (unit_share.get(c.business_unit_id, 0.0) * c.revenue_share, c.id),
+        ).id
 
     return BankOrganisation(
         company=company,

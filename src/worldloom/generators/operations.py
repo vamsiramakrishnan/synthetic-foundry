@@ -176,6 +176,22 @@ def generate(
     )
 
 
+def _affected_unit(roles: dict[str, str]) -> str:
+    """The business unit the mapping failure lands on.
+
+    The general-merchandise unit when the archetype has one — that is where
+    range architecture is fought over, the same rule ``organisation`` uses to
+    home the merchandising roles — else the first unit the world has. The
+    fallback exists because this used to be ``roles["unit_gm"]``, which made
+    the whole engine crash for any pack whose units were named honestly for a
+    different business: the exact coupling the telco experiment measured, hit
+    again by the first insurer pack, fixed rather than worked around.
+    """
+    if "unit_gm" in roles:
+        return roles["unit_gm"]
+    return next(roles[key] for key in roles if key.startswith("unit_"))
+
+
 def _incident_chain(
     rng: Rng, minter: Minter, *, period: str, day: date, company_id: str, roles: dict[str, str],
     incident_lore: list[str], calendar_lore: list[str], ownership_lore: list[str],
@@ -232,7 +248,7 @@ def _incident_chain(
                   "Root cause confirmed as a stale legacy-to-new product hierarchy mapping, leaving "
                   f"{affected:,} SKUs unmapped and unvaluable.",
                   actors=[roles["platform_senior"], roles["merch_analyst"]], services=[hierarchy],
-                  systems=[mdm], units=[roles["unit_gm"]], caused_by=[dismissed.id], lore=incident_lore)
+                  systems=[mdm], units=[_affected_unit(roles)], caused_by=[dismissed.id], lore=incident_lore)
     patched = event("workaround_applied", worked_around,
                     "A manual hierarchy mapping override was applied so valuation could complete for the period.",
                     actors=[roles["platform_senior"], roles["merch_analyst"]],
@@ -250,7 +266,7 @@ def _incident_chain(
                        "Review established the underlying failure as a control failure: the hierarchy mapping "
                        "table has no registered owner and no required reviewer.",
                        actors=[roles["platform_lead"], roles["audit"]], services=[hierarchy],
-                       systems=[mdm], units=[roles["unit_gm"]], caused_by=[found.id], lore=ownership_lore)
+                       systems=[mdm], units=[_affected_unit(roles)], caused_by=[found.id], lore=ownership_lore)
     remediation = event("remediation_created", remediated,
                         "Two remediation tickets raised: automate the mapping validation, and assign ownership "
                         "of the mapping table with a mandatory reviewer.",

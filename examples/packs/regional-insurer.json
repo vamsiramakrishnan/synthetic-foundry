@@ -1,0 +1,66 @@
+{
+  "name": "regional-insurer",
+  "base": "retail",
+  "description": "Mid-size general insurer, run through the month-end close engine",
+  "company_name": "Harbourline Insurance Group",
+  "industry": "General insurance",
+  "currency": "AUD",
+  "currency_unit": "thousands",
+  "annual_revenue": 5200000,
+  "employees": 6000,
+  "units": [
+    {
+      "key": "personal",
+      "name": "Personal Lines",
+      "kind": "personal_insurance",
+      "share": 0.58,
+      "categories": [
+        {"name": "Motor", "share": 0.46, "margin": 0.18},
+        {"name": "Home and Contents", "share": 0.38, "margin": 0.22},
+        {"name": "Travel", "share": 0.16, "margin": 0.31}
+      ],
+      "site_formats": [
+        {"name": "Branch", "count": 40, "revenue_weight": 1.0}
+      ]
+    },
+    {
+      "key": "commercial",
+      "name": "Commercial Lines",
+      "kind": "commercial_insurance",
+      "share": 0.42,
+      "categories": [
+        {"name": "Property", "share": 0.52, "margin": 0.2},
+        {"name": "Liability", "share": 0.48, "margin": 0.26}
+      ]
+    }
+  ],
+  "lore": [
+    {
+      "kind": "decision",
+      "assertion": "Claims data was migrated to a new platform and the legacy peril-code mapping has been maintained by hand ever since.",
+      "effective_from": "2024-06",
+      "constrains": [
+        {"kind": "event_likelihood", "target": "data_quality_incident/inventory", "effect": "A hand-maintained mapping drifts, so valuation-style failures recur", "magnitude": 2.0},
+        {"kind": "terminology", "target": "peril_code", "effect": "Legacy and new peril codes are both in use and not interchangeable"}
+      ]
+    },
+    {
+      "kind": "norm",
+      "assertion": "Month-end close is expected to finish within four business days; overruns page the Group CFO the same day.",
+      "effective_from": "2022-01",
+      "constrains": [
+        {"kind": "artifact_density", "target": "finance/status_reports", "effect": "Status reporting swells during the close", "magnitude": 0.5},
+        {"kind": "metric_emphasis", "target": "close_cycle_time", "effect": "Close cycle time is a standing CFO metric", "magnitude": 1.0}
+      ]
+    },
+    {
+      "kind": "tension",
+      "assertion": "Personal Lines attributes its margin pressure to pricing decisions taken jointly with Commercial; Commercial regards those campaigns as Personal Lines' own choice.",
+      "effective_from": "2025-02",
+      "constrains": [
+        {"kind": "persona_trait", "target": "personal_md/hedging", "effect": "Margin commentary attributes cause outside the unit", "magnitude": 0.3},
+        {"kind": "metric_emphasis", "target": "promotional_depth", "effect": "Campaign depth is reported separately by unit", "magnitude": 1.0}
+      ]
+    }
+  ]
+}

@@ -60,6 +60,7 @@ Do not read these up front. Each is loaded for one stage of the journey.
 
 | Stage | Read | For |
 | --- | --- | --- |
+| 0. Design | `references/designing.md` | **Start here for any open-ended ask.** The five intervention surfaces, authoring an industry pack, and the measure-then-iterate loop that turns "make me a corpus" into choices you can defend |
 | 1. Build | `references/building.md` | Seeds, archetypes, scale, multiple periods, org change over time |
 | 1a. Act | `references/acting.md` | Being an employee: observations, tools, authority, and why an action is refused |
 | 1b. Shape | `references/planning-structure.md` | Proposing an artifact's sections under grammar validation |

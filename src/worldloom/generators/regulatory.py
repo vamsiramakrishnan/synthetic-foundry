@@ -81,9 +81,17 @@ def generate(
     position: CapitalPosition,
     liquidity: LiquiditySeries,
     book_names: dict[str, str],
+    affected_unit_id: str,
     lore_by_target: dict[str, list[str]],
 ) -> ReturnEpisode:
-    """Generate the challenged return for the quarter ending *period*."""
+    """Generate the challenged return for the quarter ending *period*.
+
+    ``affected_unit_id`` is the business unit whose book the error sits in —
+    resolved by the caller from the affected book itself, never assumed from a
+    unit key. This used to be ``roles["unit_business"]``, which crashed for
+    any pack whose units were named for its own business rather than the stock
+    archetype's: the same leak class ``operations._affected_unit`` fixes.
+    """
     events: list[EnterpriseEvent] = []
     facts: list[CanonicalFact] = []
     keys: dict[str, str] = {}
@@ -207,7 +215,7 @@ def generate(
         "sampled revaluations looked stale and the fully-secured treatment could not be "
         "confirmed. The challenge was logged with status open.",
         actors=[roles["prudential_risk_head"]], systems=[collateral_sys],
-        units=[roles["unit_business"]], caused_by=[review.id], lore=filing_lore,
+        units=[affected_unit_id], caused_by=[review.id], lore=filing_lore,
     )
     facts.append(_text(minter, "review.challenge", sme,
                        "Sampled collateral revaluations for the SME Secured Lending book appear "
@@ -416,7 +424,7 @@ def generate(
         f"Lending book, leaving {affected:,} loan facilities carried at stale collateral "
         "values.",
         actors=[roles["platform_senior"], roles["credit_risk_lead"]], services=[sync],
-        systems=[collateral_sys], units=[roles["unit_business"]],
+        systems=[collateral_sys], units=[affected_unit_id],
         caused_by=[dismissed.id], lore=migration_lore,
     )
     cause = _text(minter, "ops.cause", sync,

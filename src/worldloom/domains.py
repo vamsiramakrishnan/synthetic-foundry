@@ -43,6 +43,11 @@ class Domain:
     single_episode: Callable[[str], Any] | None = None
     """``period -> scenario`` for a domain whose build runs exactly one
     episode. ``None`` for retail, whose close loop the CLI drives itself."""
+    consulted_targets: tuple[tuple[str, str], ...] = ()
+    """The lore-constraint targets this engine's generators actually read,
+    as ``(target, what it changes)`` pairs. Published so a pack author — human
+    or agent — can see which lore is load-bearing and which would be carried
+    but inert; ``worldloom pack check`` lints against this."""
 
 
 _DOMAINS: dict[str, Domain] = {}
@@ -73,3 +78,13 @@ def for_archetype(key: str) -> Domain | None:
         if key in domain.archetype_keys:
             return domain
     return None
+
+
+def by_name(name: str) -> Domain | None:
+    """The domain registered as *name* — how a pack's ``base`` resolves."""
+    return _DOMAINS.get(name)
+
+
+def names() -> list[str]:
+    """Every registered domain name."""
+    return sorted(_DOMAINS)

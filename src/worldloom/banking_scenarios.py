@@ -90,6 +90,9 @@ class QuarterlyCapitalReturn:
             start=business_days_after(period_end(self.period), _LIQUIDITY_START_BD),
             days=regulatory.LIQUIDITY_DAYS,
         )
+        affected_book = next(
+            c for c in world._categories if c.id == roles["cat_sme_secured"]
+        )
         episode = regulatory.generate(
             rng.derive("regulatory"), minter,
             period=self.period,
@@ -98,6 +101,9 @@ class QuarterlyCapitalReturn:
             position=position,
             liquidity=series,
             book_names={c.id: c.name for c in world._categories},
+            # The unit the error lands on is the affected book's own unit —
+            # derived, never assumed from a unit key a pack may not have.
+            affected_unit_id=affected_book.business_unit_id,
             lore_by_target=index,
         )
 

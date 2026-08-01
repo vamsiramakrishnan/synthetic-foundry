@@ -54,15 +54,29 @@ def build_recipe(
     seed: int,
     employees: int | None = None,
     annual_revenue: int | None = None,
+    pack: Any = None,
 ) -> dict[str, Any]:
-    """The recipe for a freshly built world, before any scenario has run."""
+    """The recipe for a freshly built world, before any scenario has run.
+
+    A pack-built world embeds the whole pack, verbatim, because the pack *is*
+    part of how the world was made: a corpus that could only be rebuilt by
+    whoever still had the pack file would fail the reason recipes exist. The
+    embedding is plain JSON — same no-callables rule as everything else here.
+    """
     return {
         "archetype": archetype,
         "seed": seed,
         "employees": employees,
         "annual_revenue": annual_revenue,
+        **({} if pack is None else {"pack": _pack_payload(pack)}),
         "steps": [],
     }
+
+
+def _pack_payload(pack: Any) -> dict[str, Any]:
+    from . import packs
+
+    return packs.to_recipe(pack)
 
 
 def with_step(recipe: dict[str, Any], scenario: str, **arguments: Any) -> dict[str, Any]:
@@ -105,27 +119,45 @@ def rebuild(
             " original `worldloom build` command instead."
         )
 
-    try:
-        shape = archetypes.get(recipe["archetype"])
-    except KeyError as exc:
-        raise RecipeError(str(exc)) from None
+    if recipe.get("pack") is not None:
+        # A pack-built world: the recipe carries the pack whole, and the
+        # pack's base names the engine. Same closed-vocabulary posture — the
+        # pack is validated data, and `base` resolves through the registry.
+        from . import packs
 
-    # The archetype names the domain that knows how to build it — resolved
-    # through the registry rather than a stored class name, for the same reason
-    # STEPS is a closed vocabulary: a recipe must never be able to import and
-    # execute an arbitrary callable on load.
-    domain = domains.for_archetype(shape.key)
-    if domain is None:
-        raise RecipeError(
-            f"archetype {shape.key!r} belongs to no registered domain; the module"
-            " that owns it was never imported, so this corpus cannot be rebuilt"
-        )
-    world = domain.world(
-        seed=recipe["seed"],
-        archetype=shape,
-        employees=recipe.get("employees"),
-        annual_revenue=recipe.get("annual_revenue"),
-    ).build()
+        try:
+            pack = packs.load(dict(recipe["pack"]))
+        except Exception as exc:
+            raise RecipeError(f"this corpus's embedded pack does not validate: {exc}") from exc
+        domain = domains.by_name(pack.base)
+        if domain is None:
+            raise RecipeError(
+                f"the embedded pack names engine {pack.base!r}, which is not"
+                f" registered — registered: {', '.join(domains.names())}"
+            )
+        world = domain.world.from_pack(pack, seed=recipe["seed"]).build()
+    else:
+        try:
+            shape = archetypes.get(recipe["archetype"])
+        except KeyError as exc:
+            raise RecipeError(str(exc)) from None
+
+        # The archetype names the domain that knows how to build it — resolved
+        # through the registry rather than a stored class name, for the same
+        # reason STEPS is a closed vocabulary: a recipe must never be able to
+        # import and execute an arbitrary callable on load.
+        domain = domains.for_archetype(shape.key)
+        if domain is None:
+            raise RecipeError(
+                f"archetype {shape.key!r} belongs to no registered domain; the module"
+                " that owns it was never imported, so this corpus cannot be rebuilt"
+            )
+        world = domain.world(
+            seed=recipe["seed"],
+            archetype=shape,
+            employees=recipe.get("employees"),
+            annual_revenue=recipe.get("annual_revenue"),
+        ).build()
 
     for step in recipe.get("steps", ()):
         name = step.get("scenario")
