@@ -135,7 +135,12 @@ jobs:
           worldloom pack check examples/packs/mutual-bank.json
           worldloom build --seed 4242 --incident --pack examples/packs/regional-insurer.json \
             --narrate -f markdown --out "${{ runner.temp }}/insurer"
-          grep -rl "claims reserving pipeline" "${{ runner.temp }}/insurer/artifacts" >/dev/null
+          # The re-voiced event lives on the timeline; the re-voiced cause is
+          # cited into rendered prose. Both are asserted where they actually
+          # land — the first version of this step grepped the artifacts for an
+          # event summary and failed all three matrix jobs.
+          grep -l "claims reserving pipeline" "${{ runner.temp }}/insurer/events.jsonl" >/dev/null
+          grep -rl "peril-code mapping" "${{ runner.temp }}/insurer/artifacts" >/dev/null
           worldloom build --seed 7 --pack examples/packs/mutual-bank.json \
             --narrate -f markdown -f xlsx --out "${{ runner.temp }}/mutual"
           grep -l "Owner-Occupier" "${{ runner.temp }}/mutual/events.jsonl" >/dev/null
