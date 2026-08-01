@@ -6,3 +6,6 @@ build/
 dist/
 .venv/
 venv/
+# Agent worktrees are live workspaces, not content — committing one would land
+# in-progress, unverified work alongside a nested git checkout.
+.claude/worktrees/
