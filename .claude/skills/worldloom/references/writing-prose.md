@@ -22,6 +22,7 @@ Fields that matter:
 | `hierarchy` | Subject name to where it sits, e.g. `"division of Ardent Holdings"`. Lets you write "the largest division" instead of naming all four. |
 | `knows_as_of` | When the document was written. See `not_yet_known` below. |
 | `must_not_claim` | Phrases this document may not contain, verbatim. |
+| `terminology` | The world's vocabulary notes, term → how it is used (e.g. legacy and new names for one thing that are not interchangeable). Advisory register guidance — follow it, but no validator rejects on it. |
 | `target_words` | Roughly how long. Not a hard limit, but a two-sentence answer to a 200-word request is not doing the section's job either. |
 | `facts` | The only facts you may use. Each carries `id`, `statement` (the value, already formatted — do not reformat it), `authority`, `valid_from`, `superseded`, `required`, and sometimes `prior_period_fact` (the ID of the same measure a period earlier, so a trend is two references, not a described movement). |
 

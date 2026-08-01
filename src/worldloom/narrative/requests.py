@@ -66,6 +66,13 @@ class NarrativeRequest(Model):
     subject is an opaque ID cannot be written about at all.
     """
     forbidden_claims: list[str] = Field(default_factory=list)
+    terminology: dict[str, str] = Field(default_factory=dict)
+    """Term → the world's note on how it is used ("legacy 'department' and new
+    'category' are both in use and not interchangeable"). From TERMINOLOGY lore
+    constraints — the one constraint kind whose effect *is* prose — so a pack
+    that declares its industry's vocabulary sees it reach the writer. Advisory:
+    guidance for the author, not a rejection rule, because vocabulary is a
+    register question and the validators police facts, not style."""
     target_words: int = 120
     fact_digest: str = ""
     """Content address of the facts supplied, so the ledger key moves when they do."""

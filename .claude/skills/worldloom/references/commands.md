@@ -138,6 +138,7 @@ worldloom evaluate <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
+| `--json` | Emit the scorecard as JSON. This is the measure half of the measure-then-iterate loop — an agent deciding what to change next should read data, not parse a bar chart. |
 | `--verbose`, `-v` | Show every question. |
 | `-k` | How many passages the baseline may return. |
 

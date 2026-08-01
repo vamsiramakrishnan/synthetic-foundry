@@ -1058,6 +1058,14 @@ def evaluate(
     corpus: str = typer.Argument(..., help="Corpus name or path."),
     k: int = typer.Option(5, "-k", help="How many passages the baseline may return."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every question."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help=(
+            "Emit the scorecard as JSON. This is the measure half of the "
+            "measure-then-iterate loop — an agent deciding what to change next "
+            "should read data, not parse a bar chart."
+        ),
+    ),
 ) -> None:
     """Score the built-in baseline retriever against the corpus's evaluation set.
 
@@ -1066,11 +1074,34 @@ def evaluate(
     corpus on which it does well on temporal and authority questions is a corpus
     that is not testing anything.
     """
+    import json as json_module
+
     from .evaluate import score as run_score
 
     world = _compiled(_load(corpus), corpus)
 
     card = run_score(world, k=k)
+    if as_json:
+        typer.echo(json_module.dumps({
+            "k": card.k,
+            "overall": {"passed": card.passed, "total": len(card)},
+            "by_type": {
+                kind.value: {"passed": passed, "total": total}
+                for kind, (passed, total) in sorted(
+                    card.by_type().items(), key=lambda item: item[0].value
+                )
+            },
+            "outcomes": [
+                {
+                    "case_id": outcome.case_id,
+                    "type": outcome.evaluation_type.value,
+                    "passed": outcome.passed,
+                    "detail": outcome.detail,
+                }
+                for outcome in card.outcomes
+            ],
+        }, indent=2))
+        return
     console.print(str(card))
 
     if verbose:

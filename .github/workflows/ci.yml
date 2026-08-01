@@ -124,6 +124,26 @@ jobs:
             --replay "${{ runner.temp }}/bank" $FORMATS --out "${{ runner.temp }}/bank-again"
           diff -r "${{ runner.temp }}/bank" "${{ runner.temp }}/bank-again"
 
+      # The shipped example packs, end to end: authored worlds through
+      # unmodified engines. The greps assert the texture genuinely landed —
+      # the insurer's incident speaks claims language, the mutual bank's
+      # challenge names its own book — and the replay diff proves a
+      # re-voiced corpus rebuilds its own voice from the recipe alone.
+      - name: The example packs build, re-voice, and replay
+        run: |
+          worldloom pack check examples/packs/regional-insurer.json
+          worldloom pack check examples/packs/mutual-bank.json
+          worldloom build --seed 4242 --incident --pack examples/packs/regional-insurer.json \
+            --narrate -f markdown --out "${{ runner.temp }}/insurer"
+          grep -rl "claims reserving pipeline" "${{ runner.temp }}/insurer/artifacts" >/dev/null
+          worldloom build --seed 7 --pack examples/packs/mutual-bank.json \
+            --narrate -f markdown -f xlsx --out "${{ runner.temp }}/mutual"
+          grep -l "Owner-Occupier" "${{ runner.temp }}/mutual/events.jsonl" >/dev/null
+          worldloom build --seed 7 --pack examples/packs/mutual-bank.json \
+            --replay "${{ runner.temp }}/mutual" -f markdown -f xlsx \
+            --out "${{ runner.temp }}/mutual-again"
+          diff -r "${{ runner.temp }}/mutual" "${{ runner.temp }}/mutual-again"
+
       # The agent handshake: a corpus asks for prose, and refuses prose that
       # restates a figure. Exercised with a scripted "agent" so the contract is
       # covered without a model in CI.

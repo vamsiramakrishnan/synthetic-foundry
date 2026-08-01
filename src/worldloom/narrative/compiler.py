@@ -202,6 +202,15 @@ def _request_for(
         allowed_fact_ids=allowed,
         required_fact_ids=required,
         forbidden_claims=_forbidden_for(intent.artifact_type),
+        # World-level, not fact-scoped: a vocabulary note holds for every
+        # section, and there are never more than a handful. Not part of the
+        # fact digest, so adding one cannot orphan a recorded narration.
+        terminology={
+            constraint.target: constraint.effect
+            for commitment in world.lore
+            for constraint in commitment.constrains
+            if constraint.kind.value == "terminology"
+        },
         target_words={"small": 70, "medium": 130, "long": 200}.get(intent.size_profile, 120),
         fact_digest=providers.digest([facts[f] for f in allowed]),
     )
