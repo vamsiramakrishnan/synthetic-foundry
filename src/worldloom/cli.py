@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -1314,10 +1315,48 @@ def formats() -> None:
         console.print(name)
 
 
+def _card_json(card: Any) -> dict[str, Any]:
+    """A `Scorecard` as the JSON fragment shared by every `evaluate` shape below.
+
+    Factored out so the single-retriever payload (`{k, overall, by_type,
+    outcomes}`, unchanged since before `--retriever` existed) and each entry
+    under `"retrievers"` in the `both` payload are built from one place — two
+    copies of this dict comprehension drifting apart is exactly the kind of
+    thing that would go unnoticed until an agent's `--json` parsing broke on
+    one shape and not the other.
+    """
+    return {
+        "overall": {"passed": card.passed, "total": len(card)},
+        "by_type": {
+            kind.value: {"passed": passed, "total": total}
+            for kind, (passed, total) in sorted(card.by_type().items(), key=lambda item: item[0].value)
+        },
+        "outcomes": [
+            {
+                "case_id": outcome.case_id,
+                "type": outcome.evaluation_type.value,
+                "passed": outcome.passed,
+                "detail": outcome.detail,
+            }
+            for outcome in card.outcomes
+        ],
+    }
+
+
 @app.command()
 def evaluate(
     corpus: str = typer.Argument(..., help="Corpus name or path."),
-    k: int = typer.Option(5, "-k", help="How many passages the baseline may return."),
+    k: int = typer.Option(5, "-k", help="How many passages a retriever may return."),
+    retriever: str = typer.Option(
+        "bm25", "--retriever",
+        help=(
+            "bm25 (default — the original baseline, unchanged), tfidf "
+            "(vector-space cosine, a genuinely different ranking family — see "
+            "src/worldloom/evaluate/tfidf.py), or both (side by side, with a "
+            "per-family agreement reading: a family low under both retrievers "
+            "is structurally hard, not hard for one heuristic)."
+        ),
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every question."),
     as_json: bool = typer.Option(
         False, "--json",
@@ -1328,40 +1367,72 @@ def evaluate(
         ),
     ),
 ) -> None:
-    """Score the built-in baseline retriever against the corpus's evaluation set.
+    """Score one or both baseline retrievers against the corpus's evaluation set.
 
-    A *low* score on the hard question types is the good result. The baseline has
-    no notion of when a document was written or how authoritative it is, so a
-    corpus on which it does well on temporal and authority questions is a corpus
-    that is not testing anything.
+    A *low* score on the hard question types is the good result. Neither
+    retriever has any notion of when a document was written or how authoritative
+    it is, so a corpus on which they do well on temporal and authority questions
+    is a corpus that is not testing anything. `--retriever both` is the stronger
+    claim: a family low under BM25 *and* TF-IDF cosine — two different ranking
+    families — is hard because of the corpus, not because of which keyword
+    heuristic happened to be asked.
     """
     import json as json_module
 
+    from .evaluate import RETRIEVERS, compare, render_agreement
     from .evaluate import score as run_score
+
+    if retriever != "both" and retriever not in RETRIEVERS:
+        raise typer.BadParameter(f"must be one of {sorted([*RETRIEVERS, 'both'])}", param_hint="--retriever")
 
     world = _compiled(_load(corpus), corpus)
 
-    card = run_score(world, k=k)
+    if retriever == "both":
+        cards = {name: run_score(world, k=k, retriever=name) for name in sorted(RETRIEVERS)}
+        findings = compare(cards)
+        if as_json:
+            # A new top-level shape, not a variant of the single-retriever one —
+            # `retriever="both"` is a capability nothing could request before
+            # this flag existed, so there is no old consumer whose parsing this
+            # could break. The single-retriever shape below (`bm25`, the
+            # default, and `tfidf`) is untouched byte-for-byte.
+            typer.echo(json_module.dumps({
+                "retriever": "both",
+                "k": k,
+                "retrievers": {name: _card_json(card) for name, card in cards.items()},
+                "agreement": {
+                    finding.evaluation_type.value: {
+                        "scores": {
+                            name: {"passed": passed, "total": total}
+                            for name, (passed, total) in finding.scores.items()
+                        },
+                        "disagreements": finding.disagreements,
+                        "total": finding.total,
+                        "finding": finding.finding,
+                    }
+                    for finding in findings
+                },
+            }, indent=2))
+            return
+        for name in sorted(cards):
+            console.print(str(cards[name]))
+            console.print("")
+        console.print(render_agreement(findings))
+        if verbose:
+            for name in sorted(cards):
+                console.print(f"\n[bold]{name}[/bold]")
+                for outcome in cards[name].outcomes:
+                    mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
+                    console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
+                    console.print(f"      {outcome.detail}")
+        return
+
+    card = run_score(world, k=k, retriever=retriever)
     if as_json:
-        typer.echo(json_module.dumps({
-            "k": card.k,
-            "overall": {"passed": card.passed, "total": len(card)},
-            "by_type": {
-                kind.value: {"passed": passed, "total": total}
-                for kind, (passed, total) in sorted(
-                    card.by_type().items(), key=lambda item: item[0].value
-                )
-            },
-            "outcomes": [
-                {
-                    "case_id": outcome.case_id,
-                    "type": outcome.evaluation_type.value,
-                    "passed": outcome.passed,
-                    "detail": outcome.detail,
-                }
-                for outcome in card.outcomes
-            ],
-        }, indent=2))
+        # Exactly the pre-`--retriever` shape, plus one additive key naming
+        # which retriever produced it — an old consumer reading `k`/`overall`/
+        # `by_type`/`outcomes` sees the same thing it always has.
+        typer.echo(json_module.dumps({"retriever": retriever, "k": card.k, **_card_json(card)}, indent=2))
         return
     console.print(str(card))
 
@@ -1469,6 +1540,84 @@ def diversity(
             for violation in violations:
                 err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
             raise typer.Exit(code=1)
+
+
+def _for_stats(name: str) -> World:
+    """Load *name* the way `stats` needs it: compiled if it can be.
+
+    Same dance as `diversity`'s loader, for the same reason — a generated
+    corpus has `artifact_intents` to recompile IR from and should always be
+    scored on that IR, but the hand-authored golden episode
+    (`examples/retail-close`) never had intents at all, so `compile()`'s
+    `ValueError` there is not a failure, it is "this corpus predates the
+    compiler pipeline" — `stats.compute` falls back to the manifest and the
+    rendered bytes on disk for exactly that case.
+    """
+    world = _load(name)
+    if not world.artifact_irs:
+        try:
+            world = world.compile()
+        except ValueError:
+            pass
+    return world
+
+
+@app.command()
+def stats(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    against: str = typer.Option(
+        None, "--against", help="A second corpus name or path to diff against, metric by metric."
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the statistics as JSON — stable keys and ordering, safe to diff in CI."
+    ),
+) -> None:
+    """Report what the corpus actually contains: no invented benchmark, just numbers.
+
+    Document counts by type, per-document word/token length (min/median/p90/
+    max), vocabulary size and type-token ratio, a shingled-Jaccard near-
+    duplicate rate over passages, fact-reference density per document, the
+    citation graph (facts per document, documents per fact), and eval-case
+    counts per family. Nothing here is compared against a "real enterprise
+    corpus" figure — no such reference is auditable, so no such number appears.
+    The only comparison this command makes is `--against`, between two corpora
+    that both exist and can both be opened.
+
+    `evaluate` asks whether the corpus is hard; `diversity` asks whether it
+    looks structurally repeated; this asks what is actually in it. Read all
+    three before calling a corpus measured.
+    """
+    import json as json_module
+
+    from . import stats as stats_module
+
+    world = _for_stats(corpus)
+    try:
+        report = stats_module.compute(world)
+    except ValueError as exc:
+        err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    other_report = None
+    if against:
+        other_world = _for_stats(against)
+        try:
+            other_report = stats_module.compute(other_world)
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] {against}: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+
+    if as_json:
+        payload: dict[str, Any] = {"corpus": corpus, **report.as_dict()}
+        if other_report is not None:
+            payload["against"] = {"corpus": against, **other_report.as_dict()}
+        typer.echo(json_module.dumps(payload, indent=2))
+        return
+
+    console.print(str(report))
+    if other_report is not None:
+        console.print("")
+        console.print(stats_module.diff(report, other_report, a_label=corpus, b_label=against))
 
 
 @app.command()

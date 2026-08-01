@@ -71,19 +71,28 @@ fact.
 worldloom build --seed <SEED> --pack pack.json --incident --periods <N> --out ./corpus
 # or, for a stock shape:
 worldloom build --seed <SEED> --archetype <NAME> --incident --periods <N> --out ./corpus
-worldloom evaluate ./corpus --json
+worldloom evaluate ./corpus --retriever both --json
 worldloom diversity ./corpus -v
+worldloom stats ./corpus --json
 worldloom status ./corpus --json
 ```
 
-**Read the scorecard the right way round.** A baseline that scores well on
+**Read the scorecard the right way round.** Retrievers that score well on
 `direct_lookup` and `numerical_comparison` while scoring badly on
 `temporal_state`, `expected_abstention`, `authority_resolution`, and
 `causal_multi_hop` is the corpus *working* — a high score on the hard
-families is the bad result. `diversity` reads the other way: a high
-unique-shape ratio, a low max family share, short repetition runs are the
-good result. Don't change anything if both already read this way; that's a
-finished corpus, not one that needs another pass.
+families is the bad result. `--retriever both` makes the claim stronger, not
+just louder: BM25 and TF-IDF cosine are different ranking families, so a
+family low under **both** is hard because of the corpus, not because of one
+keyword heuristic's blind spot — and a family they *disagree* on (see the
+agreement table `both` prints) is itself a finding worth naming, not a number
+to average away. `diversity` reads the other way: a high unique-shape ratio, a
+low max family share, short repetition runs are the good result. `stats` has
+no "good" direction — it reports document counts, length, vocabulary,
+near-duplication, and fact-citation density as facts, never against a
+fabricated "real enterprise corpus" number. Don't change anything if the
+first two already read this way; that's a finished corpus, not one that needs
+another pass.
 
 **Iterate by changing what the corpus generates — never the questions, the
 scorer, or a validator.** `references/designing.md` carries the full
@@ -142,10 +151,13 @@ Report the corpus card, not a directory listing:
   or three load-bearing lore commitments, or why a stock archetype was
   enough.
 - **Validation** — the check count from `worldloom validate`, pass or fail.
-- **Scorecard by family** — `evaluate`'s per-type breakdown, read the right
-  way round, stated plainly.
+- **Scorecard by family, both retrievers** — `evaluate --retriever both`'s
+  per-type breakdown for BM25 and TF-IDF cosine, read the right way round,
+  stated plainly, with any family the two disagree on named as a finding.
 - **Diversity shape** — `diversity`'s headline numbers and what changed to
   get there.
+- **Corpus statistics** — `stats`'s headline numbers, reported as facts about
+  the corpus, never against a fabricated reference figure.
 - **What was chosen and why** — one line per elicitation answer, so the ask
   visibly got read rather than defaulted past.
 

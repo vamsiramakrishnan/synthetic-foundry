@@ -142,19 +142,32 @@ file.
 
 ```bash
 worldloom build --seed 8128 --pack pack.json --incident --out ./corpus
-worldloom evaluate ./corpus --json     # baseline retriever scorecard
-worldloom diversity ./corpus -v        # structural sameness fingerprints
+worldloom evaluate ./corpus --retriever both --json   # two ranking families, side by side
+worldloom diversity ./corpus -v                       # structural sameness fingerprints
+worldloom stats ./corpus --json                       # what's actually in it
 ```
 
-**Read the scorecard the right way round.** A baseline that scores well on
+**Read the scorecard the right way round.** Retrievers that score well on
 `direct_lookup` and `numerical_comparison` while scoring badly on
 `temporal_state`, `expected_abstention`, `authority_resolution`, and
 `causal_multi_hop` is the corpus *working* — a high score on the hard
 families means the corpus isn't posing the question it thinks it's posing.
-`diversity` reads the other way: high unique-shape ratio, low max family
-share, short repetition runs are the good result there. Read both before
-deciding anything needs to change; a corpus that already reads this way is
-done, not in need of another pass.
+`--retriever both` is the stronger form of that claim: BM25 and TF-IDF cosine
+are different ranking families (probabilistic versus vector-space — see
+`references/evaluating.md`), so a family low under **both** is hard because of
+the corpus, not because of which keyword heuristic happened to be asked. Where
+the two *disagree* on a family (a third or more of its cases split — see
+`compare()` in `evaluate/score.py`), that disagreement is itself a finding
+about the corpus, worth a line in the corpus card, not something to average
+into a single number. `diversity` reads the other way: high unique-shape
+ratio, low max family share, short repetition runs are the good result there.
+`stats` reads neither direction — it has no "good" result, only an honest one:
+document counts, length distributions, vocabulary, near-duplicate rate, and
+the citation graph, with no fabricated "real enterprise corpus" figure to
+compare against (report, don't grade; `--against` diffs two real corpora when
+there is a second one worth comparing to). Read all three before deciding
+anything needs to change; a corpus that already reads this way is done, not in
+need of another pass.
 
 **Iterate by changing what the corpus generates — never the questions, the
 scorer, or a validator.** Every row below is a generation-side lever, not an
@@ -207,10 +220,15 @@ directory listing:
   or three load-bearing lore commitments, or why a stock archetype was
   enough.
 - **Validation** — the check count from `worldloom validate`, pass or fail.
-- **Scorecard by family** — `evaluate`'s per-type breakdown, with the
-  right-way-round reading stated plainly (which low scores are good news).
+- **Scorecard by family, both retrievers** — `evaluate --retriever both`'s
+  per-type breakdown for BM25 and TF-IDF cosine, with the right-way-round
+  reading stated plainly (which low scores are good news) and the agreement
+  reading named for any family the two retrievers split on.
 - **Diversity shape** — `diversity`'s headline numbers, plus whatever changed
   to get there.
+- **Corpus statistics** — `stats`'s headline numbers (document count and
+  length, vocabulary, near-duplicate rate, fact-citation density), reported as
+  facts about the corpus, not graded against anything.
 - **What was chosen and why** — the answers to the elicitation table, one
   line each, so a reader can see the ask was actually read rather than
   defaulted past.

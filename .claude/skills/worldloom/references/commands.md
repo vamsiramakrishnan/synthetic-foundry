@@ -132,7 +132,7 @@ worldloom evals export <CORPUS>
 
 ### `worldloom evaluate`
 
-Score the built-in baseline retriever against the corpus's evaluation set.
+Score one or both baseline retrievers against the corpus's evaluation set.
 
 ```
 worldloom evaluate <CORPUS>
@@ -141,8 +141,9 @@ worldloom evaluate <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. This is the measure half of the measure-then-iterate loop — an agent deciding what to change next should read data, not parse a bar chart. |
+| `--retriever` | bm25 (default — the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family — see src/worldloom/evaluate/tfidf.py), or both (side by side, with a per-family agreement reading: a family low under both retrievers is structurally hard, not hard for one heuristic). |
 | `--verbose`, `-v` | Show every question. |
-| `-k` | How many passages the baseline may return. |
+| `-k` | How many passages a retriever may return. |
 
 ### `worldloom formats`
 
@@ -294,6 +295,19 @@ worldloom render <CORPUS>
 | --- | --- |
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
+
+### `worldloom stats`
+
+Report what the corpus actually contains: no invented benchmark, just numbers.
+
+```
+worldloom stats <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--against` | A second corpus name or path to diff against, metric by metric. |
+| `--json` | Emit the statistics as JSON — stable keys and ordering, safe to diff in CI. |
 
 ### `worldloom status`
 

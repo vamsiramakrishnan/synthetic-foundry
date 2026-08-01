@@ -38,8 +38,14 @@ class Passage:
         return AUTHORITY_RANK[self.authority]
 
 
-def _table_text(table: Table) -> str:
-    """A table as the flat text a naive ingester would extract from it."""
+def table_text(table: Table) -> str:
+    """A table as the flat text a naive ingester would extract from it.
+
+    Public (not `_table_text`) because `stats.py` needs the identical flattening
+    to build whole-document text — a table has to look the same to the word-count
+    report as it does to the retriever it is also feeding, or the two would be
+    silently describing different corpora.
+    """
     lines = [table.title, " ".join(column.label for column in table.columns)]
     for row in table.rows:
         cells = [row.label]
@@ -74,7 +80,7 @@ def passages(world: World, *, include_hidden: bool = False) -> list[Passage]:
                 text = references.substitute(section.body, facts)
                 cited = frozenset(references.referenced(section.body)) | frozenset(section.fact_ids)
             elif section.table is not None:
-                text = _table_text(section.table)
+                text = table_text(section.table)
                 cited = frozenset(
                     cell.fact_id
                     for row in section.table.rows
@@ -96,4 +102,34 @@ def passages(world: World, *, include_hidden: bool = False) -> list[Passage]:
                     hidden=section.hidden,
                 )
             )
+    return out
+
+
+def document_texts(world: World, *, include_hidden: bool = False) -> dict[str, str]:
+    """Whole-document text, one string per artifact — `stats.py`'s unit of account.
+
+    `passages()` is deliberately section-granular because that is what a
+    retriever indexes. A word-count or vocabulary report has no use for that
+    granularity and every reason to avoid it: gluing `Passage.text` back together
+    would repeat `ir.title` once per section, inflating every document's count by
+    however many sections it has. So this walks `ir.sections` directly rather
+    than going through `passages()`, and shares only the substitution and table
+    flattening — the two views of "what text does this artifact contain" would
+    otherwise drift the moment one changed how a table renders and the other did
+    not.
+    """
+    facts = {fact.id: fact for fact in world.facts}
+    out: dict[str, str] = {}
+    for ir in world.artifact_irs:
+        pieces = [ir.title]
+        for section in ir.sections:
+            if section.hidden and not include_hidden:
+                continue
+            if section.body:
+                pieces.append(section.heading)
+                pieces.append(references.substitute(section.body, facts))
+            elif section.table is not None:
+                pieces.append(section.heading)
+                pieces.append(table_text(section.table))
+        out[ir.id] = "\n".join(pieces)
     return out
