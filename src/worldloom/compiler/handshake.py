@@ -53,7 +53,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
 
-from ..ids import content_key, format_id
+from ..ids import content_key, format_id, highest_numeric_suffix
 from ..models import GenerationLedgerEntry, Model
 from ..narrative import references
 from ..narrative.providers import digest as fact_digest
@@ -639,11 +639,11 @@ def accept(world: World, responses: dict[str, ProposedPlan], *, model_id: str) -
     # Continue the GEN sequence rather than restarting it: this world's ledger
     # may already carry entries minted by narration (or an earlier accepted
     # plan batch), and starting back at GEN-0001 would mint an id that already
-    # names something else.
-    next_gen = 1 + max(
-        (int(entry.id.rsplit("-", 1)[1]) for entry in world.ledger if entry.id.startswith("GEN-")),
-        default=0,
-    )
+    # names something else. `highest_numeric_suffix` also shields this against
+    # a narration checkpoint's `GEN-CKPT-<hex>` entries reaching a resumed
+    # corpus's ledger (`narrative/compiler.py`) — the naive `int(...)` this
+    # used to do would raise on that suffix instead of skipping it.
+    next_gen = 1 + highest_numeric_suffix("GEN", (entry.id for entry in world.ledger))
 
     reqs = requests(world)
     verdicts: dict[str, PlanVerdict] = {}

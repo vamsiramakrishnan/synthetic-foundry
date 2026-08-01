@@ -661,6 +661,20 @@ def narrate_auto(
         " `antigravity` (a Google Antigravity Agent; `worldloom[antigravity]`,"
         " GEMINI_API_KEY). `--model` passes through to the harness.",
     ),
+    concurrency: int = typer.Option(
+        1, "--concurrency",
+        help="Live generation calls to run at once, across a thread pool. 1 (the"
+        " default) opens no thread pool at all — today's behaviour, byte for"
+        " byte. Raising it only changes when calls happen: the recorded ledger"
+        " is identical at any concurrency, because completion order never"
+        " reaches it (see narrative/compiler.py's module docstring).",
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y",
+        help="Skip the confirmation prompt after the preflight summary. Always"
+        " skipped when stdin is not a terminal (CI, a script) — the summary is"
+        " still printed either way.",
+    ),
 ) -> None:
     """Run requests -> generate -> validate -> accept in-process, against a live model.
 
@@ -679,8 +693,23 @@ def narrate_auto(
     `test_anthropic_narrate_auto_ledger_replays_offline` in
     tests/test_anthropic_provider.py closes that gap for this specific,
     non-deterministic provider.
+
+    Before a single call, a preflight prints how many sections are total,
+    already in the ledger, already checkpointed, and left to call live, plus
+    the provider id and a rough token estimate — see `tests/test_narrate_concurrency.py`.
+    Accepted sections persist incrementally to `narration-checkpoint.jsonl`
+    inside *corpus* as they land, so a crash or an interrupted run loses no
+    paid model output: rerunning this exact command resumes, replaying every
+    checkpointed section instead of calling for it again. A section that
+    exhausts its retry budget still aborts the run — `NarrationError`, exit
+    code 2 — but everything accepted before that point is already safe on
+    disk, and the error says how many sections and that rerunning resumes.
+    The sidecar is deleted once a run completes successfully; a corpus that
+    finished without ever crashing is byte-identical to one narrated with no
+    checkpointing at all.
     """
     import os
+    import sys
 
     from .narrative import (
         ANTHROPIC_DEFAULT_MODEL,
@@ -690,7 +719,13 @@ def narrate_auto(
         GeminiProvider,
         NarrationError,
         ProviderError,
+        checkpoint,
+        compiler,
     )
+
+    if concurrency < 1:
+        err.print(f"[red]error:[/red] --concurrency must be at least 1, not {concurrency}")
+        raise typer.Exit(code=2)
 
     # `--harness` names an agent runtime and overrides the model-prefix
     # routing below — a harness picks (or is told) its model itself, so the
@@ -751,14 +786,72 @@ def narrate_auto(
 
     world = _compiled(_load(corpus), corpus)
 
+    # A crash-and-resume sidecar, not a corpus file — see narrative/checkpoint.py.
+    # Loaded before the provider is even asked anything, so a rerun after a
+    # crash sees exactly what the interrupted run already paid for.
+    checkpoint_path = Path(corpus) / checkpoint.FILENAME
+    checkpointed = checkpoint.load(checkpoint_path)
+    checkpoint_keys = frozenset(entry.key for entry in checkpointed)
+    ledger = tuple(world._ledger) + checkpointed
+
     try:
         provider = make_provider()
-        narrated = world.narrate(provider, retries=retries)
+        plan = compiler.preflight(world, provider, ledger=ledger)
     except (ProviderError, NarrationError) as exc:
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
+    # `preflight`'s `replay_keys` doesn't know which ledger a hit came from —
+    # split it here by intersecting with the checkpoint's own keys, so the
+    # summary can tell "already in this corpus's ledger" apart from
+    # "recovered from an interrupted run", which are different facts about
+    # the corpus even though `narrate()` treats both as an ordinary replay.
+    from_checkpoint = len(plan.replay_keys & checkpoint_keys)
+    from_ledger = len(plan.replay_keys) - from_checkpoint
+    # `~4 chars/token` is the standard rough-English heuristic — the count it
+    # is applied to (`live_prompt_chars`) is exact, not guessed: the sum of
+    # what `Prompt.render()` will actually send for every live call.
+    token_estimate = plan.live_prompt_chars // 4
+
+    console.print(f"[bold]narrate auto[/bold] preflight — [bold]{corpus}[/bold]")
+    console.print(f"  sections total             {plan.total_sections:,}")
+    console.print(f"  replayed from ledger        {from_ledger:,}")
+    console.print(f"  replayed from checkpoint    {from_checkpoint:,}")
+    console.print(f"  live calls to make          {plan.live_count:,}")
+    console.print(f"  provider                    {provider.id}")
+    console.print(
+        f"  prompt size                 {plan.live_prompt_chars:,} chars"
+        f" (~{token_estimate:,} tokens, rough)\n"
+    )
+
+    if plan.live_count and not yes and sys.stdin.isatty():
+        if not typer.confirm("Proceed?", default=False):
+            console.print("[yellow]aborted[/yellow] — no call was made.")
+            raise typer.Exit(code=0)
+
+    writer = checkpoint.Writer(checkpoint_path)
+    try:
+        narrated = world.narrate(
+            provider, ledger=ledger, retries=retries,
+            concurrency=concurrency, on_accepted=writer,
+        )
+    except (ProviderError, NarrationError) as exc:
+        writer.close()
+        safe = len(checkpoint.load(checkpoint_path))
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        if safe:
+            err.print(
+                f"[yellow]{safe} section(s)[/yellow] accepted before this failure"
+                f" are safe in [bold]{checkpoint_path}[/bold]. Rerunning this exact"
+                " command resumes from there instead of paying for them again."
+            )
+        raise typer.Exit(code=2) from exc
+    writer.close()
+
     written = narrated.export(corpus, overwrite=True)
+    # Only reached after a full success — an aborted run above never calls
+    # this, so its checkpoint stays on disk for the next attempt to find.
+    checkpoint.consume(checkpoint_path)
 
     calls, replayed, rejected = narrated._narration
     # `calls` counts every attempt including rejected ones (`1 + attempts` per new

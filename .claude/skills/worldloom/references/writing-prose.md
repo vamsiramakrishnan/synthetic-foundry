@@ -263,6 +263,31 @@ reach for the hand-written loop when a document is worth getting exactly
 right, or when you are the one deciding what "exactly right" means for a
 scenario nobody has written prose for yet.
 
+At enterprise size — thousands of sections, hours of live calls — three more
+flags matter. `--concurrency N` fans live generation out to a thread pool of N
+workers; the default of 1 is today's behaviour, byte for byte, and raising it
+changes only *when* calls happen, never what they produce or what order the
+ledger records them in (`_plan` in `narrative/compiler.py` decides every
+section's fate before a thread is spun up, and ids are minted afterward,
+single-threaded, strictly in section order). Every accepted section is
+persisted incrementally to `narration-checkpoint.jsonl` inside the corpus as
+it lands, so a crash — killed process, lost connection, an exhausted retry
+budget on one stubborn section — never re-pays for work already accepted:
+rerunning the exact same command resumes, replaying every checkpointed section
+and only calling live for what is left. The checkpoint is consumed and deleted
+the moment a run finishes cleanly, so a corpus that never crashed is
+byte-identical to one narrated with no checkpointing at all. Before any call,
+a preflight prints how many sections are total, already in the ledger, already
+checkpointed, and left to call live, the provider id, and a rough token
+estimate; `--yes` skips the confirmation that follows (skipped automatically
+when stdin is not a terminal, so CI never blocks on it, but the numbers are
+always printed).
+
+```bash
+worldloom narrate auto ./corpus --model claude-sonnet-5 --concurrency 8
+worldloom narrate auto ./corpus --model claude-sonnet-5 --concurrency 8 --yes  # non-interactive
+```
+
 The moment someone needs documents that read like the real thing a controller
 or a service desk actually wrote — varied emphasis, an argued position,
 register that shifts with the audience — that's either loop, and this file is

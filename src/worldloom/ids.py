@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 # Prefix is the first segment only, so ``ART-SNOW-001`` is an ``ART`` whose
@@ -92,6 +93,34 @@ def id_prefix(value: str) -> str:
 def is_id(value: str) -> bool:
     """Whether *value* is a well-formed identifier."""
     return bool(ID_PATTERN.match(value))
+
+
+def highest_numeric_suffix(prefix: str, ids: Iterable[str]) -> int:
+    """The largest ``<prefix>-<digits>`` suffix among *ids*, or 0 if none.
+
+    Ignores any id sharing *prefix* whose suffix is not a bare number, rather
+    than raising on it — a scratch id minted by a different scheme under the
+    same prefix (a narration checkpoint's ``GEN-CKPT-<hex>``, see
+    ``narrative/compiler.py``; a foreign provider's ledger entry, see
+    ``test_foreign_ledger_entries_are_harmless_to_replay``) must not stop a
+    legitimate sequence from continuing, or worse, crash it.
+
+    Used wherever an id sequence has to keep counting across independent
+    calls rather than being minted whole by one ``Minter`` from a single seed:
+    ``compiler.narrate``'s ``GEN`` sequence and ``compiler/handshake.py``'s
+    plan ``accept()`` both grow a ledger that may already carry ids from an
+    earlier, separate pass — restarting either at 1 would mint an id some
+    already-recorded entry owns.
+    """
+    highest = 0
+    needle = f"{prefix}-"
+    for value in ids:
+        if not value.startswith(needle):
+            continue
+        suffix = value.rsplit("-", 1)[1]
+        if suffix.isdigit():
+            highest = max(highest, int(suffix))
+    return highest
 
 
 def content_key(*parts: object) -> str:

@@ -14,7 +14,7 @@ import shutil
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import corpus
 
@@ -546,6 +546,8 @@ class World:
         *,
         ledger: tuple[GenerationLedgerEntry, ...] | None = None,
         retries: int = 2,
+        concurrency: int = 1,
+        on_accepted: Callable[[GenerationLedgerEntry], None] | None = None,
     ) -> World:
         """Fill every section awaiting prose, replaying from a ledger where possible.
 
@@ -558,12 +560,20 @@ class World:
         Pass ``ledger`` to replay: every recorded call is served from the ledger and
         the provider is never asked, which is how a world regenerates byte-identical
         without depending on model calls being reproducible.
+
+        ``concurrency`` and ``on_accepted`` pass straight through to
+        ``compiler.narrate`` — see its docstring for the determinism argument
+        (why a thread pool here never changes a byte of output) and for what
+        ``on_accepted`` is for (`narrate auto --concurrency`'s checkpoint hook).
         """
         from .narrative import compiler
 
         staged = self if self._artifact_irs else self.compile()
         available = self._ledger if ledger is None else ledger
-        result = compiler.narrate(staged, provider, ledger=available, retries=retries)
+        result = compiler.narrate(
+            staged, provider, ledger=available, retries=retries,
+            concurrency=concurrency, on_accepted=on_accepted,
+        )
 
         # Merge rather than replace. `compiler.narrate` returns only the entries
         # it generated or replayed, so assigning its result dropped every

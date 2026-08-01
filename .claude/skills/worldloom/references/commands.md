@@ -193,9 +193,11 @@ worldloom narrate auto <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
+| `--concurrency` | Live generation calls to run at once, across a thread pool. 1 (the default) opens no thread pool at all — today's behaviour, byte for byte. Raising it only changes when calls happen: the recorded ledger is identical at any concurrency, because completion order never reaches it (see narrative/compiler.py's module docstring). |
 | `--harness` | Answer each request with an agent harness instead of a bare model: `claude-code` (the claude CLI in headless mode, its own auth) or `antigravity` (a Google Antigravity Agent; `worldloom[antigravity]`, GEMINI_API_KEY). `--model` passes through to the harness. |
 | `--model` | Model id. A `gemini-*` id routes to the Gemini provider (`worldloom[gemini]`, GEMINI_API_KEY); anything else — and the default — routes to Anthropic (`worldloom[llm]`, ANTHROPIC_API_KEY). Defaults: `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL` / `GEMINI_DEFAULT_MODEL`. |
 | `--retries` | Rejections the compiler will absorb per section before giving up. |
+| `--yes`, `-y` | Skip the confirmation prompt after the preflight summary. Always skipped when stdin is not a terminal (CI, a script) — the summary is still printed either way. |
 
 ### `worldloom narrate requests`
 
