@@ -8,6 +8,23 @@
   "currency_unit": "millions",
   "annual_revenue": 900,
   "employees": 3500,
+  "system_brands": {
+    "core_banking": "MemberCore",
+    "collateral": "Security Register",
+    "risk_platform": "Prudential Analytics",
+    "reg_portal": "PSA Direct Lodgement",
+    "market_data": "Rates Desk Feed"
+  },
+  "voices": {
+    "cfo": {
+      "voice": "plain-spoken, member-first, precise about obligations",
+      "phrases": ["member value", "within the standard's window"]
+    },
+    "prudential_risk_head": {
+      "voice": "formal, unhurried, immovable on the record",
+      "phrases": ["on the record", "cannot be confirmed from the register"]
+    }
+  },
   "units": [
     {
       "key": "members",

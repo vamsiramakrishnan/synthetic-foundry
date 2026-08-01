@@ -8,6 +8,23 @@
   "currency_unit": "thousands",
   "annual_revenue": 5200000,
   "employees": 6000,
+  "system_brands": {
+    "erp": "Ledgerstone Core",
+    "mdm": "Policy and Claims Register",
+    "platform": "Actuarial Data Platform",
+    "commerce": "Direct Quote Portal",
+    "pos": "Branch Counter System"
+  },
+  "voices": {
+    "cfo": {
+      "voice": "measured, technical about reserves, allergic to surprise",
+      "phrases": ["loss experience", "within appetite", "on a normalised basis"]
+    },
+    "personal_bp": {
+      "voice": "commercial, portfolio-minded, plain about pricing",
+      "phrases": ["earned premium mix", "claims frequency"]
+    }
+  },
   "units": [
     {
       "key": "personal",

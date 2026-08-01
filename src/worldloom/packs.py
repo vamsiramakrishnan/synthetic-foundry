@@ -103,6 +103,19 @@ class PackCommitment(PackModel):
     visibility: Literal["acknowledged", "tacit", "denied"] = "acknowledged"
 
 
+class PackVoice(PackModel):
+    """How one role writes: an override of that role's default persona.
+
+    Voice and favourite phrases only — the persona's numeric temperament
+    (optimism, risk tolerance, political awareness) stays the engine's,
+    because those knobs interact with the deliberate-imperfection machinery
+    in ways a pack author cannot see from outside.
+    """
+
+    voice: str | None = None
+    phrases: list[str] = Field(default_factory=list, max_length=4)
+
+
 class Pack(PackModel):
     """One industry pack. See the module docstring for what it can and cannot do."""
 
@@ -121,6 +134,14 @@ class Pack(PackModel):
     employees: int = Field(gt=0)
     units: list[PackUnit] = Field(min_length=1)
     lore: list[PackCommitment] = Field(default_factory=list)
+    system_brands: dict[str, str] = Field(default_factory=dict)
+    """Brand names for the engine's system slots (``worldloom pack targets``
+    lists them). Brands only: what a system is *for* — the merchandising
+    master, the filing portal — is the engine's episode physics, so the
+    override renames the product without relabelling the concept."""
+    voices: dict[str, PackVoice] = Field(default_factory=dict)
+    """Per-role persona overrides, keyed by the engine's role keys. The
+    highest-leverage texture a pack owns: prose is written in these voices."""
 
     @model_validator(mode="after")
     def _units_sum_to_the_group(self) -> Pack:
@@ -215,6 +236,25 @@ def lint(pack: Pack) -> list[str]:
             f" registered: {', '.join(sorted(domains.names()))}"
         )
         return findings
+
+    slots = dict(domain.system_slots)
+    for slot in sorted(pack.system_brands):
+        if slot not in slots:
+            findings.append(
+                f"system_brands[{slot!r}] names no {pack.base} system slot —"
+                f" slots: {', '.join(sorted(slots))}"
+            )
+    for role in sorted(pack.voices):
+        known = role in domain.role_keys or any(
+            role.endswith(suffix) for suffix in domain.unit_role_suffixes
+        )
+        if not known:
+            findings.append(
+                f"voices[{role!r}] names no {pack.base} role — roles:"
+                f" {', '.join(domain.role_keys)}; per-unit roles end in"
+                f" {', '.join(domain.unit_role_suffixes)} (e.g."
+                f" {pack.units[0].key}{domain.unit_role_suffixes[0]})"
+            )
 
     consulted: dict[str, str] = dict(domain.consulted_targets)
     for index, commitment in enumerate(pack.lore):

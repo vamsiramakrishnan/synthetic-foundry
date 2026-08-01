@@ -91,6 +91,43 @@ def test_pack_worlds_rebuild_from_their_own_recipes(insurer, mutual) -> None:
         ]
 
 
+def test_a_pack_brands_its_systems(insurer, mutual) -> None:
+    """The rename is the brand, never the concept: the insurer's merchandising
+    master answers to an insurance name, and its purpose stays the engine's."""
+    _, world = insurer
+    names = {s.name for s in world.systems}
+    assert "Policy and Claims Register" in names
+    assert "Actuarial Data Platform" in names
+    _, bank = mutual
+    assert "MemberCore" in {s.name for s in bank.systems}
+
+
+def test_a_pack_voices_its_roles(insurer) -> None:
+    """A voiced role writes with a cloned persona — override applied, shared
+    persona untouched, temperament kept."""
+    _, world = insurer
+    cfo = world.people.by_id(world._roles["cfo"])
+    assert cfo.persona_id == "PERSONA-PACK-CFO"
+    voiced = world.personas.by_id("PERSONA-PACK-CFO")
+    assert "reserves" in voiced.voice
+    assert "loss experience" in voiced.favourite_phrases
+    base = world.personas.by_id("PERSONA-CFO")
+    assert "reserves" not in base.voice, "the shared persona is cloned, not edited"
+    assert voiced.optimism == base.optimism, "temperament stays the engine's"
+    # And the per-unit role form works too.
+    bp = world.people.by_id(world._roles["personal_bp"])
+    assert bp.persona_id == "PERSONA-PACK-PERSONAL-BP"
+
+
+def test_the_lint_names_unknown_slots_and_roles() -> None:
+    pack_dict = json.loads(open(INSURER).read())
+    pack_dict["system_brands"]["core_banking"] = "Wrong Engine Brand"
+    pack_dict["voices"]["prudential_risk_head"] = {"voice": "not a retail role"}
+    findings = packs.lint(packs.load(pack_dict))
+    assert any("system_brands['core_banking']" in f for f in findings)
+    assert any("voices['prudential_risk_head']" in f for f in findings)
+
+
 def test_the_lint_names_inert_lore() -> None:
     pack_dict = json.loads(open(INSURER).read())
     pack_dict["lore"].append({

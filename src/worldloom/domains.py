@@ -48,6 +48,17 @@ class Domain:
     as ``(target, what it changes)`` pairs. Published so a pack author — human
     or agent — can see which lore is load-bearing and which would be carried
     but inert; ``worldloom pack check`` lints against this."""
+    system_slots: tuple[tuple[str, str], ...] = ()
+    """The engine's system slots a pack may re-brand, as ``(slot, what the
+    system is)`` pairs. Brands only — the concept each slot plays in the
+    episode is the engine's."""
+    role_keys: tuple[str, ...] = ()
+    """The engine's fixed role keys, for voice overrides and persona-trait
+    lore. Per-unit roles are derived from the pack's own unit keys plus
+    ``unit_role_suffixes``."""
+    unit_role_suffixes: tuple[str, ...] = ()
+    """Suffixes of the roles minted per business unit (``_md`` everywhere;
+    retail adds ``_bp`` and ``_buyer``)."""
 
 
 _DOMAINS: dict[str, Domain] = {}

@@ -66,6 +66,15 @@ banking one). Then:
   Write lore as *causes with dates*: "the 2023 migration carried mappings
   over by hand" is a decision the corpus's own timeline will witness and its
   incident will cite.
+- **Texture: brands and voices.** `system_brands` renames the engine's
+  systems for your industry (slots from `worldloom pack targets` — the
+  insurer example turns the merchandising master into "Policy and Claims
+  Register"); `voices` re-voices any role's prose (`{"cfo": {"voice": ...,
+  "phrases": [...]}}`, role keys and per-unit suffixes from the same
+  command). Know the boundary: brands and voices are yours, but the
+  episode's *concepts* — what fails, what gets filed, what the incident is
+  about — are the engine's, so choose brands that fit the concept rather
+  than fighting it.
 - **Fiction only.** Name the company anything you invent; never a real
   organisation, regulator, or standard. Shape and scale may resemble an
   industry; no figure, person, or fact may resemble a company.

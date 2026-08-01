@@ -18,6 +18,7 @@ topology, and ``persona_trait`` adjusts how specific people write.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from ..ids import Minter
 from ..models import (
@@ -142,6 +143,16 @@ _ROLE_PERSONA = {
 #: Business-unit finance partners all write with the same persona.
 _UNIT_ROLE_PERSONA = {"_md": "PERSONA-EXEC", "_bp": "PERSONA-FIN-BP", "buyer": "PERSONA-MERCH-LEAD"}
 
+
+def _persona_for(role: str) -> str:
+    """The default persona a role writes with — one lookup, used both to
+    assign people and to base a pack's voice override on."""
+    return (
+        _ROLE_PERSONA.get(role)
+        or _UNIT_ROLE_PERSONA.get(role[-3:])
+        or _UNIT_ROLE_PERSONA["buyer"]
+    )
+
 def _merch_unit(unit_ids: dict[str, str]) -> str:
     """Which unit merchandising systems sits under.
 
@@ -158,12 +169,16 @@ def generate(
     archetype,  # type: ignore[no-untyped-def]
     lore: tuple[LoreCommitment, ...] = (),
     company_name: str | None = None,
+    system_brands: dict[str, str] | None = None,
+    voices: dict[str, Any] | None = None,
 ) -> Organisation:
     """Build the organisation for an archetype. Same seed, same graph, same IDs.
 
-    ``company_name`` lets a pack name its own fiction. The generated name is
-    still drawn either way, so a pack that names the company never reshuffles
-    a single downstream draw relative to one that does not.
+    ``company_name`` lets a pack name its own fiction; ``system_brands``
+    re-brands system slots (keys per ``names.system_names``); ``voices`` maps
+    role keys to voice overrides (``packs.PackVoice``-shaped). Every generated
+    value is still drawn either way, so a pack that overrides any of them
+    never reshuffles a single downstream draw relative to one that does not.
     """
     company_rng = rng.derive("company")
     company_id = minter.next("CO")
@@ -193,6 +208,14 @@ def generate(
     finance_cc = minter.next("CC")
     platform_cc = minter.next("CC")
 
+    # A voiced role writes with a pack persona — a clone of its default one,
+    # built after the defaults below. The ids are derivable from the role
+    # alone, which is what lets `assign` name them before the clones exist.
+    pack_voice_ids = {
+        role: f"PERSONA-PACK-{role.upper().replace('_', '-')}"
+        for role in (voices or {})
+    }
+
     def assign(role: str, title: str, function: str):  # type: ignore[no-untyped-def]
         """Retail's one decision per person: unit by role-key convention, cost
         centre by function, persona by role then unit-role suffix."""
@@ -208,12 +231,7 @@ def generate(
             else platform_cc if title.endswith(("Engineer", "Data Platform"))
             else None
         )
-        persona = (
-            _ROLE_PERSONA.get(role)
-            or _UNIT_ROLE_PERSONA.get(role[-3:])
-            or _UNIT_ROLE_PERSONA["buyer"]
-        )
-        return business_unit, cost_centre, persona
+        return business_unit, cost_centre, pack_voice_ids.get(role) or _persona_for(role)
 
     role_ids, people = mint_people(rng, minter, role_table, depth_of, assign=assign)
     people = wire_managers(people, role_table, role_ids)
@@ -226,7 +244,9 @@ def generate(
         buyers={unit.key: role_ids[f"{unit.key}_buyer"] for unit in units},
     )
 
-    system_names = names.system_names(rng.derive("systems"))
+    # Drawn first, then re-branded: a pack renames the products, never the
+    # roles the systems play in the episode.
+    system_names = {**names.system_names(rng.derive("systems")), **(system_brands or {})}
     erp, mdm, platform, commerce, pos = (minter.next("SYS") for _ in range(5))
     systems = (
         System(id=erp, name=system_names["erp"], purpose="Group finance system of record",
@@ -274,6 +294,24 @@ def generate(
         )
         for persona_id, label, voice, complexity, depth, optimism, risk, political, phrases in _PERSONAS
     )
+    # Pack voices: each voiced role gets a clone of its default persona with
+    # the voice and phrases swapped — a clone per role rather than an edit of
+    # the shared persona, so voicing the CFO never re-voices everyone who
+    # shares the CFO's register. Numeric temperament stays the engine's.
+    if voices:
+        by_id = {p.id: p for p in personas}
+        clones = []
+        for role, spec in sorted(voices.items()):
+            if role not in role_ids:
+                continue  # linted upstream; an unknown role must not orphan a persona
+            base = by_id[_persona_for(role)]
+            clones.append(base.model_copy(update={
+                "id": pack_voice_ids[role],
+                "label": f"{base.label} ({role})",
+                "voice": spec.voice or base.voice,
+                "favourite_phrases": list(spec.phrases) or list(base.favourite_phrases),
+            }))
+        personas += tuple(clones)
     people = apply_traits(people, lore, role_ids)
 
     cost_centres = (

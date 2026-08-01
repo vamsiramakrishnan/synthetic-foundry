@@ -690,7 +690,8 @@ The first executable is `worldloom demo retail-close`, not `worldloom interview`
 - [x] The second vertical: banking (`BankingWorld` + `QuarterlyCapitalReturn` — the challenged, restated capital return), with zero core model changes; decision recorded in [docs/build-order.md](docs/build-order.md) §7
 - [ ] Domain modules and the industry-pack interface, extracted from two verticals rather than guessed
 - [x] Industry packs: archetype and lore as agent-authorable JSON (`worldloom pack`), embedded in the recipe, linted against each engine's consulted targets
-- [ ] Name pools, personas, and terminology in packs (today they stay engine-owned)
+- [x] Pack texture: system brands and per-role prose voices, with each engine publishing its slots and roles
+- [ ] Name pools and terminology in packs (today they stay engine-owned)
 - [ ] Socratic world composer, with replay and an assumption ledger
 - [ ] Scenario DSL and artifact recipes
 - [x] Bounded fan-out, first slice: minutes, email threads, and per-unit commentary projected from each episode's own facts, in both verticals

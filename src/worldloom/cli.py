@@ -1320,9 +1320,18 @@ def pack_targets(
             continue
         domain = domains.by_name(name)
         console.print(f"[bold]{name}[/bold]")
+        console.print("  [underline]lore targets[/underline]")
         for target, effect in domain.consulted_targets:
-            console.print(f"  {target}\n    [dim]{effect}[/dim]")
-        console.print("  <role>/<trait>\n    [dim]persona_trait: adjusts how that role's holder writes[/dim]")
+            console.print(f"    {target}\n      [dim]{effect}[/dim]")
+        console.print("    <role>/<trait>\n      [dim]persona_trait: adjusts how that role's holder writes[/dim]")
+        console.print("  [underline]system slots (system_brands keys)[/underline]")
+        for slot, what in domain.system_slots:
+            console.print(f"    {slot}\n      [dim]{what}[/dim]")
+        console.print(
+            "  [underline]roles (voices keys, persona_trait targets)[/underline]\n"
+            f"    {', '.join(domain.role_keys)}\n"
+            f"    [dim]plus one per unit key with suffix {', '.join(domain.unit_role_suffixes)}[/dim]"
+        )
 
 
 @pack_app.command("template")

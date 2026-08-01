@@ -243,6 +243,8 @@ class RetailWorld:
             rng.derive("organisation"), minter,
             archetype=self.archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
+            system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
+            voices=dict(self.pack.voices) if self.pack is not None else None,
         )
 
         return World(
@@ -281,11 +283,22 @@ class RetailWorld:
 # flattening them into the shared interface.
 from .domains import Domain, register_domain
 
+from .generators.organisation import _ROLES as _RETAIL_ROLES
+
 register_domain(Domain(
     name="retail",
     archetype_keys=frozenset({AUSTRALIAN_GROCERY.key, OMNICHANNEL_RETAILER.key}),
     world=RetailWorld,
     consulted_targets=CONSULTED_TARGETS,
+    system_slots=(
+        ("erp", "group finance system of record"),
+        ("mdm", "master data: products, categories, the hierarchy the incident corrupts"),
+        ("platform", "analytical data platform running the valuation pipeline"),
+        ("commerce", "online storefront and checkout"),
+        ("pos", "in-store point of sale"),
+    ),
+    role_keys=tuple(row[0] for row in _RETAIL_ROLES),
+    unit_role_suffixes=("_md", "_bp", "_buyer"),
 ))
 
 

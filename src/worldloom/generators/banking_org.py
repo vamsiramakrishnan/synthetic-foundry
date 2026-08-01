@@ -160,13 +160,18 @@ def generate(
     archetype,  # type: ignore[no-untyped-def]
     lore: tuple[LoreCommitment, ...] = (),
     company_name: str | None = None,
+    system_brands: dict[str, str] | None = None,
+    voices: dict[str, Any] | None = None,
 ) -> BankOrganisation:
     """Build the bank for an archetype. Same seed, same graph, same ids.
 
-    ``company_name`` lets a pack name its fiction; the generated name is drawn
-    regardless so the override never reshuffles a downstream stream.
+    ``company_name``, ``system_brands`` and ``voices`` are the pack override
+    trio — see ``organisation.generate``. Overrides can never reshuffle a
+    downstream stream: the company name is drawn regardless, and each system
+    name comes from its own derived stream that nothing else reads.
     """
     company_rng = rng.derive("company")
+    brands = system_brands or {}
     company_id = minter.next("CO")
     units = archetype.units
     unit_ids = {unit.key: minter.next("BU") for unit in units}
@@ -178,6 +183,13 @@ def generate(
 
     finance_cc = minter.next("CC")
     risk_cc = minter.next("CC")
+
+    # See organisation.py: voiced roles write with pack personas, cloned from
+    # their defaults after the default tuple is built.
+    pack_voice_ids = {
+        role: f"PERSONA-PACK-{role.upper().replace('_', '-')}"
+        for role in (voices or {})
+    }
 
     def assign(role: str, title: str, function: str):  # type: ignore[no-untyped-def]
         """Banking's one decision per person: MDs sit in their unit and the
@@ -193,7 +205,8 @@ def generate(
             else risk_cc if function in ("Risk", "Technology")
             else None
         )
-        return business_unit, cost_centre, _ROLE_PERSONA.get(role, "PERSONA-BANK-EXEC")
+        persona = pack_voice_ids.get(role) or _ROLE_PERSONA.get(role, "PERSONA-BANK-EXEC")
+        return business_unit, cost_centre, persona
 
     role_ids, people = mint_people(rng, minter, role_table, depth_of, assign=assign)
     people = wire_managers(people, role_table, role_ids)
@@ -218,24 +231,30 @@ def generate(
     risk_platform = minter.next("SYS")
     reg_portal = minter.next("SYS")
     market_data = minter.next("SYS")
+    # Drawn first, then re-branded — the pack override trio's rule.
     systems = (
-        System(id=core, name=company_rng.derive("core").choice(_CORE),
+        System(id=core,
+               name=brands.get("core_banking") or company_rng.derive("core").choice(_CORE),
                purpose="Core banking ledger and general ledger of record",
                owner_id=role_ids["controller"],
                is_system_of_record_for=["general_ledger", "financial_reporting"]),
-        System(id=collateral, name=company_rng.derive("collateral").choice(_COLLATERAL),
+        System(id=collateral,
+               name=brands.get("collateral") or company_rng.derive("collateral").choice(_COLLATERAL),
                purpose="Collateral management: security interests and revaluation schedules",
                owner_id=role_ids["credit_risk_lead"],
                is_system_of_record_for=["collateral_valuations"]),
-        System(id=risk_platform, name=company_rng.derive("risk").choice(_RISK),
+        System(id=risk_platform,
+               name=brands.get("risk_platform") or company_rng.derive("risk").choice(_RISK),
                purpose="Risk data aggregation for capital and liquidity calculation",
                owner_id=role_ids["platform_lead"],
                is_system_of_record_for=["risk_weighted_assets", "liquidity_coverage"]),
-        System(id=reg_portal, name=company_rng.derive("portal").choice(_PORTAL),
+        System(id=reg_portal,
+               name=brands.get("reg_portal") or company_rng.derive("portal").choice(_PORTAL),
                purpose="Regulatory filing portal; a lodged return is immutable here",
                owner_id=role_ids["reg_reporting_manager"],
                is_system_of_record_for=["regulatory_filings"]),
-        System(id=market_data, name=company_rng.derive("market").choice(_MARKET),
+        System(id=market_data,
+               name=brands.get("market_data") or company_rng.derive("market").choice(_MARKET),
                purpose="Market data and end-of-day FX rates",
                owner_id=role_ids["platform_senior"],
                is_system_of_record_for=["fx_rates"]),
@@ -279,6 +298,20 @@ def generate(
         )
         for persona_id, label, voice, complexity, depth, optimism, risk, political, phrases in _PERSONAS
     )
+    if voices:
+        by_id = {p.id: p for p in personas}
+        clones = []
+        for role, spec in sorted(voices.items()):
+            if role not in role_ids:
+                continue  # linted upstream; an unknown role must not orphan a persona
+            base = by_id[_ROLE_PERSONA.get(role, "PERSONA-BANK-EXEC")]
+            clones.append(base.model_copy(update={
+                "id": pack_voice_ids[role],
+                "label": f"{base.label} ({role})",
+                "voice": spec.voice or base.voice,
+                "favourite_phrases": list(spec.phrases) or list(base.favourite_phrases),
+            }))
+        personas += tuple(clones)
     people = apply_traits(people, lore, role_ids)
 
     cost_centres = (

@@ -290,6 +290,8 @@ class BankingWorld:
             rng.derive("organisation"), minter,
             archetype=self.archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
+            system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
+            voices=dict(self.pack.voices) if self.pack is not None else None,
         )
 
         return World(
@@ -560,12 +562,23 @@ validate_module.register_domain_checks("banking", _checks)
 from .banking_scenarios import QuarterlyCapitalReturn  # noqa: E402
 from .domains import Domain, register_domain  # noqa: E402
 
+from .generators.banking_org import _ROLES as _BANKING_ROLES  # noqa: E402
+
 register_domain(Domain(
     name="banking",
     archetype_keys=BANKING_ARCHETYPES,
     world=BankingWorld,
     single_episode=QuarterlyCapitalReturn,
     consulted_targets=CONSULTED_TARGETS,
+    system_slots=(
+        ("core_banking", "core banking ledger and general ledger of record"),
+        ("collateral", "collateral register whose stale mapping causes the error"),
+        ("risk_platform", "risk aggregation platform computing capital and liquidity"),
+        ("reg_portal", "regulatory filing portal where a lodged return is immutable"),
+        ("market_data", "market data and FX rates, named by the wrong hypothesis"),
+    ),
+    role_keys=tuple(row[0] for row in _BANKING_ROLES),
+    unit_role_suffixes=("_md",),
 ))
 
 

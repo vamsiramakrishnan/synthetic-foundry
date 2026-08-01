@@ -73,6 +73,12 @@ One coherent enterprise, taken all the way through. Two, in fact.
   which lore each engine actually consults, `pack check` lints inert
   commitments by name, and `build --pack` builds it. The pack embeds in the
   corpus recipe, so a pack-built corpus rebuilds itself with no pack file.
+  Packs also own their texture: ``system_brands`` renames the engine's
+  systems for the industry, and ``voices`` re-voices any role's prose —
+  applied as per-role persona clones, so a voiced CFO never re-voices
+  everyone sharing the CFO's register, and numeric temperament stays the
+  engine's. Each engine publishes its slots and role keys through
+  ``worldloom pack targets``, and the lint names unknown keys.
   Shipped references: a general insurer on the close engine and a mutual bank
   on the challenged-return engine, both exercised in tests. Authoring the
   first packs surfaced and fixed three archetype-coupling leaks the telco
