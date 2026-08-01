@@ -57,6 +57,10 @@ from .retail import RetailWorld
 from .banking import BankingWorld
 from .banking_scenarios import QuarterlyCapitalReturn
 
+# Same contract as the banking imports above, for the third vertical.
+from .insurance import InsuranceWorld
+from .insurance_scenarios import QuarterlyReserving
+
 # Same contract as the banking imports above: importing this is what registers
 # the `routine_notice` artifact type (build --distractors's plainest family),
 # and a corpus that carries one must compile identically whether this process
@@ -72,6 +76,8 @@ __all__ = [
     "MonthEndClose",
     "BankingWorld",
     "QuarterlyCapitalReturn",
+    "InsuranceWorld",
+    "QuarterlyReserving",
     # entities
     "Company",
     "BusinessUnit",

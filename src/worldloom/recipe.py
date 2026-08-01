@@ -22,6 +22,7 @@ That works only if the corpus knows how to rebuild itself.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -32,7 +33,11 @@ class RecipeError(Exception):
     """Raised when a corpus cannot be rebuilt from what it carries."""
 
 
-#: Scenario verbs a recipe may record, and the argument names each takes.
+#: Scenario verbs a recipe may record, and the argument names each takes —
+#: the retail close loop's own scenarios, hardcoded here because each takes a
+#: genuinely different, bespoke set of keyword arguments (``MonthEndClose``'s
+#: five bear no resemblance to ``Hire``'s) rather than one uniform shape a
+#: registry entry could describe generically.
 #:
 #: A closed vocabulary, like ``ConstraintKind`` and the scheduler's route
 #: conditions: a recipe may only name a scenario the rebuilder knows how to run,
@@ -44,7 +49,6 @@ STEPS: dict[str, tuple[str, ...]] = {
     "Hire": ("period", "role_key", "title", "function", "unit_key"),
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
-    "QuarterlyCapitalReturn": ("period",),
     # Not a scenario in the sense the others are — it mints no event and no
     # fact, only documents over what already happened — but it rides the same
     # step list for the same reason `--incident`/`--comparatives` do: a corpus
@@ -52,6 +56,40 @@ STEPS: dict[str, tuple[str, ...]] = {
     # silently rebuild a cleaner world than the one that shipped.
     "Distractors": ("count",),
 }
+
+#: Single-episode verticals' own scenario, by name — banking's
+#: ``QuarterlyCapitalReturn`` and insurance's ``QuarterlyReserving``, and
+#: whatever a fourth vertical registers. ``QuarterlyReserving`` was the third
+#: such literal this module would otherwise have carried (banking's own
+#: two-line edit having already landed the first two: a ``STEPS`` entry and
+#: an ``elif`` branch), which is the rule-of-three trigger the design record
+#: for the insurance vertical names: a domain module calls
+#: ``register_step(name, arg_names, build)`` from its own file — never from
+#: here — at package import, the same seam ``domains.register_domain`` and
+#: ``validate.register_domain_checks`` already use, so a third (and every
+#: later) vertical's recipe verb costs this module nothing. ``build`` is the
+#: scenario class itself: every single-episode vertical's scenario currently
+#: takes exactly ``period``, constructed as ``build(period=...)``, so one
+#: calling convention serves every registrant without this module needing to
+#: know any of their names.
+_STEP_REGISTRY: dict[str, tuple[tuple[str, ...], Callable[..., Any]]] = {}
+
+
+def register_step(name: str, arg_names: tuple[str, ...], build: Callable[..., Any]) -> None:
+    """Register a single-episode vertical's scenario as a recipe verb.
+
+    Idempotent for an identical re-registration (a module reload); a second,
+    different registration under one name is refused — the same posture
+    ``domains.register_domain`` takes, for the same reason: two domains
+    disagreeing about what a name means would make a recipe's meaning depend
+    on import order.
+    """
+    existing = _STEP_REGISTRY.get(name)
+    if existing is not None:
+        if existing == (arg_names, build):
+            return
+        raise RecipeError(f"a different step is already registered as {name!r}")
+    _STEP_REGISTRY[name] = (arg_names, build)
 
 
 def build_recipe(
@@ -92,9 +130,16 @@ def with_step(recipe: dict[str, Any], scenario: str, **arguments: Any) -> dict[s
     on one world are not the same world as one close run three times, and a
     departure between them changes who signs the third.
     """
-    if scenario not in STEPS:
-        raise RecipeError(f"unknown scenario {scenario!r}; add it to recipe.STEPS first")
-    unknown = set(arguments) - set(STEPS[scenario])
+    if scenario in STEPS:
+        arg_names = STEPS[scenario]
+    elif scenario in _STEP_REGISTRY:
+        arg_names, _ = _STEP_REGISTRY[scenario]
+    else:
+        raise RecipeError(
+            f"unknown scenario {scenario!r}; add it to recipe.STEPS or register it"
+            " with recipe.register_step first"
+        )
+    unknown = set(arguments) - set(arg_names)
     if unknown:
         raise RecipeError(f"{scenario} does not take {sorted(unknown)}")
     return {**recipe, "steps": [*recipe.get("steps", ()), {"scenario": scenario, **arguments}]}
@@ -114,7 +159,6 @@ def rebuild(
     the scripted fake, a paused handshake, or nothing at all.
     """
     from . import archetypes, domains
-    from .banking_scenarios import QuarterlyCapitalReturn
     from .generators import distractors
     from .scenarios import Departure, Hire, MonthEndClose, Reorganisation
 
@@ -203,10 +247,12 @@ def rebuild(
                     new_leader_role=step["new_leader_role"],
                 )
             )
-        elif name == "QuarterlyCapitalReturn":
-            world = world.run(QuarterlyCapitalReturn(period=step["period"]))
         elif name == "Distractors":
             world = distractors.apply(world, count=step["count"])
+        elif name in _STEP_REGISTRY:
+            _, build = _STEP_REGISTRY[name]
+            kwargs = {key: value for key, value in step.items() if key != "scenario"}
+            world = world.run(build(**kwargs))
         else:
             raise RecipeError(f"unknown scenario {name!r} in recipe")
     return world
@@ -217,4 +263,7 @@ def has_actor_step(recipe: dict[str, Any]) -> bool:
     return any(step.get("actors") for step in recipe.get("steps", ()))
 
 
-__all__ = ["RecipeError", "STEPS", "build_recipe", "has_actor_step", "rebuild", "with_step"]
+__all__ = [
+    "RecipeError", "STEPS", "build_recipe", "has_actor_step", "rebuild",
+    "register_step", "with_step",
+]

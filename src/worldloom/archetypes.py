@@ -263,10 +263,80 @@ MIDSIZE_ADI = Archetype(
 )
 
 
+def _personal_lines_books() -> tuple[CategorySpec, ...]:
+    """Personal lines products, share of the unit's gross written premium.
+
+    ``margin`` here stands in for the same slot a retail category uses for
+    gross margin — general insurance's nearest analogue is the underwriting
+    margin implied by the combined ratio, not a real one this generator reads;
+    only ``share`` is consulted, by the triangle generator's roll-up.
+    """
+    return (
+        CategorySpec("Motor", 0.55, 0.08),
+        CategorySpec("Home", 0.35, 0.10),
+        CategorySpec("Travel", 0.10, 0.05),
+    )
+
+
+def _commercial_lines_books() -> tuple[CategorySpec, ...]:
+    """Commercial lines products. ``Public and Products Liability`` is the
+    long-tail book the reserving episode's error lands on — thin margin and a
+    volatile pattern, the two things that make a liability book the one a
+    revaluation-style distortion would actually hurt."""
+    return (
+        CategorySpec("Public and Products Liability", 0.30, 0.03),
+        CategorySpec("Commercial Property", 0.45, 0.09),
+        CategorySpec("Professional Indemnity", 0.25, 0.04),
+    )
+
+
+#: A mid-size Australian general insurer. Shape only, like the grocer and the
+#: bank: the scale is the sector's, the books are generic general-insurance
+#: lines, and every figure is generated from a seed. No real insurer, standard,
+#: or regulator is named (see ``worldloom.insurance``).
+MIDSIZE_GENERAL_INSURER = Archetype(
+    key="midsize_general_insurer",
+    label="Mid-size Australian general insurer",
+    industry="General insurance",
+    currency="AUD",
+    currency_unit="millions",
+    fiscal_year_start_month=7,
+    # Gross written premium, in millions — the insurer's analogue of revenue.
+    annual_revenue=1_800,
+    employees=3_500,
+    units=(
+        UnitSpec(
+            key="personal", name="Personal Lines", kind="personal_lines", share=0.55,
+            categories=_personal_lines_books(),
+            site_formats=(
+                SiteFormat("Branch", 20, 1.00),
+                # A claims centre processes claims, not premium — the same
+                # zero-revenue-weight shape hierarchy.py already documents for
+                # a distribution centre.
+                SiteFormat("Claims Centre", 3, 0.0),
+            ),
+        ),
+        UnitSpec(
+            key="commercial", name="Commercial Lines", kind="commercial_lines", share=0.35,
+            categories=_commercial_lines_books(),
+            site_formats=(SiteFormat("Underwriting Office", 6, 2.0),),
+        ),
+        UnitSpec(
+            # No books and no sites, the same honest-empty-tuple shape as
+            # banking's treasury desk: an investment function's income is not
+            # decomposed by product book.
+            key="investments", name="Group Investments", kind="investments", share=0.10,
+            categories=(),
+        ),
+    ),
+)
+
+
 _REGISTRY: dict[str, Archetype] = {
     AUSTRALIAN_GROCERY.key: AUSTRALIAN_GROCERY,
     OMNICHANNEL_RETAILER.key: OMNICHANNEL_RETAILER,
     MIDSIZE_ADI.key: MIDSIZE_ADI,
+    MIDSIZE_GENERAL_INSURER.key: MIDSIZE_GENERAL_INSURER,
 }
 
 #: What `inspired_by` accepts, and the archetype each phrase resolves to.
@@ -292,6 +362,11 @@ _INSPIRATION: dict[str, str] = {
     # Not the bare acronym "adi": three letters that occur inside ordinary
     # words ("trading") would hijack descriptions that never mention a bank.
     "deposit-taking institution": "midsize_adi",
+    "insurer": "midsize_general_insurer",
+    "insurance": "midsize_general_insurer",
+    "general insurer": "midsize_general_insurer",
+    "australian insurer": "midsize_general_insurer",
+    "general insurance": "midsize_general_insurer",
 }
 
 

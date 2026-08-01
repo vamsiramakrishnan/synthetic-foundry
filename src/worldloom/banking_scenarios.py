@@ -159,4 +159,14 @@ class QuarterlyCapitalReturn:
         )
 
 
+# The recipe verb: registered here, from banking's own module, rather than
+# as a literal in `recipe.py` — the seam `recipe.register_step` provides so
+# a vertical's scenario name never has to be taught to core a second time.
+# `QuarterlyCapitalReturn(period=...)` is the same call `with_step`'s
+# stored arguments already reconstruct, so the class itself is the builder.
+from . import recipe as _recipe  # noqa: E402
+
+_recipe.register_step("QuarterlyCapitalReturn", ("period",), QuarterlyCapitalReturn)
+
+
 __all__ = ["QuarterlyCapitalReturn"]

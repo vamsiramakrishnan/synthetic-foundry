@@ -124,6 +124,22 @@ jobs:
             --replay "${{ runner.temp }}/bank" $FORMATS --out "${{ runner.temp }}/bank-again"
           diff -r "${{ runner.temp }}/bank" "${{ runner.temp }}/bank-again"
 
+      # The third vertical, increment 1: phase 1 only, one valuation quarter.
+      # Same shape as the banking step above — build, narrate, render,
+      # validate, evaluate, replay byte-for-byte — because a corpus that only
+      # worked through the Python API would be a vertical the tool's own
+      # front door cannot reach.
+      - name: The insurance vertical validates and replays
+        run: |
+          FORMATS="-f xlsx -f docx -f markdown"
+          worldloom build --seed 8128 --archetype midsize_general_insurer --narrate $FORMATS \
+            --out "${{ runner.temp }}/insurance"
+          worldloom validate "${{ runner.temp }}/insurance"
+          worldloom evaluate "${{ runner.temp }}/insurance"
+          worldloom build --seed 8128 --archetype midsize_general_insurer \
+            --replay "${{ runner.temp }}/insurance" $FORMATS --out "${{ runner.temp }}/insurance-again"
+          diff -r "${{ runner.temp }}/insurance" "${{ runner.temp }}/insurance-again"
+
       # The shipped example packs, end to end: authored worlds through
       # unmodified engines. The greps assert the texture genuinely landed —
       # the insurer's incident speaks claims language, the mutual bank's

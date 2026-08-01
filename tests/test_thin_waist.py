@@ -64,6 +64,10 @@ ENGINE_VOCABULARY: tuple[str, ...] = (
     "capital.", "liquidity.", "review.challenge", "regulatory.notification",
     "capital_return", "rwa_working_paper", "second_line_challenge_memo",
     "internal_audit_review", "board_risk_committee_summary", "midsize_adi",
+    # insurance
+    "reserves.", "claims.", "reserve_triangle_workbook", "claims_emergence_note",
+    "actuarial_valuation_report", "margin_decision_memo", "midsize_general_insurer",
+    "QuarterlyReserving",
     # retail
     "finance_workbook", "cfo_variance_memo", "executive_summary",
     "servicenow_incident", "confluence_page", "close_calendar", "incident_rca",
@@ -117,8 +121,6 @@ EXCEPTIONS: dict[tuple[str, str], str] = {
     ("render/bundles.py", "knowledge_article"): "Confluence page-type set seed",
     ("render/bundles.py", "working_note"): "Confluence page-type set seed",
     ("recipe.py", "MonthEndClose"):
-        "the closed scenario vocabulary and its dispatch — the registry itself",
-    ("recipe.py", "QuarterlyCapitalReturn"):
         "the closed scenario vocabulary and its dispatch — the registry itself",
 
     # -- recorded debt: real coupling, extraction named.
