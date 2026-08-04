@@ -251,6 +251,20 @@ class BankingWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    role_table: tuple[tuple[str, str, str, str | None], ...] | None = None
+    """Who exists in this organisation (``worldloom.roles``).
+
+    ``None`` is the engine's own table, which is what every world built before
+    this field existed used. A supplied one must have passed ``roles.check``:
+    several of its keys are looked up by name in generator code, and a table
+    missing one raises ``KeyError`` part-way through an episode rather than
+    building a different company.
+
+    Carried on the recipe as a whole table rather than as the shape it came
+    from, for the reason the pack is embedded whole: a corpus that could only
+    be rebuilt by whoever still had the probe that derived it would fail the
+    reason recipes exist."""
+
     physics: Parameters = DEFAULT
     """The world physics ``build`` draws the organisation from.
 
@@ -305,6 +319,7 @@ class BankingWorld:
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
             physics=self.physics,
+            role_table=self.role_table,
         )
 
         return World(
@@ -334,6 +349,7 @@ class BankingWorld:
                 annual_revenue=self.annual_revenue,
                 pack=self.pack,
                 physics=self.physics,
+                role_table=self.role_table,
             ),
         )
 

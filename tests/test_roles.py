@@ -12,9 +12,18 @@ from worldloom.roles import ROOT, SPINE, Role, from_shape, measure, review
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "worldloom"
 
-#: Literal `roles["key"]` lookups, excluding `colour_roles`, which is the
-#: renderer's palette and has nothing to do with people.
-_LOOKUP = re.compile(r'(?<!colour_)roles(?:\.get)?\(?\[\s*"([a-z0-9_]+)"\s*\]')
+#: Every literal role lookup, whatever the mapping is called.
+#:
+#: `roles[...]` alone is not enough and the first version of this test believed
+#: it was — `organisation.generate` resolves `role_ids["merch_lead"]` from the
+#: map it has just built, so `merch_lead` was load-bearing and reported free. A
+#: synthesised organisation without it raised KeyError from inside the
+#: generator, which is precisely the failure the spine exists to make
+#: impossible. `colour_roles` is excluded: it is the renderer's palette and has
+#: nothing to do with people.
+_LOOKUP = re.compile(
+    r'(?<!colour_)\b(?:roles|role_ids|_roles|by_role)(?:\.get)?\(?\[\s*"([a-z0-9_]+)"\s*\]'
+)
 
 #: A role table row: `("key", "Title", "Function", "manager")`.
 _ROW = re.compile(r'^\s*\("([a-z0-9_]+)",\s*"[^"]', re.M)
@@ -185,17 +194,38 @@ def test_a_synthesised_organisation_is_buildable_not_merely_plausible() -> None:
     assert review(list(table), engine="retail", unit_keys=("north",)) == []
 
 
-def test_a_synthesised_organisation_has_the_shape_it_was_asked_for() -> None:
-    # `measure` is what lets a handshake refuse a claimed shape rather than
-    # taking it on trust.
+@pytest.mark.parametrize(
+    ("headcount", "span", "levels"),
+    [(23, 5, 4), (40, 4, 5), (60, 8, 3), (35, 3, 6), (90, 9, 4), (200, 6, 5)],
+)
+def test_a_synthesised_organisation_has_exactly_the_shape_it_was_asked_for(
+    headcount: int, span: int, levels: int,
+) -> None:
+    """All three numbers, not two of them.
+
+    The first version of this asserted `levels <= 4` and passed while building
+    trees two levels deep for every shape asked of it — the fill ran out of
+    people part-way down and reported success. `measure` exists so a handshake
+    can refuse a shape that does not match its claim, which made a synthesiser
+    quietly producing one the worst possible caller of it. Measurement caught
+    it; an inequality had hidden it.
+    """
     table = from_shape(
-        functions=("Executive", "Finance", "Technology"),
-        headcount=40, span=4, levels=4, engine="retail", unit_keys=("north",),
+        functions=("Executive", "Finance", "Technology", "Operations"),
+        headcount=headcount, span=span, levels=levels,
+        engine="retail", unit_keys=("north",),
     )
     shape = measure(table)
-    assert shape["headcount"] == 40
-    assert shape["widest_span"] <= 4
-    assert shape["levels"] <= 4
+    assert shape["headcount"] == headcount
+    assert shape["levels"] == levels
+    assert shape["widest_span"] <= span
+    assert review(list(table), engine="retail", unit_keys=("north",)) == []
+
+
+def test_a_tree_deeper_than_it_has_people_for_is_refused() -> None:
+    with pytest.raises(ValueError, match="one per level"):
+        from_shape(functions=("Executive",), headcount=30, span=2, levels=40,
+                   engine="insurance")
 
 
 def test_the_same_shape_synthesises_the_same_table_every_time() -> None:
@@ -236,6 +266,84 @@ def test_measuring_the_shipped_retail_table_reports_a_real_organisation() -> Non
     shape = measure(roles_module.from_rows(organisation._ROLES))
     assert shape["headcount"] == len(organisation._ROLES)
     assert shape["levels"] >= 2, "a two-level company is not an organisation"
+
+
+@pytest.mark.parametrize(
+    ("headcount", "span", "levels"), [(14, 4, 3), (25, 4, 5), (31, 9, 3)],
+)
+def test_a_synthesised_organisation_actually_builds_a_world(
+    headcount: int, span: int, levels: int,
+) -> None:
+    """The check `review` cannot make on its own.
+
+    `review` knows the spine; it does not know that the spine was derived by a
+    regex. The first version of that regex matched only `roles[...]` and missed
+    `role_ids["merch_lead"]`, so a table passing every grammar check raised
+    KeyError from inside the generator — the exact failure the spine exists to
+    prevent, surviving because nothing built anything. This is the test that
+    closes the loop between the two, and it is slow on purpose.
+    """
+    from worldloom.retail import RetailWorld
+    from worldloom.scenarios import MonthEndClose
+
+    table = roles_module.to_rows(from_shape(
+        functions=("Executive", "Finance", "Technology", "Operations", "Merchandising"),
+        headcount=headcount, span=span, levels=levels, engine="retail",
+    ))
+    world = RetailWorld(seed=8128, role_table=table).build()
+    world = world.run(MonthEndClose(period="2026-03", include_operational_incident=True))
+    report = world.validate()
+    assert report.ok, [str(v) for v in report.violations[:5]]
+    # The per-unit roles are the generator's to append, not an author's to
+    # supply — so headcount grows by three per business unit and that is not a
+    # broken claim, it is the division of labour.
+    assert len(world.people) > headcount
+
+
+def test_the_default_name_pools_cap_how_large_an_organisation_can_be() -> None:
+    """A ceiling worth stating rather than discovering.
+
+    `from_shape` will happily synthesise nine hundred people and `review` will
+    pass it, because neither knows the engine draws distinct names from a pool
+    of forty. The build then fails — clearly, which is why this is a documented
+    limit rather than a defect — but an author reading `from_shape`'s docstring
+    has no way to anticipate it. A pack raises the ceiling through
+    `Pack.name_pools`; nothing else does.
+    """
+    from worldloom.generators.names import FAMILY, GIVEN
+    from worldloom.retail import RetailWorld
+
+    ceiling = min(len(GIVEN), len(FAMILY))
+    assert ceiling == 40, "if this moved, the guidance below moved with it"
+
+    table = roles_module.to_rows(from_shape(
+        functions=("Executive", "Finance"), headcount=ceiling + 20, span=6,
+        levels=3, engine="retail",
+    ))
+    assert review(list(roles_module.from_rows(table)), engine="retail") == []
+    with pytest.raises(ValueError, match="name pools hold"):
+        RetailWorld(seed=8128, role_table=table).build()
+
+
+def test_an_authored_organisation_rebuilds_from_its_recipe() -> None:
+    from worldloom import recipe as recipe_module
+    from worldloom.retail import RetailWorld
+
+    table = roles_module.to_rows(from_shape(
+        functions=("Executive", "Finance", "Technology"),
+        headcount=30, span=5, levels=3, engine="retail",
+    ))
+    built = RetailWorld(seed=8128, role_table=table).build()
+    assert "role_table" in built.recipe
+    rebuilt = recipe_module.rebuild(built.recipe)
+    assert [(p.title, p.function) for p in rebuilt.people] == \
+           [(p.title, p.function) for p in built.people]
+
+
+def test_a_default_build_records_no_role_table() -> None:
+    from worldloom.retail import RetailWorld
+
+    assert "role_table" not in RetailWorld(seed=8128).build().recipe
 
 
 def test_rows_round_trip() -> None:

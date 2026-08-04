@@ -108,6 +108,7 @@ def build_recipe(
     pack: Any = None,
     estate: str | None = None,
     physics: Any = None,
+    role_table: Any = None,
 ) -> dict[str, Any]:
     """The recipe for a freshly built world, before any scenario has run.
 
@@ -132,6 +133,8 @@ def build_recipe(
         # engine's, so a recipe built with `--physics` whose file happened to
         # restate the defaults is byte-identical to one built without it.
         **_physics_payload(physics),
+        # Same conditional rule: the whole table, only when one was authored.
+        **({} if role_table is None else {"role_table": [list(row) for row in role_table]}),
         "steps": [],
     }
 
@@ -196,6 +199,29 @@ def _under(spec: Any, physics: Any, default: Any) -> Any:
         ) from exc
 
 
+def _with_roles(spec: Any, role_table: Any) -> Any:
+    """*spec* rebound to an authored role table, or untouched when there is none.
+
+    Same posture as ``_under``: a domain registered outside this repository may
+    have no ``role_table`` field, and a recipe that never recorded one must
+    keep rebuilding exactly as it did. A recipe that *did* record one and meets
+    a spec that cannot carry it is an error, not a silent fallback — the corpus
+    was built with that organisation and rebuilding it with the engine's own
+    would be a different company reported as the same one.
+    """
+    if role_table is None:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, role_table=role_table)
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records an authored role table, but"
+            f" {type(spec).__name__} does not accept one: {exc}"
+        ) from exc
+
+
 def rebuild(
     recipe: dict[str, Any],
     *,
@@ -241,6 +267,11 @@ def rebuild(
     except (KeyError, TypeError, ValueError) as exc:
         raise RecipeError(f"this corpus's recorded physics does not load: {exc}") from exc
 
+    authored_roles = recipe.get("role_table")
+    role_table = None if authored_roles is None else tuple(
+        (row[0], row[1], row[2], row[3]) for row in authored_roles
+    )
+
     if recipe.get("pack") is not None:
         # A pack-built world: the recipe carries the pack whole, and the
         # pack's base names the engine. Same closed-vocabulary posture — the
@@ -257,7 +288,8 @@ def rebuild(
                 f"the embedded pack names engine {pack.base!r}, which is not"
                 f" registered — registered: {', '.join(domains.names())}"
             )
-        world = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT).build()
+        spec = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT)
+        world = _with_roles(spec, role_table).build()
     else:
         try:
             shape = archetypes.get(recipe["archetype"])
@@ -274,7 +306,7 @@ def rebuild(
                 f"archetype {shape.key!r} belongs to no registered domain; the module"
                 " that owns it was never imported, so this corpus cannot be rebuilt"
             )
-        world = _under(domain.world(
+        spec = _under(domain.world(
             seed=recipe["seed"],
             archetype=shape,
             employees=recipe.get("employees"),
@@ -285,7 +317,8 @@ def rebuild(
             # unconditionally to every registered domain would make a bank
             # fail to rebuild over a keyword it was never offered.
             **({} if recipe.get("estate") is None else {"estate": recipe["estate"]}),
-        ), physics, DEFAULT).build()
+        ), physics, DEFAULT)
+        world = _with_roles(spec, role_table).build()
 
     for step in recipe.get("steps", ()):
         name = step.get("scenario")

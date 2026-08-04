@@ -209,6 +209,20 @@ class RetailWorld:
     """An industry ``Pack`` supplying the archetype, lore, and company name.
     Set via ``from_pack``; carried on the instance so ``build`` can embed it in
     the recipe, which is what makes a pack-built corpus rebuild itself."""
+    role_table: tuple[tuple[str, str, str, str | None], ...] | None = None
+    """Who exists in this organisation (``worldloom.roles``).
+
+    ``None`` is the engine's own table, which is what every world built before
+    this field existed used. A supplied one must have passed ``roles.check``:
+    several of its keys are looked up by name in generator code, and a table
+    missing one raises ``KeyError`` part-way through an episode rather than
+    building a different company.
+
+    Carried on the recipe as a whole table rather than as the shape it came
+    from, for the reason the pack is embedded whole: a corpus that could only
+    be rebuilt by whoever still had the probe that derived it would fail the
+    reason recipes exist."""
+
     physics: Parameters = DEFAULT
     """The world physics the organisation is generated under
     (``worldloom.parameters``). The engine's own by default, which is what an
@@ -269,6 +283,7 @@ class RetailWorld:
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
             physics=self.physics,
+            role_table=self.role_table,
         )
 
         return World(
@@ -299,6 +314,7 @@ class RetailWorld:
                 pack=self.pack,
                 estate=self.estate,
                 physics=self.physics,
+                role_table=self.role_table,
             ),
         )
 

@@ -19,11 +19,14 @@ through an episode.
 
 So the same shape as everywhere else here: **a closed vocabulary where code
 reads, and freedom above it.** ``SPINE`` is the set of keys the engine consults
-by name. A proposed table must contain every one of them; it may rename their
+by name — through ``roles[...]``, through the ``role_ids[...]`` map the org
+generators build, or through any other literal lookup. A proposed table must contain every one of them; it may rename their
 *titles*, move them in the tree, change what function they sit in, and add as
-many roles as it likes around them. Eleven keys are load-bearing in retail, out
-of a table of fifteen — so the constraint is real and most of the organisation
-is still free.
+many roles as it likes around them. Thirteen keys are load-bearing in retail out of
+a table of sixteen, sixteen of eighteen in banking, and — tellingly — seven of
+seven in insurance. That last one is a finding, not a coincidence: the insurer
+ships the thinnest role table of the three and consults all of it, so it is the
+one engine whose organisation cannot be authored at all until its table grows.
 
 **The spine is computed, not maintained.** ``tests/test_roles.py`` scans this
 package for literal ``roles["..."]`` lookups, intersects them with each
@@ -58,12 +61,12 @@ UNIT_ROLES: tuple[str, ...] = ("{unit}_md", "{unit}_bp", "{unit}_buyer")
 #: because membership is the only question ever asked of them.
 SPINE: Mapping[str, frozenset[str]] = {
     "retail": frozenset({
-        "audit", "ceo", "cfo", "controller", "merch_analyst", "platform_engineer",
-        "platform_lead", "platform_senior", "reporting_manager", "svc_desk",
-        "svc_incident",
+        "audit", "ceo", "cfo", "cio", "controller", "merch_analyst", "merch_lead",
+        "platform_engineer", "platform_lead", "platform_senior", "reporting_manager",
+        "svc_desk", "svc_incident",
     }),
     "banking": frozenset({
-        "audit", "audit_manager", "ceo", "cfo", "controller", "credit_risk_lead",
+        "audit", "audit_manager", "ceo", "cfo", "cio", "controller", "credit_risk_lead",
         "cro", "liquidity_analyst", "platform_lead", "platform_senior",
         "prudential_risk_head", "reg_analyst", "reg_reporting_manager", "svc_desk",
         "svc_incident",
@@ -262,34 +265,58 @@ def from_shape(
         )
 
     ordered_functions = tuple(functions)
-    spine_keys = [key for key in required(engine, unit_keys)]
-    roles: list[Role] = [Role(ROOT, "Chief Executive Officer", ordered_functions[0], None)]
-    placed = {ROOT}
-    pending = [key for key in spine_keys if key != ROOT]
+    spine_keys = [key for key in required(engine, unit_keys) if key != ROOT]
 
-    frontier = [ROOT]
+    # How many people sit at each level, root downwards.
+    #
+    # Filled greedily — each level takes as many as its parents' span allows —
+    # while *reserving one person for every level still to come*. That reserve
+    # is the whole of the fix for a defect measurement caught: without it the
+    # fill runs out of people part-way down and returns a tree shallower than
+    # was asked for, reporting success. Since `measure` exists precisely so a
+    # handshake can refuse a shape that does not match its claim, a synthesiser
+    # that quietly produced one was the worst possible caller of it.
+    sizes = [1]
+    remaining = headcount - 1
+    for level in range(1, levels + 1):
+        still_to_come = levels - level
+        take = min(sizes[-1] * span, remaining - still_to_come)
+        if take < 1:
+            raise ValueError(
+                f"{headcount} people cannot fill {levels} level(s): a tree that"
+                f" deep needs at least {levels + 1} people, one per level."
+            )
+        sizes.append(take)
+        remaining -= take
+    if remaining:
+        raise ValueError(
+            f"{headcount} people do not fit in {levels} level(s) at a span of"
+            f" {span}: that shape holds at most {headcount - remaining}. Widen"
+            " the span, add a level, or reduce headcount — the three are not"
+            " independent, which is what a probe's cross-layer link is for."
+        )
+
+    roles: list[Role] = [Role(ROOT, "Chief Executive Officer", ordered_functions[0], None)]
+    pending = list(spine_keys)
     made = 0
-    while len(roles) < headcount and frontier:
-        next_frontier: list[str] = []
-        depth = len(_ladder_prefix(roles, frontier[0]))
-        for manager in frontier:
-            for _ in range(span):
-                if len(roles) >= headcount:
-                    break
-                if pending:
-                    key = pending.pop(0)
-                else:
-                    made += 1
-                    key = f"role_{made:03d}"
-                if key in placed:
-                    continue
-                function = ordered_functions[len(roles) % len(ordered_functions)]
-                roles.append(Role(key, _title(key, function, depth), function, manager))
-                placed.add(key)
-                next_frontier.append(key)
-        if len(_ladder_prefix(roles, next_frontier[0] if next_frontier else ROOT)) > levels:
-            break
-        frontier = next_frontier
+    parents = [ROOT]
+    for depth, size in enumerate(sizes[1:], start=1):
+        level: list[str] = []
+        for index in range(size):
+            if pending:
+                key = pending.pop(0)
+            else:
+                made += 1
+                key = f"role_{made:03d}"
+            # Parents cycle lowest-index-first, so the remainder lands on the
+            # earliest managers. Not cosmetic: the alternative spreads it by
+            # iteration order or by a seed, and this runs inside a build whose
+            # output must be byte-identical on replay.
+            manager = parents[index % len(parents)]
+            function = ordered_functions[len(roles) % len(ordered_functions)]
+            roles.append(Role(key, _title(key, function, depth), function, manager))
+            level.append(key)
+        parents = level
 
     if pending:
         # Everything the engine consults must exist, even if the shape asked
@@ -298,21 +325,12 @@ def from_shape(
         # people and got fifty-three has had their claim overruled, and should
         # find that out here rather than from a headcount fact later.
         raise ValueError(
-            f"a {engine} organisation needs at least {len(spine_keys)} roles for the"
-            f" engine's own lookups; a headcount of {headcount} leaves"
+            f"a {engine} organisation needs at least {len(spine_keys) + 1} roles for"
+            f" the engine's own lookups; a headcount of {headcount} leaves"
             f" {len(pending)} unplaced ({', '.join(pending[:5])}"
             f"{'…' if len(pending) > 5 else ''})"
         )
     return tuple(roles)
-
-
-def _ladder_prefix(roles: Sequence[Role], key: str) -> list[str]:
-    by_key = {role.key: role for role in roles}
-    chain, cursor = [], key
-    while cursor is not None and cursor in by_key:
-        chain.append(cursor)
-        cursor = by_key[cursor].manager
-    return chain
 
 
 def _title(key: str, function: str, depth: int) -> str:
@@ -351,6 +369,111 @@ def measure(table: Sequence[Role]) -> dict[str, int]:
     }
 
 
+# ---------------------------------------------------------------------------
+# The handshake
+# ---------------------------------------------------------------------------
+
+#: The grammar, in sentences, because a model told the rules can obey them and
+#: a model told "invalid" can only guess. Carried on every request.
+RULES: tuple[str, ...] = (
+    "Every role in `must_contain` has to appear. You may retitle it, move it"
+    " under a different manager, and change its function — you may not remove"
+    " it. Generator code looks those keys up by name and would raise KeyError"
+    " part-way through an episode rather than build a different company.",
+    "Add as many roles as you like around them. Most of an organisation is"
+    " yours: in retail, eleven of fifteen roles are load-bearing and everything"
+    " else is free.",
+    "Exactly one role reports to nobody, and it is the chief executive.",
+    "Every other role reports to a role that exists, and nobody reports to"
+    " themselves through any number of hops.",
+    "Titles are the interesting half. 'Regional Operations Manager' and 'Area"
+    " Lead' are both real organisations and the difference between them is the"
+    " texture a corpus exists to carry, so no naming convention is enforced —"
+    " but a role with no title is refused, because a title is what documents"
+    " print.",
+    "If you state a shape — headcount, span of control, reporting depth — the"
+    " table you submit is measured against it and refused if it disagrees."
+    " Those three numbers are not independent, so state them only if you mean"
+    " them.",
+)
+
+
+@dataclass(frozen=True)
+class Shape:
+    """A claimed organisation shape. Every field optional; stated ones are checked."""
+
+    headcount: int | None = None
+    levels: int | None = None
+    widest_span: int | None = None
+
+    def as_dict(self) -> dict[str, int]:
+        return {k: v for k, v in
+                (("headcount", self.headcount), ("levels", self.levels),
+                 ("widest_span", self.widest_span)) if v is not None}
+
+
+def request(engine: str, unit_keys: Sequence[str] = ()) -> dict[str, object]:
+    """What an author needs to propose an organisation, and nothing else.
+
+    Self-contained on purpose, the same as every other request in this project:
+    an author should not have to read this repository to answer, and a rule
+    they cannot see is a rejection they could not have predicted.
+    """
+    return {
+        "engine": engine,
+        "must_contain": list(required(engine, unit_keys)),
+        "free_to_invent": True,
+        "shipped_shape": measure(_shipped(engine)),
+        "rules": list(RULES),
+    }
+
+
+def _shipped(engine: str) -> tuple[Role, ...]:
+    """The engine's own table, as a reference point for an author."""
+    from importlib import import_module
+
+    module = import_module({
+        "retail": "worldloom.generators.organisation",
+        "banking": "worldloom.generators.banking_org",
+        "insurance": "worldloom.generators.insurance_org",
+    }[engine])
+    return from_rows(module._ROLES)
+
+
+def check(
+    table: Sequence[Role],
+    *,
+    engine: str,
+    unit_keys: Sequence[str] = (),
+    shape: Shape | None = None,
+) -> list[Rejection]:
+    """``review``, plus the claimed shape measured against the table submitted.
+
+    Split from ``review`` rather than folded into it because they answer
+    different questions: ``review`` asks whether this organisation can be
+    *built*, and is what the generator needs; this asks whether it is the
+    organisation its author said it was, which only a handshake cares about.
+    A generator that enforced a claim nobody made would be refusing tables for
+    failing to match a shape of ``None``.
+    """
+    found = review(table, engine=engine, unit_keys=unit_keys)
+    if shape is None:
+        return found
+
+    actual = measure(table)
+    for field, claimed in shape.as_dict().items():
+        if actual[field] != claimed:
+            found.append(Rejection(
+                field, "shape_disagrees",
+                f"you stated {field} {claimed} and submitted a table whose"
+                f" {field} is {actual[field]}. Headcount, span and depth are"
+                " three numbers with two degrees of freedom — changing one"
+                " moves another, so this is usually a sign the shape was"
+                " chosen before the table rather than with it.",
+            ))
+    return found
+
+
 def from_rows(rows: Iterable[tuple[str, str, str, str | None]]) -> tuple[Role, ...]:
     """The generators' tuple shape, as ``Role`` objects."""
     return tuple(Role(*row) for row in rows)
@@ -361,6 +484,6 @@ def to_rows(table: Sequence[Role]) -> tuple[tuple[str, str, str, str | None], ..
 
 
 __all__ = [
-    "ROOT", "Rejection", "Role", "SPINE", "UNIT_ROLES", "from_rows", "from_shape",
-    "measure", "required", "review", "to_rows",
+    "ROOT", "RULES", "Rejection", "Role", "SPINE", "Shape", "UNIT_ROLES", "check",
+    "from_rows", "from_shape", "measure", "request", "required", "review", "to_rows",
 ]
