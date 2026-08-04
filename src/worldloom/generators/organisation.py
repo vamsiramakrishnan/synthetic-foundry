@@ -17,6 +17,8 @@ topology, and ``persona_trait`` adjusts how specific people write.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -176,6 +178,15 @@ def generate(
     headquarters: str | None = None,
     regions: tuple[str, ...] | None = None,
     estate_profile: str | None = None,
+    # This module's own `_ROLES`, replaced. `None` means use them, so an
+    # unpassed table is byte-identical to before this argument existed.
+    #
+    # A supplied table still has the per-unit roles appended below — those are
+    # derived from the archetype's units rather than authored — and must have
+    # gone through `roles.review` first. Several of these keys are looked up by
+    # name in generator code, and a table missing one raises `KeyError`
+    # part-way through an episode rather than building a different company.
+    role_table: Sequence[tuple[str, str, str, str | None]] | None = None,
     physics: Parameters = DEFAULT,
 ) -> Organisation:
     """Build the organisation for an archetype. Same seed, same graph, same IDs.
@@ -207,7 +218,7 @@ def generate(
     merch_md = f"{_merch_unit(unit_ids)}_md"
     role_table = [
         (role, title, function, merch_md if manager == "gm_md" else manager)
-        for role, title, function, manager in _ROLES
+        for role, title, function, manager in (_ROLES if role_table is None else role_table)
     ]
     for unit in units:
         role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))

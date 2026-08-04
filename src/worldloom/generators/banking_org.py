@@ -27,6 +27,8 @@ policies, and the charter norm instead.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from dataclasses import dataclass
 
 from ..ids import Minter
@@ -166,6 +168,15 @@ def generate(
     name_pools: dict[str, list[str]] | None = None,
     headquarters: str | None = None,
     regions: tuple[str, ...] | None = None,
+    # This module's own `_ROLES`, replaced. `None` means use them, so an
+    # unpassed table is byte-identical to before this argument existed.
+    #
+    # A supplied table still has the per-unit roles appended below — those are
+    # derived from the archetype's units rather than authored — and must have
+    # gone through `roles.review` first. Several of these keys are looked up by
+    # name in generator code, and a table missing one raises `KeyError`
+    # part-way through an episode rather than building a different company.
+    role_table: Sequence[tuple[str, str, str, str | None]] | None = None,
     physics: Parameters = DEFAULT,
 ) -> BankOrganisation:
     """Build the bank for an archetype. Same seed, same graph, same ids.
@@ -183,7 +194,7 @@ def generate(
     units = archetype.units
     unit_ids = {unit.key: minter.next("BU") for unit in units}
 
-    role_table = list(_ROLES)
+    role_table = list(_ROLES if role_table is None else role_table)
     for unit in units:
         role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))
     role_table, depth_of = sorted_roles(role_table)
