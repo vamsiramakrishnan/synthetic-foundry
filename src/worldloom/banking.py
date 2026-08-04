@@ -84,6 +84,9 @@ FILING_TYPES = frozenset({"capital_return"})
 #: The lore targets this engine's generators consult — the pack author's
 #: contract, same as ``retail.CONSULTED_TARGETS``. Each entry names its reader.
 CONSULTED_TARGETS: tuple[tuple[str, str], ...] = (
+    ("<role_key>/<fact_kind>",
+     "an accountability: mints the fact saying this role answers for that measure"
+     " (org_builder.accountability_facts)"),
     ("data_quality_incident/collateral",
      "tags the reconciliation break and the confirmed cause (regulatory.generate)"),
     ("collateral_mapping_change",

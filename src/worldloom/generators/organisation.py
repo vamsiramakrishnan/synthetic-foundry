@@ -43,6 +43,7 @@ from ..rng import Rng
 from . import hierarchy, names
 from .org_builder import (
     apply_traits,
+    accountability_facts,
     form_units,
     founding_milestones,
     mint_people,
@@ -414,6 +415,13 @@ def generate(
     # can only ever append to the "EV"/"MFACT" sequences, never disturb one that
     # names a person, unit, category, or site.
     milestones, founding_facts = founding_milestones(minter, lore, company_id)
+
+    # Appended to the founding facts rather than given a field of their own:
+    # they are canonical facts about people and every consumer already reads
+    # `founding_facts` as "the facts this organisation carries before any
+    # episode runs". Empty unless lore names an accountability, so no shipped
+    # world mints one and every existing corpus is byte-identical.
+    founding_facts = founding_facts + accountability_facts(minter, lore, role_ids)
 
     return Organisation(
         company=company,

@@ -34,6 +34,8 @@ names every commitment whose constraints all miss.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import json
 from pathlib import Path
 from typing import Any, Literal
@@ -407,10 +409,31 @@ def lint(pack: Pack) -> list[str]:
                         f"lore[{index}]: persona_trait target {constraint.target!r}"
                         " is not ROLE/trait shaped"
                     )
+            elif constraint.kind is ConstraintKind.ACCOUNTABILITY:
+                # Same shape as a persona trait — "role/measure" — and the same
+                # reasoning: whether the role exists is a build-time property of
+                # the engine's role table, so only the shape is checked here.
+                hits += 1 if "/" in constraint.target else 0
+                if "/" not in constraint.target:
+                    findings.append(
+                        f"lore[{index}]: accountability target {constraint.target!r}"
+                        " is not ROLE/measure shaped"
+                    )
             elif constraint.kind is ConstraintKind.TERMINOLOGY:
                 hits += 1  # terminology reaches prose, not a generator switch
-            elif constraint.target in consulted:
+            elif _consults(constraint.target, consulted):
                 hits += 1
+            else:
+                # Reported per constraint, not only when the whole commitment
+                # misses. The `hits == 0` test below is the weaker claim and was
+                # the only one: a commitment with one persona trait beside three
+                # nonsense targets linted clean, so the three inert ones were
+                # never mentioned to the author who wrote them.
+                findings.append(
+                    f"lore[{index}]: {constraint.kind.value} target"
+                    f" {constraint.target!r} is not consulted by the {pack.base}"
+                    " engine — it will be carried, cited, and change nothing"
+                )
         if hits == 0:
             findings.append(
                 f"lore[{index}] ({commitment.kind.value}: {commitment.assertion[:60]!r}…)"
@@ -425,6 +448,26 @@ def lint(pack: Pack) -> list[str]:
             " a persona defensive, a norm binding"
         )
     return findings
+
+
+def _consults(target: str, consulted: Mapping[str, str]) -> bool:
+    """Whether *target* is one the engine reads, allowing for templated keys.
+
+    An engine may publish a target with a placeholder — retail's
+    ``forecast_miss/<unit_key>`` — because the real key is only known once the
+    units are. Exact string equality therefore reported a pack writing
+    ``forecast_miss/grocery`` as inert when ``finance.generate`` genuinely reads
+    it: a false negative in the one tool whose entire job is telling authors
+    what will not work. Matching the prefix before the placeholder is what the
+    corresponding test in `tests/test_packs.py` had been doing all along.
+    """
+    if target in consulted:
+        return True
+    return any(
+        published.index("<") > 0 and target.startswith(published[:published.index("<")])
+        for published in consulted
+        if "<" in published
+    )
 
 
 def to_recipe(pack: Pack) -> dict[str, Any]:

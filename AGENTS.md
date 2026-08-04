@@ -145,6 +145,21 @@ literally a deposit-taking bank. The general insurer shipped in
 `flat` is the right answer for any business whose revenue is a book rather than
 a till — or a pack may supply twelve months of its own, which must average one.
 
+And a corpus had no way to say who answers for a number. Budgets attach to
+business units, variances are reported and never judged, and the engine's one
+ownership fact resolves to "unassigned" — so *who was accountable for the unit
+that missed* had no answer anywhere. Lore can now say so:
+
+```json
+{"kind": "accountability", "target": "gm_md/financial.revenue.variance",
+ "effect": "The MD answers for revenue against budget", "magnitude": 3.0}
+```
+
+`target` is `role_key/fact_kind` and `magnitude` is the tolerance band in per
+cent. It mints a fact whose **subject is a person** — the first in the project —
+carrying the measure they are judged on and how far it may move before anyone
+asks. `worldloom pack targets` lists it alongside every other consulted target.
+
 `worldloom pack params` prints the numeric ranges, now that they have names, and
 `worldloom build --physics` overrides them. But a list of thirty-seven ranges to
 fill in is the wrong instrument: they are not independent, and "retailer" or

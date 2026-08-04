@@ -208,6 +208,10 @@ EVAL_TEXT: dict[str, str] = {
     "a.comms.cfo_notified":
         "By email, within the hour of the close being recorded as delayed on"
         " {date} — before any formal report existed.",
+    # -- accountability ---------------------------------------------------------
+    "q.accountability.who_accountable":
+        "Who was accountable for {measure} when it moved outside its tolerance band?",
+    "a.accountability.who_accountable": "{person}.",
 }
 
 
@@ -1005,6 +1009,85 @@ class _Taxonomy:
                 sources=[thread], distractors=[self.artifact.get("incident_rca")],
             )
 
+    def accountability_measure(self) -> None:
+        """Who was accountable when a measure moved outside its tolerance.
+
+        Accountability facts pair a person with a measure and a tolerance band.
+        When a variance fact shows the measure moved beyond that band, the
+        person is the answer to who was accountable for the miss. This requires
+        joining two facts: the accountability (who and what measure) with the
+        variance (how far it moved).
+
+        Not asked at the default density, because the set is empty unless lore
+        explicitly names accountabilities (no shipped lore does). When asked
+        above 1.0, the family scales with the number of accountabilities
+        that exist, not with the number of business units — accountability is
+        a person-specific question, not a unit-specific one.
+        """
+        acct_facts = [f for f in self.history if f.kind == "org.accountability" and not f.is_superseded]
+        if not acct_facts:
+            return
+
+        for acct_fact in acct_facts:
+            # The accountability fact stores the measure as text_value.
+            # E.g., "financial.revenue.variance" or "financial.gross_profit.variance".
+            measure = acct_fact.text_value
+            tolerance_pct = acct_fact.value.amount if acct_fact.value else None
+            if not measure or tolerance_pct is None:
+                continue
+
+            # Find variance facts matching this measure. The measure name is the kind.
+            # Look for a fact where kind matches the measure and the absolute variance
+            # exceeds the tolerance band.
+            matching_variances = [
+                f for f in (*self.history, *[f for f in [self.get(measure, acct_fact.subject)] if f])
+                if f and f.kind == measure and f.value and f.value.amount is not None
+            ]
+
+            # More reliably, search all facts for those matching the measure kind.
+            matching_variances = [
+                f for f in self._fact_index.values()
+                if f.kind == measure and f.value and f.value.amount is not None
+                and not f.is_superseded and (f.period is None or f.period == self.period)
+            ]
+
+            for variance_fact in matching_variances:
+                variance_amount = abs(variance_fact.value.amount)
+                # Check if variance exceeds tolerance. Tolerance is in percent,
+                # but variance facts are in currency. We need to compare the
+                # relative magnitude — if the budget was 100K and tolerance is 5%,
+                # a variance of 6K should exceed it. However, variance facts only
+                # store the absolute amount, not the percentage, so we cannot make
+                # this comparison exactly. Instead, we check if the variance moved
+                # at all (non-zero) as a proxy for "outside tolerance".
+                #
+                # A better approach: look for the related budget fact to compute
+                # the percentage. The variance kind maps to a budget: e.g.,
+                # "financial.revenue.variance" maps to "financial.revenue.budget".
+                budget_kind = measure.replace(".variance", ".budget")
+                budget_fact = self.get(budget_kind, variance_fact.subject)
+
+                # Only create the case if we can compute the percentage move
+                # relative to budget.
+                if budget_fact and budget_fact.value and budget_fact.value.amount:
+                    variance_pct = (variance_amount / abs(budget_fact.value.amount)) * 100
+                    if variance_pct > tolerance_pct:
+                        # The measure moved outside the tolerance band. The person
+                        # is the one with the accountability fact.
+                        self.case(
+                            self.t("q.accountability.who_accountable", measure=measure),
+                            EvaluationType.CROSS_ARTIFACT,
+                            self.t("a.accountability.who_accountable",
+                                   person=self.subjects.name(acct_fact.subject)),
+                            [acct_fact.id, variance_fact.id, budget_fact.id],
+                            difficulty="hard",
+                            reasoning="Requires joining accountability (who and measure) "
+                                      "to variance (how much it moved) and budget to check "
+                                      "if the move exceeded tolerance.",
+                            sources=[self.artifact.get("finance_workbook")],
+                        )
+                        break  # One case per accountability is enough.
+
     def history_abstentions(self) -> None:
         """History questions that stay unanswerable regardless of how large
         the world grows.
@@ -1079,6 +1162,7 @@ def evaluation_cases(
     # Appended after every family above for the same id-stability reason, and
     # gated inside on the fan-out documents actually being planned.
     taxonomy.communications()
+    taxonomy.accountability_measure()
 
     # One last pass of the rule every family is supposed to apply for itself.
     #

@@ -92,6 +92,9 @@ INSURANCE_ARCHETYPES = frozenset({MIDSIZE_GENERAL_INSURER.key})
 #: target ahead of its reader is how a pack author sees the full contract on
 #: day one rather than being surprised by it later.
 CONSULTED_TARGETS: tuple[tuple[str, str], ...] = (
+    ("<role_key>/<fact_kind>",
+     "an accountability: mints the fact saying this role answers for that measure"
+     " (org_builder.accountability_facts)"),
     ("triangle_distortion/long_tail",
      "tags the diagonal, the emergence assessment, and the attribution split (generators.reserving.generate)"),
     ("finance/partial_booking",

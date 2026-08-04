@@ -44,6 +44,9 @@ BASE_INCIDENT_LIKELIHOOD = DEFAULT.probability("ops.incident.likelihood")
 #: than derived, and each entry names the code that reads it, so drift is a
 #: review comment away from being caught.
 CONSULTED_TARGETS: tuple[tuple[str, str], ...] = (
+    ("<role_key>/<fact_kind>",
+     "an accountability: mints the fact saying this role answers for that measure"
+     " (org_builder.accountability_facts)"),
     ("data_quality_incident/inventory",
      "multiplies the close incident likelihood (scenarios.MonthEndClose.run)"),
     ("close_cycle_time",

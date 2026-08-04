@@ -41,10 +41,12 @@ from ..models import (
     Authority,
     BusinessUnit,
     CanonicalFact,
+    ConstraintKind,
     Employee,
     EnterpriseEvent,
     LoreCommitment,
     LoreKind,
+    Quantity,
 )
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
@@ -292,6 +294,79 @@ def apply_traits(
         person if person.id not in traits else person.model_copy(update={"traits": traits[person.id]})
         for person in people
     )
+
+
+#: What an accountability fact is called. One kind, not one per measure, so a
+#: reader asking "what is this person answerable for" has a single thing to look
+#: for and the measure they are answerable *for* is the fact's own text.
+ACCOUNTABILITY_KIND = "org.accountability"
+
+#: The tolerance band a role is judged within, when its lore does not say. Five
+#: per cent because that is the band a variance memo in this corpus treats as
+#: worth explaining — it is a default, and a pack that means something else
+#: should say so rather than inherit this.
+DEFAULT_TOLERANCE_PCT = 5.0
+
+
+def accountability_facts(
+    minter: Minter,
+    lore: tuple[LoreCommitment, ...],
+    role_ids: dict[str, str],
+) -> tuple[CanonicalFact, ...]:
+    """One fact per ``accountability`` constraint: this person, this measure.
+
+    The edge the corpus did not have. A budget attaches to a business unit and
+    a variance is reported against it, but nothing anywhere said who answers
+    for either — so a reader could ask what the miss *was* and never who was
+    answerable for it.
+
+    Targets are written ``role_key/fact_kind`` and resolved through
+    ``role_ids``, exactly as ``persona_trait`` is and for the same reason: lore
+    is authored before the graph exists and cannot know who ``PERSON-0017``
+    will be. A target naming a role this world does not have is skipped rather
+    than raising — a pack shared across archetypes will legitimately name roles
+    one of them lacks, and ``packs.lint`` is where an author is told about it.
+
+    Minted last and only when lore asks for it. Both halves matter: no shipped
+    lore carries this kind, so every existing corpus mints nothing here and is
+    byte-identical, and appending after the founding milestones means the FACT
+    sequence can only grow at the end rather than renumbering a fact some
+    narration already cites.
+    """
+    facts: list[CanonicalFact] = []
+    for commitment in lore:
+        for constraint in commitment.constrains:
+            if constraint.kind is not ConstraintKind.ACCOUNTABILITY:
+                continue
+            role, _, measure = constraint.target.partition("/")
+            person_id = role_ids.get(role)
+            if person_id is None or not measure:
+                continue
+            facts.append(CanonicalFact(
+                id=minter.next("FACT"),
+                kind=ACCOUNTABILITY_KIND,
+                subject=person_id,
+                # The measure as text and the tolerance as the value, because
+                # the fact makes one claim in two parts: *what* this person is
+                # judged on, and *how far* it may move before anyone asks. Two
+                # facts would make the second orphanable.
+                text_value=measure,
+                value=Quantity(
+                    amount=(DEFAULT_TOLERANCE_PCT if constraint.magnitude is None
+                            else constraint.magnitude),
+                    unit="percent",
+                ),
+                # From when the commitment that created it takes effect, not
+                # from a timestamp the caller passed in: an accountability
+                # begins when the thing that assigned it does, and dating it
+                # otherwise would let `World.org_at` report somebody answerable
+                # for a measure before anyone had made them so.
+                valid_from=(_month_start(commitment.effective_from)
+                            if commitment.effective_from else _LATEST_JOIN),
+                authority=Authority.SYSTEM_OF_RECORD,
+                lore_ids=[commitment.id],
+            ))
+    return tuple(facts)
 
 
 def founding_milestones(

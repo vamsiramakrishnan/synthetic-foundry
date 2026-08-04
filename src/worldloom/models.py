@@ -105,6 +105,19 @@ class ConstraintKind(StrEnum):
     METRIC_EMPHASIS = "metric_emphasis"
     RISK_APPETITE = "risk_appetite"
     EVENT_LIKELIHOOD = "event_likelihood"
+    ACCOUNTABILITY = "accountability"
+    """Who is judged on which measure. Target is ``role_key/fact_kind``, and
+    ``magnitude`` is the tolerance band in per cent.
+
+    Added because the corpus had no edge from a person to a number. Budgets
+    attach to business units, variances are reported and never judged, and the
+    one ownership fact the engine mints resolves to "unassigned" — so *who was
+    accountable for the unit that missed* had no answer in any corpus this tool
+    had produced, which is a strange gap in a dataset built for questions about
+    an enterprise.
+
+    Read by ``org_builder.accountability_facts``, which is what keeps this kind
+    from joining the several above it that are carried, citable, and inert."""
 
 
 class EvaluationType(StrEnum):
