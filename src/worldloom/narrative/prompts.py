@@ -66,6 +66,10 @@ class Prompt:
             facts="\n".join(lines) or "  (none)",
             forbidden="\n".join(f"  - {c}" for c in request.forbidden_claims) or "  (none)",
             feedback=f"\nThe previous attempt was rejected:\n{feedback}\n" if feedback else "",
+            # Rendered only by a template that has the slot. `str.format`
+            # ignores a keyword the template never names, so the stock prompt
+            # is untouched by this existing at all.
+            avoid="\n\n".join(f"  ---\n  {text}" for text in request.avoid_texts) or "  (none)",
         )
 
 
@@ -117,7 +121,42 @@ Return the prose, and a list of the claims it makes with the fact IDs supporting
 """,
 )
 
-_REGISTRY: dict[str, Prompt] = {SECTION_PROSE.name: SECTION_PROSE}
+#: The same brief, plus what this section must not sound like.
+#:
+#: A separate prompt rather than a flag on the first, because the prompt key is
+#: part of the ledger key: a section rewritten under a different brief is a
+#: different generative call and has to be recorded as one, or a replay would
+#: hand back the prose the rewrite was supposed to replace.
+#:
+#: The avoid-set is not a style note. `worldloom refine` measures which
+#: passages are near-duplicates of each other (`similarity.near_duplicate_pairs`,
+#: exact, not sampled), hands the offending text over verbatim, and then
+#: *checks* that the answer moved: a rewrite still above the similarity
+#: threshold is rejected with the measured figure. "Be more varied" is advice;
+#: "you are 0.86 similar to this text, get below 0.55" is a target.
+SECTION_PROSE_VARIED = Prompt(
+    name="section_prose_varied",
+    version="1",
+    template=SECTION_PROSE.template.replace(
+        "You must not claim:\n{forbidden}\n{feedback}",
+        """You must not claim:
+{forbidden}
+
+This section is one of several in the corpus that currently read almost
+identically. Here is the prose it is being confused with — you must not
+resemble it. Same facts, genuinely different document: change what you lead
+with, what you subordinate, what you leave to the table, and the shape of the
+sentences. Do not simply reword it phrase by phrase; that scores as the same
+passage and will be rejected.
+{avoid}
+{feedback}""",
+    ),
+)
+
+_REGISTRY: dict[str, Prompt] = {
+    SECTION_PROSE.name: SECTION_PROSE,
+    SECTION_PROSE_VARIED.name: SECTION_PROSE_VARIED,
+}
 
 
 def get(name: str = SECTION_PROSE.name) -> Prompt:

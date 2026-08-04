@@ -119,6 +119,50 @@ One coherent enterprise, taken all the way through. Two, in fact.
   (`recipe.register_step`) each vertical seeds from its own module, and two
   thin-waist exceptions were paid down rather than a third added.
 
+- **The refinement loop: `worldloom refine`, `worldloom mcp`, a skill and a hook.**
+  Narration is open-loop — every section gets one request and one attempt, and
+  nothing afterwards looks at what the corpus became, so the writer of section
+  47 never learns that sections 12 and 31 already said this. A three-period
+  grocery corpus comes out with **44 of its 130 passages in 16 near-duplicate
+  groups**.
+
+  The loop closes it, and the algorithm owns three of the four steps.
+  *Measure* runs the exact similarity join over the corpus's own passages.
+  *Target* keeps one member of each cluster and ranks the rest — which is where
+  the economics are: ~130 sections, ~16 that actually repeat, 16 rewrites
+  rather than 130. *Constrain* hands the exemplar's text over as the brief,
+  because "be more varied" is advice and "here is the passage you are being
+  confused with" is a constraint. *Gate* re-measures the answer and rejects a
+  rewrite that did not move, quoting the figure — the model is never asked to
+  assess its own variety. Then it stops on a plateau rather than when the
+  budget runs out.
+
+  Two ways to drive it, running identical algorithms so they cannot drift into
+  different definitions of "better". `worldloom refine --harness claude-code`
+  drives it headlessly, one bounded request at a time. `worldloom mcp` serves
+  the same functions as MCP tools — `measure_corpus`, `next_target`,
+  `submit_section`, `corpus_topology`, `corpus_series`, `validate_corpus` — so
+  a Claude Code session **holds the loop itself** rather than being called by
+  it; `.mcp.json` wires it in, the `worldloom-refine` skill drives it, and a
+  `Stop` hook refuses to let a session end while duplicates remain, because a
+  skill can be forgotten mid-session and a hook cannot.
+
+  Every existing validator still runs on a rewrite, unchanged. Widening how
+  much an author may *vary* does not widen what it may *assert*.
+
+  Three defects found while building it, each fixed rather than asserted
+  around, and all three of the same shape — the loop appearing to work while
+  changing nothing. The gate compared a templated draft against rendered prose,
+  which scores a verbatim copy near zero. It then compared a bare body against
+  a full passage, which scores an *unchanged* body at 0.55 and passes it. And
+  it compared only against the exemplar, so two sections told to stop
+  resembling the same passage both moved away from it and landed on each other.
+
+  Also fixed: `World.export` copied artifacts twice on an in-place export of a
+  corpus that had been rendered, raising `FileExistsError` on a corpus that was
+  perfectly intact. It had never fired because the only in-place callers ran on
+  corpora with no `artifacts/` directory yet.
+
 - **The estate becomes a landscape.** `worldloom topology` on the largest world
   this tool builds reported **nine** services and systems and a three-hop
   dependency chain — because nine is exactly what the month-end-close episode

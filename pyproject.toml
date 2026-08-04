@@ -69,6 +69,11 @@ arrow = ["pyarrow>=15.0"]
 # `worldloom narrate auto` — the only stage that calls a model, so it is the only
 # stage that needs this. Everything else in the package runs with no API key.
 llm = ["anthropic>=0.40"]
+# `worldloom mcp` — the refinement loop's tool surface, spoken over stdio to an
+# agent harness. An extra rather than a core dependency because every other
+# command works without it: the same algorithms are reachable through
+# `worldloom refine`, which needs no protocol at all.
+mcp = ["mcp>=1.2"]
 # The Gemini route through the same command (`--model gemini-*`). Satisfied
 # transitively by `pip install google-antigravity` too — Google's agent SDK
 # depends on google-genai — so an Antigravity environment needs no extra step.
@@ -85,8 +90,12 @@ all = [
     "python-docx>=1.1",
     "reportlab>=4.0",
     "python-pptx>=1.0",
+    "mcp>=1.2",
 ]
-dev = ["pytest>=8.0", "openpyxl>=3.1", "python-docx>=1.1", "reportlab>=4.0", "python-pptx>=1.0"]
+dev = [
+    "pytest>=8.0", "openpyxl>=3.1", "python-docx>=1.1", "reportlab>=4.0",
+    "python-pptx>=1.0", "mcp>=1.2",
+]
 
 [project.scripts]
 worldloom = "worldloom.cli:app"

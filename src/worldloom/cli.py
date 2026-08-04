@@ -2085,6 +2085,224 @@ def series(
         )
 
 
+@app.command()
+def mcp(
+    tools: bool = typer.Option(
+        False, "--tools", help="List the tools and exit, without starting a server.",
+    ),
+) -> None:
+    """Serve Worldloom's measurements and gates as MCP tools, over stdio.
+
+    Every other agent path here makes the agent a *function*: the CLI renders a
+    request, the agent answers it once, the CLI validates. That cannot run a
+    loop — it can only be run by one. Refinement is iterative by nature (measure,
+    fix the worst thing, measure again), so the algorithms become tools and the
+    agent holds the loop.
+
+    What does not move is the division of labour: `next_target` is chosen by the
+    measurement rather than by the agent's sense of what looks repetitive, and
+    `submit_section` runs the same claim, reference and entity validators a first
+    draft goes through plus the similarity gate. An agent cannot talk its way
+    past any of it, which is what makes handing over the loop safe.
+
+    `.mcp.json` at the repository root wires this into Claude Code, and the
+    `worldloom-refine` skill drives it.
+    """
+    from . import mcp as mcp_module
+
+    if tools:
+        for tool in mcp_module.TOOLS:
+            console.print(f"[bold]{tool['name']}[/bold]")
+            console.print(f"  [dim]{tool['description']}[/dim]")
+            required = tool["schema"].get("required", [])
+            console.print(f"  [dim]required: {', '.join(required) or '(none)'}[/dim]\n")
+        return
+
+    try:
+        mcp_module.serve()
+    except RuntimeError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+
+@app.command()
+def refine(
+    corpus: str = typer.Argument(..., help="Corpus path to refine in place."),
+    rounds: int = typer.Option(
+        3, "--rounds", help="How many measure-target-rewrite passes to run at most.",
+    ),
+    budget: int = typer.Option(
+        16, "--budget", help="Sections to rewrite per round. The loop's cost ceiling.",
+    ),
+    harness: str = typer.Option(
+        "claude-code", "--harness",
+        help="Who writes the rewrites: `claude-code` (the claude CLI headless, its own"
+        " auth), `antigravity`, or `fake` for the deterministic stand-in — which writes"
+        " no real prose and exists so the loop is testable with no model.",
+    ),
+    model: str = typer.Option(None, "--model", help="Model id, passed to the harness."),
+    retries: int = typer.Option(
+        2, "--retries", help="Rejections absorbed per section before it is left alone.",
+    ),
+    check: bool = typer.Option(
+        False, "--check",
+        help="Measure and report only. Exits non-zero if anything still repeats — for"
+        " CI, and for a hook that wants to know whether a loop is finished.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Emit the measurements as JSON."),
+) -> None:
+    """Measure what a corpus repeats, rewrite only what repeats, and prove it moved.
+
+    The headless half of the refinement loop. `worldloom mcp` gives the same
+    algorithms to an agent as tools so it can drive the loop itself; this drives
+    the loop *at* an agent, one bounded request at a time, for CI and batches.
+    Both run the identical targeting and the identical gate, so the interactive
+    and headless paths cannot drift into two definitions of "better".
+
+    The economics are the point. A three-period corpus has ~130 sections and ~16
+    that actually duplicate each other. Re-narrating everything to fix them is
+    what an open loop does; this rewrites the sixteen. Each rewrite is briefed
+    with the passage it must stop resembling, and rejected — with the measured
+    similarity — if it did not get far enough away.
+    """
+    import json as json_module
+
+    from . import refine as refine_module
+
+    world = _load(corpus)
+    history = [refine_module.measure(world)]
+
+    if check:
+        outstanding = refine_module.targets(history[0], budget=1_000_000)
+        if as_json:
+            typer.echo(json_module.dumps(
+                {**history[0].as_dict(), "outstanding": len(outstanding)}, indent=2
+            ))
+        else:
+            console.print(str(history[0]))
+            console.print(f"  {len(outstanding)} section(s) still worth rewriting")
+        if outstanding:
+            raise typer.Exit(code=1)
+        return
+
+    provider = _refine_provider(harness, model)
+    console.print(str(history[0]))
+
+    rewritten = failed = 0
+    for round_number in range(1, max(1, rounds) + 1):
+        targets = refine_module.targets(history[-1], budget=budget)
+        if not targets:
+            console.print("[green]✓[/green] nothing repeats — the loop is done")
+            break
+        console.print(
+            f"\n[bold]round {round_number}[/bold] — {len(targets)} target(s)"
+            f" of {history[-1].passages} passage(s)"
+        )
+        for target in targets:
+            outcome = _rewrite_one(corpus, target, provider, retries=retries)
+            if outcome:
+                rewritten += 1
+                console.print(f"  [green]✓[/green] {target.id}  {outcome}")
+            else:
+                failed += 1
+                console.print(f"  [yellow]—[/yellow] {target.id}  left as it was")
+
+        history.append(refine_module.measure(_load(corpus)))
+        console.print(f"  {history[-1]}")
+        if refine_module.plateaued(history):
+            console.print(
+                "[dim]the last round bought less than a passage; stopping rather than"
+                " spending the rest of the budget on a corpus that is as good as it"
+                " is going to get[/dim]"
+            )
+            break
+
+    if as_json:
+        typer.echo(json_module.dumps({
+            "rounds": len(history) - 1,
+            "rewritten": rewritten,
+            "left_alone": failed,
+            "before": history[0].as_dict(),
+            "after": history[-1].as_dict(),
+        }, indent=2))
+        return
+
+    console.print(
+        f"\n[green]✓[/green] {rewritten} section(s) rewritten"
+        + (f", {failed} left as they were" if failed else "")
+        + f"\n[dim]repeated passages {history[0].repeated_passages} →"
+        f" {history[-1].repeated_passages}"
+        f" of {history[-1].passages}. Only the sections that repeated were touched;"
+        f" the other {history[-1].passages - history[0].repeated_passages} were never"
+        f" sent to a model.[/dim]"
+    )
+
+
+def _refine_provider(harness: str, model: str | None) -> Any:
+    """The writer behind `worldloom refine`."""
+    from .narrative import DeterministicProvider
+    from .narrative.harness import AntigravityProvider, ClaudeCodeProvider
+
+    if harness == "fake":
+        return DeterministicProvider()
+    if harness == "claude-code":
+        return ClaudeCodeProvider(model=model)
+    if harness == "antigravity":
+        return AntigravityProvider(model=model)
+    err.print(f"[red]error:[/red] unknown harness {harness!r}; expected claude-code, antigravity or fake")
+    raise typer.Exit(code=2)
+
+
+def _rewrite_one(corpus: str, target: Any, provider: Any, *, retries: int) -> str:
+    """One target, up to *retries* rejections, committed through the MCP tool body.
+
+    Committed through `mcp.submit_section` rather than through a second commit
+    path, deliberately: an agent driving the loop interactively and this command
+    driving it headlessly must write the corpus the same way, or a refined corpus
+    would carry different ledger entries depending on which door it came through.
+    """
+    from . import mcp as mcp_module
+    from .narrative import prompts
+    from .narrative.compiler import _request_for
+    from .narrative.providers import ProviderError
+
+    world = _load(corpus)
+    facts = {fact.id: fact for fact in world.facts}
+    ir = next((i for i in world.artifact_irs if i.id == target.artifact_id), None)
+    section = next((s for s in ir.sections if s.heading == target.heading), None) if ir else None
+    if ir is None or section is None:
+        return ""
+
+    prompt = prompts.get(prompts.SECTION_PROSE_VARIED.name)
+    request = _request_for(world, ir, section, facts).model_copy(
+        update={"avoid_texts": list(target.avoid_texts)}
+    )
+
+    feedback = ""
+    for _ in range(max(1, retries + 1)):
+        try:
+            narrative = provider.complete(request, prompt, facts, feedback=feedback)
+        except ProviderError as exc:
+            # A harness that cannot run is not the retry loop's problem — no
+            # rewording fixes an unauthenticated CLI. Same split the narration
+            # compiler draws.
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+
+        result = mcp_module.submit_section(
+            corpus, target.artifact_id, target.heading, narrative.text,
+            [claim.model_dump(mode="json") for claim in narrative.claims],
+            model_id=provider.id,
+        )
+        if result.get("accepted"):
+            return str(result.get("detail", ""))
+        # The rejection becomes the next attempt's feedback verbatim — including
+        # the measured similarity, which is the one piece of feedback an author
+        # can actually act on.
+        feedback = "\n".join(f"- {v['code']}: {v['detail']}" for v in result.get("violations", []))
+    return ""
+
+
 def _for_stats(name: str) -> World:
     """Load *name* the way `stats` needs it: compiled if it can be.
 

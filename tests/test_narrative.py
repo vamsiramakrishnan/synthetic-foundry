@@ -596,10 +596,25 @@ def test_narration_needs_something_to_narrate() -> None:
 
 
 def test_prompts_are_versioned() -> None:
-    assert prompts.versions() == {"section_prose": "3"}
+    assert prompts.versions() == {"section_prose": "3", "section_prose_varied": "1"}
     assert prompts.SECTION_PROSE.key == "section_prose@3"
+    assert prompts.SECTION_PROSE_VARIED.key == "section_prose_varied@1"
     with pytest.raises(KeyError, match="unknown prompt"):
         prompts.get("nope")
+
+
+def test_the_varied_prompt_is_the_stock_one_plus_what_to_avoid() -> None:
+    """A separate prompt rather than a flag, because the prompt key is part of
+    the ledger key: a section rewritten under a different brief is a different
+    generative call and has to be recorded as one. Everything else about the
+    brief — the facts, the cut-off, the forbidden claims — is deliberately
+    identical, so a refined section is held to the constraints a first draft
+    was rather than to looser ones."""
+    varied = prompts.SECTION_PROSE_VARIED.template
+    assert "{avoid}" in varied
+    assert "{avoid}" not in prompts.SECTION_PROSE.template
+    for slot in ("{facts}", "{forbidden}", "{cutoff}", "{feedback}", "{purpose}"):
+        assert slot in varied, slot
 
 
 def test_the_prompt_names_the_facts_and_the_rules(narrated: World) -> None:

@@ -847,8 +847,21 @@ class World:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(item.payload)
 
-        # Or copied through, when it was loaded from a corpus on disk.
-        if self.root is not None and not self._rendered:
+        # Or copied through, when it was loaded from a corpus on disk — unless
+        # the in-place staging above already restored them.
+        #
+        # `not in_place` is load-bearing rather than defensive. An in-place
+        # export of a corpus that *has* rendered artifacts stages them, deletes
+        # the directory, and copies the staged tree back in; without this guard
+        # the line below then copies the same tree to the same place a second
+        # time and `copytree` raises FileExistsError on a corpus that was
+        # perfectly intact. It never fired before because the two in-place
+        # callers — `narrate accept` and `plan accept` — run on corpora that
+        # have not been rendered yet, so `in_place` was always False for them.
+        # `worldloom mcp`'s `submit_section` is the first caller to write back
+        # over a corpus with an `artifacts/` directory in it, and it found this
+        # immediately.
+        if self.root is not None and not self._rendered and not in_place:
             source_dir = self.root / corpus.ARTIFACTS_DIR
             if source_dir.is_dir():
                 shutil.copytree(source_dir, target / corpus.ARTIFACTS_DIR)

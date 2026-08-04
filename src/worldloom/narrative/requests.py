@@ -74,6 +74,20 @@ class NarrativeRequest(Model):
     guidance for the author, not a rejection rule, because vocabulary is a
     register question and the validators police facts, not style."""
     target_words: int = 120
+    avoid_texts: list[str] = Field(default_factory=list)
+    """Prose this section must not resemble, supplied verbatim.
+
+    Carried on the *request* rather than passed alongside it, because it is
+    part of what this author knows: "the close pack already says this three
+    times, in these words" is a brief, not a scolding. Empty for every ordinary
+    narration — it is filled only by ``worldloom refine``, where a measurement
+    (`similarity.near_duplicate_pairs`) decided which sections repeat each
+    other and handed the offending text back as the constraint.
+
+    Only the ``section_prose_varied`` prompt renders it. The stock prompt has
+    no slot for it, so an ordinary narration is unchanged whether this is
+    populated or not — which is what keeps every existing corpus byte-identical
+    through the addition of the field."""
     fact_digest: str = ""
     """Content address of the facts supplied, so the ledger key moves when they do."""
 

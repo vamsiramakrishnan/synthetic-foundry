@@ -198,6 +198,14 @@ worldloom inspect <CORPUS>
 | `--facts` | List facts. |
 | `--lore` | List lore commitments. |
 
+### `worldloom mcp`
+
+Serve Worldloom's measurements and gates as MCP tools, over stdio.
+
+| Option | Purpose |
+| --- | --- |
+| `--tools` | List the tools and exit, without starting a server. |
+
 ### `worldloom narrate`
 
 Hand prose requests to an agent, and validate what comes back.
@@ -317,6 +325,24 @@ worldloom plan requests <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
+
+### `worldloom refine`
+
+Measure what a corpus repeats, rewrite only what repeats, and prove it moved.
+
+```
+worldloom refine <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--budget` | Sections to rewrite per round. The loop's cost ceiling. |
+| `--check` | Measure and report only. Exits non-zero if anything still repeats — for CI, and for a hook that wants to know whether a loop is finished. |
+| `--harness` | Who writes the rewrites: `claude-code` (the claude CLI headless, its own auth), `antigravity`, or `fake` for the deterministic stand-in — which writes no real prose and exists so the loop is testable with no model. |
+| `--json` | Emit the measurements as JSON. |
+| `--model` | Model id, passed to the harness. |
+| `--retries` | Rejections absorbed per section before it is left alone. |
+| `--rounds` | How many measure-target-rewrite passes to run at most. |
 
 ### `worldloom render`
 

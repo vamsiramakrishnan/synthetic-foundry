@@ -145,6 +145,46 @@ jobs:
             exit 1
           fi
 
+      # The refinement loop, driven by its own algorithms with no model in the
+      # loop. Three things are proved here and each one is a way the loop could
+      # silently do nothing: targeting picks far fewer sections than the corpus
+      # has (the entire economic argument), `--check` fails a corpus that still
+      # repeats itself (so this is usable as a gate), and the deterministic fake
+      # — which reproduces the prose it wrote the first time — is *refused*
+      # rather than accepted. A loop that accepted it would report rewrites and
+      # move nothing, which is exactly what it did until the gate compared the
+      # right two strings.
+      - name: The refinement loop measures, targets, and refuses
+        run: |
+          worldloom build --seed 8128 --incident --periods 3 --narrate -f markdown \
+            --out "${{ runner.temp }}/repetitive"
+          worldloom diversity "${{ runner.temp }}/repetitive" --near-duplicates
+          if worldloom refine "${{ runner.temp }}/repetitive" --check; then
+            echo "a corpus of three closes from one template reported no repetition"
+            exit 1
+          fi
+          # `|| true` because a non-zero exit is the whole point of --check and
+          # the step runs under `bash -e`: the reading is wanted here, not the
+          # verdict, and the verdict is asserted above.
+          worldloom refine "${{ runner.temp }}/repetitive" --check --json > /tmp/before.json || true
+          worldloom refine "${{ runner.temp }}/repetitive" --harness fake --rounds 1 --budget 4
+          worldloom refine "${{ runner.temp }}/repetitive" --check --json > /tmp/after.json || true
+          worldloom validate "${{ runner.temp }}/repetitive"
+          python3 - <<'EOF'
+          import json
+          before = json.load(open("/tmp/before.json"))
+          after = json.load(open("/tmp/after.json"))
+          assert before["repeated_passages"] > 0, before
+          assert 0 < before["outstanding"] < before["passages"] / 2, (
+              "targeting must pick a small minority of sections, not most of them"
+          )
+          # The fake cannot vary, so the gate must refuse every one of its
+          # rewrites and the corpus must be untouched.
+          assert after["repeated_passages"] == before["repeated_passages"], (before, after)
+          EOF
+          # And the tool surface an agent is handed is the same one the CLI uses.
+          worldloom mcp --tools | grep -q next_target
+
       # The corpus has to be hard, not just coherent. A keyword baseline with no
       # notion of time or authority is scored against the evaluation set, and the
       # score is asserted to stay low on the types the corpus exists to pose. If

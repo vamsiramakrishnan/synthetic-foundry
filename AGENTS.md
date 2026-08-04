@@ -88,6 +88,46 @@ like every other.
 
 ---
 
+## Closing the loop
+
+Narration is open-loop: every section gets one request and one attempt, and
+nothing afterwards looks at what the corpus became. So the writer of section 47
+never learns that sections 12 and 31 already said this, and a three-period
+grocery corpus comes out with **44 of its 130 passages in 16 near-duplicate
+groups**.
+
+`worldloom refine` closes it. Measure what repeats, rewrite only what repeats,
+and prove each rewrite moved:
+
+```bash
+worldloom refine ./corpus --harness claude-code   # drive the loop headlessly
+worldloom refine ./corpus --check                 # measure only; exits 1 if anything repeats
+```
+
+The economics are the point: ~130 sections, ~16 duplicates, 16 rewrites. Each
+one is briefed with the passage it must stop resembling and rejected — with the
+measured similarity — if it did not get far enough away. The loop stops when the
+measurement plateaus rather than when the budget runs out.
+
+**Or hold the loop yourself.** `worldloom mcp` serves the same algorithms as
+tools over stdio, and `.mcp.json` wires them into Claude Code:
+
+```
+measure_corpus  →  next_target  →  write it  →  submit_section  →  repeat
+```
+
+The `worldloom-refine` skill drives that loop, and a `Stop` hook
+(`.claude/hooks/refine_guard.py`) refuses to let a session end while duplicates
+remain — a skill can be forgotten mid-session, a hook cannot.
+
+What does not change either way: `next_target` is chosen by the measurement, not
+by anyone's sense of what looks repetitive, and `submit_section` runs the same
+claim, reference and entity validators a first draft goes through *plus* the
+similarity gate. Widening how much you may vary does not widen what you may
+assert.
+
+---
+
 ## Composing the estate, optionally
 
 A stock world runs four services on five systems, because nine is what the
