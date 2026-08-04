@@ -45,7 +45,8 @@ class RecipeError(Exception):
 #: and importing it — would make a corpus file able to execute arbitrary code on
 #: load, which is a lot to accept for the convenience of not writing a line here.
 STEPS: dict[str, tuple[str, ...]] = {
-    "MonthEndClose": ("period", "incident", "comparatives", "actors", "eval_density"),
+    "MonthEndClose": ("period", "incident", "comparatives", "actors", "eval_density",
+                      "trend_pct"),
     "Hire": ("period", "role_key", "title", "function", "unit_key"),
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
@@ -225,6 +226,7 @@ def rebuild(
                     # `eval_density` at all, and 1.0 is exactly what that
                     # corpus was built with — the knob's own default.
                     eval_density=step.get("eval_density", 1.0),
+                    trend_pct=step.get("trend_pct", 0.0),
                 )
             )
         elif name == "Hire":

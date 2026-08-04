@@ -143,3 +143,41 @@ Neither number should move on its own — a change to how many artifacts a
 corpus produces, or which types, will shift the count; only a change to the
 component registry, the composer, or a diversity mechanism deliberately wired
 into generation should shift the *shape*.
+
+## Prose sameness, which is a different failure
+
+`worldloom diversity ./corpus --near-duplicates` groups passages whose *text*
+is near-identical and names the artifacts they came from. A batch can carry
+twenty distinct structural shapes and still say the same sentences inside all
+of them, and the fingerprint has no way to see that — it reads component
+sequences, deliberately, so that two memos about entirely different business
+units do not look different merely for having different numbers in them.
+
+The grouping is exact rather than sampled: `similarity.near_duplicate_pairs`
+runs a prefix-filtered similarity join, which returns precisely the pairs a
+full pairwise scan would and misses none, so the clusters are auditable by
+hand. It is also the only version of the number that survives Gate 1's scale —
+ten thousand artifacts is fifty million pairs, and the pairwise scan it
+replaced would have made the diversity claim uncheckable on exactly the corpora
+whose diversity is most at risk.
+
+The report names the group size and the artifacts in it. Three artifacts
+sharing a passage across three periods is a template stamped per period; that
+is one template to fix, not three documents.
+
+## Selecting, not only auditing
+
+Two functions in `compiler/diversity.py`, and they solve different halves:
+
+- `select(candidates, k=..., seed=...)` picks the *k* structural alternatives
+  for **one** artifact that are most unlike each other. Right for offering a
+  model a varied menu; silent about the batch. Run independently for a hundred
+  artifacts it hands every one of them the same first pick, which is how a
+  corpus reaches 120 artifacts and 11 shapes.
+- `assign(candidates_per_artifact, committed=...)` picks one shape per artifact
+  **across** the batch, each one chosen to be furthest from everything already
+  spent — including shapes an earlier period already used, via `committed`, so
+  a corpus built one period at a time does not restart the dispersion each time.
+
+`collisions(fingerprints)` is the audit half of the same question: which
+artifacts actually share a shape, rather than how many shapes there were.

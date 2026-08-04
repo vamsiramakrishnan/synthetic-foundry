@@ -108,6 +108,13 @@ def _season(period: str) -> float:
     return SEASONALITY[int(period.split("-")[1])]
 
 
+def _months_between(origin: str, target: str) -> int:
+    """Signed month offset from *origin* to *target*, both ``YYYY-MM``."""
+    origin_year, origin_month = (int(part) for part in origin.split("-"))
+    target_year, target_month = (int(part) for part in target.split("-"))
+    return (target_year - origin_year) * 12 + (target_month - origin_month)
+
+
 class _Ledger:
     """Accumulates facts, so the generator reads as arithmetic rather than plumbing."""
 
@@ -170,6 +177,7 @@ def generate(
     annual_revenue: int,
     lore_by_target: dict[str, list[str]],
     comparative_months: int = 0,
+    trend_pct: float = 0.0,
     money_unit: str = MONEY,
 ) -> Financials:
     """Generate a company's financial facts for one period, plus a trend behind it.
@@ -181,6 +189,15 @@ def generate(
     ``comparative_months`` adds prior periods at actual only. A trend needs
     actuals; it does not need every prior month's budget, and generating them
     would triple the fact count to fill a column nobody reads.
+
+    ``trend_pct`` compounds the level per month, so a comparative history
+    *grows* instead of oscillating around a flat line. Without it a year of
+    comparatives is one number with a fixed seasonal wobble on top: every
+    month's figure is drawn around the same level, so a seasonally-adjusted
+    series is flat by construction and "is this month's shortfall part of a
+    trend" has no answer in the data. Defaults to 0.0, which multiplies every
+    figure by exactly 1.0 — an IEEE identity, not an approximate one, which is
+    what keeps every existing corpus byte-identical rather than nearly so.
 
     ``money_unit`` is the archetype's own ``f"{currency}_{currency_unit}"`` —
     every retail archetype in this repository resolves to ``MONEY``, which is
@@ -209,9 +226,16 @@ def generate(
         budget: dict[str, int] = {}
         actual: dict[str, int] = {}
         season = _season(target_period)
+        # Compounded from the reporting period, so the offset is negative for
+        # every comparative and the history sits *below* the current month at a
+        # positive trend. Applied as a trailing factor rather than folded into
+        # the level, because at the default `trend_pct` this is a multiply by
+        # exactly 1.0 and leaves the existing expression's floating-point
+        # result bit-identical — reassociating it would not.
+        growth = (1.0 + trend_pct) ** _months_between(period, target_period)
         for key in unit_ids:
             unit_rng = rng.derive(f"revenue/{target_period}/{key}")
-            unit_budget = int(round(monthly * unit_shares[key] * season, -2))
+            unit_budget = int(round(monthly * unit_shares[key] * season * growth, -2))
             miss_pct = unit_rng.number(-0.065, 0.015, places=4)
             budget[key] = unit_budget
             actual[key] = int(round(unit_budget * (1 + miss_pct), -2))

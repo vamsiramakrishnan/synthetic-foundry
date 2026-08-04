@@ -83,6 +83,30 @@ jobs:
           worldloom render "${{ runner.temp }}/reference" -f docx -f xlsx -f markdown
           worldloom validate "${{ runner.temp }}/reference"
 
+      # The analysis surfaces, on a corpus big enough for each to say something.
+      # `topology` and `series` are readings rather than gates — they exit zero
+      # on a corpus with a defect in it, because `validate` owns pass/fail — so
+      # what this step proves is that they run at scale and that their JSON is
+      # stable: the same corpus read twice must produce the same bytes, which is
+      # the property that lets either one be diffed in a downstream CI at all.
+      - name: The readings run and are stable
+        run: |
+          worldloom build --seed 8128 --incident --archetype australian_grocery \
+            --comparatives 23 --trend 0.004 --narrate -f markdown \
+            --out "${{ runner.temp }}/measured"
+          worldloom topology "${{ runner.temp }}/measured" --json > /tmp/topology-a.json
+          worldloom topology "${{ runner.temp }}/measured" --json > /tmp/topology-b.json
+          diff /tmp/topology-a.json /tmp/topology-b.json
+          worldloom series "${{ runner.temp }}/measured" --json > /tmp/series-a.json
+          worldloom series "${{ runner.temp }}/measured" --json > /tmp/series-b.json
+          diff /tmp/series-a.json /tmp/series-b.json
+          worldloom diversity "${{ runner.temp }}/measured" --near-duplicates
+          # And the trended build replays byte-for-byte like every other knob.
+          worldloom build --seed 8128 --incident --archetype australian_grocery \
+            --comparatives 23 --trend 0.004 --replay "${{ runner.temp }}/measured" \
+            -f markdown --out "${{ runner.temp }}/measured-again"
+          diff -r "${{ runner.temp }}/measured" "${{ runner.temp }}/measured-again"
+
       # The corpus has to be hard, not just coherent. A keyword baseline with no
       # notion of time or authority is scored against the evaluation set, and the
       # score is asserted to stay low on the types the corpus exists to pose. If

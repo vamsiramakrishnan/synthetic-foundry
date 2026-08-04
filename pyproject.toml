@@ -39,6 +39,17 @@ dependencies = [
     "pydantic>=2.6",
     "typer>=0.12",
     "rich>=13.0",
+    # `worldloom.graphs` — the dependency, provenance, supersession and
+    # reporting graphs, and the validator checks that read them. Core rather
+    # than an extra because `worldloom validate` runs those checks on every
+    # corpus, and a coherence gate that is skipped when an optional package is
+    # missing is not a gate.
+    "networkx>=3.2",
+    # `worldloom.series` and `worldloom.similarity`. Both use numpy only for
+    # elementwise and integer arithmetic, which is bit-identical everywhere;
+    # neither performs a matrix product, which is the operation that would not
+    # be. Pure-wheel, no compiler, no BLAS requirement at import.
+    "numpy>=1.26",
 ]
 
 [project.urls]

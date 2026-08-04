@@ -190,6 +190,16 @@ def build(
         0, "--comparatives",
         help="Prior months of actuals to generate, for a trend. 11 gives a rolling year.",
     ),
+    trend: float = typer.Option(
+        0.0, "--trend",
+        help=(
+            "Monthly compound growth behind the comparative history, as a fraction "
+            "(0.004 is about 5%/year). Without it a year of comparatives oscillates "
+            "around a flat level, so a seasonally-adjusted series is flat by "
+            "construction and no question about direction has an answer in the data. "
+            "Needs --comparatives. 0.0 reproduces every existing corpus byte for byte."
+        ),
+    ),
     periods: int = typer.Option(
         1, "--periods",
         help=(
@@ -327,6 +337,9 @@ def build(
                 ("--actors", actors is not None),
                 ("--incident/--no-incident", incident is not None),
                 ("--comparatives", comparatives > 0),
+                # Same reasoning as its neighbour: the trend shapes retail's
+                # comparative history, and a single-episode vertical has none.
+                ("--trend", trend != 0.0),
                 # Retail-only for now: the knob's growth (category commentary,
                 # site-level cases) is argued entirely from retail's own
                 # hierarchy in `scenarios.py`/`generators/evaluation.py`.
@@ -390,6 +403,7 @@ def build(
             intended = with_step(
                 intended, "MonthEndClose", period=stamp, incident=incident,
                 comparatives=comparatives if index == 0 else 0, actors=True,
+                **({} if trend == 0.0 else {"trend_pct": trend}),
                 # Only recorded away from its default — see `scenarios.py`'s
                 # matching call for why an unconditional write here would
                 # break the byte-identity gate every default build depends on.
@@ -437,6 +451,7 @@ def build(
                     period=stamp,
                     include_operational_incident=incident,
                     comparative_months=comparatives if index == 0 else 0,
+                    trend_pct=trend if index == 0 else 0.0,
                     actors=actor_provider,
                     actor_ledger=actor_ledger,
                     eval_density=eval_density_value,
@@ -1552,6 +1567,15 @@ def diversity(
             "monotonous over time."
         ),
     ),
+    near_duplicates: bool = typer.Option(
+        False, "--near-duplicates",
+        help=(
+            "Also group passages whose prose is near-identical, and name which "
+            "artifacts they belong to. Structural sameness and prose sameness are "
+            "different failures — a batch can carry twenty distinct shapes and still "
+            "say the same sentences in all of them."
+        ),
+    ),
 ) -> None:
     """Fingerprint every compilable artifact and report how structurally varied the batch is.
 
@@ -1565,6 +1589,8 @@ def diversity(
     """
     from .compiler.compose import compose, plan_from_ir
     from .compiler.diversity import Fingerprint, Quotas, check, fingerprint, report
+    from .compiler.diversity import collisions as diversity_collisions
+    from .evaluate.index import passages
     from .render.docx import HANDLES as DOCX_ARTIFACT_TYPES
     from .render.xlsx import HANDLES as XLSX_ARTIFACT_TYPES
 
@@ -1583,6 +1609,10 @@ def diversity(
             pass
 
     fingerprints: list[Fingerprint] = []
+    # Kept beside the fingerprints rather than recovered by re-walking the IR:
+    # `collisions()` returns positions, and a position is only useful if it can
+    # be turned back into the artifact an author has to open.
+    fingerprint_ids: list[str] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
         # A workbook composes with fmt="xlsx" — its lineage sheet is xlsx-only, so
@@ -1600,6 +1630,7 @@ def diversity(
             continue
         plan = plan_from_ir(ir, artifact_type=intent.artifact_type, size_class=intent.size_profile)
         fingerprints.append(fingerprint(compose(plan, fmt=fmt)))
+        fingerprint_ids.append(ir.id)
 
     if not fingerprints:
         console.print("[green]✓[/green] nothing compilable to fingerprint")
@@ -1622,6 +1653,33 @@ def diversity(
                     shape = " → ".join(fp.components) if fp.components else "(no components)"
                     console.print(f"  [dim]{digest[:12]}[/dim]  {shape}")
 
+        # Which artifacts share a shape, not merely how many shapes there were.
+        # A count is a metric; a list of the fourteen documents that are one
+        # template is somewhere to go and look.
+        repeated = diversity_collisions(fingerprints)
+        if repeated:
+            console.print("")
+            console.print(f"[bold]shapes used by more than one artifact[/bold] ({len(repeated)})")
+            for digest, members in repeated[:10]:
+                names = ", ".join(fingerprint_ids[i] for i in members[:8])
+                more = f" +{len(members) - 8}" if len(members) > 8 else ""
+                console.print(f"  [dim]{digest[:12]}[/dim]  ×{len(members)}  {names}{more}")
+
+    if near_duplicates:
+        from .stats import near_duplicate_clusters
+
+        pool = list(passages(world))
+        groups = near_duplicate_clusters(pool)
+        console.print("")
+        if not groups:
+            console.print("[green]✓[/green] no near-duplicate passages")
+        else:
+            console.print(f"[bold]near-duplicate passage groups[/bold] ({len(groups)})")
+            for group in groups[:10]:
+                where = ", ".join(sorted({pool[i].artifact_id for i in group}))
+                console.print(f"  ×{len(group)}  {where}")
+                console.print(f"      [dim]{pool[group[0]].text[:110]}…[/dim]")
+
     # Checked even when `fingerprints` is empty: an empty batch trivially meets
     # every quota (nothing to be repetitive or concentrated about yet — see
     # `check`'s own docstring), so `--check-quotas` must not fail a corpus that
@@ -1633,6 +1691,259 @@ def diversity(
             for violation in violations:
                 err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
             raise typer.Exit(code=1)
+
+
+@app.command()
+def topology(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    limit: int = typer.Option(
+        12, "--limit", "-n", help="How many services to list, most load-bearing first.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the reading as JSON — stable keys and ordering, safe to diff in CI.",
+    ),
+) -> None:
+    """Read the corpus's graphs: what depends on what, and what nothing routes around.
+
+    The estate has always been a graph — `depends_on`, `manager_id`,
+    `derived_from`, a fact's `supersedes` — and nothing read it. This does.
+    Services are ranked by *blast radius*, the number of things that fall over
+    transitively when one does, and separately by *gates*, the number of things
+    that have no second path to what it serves. Those are different questions:
+    a well-replicated shared platform has a large blast radius and gates
+    nothing, and a small unloved mapping job can gate the whole close.
+
+    Two readings this is for. As an author: an archetype whose service
+    catalogue is a flat list of unrelated names shows up here as zero
+    dependency hops, and a world with no provenance depth is one whose
+    documents never build on each other. As a corpus buyer: the ranking is
+    *derived from the graph*, so it can disagree with the hand-declared
+    `criticality_tier` — and a tier-4 service that seventeen things depend on
+    is a finding, not a rounding error.
+
+    Every number here is an exact count with ties broken on id. There is no
+    centrality score anywhere in it, deliberately: see `graphs.py`'s module
+    docstring on why a float from an iterative solver has no business
+    deciding a rank in a corpus that must regenerate byte-for-byte.
+    """
+    import json as json_module
+
+    from . import graphs as graphs_module
+
+    world = _load(corpus)
+    reading = graphs_module.analyse(world)
+
+    if as_json:
+        typer.echo(json_module.dumps({"corpus": corpus, **reading.as_dict()}, indent=2))
+        return
+
+    console.print(str(reading))
+
+    if reading.services:
+        console.print("")
+        table = Table(title="Services and systems, by blast radius", box=None)
+        table.add_column("id", style="dim")
+        table.add_column("name")
+        table.add_column("kind")
+        table.add_column("tier", justify="right")
+        table.add_column("depends on it", justify="right")
+        table.add_column("blast", justify="right")
+        table.add_column("gates", justify="right")
+        for rank in reading.services[: max(1, limit)]:
+            table.add_row(
+                rank.id, rank.name, rank.kind,
+                str(rank.tier) if rank.kind == "service" else "[dim]—[/dim]",
+                str(rank.fan_in), str(rank.blast_radius),
+                f"[yellow]{rank.gates}[/yellow]" if rank.gates else "0",
+            )
+        console.print(table)
+
+    # Structural defects are printed rather than merely counted, because this
+    # command is where someone looks when `validate` has already told them a
+    # cycle exists and they need to see it. `validate` owns the pass/fail —
+    # this stays a reading, and exits zero either way.
+    for label, found in (
+        ("dependency cycle", reading.dependency_cycles),
+        ("reporting cycle", reading.reporting_cycles),
+        ("provenance cycle", reading.provenance_cycles),
+    ):
+        for cycle in found:
+            console.print(f"[red]✗[/red] {label}: {' → '.join(cycle)} → {cycle[0]}")
+    for fact_id, superseding in reading.forked_supersessions:
+        console.print(
+            f"[red]✗[/red] forked supersession: {fact_id} superseded by {', '.join(superseding)}"
+        )
+
+
+#: Units that mean "this is a ratio, not a level". Listed rather than pattern-
+#: matched because the three engines spell them differently ("percent", "pct",
+#: "bps") and a substring test on "pct" would miss two of them — which is how
+#: the default series pick landed on a margin percentage in the first place.
+_RATIO_UNITS = frozenset({"percent", "pct", "bps", "ratio", "x"})
+
+
+@app.command()
+def series(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    kind: str = typer.Option(
+        None, "--kind", help="Fact kind to read. Default: the longest series in the corpus.",
+    ),
+    subject: str = typer.Option(
+        None, "--subject", help="Entity id the series is about. Default: whichever has the most periods.",
+    ),
+    cycle: int = typer.Option(
+        None, "--cycle", help="Positions in the seasonal cycle. Default: 12 if the data reaches it, else half the series.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the decomposition as JSON — stable keys and ordering.",
+    ),
+) -> None:
+    """Decompose a period-keyed fact series into trend, season, and what is left.
+
+    A multi-period corpus carries a column of monthly figures and, until now,
+    no way to ask what shape they have. This separates them: how fast the level
+    is moving, how much of the movement is the calendar, and which periods are
+    left over — the ones the trend and the season together do not explain.
+
+    That last set is the interesting one. An incident month should sit outside
+    the pattern, and if it does not, the corpus is claiming a disruption its own
+    numbers do not show. Outliers are scored on **median absolute deviation**
+    rather than a z-score, because an outlier inflates the standard deviation it
+    would be measured against — a detector that hides its largest findings.
+
+    Build a history worth decomposing with `--comparatives`, and give it a
+    direction with `--trend`: without one the level is flat by construction and
+    every seasonally-adjusted month looks like every other.
+    """
+    import json as json_module
+
+    from . import series as series_module
+
+    world = _load(corpus)
+
+    # The longest series in the corpus, unless the caller named one. Grouped
+    # on (kind, subject) because those two together are what a series *is*
+    # here: one measure, about one entity, across periods.
+    grouped: dict[tuple[str, str], dict[str, float]] = {}
+    units: dict[tuple[str, str], str] = {}
+    for fact in world.facts:
+        if fact.period is None or fact.value is None or fact.is_superseded:
+            continue
+        if kind and fact.kind != kind:
+            continue
+        if subject and fact.subject != subject:
+            continue
+        grouped.setdefault((fact.kind, fact.subject), {})[fact.period] = fact.value.amount
+        units.setdefault((fact.kind, fact.subject), fact.value.unit)
+
+    if not grouped:
+        err.print("[red]error:[/red] no period-keyed numeric facts match that kind/subject")
+        raise typer.Exit(code=2)
+
+    # Longest wins, and the ties are the interesting part: a retail close mints
+    # a dozen kinds over the same twelve months, so length alone would pick
+    # whichever sorted last — a business unit's margin *percentage* rather than
+    # the group's revenue. Three tie-breaks, in order: company-level before a
+    # unit's, an amount before a ratio, then the kind name. The middle one is
+    # not cosmetic — decomposing a percentage multiplicatively asks how a ratio
+    # grew, which is a question about two series at once and not the one the
+    # output claims to answer. The result is still a pure function of the
+    # corpus.
+    (chosen_kind, chosen_subject), points = min(
+        grouped.items(),
+        key=lambda row: (
+            -len(row[1]),
+            row[0][1] != world.company.id,
+            units.get(row[0], "") in _RATIO_UNITS,
+            row[0][0],
+            row[0][1],
+        ),
+    )
+    periods = sorted(points)
+    values = [points[p] for p in periods]
+
+    span = cycle or (12 if len(values) >= 24 else max(2, len(values) // 2))
+    try:
+        decomposition = series_module.decompose(values, period=span)
+    except ValueError as exc:
+        err.print(
+            f"[red]error:[/red] {escape(str(exc))}\n"
+            "[dim]Build a longer history with --comparatives, or name a shorter "
+            "--cycle.[/dim]"
+        )
+        raise typer.Exit(code=2) from exc
+
+    outliers = series_module.anomalies(decomposition)
+    expected = decomposition.extend(1)
+
+    if as_json:
+        typer.echo(json_module.dumps({
+            "corpus": corpus,
+            "kind": chosen_kind,
+            "subject": chosen_subject,
+            "cycle": span,
+            "periods": periods,
+            "values": list(decomposition.values),
+            "trend": list(decomposition.trend),
+            "seasonal": list(decomposition.seasonal),
+            "residual": list(decomposition.residual),
+            "seasonal_indices": list(decomposition.seasonal_indices),
+            "growth_per_period": decomposition.growth_per_period,
+            "anomalies": [
+                {"period": periods[index], "score": score} for index, score in outliers
+            ],
+            "next_expected": list(expected),
+        }, indent=2))
+        return
+
+    growth = decomposition.growth_per_period
+    console.print(
+        f"[bold]{chosen_kind}[/bold] for {chosen_subject} — {len(values)} period(s),"
+        f" cycle of {span}"
+    )
+    console.print(f"  trend                 {decomposition.trend[0]:,.0f} → {decomposition.trend[-1]:,.0f}"
+                  f"  ({growth * 100:+.2f}% per period)")
+    console.print(f"  seasonal amplitude    {decomposition.seasonal_amplitude:.3f}"
+                  f"  (peak-to-trough, as a multiple of normal)")
+    console.print(f"  next period expected  {expected[0]:,.0f}" if expected else "")
+    if cycle is None and span != 12:
+        # Said out loud rather than left in the header, because a fallback
+        # cycle on monthly data aliases: a December spike folded into a
+        # six-position cycle reappears as a mirrored dip in June, and the
+        # outlier column will faithfully flag both. A monthly series needs 24
+        # observations before a 12-cycle has more than one number per index.
+        console.print(
+            f"  [dim]cycle of {span} is a fallback: {len(values)} observations cannot"
+            " support the 12 a monthly series wants (24 are needed). Positions alias"
+            " onto each other, so read the outliers as pairs. Build with"
+            " --comparatives 23, or name a --cycle.[/dim]"
+        )
+
+    table = Table(box=None)
+    table.add_column("period")
+    table.add_column("actual", justify="right")
+    table.add_column("trend", justify="right")
+    table.add_column("season", justify="right")
+    table.add_column("residual", justify="right")
+    table.add_column("")
+    flagged = dict(outliers)
+    for index, period in enumerate(periods):
+        table.add_row(
+            period,
+            f"{decomposition.values[index]:,.0f}",
+            f"{decomposition.trend[index]:,.0f}",
+            f"{decomposition.seasonal[index]:.3f}",
+            f"{decomposition.residual[index]:.3f}",
+            f"[yellow]outlier {flagged[index]:+.1f}[/yellow]" if index in flagged else "",
+        )
+    console.print(table)
+
+    if not outliers:
+        console.print(
+            "[dim]No period departs from the fitted trend and season. On a corpus "
+            "with an incident in it, that is a finding: the disruption the "
+            "documents describe is not visible in the figures.[/dim]"
+        )
 
 
 def _for_stats(name: str) -> World:

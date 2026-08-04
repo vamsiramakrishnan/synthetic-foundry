@@ -31,6 +31,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from . import similarity
 from .evaluate.bm25 import tokens
 from .evaluate.index import Passage, document_texts, passages
 
@@ -103,35 +104,45 @@ def _shingles(text: str) -> frozenset[tuple[str, ...]]:
     same thing here as it does to the thing that would actually be confused by
     it: a retriever indexing this corpus.
     """
-    words = tokens(text)
-    if len(words) < SHINGLE_SIZE:
-        return frozenset({tuple(words)}) if words else frozenset()
-    return frozenset(tuple(words[i : i + SHINGLE_SIZE]) for i in range(len(words) - SHINGLE_SIZE + 1))
+    return similarity.shingles(tokens(text), SHINGLE_SIZE)
+
+
+def near_duplicate_clusters(pool: list[Passage]) -> tuple[tuple[int, ...], ...]:
+    """Groups of mutually near-duplicate passages, largest first.
+
+    The finding behind the rate. `_near_duplicates` says a tenth of the pairs
+    repeat; this says *which* passages they are, so an author can look at the
+    eleven that are one template and fix the template rather than guess.
+    """
+    return similarity.clusters(
+        similarity.near_duplicate_pairs([_shingles(p.text) for p in pool],
+                                        NEAR_DUPLICATE_THRESHOLD),
+        len(pool),
+    )
 
 
 def _near_duplicates(pool: list[Passage]) -> tuple[int, int]:
     """``(near-duplicate pairs, total pairs)`` among *pool*, by shingled Jaccard.
 
-    Exact, pairwise, O(n^2) — deliberately, not a MinHash approximation. A
-    corpus large enough for that to matter is larger than anything this tool
-    renders today (see `AGENTS.md`'s scale figures), and the entire premise of
-    this report is a number a skeptical reader can recompute by hand from the
-    passage text; trading that for an approximate one to save time nobody is
-    spending would be a strange economy.
+    Still the exact count — the same pairs a full pairwise scan returns, not a
+    MinHash estimate of them — because the premise of this whole report is a
+    number a skeptical reader can recompute by hand from the passage text. What
+    changed is only how long getting it takes: `similarity.near_duplicate_pairs`
+    reaches the same answer through a prefix-filtered similarity join instead of
+    comparing all n(n-1)/2 pairs.
+
+    That mattered more than it looked. The O(n^2) version defended itself on
+    the grounds that no corpus this tool renders is big enough for the cost to
+    bite — which was true of a 120-artifact close and is precisely what
+    build-order §12's Gate 1 (10,000 artifacts, fifty million pairs) exists to
+    stop being true. A diversity number that silently becomes uncomputable at
+    the scale where diversity is most at risk is worse than no number.
     """
-    shingle_sets = [_shingles(p.text) for p in pool]
     total_pairs = len(pool) * (len(pool) - 1) // 2
-    near = 0
-    for i in range(len(pool)):
-        a = shingle_sets[i]
-        for j in range(i + 1, len(pool)):
-            b = shingle_sets[j]
-            union = a | b
-            if not union:
-                continue
-            if len(a & b) / len(union) >= NEAR_DUPLICATE_THRESHOLD:
-                near += 1
-    return near, total_pairs
+    pairs = similarity.near_duplicate_pairs(
+        [_shingles(p.text) for p in pool], NEAR_DUPLICATE_THRESHOLD
+    )
+    return len(pairs), total_pairs
 
 
 def _texts_and_citations(world: World) -> tuple[dict[str, str], dict[str, set[str]]]:

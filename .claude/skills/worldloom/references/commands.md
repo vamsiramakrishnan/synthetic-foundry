@@ -79,6 +79,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--periods` | Run this many consecutive episodes — closes for the retail vertical, or a single-episode vertical's own cadence (a domain's period_step_months). More than one gives recurrence, superseded documents, and the evaluation questions a single episode cannot pose. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
+| `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
 
 ### `worldloom demo`
 
@@ -104,6 +105,7 @@ worldloom diversity <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--check-quotas` | Exit non-zero if the batch fails a declared Quotas threshold (see compiler/diversity.py). For CI: assert the corpus does not get more monotonous over time. |
+| `--near-duplicates` | Also group passages whose prose is near-identical, and name which artifacts they belong to. Structural sameness and prose sameness are different failures — a batch can carry twenty distinct shapes and still say the same sentences in all of them. |
 | `--verbose`, `-v` | Show the per-artifact-type breakdown and every distinct shape within it. |
 
 ### `worldloom docs`
@@ -298,6 +300,21 @@ worldloom render <CORPUS>
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
 
+### `worldloom series`
+
+Decompose a period-keyed fact series into trend, season, and what is left.
+
+```
+worldloom series <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--cycle` | Positions in the seasonal cycle. Default: 12 if the data reaches it, else half the series. |
+| `--json` | Emit the decomposition as JSON — stable keys and ordering. |
+| `--kind` | Fact kind to read. Default: the longest series in the corpus. |
+| `--subject` | Entity id the series is about. Default: whichever has the most periods. |
+
 ### `worldloom stats`
 
 Report what the corpus actually contains: no invented benchmark, just numbers.
@@ -322,6 +339,19 @@ worldloom status <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit machine-readable state instead of the table. |
+
+### `worldloom topology`
+
+Read the corpus's graphs: what depends on what, and what nothing routes around.
+
+```
+worldloom topology <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the reading as JSON — stable keys and ordering, safe to diff in CI. |
+| `--limit`, `-n` | How many services to list, most load-bearing first. |
 
 ### `worldloom validate`
 

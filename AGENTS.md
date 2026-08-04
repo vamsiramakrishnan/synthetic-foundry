@@ -63,6 +63,29 @@ worldloom validate ./corpus
 worldloom evaluate ./corpus
 ```
 
+Three more readings answer questions `validate` and `evaluate` cannot, and each
+one is a different question — read all four before calling a corpus measured:
+
+```bash
+worldloom topology ./corpus              # what depends on what, and what nothing routes around
+worldloom series ./corpus                # trend, season, and the periods neither explains
+worldloom diversity ./corpus --near-duplicates   # which documents are one template
+```
+
+`topology` reads the estate as a graph: services ranked by *blast radius* (how
+much falls over transitively when one does) and separately by *gates* (how much
+has no second path to what it serves — a well-replicated platform has a large
+blast radius and gates nothing). Its ranking is derived from the graph, so it
+can disagree with the hand-declared `criticality_tier`, and a zero-hop
+dependency chain means an archetype's service catalogue is a flat list rather
+than a system.
+
+`series` decomposes a period-keyed fact series into trend, season, and residual,
+and names the periods the first two do not explain. Worth building a history for
+first: `--comparatives 23 --trend 0.004` gives two years with a direction in
+them, where the default flat level makes every seasonally-adjusted month look
+like every other.
+
 At any point, `worldloom status ./corpus` names the stage the corpus is at and
 the exact command that comes next — resume from that rather than from memory.
 `status`, `validate`, and every `accept` command take `--json` when you would

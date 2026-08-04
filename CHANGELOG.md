@@ -119,6 +119,72 @@ One coherent enterprise, taken all the way through. Two, in fact.
   (`recipe.register_step`) each vertical seeds from its own module, and two
   thin-waist exceptions were paid down rather than a third added.
 
+- **The world as graphs, and the defects only a graph could see.**
+  `worldloom.graphs` reads the four graphs the schema always had and nothing
+  ever looked at: the service/system dependency graph, the artifact provenance
+  DAG across all four relationships at once, the fact supersession forest, and
+  the reporting tree. It closed three real invariant gaps corpus-wide, for
+  every vertical at the same time — a dependency cycle through more than one
+  hop (the old check caught a service that depended on *itself* and nothing
+  longer), a **forked supersession chain** (two facts replacing one, which
+  leaves "what is current" ambiguous; the fact-layer walk built a dict keyed on
+  the superseded id and let the second writer win, so this could never
+  surface), and a provenance loop that uses a different relationship on each
+  edge. `worldloom topology` is the reading: services ranked by *blast radius*
+  and separately by *gates* — how much has no second path to what they serve,
+  computed from dominator trees, because "lots of things depend on it" and
+  "nothing routes around it" are different properties and a replicated platform
+  has the first without the second. Every measure is an exact integer count
+  with ties broken on id; there is no centrality score anywhere in it, because
+  ranking by a float from an iterative solver is an argmax a different SciPy
+  build can flip, and a rank that moves between machines is not a rank.
+
+- **Near-duplicate detection that survives Gate 1.** `stats` has always
+  reported an exact near-duplicate rate over passages, computed by comparing
+  every pair — defensible at 120 artifacts and uncomputable at the 10,000
+  build-order §12 targets, which is to say it would have stopped working on
+  exactly the corpora whose repetition most needs auditing. `worldloom.similarity`
+  keeps the *answer* and changes the algorithm: a prefix-filtered similarity
+  join returns precisely the pairs a full scan would and provably misses none.
+  Measured at 158× on corpus-shaped input, and pinned against brute force over
+  randomised inputs rather than a fixture, because an off-by-one in a prefix
+  bound is the only interesting way it can be wrong. `diversity
+  --near-duplicates` turns the rate into a finding: *which* documents are one
+  template, named. MinHash and banded LSH ship alongside for the regime past
+  the exact one, labelled approximate and able to state the recall their band
+  configuration implies.
+
+- **Batch diversity, not just per-artifact.** `compiler.diversity.select` picks
+  the *k* most-unlike alternatives for one artifact and is silent about the
+  batch — run independently for a hundred artifacts it hands every one of them
+  index 0, which is how §7a's measured defect (120 artifacts, 11 distinct
+  shapes) is produced in the first place. `assign` spreads shapes *across* a
+  batch, carrying what earlier periods already spent so period two does not
+  reproduce period one; `collisions` names which artifacts share a shape rather
+  than counting how many shapes there were.
+
+- **Time series behind the figures.** `worldloom.series` decomposes a
+  period-keyed fact series into trend, season and residual, and names the
+  periods the first two do not explain — read it as a corpus check, since an
+  incident month that does *not* sit outside the pattern is a corpus asserting
+  a disruption its own numbers do not show. Outliers are scored on median
+  absolute deviation rather than a z-score, because outliers inflate the
+  standard deviation they would be measured against and several of them mask
+  each other; the decomposition refits once with the first pass's outliers
+  replaced by what it expected, so one spike cannot tilt the trend every other
+  month is then judged against. Two defects found by its own tests and fixed
+  in the algorithm rather than the assertion: a local (Hampel) filter mistakes
+  a genuine seasonal peak for a spike, and a robust scale of zero — routine
+  when more than half a sample is identical, which generated figures often are
+  — silently disabled the detector on exactly the obvious cases.
+
+- **`build --trend`.** Monthly compound growth behind the comparative history.
+  Without it a year of comparatives oscillates around a flat level, so a
+  seasonally-adjusted series is flat by construction and no question about
+  direction has an answer in the data. 0.0 multiplies by exactly 1.0 — an IEEE
+  identity — so every existing corpus is byte-identical, asserted rather than
+  reasoned about.
+
 - **Two retrievers, so hardness claims survive a change of heuristic.**
   `evaluate --retriever {bm25,tfidf,both}` — the existing baseline was
   already BM25, so the second family is TF-IDF cosine with shared

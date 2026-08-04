@@ -637,6 +637,61 @@ class _Validator:
             if service.id in service.depends_on:
                 self.fail("graph", "self_dependency", service.id, "service depends on itself")
 
+        self.structure()
+
+    def structure(self) -> None:
+        """The invariants only a graph can see.
+
+        Everything above walks one edge at a time and catches what one hop can
+        catch: a service that depends on itself, a person who manages
+        themselves. Three defects are invisible at that resolution, and each
+        one has been reachable in this schema since the schema existed:
+
+        * **A cycle through more than one hop.** ``A → B → C → A`` passes the
+          self-dependency check above three times and is still an estate that
+          can never start.
+        * **A forked supersession chain.** ``temporal()`` builds
+          ``superseded_by[fact.supersedes] = fact.id`` and lets the second
+          writer win, so two facts replacing one earlier fact — which makes
+          "what is current" ambiguous with no rule for choosing — has never
+          been able to surface. The artifact layer has checked exactly this
+          (``superseded_twice``) since documents started being republished;
+          the fact layer, where it matters more, never did.
+        * **A provenance loop across relationships.** Each of ``derived_from``,
+          ``supersedes``, ``revises`` and ``restates`` is checked for its own
+          semantics, and none of those checks can see a loop that uses a
+          different relationship on each edge.
+
+        Delegated to ``graphs.py`` rather than hand-rolled here, because the
+        reading these need is the same reading ``worldloom topology`` prints,
+        and two implementations of "is this acyclic" that could disagree is
+        exactly one implementation too many.
+        """
+        from . import graphs
+
+        for label, graph in (
+            ("service_cycle", graphs.dependency_graph(self.world)),
+            ("reporting_cycle", graphs.reporting_graph(self.world)),
+            ("provenance_cycle", graphs.provenance_graph(self.world)),
+        ):
+            self.checks += 1
+            for cycle in graphs.cycles(graph):
+                self.fail("graph", label, cycle[0],
+                          f"cycle through {' → '.join(cycle)} → {cycle[0]}")
+
+        # One check per superseded fact, counted whether or not it forks: a
+        # counter incremented only inside the failure branch would report zero
+        # checks on a healthy corpus, which reads as "this was never checked"
+        # — and on the corpus where it matters most, the one that passes.
+        supersession = graphs.supersession_graph(self.world)
+        self.checks += sum(1 for node in supersession if supersession.in_degree(node))
+        for fact_id, superseding in graphs.forks(supersession):
+            self.fail(
+                "graph", "fact_superseded_twice", fact_id,
+                f"superseded by {', '.join(superseding)} — a forked chain leaves two"
+                " facts current with no rule for choosing between them",
+            )
+
     # -- financial ---------------------------------------------------------
 
     def financial(self) -> None:

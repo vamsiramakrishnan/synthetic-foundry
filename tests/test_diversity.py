@@ -495,3 +495,73 @@ def test_regression_the_measured_problem_has_a_floor_to_raise() -> None:
         f"only {batch.distinct_digests} distinct shapes across {batch.count} artifacts — "
         "below the recorded floor; diversity regressed"
     )
+
+
+# ---------------------------------------------------------------------------
+# Batch assignment: the half `select` leaves open
+# ---------------------------------------------------------------------------
+
+
+def test_collisions_name_the_artifacts_that_share_a_shape() -> None:
+    """`report` counts distinct shapes; this says which documents are the
+    repeats. The count is a metric, the list is somewhere to go and look."""
+    from worldloom.compiler.diversity import collisions
+
+    fingerprints = _fingerprint_the_corpus()
+    repeated = collisions(fingerprints)
+    assert repeated, "the recorded fixture repeats shapes across its three periods"
+    for digest, members in repeated:
+        assert len(members) > 1
+        assert len({fingerprints[i].digest() for i in members}) == 1
+        assert digest == fingerprints[members[0]].digest()
+    # Largest group first, which is the order an author wants to work in.
+    sizes = [len(members) for _, members in repeated]
+    assert sizes == sorted(sizes, reverse=True)
+
+
+def test_assign_spreads_shapes_across_a_batch_where_select_cannot() -> None:
+    """`select` picks the *k* most-unlike alternatives for one artifact and has
+    nothing to say about the batch — run independently per artifact it hands
+    every one of them index 0, which is precisely how a corpus ends up with 120
+    artifacts and 11 shapes. This spreads them."""
+    from worldloom.compiler.diversity import assign, select
+
+    # Distinct shapes only. The corpus repeats itself — which is the defect
+    # this whole module is about — so a menu taken straight off the front of
+    # the list would contain two entries with the same digest, and "use every
+    # option" would then be asking for something that is not there.
+    seen: dict[str, object] = {}
+    for fp in _fingerprint_the_corpus():
+        seen.setdefault(fp.digest(), fp)
+    menu = list(seen.values())[:4]
+    assert len(menu) == 4
+
+    # Every artifact offered the same menu of alternatives: the pathological
+    # case, where per-artifact selection is guaranteed to collide.
+    batch = [menu] * 4
+
+    per_artifact = [select(menu, k=1, seed=0)[0] for _ in range(4)]
+    assert set(per_artifact) == {0}, "per-artifact selection collides, by design"
+
+    chosen = assign(batch)
+    assert len(set(chosen)) == len(menu), "the batch should use every distinct shape it has"
+
+
+def test_assign_respects_what_an_earlier_batch_already_spent() -> None:
+    """A corpus built one period at a time must not restart the dispersion at
+    every period, or period two reproduces period one exactly."""
+    from worldloom.compiler.diversity import assign
+
+    fingerprints = _fingerprint_the_corpus()
+    menu = list(fingerprints[:3])
+    assert assign([menu], committed=[menu[0]])[0] != 0
+
+
+def test_assign_refuses_an_artifact_with_no_shapes_to_choose_from() -> None:
+    """An empty candidate set means the shape vocabulary is broken, and a quiet
+    fallback would hide it behind exactly the monotony this exists to break."""
+    from worldloom.compiler.diversity import assign
+
+    fingerprints = _fingerprint_the_corpus()
+    with pytest.raises(ValueError, match="no candidate shapes"):
+        assign([[fingerprints[0]], []])

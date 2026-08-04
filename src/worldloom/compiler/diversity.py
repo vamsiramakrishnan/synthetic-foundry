@@ -647,12 +647,104 @@ def select(candidates: Sequence[Fingerprint], *, k: int, seed: int) -> tuple[int
     return tuple(selected)
 
 
+def collisions(fingerprints: Sequence[Fingerprint]) -> tuple[tuple[str, tuple[int, ...]], ...]:
+    """Shapes used by more than one artifact, and which artifacts used them.
+
+    ``report()`` counts distinct shapes; this names the repeats. The
+    difference is what an author can act on: "120 artifacts, 11 shapes" is a
+    number, and "these fourteen close packs are one shape" is a document to go
+    and look at. Ordered largest group first, then by digest, so ``--json`` is
+    diffable.
+    """
+    grouped: dict[str, list[int]] = {}
+    for index, fp in enumerate(fingerprints):
+        grouped.setdefault(fp.digest(), []).append(index)
+    return tuple(sorted(
+        ((digest, tuple(members)) for digest, members in grouped.items() if len(members) > 1),
+        key=lambda row: (-len(row[1]), row[0]),
+    ))
+
+
+def assign(
+    candidates: Sequence[Sequence[Fingerprint]],
+    *,
+    committed: Sequence[Fingerprint] = (),
+) -> tuple[int, ...]:
+    """One shape per artifact, chosen so the *batch* spreads out.
+
+    ``select`` and this are the two halves of the same problem and neither
+    substitutes for the other. ``select`` works inside one artifact: given the
+    dozen structural alternatives that artifact could take, pick the *k* most
+    unlike each other. That is the right tool for offering a model a varied
+    menu, and it has nothing to say about the batch — run it independently for
+    a hundred artifacts of the same type and it will happily hand every one of
+    them the same first pick, because index 0 is index 0 every time.
+
+    Which is precisely the measured defect build-order §7a.1 records: a
+    12-period corpus of 120 artifacts carrying **11 distinct section shapes**,
+    with DOCX sizes across 72 files spanning 38,658–40,618 bytes. Every close
+    pack in the estate is the same document with different numbers, and no
+    amount of per-artifact selection fixes it, because per-artifact selection
+    is what produced it.
+
+    So this greedily assigns across the batch: artifacts are taken in the
+    order given, and each one gets whichever of *its own* candidates is
+    furthest from every shape already committed — the shapes chosen by earlier
+    artifacts in this call, plus any *committed* shapes an earlier batch
+    already spent (a corpus built one period at a time must not restart the
+    dispersion at every period, or period two reproduces period one exactly).
+
+    Greedy, and honestly so. The exact problem — maximise the minimum pairwise
+    distance over a product of per-artifact candidate sets — is max-min
+    dispersion with assignment constraints and is NP-hard; §14.E is explicit
+    that a solver does not belong here until a recorded fixture proves greedy
+    insufficient. What greedy guarantees is the thing that was actually
+    missing: no artifact takes a shape identical to one already in the batch
+    while a different one is available to it.
+
+    Ties break toward the lowest candidate index, by strict-improvement
+    comparison, exactly as ``select`` does.
+
+    Returns one index per artifact, into that artifact's own candidate list.
+    An artifact with no candidates raises rather than silently taking a
+    default — an empty candidate set means the caller's shape vocabulary is
+    broken, and a quiet fallback would hide it behind exactly the monotony
+    this function exists to break.
+    """
+    for position, options in enumerate(candidates):
+        if not options:
+            raise ValueError(f"artifact {position} has no candidate shapes to assign")
+
+    spent: list[Fingerprint] = list(committed)
+    chosen: list[int] = []
+    for options in candidates:
+        best_index = 0
+        best_score = -1.0
+        for index, option in enumerate(options):
+            # Distance to the nearest already-spent shape — the same
+            # "furthest from what is already in the batch" rule `select`
+            # applies within one artifact, with the batch standing in for the
+            # selection being built.
+            score = min((distance(option, other) for other in spent), default=float("inf"))
+            if score > best_score:
+                best_score, best_index = score, index
+            if best_score == float("inf"):
+                # Nothing spent yet: every candidate is equally unconstrained,
+                # so the lowest index wins and there is nothing to compare.
+                break
+        chosen.append(best_index)
+        spent.append(options[best_index])
+    return tuple(chosen)
+
+
 __all__ = [
     "DiversityReport",
     "Fingerprint",
     "QuotaViolation",
     "Quotas",
+    "assign",
     "check",
+    "collisions",
     "distance",
     "fingerprint",
     "report",

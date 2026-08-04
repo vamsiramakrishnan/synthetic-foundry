@@ -100,6 +100,15 @@ class MonthEndClose:
     generate two sets of facts for the overlapping months, and the second would be
     a duplicate rather than a revision. A caller who wants a trend asks for one.
     """
+    trend_pct: float = 0.0
+    """Monthly compound growth behind the comparative history. Zero is flat.
+
+    Only meaningful with ``comparative_months``: it shapes the *history*, and
+    a close with no history has nothing to shape. Zero by default, and zero
+    multiplies every figure by exactly 1.0, so a corpus built without it is
+    byte-identical to one built before the knob existed — the same discipline
+    ``eval_density`` follows below and for the same reason.
+    """
     actors: Any = field(default=None, compare=False)
     """An ``ActorProvider``. ``None`` keeps the deterministic plan.
 
@@ -200,6 +209,7 @@ class MonthEndClose:
             annual_revenue=world._annual_revenue,
             lore_by_target=index,
             comparative_months=self.comparative_months,
+            trend_pct=self.trend_pct,
             # The archetype's own currency, not the generator's constant — a
             # pack's `currency`/`currency_unit` used to reach every other
             # surface (documents, narrative rendering) except the fact ledger
@@ -340,6 +350,10 @@ class MonthEndClose:
                 # absent key to 1.0, so an old recipe and an explicit `1.0`
                 # recipe replay identically either way.
                 **({} if self.eval_density == 1.0 else {"eval_density": self.eval_density}),
+                # Same conditional-write rule, same reason: a knob added after
+                # corpora were built must not appear in the recipe of a build
+                # that did not use it.
+                **({} if self.trend_pct == 0.0 else {"trend_pct": self.trend_pct}),
             ),
             **actor_state,
         )
