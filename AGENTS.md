@@ -136,7 +136,16 @@ an organisation takes to find the cause of an outage, so every Worldloom
 incident ever generated has resolved at exactly one tempo, whatever the pack
 said the company was.
 
-`worldloom pack params` prints those ranges, now that they have names, and
+The same is true of a company's trading year. One twelve-month index — a 21%
+December — is applied to every world the retail engine builds, and since `base`
+may only be `retail` or `banking`, that is every industry pack that is not
+literally a deposit-taking bank. The general insurer shipped in
+`examples/packs/` therefore wrote a premium book that peaked at Christmas.
+`worldloom pack profiles` lists the trading years a pack may pick by name —
+`flat` is the right answer for any business whose revenue is a book rather than
+a till — or a pack may supply twelve months of its own, which must average one.
+
+`worldloom pack params` prints the numeric ranges, now that they have names, and
 `worldloom build --physics` overrides them. But a list of thirty-seven ranges to
 fill in is the wrong instrument: they are not independent, and "retailer" or
 "insurer" is a label, not a structure. So derive them instead, by descending the

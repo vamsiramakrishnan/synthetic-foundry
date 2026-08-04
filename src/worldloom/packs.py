@@ -197,6 +197,29 @@ class Pack(PackModel):
     other stream ever reshuffles depending on whether it did. A pool would be
     the wrong shape here; a company has exactly one headquarters, never a
     choice of several."""
+    seasonality: str | dict[str, float] | None = None
+    """The trading year: a profile name, or twelve months of your own.
+
+    ``None`` keeps the engine's general-retail year — a 21% December. Name one
+    of ``worldloom profiles`` (``flat``, ``fiscal_year_end``,
+    ``southern_summer``, ``harvest``, ``retail_christmas``), or supply a
+    ``{"1": 0.9, ... "12": 1.2}`` mapping.
+
+    This is the field that stops a pack quietly being a grocer. ``base`` may
+    only be ``retail`` or ``banking``, so every industry that is neither runs
+    on the retail engine and, until this existed, inherited its trading
+    calendar — which is why this repository's own ``regional-insurer.json``
+    shipped a general insurer whose written premium peaked at Christmas.
+    ``flat`` is the right answer for any business whose revenue is a book
+    rather than a till.
+
+    Twelve months of your own must average one. The index multiplies each
+    month's budget, so a profile averaging 1.05 does not make the year more
+    seasonal — it makes the company five per cent bigger, silently. The
+    validator refuses that rather than letting it through as a plausible
+    revenue line.
+    """
+
     regions: list[str] = Field(default_factory=list)
     """Region labels for the site estate (``generators/hierarchy.py``'s
     ``region`` field and the site names built from it — e.g. a site named
@@ -229,6 +252,20 @@ def load(source: str | Path | dict[str, Any]) -> Pack:
         return Pack.model_validate(source)
     text = Path(source).read_text(encoding="utf-8") if Path(str(source)).exists() else str(source)
     return Pack.model_validate(json.loads(text))
+
+
+def seasonality_of(pack: Pack) -> Any:
+    """The pack's trading year, or ``None`` for the engine's own.
+
+    Resolved here rather than in the world constructor so that a bad profile
+    name is a *pack* error, reported by ``worldloom pack check`` alongside
+    every other one, instead of a traceback part-way through a build.
+    """
+    from . import profiles
+
+    if pack.seasonality is None:
+        return None
+    return profiles.from_document(pack.seasonality)
 
 
 def archetype_of(pack: Pack) -> Archetype:

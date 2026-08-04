@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from .generators.operations import business_days_after, period_end
+from . import profiles as _profiles
 from .parameters import DEFAULT, Parameters
 from .rng import Rng
 
@@ -138,6 +139,14 @@ class MonthEndClose:
     reason, not because 1.0 is an otherwise meaningful point on the scale.
     """
 
+    seasonality: Any = None
+    """The trading year this business has (``worldloom.profiles``).
+
+    ``None`` means the engine's own general-retail profile, which is what every
+    close before this field existed used. A bank or an insurer wants ``flat``:
+    a premium book that peaks at Christmas is not a subtle error, it is a
+    different industry."""
+
     physics: Parameters = DEFAULT
     """The world physics this close is generated under (``worldloom.parameters``).
 
@@ -231,6 +240,7 @@ class MonthEndClose:
             # surface (documents, narrative rendering) except the fact ledger
             # itself, which minted "AUD_thousands" regardless.
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            seasonality=self.seasonality or _profiles.DEFAULT,
             physics=self.physics,
         )
         financial_facts = financials.headline

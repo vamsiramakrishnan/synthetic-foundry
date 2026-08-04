@@ -109,6 +109,7 @@ def build_recipe(
     estate: str | None = None,
     physics: Any = None,
     role_table: Any = None,
+    seasonality: Any = None,
 ) -> dict[str, Any]:
     """The recipe for a freshly built world, before any scenario has run.
 
@@ -135,6 +136,10 @@ def build_recipe(
         **_physics_payload(physics),
         # Same conditional rule: the whole table, only when one was authored.
         **({} if role_table is None else {"role_table": [list(row) for row in role_table]}),
+        # Written only when a profile was chosen. The engine's own is the
+        # general-retail year every corpus before this traded on, so an
+        # absent key means exactly that rather than "unknown".
+        **({} if seasonality is None else {"seasonality": seasonality.as_dict()}),
         "steps": [],
     }
 
@@ -199,6 +204,21 @@ def _under(spec: Any, physics: Any, default: Any) -> Any:
         ) from exc
 
 
+def _with_seasonality(spec: Any, seasonality: Any) -> Any:
+    """*spec* rebound to a recorded trading year, or untouched when there is none."""
+    if seasonality is None:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, seasonality=seasonality)
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records a trading year, but {type(spec).__name__}"
+            f" does not accept one: {exc}"
+        ) from exc
+
+
 def _with_roles(spec: Any, role_table: Any) -> Any:
     """*spec* rebound to an authored role table, or untouched when there is none.
 
@@ -244,6 +264,7 @@ def rebuild(
     """
     from . import archetypes, domains
     from .generators import distractors
+    from . import profiles as _profiles
     from .parameters import DEFAULT, overrides_from
     from .scenarios import Departure, Hire, MonthEndClose, Reorganisation
 
@@ -267,6 +288,16 @@ def rebuild(
     except (KeyError, TypeError, ValueError) as exc:
         raise RecipeError(f"this corpus's recorded physics does not load: {exc}") from exc
 
+    try:
+        seasonality = (
+            None if recipe.get("seasonality") is None
+            else _profiles.from_document(recipe["seasonality"])
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RecipeError(
+            f"this corpus's recorded trading year does not load: {exc}"
+        ) from exc
+
     authored_roles = recipe.get("role_table")
     role_table = None if authored_roles is None else tuple(
         (row[0], row[1], row[2], row[3]) for row in authored_roles
@@ -289,7 +320,7 @@ def rebuild(
                 f" registered — registered: {', '.join(domains.names())}"
             )
         spec = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT)
-        world = _with_roles(spec, role_table).build()
+        world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
     else:
         try:
             shape = archetypes.get(recipe["archetype"])
@@ -318,7 +349,7 @@ def rebuild(
             # fail to rebuild over a keyword it was never offered.
             **({} if recipe.get("estate") is None else {"estate": recipe["estate"]}),
         ), physics, DEFAULT)
-        world = _with_roles(spec, role_table).build()
+        world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
 
     for step in recipe.get("steps", ()):
         name = step.get("scenario")
@@ -337,6 +368,7 @@ def rebuild(
                     eval_density=step.get("eval_density", 1.0),
                     trend_pct=step.get("trend_pct", 0.0),
                     physics=physics,
+                    seasonality=seasonality,
                 )
             )
         elif name == "Hire":

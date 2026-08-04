@@ -25,6 +25,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from .. import profiles
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, Category, Quantity, Site
 from ..parameters import DEFAULT, Parameters
@@ -34,13 +35,15 @@ MONEY = "AUD_thousands"
 PERCENT = "percent"
 BPS = "bps"
 
-#: Trading index by calendar month. A grocer's December is not its February, and a
-#: twelve-month trend that ignores that reads as noise around a flat line rather
-#: than as a business. Shape only — the amplitude is generic retail seasonality.
-SEASONALITY: dict[int, float] = {
-    1: 0.96, 2: 0.88, 3: 0.97, 4: 0.98, 5: 0.99, 6: 0.99,
-    7: 1.00, 8: 0.99, 9: 0.98, 10: 1.01, 11: 1.04, 12: 1.21,
-}
+#: Trading index by calendar month. A grocer's December is not its February, and
+#: a twelve-month trend that ignores that reads as noise around a flat line
+#: rather than as a business.
+#:
+#: Now `profiles.RETAIL_CHRISTMAS`, re-exported here because it was a public
+#: name and `series.py`'s docstring cites it. The values are unchanged and the
+#: registry enforces what kept them correct by hand: they average exactly one,
+#: so the profile changes the shape of a year and never the size of the company.
+SEASONALITY: dict[int, float] = dict(profiles.RETAIL_CHRISTMAS.index)
 
 
 @dataclass(frozen=True)
@@ -105,8 +108,8 @@ def _closed_at(period: str, template: datetime) -> datetime:
     return first + timedelta(days=3)
 
 
-def _season(period: str) -> float:
-    return SEASONALITY[int(period.split("-")[1])]
+def _season(period: str, season: profiles.Seasonality) -> float:
+    return season.of(period)
 
 
 def _months_between(origin: str, target: str) -> int:
@@ -180,6 +183,11 @@ def generate(
     comparative_months: int = 0,
     trend_pct: float = 0.0,
     money_unit: str = MONEY,
+    # The trading year this business has. `profiles.DEFAULT` is the general
+    # retail one every world used before this argument existed, so an unpassed
+    # profile is byte-identical — and naming it here is the point: a bank or an
+    # insurer wants `profiles.PROFILES["flat"]`, and until now could not say so.
+    seasonality: profiles.Seasonality = profiles.DEFAULT,
     physics: Parameters = DEFAULT,
 ) -> Financials:
     """Generate a company's financial facts for one period, plus a trend behind it.
@@ -227,7 +235,7 @@ def generate(
         """Unit budget and actual for a period. Actual is skewed adverse."""
         budget: dict[str, int] = {}
         actual: dict[str, int] = {}
-        season = _season(target_period)
+        season = _season(target_period, seasonality)
         # Compounded from the reporting period, so the offset is negative for
         # every comparative and the history sits *below* the current month at a
         # positive trend. Applied as a trailing factor rather than folded into

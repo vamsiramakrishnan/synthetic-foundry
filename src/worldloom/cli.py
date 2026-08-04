@@ -2864,6 +2864,35 @@ def pack_check(
         console.print("[dim]no lint findings — every commitment is load-bearing[/dim]")
 
 
+@pack_app.command("profiles")
+def pack_profiles(as_json: bool = typer.Option(False, "--json", help="Emit as data.")) -> None:
+    """The trading years a pack may choose by name.
+
+    `base` may only be `retail` or `banking`, so any industry that is neither
+    runs on the retail engine — and until these had names it inherited that
+    engine's calendar. This repository's own general-insurer pack shipped a
+    written-premium book peaking 21% at Christmas because of it. `flat` is the
+    right answer for any business whose revenue is a book rather than a till.
+
+    A pack may also supply twelve months of its own. They must average one: the
+    index multiplies each month's budget, so a year averaging 1.05 does not
+    make a business more seasonal, it makes it five per cent bigger.
+    """
+    from . import profiles as profiles_module
+
+    published = profiles_module.publish()
+    if as_json:
+        typer.echo(json.dumps(published, indent=2))
+        return
+    for name, entry in published.items():
+        console.print(f"[bold]{escape(name)}[/bold] [cyan]amplitude {entry['amplitude']}[/cyan]")
+        console.print("  " + "  ".join(
+            f"[dim]{month:>2}[/dim] {entry['index'][str(month)]:.2f}"
+            for month in profiles_module.MONTHS))
+        if entry.get("about"):
+            console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+
+
 @pack_app.command("params")
 def pack_params(
     prefix: str = typer.Argument(None, help="Only parameters under this prefix, e.g. `retail`."),

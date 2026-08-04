@@ -281,6 +281,14 @@ worldloom pack params <PREFIX>
 | --- | --- |
 | `--json` | Emit the registry as data. |
 
+### `worldloom pack profiles`
+
+The trading years a pack may choose by name.
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit as data. |
+
 ### `worldloom pack targets`
 
 List the lore targets each engine consults, and what each one changes.

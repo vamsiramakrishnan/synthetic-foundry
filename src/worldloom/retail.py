@@ -209,6 +209,11 @@ class RetailWorld:
     """An industry ``Pack`` supplying the archetype, lore, and company name.
     Set via ``from_pack``; carried on the instance so ``build`` can embed it in
     the recipe, which is what makes a pack-built corpus rebuild itself."""
+    seasonality: Any = None
+    """The trading year (``worldloom.profiles``). ``None`` is the engine's own
+    general-retail profile — a 21% December — which every world built before
+    this field existed traded on, insurers included."""
+
     role_table: tuple[tuple[str, str, str, str | None], ...] | None = None
     """Who exists in this organisation (``worldloom.roles``).
 
@@ -251,7 +256,11 @@ class RetailWorld:
         from . import packs as packs_module
 
         return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack,
-                   physics=physics)
+                   physics=physics,
+                   # The pack's own trading year, or None for the engine's. This
+                   # is the line that stops a pack-authored insurer trading like
+                   # a supermarket.
+                   seasonality=packs_module.seasonality_of(pack))
 
     def build(self) -> World:
         """Generate the organisation, its lore, and the lore's founding milestones.
@@ -315,6 +324,7 @@ class RetailWorld:
                 estate=self.estate,
                 physics=self.physics,
                 role_table=self.role_table,
+                seasonality=self.seasonality,
             ),
         )
 
