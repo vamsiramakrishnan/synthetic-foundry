@@ -1682,7 +1682,14 @@ def render(
 
     written = rendered.export(out or Path(corpus), overwrite=True)
     console.print(f"[green]✓[/green] {len(rendered._rendered)} file(s) written to [bold]{written}[/bold]")
-    if not _report(rendered):
+    # Reloaded from where the files actually landed, not validated in memory.
+    # The in-memory world still resolves artifact paths against the *source*
+    # corpus, so rendering to a `--out` directory reported every file it had
+    # just written as missing — a false failure, and the loudest possible one,
+    # since anyone running this in a pipeline reads it as rendering being
+    # broken. Reloading also makes the check mean what it says: the artifact on
+    # disk is the thing a reader will open.
+    if not _report(_load(str(written))):
         raise typer.Exit(code=1)
 
 
