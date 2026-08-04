@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from .operations import business_days_after
 
@@ -28,7 +29,9 @@ class LiquiditySeries:
     observations: tuple[tuple[date, float], ...]
 
 
-def generate(rng: Rng, *, start: date, days: int) -> LiquiditySeries:
+def generate(
+    rng: Rng, *, start: date, days: int, physics: Parameters = DEFAULT
+) -> LiquiditySeries:
     """*days* consecutive business-day LCR values from *start* (inclusive).
 
     The band is an ordinary well-covered bank: comfortably above 100%, moving
@@ -42,7 +45,9 @@ def generate(rng: Rng, *, start: date, days: int) -> LiquiditySeries:
     current = start if start.weekday() < 5 else business_days_after(start, 1)
     observations: list[tuple[date, float]] = []
     for _ in range(days):
-        value = rng.derive(f"lcr/{current.isoformat()}").number(126.0, 138.0, places=1)
+        value = physics.number(
+            "capital.liquidity.lcr_pct", rng.derive(f"lcr/{current.isoformat()}")
+        )
         observations.append((current, value))
         current = business_days_after(current, 1)
     return LiquiditySeries(observations=tuple(observations))

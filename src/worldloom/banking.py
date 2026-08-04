@@ -59,6 +59,7 @@ from .models import (
     LoreConstraint,
     LoreKind,
 )
+from .parameters import DEFAULT, Parameters
 from .rng import Rng
 from .validate import RECONCILIATION_TOLERANCE, Violation
 from .world import World
@@ -250,6 +251,14 @@ class BankingWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    physics: Parameters = DEFAULT
+    """The world physics ``build`` draws the organisation from.
+
+    Separate from ``pack`` even though a pack is what will eventually supply it:
+    the ranges are the engine's, a pack states values, and keeping the two
+    fields apart is what lets a world be built at non-default physics with no
+    pack at all. Defaulted, so a world constructed as it always was is the same
+    bytes."""
 
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> BankingWorld:
@@ -295,6 +304,7 @@ class BankingWorld:
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
+            physics=self.physics,
         )
 
         return World(
@@ -323,6 +333,7 @@ class BankingWorld:
                 employees=self.employees,
                 annual_revenue=self.annual_revenue,
                 pack=self.pack,
+                physics=self.physics,
             ),
         )
 

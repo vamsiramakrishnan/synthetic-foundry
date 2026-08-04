@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from .finance import allocate
 
@@ -109,11 +110,63 @@ class TrianglePosition:
     disagreement the margin decision memo exists to record."""
 
 
+#: The two multiples that must stay strictly above 1.0, and what the corpus
+#: loses if either one drops to it. Enforced here rather than in the pack
+#: linter for two reasons. The linter only sees packs, and a ``Parameters``
+#: reaches this generator by other routes too — ``with_overrides`` is public,
+#: a recipe replays overrides with no pack file on hand, and a test or an
+#: in-process caller passes one directly; a rule that only one of those routes
+#: honours is not an invariant. And ``packs.py`` is core, where
+#: ``tests/test_thin_waist.py`` forbids ``reserves.`` outright: stating the
+#: rule there would mean teaching core an insurer's vocabulary and duplicating
+#: the reasoning that only this module holds.
+_DEFICIT_MULTIPLES: tuple[tuple[str, str], ...] = (
+    ("reserves.decision.margin_release_multiple",
+     "the release stops being guaranteed to exceed the standing margin, and the"
+     " booked-below-central gap this vertical exists to pose stops opening"),
+    ("reserves.decision.movement_multiple",
+     "the recommended strengthening stops being guaranteed to exceed the release,"
+     " and booked_strengthening — the amount finance actually put up — can come"
+     " out zero or negative"),
+)
+
+
+def _check_deficit_multiples(physics: Parameters) -> None:
+    """Refuse physics that lets the held-versus-central gap fail to open.
+
+    ``generate``'s sizing order *guarantees* the gap — the whole point of drawing
+    margin, then release, then movement in dependency order rather than
+    independently and hoping. That guarantee rests entirely on both multiples
+    being above 1.0, and until the physics registry existed it rested on them
+    being literals nobody could reach. Now a pack can reach them, so the
+    guarantee needs saying in code: the registry's ``about`` says a pack may
+    tune the severity and must not tune it away, and prose in a docstring is
+    not a check.
+
+    Refused rather than clamped, for the same reason ``with_overrides``
+    refuses an unknown name rather than ignoring it. A clamped span builds a
+    perfectly valid corpus in which ``held_vs_central_gap`` is zero or
+    negative, insurance check (g) skips itself on exactly that condition
+    (``if gap.value.amount <= 0: continue``), and the author is told nothing —
+    they get a corpus that no longer poses the contest the vertical exists for
+    and no sign at all that their intent was dropped.
+    """
+    for name, consequence in _DEFICIT_MULTIPLES:
+        span = physics.span(name)
+        if span.low <= 1.0:
+            raise ValueError(
+                f"{name} must stay strictly above 1.0; got [{span.low}, {span.high}]."
+                f" At or below 1.0 {consequence}. A pack may tune how severe the"
+                " deficit is; it may not tune the deficit away."
+            )
+
+
 def generate(
     rng: Rng,
     *,
     accident_periods: tuple[str, ...],
     risk_margin_policy_pct: float,
+    physics: Parameters = DEFAULT,
 ) -> TrianglePosition:
     """Draw one quarter's triangle for ``len(accident_periods)`` cohorts.
 
@@ -122,6 +175,8 @@ def generate(
     the design record's own choice. The caller derives the periods from the
     episode's own valuation date, never from the archetype (risk 2).
     """
+    _check_deficit_multiples(physics)
+
     # Prior-valuation figures only, one tuple per cohort — kept separate from
     # `CohortPosition` because that model's current-valuation fields are not
     # known until `total_movement` is sized below, and a placeholder instance
@@ -137,15 +192,20 @@ def generate(
         # The prior valuation's position. Mid-size figures for a single
         # accident quarter of a long-tail book: tens of millions ultimate,
         # a minority of it still IBNR this many quarters after the loss.
-        ultimate_prior = cohort_rng.derive("ultimate").integer(35, 90)
-        incurred_prior = round(ultimate_prior * cohort_rng.derive("incurred_ratio").number(0.55, 0.72))
-        paid_prior = round(incurred_prior * cohort_rng.derive("paid_ratio").number(0.60, 0.82))
+        ultimate_prior = physics.integer(
+            "reserves.cohort.ultimate", cohort_rng.derive("ultimate"))
+        incurred_prior = round(ultimate_prior * physics.number(
+            "reserves.cohort.incurred_ratio", cohort_rng.derive("incurred_ratio")))
+        paid_prior = round(incurred_prior * physics.number(
+            "reserves.cohort.paid_ratio", cohort_rng.derive("paid_ratio")))
         ibnr_prior = ultimate_prior - incurred_prior
 
         # Normal quarterly development, under the pattern the prior valuation
         # was calibrated on: a modest fraction of the remaining IBNR closes
         # out as incurred every quarter, distortion or not.
-        expected_development = round(ibnr_prior * cohort_rng.derive("expected_development").number(0.08, 0.15))
+        expected_development = round(ibnr_prior * physics.number(
+            "reserves.cohort.expected_development",
+            cohort_rng.derive("expected_development")))
         expected_incurred_current = incurred_prior + expected_development
 
         priors.append((
@@ -164,13 +224,14 @@ def generate(
     # scenario materialises would make the corpus's own hardest contest a
     # coin flip on the seed.
     margin_prior = round(central_estimate_prior * risk_margin_policy_pct / 100)
-    # The release exceeds the standing margin — the deficit condition — by a
-    # deliberate 15-60%, not merely "large": this is the one quarter the
-    # design record says the gap opens, not a possibility among several.
-    margin_released = round(margin_prior * rng.derive("margin_released").number(1.15, 1.60))
-    # The full recommended strengthening exceeds the release by 20-60%, which
-    # is what leaves a positive, "less than central" booked_strengthening.
-    total_movement = round(margin_released * rng.derive("total_movement").number(1.20, 1.60))
+    # The release exceeds the standing margin — the deficit condition. Not
+    # merely "large": this is the one quarter the design record says the gap
+    # opens, not a possibility among several, which is why both multiples are
+    # gated above rather than trusted.
+    margin_released = round(margin_prior * physics.number(
+        "reserves.decision.margin_release_multiple", rng.derive("margin_released")))
+    total_movement = round(margin_released * physics.number(
+        "reserves.decision.movement_multiple", rng.derive("total_movement")))
 
     # Each cohort's actual-vs-expected deviation is its allocated share of the
     # book-level movement, weighted by remaining IBNR — a book with more
@@ -185,7 +246,14 @@ def generate(
         incurred_current = expected_incurred_current + share
         paid_current = paid_prior + round(
             (incurred_current - incurred_prior)
-            * rng.derive(f"cohort/{accident_period}/paid_out").number(0.50, 0.70)
+            # Per-cohort stream, so the derive key is built from the cohort
+            # while the range is the one book-level parameter — unlike the
+            # prior-valuation draws above, this one is not inside the cohort
+            # loop's own `cohort_rng`.
+            * physics.number(
+                "reserves.cohort.paid_out_fraction",
+                rng.derive(f"cohort/{accident_period}/paid_out"),
+            )
         )
         ultimate_current = ultimate_prior + share
         ibnr_current = ultimate_current - incurred_current
@@ -206,7 +274,8 @@ def generate(
     # close) against adverse (claims are genuinely costing more). Minority
     # benign, because the premise is a genuine deterioration the corpus later
     # confirms — the split itself is what phase 2's revision moves.
-    pattern_fraction = rng.derive("pattern_fraction").number(0.25, 0.45)
+    pattern_fraction = physics.number(
+        "reserves.attribution.pattern_fraction", rng.derive("pattern_fraction"))
     pattern_change_amount = round(total_movement * pattern_fraction)
     deterioration_amount = total_movement - pattern_change_amount
 

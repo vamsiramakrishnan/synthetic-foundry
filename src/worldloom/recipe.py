@@ -107,6 +107,7 @@ def build_recipe(
     annual_revenue: int | None = None,
     pack: Any = None,
     estate: str | None = None,
+    physics: Any = None,
 ) -> dict[str, Any]:
     """The recipe for a freshly built world, before any scenario has run.
 
@@ -126,8 +127,22 @@ def build_recipe(
         # a new field in every recipe ever written for a value that changes
         # nothing, and the default-build byte diff is what catches that.
         **({} if estate is None else {"estate": estate}),
+        # Same conditional rule, and here it also carries a stronger claim:
+        # the key is written only when a span actually *differs* from the
+        # engine's, so a recipe built with `--physics` whose file happened to
+        # restate the defaults is byte-identical to one built without it.
+        **_physics_payload(physics),
         "steps": [],
     }
+
+
+def _physics_payload(physics: Any) -> dict[str, Any]:
+    if physics is None:
+        return {}
+    from .parameters import overrides_document
+
+    overrides = overrides_document(physics)
+    return {"physics": overrides} if overrides else {}
 
 
 def _pack_payload(pack: Any) -> dict[str, Any]:
@@ -158,6 +173,29 @@ def with_step(recipe: dict[str, Any], scenario: str, **arguments: Any) -> dict[s
     return {**recipe, "steps": [*recipe.get("steps", ()), {"scenario": scenario, **arguments}]}
 
 
+def _under(spec: Any, physics: Any, default: Any) -> Any:
+    """*spec* rebound to *physics*, or untouched when the physics are default.
+
+    Untouched on the default path so that a domain or scenario registered
+    elsewhere — which may predate the parameter registry and have no ``physics``
+    field at all — keeps rebuilding exactly as it did. When non-default physics
+    *were* recorded, a spec that cannot carry them is an error rather than a
+    silent fallback: the corpus was built at those ranges and rebuilding it at
+    the engine's would be a different world reported as the same one.
+    """
+    if physics is default:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, physics=physics)
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records non-default physics, but {type(spec).__name__}"
+            f" does not accept any: {exc}"
+        ) from exc
+
+
 def rebuild(
     recipe: dict[str, Any],
     *,
@@ -180,6 +218,7 @@ def rebuild(
     """
     from . import archetypes, domains
     from .generators import distractors
+    from .parameters import DEFAULT, overrides_from
     from .scenarios import Departure, Hire, MonthEndClose, Reorganisation
 
     missing = [key for key in ("archetype", "seed") if recipe.get(key) is None]
@@ -189,6 +228,18 @@ def rebuild(
             " Corpora built before recipes existed carry none; rebuild from the"
             " original `worldloom build` command instead."
         )
+
+    # Reconstructed before anything is built, and refused loudly if it does not
+    # reconstruct. A recipe whose physics failed to load and fell back to the
+    # engine's would rebuild a *different world* while reporting success, which
+    # is the one failure mode a recipe exists to make impossible.
+    try:
+        physics = (
+            DEFAULT if recipe.get("physics") is None
+            else DEFAULT.with_overrides(overrides_from(recipe["physics"]))
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RecipeError(f"this corpus's recorded physics does not load: {exc}") from exc
 
     if recipe.get("pack") is not None:
         # A pack-built world: the recipe carries the pack whole, and the
@@ -206,7 +257,7 @@ def rebuild(
                 f"the embedded pack names engine {pack.base!r}, which is not"
                 f" registered — registered: {', '.join(domains.names())}"
             )
-        world = domain.world.from_pack(pack, seed=recipe["seed"]).build()
+        world = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT).build()
     else:
         try:
             shape = archetypes.get(recipe["archetype"])
@@ -223,7 +274,7 @@ def rebuild(
                 f"archetype {shape.key!r} belongs to no registered domain; the module"
                 " that owns it was never imported, so this corpus cannot be rebuilt"
             )
-        world = domain.world(
+        world = _under(domain.world(
             seed=recipe["seed"],
             archetype=shape,
             employees=recipe.get("employees"),
@@ -234,7 +285,7 @@ def rebuild(
             # unconditionally to every registered domain would make a bank
             # fail to rebuild over a keyword it was never offered.
             **({} if recipe.get("estate") is None else {"estate": recipe["estate"]}),
-        ).build()
+        ), physics, DEFAULT).build()
 
     for step in recipe.get("steps", ()):
         name = step.get("scenario")
@@ -252,6 +303,7 @@ def rebuild(
                     # corpus was built with — the knob's own default.
                     eval_density=step.get("eval_density", 1.0),
                     trend_pct=step.get("trend_pct", 0.0),
+                    physics=physics,
                 )
             )
         elif name == "Hire":
@@ -285,7 +337,7 @@ def rebuild(
         elif name in _STEP_REGISTRY:
             _, build = _STEP_REGISTRY[name]
             kwargs = {key: value for key, value in step.items() if key != "scenario"}
-            world = world.run(build(**kwargs))
+            world = world.run(_under(build(**kwargs), physics, DEFAULT))
         else:
             raise RecipeError(f"unknown scenario {name!r} in recipe")
     return world

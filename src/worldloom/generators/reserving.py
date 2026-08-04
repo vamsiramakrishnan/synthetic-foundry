@@ -48,6 +48,7 @@ from collections.abc import Mapping
 
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import episode_text
 from .finance import previous_periods
@@ -147,6 +148,7 @@ def generate(
     text: Mapping[str, str] | None = None,
     existing_philosophy: CanonicalFact | None = None,
     existing_margin_policy: CanonicalFact | None = None,
+    physics: Parameters = DEFAULT,
 ) -> ReservingEpisode:
     """Generate the phase-1 reserving cycle for the quarter ending *period*.
 
@@ -154,6 +156,13 @@ def generate(
     passed in rather than drawn here, the same separation ``regulatory.py``
     keeps from ``capital.py``: this function decides *when* a number enters
     the world and at what authority, never what the number is.
+
+    Which is why ``rng`` and ``physics`` are both accepted and neither is
+    spent: every figure this episode places was drawn in ``triangles``. They
+    are on the signature so a caller forwards to every episode generator
+    identically and a phase-2 draw that does belong here — the next quarter's
+    diagonal deciding whether the split was right — needs no call-site change
+    to reach one.
 
     ``existing_philosophy``/``existing_margin_policy`` are the standing
     facts already on the world's record, if a prior quarter minted them —

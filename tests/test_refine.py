@@ -218,11 +218,19 @@ def test_one_round_is_never_a_plateau(corpus: str) -> None:
 
 
 def test_every_tool_has_a_schema_an_agent_can_answer() -> None:
+    """Every tool names its subject explicitly and requires it.
+
+    This asserted ``corpus`` specifically until the probe tools arrived, which
+    operate on a probe file rather than a corpus. The invariant being protected
+    was never "corpus" — it is that one server holds no state about what it is
+    working on, so a session can drive several at once.
+    """
     for tool in mcp.TOOLS:
         assert tool["description"].strip()
         assert tool["schema"]["type"] == "object"
-        assert "corpus" in tool["schema"]["properties"]
-        assert "corpus" in tool["schema"]["required"]
+        subjects = [s for s in mcp.SUBJECTS if s in tool["schema"]["properties"]]
+        assert len(subjects) == 1, f"{tool['name']} names {subjects}, expected exactly one"
+        assert subjects[0] in tool["schema"]["required"]
 
 
 def test_an_unknown_tool_is_data_rather_than_a_crash() -> None:

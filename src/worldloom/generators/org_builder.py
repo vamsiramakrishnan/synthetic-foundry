@@ -46,6 +46,7 @@ from ..models import (
     LoreCommitment,
     LoreKind,
 )
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import names
 
@@ -113,7 +114,7 @@ def _depth(role: str, managers: dict[str, str | None], seen: frozenset[str] = fr
     return 0 if manager is None else 1 + _depth(manager, managers, seen | {role})
 
 
-def _joined_date(rng: Rng, role: str, depth: int) -> datetime:
+def _joined_date(rng: Rng, role: str, depth: int, physics: Parameters = DEFAULT) -> datetime:
     """A join date for *role*, further back the closer it sits to the org root.
 
     An executive who has been here a decade and an analyst hired last year is a
@@ -132,7 +133,16 @@ def _joined_date(rng: Rng, role: str, depth: int) -> datetime:
     # than landing on day zero.
     min_years = max(0.5, 6.0 - depth * 2.0)
     max_years = min_years + 6.0
-    tenure_days = tenure_rng.number(min_years, max_years) * 365.25
+    # The only registry draw in this module that is not the range it replaced:
+    # `org.tenure.years` is the *position within* the band above, because the
+    # band's ends are derived from depth and a pack cannot state them as one
+    # range. Scaling a unit draw is bit-identical to drawing across
+    # [min_years, max_years] directly — `Rng.number` is `random.uniform`, which
+    # is `a + (b - a) * random()`, and float multiplication commutes — so this
+    # is a rewrite of the arithmetic and not of the world. Verified across every
+    # band `depth` can produce rather than argued from the identity alone.
+    position = physics.number("org.tenure.years", tenure_rng)
+    tenure_days = (min_years + position * (max_years - min_years)) * 365.25
     return _LATEST_JOIN - timedelta(days=tenure_days)
 
 
@@ -158,6 +168,7 @@ def mint_people(
     assign: Callable[[str, str, str], Assignment],
     given: Sequence[str] | None = None,
     family: Sequence[str] | None = None,
+    physics: Parameters = DEFAULT,
 ) -> tuple[dict[str, str], list[Employee]]:
     """Mint one person per role row, in table order.
 
@@ -192,7 +203,7 @@ def mint_people(
                 id=person_id,
                 name=person_name,
                 title=title,
-                joined=_joined_date(founding_rng, role, depth_of[role]),
+                joined=_joined_date(founding_rng, role, depth_of[role], physics),
                 left=None,
                 manager_id=None,  # wired by `wire_managers`, once every role has an id
                 business_unit_id=business_unit,

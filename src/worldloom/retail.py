@@ -22,6 +22,7 @@ from . import archetypes
 from .archetypes import AUSTRALIAN_GROCERY, OMNICHANNEL_RETAILER, Archetype
 from .ids import Minter
 from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
+from .parameters import DEFAULT, Parameters
 from .rng import Rng
 from .scenarios import MonthEndClose
 from .world import World
@@ -29,7 +30,12 @@ from .world import World
 #: Base probability of a data-quality incident during any given close, before
 #: lore multipliers. Deliberately low: most closes are uneventful, and a corpus
 #: where every period has a crisis is not a realistic one.
-BASE_INCIDENT_LIKELIHOOD = 0.18
+#:
+#: Read from the registry rather than typed here. It is a public name and a
+#: test asserts on it, so it stays — but two copies of a load-bearing
+#: probability is one copy that can quietly stop being the one the engine
+#: draws with, which is exactly the failure the registry exists to end.
+BASE_INCIDENT_LIKELIHOOD = DEFAULT.probability("ops.incident.likelihood")
 
 #: The lore-constraint targets this engine's generators actually consult, and
 #: what each one changes. This is the pack author's contract: a commitment
@@ -203,9 +209,14 @@ class RetailWorld:
     """An industry ``Pack`` supplying the archetype, lore, and company name.
     Set via ``from_pack``; carried on the instance so ``build`` can embed it in
     the recipe, which is what makes a pack-built corpus rebuild itself."""
+    physics: Parameters = DEFAULT
+    """The world physics the organisation is generated under
+    (``worldloom.parameters``). The engine's own by default, which is what an
+    un-overridden build has always used."""
 
     @classmethod
-    def inspired_by(cls, description: str, *, seed: int) -> RetailWorld:
+    def inspired_by(cls, description: str, *, seed: int,
+                    physics: Parameters = DEFAULT) -> RetailWorld:
         """A world shaped like the business *description* names.
 
         Shape only: unit mix, margin structure, store count, category depth. No
@@ -213,10 +224,11 @@ class RetailWorld:
         the point is a corpus that behaves like that *kind* of business while
         being wholly invented.
         """
-        return cls(seed=seed, archetype=archetypes.inspired_by(description))
+        return cls(seed=seed, archetype=archetypes.inspired_by(description), physics=physics)
 
     @classmethod
-    def from_pack(cls, pack: Any, *, seed: int) -> RetailWorld:
+    def from_pack(cls, pack: Any, *, seed: int,
+                  physics: Parameters = DEFAULT) -> RetailWorld:
         """A world whose shape, lore, and name a pack authored.
 
         The pack decides the texture; this engine keeps the physics. See
@@ -224,7 +236,8 @@ class RetailWorld:
         """
         from . import packs as packs_module
 
-        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack)
+        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack,
+                   physics=physics)
 
     def build(self) -> World:
         """Generate the organisation, its lore, and the lore's founding milestones.
@@ -255,6 +268,7 @@ class RetailWorld:
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
+            physics=self.physics,
         )
 
         return World(
@@ -284,6 +298,7 @@ class RetailWorld:
                 annual_revenue=self.annual_revenue,
                 pack=self.pack,
                 estate=self.estate,
+                physics=self.physics,
             ),
         )
 

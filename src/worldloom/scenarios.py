@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from .generators.operations import business_days_after, period_end
+from .parameters import DEFAULT, Parameters
 from .rng import Rng
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -137,13 +138,22 @@ class MonthEndClose:
     reason, not because 1.0 is an otherwise meaningful point on the scale.
     """
 
+    physics: Parameters = DEFAULT
+    """The world physics this close is generated under (``worldloom.parameters``).
+
+    Compared and hashed like any other field. It was briefly excluded from
+    both, because a frozen dataclass hashes its comparable fields and a
+    ``Parameters`` carries a Mapping — but excluding it makes two closes with
+    *different physics* compare equal, which is worse than the problem. The fix
+    belongs in ``Parameters``, which now defines its own ``__hash__``.
+    """
+
     def run(self, world: World) -> World:
         """Return a new world with this episode's events, facts, and plans.
 
         The world passed in is not mutated.
         """
         from .generators import evaluation, finance, operations, planning
-        from .retail import BASE_INCIDENT_LIKELIHOOD
 
         if world.seed is None:
             raise ValueError("a scenario needs a seeded world; use RetailWorld(seed=...).build()")
@@ -160,8 +170,13 @@ class MonthEndClose:
         roles = dict(world._roles)
         index = lore_index(world)
 
-        likelihood = BASE_INCIDENT_LIKELIHOOD * likelihood_multiplier(
-            world, "data_quality_incident/inventory"
+        # `probability` and not `chance`: the base rate is decided here, the
+        # lore multiplier is applied here, and the coin is flipped two layers
+        # down in `operations`. A parameter's accessor stops where its
+        # authority stops.
+        likelihood = self.physics.probability(
+            "ops.incident.likelihood",
+            scale=likelihood_multiplier(world, "data_quality_incident/inventory"),
         )
 
         episode = operations.generate(
@@ -181,6 +196,7 @@ class MonthEndClose:
             # lets a pack-built corpus rebuild them with no pack file on hand.
             text=(world._recipe.get("pack") or {}).get("episode_text") or None,
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            physics=self.physics,
         )
 
         # Unit keys come from the world rather than a literal list, because the
@@ -215,6 +231,7 @@ class MonthEndClose:
             # surface (documents, narrative rendering) except the fact ledger
             # itself, which minted "AUD_thousands" regardless.
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            physics=self.physics,
         )
         financial_facts = financials.headline
 

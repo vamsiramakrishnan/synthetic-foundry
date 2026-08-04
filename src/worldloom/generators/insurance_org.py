@@ -37,6 +37,7 @@ from ..models import (
     Site,
     System,
 )
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import hierarchy, names
 from .org_builder import (
@@ -130,6 +131,7 @@ def generate(
     company_name: str | None = None,
     system_brands: dict[str, str] | None = None,
     voices: dict[str, Any] | None = None,
+    physics: Parameters = DEFAULT,
 ) -> InsurerOrganisation:
     """Build the insurer for an archetype. Same seed, same graph, same ids.
 
@@ -170,7 +172,9 @@ def generate(
         persona = pack_voice_ids.get(role) or _ROLE_PERSONA.get(role, "PERSONA-INS-EXEC")
         return business_unit, cost_centre, persona
 
-    role_ids, people = mint_people(rng, minter, role_table, depth_of, assign=assign)
+    role_ids, people = mint_people(
+        rng, minter, role_table, depth_of, assign=assign, physics=physics
+    )
     people = wire_managers(people, role_table, role_ids)
     business_units = form_units(units, unit_ids, role_ids, people, company_id, lore)
 
@@ -183,6 +187,7 @@ def generate(
         units=units,
         unit_ids=unit_ids,
         buyers={},
+        physics=physics,
     )
 
     policy_admin = minter.next("SYS")

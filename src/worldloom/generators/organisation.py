@@ -36,6 +36,7 @@ from ..models import (
     Site,
     System,
 )
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import hierarchy, names
 from .org_builder import (
@@ -175,6 +176,7 @@ def generate(
     headquarters: str | None = None,
     regions: tuple[str, ...] | None = None,
     estate_profile: str | None = None,
+    physics: Parameters = DEFAULT,
 ) -> Organisation:
     """Build the organisation for an archetype. Same seed, same graph, same IDs.
 
@@ -245,6 +247,7 @@ def generate(
     role_ids, people = mint_people(
         rng, minter, role_table, depth_of, assign=assign,
         given=pools.get("given") or None, family=pools.get("family") or None,
+        physics=physics,
     )
     people = wire_managers(people, role_table, role_ids)
     business_units = form_units(units, unit_ids, role_ids, people, company_id, lore)
@@ -257,6 +260,7 @@ def generate(
         # Empty (the field's default) means "no override" — the module's own
         # REGIONS pool applies, exactly as if the pack had never mentioned it.
         regions=regions if regions else hierarchy.REGIONS,
+        physics=physics,
     )
 
     # Drawn first, then re-branded: a pack renames the products, never the

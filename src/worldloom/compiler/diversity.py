@@ -604,48 +604,19 @@ def select(candidates: Sequence[Fingerprint], *, k: int, seed: int) -> tuple[int
     Returns indices into *candidates*, in selection order, so the caller
     (who owns the actual candidate objects — plans, renders, whatever a
     `Fingerprint` here stands in for) decides what to do with them.
+
+    The traversal itself lives in ``worldloom.dispersion``. It was lifted out
+    unchanged — same first pick, same strict-improvement tie-break — when
+    ``probe.worlds`` needed the identical algorithm over a completely different
+    thing: whole consistent worlds rather than document shapes. Two copies of
+    "as unlike each other as possible" is two things that can disagree about
+    it, which on a project whose central claim is *measured* diversity is a
+    particularly bad place to keep a fork. What stays here is this module's own
+    judgement — the `distance` a document shape is measured by.
     """
-    n = len(candidates)
-    if k < 0:
-        raise ValueError(f"k must be non-negative, got {k}")
-    if k > n:
-        raise ValueError(f"cannot select {k} candidate(s) from {n}")
-    if k == 0:
-        return ()
+    from ..dispersion import farthest_first
 
-    # The first pick has no "already selected" set to be distant from, so
-    # there is no distance-based reason to prefer any one candidate over
-    # another yet. Lowest index, for the same reason every other tie here
-    # resolves that way: deterministic without inventing a preference the
-    # data does not support.
-    selected: list[int] = [0]
-    if k == 1:
-        return (0,)
-
-    min_distance_to_selected = [distance(candidates[0], candidates[i]) for i in range(n)]
-    selected_set = {0}
-    while len(selected) < k:
-        best_index = -1
-        best_score = -1.0
-        for i in range(n):
-            if i in selected_set:
-                continue
-            # Strict `>` only: the first (lowest-index) candidate to reach the
-            # best score seen so far keeps it, which is the tie-break.
-            if min_distance_to_selected[i] > best_score:
-                best_score = min_distance_to_selected[i]
-                best_index = i
-        selected.append(best_index)
-        selected_set.add(best_index)
-        for i in range(n):
-            if i in selected_set:
-                continue
-            candidate_distance = distance(candidates[best_index], candidates[i])
-            if candidate_distance < min_distance_to_selected[i]:
-                min_distance_to_selected[i] = candidate_distance
-
-    return tuple(selected)
-
+    return farthest_first(candidates, distance, k)
 
 def collisions(fingerprints: Sequence[Fingerprint]) -> tuple[tuple[str, tuple[int, ...]], ...]:
     """Shapes used by more than one artifact, and which artifacts used them.

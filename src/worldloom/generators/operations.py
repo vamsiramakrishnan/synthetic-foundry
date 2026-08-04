@@ -19,6 +19,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import episode_text
 
@@ -159,6 +160,7 @@ def generate(
     prior_incident_periods: tuple[str, ...] = (),
     text: Mapping[str, str] | None = None,
     money_unit: str = MONEY,
+    physics: Parameters = DEFAULT,
 ) -> CloseEpisode:
     """Generate the close, and an incident if lore and the seed conspire.
 
@@ -208,7 +210,7 @@ def generate(
                                incident_lore=incident_lore, calendar_lore=calendar_lore,
                                ownership_lore=ownership_lore, previous_event=start,
                                prior_incident_periods=prior_incident_periods, t=t,
-                               money_unit=money_unit)
+                               money_unit=money_unit, physics=physics)
         events.extend(chain["events"])
         facts.extend(chain["facts"])
         keys.update(chain["keys"])
@@ -277,24 +279,27 @@ def _incident_chain(
     incident_lore: list[str], calendar_lore: list[str], ownership_lore: list[str],
     previous_event: EnterpriseEvent, prior_incident_periods: tuple[str, ...] = (),
     t: Mapping[str, str] = TEXT, money_unit: str = MONEY,
+    physics: Parameters = DEFAULT,
 ) -> dict:
     """The eight-step incident: detect, triage, be wrong, be corrected, work around, escalate."""
     events: list[EnterpriseEvent] = []
     facts: list[CanonicalFact] = []
     keys: dict[str, str] = {}
 
-    detected = _at(day, 8, rng.integer(5, 25))
-    raised = detected + timedelta(minutes=rng.integer(4, 12))
-    hypothesised = detected + timedelta(minutes=rng.integer(45, 70))
-    ruled_out = hypothesised + timedelta(minutes=rng.integer(120, 180))
-    confirmed = ruled_out + timedelta(minutes=rng.integer(80, 120))
-    worked_around = confirmed + timedelta(minutes=rng.integer(90, 130))
-    available = worked_around + timedelta(minutes=rng.integer(120, 170))
+    detected = _at(day, 8, physics.integer("ops.incident.detected_minute", rng))
+    raised = detected + timedelta(minutes=physics.integer("ops.incident.raise_minutes", rng))
+    hypothesised = detected + timedelta(minutes=physics.integer("ops.incident.hypothesis_minutes", rng))
+    ruled_out = hypothesised + timedelta(minutes=physics.integer("ops.incident.rule_out_minutes", rng))
+    confirmed = ruled_out + timedelta(minutes=physics.integer("ops.incident.confirm_minutes", rng))
+    worked_around = confirmed + timedelta(minutes=physics.integer("ops.incident.workaround_minutes", rng))
+    available = worked_around + timedelta(minutes=physics.integer("ops.incident.recovery_minutes", rng))
     escalated = _at(day + timedelta(days=1 if (day + timedelta(days=1)).weekday() < 5 else 3), 9, 0)
     reviewed = _at(business_days_after(day, 2), 11, 0)
     remediated = _at(business_days_after(day, 2), 14, 0)
 
-    affected = rng.integer(4_000, 26_000)
+    affected = physics.integer("ops.incident.affected_records", rng)
+    # Left a literal beside the converted draw above: a reference number's
+    # format belongs to the ticketing system, not to the world's physics.
     incident_ref = f"INC{rng.integer(10_000, 99_999):07d}"
 
     def event(kind: str, at: datetime, summary: str, *, actors: list[str], services: list[str] = [],

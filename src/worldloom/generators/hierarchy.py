@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 from ..ids import Minter
 from ..models import Category, Site
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 
 
@@ -91,6 +92,7 @@ def generate(
     unit_ids: dict[str, str],
     buyers: dict[str, str],
     regions: tuple[str, ...] = REGIONS,
+    physics: Parameters = DEFAULT,
 ) -> Dimensions:
     """Build the category and site dimensions for a set of business units.
 
@@ -134,9 +136,18 @@ def generate(
                 # A zero-revenue format stays exactly zero rather than becoming a
                 # small non-zero number — a distribution centre with $40k of
                 # turnover would reconcile and still be wrong.
+                #
+                # The `round` stays here and `org.site.revenue_spread` must carry
+                # no `places`: what is published to four decimals is the *weight*,
+                # after the format's own multiplier, not the spread that produced
+                # it. Rounding the draw as well is a second rounding, and it moves
+                # roughly one site in seven off the value it had before this
+                # registry existed.
                 weight = (
                     0.0 if fmt.revenue_weight == 0.0
-                    else round(fmt.revenue_weight * site_rng.number(0.62, 1.44), 4)
+                    else round(
+                        fmt.revenue_weight * physics.number("org.site.revenue_spread", site_rng), 4
+                    )
                 )
                 site = Site(
                     id=minter.next("SITE"),
@@ -146,7 +157,7 @@ def generate(
                     business_unit_id=unit_id,
                     format=fmt.name,
                     region=region,
-                    opened=f"{site_rng.integer(1998, 2025)}",
+                    opened=f"{physics.integer('org.site.opened_year', site_rng)}",
                     revenue_weight=weight,
                 )
                 sites.append(site)

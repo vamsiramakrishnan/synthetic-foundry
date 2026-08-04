@@ -27,6 +27,7 @@ from datetime import datetime, timedelta
 
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, Category, Quantity, Site
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 
 MONEY = "AUD_thousands"
@@ -179,6 +180,7 @@ def generate(
     comparative_months: int = 0,
     trend_pct: float = 0.0,
     money_unit: str = MONEY,
+    physics: Parameters = DEFAULT,
 ) -> Financials:
     """Generate a company's financial facts for one period, plus a trend behind it.
 
@@ -236,7 +238,7 @@ def generate(
         for key in unit_ids:
             unit_rng = rng.derive(f"revenue/{target_period}/{key}")
             unit_budget = int(round(monthly * unit_shares[key] * season * growth, -2))
-            miss_pct = unit_rng.number(-0.065, 0.015, places=4)
+            miss_pct = physics.number("retail.revenue.miss_pct", unit_rng)
             budget[key] = unit_budget
             actual[key] = int(round(unit_budget * (1 + miss_pct), -2))
         return budget, actual
@@ -344,10 +346,16 @@ def generate(
         gp_actual: dict[str, int] = {}
         cat_gp_actual: dict[str, int] = {}
         cat_gp_budget: dict[str, int] = {}
+        # The category spread is the one span here the registry cannot hand over
+        # resolved: it carries its high bound as a multiple of the per-unit
+        # `erosion` drawn below, so the call site does the multiplication.
+        spread = physics.span("retail.margin.category_spread")
         for key, unit_id in unit_ids.items():
             margin_rng = rng.derive(f"margin/{target_period}/{key}")
-            budget_margin = unit_margin(unit_id, margin_rng.number(0.20, 0.34, places=4))
-            erosion = margin_rng.number(0.002, 0.020, places=4)
+            budget_margin = unit_margin(
+                unit_id, physics.number("retail.margin.budget", margin_rng)
+            )
+            erosion = physics.number("retail.margin.erosion", margin_rng)
             gp_budget[key] = int(round(budget[key] * budget_margin))
             gp_actual[key] = int(round(actual[key] * (budget_margin - erosion)))
 
@@ -360,7 +368,11 @@ def generate(
             # spread is real; the total is still exactly what was drawn above.
             eroded = [
                 max(
-                    c.margin_profile - margin_rng.number(-0.004, 2 * erosion, places=4),
+                    c.margin_profile
+                    - physics.number(
+                        "retail.margin.category_spread", margin_rng,
+                        high=spread.high * erosion,
+                    ),
                     0.001,
                 )
                 for c in members
@@ -438,7 +450,8 @@ def generate(
             _drivers(ledger, rng, unit_ids, company_id, target_period, at,
                      erp_id, commerce_id, close_event_id, lore_by_target,
                      budget, actual, gp_budget, gp_actual,
-                     group_budget, group_actual, group_gp_budget, group_gp_actual)
+                     group_budget, group_actual, group_gp_budget, group_gp_actual,
+                     physics=physics)
 
         return budget, actual
 
@@ -469,6 +482,8 @@ def _drivers(
     budget: dict[str, int], actual: dict[str, int],
     gp_budget: dict[str, int], gp_actual: dict[str, int],
     group_budget: int, group_actual: int, group_gp_budget: int, group_gp_actual: int,
+    *,
+    physics: Parameters = DEFAULT,
 ) -> None:
     """The derived metrics a variance memo argues from."""
     margin_move = round(
@@ -487,8 +502,10 @@ def _drivers(
 
     if "digital" in unit_ids:
         conv_rng = rng.derive(f"conversion/{period}")
-        forecast = conv_rng.number(3.0, 3.4, places=2)
-        actual_conv = round(forecast - conv_rng.number(0.05, 0.40, places=2), 2)
+        forecast = physics.number("retail.conversion.forecast_pct", conv_rng)
+        actual_conv = round(
+            forecast - physics.number("retail.conversion.shortfall_pct", conv_rng), 2
+        )
         ledger.measure("metric.online_conversion_rate.forecast", unit_ids["digital"], period,
                        forecast, PERCENT, at=at, source=commerce_id, event=event,
                        lore=lore_by_target.get("online_conversion_rate", []))

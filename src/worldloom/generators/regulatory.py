@@ -44,6 +44,7 @@ from collections.abc import Mapping
 
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import episode_text
 from .capital import CapitalPosition
@@ -169,6 +170,7 @@ def generate(
     text: Mapping[str, str] | None = None,
     existing_minimum: CanonicalFact | None = None,
     money_unit: str = MONEY,
+    physics: Parameters = DEFAULT,
 ) -> ReturnEpisode:
     """Generate the challenged return for the quarter ending *period*.
 
@@ -474,13 +476,21 @@ def generate(
     # -- detection: the daily path catches the quarterly path's error --------
     break_day = liquidity.observations[-2][0]
     chain = rng.derive(f"chain/{break_day.isoformat()}")
-    detected = _at(break_day, 8, chain.integer(12, 28))
-    opened_at = detected + timedelta(minutes=chain.integer(14, 26))
-    hypothesised = detected + timedelta(minutes=chain.integer(75, 105))
-    ruled_out = hypothesised + timedelta(minutes=chain.integer(150, 210))
-    confirmed = ruled_out + timedelta(minutes=chain.integer(90, 145))
+    detected = _at(break_day, 8, physics.integer("capital.incident.detected_minute", chain))
+    opened_at = detected + timedelta(
+        minutes=physics.integer("capital.incident.raise_minutes", chain))
+    hypothesised = detected + timedelta(
+        minutes=physics.integer("capital.incident.hypothesis_minutes", chain))
+    ruled_out = hypothesised + timedelta(
+        minutes=physics.integer("capital.incident.rule_out_minutes", chain))
+    confirmed = ruled_out + timedelta(
+        minutes=physics.integer("capital.incident.confirm_minutes", chain))
+    # Not a parameter, and it stays *here*: an identifier's format is not a fact
+    # about the world, and `chain` is one stream — moving this draw past the
+    # next one to group the parameters together would reshuffle every figure
+    # below it.
     incident_ref = f"INC{chain.integer(10_000, 99_999):07d}"
-    affected = chain.integer(800, 4_200)
+    affected = physics.integer("capital.incident.affected_records", chain)
 
     breach = event(
         "reconciliation_break_detected", detected,

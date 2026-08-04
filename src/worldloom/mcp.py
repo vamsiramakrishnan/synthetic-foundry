@@ -394,6 +394,115 @@ def corpus_series(corpus: str, kind: str | None = None) -> dict[str, Any]:
     }
 
 
+def _probe_path(probe: str) -> Any:
+    from pathlib import Path
+
+    return Path(probe)
+
+
+def _probe_session(probe: str) -> Any:
+    from . import probe as probe_module
+
+    return probe_module.Session.from_document(
+        json.loads(_probe_path(probe).read_text(encoding="utf-8"))
+    )
+
+
+def probe_open(probe: str, premise: str, max_depth: int = 4) -> dict[str, Any]:
+    """Start a probe from a premise."""
+    from . import probe as probe_module
+
+    path = _probe_path(probe)
+    if path.exists():
+        return {"error": f"{probe} already exists; probe_next continues it"}
+    session = probe_module.Session(premise, max_depth)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(session.document(), indent=2, allow_nan=False) + "\n",
+                    encoding="utf-8")
+    return probe_module.brief_document(
+        probe_module.frontier(session.graph), premise=premise
+    )
+
+
+def probe_next(probe: str) -> dict[str, Any]:
+    """The next question, with the bounds earlier answers have left it."""
+    from . import probe as probe_module
+
+    session = _probe_session(probe)
+    return probe_module.brief_document(
+        probe_module.frontier(session.graph), premise=session.premise
+    )
+
+
+def probe_answer(probe: str, **answer: Any) -> dict[str, Any]:
+    """Submit one answer. Committed only if the whole graph can still hold."""
+    from . import probe as probe_module
+
+    session = _probe_session(probe)
+    try:
+        parsed = probe_module.Answer.model_validate(answer)
+    except ValueError as exc:
+        return {"accepted": False, "rejections": [
+            {"subject": answer.get("question", "?"), "rule": "malformed_answer",
+             "detail": str(exc)},
+        ]}
+
+    result = probe_module.accept(session.graph, parsed)
+    if not result.accepted:
+        return {"accepted": False, "rejections": [
+            {"subject": r.subject, "rule": r.rule, "detail": r.detail}
+            for r in result.rejections
+        ]}
+
+    committed = session.committed(parsed)
+    _probe_path(probe).write_text(
+        json.dumps(committed.document(), indent=2, allow_nan=False) + "\n", encoding="utf-8"
+    )
+    # Hand back the next question with the acceptance. An agent running this
+    # loop would otherwise call `probe_next` on every single turn purely to
+    # find out it is not finished, which doubles the round trips for nothing.
+    return {
+        "accepted": True,
+        "raised": result.raised,
+        "next": probe_module.brief_document(
+            probe_module.frontier(committed.graph), premise=committed.premise
+        ),
+    }
+
+
+def probe_worlds(probe: str, count: int = 5) -> dict[str, Any]:
+    """The worlds this probe allows, as unlike each other as possible."""
+    from . import probe as probe_module
+
+    session = _probe_session(probe)
+    try:
+        found = probe_module.worlds(session.graph, count=count)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"premise": session.premise, "worlds": [w.as_dict() for w in found]}
+
+
+def probe_resolve(probe: str) -> dict[str, Any]:
+    """The graph as engine physics, plus the parameters it wanted and could not reach."""
+    from . import probe as probe_module
+
+    session = _probe_session(probe)
+    resolution = probe_module.resolve(session.graph)
+    return {
+        "usable": resolution.usable,
+        "overrides": {
+            name: span.as_dict() for name, span in sorted(resolution.overrides.items())
+        },
+        "unbound": [
+            {"key": u.key, "asks": u.asks, "claim": u.claim, "unit": u.unit,
+             "low": u.bounds.low, "high": u.bounds.high}
+            for u in resolution.unbound
+        ],
+        "unanswered": list(resolution.unanswered),
+        "contradictions": [str(c) for c in resolution.contradictions],
+    }
+
+
 def validate_corpus(corpus: str) -> dict[str, Any]:
     """The coherence gate, as data."""
     report = _load(corpus).validate()
@@ -533,7 +642,163 @@ TOOLS: tuple[dict[str, Any], ...] = (
         },
         "call": validate_corpus,
     },
+    {
+        "name": "probe_open",
+        "description": (
+            "Start deriving a world's physics from a premise. Creates exactly one "
+            "question — the premise's own — and returns it. Every quantity the world "
+            "ends up with is raised by you answering that, and then by answering what "
+            "your own answers raised. Returns the first question, so you can begin "
+            "without a second call."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "probe": {"type": "string", "description": "Where to keep the probe, e.g. probe.json."},
+                "premise": {
+                    "type": "string",
+                    "description": "What this business is, in a sentence or two.",
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "How many levels of sub-question to allow."
+                                   " Two is a sketch; five is a business plan. Default 4.",
+                },
+            },
+            "required": ["probe", "premise"],
+        },
+        "call": probe_open,
+    },
+    {
+        "name": "probe_next",
+        "description": (
+            "The next question to answer, with the bounds every earlier answer has "
+            "left it, the chain of reasoning that led to it, and the terminal "
+            "parameters nobody has claimed yet. The bounds are propagated, not "
+            "declared: by the time margin is asked, sell-through and markdown have "
+            "already squeezed it. Returns question: null when the graph is settled."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {"probe": {"type": "string", "description": "The probe file."}},
+            "required": ["probe"],
+        },
+        "call": probe_next,
+    },
+    {
+        "name": "probe_answer",
+        "description": (
+            "Answer one question. You may narrow it and may never widen it. If the "
+            "quantity is not primitive — if it follows from things you have not been "
+            "asked about — say so and raise those as sub-questions with a relation to "
+            "the parent, rather than picking a number with nothing under it. A leaf "
+            "may bind to a terminal parameter, which is how it reaches the engine; if "
+            "nothing fits, leave it unbound and say what it should have been called. "
+            "Refused if it cannot hold alongside what you have already said — nobody "
+            "wrote down which combinations are illegal, they fall out of propagating "
+            "the relations you supplied. Returns the next question with the acceptance."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "probe": {"type": "string", "description": "The probe file."},
+                "question": {"type": "string", "description": "The key you were asked."},
+                "claim": {
+                    "type": "string",
+                    "description": "What you concluded and why, in a sentence or two.",
+                },
+                "low": {"type": "number", "description": "Omit if this question has no number."},
+                "high": {"type": "number", "description": "Omit if this question has no number."},
+                "source": {
+                    "type": "string",
+                    "description": "Where the range came from. Sector statistics and"
+                                   " published benchmarks are priors and are welcome."
+                                   " A named company's own figures are not — this"
+                                   " corpus is fictional and must stay that way.",
+                },
+                "binds": {
+                    "type": "string",
+                    "description": "A terminal parameter, on leaves only.",
+                },
+                "raises": {
+                    "type": "array",
+                    "description": "Sub-questions this answer makes necessary.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "key": {"type": "string"},
+                            "asks": {"type": "string", "description": "As a question."},
+                            "because": {
+                                "type": "string",
+                                "description": "Why answering the parent requires this."
+                                               " Required: a sub-question with no"
+                                               " reasoning is a guess with structure.",
+                            },
+                            "unit": {"type": "string"},
+                            "relation": {
+                                "type": "string",
+                                "enum": ["free", "scales", "complements", "at_most"],
+                                "description": "How knowing the child changes what the"
+                                               " parent can be. 'free' means you believe"
+                                               " there is no arithmetic tie, which is a"
+                                               " claim, not a default.",
+                            },
+                            "factor_low": {"type": "number", "description": "For 'scales'."},
+                            "factor_high": {"type": "number", "description": "For 'scales'."},
+                            "domain_low": {"type": "number", "description": "Omit for unbounded."},
+                            "domain_high": {"type": "number", "description": "Omit for unbounded."},
+                            "binds": {"type": "string"},
+                        },
+                        "required": ["key", "asks", "because"],
+                    },
+                },
+            },
+            "required": ["probe", "question", "claim"],
+        },
+        "call": probe_answer,
+    },
+    {
+        "name": "probe_worlds",
+        "description": (
+            "The worlds this probe allows, as unlike each other as possible. A "
+            "settled probe describes a space, not a world: every assignment inside "
+            "the narrowed ranges that also respects the relations. Resolving takes "
+            "the average member of that space; this covers it with a low-discrepancy "
+            "sequence, keeps what satisfies every relation, and returns the ones "
+            "furthest apart. Deterministic — the same graph gives the same mosaic. "
+            "Use it to see what shapes your answers have actually committed to."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "probe": {"type": "string", "description": "The probe file."},
+                "count": {"type": "integer", "description": "How many worlds. Default 5."},
+            },
+            "required": ["probe"],
+        },
+        "call": probe_worlds,
+    },
+    {
+        "name": "probe_resolve",
+        "description": (
+            "Turn a settled probe into overrides for the engine's parameter registry, "
+            "plus the leaves that bound to nothing — parameters this world needed and "
+            "the engine cannot yet read. Those are reported, never dropped: they are "
+            "the only honest evidence for growing the registry."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {"probe": {"type": "string", "description": "The probe file."}},
+            "required": ["probe"],
+        },
+        "call": probe_resolve,
+    },
 )
+
+#: What a tool operates on. Every tool must name exactly one of these and
+#: require it, so that a single server can serve however many corpora and
+#: probes a session is working on without holding any of them as state.
+SUBJECTS = ("corpus", "probe")
 
 
 def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:

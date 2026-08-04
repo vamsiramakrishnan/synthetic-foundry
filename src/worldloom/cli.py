@@ -56,6 +56,11 @@ compose_app = typer.Typer(
     help="Hand an agent the company's technology estate to author, and check it against the graph.",
 )
 app.add_typer(compose_app, name="compose")
+probe_app = typer.Typer(
+    no_args_is_help=True,
+    help="Derive a world's physics by asking, one question at a time, under propagation.",
+)
+app.add_typer(probe_app, name="probe")
 
 console = Console()
 err = Console(stderr=True)
@@ -206,6 +211,17 @@ def build(
             "existing corpus is byte-identical."
         ),
     ),
+    physics: Path = typer.Option(
+        None, "--physics",
+        help=(
+            "Build under overridden world physics: a JSON file of parameter ranges, "
+            "as `worldloom probe resolve` writes and `worldloom pack params` lists. "
+            "This is what makes a pack able to say the company is a jeweller rather "
+            "than a grocer with the labels changed. Only the ranges that differ from "
+            "the engine's are recorded, so a file restating the defaults builds a "
+            "byte-identical corpus."
+        ),
+    ),
     trend: float = typer.Option(
         0.0, "--trend",
         help=(
@@ -347,6 +363,45 @@ def build(
     # below.
     single_episode = domain.single_episode if domain is not None else None
 
+    # Resolved once, before anything is built, and applied to the builder *and*
+    # every episode: the world's organisation and the episode's figures are
+    # drawn under the same physics or the corpus is internally inconsistent
+    # about what kind of company it is.
+    from .parameters import DEFAULT as _DEFAULT_PHYSICS
+
+    physics_value = _DEFAULT_PHYSICS
+    if physics is not None:
+        from .parameters import overrides_from
+
+        try:
+            document = json.loads(physics.read_text(encoding="utf-8"))
+            physics_value = _DEFAULT_PHYSICS.with_overrides(
+                overrides_from(document.get("overrides", document))
+            )
+        except (OSError, AttributeError, KeyError, ValueError, json.JSONDecodeError) as exc:
+            err.print(f"[red]error:[/red] {physics}: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+
+    def _under_physics(spec: Any) -> Any:
+        """*spec* rebound to the requested physics, untouched on the default path.
+
+        Untouched rather than always rebound so that a domain registered
+        outside this repository — which may have no ``physics`` field — keeps
+        building exactly as it did.
+        """
+        if physics_value is _DEFAULT_PHYSICS:
+            return spec
+        from dataclasses import replace as _replace_physics
+
+        try:
+            return _replace_physics(spec, physics=physics_value)
+        except TypeError as exc:
+            err.print(
+                f"[red]error:[/red] --physics was given, but {type(spec).__name__}"
+                f" does not accept any: {escape(str(exc))}"
+            )
+            raise typer.Exit(code=2) from exc
+
     if single_episode is not None:
         refused = [
             flag for flag, given in (
@@ -379,16 +434,18 @@ def build(
             )
             raise typer.Exit(code=2)
 
-        builder = (
+        builder = _under_physics(
             domain.world.from_pack(pack_obj, seed=seed)
             if pack_obj is not None
             else domain.world(seed=seed, archetype=shape, employees=employees)
         )
         world = builder.build()
         for index in range(max(1, periods)):
-            world = world.run(single_episode(_step_period(period, index, domain.period_step_months)))
+            world = world.run(_under_physics(
+                single_episode(_step_period(period, index, domain.period_step_months))
+            ))
     else:
-        builder = (
+        builder = _under_physics(
             RetailWorld.from_pack(pack_obj, seed=seed)
             if pack_obj is not None
             else RetailWorld(seed=seed, archetype=shape, employees=employees)
@@ -482,6 +539,7 @@ def build(
                     actors=actor_provider,
                     actor_ledger=actor_ledger,
                     eval_density=eval_density_value,
+                    physics=physics_value,
                 )
             )
         except ActorProviderError as exc:
@@ -1046,6 +1104,285 @@ def compose_accept(
             f" `--replay` rebuilds it with no provider. Written to {written}."
             f"\nRead it with `worldloom topology {corpus}`.[/dim]"
         )
+
+
+# ---------------------------------------------------------------------------
+# probe — physics a model derives, rather than physics an engineer typed
+# ---------------------------------------------------------------------------
+
+
+def _probe_session(path: Path):  # type: ignore[no-untyped-def]
+    from . import probe as probe_module
+
+    try:
+        return probe_module.Session.from_document(
+            json.loads(path.read_text(encoding="utf-8"))
+        )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {path}: {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+
+def _write_probe(session, path: Path) -> None:  # type: ignore[no-untyped-def]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # `allow_nan=False` on purpose. An unbounded end must have been encoded as
+    # null before it reaches here; if one slipped through as an infinity this
+    # raises rather than writing `Infinity`, which Python reads back and no
+    # other JSON parser does.
+    path.write_text(json.dumps(session.document(), indent=2, allow_nan=False) + "\n",
+                    encoding="utf-8")
+
+
+@probe_app.command("open")
+def probe_open(
+    premise: str = typer.Option(..., "--premise", "-p",
+                                help="What this business is, in a sentence or two."),
+    out: Path = typer.Option(Path("probe.json"), "--out", "-o", help="Where to keep the probe."),
+    depth: int = typer.Option(
+        None, "--depth",
+        help="How many levels of sub-question to allow. Two is a sketch; five is a business plan.",
+    ),
+) -> None:
+    """Start a probe from a premise.
+
+    Creates one question — the premise's own — and nothing else. Every quantity
+    the world ends up with is raised by a model answering that, and then by
+    answering what its own answers raised.
+    """
+    from . import probe as probe_module
+
+    session = probe_module.Session(
+        premise, probe_module.DEFAULT_MAX_DEPTH if depth is None else depth
+    )
+    _write_probe(session, out)
+    console.print(
+        f"[green]✓[/green] probe opened at [bold]{out}[/bold]"
+        f"\n[dim]depth limit {session.max_depth}. Ask the first question with"
+        f" `worldloom probe next {out}`.[/dim]"
+    )
+
+
+@probe_app.command("next")
+def probe_next(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to read."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the next question, with the bounds earlier answers have left it.
+
+    The bounds are the *propagated* ones, not the question's own declared
+    range. That is the whole mechanism by which context shapes what a model may
+    say: by the time margin is asked, sell-through and markdown have already
+    squeezed it, and the model answers inside a box that earlier answers built.
+
+    Exits 3 when the graph is settled, so a driving loop can tell "nothing left
+    to ask" from "something went wrong" without parsing prose.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    graph = session.graph
+    brief = probe_module.frontier(graph)
+    payload = json.dumps(
+        probe_module.brief_document(brief, premise=session.premise), indent=2, allow_nan=False
+    )
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(f"[green]✓[/green] question written to [bold]{out}[/bold]")
+    if brief is None:
+        raise typer.Exit(code=3)
+
+
+@probe_app.command("accept")
+def probe_accept(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to record into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Answer JSON from the agent."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the verdict as JSON — an agent fixing rejections should read data, not parse a table.",
+    ),
+) -> None:
+    """Check one answer against the graph, and commit it or refuse all of it.
+
+    Refused for widening a question it was meant to narrow, for raising a
+    sub-question with no reasoning under it, for binding a terminal twice — and,
+    once it is well-formed, for being unable to hold alongside everything
+    already accepted. That last one is the interesting rejection: nobody wrote
+    down which combinations are illegal, they fall out of propagating the
+    relations the model itself supplied.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    try:
+        answer = probe_module.Answer.model_validate(
+            json.loads(source.read_text(encoding="utf-8"))
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    result = probe_module.accept(session.graph, answer)
+
+    if as_json:
+        typer.echo(json.dumps({
+            "accepted": result.accepted,
+            "raised": result.raised,
+            "rejections": [
+                {"subject": r.subject, "rule": r.rule, "detail": r.detail}
+                for r in result.rejections
+            ],
+        }, indent=2))
+
+    if not result.accepted:
+        if not as_json:
+            err.print(f"[red]✗[/red] {len(result.rejections)} violation(s). Nothing was committed.")
+            for rejection in result.rejections:
+                err.print(
+                    f"  [yellow]{rejection.rule}[/yellow] {rejection.subject}:"
+                    f" {escape(rejection.detail)}"
+                )
+        raise typer.Exit(code=1)
+
+    _write_probe(session.committed(answer), path)
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] {answer.question} answered"
+            + (f", raising {result.raised} sub-question(s)" if result.raised else "")
+        )
+
+
+@probe_app.command("show")
+def probe_show(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to read."),
+) -> None:
+    """The graph as it stands: what is settled, what it implies, what is missing."""
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    graph = session.graph
+    state = probe_module.propagate(graph)
+    resolution = probe_module.resolve(graph)
+
+    console.print(f"[bold]{escape(session.premise)}[/bold]\n")
+    for node in graph.ordered:
+        if node.key == probe_module.ROOT:
+            continue
+        bounds = state.domains.get(node.key, node.domain)
+        mark = "[green]✓[/green]" if node.answered else "[yellow]?[/yellow]"
+        bound = f" [dim]→ {node.binds}[/dim]" if node.binds else ""
+        console.print(
+            f"{'  ' * node.depth}{mark} [bold]{escape(node.key)}[/bold]"
+            f" {bounds} {escape(node.unit)}{bound}"
+        )
+        if node.because:
+            console.print(f"{'  ' * node.depth}  [dim]{escape(node.because)}[/dim]")
+
+    for contradiction in resolution.contradictions:
+        err.print(f"[red]✗[/red] {escape(str(contradiction))}")
+    for missing in resolution.unbound:
+        # Not a warning. A leaf the world needed and the engine cannot read is
+        # the only honest evidence for growing the terminal registry, and it
+        # only counts as evidence if it survives to be read.
+        console.print(f"[magenta]unbound[/magenta] {escape(str(missing))}")
+    if resolution.unanswered:
+        console.print(f"\n[dim]{len(resolution.unanswered)} question(s) still open.[/dim]")
+
+
+@probe_app.command("worlds")
+def probe_worlds(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to read."),
+    count: int = typer.Option(5, "--count", "-n", help="How many worlds."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """The worlds this probe allows, as unlike each other as possible.
+
+    A settled probe does not describe one world. It describes a space — every
+    assignment inside the narrowed ranges that also respects the relations —
+    and taking the midpoint of each range, which is what resolving does,
+    produces the single most average member of it.
+
+    This covers the space with a low-discrepancy sequence rather than random
+    draws, keeps the assignments that satisfy every relation, and returns the
+    ones furthest apart by farthest-point traversal. Deterministic: the same
+    graph gives the same mosaic every time.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    try:
+        found = probe_module.worlds(session.graph, count=count)
+    except ValueError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+
+    document = {
+        "premise": session.premise,
+        "worlds": [world.as_dict() for world in found],
+    }
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(document, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        console.print(f"[green]✓[/green] {len(found)} world(s) written to [bold]{out}[/bold]")
+        return
+
+    keys = sorted({key for world in found for key in world.values})
+    for index, world in enumerate(found, start=1):
+        values = world.as_dict()
+        console.print(f"[bold]world {index}[/bold] " + "  ".join(
+            f"[dim]{escape(key)}[/dim] {values[key]:.4g}" for key in keys if key in values
+        ))
+
+
+@probe_app.command("resolve")
+def probe_resolve(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to resolve."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write the overrides here."),
+) -> None:
+    """Turn a settled graph into overrides for the terminal parameter registry.
+
+    Refuses while anything is unanswered or contradictory: physics derived from
+    a graph that does not yet hold would be a build calibrated against
+    reasoning nobody finished.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    resolution = probe_module.resolve(session.graph)
+
+    if not resolution.usable:
+        err.print("[red]✗[/red] this probe cannot produce physics yet.")
+        for contradiction in resolution.contradictions:
+            err.print(f"  [red]contradiction[/red] {escape(str(contradiction))}")
+        for key in resolution.unanswered:
+            err.print(f"  [yellow]unanswered[/yellow] {key}")
+        raise typer.Exit(code=1)
+
+    document = {
+        "premise": session.premise,
+        "overrides": {
+            name: span.as_dict() for name, span in sorted(resolution.overrides.items())
+        },
+        "unbound": [
+            {"key": u.key, "asks": u.asks, "claim": u.claim, "unit": u.unit,
+             "low": u.bounds.low, "high": u.bounds.high}
+            for u in resolution.unbound
+        ],
+    }
+    payload = json.dumps(document, indent=2, allow_nan=False)
+    if out is None:
+        typer.echo(payload, nl=False)
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(payload + "\n", encoding="utf-8")
+    console.print(
+        f"[green]✓[/green] {len(resolution.overrides)} parameter(s) written to [bold]{out}[/bold]"
+        + (f"\n[magenta]{len(resolution.unbound)} leaf/leaves bound to nothing[/magenta]"
+           " [dim]— parameters this world wanted and the engine cannot read.[/dim]"
+           if resolution.unbound else "")
+    )
 
 
 @plan_app.command("requests")
@@ -2525,6 +2862,48 @@ def pack_check(
         console.print(f"[yellow]•[/yellow] {escape(finding)}")
     if not findings:
         console.print("[dim]no lint findings — every commitment is load-bearing[/dim]")
+
+
+@pack_app.command("params")
+def pack_params(
+    prefix: str = typer.Argument(None, help="Only parameters under this prefix, e.g. `retail`."),
+    as_json: bool = typer.Option(False, "--json", help="Emit the registry as data."),
+) -> None:
+    """Every world-physics range a pack may override, and what each one decides.
+
+    These are the ranges the engine draws from — the ones a pack could not
+    reach until they had names. Gross margin came out of `[0.20, 0.34]`
+    whatever a pack said the company sold, which is why every world this tool
+    built was a grocer with the labels changed.
+
+    An author cannot override what they cannot see, and reading the source is
+    not a reasonable ask for thirty-seven of them. Set them with
+    `worldloom build --physics`, or derive them with `worldloom probe` rather
+    than filling in a list — they are not independent, and setting margin
+    without moving markdown cadence builds a grocer with one figure edited.
+    """
+    from .parameters import publish
+
+    registry = {
+        name: entry for name, entry in publish().items()
+        if prefix is None or name.startswith(prefix)
+    }
+    if not registry:
+        err.print(f"[red]error:[/red] no parameter starts with {prefix!r}")
+        raise typer.Exit(code=2)
+
+    if as_json:
+        typer.echo(json.dumps(registry, indent=2))
+        return
+
+    for name, entry in registry.items():
+        span = f"[{entry['low']}, {entry['high']}]" if entry["kind"] != "chance" else str(entry["low"])
+        console.print(f"[bold]{escape(name)}[/bold] [cyan]{span}[/cyan] [dim]{entry['kind']}[/dim]")
+        if entry.get("about"):
+            console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+        if entry.get("source"):
+            console.print(f"  [dim]source: {escape(entry['source'])}[/dim]")
+    console.print(f"\n[dim]{len(registry)} parameter(s).[/dim]")
 
 
 @pack_app.command("targets")

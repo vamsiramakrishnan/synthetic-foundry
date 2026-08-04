@@ -69,6 +69,7 @@ from .models import (
     LoreConstraint,
     LoreKind,
 )
+from .parameters import DEFAULT, Parameters
 from .rng import Rng
 from .validate import RECONCILIATION_TOLERANCE, Violation
 from .world import World
@@ -247,6 +248,12 @@ class InsuranceWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    physics: Parameters = DEFAULT
+    """The world physics the organisation is drawn under. Separate from
+    ``pack`` even though a pack is what will normally supply one: a pack says
+    what this insurer *is* — its units, its lore, its brands — and the physics
+    says what ranges its figures live in. Keeping them one field would make
+    a caller who only wants to move a range author a whole pack to do it."""
 
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> InsuranceWorld:
@@ -290,6 +297,7 @@ class InsuranceWorld:
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
             voices=dict(self.pack.voices) if self.pack is not None else None,
+            physics=self.physics,
         )
 
         return World(
@@ -318,6 +326,7 @@ class InsuranceWorld:
                 employees=self.employees,
                 annual_revenue=self.annual_revenue,
                 pack=self.pack,
+                physics=self.physics,
             ),
         )
 

@@ -78,6 +78,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--pack` | Build from an industry pack: a JSON file carrying the company shape, lore, and name. See `worldloom pack template` to start one and `worldloom pack check` to lint it. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Run this many consecutive episodes — closes for the retail vertical, or a single-episode vertical's own cadence (a domain's period_step_months). More than one gives recurrence, superseded documents, and the evaluation questions a single episode cannot pose. |
+| `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
@@ -268,6 +269,18 @@ worldloom pack check <SOURCE>
 | --- | --- |
 | `--json` | Emit findings as JSON — an agent authoring a pack should read data. |
 
+### `worldloom pack params`
+
+Every world-physics range a pack may override, and what each one decides.
+
+```
+worldloom pack params <PREFIX>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the registry as data. |
+
 ### `worldloom pack targets`
 
 List the lore targets each engine consults, and what each one changes.
@@ -324,6 +337,78 @@ worldloom plan requests <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
+| `--out`, `-o` | Write JSON here instead of stdout. |
+
+### `worldloom probe`
+
+Derive a world's physics by asking, one question at a time, under propagation.
+
+### `worldloom probe accept`
+
+Check one answer against the graph, and commit it or refuse all of it.
+
+```
+worldloom probe accept <PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--from`, `-i` | Answer JSON from the agent. |
+| `--json` | Emit the verdict as JSON — an agent fixing rejections should read data, not parse a table. |
+
+### `worldloom probe next`
+
+Emit the next question, with the bounds earlier answers have left it.
+
+```
+worldloom probe next <PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write JSON here instead of stdout. |
+
+### `worldloom probe open`
+
+Start a probe from a premise.
+
+| Option | Purpose |
+| --- | --- |
+| `--depth` | How many levels of sub-question to allow. Two is a sketch; five is a business plan. |
+| `--out`, `-o` | Where to keep the probe. |
+| `--premise`, `-p` | What this business is, in a sentence or two. |
+
+### `worldloom probe resolve`
+
+Turn a settled graph into overrides for the terminal parameter registry.
+
+```
+worldloom probe resolve <PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write the overrides here. |
+
+### `worldloom probe show`
+
+The graph as it stands: what is settled, what it implies, what is missing.
+
+```
+worldloom probe show <PATH>
+```
+
+### `worldloom probe worlds`
+
+The worlds this probe allows, as unlike each other as possible.
+
+```
+worldloom probe worlds <PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--count`, `-n` | How many worlds. |
 | `--out`, `-o` | Write JSON here instead of stdout. |
 
 ### `worldloom refine`

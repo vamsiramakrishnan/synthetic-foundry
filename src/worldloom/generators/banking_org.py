@@ -44,6 +44,7 @@ from ..models import (
     Site,
     System,
 )
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import hierarchy, names
 from .org_builder import (
@@ -165,6 +166,7 @@ def generate(
     name_pools: dict[str, list[str]] | None = None,
     headquarters: str | None = None,
     regions: tuple[str, ...] | None = None,
+    physics: Parameters = DEFAULT,
 ) -> BankOrganisation:
     """Build the bank for an archetype. Same seed, same graph, same ids.
 
@@ -217,6 +219,7 @@ def generate(
     role_ids, people = mint_people(
         rng, minter, role_table, depth_of, assign=assign,
         given=pools.get("given") or None, family=pools.get("family") or None,
+        physics=physics,
     )
     people = wire_managers(people, role_table, role_ids)
     business_units = form_units(units, unit_ids, role_ids, people, company_id, lore)
@@ -234,6 +237,7 @@ def generate(
         unit_ids=unit_ids,
         buyers={},
         regions=regions if regions else hierarchy.REGIONS,
+        physics=physics,
     )
 
     core = minter.next("SYS")
