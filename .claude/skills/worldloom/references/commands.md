@@ -67,6 +67,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
 | `--distractors` | Add this many provenance-true noise artifacts once the episode(s) finish: superseded drafts, personal working copies, and routine notices — real authors, real dates, real facts, answering nothing an evaluation case needs. 0 (the default) touches nothing. |
 | `--employees` | Override the archetype's stated headcount. |
+| `--estate` | Grow a service landscape around the episode's own services: small, medium or large. Without it the estate is the four services and five systems the close names and nothing else — nine nodes whether the archetype has three stores or sixteen hundred, so nothing has a blast radius and `worldloom topology` has little to read. Omit it and every existing corpus is byte-identical. |
 | `--eval-density` | How much of the world's own size the evaluation set and its fan-out documents are allowed to exploit: `low` trims the optional close documents to the floor a benchmark needs; `standard` is today's corpus, unchanged; `high` adds direct-lookup, comparison, and cross-period cases (and the documents to source them from) that only exist once a world has more units, categories, sites, or periods to ask about. `standard` reproduces every existing corpus byte for byte. |
 | `--format`, `-f` | Render these formats. Repeatable. Omit to plan artifacts without rendering. |
 | `--incident` | Force the operational incident on or off. Omit to let the seed and lore decide. |
@@ -80,6 +81,36 @@ Generate a world deterministically from a seed, then validate it.
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
+
+### `worldloom compose`
+
+Hand an agent the company's technology estate to author, and check it against the graph.
+
+### `worldloom compose accept`
+
+Validate an agent-authored estate against the graph, and commit it or refuse all of it.
+
+```
+worldloom compose accept <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--from`, `-i` | Response JSON from the agent. |
+| `--json` | Emit the verdict as JSON — an agent fixing rejections should read data, not parse a table. |
+| `--model-id` | Who composed it. Recorded in the ledger and part of the replay key. |
+
+### `worldloom compose requests`
+
+Emit the request an agent needs to author this company's estate.
+
+```
+worldloom compose requests <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write JSON here instead of stdout. |
 
 ### `worldloom demo`
 

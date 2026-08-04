@@ -75,16 +75,16 @@ def test_a_chokepoint_is_a_node_nothing_routes_around() -> None:
 
 
 def test_a_redundant_dependency_gates_nothing() -> None:
-    """Gating is per entry point, and unioned. Giving A a second route to C
-    does not clear B, because D still has only one — which is the honest
-    answer: the estate is redundant from one entry and not from the other.
-    Route D around it too and B gates nothing, with its blast radius unmoved
-    the whole way through."""
+    """Gating is an estate-level question: *anything* routing around B clears
+    it, not every consumer individually. One second route to C is enough, and
+    B's blast radius does not move — which is the separation the two measures
+    exist for. (D still reaches C only through B; that per-consumer reading is
+    the weaker question `chokepoints` documents and deliberately does not
+    answer.)"""
     graph = _chain()
-    graph.add_edge("A", "C")
     assert dict(graphs.chokepoints(graph)) == {"B": 1}
 
-    graph.add_edge("D", "C")
+    graph.add_edge("A", "C")
     assert dict(graphs.chokepoints(graph)) == {}
     assert graphs.blast_radius(graph, "C") == frozenset({"A", "B", "D"})
 

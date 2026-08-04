@@ -56,6 +56,12 @@ STEPS: dict[str, tuple[str, ...]] = {
     # that carries noise must say so on its own recipe, or `--replay` would
     # silently rebuild a cleaner world than the one that shipped.
     "Distractors": ("count",),
+    # Also not a scenario: a model-authored estate, applied to a built world.
+    # Only the ledger key is recorded — the composition itself is the ledger
+    # entry, exactly as a narrated section is, so the recipe stays the small
+    # "how it was made" document it is meant to be rather than growing a copy
+    # of the answer.
+    "Compose": ("ledger_key",),
 }
 
 #: Single-episode verticals' own scenario, by name — banking's
@@ -100,6 +106,7 @@ def build_recipe(
     employees: int | None = None,
     annual_revenue: int | None = None,
     pack: Any = None,
+    estate: str | None = None,
 ) -> dict[str, Any]:
     """The recipe for a freshly built world, before any scenario has run.
 
@@ -114,6 +121,11 @@ def build_recipe(
         "employees": employees,
         "annual_revenue": annual_revenue,
         **({} if pack is None else {"pack": _pack_payload(pack)}),
+        # Written only when asked for, the same rule `eval_density` and
+        # `trend_pct` follow on a step: a key that appears unconditionally puts
+        # a new field in every recipe ever written for a value that changes
+        # nothing, and the default-build byte diff is what catches that.
+        **({} if estate is None else {"estate": estate}),
         "steps": [],
     }
 
@@ -151,8 +163,15 @@ def rebuild(
     *,
     actors: Any = None,
     actor_ledger: tuple = (),
+    ledger: tuple = (),
 ) -> World:
     """Rebuild the world this recipe describes, from scratch.
+
+    ``ledger`` is the corpus's generation ledger, needed only by a recipe that
+    records a ``Compose`` step: the composition a model authored lives in the
+    ledger, not the recipe, so rebuilding one without its ledger is refused
+    rather than silently producing the uncomposed world. Same shape as
+    ``actor_ledger`` below and for the same reason.
 
     ``actors`` replaces the provider on every step the recipe recorded as
     actor-driven. That substitution is the point: the recipe says *an actor
@@ -209,6 +228,12 @@ def rebuild(
             archetype=shape,
             employees=recipe.get("employees"),
             annual_revenue=recipe.get("annual_revenue"),
+            # Only passed when the recipe carries one. The estate generator's
+            # service-name pools are retail's, so only retail's world accepts
+            # the argument at all (see `generators/estate.py`); handing it
+            # unconditionally to every registered domain would make a bank
+            # fail to rebuild over a keyword it was never offered.
+            **({} if recipe.get("estate") is None else {"estate": recipe["estate"]}),
         ).build()
 
     for step in recipe.get("steps", ()):
@@ -251,6 +276,12 @@ def rebuild(
             )
         elif name == "Distractors":
             world = distractors.apply(world, count=step["count"])
+        elif name == "Compose":
+            from . import compose as compose_module
+
+            world = compose_module.replay(
+                world, ledger_key=step["ledger_key"], ledger=ledger,
+            )
         elif name in _STEP_REGISTRY:
             _, build = _STEP_REGISTRY[name]
             kwargs = {key: value for key, value in step.items() if key != "scenario"}

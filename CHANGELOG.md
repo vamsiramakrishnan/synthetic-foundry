@@ -119,6 +119,48 @@ One coherent enterprise, taken all the way through. Two, in fact.
   (`recipe.register_step`) each vertical seeds from its own module, and two
   thin-waist exceptions were paid down rather than a third added.
 
+- **The estate becomes a landscape.** `worldloom topology` on the largest world
+  this tool builds reported **nine** services and systems and a three-hop
+  dependency chain — because nine is exactly what the month-end-close episode
+  names. Categories scale with the archetype, sites scale, facts scale; the
+  estate did not, which made blast radius meaningless, gave "who gets paged" a
+  single answer, and left the incident's stale mapping table reading as bad
+  luck rather than as the kind of thing sitting in every estate of that size.
+  `build --estate small|medium|large` grows the rest of the landscape around
+  the episode's own services: layered (edge → domain → platform → data →
+  system of record) so acyclicity is *unconstructible* rather than merely
+  checked, with chokepoints **placed** — each backed by a store only it may
+  reach, because a shared service whose dependencies everything else can also
+  reach directly dominates nothing. 101 nodes, a ten-hop chain, and the close
+  orchestrator finally has a blast radius. The episode's four services are
+  never edited, so its causality is bit-for-bit unchanged, and omitting the
+  flag leaves every existing corpus byte-identical.
+
+- **`worldloom compose` — the third handshake, and the first over entities.**
+  `narrate` bounds what a model may *say* and checks it against the fact
+  ledger; `plan` bounds how it may *shape* a document and checks it against a
+  component grammar. This bounds what the company *runs* — services, systems,
+  ownership, dependencies, declared criticality, and the lore explaining why
+  the landscape looks that way — and checks it against `worldloom.graphs`. The
+  graph library built for other reasons turned out to be exactly the validator
+  that judgement needs.
+
+  It exists because the generated estate cannot serve every vertical: its
+  name pools are retail's, banking's landscape is not called
+  `click-collect-api`, and the insurer ships with no services at all. A pool
+  per industry is the wrong answer — it puts an ever-growing list of invented
+  names into the engine, the contamination §7 forbids. An industry's
+  vocabulary is the thing a model is genuinely better at than a table, so the
+  model brings it and the harness refuses anything incoherent: a cycle through
+  any number of hops, a dependency resolving to nothing, an owner who does not
+  work here, a tier the graph contradicts, lore that constrains nothing, and
+  an estate in which nothing is a single point of failure. Every violation is
+  reported at once, nothing commits unless everything passes, and the accepted
+  composition lands in the generation ledger — so a composed corpus rebuilds
+  from its own recipe with no provider reachable, and refuses loudly rather
+  than quietly rebuilding into the *un*composed world if its ledger is
+  missing.
+
 - **The world as graphs, and the defects only a graph could see.**
   `worldloom.graphs` reads the four graphs the schema always had and nothing
   ever looked at: the service/system dependency graph, the artifact provenance

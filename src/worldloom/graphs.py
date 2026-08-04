@@ -86,7 +86,11 @@ def _ordered(nodes: list[tuple[str, dict[str, Any]]],
     corpus is.
     """
     graph = nx.DiGraph()
-    for node, attributes in sorted(nodes):
+    # Sorted on the id alone. `sorted(nodes)` compares the whole tuple, so two
+    # entries sharing an id fall through to comparing their attribute *dicts*
+    # and raise — which turned a duplicate id, a defect the validator exists to
+    # report, into a TypeError from inside the reporting machinery.
+    for node, attributes in sorted(nodes, key=lambda row: row[0]):
         graph.add_node(node, **attributes)
     for source, target in sorted(edges):
         graph.add_edge(source, target)
@@ -274,17 +278,27 @@ def cycles(graph: nx.DiGraph, *, limit: int = CYCLE_LIMIT) -> tuple[tuple[str, .
 def chokepoints(graph: nx.DiGraph) -> tuple[tuple[str, int], ...]:
     """Nodes nothing routes around, with how many nodes each one gates.
 
-    A *chokepoint* is a node ``D`` such that, for some root ``R`` and some node
-    ``n``, **every** path from ``R`` to ``n`` passes through ``D``. That is the
-    dominator relation, and it is the honest formalisation of "single point of
-    failure": not merely "lots of things depend on it" (that is blast radius,
-    which a well-replicated shared platform also has), but "there is no second
-    path to what it serves".
+    A *chokepoint* is a node ``D`` such that some node ``n`` cannot be reached
+    from **anywhere** in the estate except through ``D``. That is the honest
+    formalisation of "single point of failure": not merely "lots of things
+    depend on it" (that is blast radius, which a well-replicated shared
+    platform also has), but "there is no second path to what it serves".
 
-    Computed with ``nx.immediate_dominators`` per root and unioned, because a
-    node can be a chokepoint on one chain and fully redundant on another, and
-    an estate with several independent entry points has several dominator
-    trees rather than one.
+    Computed as dominators over the graph augmented with a **virtual source**
+    joined to every root, which is what makes "from anywhere" the question.
+
+    There is a second, weaker question that is also worth asking and that this
+    deliberately does not answer: *is this node the only way some particular
+    consumer reaches what it needs?* That is the per-root dominator union, and
+    it is not wrong — it is the right question if you are the team that owns
+    one service and want to know what can take you out. It is the wrong
+    question for a report about an estate, because on a sparse graph almost
+    everything answers yes to it: a 101-node landscape reports **47** under the
+    per-root union and **14** under this one, and most of the 47 are nodes that
+    one customer-facing service happened to reach by a single path while three
+    others reached them by several. Ranked by how much each gates, the per-root
+    answer is still readable; as a headline count it says only that the estate
+    is sparse, which the node and edge counts already said.
 
     Cyclic graphs return ``()``: dominators are defined on a flow graph reached
     from an entry, and a dependency cycle has no entry to be reached from — the
@@ -292,14 +306,24 @@ def chokepoints(graph: nx.DiGraph) -> tuple[tuple[str, int], ...]:
     """
     if not nx.is_directed_acyclic_graph(graph):
         return ()
+    entries = roots(graph)
+    if not entries:
+        return ()
+    # The virtual source is named so it cannot collide with a real id: every
+    # entity id in this project is a prefixed, uppercase string.
+    source = "\x00source"
+    augmented = graph.copy()
+    augmented.add_node(source)
+    for root in entries:
+        augmented.add_edge(source, root)
+
     gated: dict[str, set[str]] = {}
-    for root in roots(graph):
-        for node, dominator in sorted(nx.immediate_dominators(graph, root).items()):
-            # A node is its own immediate dominator by convention, and the root
-            # dominates everything trivially — neither says anything about
-            # redundancy.
-            if dominator != node and dominator != root:
-                gated.setdefault(dominator, set()).add(node)
+    for node, dominator in sorted(nx.immediate_dominators(augmented, source).items()):
+        # A node is its own immediate dominator by convention, and the virtual
+        # source dominates everything trivially — neither says anything about
+        # redundancy.
+        if dominator not in (node, source) and node != source:
+            gated.setdefault(dominator, set()).add(node)
     return tuple(sorted(
         ((node, len(nodes)) for node, nodes in gated.items()),
         key=lambda row: (-row[1], row[0]),

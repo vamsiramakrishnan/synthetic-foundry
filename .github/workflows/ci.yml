@@ -107,6 +107,44 @@ jobs:
             -f markdown --out "${{ runner.temp }}/measured-again"
           diff -r "${{ runner.temp }}/measured" "${{ runner.temp }}/measured-again"
 
+      # The estate: generated on the engine that has pools, authored on the one
+      # that does not. Both paths end at the same place — a landscape that
+      # validates and a topology that can be read — and the composed corpus
+      # additionally has to rebuild from its own ledger, because a
+      # model-authored estate that only exists in the run that made it is one
+      # run's output rather than an artifact.
+      - name: The estate grows, composes, and rebuilds
+        run: |
+          worldloom build --seed 8128 --incident --archetype australian_grocery \
+            --estate large --out "${{ runner.temp }}/estate"
+          worldloom validate "${{ runner.temp }}/estate"
+          worldloom topology "${{ runner.temp }}/estate" --json > /tmp/estate.json
+          python3 - <<'EOF'
+          import json
+          reading = json.load(open("/tmp/estate.json"))
+          assert len(reading["services"]) > 50, reading["services"][:3]
+          assert len(reading["longest_dependency_chain"]) > 5, reading["longest_dependency_chain"]
+          assert reading["chokepoints"], "a landscape with nothing gating anything is a diagram"
+          assert not reading["dependency_cycles"]
+          EOF
+          # The composition handshake, driven by a scripted stand-in so the
+          # contract is covered with no model in CI — the same posture the
+          # narration and actor handshakes take.
+          worldloom build --seed 8128 --archetype midsize_general_insurer \
+            --out "${{ runner.temp }}/composed"
+          worldloom compose requests "${{ runner.temp }}/composed" -o compose-request.json
+          python3 tests/scripted_composer.py compose-request.json estate-response.json
+          worldloom compose accept "${{ runner.temp }}/composed" --from estate-response.json \
+            --model-id ci-scripted-composer
+          worldloom validate "${{ runner.temp }}/composed"
+          worldloom topology "${{ runner.temp }}/composed"
+          # And an incoherent estate must be refused rather than committed.
+          python3 tests/scripted_composer.py compose-request.json bad-estate.json --cycle
+          if worldloom compose accept "${{ runner.temp }}/composed" --from bad-estate.json; then
+            echo "a dependency cycle was accepted"
+            exit 1
+          fi
+
       # The corpus has to be hard, not just coherent. A keyword baseline with no
       # notion of time or authority is scored against the evaluation set, and the
       # score is asserted to stay low on the types the corpus exists to pose. If

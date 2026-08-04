@@ -193,6 +193,12 @@ class RetailWorld:
     employees: int | None = None
     annual_revenue: int | None = None
     """Override the archetype's scale. ``None`` takes the archetype's own."""
+    estate: str | None = None
+    """Grow a service landscape around the episode's own services:
+    ``"small"``, ``"medium"`` or ``"large"`` (``generators/estate.PROFILES``).
+    ``None`` mints nothing, which is what keeps every corpus built before this
+    existed byte-identical — the estate appends ids after the core's, and
+    ``Minter`` counts per prefix, so no other entity moves either."""
     pack: Any = None
     """An industry ``Pack`` supplying the archetype, lore, and company name.
     Set via ``from_pack``; carried on the instance so ``build`` can embed it in
@@ -245,6 +251,7 @@ class RetailWorld:
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
             voices=dict(self.pack.voices) if self.pack is not None else None,
+            estate_profile=self.estate,
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
@@ -276,6 +283,7 @@ class RetailWorld:
                 employees=self.employees,
                 annual_revenue=self.annual_revenue,
                 pack=self.pack,
+                estate=self.estate,
             ),
         )
 

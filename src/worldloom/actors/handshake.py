@@ -178,7 +178,13 @@ def resume(
     provider = PausingProvider(actions, model_id=model_id or model_id_for(world))
     try:
         rebuilt = recipe_module.rebuild(
-            world.recipe, actors=provider, actor_ledger=world._ledger
+            world.recipe, actors=provider, actor_ledger=world._ledger,
+            # The same ledger again, under the argument a `Compose` step reads
+            # it from. An actor episode on a corpus whose estate a model
+            # authored would otherwise fail to rebuild — the composition lives
+            # in this ledger, and `rebuild` refuses rather than quietly
+            # producing the uncomposed world.
+            ledger=world._ledger,
         )
     except PendingDecision as pending:
         return Resumption(

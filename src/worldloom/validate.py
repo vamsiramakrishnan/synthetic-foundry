@@ -679,6 +679,8 @@ class _Validator:
                 self.fail("graph", label, cycle[0],
                           f"cycle through {' → '.join(cycle)} → {cycle[0]}")
 
+        self.estate()
+
         # One check per superseded fact, counted whether or not it forks: a
         # counter incremented only inside the failure branch would report zero
         # checks on a healthy corpus, which reads as "this was never checked"
@@ -691,6 +693,65 @@ class _Validator:
                 f"superseded by {', '.join(superseding)} — a forked chain leaves two"
                 " facts current with no rule for choosing between them",
             )
+
+    def estate(self) -> None:
+        """The service landscape has to be a landscape, not a list of names.
+
+        These are cheap on the nine-node estate a stock build produces and are
+        the whole gate on one that a *model* authored (``worldloom compose``),
+        where nothing about the construction can be relied on. Three
+        properties, and each one is a thing a plausible-looking authored estate
+        gets wrong:
+
+        * **A service is owned by someone who works here, and was there to own
+          it.** The referential check upstream proves the id resolves; it does
+          not prove the owner had joined, or had not left. An estate assembled
+          from role names is exactly where that goes wrong.
+        * **A declared criticality tier is not contradicted by the graph.**
+          A tier-1 service that nothing depends on and that depends on nothing
+          is an isolated node claiming to be the most important thing in the
+          company. The generator derives tier from position so it cannot say
+          that; an author can, and does.
+        * **A service runs on a system, and the system exists.** Same
+          reasoning: `system_id` resolving is referential, but a service whose
+          system is one *it also depends on transitively through something
+          else* is fine, while a service with no system at all is a service
+          nobody can deploy.
+
+        Deliberately *not* checked here: acyclicity and layering. The first is
+        `structure()`'s, corpus-wide, and duplicating it would be two
+        implementations of one invariant. The second is not a core concept at
+        all — `Service` carries no layer, and giving it one so this check could
+        read it would put a generator's private vocabulary into the thin waist
+        for the convenience of a check that acyclicity already covers.
+        """
+        w = self.world
+        people = w.people
+        systems = {system.id for system in w.systems}
+        depended_on = {target for service in w.services for target in service.depends_on}
+
+        for service in w.services:
+            self.checks += 1
+            owner = people.get(service.owner_id)
+            if owner is not None and owner.left is not None and owner.joined is not None:
+                if owner.left < owner.joined:
+                    self.fail("graph", "owner_never_employed", service.id,
+                              f"owner {owner.id} left before they joined")
+
+            self.checks += 1
+            isolated = not service.depends_on and service.id not in depended_on
+            if isolated and service.criticality_tier <= 2:
+                self.fail(
+                    "graph", "tier_contradicts_graph", service.id,
+                    f"declares criticality tier {service.criticality_tier} but nothing"
+                    " depends on it and it depends on nothing — an isolated node cannot"
+                    " be the most critical thing in the estate",
+                )
+
+            self.checks += 1
+            if service.system_id not in systems:
+                self.fail("graph", "service_without_system", service.id,
+                          f"runs on {service.system_id!r}, which is not a system of this world")
 
     # -- financial ---------------------------------------------------------
 

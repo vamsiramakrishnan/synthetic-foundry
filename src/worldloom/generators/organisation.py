@@ -174,6 +174,7 @@ def generate(
     name_pools: dict[str, list[str]] | None = None,
     headquarters: str | None = None,
     regions: tuple[str, ...] | None = None,
+    estate_profile: str | None = None,
 ) -> Organisation:
     """Build the organisation for an archetype. Same seed, same graph, same IDs.
 
@@ -292,6 +293,29 @@ def generate(
         Service(id=checkout, name="checkout-api", purpose="Handles online basket and checkout requests",
                 owner_id=role_ids["platform_engineer"], system_id=commerce, criticality_tier=1, depends_on=[commerce]),
     )
+
+    # The estate, if one was asked for: everything the organisation runs that
+    # the episode does not itself name. Appended after the core, never mixed
+    # into it — see `generators/estate.py` on why the four services above are
+    # untouchable.
+    if estate_profile is not None:
+        from . import estate as estate_module
+
+        landscape = estate_module.generate(
+            rng.derive("estate"), minter,
+            profile=estate_profile,
+            core_services=services,
+            core_systems=systems,
+            # Who may own a service. Engineering and platform roles only: a
+            # merchandising buyer owning the event bus is the kind of detail
+            # that makes a corpus read as generated.
+            owner_ids=tuple(sorted(
+                role_ids[key] for key in ("platform_lead", "platform_senior", "platform_engineer")
+                if key in role_ids
+            )) or (role_ids[next(iter(role_ids))],),
+        )
+        systems = (*systems, *landscape.systems)
+        services = (*services, *landscape.services)
 
     personas = tuple(
         Persona(

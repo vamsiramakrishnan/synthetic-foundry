@@ -51,6 +51,11 @@ act_app = typer.Typer(
     help="Drive an actor episode: one employee's decision at a time, validated before it changes anything.",
 )
 app.add_typer(act_app, name="act")
+compose_app = typer.Typer(
+    no_args_is_help=True,
+    help="Hand an agent the company's technology estate to author, and check it against the graph.",
+)
+app.add_typer(compose_app, name="compose")
 
 console = Console()
 err = Console(stderr=True)
@@ -189,6 +194,17 @@ def build(
     comparatives: int = typer.Option(
         0, "--comparatives",
         help="Prior months of actuals to generate, for a trend. 11 gives a rolling year.",
+    ),
+    estate: str = typer.Option(
+        None, "--estate",
+        help=(
+            "Grow a service landscape around the episode's own services: small, "
+            "medium or large. Without it the estate is the four services and five "
+            "systems the close names and nothing else — nine nodes whether the "
+            "archetype has three stores or sixteen hundred, so nothing has a blast "
+            "radius and `worldloom topology` has little to read. Omit it and every "
+            "existing corpus is byte-identical."
+        ),
     ),
     trend: float = typer.Option(
         0.0, "--trend",
@@ -340,6 +356,13 @@ def build(
                 # Same reasoning as its neighbour: the trend shapes retail's
                 # comparative history, and a single-episode vertical has none.
                 ("--trend", trend != 0.0),
+                # The estate generator's service-name pools are retail's. A
+                # bank whose landscape is called "pricing-engine" and
+                # "click-collect-api" would be worse than a thin one, so this
+                # is refused rather than mis-served — `worldloom compose` is
+                # the path for a vertical whose vocabulary this module does not
+                # have, because there the model brings the vocabulary.
+                ("--estate", estate is not None),
                 # Retail-only for now: the knob's growth (category commentary,
                 # site-level cases) is argued entirely from retail's own
                 # hierarchy in `scenarios.py`/`generators/evaluation.py`.
@@ -370,6 +393,10 @@ def build(
             if pack_obj is not None
             else RetailWorld(seed=seed, archetype=shape, employees=employees)
         )
+        if estate is not None:
+            from dataclasses import replace as _replace_builder
+
+            builder = _replace_builder(builder, estate=estate)
         world = builder.build()
 
     # The actor provider is resolved before the loop, and a replay makes it
@@ -885,6 +912,118 @@ def narrate_auto(
     console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
     if not _report(narrated):
         raise typer.Exit(code=1)
+
+
+@compose_app.command("requests")
+def compose_requests(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the request an agent needs to author this company's estate.
+
+    One request, not one per document: an estate is a graph, and asking for it
+    a node at a time would mean no proposal could ever be checked for the
+    property that matters — whether the whole thing is coherent.
+
+    The request is self-contained. It carries the company and its units, every
+    system and service that already exists (including what each depends on),
+    the people who could own something, the closed constraint vocabulary lore
+    may use, and the grammar in plain sentences. An agent should not need to
+    read this repository to answer, and a rule it cannot see is a rejection it
+    could not have predicted.
+    """
+    import json as json_module
+
+    from . import compose as compose_module
+
+    world = _load(corpus)
+    document = compose_module.requests_document(world)
+    payload = json_module.dumps(document, indent=2)
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(
+            f"[green]✓[/green] estate request written to [bold]{out}[/bold]"
+            f"\n[dim]{len(document['existing_services'])} service(s) and"
+            f" {len(document['existing_systems'])} system(s) already exist; up to"
+            f" {document['budget']['max_services']} more may be proposed.[/dim]"
+        )
+
+
+@compose_app.command("accept")
+def compose_accept(
+    corpus: str = typer.Argument(..., help="Corpus path to record the estate into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Response JSON from the agent."),
+    model_id: str = typer.Option(
+        "agent", "--model-id",
+        help="Who composed it. Recorded in the ledger and part of the replay key.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the verdict as JSON — an agent fixing rejections should read data, not parse a table.",
+    ),
+) -> None:
+    """Validate an agent-authored estate against the graph, and commit it or refuse all of it.
+
+    The grammar is `worldloom.graphs`: the same reading `validate` and
+    `topology` do. A cycle through any number of hops, a dependency that
+    resolves to nothing, an owner who does not work here, a tier the graph
+    contradicts, or an estate in which nothing is a single point of failure —
+    each is refused with the rule it broke, and every violation is reported at
+    once rather than one per round.
+
+    All-or-nothing. A partial commit would leave a corpus half-composed with no
+    record of which half, and the half that landed is the half nobody reviewed.
+    """
+    import json as json_module
+
+    from . import compose as compose_module
+
+    world = _load(corpus)
+    try:
+        proposal = compose_module.Composition.model_validate(
+            json.loads(source.read_text(encoding="utf-8"))
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    result = compose_module.accept(world, proposal, model_id=model_id)
+
+    if as_json:
+        typer.echo(json_module.dumps({
+            "accepted": result.accepted,
+            "services_added": result.services_added,
+            "systems_added": result.systems_added,
+            "lore_added": result.lore_added,
+            "rejections": [
+                {"subject": r.subject, "rule": r.rule, "detail": r.detail}
+                for r in result.rejections
+            ],
+        }, indent=2))
+        if not result.accepted:
+            raise typer.Exit(code=1)
+
+    if not result.accepted:
+        err.print(
+            f"[red]✗[/red] {len(result.rejections)} violation(s). Nothing was committed."
+        )
+        for rejection in result.rejections:
+            err.print(f"  [yellow]{rejection.rule}[/yellow] {rejection.subject}: {rejection.detail}")
+        raise typer.Exit(code=1)
+
+    assert result.world is not None
+    written = result.world.export(corpus, overwrite=True)
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] estate accepted: {result.services_added} service(s),"
+            f" {result.systems_added} system(s), {result.lore_added} lore commitment(s)"
+            f"\n[dim]recorded in the generation ledger and on the recipe, so"
+            f" `--replay` rebuilds it with no provider. Written to {written}."
+            f"\nRead it with `worldloom topology {corpus}`.[/dim]"
+        )
 
 
 @plan_app.command("requests")
