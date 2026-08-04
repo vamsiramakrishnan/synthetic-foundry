@@ -271,6 +271,13 @@ class MonthEndClose:
         if self.eval_density <= 0.5:
             artifact_density = 0.0
 
+        # Accountability facts are those that pair a person with a measure and tolerance.
+        # They exist if lore specified accountability constraints; no shipped lore does.
+        accountability_facts = tuple(
+            f for f in world.facts
+            if f.kind == "org.accountability" and not f.is_superseded
+        )
+
         intents = planning.artifact_intents(
             minter,
             episode=episode,
@@ -283,6 +290,7 @@ class MonthEndClose:
             actor_authored=self.actors is not None,
             categories_by_unit=categories_by_unit,
             eval_density=self.eval_density,
+            accountability_facts=accountability_facts,
         )
 
         # The world has to carry this period's events, facts, and standing
@@ -329,6 +337,15 @@ class MonthEndClose:
                 sites_by_unit={
                     unit.id: [s.id for s in world.sites if s.business_unit_id == unit.id]
                     for unit in world.business_units
+                },
+                # Only the people who belong to a unit. A group CFO belongs to
+                # none, and a question about "their unit's variance" would have
+                # no subject — the accountability family skips them rather than
+                # picking one.
+                unit_by_person={
+                    person.id: person.business_unit_id
+                    for person in world.people
+                    if person.business_unit_id is not None
                 },
             ),
             intents=intents,

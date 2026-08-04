@@ -34,6 +34,7 @@ def artifact_intents(
     actor_authored: bool = False,
     categories_by_unit: dict[str, list[str]] | None = None,
     eval_density: float = 1.0,
+    accountability_facts: tuple[CanonicalFact, ...] = (),
 ) -> tuple[ArtifactIntent, ...]:
     """Plan the artifacts this episode warrants.
 
@@ -70,6 +71,10 @@ def artifact_intents(
     """
     money = [f.id for f in financial_facts]
     detail = [f.id for f in (workbook_facts or financial_facts)]
+    # Accountability facts establish who is responsible for which measures,
+    # which the finance workbook needs to support evaluation questions about
+    # who was accountable when a variance moved outside tolerance.
+    acct = [f.id for f in accountability_facts]
     intents: list[ArtifactIntent] = []
     unit_keys = [key.removeprefix("unit_") for key in roles if key.startswith("unit_")]
 
@@ -123,7 +128,7 @@ def artifact_intents(
            supersedes=latest("close_calendar"))
 
     intent("finance_workbook", "finance", "finance", roles["reporting_manager"],
-           detail + [episode.keys["fact_close_delay"]], [episode.close_event_id], "long",
+           detail + acct + [episode.keys["fact_close_delay"]], [episode.close_event_id], "long",
            "The month-end model is the source artifact for the period and must reconcile.")
 
     intent("cfo_variance_memo", "finance", "group_cfo", roles["controller"],

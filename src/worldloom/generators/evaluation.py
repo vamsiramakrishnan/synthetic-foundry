@@ -41,7 +41,7 @@ lower its average difficulty, not test the corpus at scale.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from ..ids import Minter
@@ -49,6 +49,7 @@ from ..models import ArtifactIntent, CanonicalFact, EvaluationCase, EvaluationTy
 from . import episode_text
 from .cases import CaseBuilder, adverse as _adverse, answerable, fmt as _fmt
 from .operations import CloseEpisode
+from .org_builder import ACCOUNTABILITY_KIND
 
 #: The retail taxonomy's surface text: every question and expected answer it
 #: asks, keyed so a pack can re-voice the benchmark the way `operations.TEXT`
@@ -210,7 +211,8 @@ EVAL_TEXT: dict[str, str] = {
         " {date} — before any formal report existed.",
     # -- accountability ---------------------------------------------------------
     "q.accountability.who_accountable":
-        "Who was accountable for {measure} when it moved outside its tolerance band?",
+        "Who was accountable for {unit}'s {measure} in {period}, given that it moved"
+        " beyond the band they are held to?",
     "a.accountability.who_accountable": "{person}.",
 }
 
@@ -224,6 +226,18 @@ class Subjects:
     names: dict[str, str]
     categories_by_unit: dict[str, list[str]]
     sites_by_unit: dict[str, list[str]]
+    unit_by_person: dict[str, str] = field(default_factory=dict)
+    """Which business unit a person belongs to, for the people who belong to one.
+
+    Needed because an accountability fact's subject is a *person* and a
+    variance fact's subject is a *business unit*, so a question joining the two
+    has to know which unit the accountable person answers for. Without it the
+    join is unconstrained and names whoever holds an accountability as
+    answerable for every unit's miss — a case that asserts something false, in
+    a corpus whose whole premise is that its documents agree.
+
+    Defaulted so that a caller building a `Subjects` for a taxonomy that asks
+    no person-scoped question does not have to supply one."""
 
     def name(self, subject_id: str) -> str:
         return self.names.get(subject_id, subject_id)
@@ -1010,83 +1024,66 @@ class _Taxonomy:
             )
 
     def accountability_measure(self) -> None:
-        """Who was accountable when a measure moved outside its tolerance.
+        """Who answers for a measure that moved beyond the band they are held to.
 
-        Accountability facts pair a person with a measure and a tolerance band.
-        When a variance fact shows the measure moved beyond that band, the
-        person is the answer to who was accountable for the miss. This requires
-        joining two facts: the accountability (who and what measure) with the
-        variance (how far it moved).
+        The question this corpus could not ask. A budget belongs to a business
+        unit, a variance is reported against that unit, and until lore could
+        name an accountability nothing anywhere connected either to a person —
+        so "who was answerable for the miss" had no answer to check against.
 
-        Not asked at the default density, because the set is empty unless lore
-        explicitly names accountabilities (no shipped lore does). When asked
-        above 1.0, the family scales with the number of accountabilities
-        that exist, not with the number of business units — accountability is
-        a person-specific question, not a unit-specific one.
+        It is a genuine join and that is the point of adding it: the
+        accountability fact carries *who and which measure*, the variance fact
+        carries *how far it moved*, and the budget fact is what turns an amount
+        into a percentage that can be compared against the band. No single
+        document holds all three.
+
+        Scoped to the accountable person's own business unit. That constraint
+        is the whole correctness of the family: an accountability's subject is a
+        person and a variance's subject is a unit, so an unconstrained join
+        names the general-merchandise MD as answerable for the digital unit's
+        miss. The case would be well-formed, citable, and false.
+
+        Empty unless lore names an accountability, and no shipped lore does.
         """
-        acct_facts = [f for f in self.history if f.kind == "org.accountability" and not f.is_superseded]
-        if not acct_facts:
-            return
-
-        for acct_fact in acct_facts:
-            # The accountability fact stores the measure as text_value.
-            # E.g., "financial.revenue.variance" or "financial.gross_profit.variance".
-            measure = acct_fact.text_value
-            tolerance_pct = acct_fact.value.amount if acct_fact.value else None
-            if not measure or tolerance_pct is None:
+        accountabilities = [
+            fact for fact in self.history
+            if fact.kind == ACCOUNTABILITY_KIND and not fact.is_superseded
+        ]
+        for accountability in accountabilities:
+            measure = accountability.text_value
+            band = accountability.value.amount if accountability.value else None
+            unit_id = self.subjects.unit_by_person.get(accountability.subject)
+            if not measure or band is None or unit_id is None:
+                # A person with no unit — a group CFO, an auditor — is
+                # accountable for something this family cannot scope, so it
+                # says nothing rather than guessing at a subject.
                 continue
 
-            # Find variance facts matching this measure. The measure name is the kind.
-            # Look for a fact where kind matches the measure and the absolute variance
-            # exceeds the tolerance band.
-            matching_variances = [
-                f for f in (*self.history, *[f for f in [self.get(measure, acct_fact.subject)] if f])
-                if f and f.kind == measure and f.value and f.value.amount is not None
-            ]
+            variance = self.get(measure, unit_id)
+            budget = self.get(measure.replace(".variance", ".budget"), unit_id)
+            if not (variance and variance.value and budget and budget.value and budget.value.amount):
+                continue
 
-            # More reliably, search all facts for those matching the measure kind.
-            matching_variances = [
-                f for f in self._fact_index.values()
-                if f.kind == measure and f.value and f.value.amount is not None
-                and not f.is_superseded and (f.period is None or f.period == self.period)
-            ]
+            moved_pct = abs(variance.value.amount) / abs(budget.value.amount) * 100.0
+            if moved_pct <= band:
+                # Inside the band is not a miss, and asking who was accountable
+                # for a number that behaved is a question with no answer.
+                continue
 
-            for variance_fact in matching_variances:
-                variance_amount = abs(variance_fact.value.amount)
-                # Check if variance exceeds tolerance. Tolerance is in percent,
-                # but variance facts are in currency. We need to compare the
-                # relative magnitude — if the budget was 100K and tolerance is 5%,
-                # a variance of 6K should exceed it. However, variance facts only
-                # store the absolute amount, not the percentage, so we cannot make
-                # this comparison exactly. Instead, we check if the variance moved
-                # at all (non-zero) as a proxy for "outside tolerance".
-                #
-                # A better approach: look for the related budget fact to compute
-                # the percentage. The variance kind maps to a budget: e.g.,
-                # "financial.revenue.variance" maps to "financial.revenue.budget".
-                budget_kind = measure.replace(".variance", ".budget")
-                budget_fact = self.get(budget_kind, variance_fact.subject)
-
-                # Only create the case if we can compute the percentage move
-                # relative to budget.
-                if budget_fact and budget_fact.value and budget_fact.value.amount:
-                    variance_pct = (variance_amount / abs(budget_fact.value.amount)) * 100
-                    if variance_pct > tolerance_pct:
-                        # The measure moved outside the tolerance band. The person
-                        # is the one with the accountability fact.
-                        self.case(
-                            self.t("q.accountability.who_accountable", measure=measure),
-                            EvaluationType.CROSS_ARTIFACT,
-                            self.t("a.accountability.who_accountable",
-                                   person=self.subjects.name(acct_fact.subject)),
-                            [acct_fact.id, variance_fact.id, budget_fact.id],
-                            difficulty="hard",
-                            reasoning="Requires joining accountability (who and measure) "
-                                      "to variance (how much it moved) and budget to check "
-                                      "if the move exceeded tolerance.",
-                            sources=[self.artifact.get("finance_workbook")],
-                        )
-                        break  # One case per accountability is enough.
+            self.case(
+                self.t("q.accountability.who_accountable",
+                       measure=measure, unit=self.subjects.name(unit_id), period=self.period),
+                EvaluationType.CROSS_ARTIFACT,
+                self.t("a.accountability.who_accountable",
+                       person=self.subjects.name(accountability.subject)),
+                [accountability.id, variance.id, budget.id],
+                difficulty="hard",
+                reasoning="The workbook carries the variance and the budget; only the"
+                          " accountability says who is held to the measure, and only"
+                          " the band it states makes the move a miss rather than a"
+                          " number.",
+                sources=[self.artifact.get("finance_workbook")],
+            )
 
     def history_abstentions(self) -> None:
         """History questions that stay unanswerable regardless of how large
