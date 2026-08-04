@@ -11,6 +11,7 @@ repository*, and that a rejection says enough to fix the problem.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -282,3 +283,65 @@ def test_an_unrendered_artifact_has_no_path_and_that_is_allowed(tmp_path) -> Non
     empty = [a for a in world.artifacts if not a.path]
     assert empty, "some artifacts have no Markdown rendering"
     assert world.validate().ok
+
+
+def test_responses_into_a_fully_narrated_corpus_are_an_error(tmp_path) -> None:
+    """Not a corner case — the one that let a CI guardrail go unexercised.
+
+    Submitting responses to a corpus where every section already has prose used
+    to print "0 section(s) accepted" and exit zero, which is indistinguishable
+    from success to anything reading the exit code. CI's agent-handshake step
+    submits *deliberately invalid* prose to prove the guardrail rejects it, and
+    had been doing so against an already-narrated corpus: nothing was reviewed,
+    and the step passed only because of an unrelated `FileExistsError` further
+    down in `export`. Fixing that bug is what revealed it.
+    """
+    corpus = _corpus(tmp_path)
+    requests = tmp_path / "requests.json"
+    runner.invoke(app, ["narrate", "requests", str(corpus), "-o", str(requests)])
+    responses = tmp_path / "responses.json"
+    responses.write_text(json.dumps(answer(json.loads(requests.read_text()))))
+    assert runner.invoke(
+        app, ["narrate", "accept", str(corpus), "--from", str(responses)]
+    ).exit_code == 0
+
+    again = runner.invoke(app, ["narrate", "accept", str(corpus), "--from", str(responses)])
+    assert again.exit_code == 2
+    assert "no section awaiting prose" in again.output
+
+
+def test_the_restated_figure_guardrail_fires_on_a_pending_corpus(tmp_path) -> None:
+    """The property CI's step is named for, pinned where it cannot decay into
+    passing for an unrelated reason: invalid prose submitted while sections are
+    genuinely awaiting it must be rejected, by the validator, with the
+    violation named."""
+    corpus = _corpus(tmp_path)
+    requests = tmp_path / "requests.json"
+    runner.invoke(app, ["narrate", "requests", str(corpus), "-o", str(requests)])
+
+    document = json.loads(requests.read_text())
+    bad = answer(document)
+    bad["responses"][0]["text"] += " Revenue finished 2.48% below plan."
+    source = tmp_path / "bad.json"
+    source.write_text(json.dumps(bad))
+
+    result = runner.invoke(app, ["narrate", "accept", str(corpus), "--from", str(source)])
+    assert result.exit_code == 1
+    assert "rejected" in result.output
+
+
+def test_an_in_place_export_of_a_rendered_corpus_survives(tmp_path) -> None:
+    """`export` staged the artifacts directory and then copied it again, so
+    writing a rendered corpus back over itself raised `FileExistsError` on a
+    corpus that was perfectly intact. It never fired because the only in-place
+    callers ran before rendering — until one did not."""
+    corpus = _corpus(tmp_path)
+    assert runner.invoke(app, ["render", str(corpus), "-f", "markdown"]).exit_code == 0
+
+    world = World.load(corpus)
+    assert (Path(corpus) / "artifacts").is_dir()
+    world.export(corpus, overwrite=True)
+
+    reloaded = World.load(corpus)
+    assert reloaded.validate().ok
+    assert list((Path(corpus) / "artifacts").iterdir()), "the artifacts must survive"

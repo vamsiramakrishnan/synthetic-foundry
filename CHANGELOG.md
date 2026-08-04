@@ -161,7 +161,16 @@ One coherent enterprise, taken all the way through. Two, in fact.
   Also fixed: `World.export` copied artifacts twice on an in-place export of a
   corpus that had been rendered, raising `FileExistsError` on a corpus that was
   perfectly intact. It had never fired because the only in-place callers ran on
-  corpora with no `artifacts/` directory yet.
+  corpora with no `artifacts/` directory yet — and fixing it revealed a second,
+  older defect it had been masking. CI's agent-handshake step submits
+  deliberately invalid prose to prove the guardrail rejects it, and had been
+  doing so against an already-narrated corpus: `review()` had nothing to review,
+  the responses were never looked at, and the step passed only because that
+  `FileExistsError` made the command exit non-zero. The guardrail the step is
+  named for had not been exercised since rendering was added to it. `narrate
+  accept` now refuses responses submitted into a corpus with no section awaiting
+  prose, instead of printing "0 section(s) accepted" and exiting zero, and the
+  CI step runs its rejection first — while sections are genuinely pending.
 
 - **The estate becomes a landscape.** `worldloom topology` on the largest world
   this tool builds reported **nine** services and systems and a three-hop

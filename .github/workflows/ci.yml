@@ -274,16 +274,34 @@ jobs:
         run: |
           worldloom build --seed 8128 --incident --out "${{ runner.temp }}/agent"
           worldloom narrate requests "${{ runner.temp }}/agent" -o requests.json
+
+          # The rejection first, while sections are still awaiting prose.
+          #
+          # This used to run *last*, against a corpus every section of which had
+          # already been narrated — so `review()` had nothing to review, the
+          # deliberately-invalid responses were never looked at, and the step
+          # passed only because an unrelated `FileExistsError` in `export` made
+          # the command exit non-zero. Fixing that bug is what revealed it. The
+          # guardrail this step is named for had not been exercised since
+          # rendering was added to it.
+          python3 tests/scripted_agent.py requests.json bad.json --restate
+          if worldloom narrate accept "${{ runner.temp }}/agent" --from bad.json; then
+            echo "a restated figure was accepted — the guardrail is not working"
+            exit 1
+          fi
+
+          # Then the good pass, which must still be accepted whole.
           python3 tests/scripted_agent.py requests.json responses.json
           worldloom narrate accept "${{ runner.temp }}/agent" --from responses.json \
             --model-id ci-scripted-agent
           worldloom render "${{ runner.temp }}/agent" -f markdown -f xlsx -f docx
           worldloom validate "${{ runner.temp }}/agent"
 
-          # And a violation must be rejected rather than quietly accepted.
-          python3 tests/scripted_agent.py requests.json bad.json --restate
-          if worldloom narrate accept "${{ runner.temp }}/agent" --from bad.json; then
-            echo "a restated figure was accepted — the guardrail is not working"
+          # And submitting into a corpus with nothing left awaiting prose is an
+          # error rather than a silent no-op — the exact shape that let the
+          # rejection above go unexercised.
+          if worldloom narrate accept "${{ runner.temp }}/agent" --from responses.json; then
+            echo "responses were accepted into a corpus with nothing awaiting prose"
             exit 1
           fi
 

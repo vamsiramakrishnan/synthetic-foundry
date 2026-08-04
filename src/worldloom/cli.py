@@ -644,6 +644,28 @@ def narrate_accept(
     verdicts = handshake.review(world, responses)
     rejected = {name: v for name, v in verdicts.items() if not v.accepted}
 
+    # Responses supplied, and not one of them was even looked at. That happens
+    # when every section already has prose, so `pending()` is empty and
+    # `review()` has nothing to review — and it printed "✓ 0 section(s)
+    # accepted" and exited zero, which is indistinguishable from success to
+    # anything reading the exit code.
+    #
+    # It is not a corner. CI's agent-handshake step submits *deliberately
+    # invalid* prose to prove the guardrail rejects it, and had been doing so
+    # against an already-narrated corpus: the responses were never reviewed,
+    # the step passed on a `FileExistsError` raised further down in `export`,
+    # and when that unrelated bug was fixed the step failed and revealed that
+    # the guardrail it names had not been exercised in a long time.
+    if responses and not verdicts:
+        err.print(
+            f"[red]error:[/red] {len(responses)} response(s) supplied but this corpus"
+            " has no section awaiting prose — nothing was reviewed and nothing was"
+            " committed.\n[dim]Every section already carries prose. Run `worldloom"
+            " status` to see where this corpus actually is; `worldloom refine` is what"
+            " rewrites prose that already exists.[/dim]"
+        )
+        raise typer.Exit(code=2)
+
     if as_json:
         import json as json_module
 
