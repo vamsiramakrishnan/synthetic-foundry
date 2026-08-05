@@ -49,6 +49,21 @@ HANDLES = {
     "working_note",
     "knowledge_article",
     "close_calendar",
+    # The filings a company's own claims put in the plan (`facets.FILING_PREFIX`,
+    # `generators.planning`). Listed here rather than through `register` because
+    # `documents.py` declares them in core for the same reason: none of them is a
+    # vertical's vocabulary. A bank can be listed, a fund can own an insurer, and
+    # a big estate makes an impact assessment whoever runs it. Absent from this
+    # set they rendered as Markdown and were silently skipped by Word and PDF —
+    # a document that exists in the plan, exists in the IR, and reaches none of
+    # the formats a reader was promised.
+    "service_impact_assessment",
+    "remediation_scope_review",
+    "peak_trading_review",
+    "audit_committee_pack",
+    "sponsor_pack",
+    "member_report",
+    "ministerial_brief",
 }
 
 
