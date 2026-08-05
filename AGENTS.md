@@ -138,10 +138,19 @@ names on the same twenty-three people** — a fine corpus and a poor dataset,
 because a model evaluated against it has seen one enterprise five times.
 
 ```bash
-worldloom mosaic --describe              # what varies, building nothing
-worldloom mosaic -n 5                    # the plan, still building nothing
+worldloom mosaic --describe                       # what varies, building nothing
+worldloom mosaic -n 5                             # the plan, still building nothing
 worldloom mosaic -n 5 --incident --out ./mosaic
+worldloom mosaic -e banking -n 5 --out ./banks    # or insurance
 ```
+
+Each engine varies its own physics, because the parameters are its own: a
+retailer's margin erosion and incident tempo, a bank's capital headroom and how
+badly its filed risk-weighted assets understate the truth, an insurer's tail
+length and how bad the news the actuary has to deliver is. Only the retail
+engine varies a trading year, because `finance.generate` is the one generator
+that reads one. Estate size is an axis for all three, so a mosaic of banks spans
+9 to 101 nodes and the corpus can be asked what has a blast radius.
 
 Each world lands in `./mosaic/world-NN/` with its own recipe, so any one of them
 rebuilds alone. `mosaic.json` records the plan. Measured on five worlds: five

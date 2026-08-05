@@ -69,6 +69,11 @@ _POOL = 512
 #: same coordinate would mean a different calendar between runs.
 _CALENDARS: tuple[str, ...] = tuple(sorted(profiles.PROFILES))
 
+#: What an engine that does not vary a calendar gets: the engine's own,
+#: which for a bank or an insurer is the one its figures were always drawn
+#: under, since no generator on those paths reads it.
+_DEFAULT_CALENDAR = "retail_christmas"
+
 
 @dataclass(frozen=True)
 class Axis:
@@ -94,11 +99,18 @@ class Axis:
         return float(round(value)) if self.integral else value
 
 
-#: What a mosaic varies. Seven axes, and the count is not arbitrary: the Halton
-#: sequence's high bases correlate, so past roughly a dozen dimensions it stops
-#: covering better than a grid. These are chosen to be the things a *reader*
-#: would name if asked how two corpora differed — not the things easiest to vary.
-AXES: tuple[Axis, ...] = (
+#: The estate sizes a mosaic will pick between, plus no estate at all. The
+#: engine's own default is "none" — nine nodes, whatever the archetype's scale —
+#: so it stays in the field rather than being quietly dropped: a corpus with a
+#: thin landscape is a legitimate world and one axis should not decide
+#: otherwise.
+_ESTATES: tuple[str | None, ...] = (None, "small", "medium", "large")
+
+#: What every mosaic varies, whatever engine it runs. An organisation's shape
+#: and its technology landscape are not industry-specific claims — a bank and a
+#: grocer both have a headcount, a span of control and a number of reporting
+#: levels, and both either do or do not have a landscape worth reading.
+_STRUCTURE: tuple[Axis, ...] = (
     Axis("headcount", 14, 31, integral=True,
          about="How many people the organisation has. Capped at what the engine"
                " has distinct names for; a pack with its own name pools lifts it."),
@@ -109,21 +121,92 @@ AXES: tuple[Axis, ...] = (
          about="Reporting levels below the chief executive. With headcount and"
                " span this is over-determined, so infeasible combinations are"
                " discarded rather than rounded into feasibility."),
-    Axis("calendar", 0, len(_CALENDARS) - 1e-9, integral=False,
-         about="Which trading year the business has, from `worldloom pack"
-               " profiles`. A flat book, a Christmas peak, a harvest."),
-    Axis("margin_erosion", 0.002, 0.060, parameter="retail.margin.erosion",
-         about="How much promotional activity takes off budgeted margin — the"
-               " size of the story the variance memo has to tell."),
-    Axis("incident_tempo", 12, 180, integral=True,
-         parameter="ops.incident.hypothesis_minutes",
-         about="Minutes from detection to a first hypothesis. This is the"
-               " organisation's operational maturity: twenty minutes is a"
-               " capable team, three hours is a struggling one."),
-    Axis("revenue_miss", -0.12, 0.01, parameter="retail.revenue.miss_pct",
-         about="How far a unit's revenue lands from budget. Decides whether the"
-               " corpus is about a bad month or an ordinary one."),
+    Axis("estate", 0, len(_ESTATES) - 1e-9,
+         about="How much technology landscape the company has, from none to"
+               " large. Decides whether the corpus can be asked what has a blast"
+               " radius and what nothing routes around."),
 )
+
+#: The physics each engine varies, on top of the structure above. Separate per
+#: engine because the parameters are: `retail.margin.erosion` means nothing to a
+#: bank, and a mosaic that moved it would report varying something it had not.
+#:
+#: Each set is chosen the same way — the things a *reader* would name if asked
+#: how two corpora differed, not the things easiest to vary. Every engine gets
+#: an incident-tempo axis, because how fast an organisation finds a cause is the
+#: clearest single statement a corpus makes about how it is run.
+_PHYSICS: Mapping[str, tuple[Axis, ...]] = {
+    "retail": (
+        # Retail only, and not an oversight: `finance.generate` is the one
+        # generator that reads a trading year, and only this engine runs it. A
+        # banking mosaic carrying this axis would report varying a calendar
+        # that changed nothing, which is precisely the failure this module
+        # splits its axes per engine to avoid.
+        Axis("calendar", 0, len(_CALENDARS) - 1e-9,
+             about="Which trading year the business has, from `worldloom pack"
+                   " profiles`. A flat book, a Christmas peak, a harvest."),
+        Axis("margin_erosion", 0.002, 0.060, parameter="retail.margin.erosion",
+             about="How much promotional activity takes off budgeted margin — the"
+                   " size of the story the variance memo has to tell."),
+        Axis("incident_tempo", 12, 180, integral=True,
+             parameter="ops.incident.hypothesis_minutes",
+             about="Minutes from detection to a first hypothesis. This is the"
+                   " organisation's operational maturity: twenty minutes is a"
+                   " capable team, three hours is a struggling one."),
+        Axis("revenue_miss", -0.12, 0.01, parameter="retail.revenue.miss_pct",
+             about="How far a unit's revenue lands from budget. Decides whether"
+                   " the corpus is about a bad month or an ordinary one."),
+    ),
+    "banking": (
+        Axis("capital_headroom", 10.6, 16.0, parameter="capital.ratio.target_pct",
+             about="The CET1 ratio the bank targets. A mutual runs high; a bank"
+                   " under a capital plan runs at its floor, and the whole"
+                   " challenged-return story reads differently at each."),
+        Axis("understatement", 0.01, 0.12, parameter="capital.error.understatement_pct",
+             about="How badly the filed risk-weighted assets understate the truth"
+                   " — the severity of the error the second line challenges."),
+        Axis("incident_tempo", 20, 240, integral=True,
+             parameter="capital.incident.hypothesis_minutes",
+             about="Minutes from detection to a first hypothesis on the"
+                   " reconciliation break."),
+        Axis("balance_sheet", 60, 400, integral=True,
+             parameter="capital.rwa.filed_hundreds",
+             about="Risk-weighted assets as filed, in hundreds. The size of the"
+                   " bank."),
+    ),
+    "insurance": (
+        Axis("tail_length", 0.30, 0.92, parameter="reserves.cohort.incurred_ratio",
+             about="How much of ultimate cost is already incurred. Near 0.95 is a"
+                   " short-tail book settling fast; near 0.4 is long-tail motor"
+                   " injury, and the vertical reads as a different business at"
+                   " each end."),
+        # The low end is 1.25 and not 1.05, and the arithmetic is the reason: a
+        # physics axis carries the engine's own *width* across (see `_candidate`),
+        # and this parameter's is 0.4 — so a centre of 1.05 generates a span
+        # starting at 0.85 and `triangles.generate` refuses it, correctly. The
+        # first version of this axis did exactly that and every insurance mosaic
+        # died on it. 1.25 is the lowest centre whose whole band clears 1.0.
+        Axis("deterioration", 1.25, 2.20, parameter="reserves.decision.movement_multiple",
+             about="How far the recommended strengthening exceeds the release —"
+                   " how bad the news the actuary has to deliver is. Stays above"
+                   " 1.0, because at or below it the held-versus-central gap this"
+                   " vertical exists to pose stops opening."),
+        Axis("book_size", 20, 160, integral=True, parameter="reserves.cohort.ultimate",
+             about="An accident cohort's ultimate claims cost. The size of the"
+                   " book being reserved."),
+        Axis("benign_share", 0.10, 0.70, parameter="reserves.attribution.pattern_fraction",
+             about="How much of the movement is pattern change rather than genuine"
+                   " deterioration — how defensible the actuary's position is."),
+    ),
+}
+
+#: Every engine a mosaic can build, and what it varies.
+ENGINES: Mapping[str, tuple[Axis, ...]] = {
+    engine: _STRUCTURE + physics for engine, physics in _PHYSICS.items()
+}
+
+#: Retail's, for callers that predate `engine=` and for `AXES` as a public name.
+AXES: tuple[Axis, ...] = ENGINES["retail"]
 
 #: Functions to draw an organisation's departments from, longest-first so a
 #: bigger company gets more of them. Ordered, never shuffled: a mosaic's shapes
@@ -146,6 +229,8 @@ class Variant:
     calendar: str
     overrides: Mapping[str, Span]
     coordinates: tuple[float, ...]
+    engine: str = "retail"
+    estate: str | None = None
 
     @property
     def functions(self) -> tuple[str, ...]:
@@ -164,10 +249,10 @@ class Variant:
     def seasonality(self) -> profiles.Seasonality:
         return profiles.named(self.calendar)
 
-    def role_table(self, engine: str = "retail") -> tuple[tuple[str, str, str, str | None], ...]:
+    def role_table(self, engine: str | None = None) -> tuple[tuple[str, str, str, str | None], ...]:
         return to_rows(from_shape(
             functions=self.functions, headcount=self.headcount,
-            span=self.span, levels=self.levels, engine=engine,
+            span=self.span, levels=self.levels, engine=engine or self.engine,
         ))
 
     def as_dict(self) -> dict[str, Any]:
@@ -177,23 +262,35 @@ class Variant:
             "headcount": self.headcount,
             "span": self.span,
             "levels": self.levels,
+            "engine": self.engine,
             "calendar": self.calendar,
+            "estate": self.estate,
             "functions": list(self.functions),
             "physics": {name: span.as_dict() for name, span in sorted(self.overrides.items())},
         }
 
     def summary(self) -> str:
-        return (f"{self.headcount} people, spans of {self.span}, {self.levels} levels,"
-                f" {self.calendar} calendar")
+        parts = [f"{self.headcount} people", f"spans of {self.span}",
+                 f"{self.levels} levels"]
+        # Named only when this engine actually reads one. Printing
+        # "retail_christmas calendar" beside a bank would tell a reader the
+        # mosaic varied something it did not.
+        if any(axis.name == "calendar" for axis in ENGINES[self.engine]):
+            parts.append(f"{self.calendar} calendar")
+        parts.append("no estate" if self.estate is None else f"{self.estate} estate")
+        return ", ".join(parts)
 
 
-def _candidate(index: int, coordinates: Sequence[float], *, seed: int) -> Variant | None:
+def _candidate(
+    index: int, coordinates: Sequence[float], *, seed: int, engine: str = "retail",
+) -> Variant | None:
     """One variant from one point in the unit cube, or ``None`` if unbuildable."""
+    axes = ENGINES[engine]
     values = {axis.name: axis.at(coordinate)
-              for axis, coordinate in zip(AXES, coordinates, strict=True)}
+              for axis, coordinate in zip(axes, coordinates, strict=True)}
 
     overrides: dict[str, Span] = {}
-    for axis in AXES:
+    for axis in axes:
         if axis.parameter is None:
             continue
         engine_span = DEFAULT.span(axis.parameter)
@@ -217,9 +314,12 @@ def _candidate(index: int, coordinates: Sequence[float], *, seed: int) -> Varian
         headcount=int(values["headcount"]),
         span=int(values["span"]),
         levels=int(values["levels"]),
-        calendar=_CALENDARS[int(values["calendar"])],
+        calendar=(_CALENDARS[int(values["calendar"])]
+                  if "calendar" in values else _DEFAULT_CALENDAR),
         overrides=overrides,
         coordinates=tuple(coordinates),
+        engine=engine,
+        estate=_ESTATES[int(values["estate"])],
     )
     try:
         table = variant.role_table()
@@ -245,6 +345,7 @@ def field(
     count: int,
     *,
     seed: int = 8128,
+    engine: str = "retail",
     pool: int = _POOL,
 ) -> tuple[Variant, ...]:
     """*count* variants, covered then chosen for maximum dispersion.
@@ -255,13 +356,21 @@ def field(
     """
     if count < 0:
         raise ValueError(f"count must be non-negative, got {count}")
+    if engine not in ENGINES:
+        raise KeyError(
+            f"unknown engine {engine!r}; a mosaic can be built for"
+            f" {sorted(ENGINES)}. Each varies its own physics, because"
+            " `retail.margin.erosion` means nothing to a bank and a mosaic that"
+            " moved it would report varying something it had not."
+        )
     if count == 0:
         return ()
 
     feasible: list[Variant] = []
     points: list[tuple[float, ...]] = []
-    for offset, coordinates in enumerate(halton(len(AXES), pool)):
-        variant = _candidate(len(feasible), coordinates, seed=seed + len(feasible))
+    for coordinates in halton(len(ENGINES[engine]), pool):
+        variant = _candidate(len(feasible), coordinates,
+                             seed=seed + len(feasible), engine=engine)
         if variant is None:
             continue
         feasible.append(variant)
@@ -293,20 +402,28 @@ def field(
             calendar=feasible[at].calendar,
             overrides=feasible[at].overrides,
             coordinates=feasible[at].coordinates,
+            engine=feasible[at].engine,
+            estate=feasible[at].estate,
         )
         for position, at in enumerate(chosen)
     )
 
 
-def describe() -> dict[str, Any]:
+def describe(engine: str = "retail") -> dict[str, Any]:
     """What a mosaic varies, without building anything."""
+    if engine not in ENGINES:
+        raise KeyError(f"unknown engine {engine!r}; known: {sorted(ENGINES)}")
     return {
+        "engine": engine,
+        "engines": sorted(ENGINES),
         "axes": [
             {"name": axis.name, "low": axis.low, "high": axis.high,
              "about": axis.about, "parameter": axis.parameter}
-            for axis in AXES
+            for axis in ENGINES[engine]
         ],
-        "calendars": list(_CALENDARS),
+        **({"calendars": list(_CALENDARS)}
+           if any(a.name == "calendar" for a in ENGINES[engine]) else {}),
+        "estates": [e or "none" for e in _ESTATES],
     }
 
 
@@ -325,7 +442,9 @@ def spread(variants: Sequence[Variant]) -> dict[str, Any]:
         "headcounts": sorted({v.headcount for v in variants}),
         "spans": sorted({v.span for v in variants}),
         "levels": sorted({v.levels for v in variants}),
-        "calendars": sorted({v.calendar for v in variants}),
+        **({"calendars": sorted({v.calendar for v in variants})}
+           if any(a.name == "calendar" for a in ENGINES[variants[0].engine]) else {}),
+        "estates": sorted({v.estate or "none" for v in variants}),
         "distinct_shapes": len({(v.headcount, v.span, v.levels) for v in variants}),
         "closest_pair": round(min(
             (manhattan(a.coordinates, b.coordinates)
@@ -335,4 +454,4 @@ def spread(variants: Sequence[Variant]) -> dict[str, Any]:
     }
 
 
-__all__ = ["AXES", "Axis", "Variant", "describe", "field", "spread"]
+__all__ = ["AXES", "ENGINES", "Axis", "Variant", "describe", "field", "spread"]

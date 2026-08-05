@@ -593,6 +593,7 @@ from .generators.reserving import TEXT as _INSURANCE_TEXT  # noqa: E402
 register_domain(Domain(
     name="insurance",
     archetype_keys=INSURANCE_ARCHETYPES,
+    default_archetype="midsize_general_insurer",
     world=InsuranceWorld,
     single_episode=QuarterlyReserving,
     # A period is always the valuation quarter-end month, exactly as

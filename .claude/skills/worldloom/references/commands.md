@@ -215,6 +215,7 @@ Build several companies at once, as unlike each other as the rules allow.
 | --- | --- |
 | `--count`, `-n` | How many worlds. |
 | `--describe` | Print what a mosaic varies, and build nothing. |
+| `--engine`, `-e` | Which vertical to build: retail, banking or insurance. Each varies its own physics — a bank's capital headroom, an insurer's tail length — because a mosaic that moved a retailer's margin through a bank would report varying something it had not. |
 | `--incident` | Force the operational incident. Omit to let each world's seed and lore decide. |
 | `--json` | Emit the plan as data. |
 | `--out`, `-o` | Directory to write the worlds into. |

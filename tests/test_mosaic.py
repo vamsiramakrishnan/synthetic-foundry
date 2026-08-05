@@ -206,3 +206,105 @@ def test_a_small_company_does_not_get_every_department() -> None:
     large = mosaic.Variant(2, 8128, headcount=31, span=9, levels=5,
                            calendar="flat", overrides={}, coordinates=())
     assert len(small.functions) < len(large.functions)
+
+
+# ---------------------------------------------------------------------------
+# Every engine, and the invariants its physics must respect
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("engine", sorted(mosaic.ENGINES))
+def test_every_engine_produces_distinct_buildable_shapes(engine: str) -> None:
+    variants = mosaic.field(4, engine=engine)
+    assert len({(v.headcount, v.span, v.levels) for v in variants}) == 4
+    for variant in variants:
+        variant.role_table()          # must not raise for any engine
+
+
+@pytest.mark.parametrize("engine", sorted(mosaic.ENGINES))
+def test_an_engine_only_varies_physics_it_actually_reads(engine: str) -> None:
+    """A mosaic that moved `retail.margin.erosion` through a bank would report
+    varying something it had not."""
+    prefixes = {"retail": ("retail.", "ops."), "banking": ("capital.",),
+                "insurance": ("reserves.",)}[engine]
+    for axis in mosaic.ENGINES[engine]:
+        if axis.parameter is not None:
+            assert axis.parameter.startswith(prefixes), (engine, axis.name)
+
+
+def test_only_the_engine_that_reads_a_trading_year_varies_one() -> None:
+    """`finance.generate` is the one generator that reads seasonality and only
+    the retail engine runs it."""
+    assert any(a.name == "calendar" for a in mosaic.ENGINES["retail"])
+    for engine in ("banking", "insurance"):
+        assert not any(a.name == "calendar" for a in mosaic.ENGINES[engine])
+        assert "calendar" not in mosaic.spread(mosaic.field(3, engine=engine))
+
+
+@pytest.mark.parametrize("engine", sorted(mosaic.ENGINES))
+def test_no_axis_generates_a_span_its_generator_would_refuse(engine: str) -> None:
+    """The test that was missing.
+
+    A physics axis carries the engine's own *width* across, so an axis whose
+    low end sits within half a width of a hard bound generates an illegal span.
+    `reserves.decision.movement_multiple` must stay strictly above 1.0 — the
+    held-versus-central gap the insurance vertical exists to pose stops opening
+    at or below it — and the first version of that axis put its low end at 1.05
+    against a width of 0.4, so every insurance mosaic died on the guard.
+
+    Walking the extremes rather than the sampled points: a mosaic that happens
+    not to select the bad corner today would select it tomorrow.
+    """
+    from worldloom.parameters import DEFAULT
+
+    for axis in mosaic.ENGINES[engine]:
+        if axis.parameter is None:
+            continue
+        engine_span = DEFAULT.span(axis.parameter)
+        half = (engine_span.high - engine_span.low) / 2.0
+        for centre in (axis.low, axis.high):
+            low = centre - half
+            if axis.parameter.startswith("reserves.decision."):
+                assert low > 1.0, (
+                    f"{axis.name} at {centre} generates [{low}, ...], and"
+                    " `triangles.generate` refuses a multiple at or below 1.0"
+                )
+            assert low < centre + half
+
+
+@pytest.mark.parametrize("engine", sorted(mosaic.ENGINES))
+def test_an_engines_extremes_actually_build(engine: str) -> None:
+    """Walking the corners of the space, not the middle of it. A guard that
+    only fires at an extreme is a guard that fires in production."""
+    from worldloom import archetypes, domains
+    from dataclasses import replace
+
+    names = {"retail": "omnichannel_retailer", "banking": "midsize_adi",
+             "insurance": "midsize_general_insurer"}
+    shape = archetypes.get(names[engine])
+    domain = domains.for_archetype(shape.key)
+    assert domain is not None
+
+    for corner in (0.0, 1.0):
+        coordinates = [corner] * len(mosaic.ENGINES[engine])
+        variant = mosaic._candidate(0, coordinates, seed=8128, engine=engine)
+        if variant is None:
+            continue          # an infeasible shape at that corner is legitimate
+        spec = replace(domain.world(seed=variant.seed, archetype=shape),
+                       physics=variant.physics)
+        world = spec.build()
+        episode = (domain.single_episode("2026-03") if domain.single_episode
+                   else None)
+        if episode is not None:
+            world = world.run(replace(episode, physics=variant.physics))
+        assert world.validate().ok
+
+
+def test_an_unknown_engine_says_which_exist() -> None:
+    with pytest.raises(KeyError, match="banking"):
+        mosaic.field(3, engine="logistics")
+
+
+def test_the_estate_axis_changes_the_size_of_the_graph() -> None:
+    """Otherwise the axis is a label on a field that never moves."""
+    assert len({v.estate for v in mosaic.field(6)}) > 1

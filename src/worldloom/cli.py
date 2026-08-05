@@ -1698,6 +1698,13 @@ def render(
 def mosaic(
     count: int = typer.Option(5, "--count", "-n", help="How many worlds."),
     seed: int = typer.Option(8128, "--seed", "-s", help="Base seed. World N uses seed+N-1."),
+    engine: str = typer.Option(
+        "retail", "--engine", "-e",
+        help="Which vertical to build: retail, banking or insurance. Each varies"
+             " its own physics — a bank's capital headroom, an insurer's tail"
+             " length — because a mosaic that moved a retailer's margin through a"
+             " bank would report varying something it had not.",
+    ),
     out: Path = typer.Option(None, "--out", "-o", help="Directory to write the worlds into."),
     period: str = typer.Option("2026-03", "--period", "-p", help="Reporting period, YYYY-MM."),
     periods: int = typer.Option(1, "--periods", help="Consecutive periods per world."),
@@ -1733,22 +1740,29 @@ def mosaic(
     from . import mosaic as mosaic_module
 
     if describe:
-        document = mosaic_module.describe()
+        try:
+            document = mosaic_module.describe(engine)
+        except KeyError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
         if as_json:
             typer.echo(json.dumps(document, indent=2))
             return
-        console.print("[bold]What a mosaic varies[/bold]\n")
+        console.print(f"[bold]What a {engine} mosaic varies[/bold]"
+                      f" [dim]— engines: {', '.join(document['engines'])}[/dim]\n")
         for axis in document["axes"]:
             bound = f"{axis['low']:g}–{axis['high']:g}"
             console.print(f"[bold]{escape(axis['name'])}[/bold] [cyan]{bound}[/cyan]"
                           + (f" [dim]→ {axis['parameter']}[/dim]" if axis["parameter"] else ""))
             console.print(f"  [dim]{escape(axis['about'])}[/dim]")
-        console.print(f"\n[dim]calendars: {', '.join(document['calendars'])}[/dim]")
+        console.print(f"\n[dim]estates: {', '.join(document['estates'])}[/dim]")
+        if document.get("calendars"):
+            console.print(f"[dim]calendars: {', '.join(document['calendars'])}[/dim]")
         return
 
     try:
-        variants = mosaic_module.field(count, seed=seed)
-    except ValueError as exc:
+        variants = mosaic_module.field(count, seed=seed, engine=engine)
+    except (KeyError, ValueError) as exc:
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
@@ -1767,28 +1781,56 @@ def mosaic(
         console.print(
             f"\n[dim]{spread['distinct_shapes']} distinct shape(s),"
             f" headcounts {spread['headcounts']}, spans {spread['spans']},"
-            f" {len(spread['calendars'])} calendar(s).[/dim]"
+            f" estates {spread['estates']}.[/dim]"
         )
         return
 
-    from .retail import RetailWorld
+    from dataclasses import replace as _replace_spec
+
+    from . import archetypes, domains
     from .scenarios import MonthEndClose
+
+    # The domain names its own archetype. Core may not hold a map from a
+    # vertical's name to one of its archetype keys — the thin-waist ratchet
+    # forbids engine vocabulary here, and it caught exactly that map when this
+    # was first written.
+    registered = domains.by_name(engine)
+    if registered is None or not registered.default_archetype:
+        err.print(f"[red]error:[/red] no domain named {engine!r} is registered;"
+                  f" known: {', '.join(domains.names())}")
+        raise typer.Exit(code=2)
+    domain = registered
+    shape = archetypes.get(domain.default_archetype)
 
     written: list[str] = []
     for variant in variants:
-        world = RetailWorld(
-            seed=variant.seed,
-            physics=variant.physics,
-            role_table=variant.role_table(),
-            seasonality=variant.seasonality,
-        ).build()
+        spec = domain.world(seed=variant.seed, archetype=shape)
+        changes: dict[str, Any] = {
+            "physics": variant.physics,
+            "role_table": variant.role_table(),
+        }
+        if variant.estate is not None:
+            changes["estate"] = variant.estate
+        # Only the retail engine reads a trading year, and only its mosaic
+        # varies one — handing a bank's world a `seasonality` it has no field
+        # for would fail on a keyword rather than on a decision.
+        if any(axis.name == "calendar" for axis in mosaic_module.ENGINES[engine]):
+            changes["seasonality"] = variant.seasonality
+        world = _replace_spec(spec, **changes).build()
+
         for index in range(max(1, periods)):
-            world = world.run(MonthEndClose(
-                period=_step_period(period, index, 1),
-                include_operational_incident=incident,
-                physics=variant.physics,
-                seasonality=variant.seasonality,
-            ))
+            stamp = _step_period(period, index, domain.period_step_months)
+            if domain.single_episode is not None:
+                episode = _replace_spec(domain.single_episode(stamp),
+                                        physics=variant.physics)
+            else:
+                episode = MonthEndClose(
+                    period=stamp,
+                    include_operational_incident=incident,
+                    physics=variant.physics,
+                    seasonality=variant.seasonality,
+                )
+            world = world.run(episode)
         target = out / f"world-{variant.index:02d}"
         written.append(str(world.export(target, overwrite=True)))
         report = world.validate()
@@ -1808,7 +1850,7 @@ def mosaic(
     console.print(
         f"\n[green]✓[/green] {len(written)} world(s) written under [bold]{out}[/bold]"
         f"\n[dim]{spread['distinct_shapes']} distinct organisation shape(s);"
-        f" headcounts {spread['headcounts']}; {len(spread['calendars'])} calendar(s)."
+        f" headcounts {spread['headcounts']}; estates {spread['estates']}."
         f" The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
     )
 

@@ -345,6 +345,7 @@ from .generators.organisation import _ROLES as _RETAIL_ROLES
 register_domain(Domain(
     name="retail",
     archetype_keys=frozenset({AUSTRALIAN_GROCERY.key, OMNICHANNEL_RETAILER.key}),
+    default_archetype="omnichannel_retailer",
     world=RetailWorld,
     consulted_targets=CONSULTED_TARGETS,
     system_slots=(

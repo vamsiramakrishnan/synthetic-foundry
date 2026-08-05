@@ -689,6 +689,7 @@ from .generators.regulatory import TEXT as _BANKING_TEXT  # noqa: E402
 register_domain(Domain(
     name="banking",
     archetype_keys=BANKING_ARCHETYPES,
+    default_archetype="midsize_adi",
     world=BankingWorld,
     single_episode=QuarterlyCapitalReturn,
     # A period is always the quarter-end month: three consecutive `--periods`
