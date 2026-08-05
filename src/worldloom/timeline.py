@@ -178,13 +178,29 @@ class Roster:
     peers and raises when there are none; this is that predicate, precomputed,
     so the sampler can avoid scheduling a departure the engine will refuse."""
 
+    function_by_role: Mapping[str, str] = field(default_factory=dict)
+    """Which function each role's holder sits in.
+
+    Carried because ``succeedable`` is a *per-role* predicate and the constraint
+    it stands in for is *per-function*: Finance holding three people makes all
+    three of its roles succeedable, and departing all three is impossible,
+    because the third leaver has no peer left to hand to. A 45-period history
+    hit exactly that and died mid-build with "nobody else in Finance is
+    employed" — 40 periods after the schedule that doomed it was chosen."""
+
+    function_size: Mapping[str, int] = field(default_factory=dict)
+    """Employed headcount per function when this roster was taken. With
+    ``function_by_role``, what lets the sampler bound a family it can exhaust."""
+
     def __hash__(self) -> int:
         """Hashable despite the Mapping, the same fix ``Parameters`` made and
         for the same reason: a frozen dataclass wrapping a Mapping gets a
         generated ``__hash__`` that raises, and a value an SDK might key a
         cache on should not be the one thing in the module that cannot."""
         return hash((self.engine, self.role_keys, self.unit_keys, self.bound_keys,
-                     tuple(sorted(self.unit_by_role.items())), self.succeedable))
+                     tuple(sorted(self.unit_by_role.items())), self.succeedable,
+                     tuple(sorted(self.function_by_role.items())),
+                     tuple(sorted(self.function_size.items()))))
 
     @classmethod
     def of(cls, world: World) -> Roster:
@@ -213,6 +229,7 @@ class Roster:
 
         role_keys: set[str] = set()
         unit_by_role: dict[str, str | None] = {}
+        function_by_role: dict[str, str] = {}
         succeedable: set[str] = set()
         for key in sorted(bindings):
             if key.startswith("unit_"):
@@ -222,6 +239,7 @@ class Roster:
                 continue
             role_keys.add(key)
             unit_by_role[key] = unit_of_id.get(person.business_unit_id)
+            function_by_role[key] = person.function
             if person.left is None and (
                 reports.get(person.id, 0) > 0 or by_function.get(person.function, 0) > 1
             ):
@@ -236,6 +254,8 @@ class Roster:
             bound_keys=frozenset(bindings),
             unit_by_role=unit_by_role,
             succeedable=frozenset(succeedable),
+            function_by_role=function_by_role,
+            function_size=dict(by_function),
         )
 
     def reserved(self) -> frozenset[str]:
@@ -817,7 +837,30 @@ def sample(
     if wanted:
         picked = rng.derive("departures").sample(departable, wanted)
         placed = _spread(periods, wanted, skip=_PHASE["departures"])
+        # A function of N people sustains at most N-1 departures: each one
+        # consumes a leaver and hands the key to somebody already inside the
+        # organisation, so the last person standing has nobody to hand to.
+        # `succeedable` cannot express that — it is asked once per role, and
+        # this is a budget shared across every role in a function.
+        #
+        # Conservative on purpose. A successor drawn from *direct reports* may
+        # come from another function, so the true capacity is sometimes higher;
+        # deriving it exactly would mean reimplementing `personnel.depart`'s
+        # choice here, and a planner that models the engine approximately is a
+        # second source of truth about the organisation. Scheduling one
+        # departure fewer than possible costs a corpus nothing. Scheduling one
+        # too many costs it the whole build, 40 periods in.
+        room = {name: count - 1 for name, count in roster.function_size.items()}
         for index, role_key in zip(placed, picked, strict=True):
+            function = roster.function_by_role.get(role_key)
+            if function is not None:
+                if room.get(function, 0) <= 0:
+                    # Dropped, not deferred, and every other family keeps the
+                    # placement it already had — a history missing one
+                    # succession is a history; one whose incidents all moved
+                    # because a succession was dropped is a different corpus.
+                    continue
+                room[function] -= 1
             at(index, Departure(period=stamps[index], role_key=role_key))
             leaving.add(role_key)
 

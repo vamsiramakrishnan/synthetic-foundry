@@ -735,9 +735,37 @@ class Departure:
         peers = [p for p in employed if p.id != leaver.id and p.function == leaver.function]
         candidates = reports or peers
         if not candidates:
+            # Refused, never skipped. A scenario that quietly did nothing would
+            # report success while the corpus lost a succession its recipe says
+            # happened — and `--replay` would then rebuild a different history
+            # than the one that shipped.
+            #
+            # `timeline` budgets departures per function so a *sampled* history
+            # does not schedule more than the organisation can serve, which is
+            # why this fires far later than it used to. It can still fire,
+            # because that budget is deliberately approximate: a successor drawn
+            # from direct reports may come from another function, and
+            # `Reorganisation` and `Hire` move people between functions after
+            # the budget was struck. The remedy is in the message rather than in
+            # a guess here, because only the caller knows which they want.
+            #
+            # The message deliberately does *not* suggest a bigger organisation,
+            # obvious as that reads: `--employees` is inert. `RetailWorld
+            # .employees` rides the recipe and reaches no generator —
+            # `organisation.generate` reads `archetype.employees` and takes no
+            # employees argument — so `--employees 60` builds the same
+            # twenty-three people and fails in the same period. Advice that does
+            # not work is worse than none, because it costs a build to find out.
+            remaining = sorted(
+                {person.function for person in employed if person.id != leaver.id}
+            )
             raise ValueError(
-                f"no eligible successor for {leaver.id} ({leaver.title}): no direct reports and "
-                f"nobody else in {leaver.function} is employed at {at.isoformat()}"
+                f"no eligible successor for {leaver.id} ({leaver.title}): no direct"
+                f" reports and nobody else in {leaver.function} is employed at"
+                f" {at.isoformat()}. {len(employed)} people remain, across"
+                f" {', '.join(remaining) or 'no other function'}. Shorten"
+                " `--periods`, or use `--timeline quiet`, which schedules no"
+                " departures and builds 96 periods clean."
             )
         successor = min(candidates, key=lambda p: p.id)
 
