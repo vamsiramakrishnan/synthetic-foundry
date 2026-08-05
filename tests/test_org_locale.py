@@ -197,28 +197,33 @@ def test_a_packs_headquarters_still_beats_the_locales(module, archetype_key) -> 
 
 
 # ---------------------------------------------------------------------------
-# What a locale still does not reach
+# What a locale names, and in whose vocabulary
 # ---------------------------------------------------------------------------
 
 
-def test_a_locale_names_the_retailer_and_not_the_bank_or_the_insurer() -> None:
-    """The gap this work leaves open, asserted so it is a decision and not a bug.
+def test_a_locale_names_all_three_verticals_in_their_own_words() -> None:
+    """Written the other way up — as the gap, asserting the bank and the insurer
+    were *unmoved* by a locale, because ``Locale.company_suffixes`` is a retail
+    pool by construction (Germany's are all Handel-) and a Frankfurt insurer is
+    not a trading group. That was the right refusal to the wrong question.
+    ``suffixes_for(engine)`` asks the right one.
 
-    ``names.company_name`` draws a retail suffix from the locale, so a German
-    retailer is a Handelsgruppe. Banking and insurance draw from ``_BANK_SUFFIX``
-    and ``_INSURER_SUFFIX``, their own vertical pools, and are unmoved by a
-    locale — correctly, because ``Locale.company_suffixes`` is a retail pool by
-    construction (Germany's entries are all Handel-) and a Frankfurt insurer is
-    not a trading group. Closing it needs an industry-aware suffix surface on
-    ``locales``, which is that module's to open; this records that the three
-    generators are consistent about it in the meantime.
+    The per-engine split earns its keep in exactly this pair: a German
+    cooperative bank is an ``eG``, and a German mutual insurer is never one,
+    because cooperatives are barred from insurance business — so one
+    jurisdiction has to hand the two engines different words. A single pool per
+    locale could not have expressed it.
     """
-    retail_au = build(organisation, "omnichannel_retailer", locale=locales.AUSTRALIA)
-    retail_de = build(organisation, "omnichannel_retailer", locale=locales.GERMANY)
-    assert retail_au.company.name != retail_de.company.name
-    assert retail_de.company.name.endswith(locales.GERMANY.company_suffixes)
-
-    for module, key in ((banking_org, "midsize_adi"), (insurance_org, "midsize_general_insurer")):
+    for module, key, engine in ((organisation, "omnichannel_retailer", "retail"),
+                                (banking_org, "midsize_adi", "banking"),
+                                (insurance_org, "midsize_general_insurer", "insurance")):
         au = build(module, key, locale=locales.AUSTRALIA)
         de = build(module, key, locale=locales.GERMANY)
-        assert au.company.name == de.company.name
+        assert au.company.name != de.company.name, engine
+        assert de.company.name.endswith(locales.GERMANY.suffixes_for(engine)), engine
+        assert au.company.name.endswith(locales.AUSTRALIA.suffixes_for(engine)), engine
+
+    # And the two engines really are given different words by one locale, which
+    # is the whole reason `suffixes_for` takes an argument.
+    assert (set(locales.GERMANY.suffixes_for("banking"))
+            != set(locales.GERMANY.suffixes_for("insurance")))

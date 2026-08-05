@@ -169,6 +169,10 @@ def _check_persona_ids(voiced: dict[str, Any], minted: dict[str, str]) -> None:
 #: Name pools for what a general insurer runs. Module-owned, like the role
 #: table — see ``banking_org``'s identical comment for why these do not move
 #: to ``generators/names.py``.
+#: What an insurer is called in the jurisdiction this engine was written for.
+#: Kept as the fallback for the reason ``banking_org._BANK_SUFFIX`` is, and
+#: identical to ``locales.AUSTRALIA.suffixes_for("insurance")``, which is what
+#: keeps the draw below byte-neutral.
 _INSURER_SUFFIX = ("Insurance Group", "General Insurance", "Assurance", "Mutual Insurance")
 _POLICY_ADMIN = ("PolicyCore", "Underwrite Direct", "Coverline Admin")
 _CLAIMS = ("ClaimsFirst", "Resolve Claims Platform", "Claimsline")
@@ -218,11 +222,13 @@ def generate(
     claims beat the locale. Every value is drawn whether or not it is
     overridden, so none of them reshuffles a downstream stream.
 
-    The locale does **not** reach the company's name here, for the reason
-    ``banking_org.generate`` states: ``_INSURER_SUFFIX`` is this vertical's own
-    pool and a locale's ``company_suffixes`` is a retail pool by construction,
-    so drawing from it would name a Frankfurt insurer a Handelsgruppe. That is
-    a gap in ``locales`` rather than one this generator can close.
+    The locale reaches the company's name here too, through
+    ``suffixes_for("insurance")`` rather than ``company_suffixes`` — the latter
+    is a retail pool by construction, so drawing from it would name a Frankfurt
+    insurer a Handelsgruppe. The distinction earns its keep immediately: a
+    German mutual insurer is a ``Versicherungsverein a.G.`` and never an
+    ``eG``, because cooperatives are barred from insurance business, and the
+    two engines therefore need different words from one jurisdiction.
     """
     company_rng = rng.derive("company")
     brands = system_brands or {}
@@ -389,7 +395,8 @@ def generate(
     # Drawn before either override is applied — the pack override rule: naming
     # the company or its headquarters must not change what any other stream
     # draws.
-    generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(_INSURER_SUFFIX)}"
+    suffixes = locale.suffixes_for("insurance") or _INSURER_SUFFIX
+    generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(suffixes)}"
     generated_hq = names.headquarters(company_rng.derive("hq"), locale=locale)
     company = Company(
         id=company_id,

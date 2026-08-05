@@ -210,6 +210,13 @@ def _check_persona_ids(voiced: dict[str, Any], minted: dict[str, str]) -> None:
 #: these into ``generators/names.py`` would grow a "temporary" file the docs
 #: already promise to delete, and the telco experiment showed shared pools are
 #: one of the six places retail leaks into a supposedly different vertical.
+#: What a bank is called in the jurisdiction this engine was written for.
+#: Kept as the fallback rather than deleted, because a `Locale` registered
+#: outside this repository may say nothing about banking and a vertical that
+#: became unbuildable in a jurisdiction over a naming table would be an outage
+#: caused by vocabulary. `locales.AUSTRALIA.suffixes_for("banking")` is this
+#: tuple verbatim, pinned by a test, which is what makes the draw below
+#: byte-neutral for every corpus built before a locale could reach it.
 _BANK_SUFFIX = ("Banking Group", "Bank", "Banking Corporation", "Mutual Bank")
 _CORE = ("Ledgerline Core", "Meridian Core Banking", "Basis Core", "Vaultline")
 _COLLATERAL = ("Collateral Register", "Security Interest Hub", "Collateral Central")
@@ -255,14 +262,15 @@ def generate(
     drawn regardless, and each system name comes from its own derived stream
     that nothing else reads.
 
-    One thing the locale does **not** reach, and deliberately: the company's
-    name. ``_BANK_SUFFIX`` is this vertical's own pool, and a locale's
-    ``company_suffixes`` is a *retail* pool by construction (Germany's are
-    Handelsgruppe, Handel GmbH), so drawing the bank's second word from it
-    would name a Frankfurt bank a trading group. What is missing is an
-    industry-aware suffix surface on ``locales``, which is another module's to
-    open; until it exists this generator is honest about naming banks in
-    English rather than dishonest about naming them in German.
+    The locale reaches the company's name too, and only because it is asked the
+    right question. ``Locale.company_suffixes`` is a *retail* pool by
+    construction — Germany's are Handelsgruppe and Handel GmbH — so drawing a
+    bank's second word from it would name a Frankfurt bank a trading group.
+    ``suffixes_for("banking")`` is the industry-aware surface that replaced it,
+    and it knows that a German cooperative bank is an ``eG`` while a mutual
+    insurer is a ``VVaG``, because German cooperatives are barred from
+    insurance business. A locale that says nothing about banking falls back to
+    ``_BANK_SUFFIX`` rather than to its retail pool.
     """
     company_rng = rng.derive("company")
     brands = system_brands or {}
@@ -480,7 +488,8 @@ def generate(
         ),
     )
 
-    generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(_BANK_SUFFIX)}"
+    suffixes = locale.suffixes_for("banking") or _BANK_SUFFIX
+    generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(suffixes)}"
     generated_hq = names.headquarters(company_rng.derive("hq"), locale=locale)
     company = Company(
         id=company_id,
