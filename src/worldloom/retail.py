@@ -25,7 +25,7 @@ from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
 from .parameters import DEFAULT, Parameters
 from .rng import Rng
 from .scenarios import MonthEndClose
-from .world import World
+from .world import World, extend_lore
 
 #: Base probability of a data-quality incident during any given close, before
 #: lore multipliers. Deliberately low: most closes are uneventful, and a corpus
@@ -236,6 +236,19 @@ class RetailWorld:
     (``worldloom.parameters``). The engine's own by default, which is what an
     un-overridden build has always used."""
 
+    lore_claims: tuple[Any, ...] = ()
+    """Lore a set of facet claims commits this company to
+    (``facets.LoreClaim``), appended to whatever lore this build already has.
+
+    Claims and not commitments: a facet knows what it asserts and what kind of
+    commitment that is, but not which world it lands in, so it cannot mint an id
+    or pick an effective date. ``world.extend_lore`` supplies both, and its
+    docstring argues why the seam is here rather than on a pack.
+
+    ``()`` appends nothing and mints nothing, which is what keeps every corpus
+    built before this existed byte-identical — the same guarantee ``estate``
+    above makes, and for the same structural reason."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int,
                     physics: Parameters = DEFAULT) -> RetailWorld:
@@ -284,6 +297,22 @@ class RetailWorld:
             commitments = packs_module.lore_of(self.pack, minter)
         else:
             commitments = lore(minter)
+        # Before `generate`, not after: lore is an *input* to the organisation —
+        # it dates the business units, attaches persona traits, and decides
+        # artifact density. Commitments minted afterwards would be carried and
+        # inert, which is the failure this seam exists to end rather than move.
+        recipe = recipe_module.build_recipe(
+            archetype=self.archetype.key,
+            seed=self.seed,
+            employees=self.employees,
+            annual_revenue=self.annual_revenue,
+            pack=self.pack,
+            estate=self.estate,
+            physics=self.physics,
+            role_table=self.role_table,
+            seasonality=self.seasonality,
+        )
+        commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = organisation.generate(
             rng.derive("organisation"), minter,
             archetype=self.archetype, lore=commitments,
@@ -318,17 +347,7 @@ class RetailWorld:
             _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
             _archetype=self.archetype,
             _generator_version=worldloom_version,
-            _recipe=recipe_module.build_recipe(
-                archetype=self.archetype.key,
-                seed=self.seed,
-                employees=self.employees,
-                annual_revenue=self.annual_revenue,
-                pack=self.pack,
-                estate=self.estate,
-                physics=self.physics,
-                role_table=self.role_table,
-                seasonality=self.seasonality,
-            ),
+            _recipe=recipe,
         )
 
 

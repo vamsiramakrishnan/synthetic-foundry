@@ -11,6 +11,7 @@ against, so their shape matters more than their current implementation.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -880,6 +881,61 @@ class World:
             f"{' planned' if not self._artifacts and self._artifact_intents else ''}, "
             f"evals={len(self._evaluations)})"
         )
+
+
+def extend_lore(
+    base: tuple[LoreCommitment, ...],
+    claims: Sequence[Any],
+    minter: Minter,
+    recipe: dict[str, Any],
+) -> tuple[tuple[LoreCommitment, ...], dict[str, Any]]:
+    """A domain's own lore, plus whatever a set of facet claims commits it to.
+
+    **Why the seam is here and not on the pack.** A pack already carries lore
+    and already replays, which makes it the obvious host — and it is the wrong
+    one. A pack is *identity*: a company name, its units, their books, its
+    voices. ``pack_export`` cannot derive any of that and marks it
+    ``PLACEHOLDER`` for a human to fill in. Routing facet lore through a pack
+    would therefore mean either inventing a company to hang two commitments off,
+    or building the archetype's world as a placeholder-named pack — and a facet
+    claims nothing whatever about what the company is *called*. The claims are
+    also derived rather than authored, so mixing them into ``Pack.lore`` would
+    put prose nobody wrote in front of ``packs.lint``, which exists to hold an
+    author to what they wrote.
+
+    So the seam is where the two lore sources already meet: the three lines in
+    each domain's ``build`` that pick between ``packs.lore_of`` and the domain's
+    own ``lore()``. Facet lore composes with *either*, which a pack-shaped path
+    could not have done.
+
+    **Appended, never interleaved.** ``LoreCommitment`` ids come off the shared
+    "LORE" sequence and ``founding_milestones`` walks the lore in order minting
+    an "EV" and an "MFACT" per dated commitment — so lore ordering decides id
+    ordering for three sequences at once. Appending means every id a domain's
+    own lore already had is the id it still has, and with no claims the tuple is
+    the identical object's contents and nothing moves at all. That is what makes
+    a no-facet build byte-identical rather than merely usually-identical.
+
+    **The recipe records the claims' commitments, and cannot yet replay them.**
+    Written because a corpus that asserts something ought to record where the
+    assertion came from, and because this is the exact payload a replay needs.
+    ``recipe.rebuild`` does not read the key yet — it reconstructs physics,
+    seasonality, role table, estate and pack, and a world-level lore field is
+    not among them — so a faceted corpus rebuilt from its recipe today comes
+    back without its facet lore. Recorded rather than dropped so that gap is
+    visible in the artifact instead of only in a changelog; closing it is
+    ``lore=`` on ``build_recipe`` and a ``LoreCommitment`` round-trip in
+    ``rebuild``.
+    """
+    if not claims:
+        return base, recipe
+    from . import facets as facets_module
+
+    implied = facets_module.commit(claims, minter, alongside=base)
+    return (*base, *implied), {
+        **recipe,
+        "lore": [commitment.model_dump(mode="json") for commitment in implied],
+    }
 
 
 def _moment(moment: datetime | str) -> datetime:

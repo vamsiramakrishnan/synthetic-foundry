@@ -51,13 +51,25 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field as _field
 from typing import Any
 
-from .models import ConstraintKind, LoreConstraint
+from .ids import Minter
+from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
 from .parameters import DEFAULT, Parameters, Span
 
 __all__ = [
-    "Choice", "Facet", "FACETS", "Implication", "Resolved", "choices", "describe",
-    "publish", "resolve",
+    "Choice", "Facet", "FACETS", "Implication", "LoreClaim", "Resolved", "choices",
+    "commit", "describe", "publish", "resolve",
 ]
+
+
+#: The lore kinds ``org_builder._MILESTONE_KIND`` can turn into a founding
+#: event. ``CAPABILITY`` is missing from that map, so a commitment carrying it
+#: raises ``KeyError`` half-way through a build rather than producing a world
+#: without a milestone. Checked here, at the point a facet *author* is writing
+#: the kind, because that is the only place the mistake is cheap to fix.
+_MILESTONED_KINDS: frozenset[LoreKind] = frozenset({
+    LoreKind.EVENT, LoreKind.DECISION, LoreKind.NORM, LoreKind.CONSTRAINT,
+    LoreKind.TENSION,
+})
 
 
 @dataclass(frozen=True)
@@ -78,6 +90,35 @@ class Implication:
     """Commitments this claim implies. The richest channel, because lore is
     already the mechanism by which a fact about a company's past changes what
     the engine generates."""
+
+    asserts: str = ""
+    """The sentence those constraints are consequences *of*.
+
+    A ``LoreConstraint`` cannot stand alone — ``LoreCommitment`` needs an
+    assertion, and that assertion is what a corpus quotes, what a founding
+    milestone's summary becomes, and what a reader chasing provenance actually
+    reads. So it has to be prose somebody wrote, and the only somebody who
+    knows what "listed" asserts about *this* company is whoever wrote the
+    claim. A template — ``f"The company is {value}"`` — would put engine prose
+    in the most-read field in the corpus and throw away everything the facet
+    author knew.
+
+    ``about`` is not reused for it, close as the two look: ``about`` is written
+    for a reader of the registry ("the engine's own assumption", "the most
+    fertile ground for the kind of question this corpus exists to pose") and
+    that voice must not leak into a company's own lore.
+
+    Mandatory whenever ``lore`` is non-empty; see ``__post_init__``."""
+
+    lore_kind: LoreKind = LoreKind.CONSTRAINT
+    """What sort of commitment ``asserts`` is.
+
+    ``CONSTRAINT`` by default because that is what a facet mostly emits — a
+    standing structural fact about the company that binds later generation,
+    which is exactly what "listed" or "private-equity owned" is. A facet whose
+    claim is about *how things are done* rather than what the company is says
+    ``NORM`` instead, and ``governance:founder_led`` is why the field exists
+    rather than being hard-coded."""
 
     roles: tuple[tuple[str, str, str, str | None], ...] = ()
     """Roles that must exist for the claim to be true. An audit committee chair
@@ -100,6 +141,45 @@ class Implication:
     nothing."""
 
     about: str = ""
+
+    def __post_init__(self) -> None:
+        # Structural rather than a test, because the failure it prevents is
+        # silent: constraints with no assertion cannot become a commitment, so
+        # `commit` would have to either invent prose or drop them — and dropping
+        # them is the carried-and-inert failure this whole module is written to
+        # avoid. Raising here means a facet author finds out at import.
+        if self.lore and not self.asserts.strip():
+            raise ValueError(
+                f"a facet implying {len(self.lore)} lore constraint(s) must also"
+                " say what it asserts: a constraint is not a commitment, and"
+                " nothing downstream can supply the sentence for you"
+            )
+        if self.lore and self.lore_kind not in _MILESTONED_KINDS:
+            raise ValueError(
+                f"lore_kind {self.lore_kind!r} has no founding-milestone event"
+                f" kind; use one of {sorted(k.value for k in _MILESTONED_KINDS)}"
+            )
+
+
+@dataclass(frozen=True)
+class LoreClaim:
+    """A facet's lore, as far as a facet can honestly take it.
+
+    Everything a ``LoreCommitment`` needs except the two things a *claim about a
+    kind of company* cannot know: which world this is, and therefore what id it
+    mints and when it took effect. ``commit`` supplies those. Keeping the
+    half-built thing in its own type rather than passing a bare
+    ``LoreCommitment`` with placeholder values is what stops an unminted
+    commitment ever reaching a corpus and looking real.
+    """
+
+    source: str
+    """``facet:value`` — which claim this came from. Not used by generation;
+    used by every human trying to work out why their corpus asserts this."""
+
+    kind: LoreKind
+    assertion: str
+    constrains: tuple[LoreConstraint, ...]
 
 
 @dataclass(frozen=True)
@@ -169,6 +249,13 @@ FACETS: Mapping[str, Facet] = {
                                "Audit", "ceo"),
                               ("investor_relations", "Head of Investor Relations",
                                "Finance", "cfo")),
+                       asserts=(
+                           "The company is listed, and reports on the market's"
+                           " clock rather than its own. The Audit and Risk"
+                           " Committee reviews the numbers before the market"
+                           " sees them, and a close that runs late is a"
+                           " disclosure problem before it is an accounting one."
+                       ),
                        lore=(
                            _lore(ConstraintKind.ARTIFACT_DENSITY,
                                  "finance/status_reports",
@@ -200,6 +287,12 @@ FACETS: Mapping[str, Facet] = {
                    implies=Implication(
                        physics={"capital.ratio.target_pct": Span(14.0, 17.0),
                                 "retail.margin.budget": Span(0.16, 0.26)},
+                       asserts=(
+                           "The company is owned by its members. No shareholder"
+                           " is asking it for a return, so it holds capital well"
+                           " above a listed peer's and accepts the thinner"
+                           " margin that follows."
+                       ),
                        lore=(_lore(ConstraintKind.RISK_APPETITE,
                                    "finance/manual_workarounds",
                                    "A mutual answers to members, so prudence"
@@ -214,6 +307,12 @@ FACETS: Mapping[str, Facet] = {
                    implies=Implication(
                        roles=(("public_accountability", "Head of Public Accountability",
                                "Executive", "ceo"),),
+                       asserts=(
+                           "The company is owned by government and answers to a"
+                           " minister. Anything written down is discoverable, so"
+                           " decisions are minuted whether or not anyone expects"
+                           " to be asked about them."
+                       ),
                        lore=(_lore(ConstraintKind.ARTIFACT_DENSITY,
                                    "finance/status_reports",
                                    "Everything is minuted, because everything is"
@@ -236,6 +335,11 @@ FACETS: Mapping[str, Facet] = {
                          " person and a spreadsheet.",
                    implies=Implication(
                        estate=None,
+                       asserts=(
+                           "Nothing here has a formal owner yet. Everyone owns"
+                           " everything, and the reporting line on the chart"
+                           " records intent rather than practice."
+                       ),
                        lore=(_lore(ConstraintKind.APPROVAL_CHAINS,
                                    "hierarchy_mapping_change",
                                    "Nothing has a formal owner yet because"
@@ -253,6 +357,12 @@ FACETS: Mapping[str, Facet] = {
                          " what makes blast radius a question worth asking.",
                    implies=Implication(
                        estate="large",
+                       asserts=(
+                           "The technology estate has grown past any one"
+                           " person's complete understanding of it. More"
+                           " systems mean more seams between them, and the"
+                           " failures happen at the seams."
+                       ),
                        lore=(_lore(ConstraintKind.EVENT_LIKELIHOOD,
                                    "data_quality_incident/inventory",
                                    "More systems, more seams, more failures at"
@@ -265,6 +375,12 @@ FACETS: Mapping[str, Facet] = {
                          " live.",
                    implies=Implication(
                        estate="large",
+                       asserts=(
+                           "The group consolidates across ledgers in several"
+                           " jurisdictions. The consolidation is a seam no"
+                           " single team owns end to end, and the errors live"
+                           " in it."
+                       ),
                        lore=(_lore(ConstraintKind.EVENT_LIKELIHOOD,
                                    "data_quality_incident/inventory",
                                    "A consolidation across ledgers is a seam"
@@ -322,6 +438,12 @@ FACETS: Mapping[str, Facet] = {
                          " normal state rather than an event.",
                    implies=Implication(
                        physics={"retail.margin.erosion": Span(0.020, 0.065)},
+                       asserts=(
+                           "The market is fragmented and no rival holds price"
+                           " discipline. Promotional activity is continuous, so"
+                           " margin erosion is the normal state rather than an"
+                           " event to be explained."
+                       ),
                        lore=(_lore(ConstraintKind.METRIC_EMPHASIS,
                                    "promotional_depth",
                                    "Promotional depth is a standing board"
@@ -337,6 +459,15 @@ FACETS: Mapping[str, Facet] = {
                    about="Decisions concentrate at the top and process is"
                          " thinner than the org chart implies.",
                    implies=Implication(
+                       # The one claim in the registry that is about *how things
+                       # are done* rather than what the company is, so the one
+                       # that does not take the CONSTRAINT default.
+                       lore_kind=LoreKind.NORM,
+                       asserts=(
+                           "The founder decides. An approval registered against"
+                           " anyone else is a formality, and answers arrive"
+                           " short and fast."
+                       ),
                        lore=(_lore(ConstraintKind.APPROVAL_CHAINS,
                                    "hierarchy_mapping_change",
                                    "The founder decides, so the registered"
@@ -358,6 +489,12 @@ FACETS: Mapping[str, Facet] = {
                    implies=Implication(
                        roles=(("value_creation", "Value Creation Director",
                                "Executive", "ceo"),),
+                       asserts=(
+                           "The company is owned by a fund with a hold period."
+                           " The sponsor reads a pack every month and asks about"
+                           " every line, and everything is measured against a"
+                           " plan somebody else wrote."
+                       ),
                        lore=(_lore(ConstraintKind.ARTIFACT_DENSITY,
                                    "finance/status_reports",
                                    "The sponsor reads a pack every month and"
@@ -395,6 +532,12 @@ FACETS: Mapping[str, Facet] = {
                        estate="large",
                        physics={"ops.incident.hypothesis_minutes": Span(120, 300),
                                 "ops.incident.rule_out_minutes": Span(240, 480)},
+                       asserts=(
+                           "Decades of accumulated systems are still in service."
+                           " Several of them are load-bearing and unowned, so a"
+                           " fix addresses the symptom: nobody left understands"
+                           " the cause."
+                       ),
                        lore=(_lore(ConstraintKind.EVENT_LIKELIHOOD,
                                    "recurrence_after_remediation",
                                    "Fixes address the symptom because nobody"
@@ -449,6 +592,14 @@ class Resolved:
 
     chosen: Mapping[str, str]
     physics: Mapping[str, Span]
+    claims: tuple[LoreClaim, ...]
+    """The lore, grouped by the claim it follows from — what ``commit`` mints.
+
+    ``lore`` below is the same constraints flattened. Both, because they answer
+    different questions: "what does this world assert" needs the grouping, and
+    "which parameters of generation does this touch" does not care which
+    sentence a constraint hangs off."""
+
     lore: tuple[LoreConstraint, ...]
     roles: tuple[tuple[str, str, str, str | None], ...]
     calendar: str | None
@@ -469,6 +620,11 @@ class Resolved:
         return {
             "chosen": dict(sorted(self.chosen.items())),
             "physics": {n: s.as_dict() for n, s in sorted(self.physics.items())},
+            "claims": [{"source": c.source, "kind": c.kind.value,
+                        "assertion": c.assertion,
+                        "constrains": [x.model_dump(mode="json")
+                                       for x in c.constrains]}
+                       for c in self.claims],
             "lore": [c.model_dump(mode="json") for c in self.lore],
             "roles": [list(r) for r in self.roles],
             "calendar": self.calendar,
@@ -510,7 +666,7 @@ def resolve(**chosen: str) -> Resolved:
             except KeyError as exc:
                 found.append(Conflict(name, "unknown_value", str(exc)))
     if found:
-        return Resolved({}, {}, (), (), None, None, (), tuple(found))
+        return Resolved({}, {}, (), (), (), None, None, (), tuple(found))
 
     settled = {name: FACETS[name].default for name in FACETS if FACETS[name].default}
     settled.update(chosen)
@@ -518,7 +674,11 @@ def resolve(**chosen: str) -> Resolved:
 
     physics: dict[str, Span] = {}
     physics_from: dict[str, str] = {}
-    lore: list[LoreConstraint] = []
+    # Not `claims`: that name is already the set of `facet:value` strings the
+    # exclusion check reads, and shadowing it makes every `excludes` rule
+    # silently stop firing — a mutual private-equity company would resolve
+    # cleanly.
+    lore_claims: list[LoreClaim] = []
     roles: list[tuple[str, str, str, str | None]] = []
     wants: list[str] = []
     calendar: str | None = None
@@ -566,7 +726,15 @@ def resolve(**chosen: str) -> Resolved:
                 continue
             physics[parameter] = Span(low, high)
             physics_from[parameter] = f"{physics_from[parameter]} + {name}:{value}"
-        lore.extend(implied.lore)
+        if implied.lore:
+            # One claim per facet value, never one per constraint: the
+            # constraints of a single claim are consequences of one sentence,
+            # and splitting them would put the same assertion in the corpus
+            # three times over.
+            lore_claims.append(LoreClaim(
+                source=f"{name}:{value}", kind=implied.lore_kind,
+                assertion=implied.asserts, constrains=implied.lore,
+            ))
         roles.extend(implied.roles)
         wants.extend(implied.wants)
         if implied.calendar is not None:
@@ -586,9 +754,64 @@ def resolve(**chosen: str) -> Resolved:
                 estate, estate_from = implied.estate, f"{name}:{value}"
 
     return Resolved(
-        chosen=settled, physics=physics, lore=tuple(lore), roles=tuple(roles),
-        calendar=calendar, estate=estate,
+        chosen=settled, physics=physics, claims=tuple(lore_claims),
+        lore=tuple(c for claim in lore_claims for c in claim.constrains),
+        roles=tuple(roles), calendar=calendar, estate=estate,
         wants=tuple(sorted(set(wants))), conflicts=tuple(found),
+    )
+
+
+def commit(
+    claims: Sequence[LoreClaim],
+    minter: Minter,
+    *,
+    alongside: Sequence[LoreCommitment] = (),
+) -> tuple[LoreCommitment, ...]:
+    """Turn facet claims into lore a world can carry, cite, and generate from.
+
+    The seam's half of the constraint-to-commitment problem. A facet supplies
+    the assertion and the kind because those are properties of the *claim*; this
+    supplies the id and the effective date because those are properties of the
+    *world*, and a claim about a kind of company cannot know either.
+
+    **The date is the earliest date the lore it joins already asserts.** Not
+    today (a clock is not allowed anywhere in this engine, and CI's byte diff
+    would catch one), not a constant, and not a value a facet author picks —
+    because a facet is a *standing* property. A company that is listed was
+    listed for as long as this corpus remembers anything, so the honest date is
+    the beginning of what it remembers.
+
+    That choice is also load-bearing rather than tasteful.
+    ``org_builder._earliest_effective`` anchors every business unit's formation
+    date to the earliest dated commitment: dating a facet claim *earlier* would
+    silently re-date the whole organisation, and dating it *later* would assert
+    that the company became listed part-way through its own history. Landing
+    exactly on the existing minimum is the only date that does neither.
+
+    With nothing to join, there is no such date and the commitment goes out
+    undated — carried and generative, but with no founding milestone, because a
+    milestone with no date is not something ``founding_milestones`` can place on
+    a timeline.
+    """
+    dated = [c.effective_from for c in alongside if c.effective_from]
+    # "YYYY-MM" sorts lexicographically in calendar order, the same reason
+    # `_earliest_effective` compares the raw strings rather than parsing first.
+    since = min(dated) if dated else ""
+    return tuple(
+        LoreCommitment(
+            id=minter.next("LORE"),
+            kind=claim.kind,
+            assertion=claim.assertion,
+            effective_from=since,
+            constrains=list(claim.constrains),
+            # Acknowledged, with no facet-level control over it. A facet is what
+            # somebody *says* when describing the company, so it is acknowledged
+            # by construction; lore the company would not say out loud is an
+            # authored pack's business, and giving a describer a "denied" knob
+            # would be offering a vocabulary with nothing true to put in it.
+            visibility="acknowledged",
+        )
+        for claim in claims
     )
 
 
@@ -610,6 +833,7 @@ def describe(facet: str | None = None) -> dict[str, Any]:
                      "physics": sorted(option.implies.physics),
                      "roles": [role[0] for role in option.implies.roles],
                      "lore": len(option.implies.lore),
+                     "asserts": option.implies.asserts,
                      "calendar": option.implies.calendar,
                      "estate": option.implies.estate,
                      "wants": list(option.implies.wants),

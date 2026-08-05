@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -131,6 +132,124 @@ def test_companies_enumerates_only_what_can_exist() -> None:
     field = sdk.companies(sdk.retail(), "listing", "margin_profile")
     assert 0 < len(field) < 4 * 3
     assert all(b.facet_choices for b in field)
+
+
+# ---------------------------------------------------------------------------
+# Lore: from a constraint a facet implies to a commitment a corpus carries
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def listed_pe():
+    """The same organisation, with and without two claims about its ownership."""
+    base = sdk.retail().org(headcount=25, span=5, levels=3)
+    return base.build(), base.facets(listing="listed",
+                                     governance="private_equity").build()
+
+
+def test_a_constraint_without_an_assertion_cannot_become_a_commitment() -> None:
+    """The whole reason ``Implication.asserts`` exists. Constraints with no
+    sentence around them leave ``commit`` inventing prose or dropping them, and
+    dropping them is the carried-and-inert failure facets exist to avoid."""
+    from worldloom.models import ConstraintKind, LoreConstraint
+
+    constraint = LoreConstraint(kind=ConstraintKind.METRIC_EMPHASIS,
+                                target="close_cycle_time", effect="watched")
+    with pytest.raises(ValueError, match="what it asserts"):
+        facets.Implication(lore=(constraint,))
+
+
+def test_a_facets_lore_is_minted_not_merely_reported(listed_pe) -> None:
+    """The gap this seam closes. ``Blueprint.facets`` used to report these as
+    unmet, because a blueprint had no way to add lore to a domain's own."""
+    plain, faceted = listed_pe
+    added = [c for c in faceted.world.lore
+             if c.id not in {x.id for x in plain.world.lore}]
+    assert [c.kind.value for c in added] == ["constraint", "constraint"]
+    assert any("listed" in c.assertion for c in added)
+    assert any("hold period" in c.assertion for c in added)
+    # And generative rather than decorative: `scenarios.density_adjustment`
+    # sums exactly these magnitudes when it decides how much status reporting a
+    # close produces.
+    from worldloom.scenarios import density_adjustment
+
+    assert (density_adjustment(faceted.world, "finance/status_reports")
+            > density_adjustment(plain.world, "finance/status_reports"))
+
+
+def test_a_facets_lore_arrives_with_the_milestones_that_make_it_citable(listed_pe) -> None:
+    """A commitment nothing on the timeline witnesses is a dated assertion no
+    reader can chase — which is the reason ``founding_milestones`` exists at
+    all, and it must hold for facet lore too."""
+    _, faceted = listed_pe
+    for commitment in faceted.world.lore[-2:]:
+        events = [e for e in faceted.world.events if commitment.id in e.lore_ids]
+        facts = [f for f in faceted.world.facts if commitment.id in f.lore_ids]
+        assert [e.summary for e in events] == [commitment.assertion]
+        assert [f.kind for f in facts] == ["lore.milestone"]
+        assert facts[0].event_id == events[0].id
+
+
+def test_added_lore_appends_and_renumbers_nothing(listed_pe) -> None:
+    """Why a no-facet build is byte-identical rather than usually-identical.
+
+    Lore order decides id order for three sequences at once — LORE, and through
+    ``founding_milestones`` both EV and MFACT — so lore that inserted anywhere
+    but the tail would move ids a narration already cites by literal value."""
+    plain, faceted = listed_pe
+    for before, after in ((plain.world.lore, faceted.world.lore),
+                          (plain.world.events, faceted.world.events),
+                          (plain.world.facts, faceted.world.facts)):
+        assert [x.model_dump() for x in after[:len(before)]] == \
+               [x.model_dump() for x in before]
+
+
+def test_a_standing_claim_is_dated_so_it_cannot_re_date_the_company(listed_pe) -> None:
+    """``org_builder._earliest_effective`` anchors every business unit's
+    formation to the earliest dated commitment. A facet claim dated earlier
+    would silently reform the whole organisation; one dated later would assert
+    the company became listed part-way through its own history."""
+    plain, faceted = listed_pe
+    earliest = min(c.effective_from for c in plain.world.lore if c.effective_from)
+    assert {c.effective_from for c in faceted.world.lore[-2:]} == {earliest}
+    assert [(u.id, u.formed) for u in faceted.world.business_units] == \
+           [(u.id, u.formed) for u in plain.world.business_units]
+
+
+def test_the_corpus_records_where_its_facet_lore_came_from(listed_pe) -> None:
+    """Recorded on the recipe rather than dropped. ``recipe.rebuild`` does not
+    replay the key yet — see ``world.extend_lore`` — and a corpus that asserts
+    something with no record of why is worse than one whose record is ahead of
+    its rebuilder."""
+    _, faceted = listed_pe
+    recorded = faceted.world.recipe["lore"]
+    assert [entry["id"] for entry in recorded] == \
+           [c.id for c in faceted.world.lore[-2:]]
+
+
+def test_facet_lore_composes_with_a_packs_own_rather_than_replacing_it() -> None:
+    """The argument for putting the seam where the two lore sources already
+    meet: a pack-shaped path could only have carried one of them."""
+    from worldloom import packs
+    from worldloom.retail import RetailWorld
+
+    pack = packs.load("examples/packs/regional-insurer.json")
+    claims = facets.resolve(listing="listed").claims
+    authored = RetailWorld.from_pack(pack, seed=4242).build()
+    both = replace(RetailWorld.from_pack(pack, seed=4242), lore_claims=claims).build()
+    assert [c.assertion for c in both.lore[:len(authored.lore)]] == \
+           [c.assertion for c in authored.lore]
+    assert len(both.lore) == len(authored.lore) + 1
+
+
+def test_unmet_no_longer_claims_a_facets_lore_is_out_of_reach() -> None:
+    """It said "put them on a pack's `lore` and build with it". It is minted
+    now, so ``unmet`` is back to meaning only what it says."""
+    blueprint = sdk.retail().facets(listing="listed", governance="private_equity")
+    assert blueprint.implied_lore
+    assert not any("lore" in entry for entry in blueprint.unmet)
+    assert blueprint.describe()["lore"] == ["listing:listed",
+                                            "governance:private_equity"]
 
 
 def test_a_faceted_field_disperses_over_one_key_space() -> None:

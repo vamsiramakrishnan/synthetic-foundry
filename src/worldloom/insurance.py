@@ -72,7 +72,7 @@ from .models import (
 from .parameters import DEFAULT, Parameters
 from .rng import Rng
 from .validate import RECONCILIATION_TOLERANCE, Violation
-from .world import World
+from .world import World, extend_lore
 
 # Imported for its side effect: registering insurance's artifact types with
 # the document compiler. Kept at module scope so that importing
@@ -282,6 +282,12 @@ class InsuranceWorld:
     says what ranges its figures live in. Keeping them one field would make
     a caller who only wants to move a range author a whole pack to do it."""
 
+    lore_claims: tuple[Any, ...] = ()
+    """Lore a set of facet claims commits this insurer to
+    (``facets.LoreClaim``). See ``RetailWorld.lore_claims`` — same contract, and
+    ``world.extend_lore`` argues where the seam lives and why ``()`` keeps an
+    existing insurer byte-identical."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> InsuranceWorld:
         """A world shaped like the insurer *description* names. Shape only."""
@@ -318,6 +324,19 @@ class InsuranceWorld:
             commitments = packs_module.lore_of(self.pack, minter)
         else:
             commitments = lore(minter)
+        # Before `generate`: lore is an input to the organisation, not a
+        # decoration on it. See `world.extend_lore`.
+        recipe = recipe_module.build_recipe(
+            archetype=self.archetype.key,
+            seed=self.seed,
+            employees=self.employees,
+            annual_revenue=self.annual_revenue,
+            pack=self.pack,
+            estate=self.estate,
+            physics=self.physics,
+            role_table=self.role_table,
+        )
+        commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = insurance_org.generate(
             rng.derive("organisation"), minter,
             archetype=self.archetype, lore=commitments,
@@ -375,16 +394,7 @@ class InsuranceWorld:
             _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
             _archetype=self.archetype,
             _generator_version=worldloom_version,
-            _recipe=recipe_module.build_recipe(
-                archetype=self.archetype.key,
-                seed=self.seed,
-                employees=self.employees,
-                annual_revenue=self.annual_revenue,
-                pack=self.pack,
-                estate=self.estate,
-                physics=self.physics,
-                role_table=self.role_table,
-            ),
+            _recipe=recipe,
         )
 
 
