@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..ids import Minter
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import (
     AccessPolicy,
     BusinessUnit,
@@ -185,6 +186,19 @@ def generate(
     company_name: str | None = None,
     system_brands: dict[str, str] | None = None,
     voices: dict[str, Any] | None = None,
+    # The three overrides this generator was missing, and the locale they fall
+    # back to. Their absence was not a decision: `organisation.generate` and
+    # `banking_org.generate` have taken all three since packs learned to say
+    # where a company is, and this signature simply never caught up — which
+    # made every insurer this tool has ever built unconditionally Australian,
+    # with `Pack.base` accepting only `retail` and `banking` so no pack could
+    # route round it either. Same names, same order and same meanings as the
+    # siblings, so a caller cannot need to remember which vertical it is
+    # addressing.
+    name_pools: dict[str, list[str]] | None = None,
+    headquarters: str | None = None,
+    regions: tuple[str, ...] | None = None,
+    locale: Locale = DEFAULT_LOCALE,
     # This module's own `_ROLES`, replaced. `None` means use them, so an
     # unpassed table is byte-identical to before this argument existed.
     #
@@ -198,8 +212,17 @@ def generate(
 ) -> InsurerOrganisation:
     """Build the insurer for an archetype. Same seed, same graph, same ids.
 
-    ``company_name``, ``system_brands`` and ``voices`` are the pack override
-    trio — see ``organisation.generate``.
+    ``company_name``, ``system_brands``, ``voices``, ``name_pools``,
+    ``headquarters``, ``regions`` and ``locale`` are the pack override set —
+    see ``organisation.generate`` for what each means and for why the narrower
+    claims beat the locale. Every value is drawn whether or not it is
+    overridden, so none of them reshuffles a downstream stream.
+
+    The locale does **not** reach the company's name here, for the reason
+    ``banking_org.generate`` states: ``_INSURER_SUFFIX`` is this vertical's own
+    pool and a locale's ``company_suffixes`` is a retail pool by construction,
+    so drawing from it would name a Frankfurt insurer a Handelsgruppe. That is
+    a gap in ``locales`` rather than one this generator can close.
     """
     company_rng = rng.derive("company")
     brands = system_brands or {}
@@ -247,8 +270,12 @@ def generate(
         )
         return business_unit, cost_centre, persona
 
+    pools = name_pools or {}
     role_ids, people = mint_people(
-        rng, minter, role_table, depth_of, assign=assign, physics=physics
+        rng, minter, role_table, depth_of, assign=assign,
+        given=pools.get("given") or None, family=pools.get("family") or None,
+        locale=locale,
+        physics=physics,
     )
     people = wire_managers(people, role_table, role_ids)
     business_units = form_units(units, unit_ids, role_ids, people, company_id, lore)
@@ -262,6 +289,12 @@ def generate(
         units=units,
         unit_ids=unit_ids,
         buyers={},
+        # Forwarded rather than defaulted — and unlike the siblings there was
+        # nothing here to forward at all, so an insurer's branch estate was
+        # labelled with Australian state abbreviations no matter what its pack
+        # or its locale said.
+        regions=regions,
+        locale=locale,
         physics=physics,
     )
 
@@ -353,12 +386,16 @@ def generate(
         ),
     )
 
+    # Drawn before either override is applied — the pack override rule: naming
+    # the company or its headquarters must not change what any other stream
+    # draws.
     generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(_INSURER_SUFFIX)}"
+    generated_hq = names.headquarters(company_rng.derive("hq"), locale=locale)
     company = Company(
         id=company_id,
         name=company_name or generated_name,
         industry=archetype.industry,
-        headquarters=names.headquarters(company_rng.derive("hq")),
+        headquarters=headquarters or generated_hq,
         fiscal_year_start_month=archetype.fiscal_year_start_month,
         currency=archetype.currency,
         currency_unit=archetype.currency_unit,

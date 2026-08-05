@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..ids import Minter
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import (
     AccessPolicy,
     BusinessUnit,
@@ -229,6 +230,11 @@ def generate(
     name_pools: dict[str, list[str]] | None = None,
     headquarters: str | None = None,
     regions: tuple[str, ...] | None = None,
+    # Where this bank is. `headquarters`, `regions` and `name_pools` are each a
+    # narrower claim about the same subject and win over it where they overlap;
+    # defaulted to Australia so an un-passed locale is byte-identical to before
+    # this argument existed. See `organisation.generate`.
+    locale: Locale = DEFAULT_LOCALE,
     # This module's own `_ROLES`, replaced. `None` means use them, so an
     # unpassed table is byte-identical to before this argument existed.
     #
@@ -243,11 +249,20 @@ def generate(
     """Build the bank for an archetype. Same seed, same graph, same ids.
 
     ``company_name``, ``system_brands``, ``voices``, ``name_pools``,
-    ``headquarters`` and ``regions`` are the pack override set — see
-    ``organisation.generate`` for what each means. Overrides can never
+    ``headquarters``, ``regions`` and ``locale`` are the pack override set —
+    see ``organisation.generate`` for what each means. Overrides can never
     reshuffle a downstream stream: the company name and headquarters are
     drawn regardless, and each system name comes from its own derived stream
     that nothing else reads.
+
+    One thing the locale does **not** reach, and deliberately: the company's
+    name. ``_BANK_SUFFIX`` is this vertical's own pool, and a locale's
+    ``company_suffixes`` is a *retail* pool by construction (Germany's are
+    Handelsgruppe, Handel GmbH), so drawing the bank's second word from it
+    would name a Frankfurt bank a trading group. What is missing is an
+    industry-aware suffix surface on ``locales``, which is another module's to
+    open; until it exists this generator is honest about naming banks in
+    English rather than dishonest about naming them in German.
     """
     company_rng = rng.derive("company")
     brands = system_brands or {}
@@ -302,6 +317,7 @@ def generate(
     role_ids, people = mint_people(
         rng, minter, role_table, depth_of, assign=assign,
         given=pools.get("given") or None, family=pools.get("family") or None,
+        locale=locale,
         physics=physics,
     )
     people = wire_managers(people, role_table, role_ids)
@@ -319,7 +335,13 @@ def generate(
         units=units,
         unit_ids=unit_ids,
         buyers={},
-        regions=regions if regions else hierarchy.REGIONS,
+        # Both forwarded as-is — see `organisation.generate`'s note. The
+        # `regions if regions else hierarchy.REGIONS` this replaced substituted
+        # the module default for the absent value and so shadowed the locale
+        # outright: every branch in a German bank's estate was named "Branch
+        # NSW 001", and nothing in the corpus said the locale had been dropped.
+        regions=regions,
+        locale=locale,
         physics=physics,
     )
 
@@ -459,7 +481,7 @@ def generate(
     )
 
     generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(_BANK_SUFFIX)}"
-    generated_hq = names.headquarters(company_rng.derive("hq"))
+    generated_hq = names.headquarters(company_rng.derive("hq"), locale=locale)
     company = Company(
         id=company_id,
         name=company_name or generated_name,

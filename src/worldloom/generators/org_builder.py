@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from ..ids import Minter
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import (
     Authority,
     BusinessUnit,
@@ -170,6 +171,7 @@ def mint_people(
     assign: Callable[[str, str, str], Assignment],
     given: Sequence[str] | None = None,
     family: Sequence[str] | None = None,
+    locale: Locale = DEFAULT_LOCALE,
     physics: Parameters = DEFAULT,
 ) -> tuple[dict[str, str], list[Employee]]:
     """Mint one person per role row, in table order.
@@ -180,18 +182,29 @@ def mint_people(
     mechanism: name pools, id sequence, join date, and a ``left`` of ``None``,
     because departures are a scenario's concern, not the beginning's.
 
-    ``given``/``family`` pass straight through to ``names.people_names`` —
-    ``None`` for the engine's own pools, or a pack's ``name_pools`` handed
-    down by the domain module. This is mechanism deciding *how many* names it
-    needs and *which* pools to draw them from; it is still not the mechanism's
-    business to know why one pool was chosen over another.
+    ``given``/``family``/``locale`` pass straight through to
+    ``names.people_names``, which owns the precedence between them: a pack's
+    ``name_pools`` is a claim about *this company's* people and beats the
+    ``locale``, which is a claim about the country they are in. Stated once
+    there rather than resolved here, because three domain modules call this and
+    three copies of "pool or locale" is three places the rule can drift.
+
+    ``locale`` is threaded rather than left to ``people_names``'s own default
+    for the reason ``hierarchy.generate`` gives about ``regions``: reaching for
+    a module default *shadows* the locale a caller already decided, and it does
+    so invisibly — a Frankfurt company whose staff are all called Rafferty is
+    entirely plausible prose, so there is nothing in the corpus to notice the
+    drop by. Defaulted here so an un-localised call draws from the same
+    Australian pools it always did.
 
     Draw order is contract: names from ``rng.derive("people")``, join dates
     from ``rng.derive("founding")`` — the labels both original generators used,
-    kept so existing seeds reproduce their worlds.
+    kept so existing seeds reproduce their worlds. A locale changes *which*
+    pool is sampled and never how many draws are taken from it, so a localised
+    world differs in its names and in nothing downstream of them.
     """
     person_names = names.people_names(
-        rng.derive("people"), len(role_table), given=given, family=family
+        rng.derive("people"), len(role_table), given=given, family=family, locale=locale
     )
     founding_rng = rng.derive("founding")
     role_ids: dict[str, str] = {}

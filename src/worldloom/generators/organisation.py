@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..ids import Minter
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import (
     AccessPolicy,
     BusinessUnit,
@@ -245,6 +246,13 @@ def generate(
     name_pools: dict[str, list[str]] | None = None,
     headquarters: str | None = None,
     regions: tuple[str, ...] | None = None,
+    # Where this company is. Everything below it in this signature is a *narrower*
+    # claim about the same subject — `headquarters` names the one city,
+    # `regions` names this estate's labels, `name_pools` names these people —
+    # and each therefore wins over the locale where the two overlap. Defaulted
+    # to Australia, which is what every world built before `locales` existed
+    # was made of, so an un-passed locale is byte-identical rather than close.
+    locale: Locale = DEFAULT_LOCALE,
     estate_profile: str | None = None,
     # This module's own `_ROLES`, replaced. `None` means use them, so an
     # unpassed table is byte-identical to before this argument existed.
@@ -263,11 +271,13 @@ def generate(
     re-brands system slots (keys per ``names.system_names``); ``voices`` maps
     role keys to voice overrides (``packs.PackVoice``-shaped); ``name_pools``
     supplies ``given``/``family`` person-name pools (``packs.PackNamePools``-
-    shaped); ``headquarters`` and ``regions`` are the pack's locale (a single
-    string and a pool of region labels, respectively — see
-    ``generators/hierarchy.REGIONS``). Every generated value is still drawn
-    either way, so a pack that overrides any of them never reshuffles a single
-    downstream draw relative to one that does not.
+    shaped); ``headquarters`` and ``regions`` are the pack's own narrower
+    geography (a single string and a pool of region labels, respectively — see
+    ``generators/hierarchy.REGIONS``); ``locale`` is the jurisdiction the rest
+    of it falls back to. Every generated value is still drawn either way, so a
+    pack that overrides any of them never reshuffles a single downstream draw
+    relative to one that does not — and neither does a locale, which changes
+    which pool each draw reads and never how many draws there are.
     """
     company_rng = rng.derive("company")
     company_id = minter.next("CO")
@@ -344,6 +354,7 @@ def generate(
     role_ids, people = mint_people(
         rng, minter, role_table, depth_of, assign=assign,
         given=pools.get("given") or None, family=pools.get("family") or None,
+        locale=locale,
         physics=physics,
     )
     people = wire_managers(people, role_table, role_ids)
@@ -354,9 +365,17 @@ def generate(
         units=units,
         unit_ids=unit_ids,
         buyers={unit.key: role_ids[f"{unit.key}_buyer"] for unit in units},
-        # Empty (the field's default) means "no override" — the module's own
-        # REGIONS pool applies, exactly as if the pack had never mentioned it.
-        regions=regions if regions else hierarchy.REGIONS,
+        # Forwarded as-is, both of them. This used to read
+        # `regions if regions else hierarchy.REGIONS`, which looked like a
+        # harmless restatement of the callee's own default and was not: it
+        # substituted the *module* default for the absent value, so a caller
+        # who had chosen a locale got Australian state abbreviations printed
+        # into every site name and no signal that its choice had been dropped.
+        # `hierarchy.generate` resolves the pair itself — a pack's regions are
+        # the narrower claim and win — and passing None is how it is told that
+        # nobody made that narrower claim.
+        regions=regions,
+        locale=locale,
         physics=physics,
     )
 
@@ -486,8 +505,8 @@ def generate(
     # Drawn before the override is applied — see the docstring: a pack naming
     # the company (or its headquarters) must not change what any other stream
     # draws.
-    generated_name = names.company_name(company_rng)
-    generated_hq = names.headquarters(company_rng.derive("hq"))
+    generated_name = names.company_name(company_rng, locale=locale)
+    generated_hq = names.headquarters(company_rng.derive("hq"), locale=locale)
     company = Company(
         id=company_id,
         name=company_name or generated_name,
