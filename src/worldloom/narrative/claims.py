@@ -219,6 +219,26 @@ def validate(
             if len(word.split()) > 1 and word not in entity_names and not any(
                 word in name for name in entity_names
             ):
+                # One more chance before rejecting: drop the run's first word.
+                # A capitalised sentence-opener fused to a real name ("Within
+                # Mobile Ordering, conversion held") is the dominant false
+                # positive once sentence boundaries are handled, and the
+                # opener allow-list below only helps for the nine words it
+                # happens to list — "In Mobile Ordering" passed while "Within
+                # Mobile Ordering" was rejected, which is an allow-list
+                # failing the only way allow-lists do. Dropping exactly one
+                # word generalises it. Not more than one: English does not
+                # stack Title Case function words in front of a name
+                # mid-sentence, and every further dropped word widens the
+                # escape until any invented compound whose tail brushes a
+                # real name walks through — "Meridian Ordering Taskforce"
+                # must still be flagged even though "Ordering" sits inside a
+                # real "Mobile Ordering".
+                remainder = word.split(" ", 1)[1]
+                if remainder in entity_names or any(
+                    remainder in name for name in entity_names
+                ):
+                    continue
                 violations.append(
                     Violation(code="unknown_entity", detail=f"{word!r} is not an entity in this world")
                 )
@@ -233,6 +253,12 @@ def validate(
 #: supposed to be suspicious of capitalised runs — but the run it found starts one
 #: word too early. Found by the validator refusing prose this repository's own
 #: fixture provider had just written.
+#:
+#: The list is kept for the runs it stops from *forming* ("The Board" never
+#: becomes a run at all), but it is not the general rule: an opener it does not
+#: list is handled at flag time by dropping the run's first word — see the
+#: containment escape in ``validate`` — so the list no longer needs to grow a
+#: word every time a writer opens a sentence differently.
 _SENTENCE_OPENERS = frozenset({"For", "At", "In", "On", "By", "The", "A", "An", "This", "Both"})
 
 
@@ -242,19 +268,37 @@ def _capitalised_runs(text: str) -> list[str]:
     Deliberately conservative: it only flags runs of two or more capitalised words,
     because single capitalised words are too often ordinary sentence openings to be
     worth the false positives.
+
+    A run never crosses a sentence boundary. It used to: the terminal full stop
+    was stripped *before* the capitalisation test, so "Margin held in Food
+    Halls. Promotional depth was agreed centrally." surfaced the run 'Food
+    Halls Promotional' — a real entity name welded to the next sentence's first
+    word, rejected as an invention. Five independent writers hit this against
+    real names, so the run now closes at ``.``, ``!`` or ``?`` on the raw
+    token. Abbreviations and ellipses get no special handling because the
+    compiled corpus contains neither (checked against every example artifact),
+    and even a name with an internal "St." would survive the split: each
+    fragment of a real name passes the containment test on its own.
     """
     runs: list[str] = []
     current: list[str] = []
+
+    def flush() -> None:
+        if len(current) > 1:
+            runs.append(" ".join(current))
+        current.clear()
+
     for token in text.replace("\n", " ").split(" "):
         stripped = token.strip(".,;:()'\"")
         if not current and stripped in _SENTENCE_OPENERS:
             continue
         if stripped[:1].isupper() and stripped[1:2].islower():
             current.append(stripped)
+            # Trailing quotes and parens are not the sentence's last word —
+            # 'Halls.)' still ends the sentence — so peel them before asking.
+            if token.rstrip("()'\"’").endswith((".", "!", "?")):
+                flush()
         else:
-            if len(current) > 1:
-                runs.append(" ".join(current))
-            current = []
-    if len(current) > 1:
-        runs.append(" ".join(current))
+            flush()
+    flush()
     return runs

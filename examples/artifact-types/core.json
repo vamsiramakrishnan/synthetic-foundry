@@ -376,7 +376,7 @@
             "close."
           ],
           "scope": "any",
-          "purpose": "The sequence, in order, with the moment the close was put at risk made explicit. Times matter here; narrative flourish does not."
+          "purpose": "The sequence, in order, with the moment the close was put at risk made explicit. Order matters here; narrative flourish does not. No fact supplied renders a clock time — and the digits rule forbids writing one — so carry the timeline as sequence: what happened first, what followed, and what it forced."
         },
         {
           "heading": "Initial assessment and why it was wrong",
@@ -384,7 +384,7 @@
             "ops.cause_ruled_out"
           ],
           "scope": "any",
-          "purpose": "State the hypothesis triage recorded and why it was ruled out. Write it as a belief held at the time, not as an error — the point is what the evidence supported then, not blame now."
+          "purpose": "State how the initial attribution was closed: the evidence supplied is the refutation, and the belief it tested is implicit in it. Write it as a belief examined and ruled out at the time, not as an error — the point is what the evidence supported then, not blame now. The hypothesis itself is cited under Root cause; this section owns only the ruling-out."
         },
         {
           "heading": "Root cause",

@@ -12,10 +12,37 @@ against a fact ledger; a list of claims each carrying its supporting fact IDs ca
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from pydantic import Field, model_validator
 
 from ..models import Model
+
+if TYPE_CHECKING:  # pragma: no cover
+    from ..models import CanonicalFact
+
+
+def superseded_for(fact: CanonicalFact, cutoff: datetime | None) -> bool:
+    """Whether *fact* was already superseded for an author writing at *cutoff*.
+
+    Not the same question as ``fact.is_superseded``, and the difference cost
+    three writers a round each. The ledger's flag is about the corpus's final
+    state; a request is about one author's moment. ``close.status = delayed``
+    is superseded by ``close.status = final`` days later — but the author whose
+    ``knows_as_of`` falls inside the delay is *required* to state "delayed" as
+    the current position, and a request that hands them the fact stamped
+    ``superseded: true`` (with a rule saying such facts were "proved wrong")
+    contradicts its own purpose. Nobody was wrong; the world just moved on
+    after the author stopped looking.
+
+    So: superseded *for this author* means the fact's validity had already
+    ended by their cut-off. A fact superseded only after the cut-off is, for
+    them, simply current. With no cut-off the author sees the finished world,
+    and the ledger's own flag is the right answer.
+    """
+    if fact.valid_to is None:
+        return False
+    return cutoff is None or fact.valid_to <= cutoff
 
 
 class NarrativeRequest(Model):
@@ -74,20 +101,6 @@ class NarrativeRequest(Model):
     guidance for the author, not a rejection rule, because vocabulary is a
     register question and the validators police facts, not style."""
     target_words: int = 120
-    avoid_texts: list[str] = Field(default_factory=list)
-    """Prose this section must not resemble, supplied verbatim.
-
-    Carried on the *request* rather than passed alongside it, because it is
-    part of what this author knows: "the close pack already says this three
-    times, in these words" is a brief, not a scolding. Empty for every ordinary
-    narration — it is filled only by ``worldloom refine``, where a measurement
-    (`similarity.near_duplicate_pairs`) decided which sections repeat each
-    other and handed the offending text back as the constraint.
-
-    Only the ``section_prose_varied`` prompt renders it. The stock prompt has
-    no slot for it, so an ordinary narration is unchanged whether this is
-    populated or not — which is what keeps every existing corpus byte-identical
-    through the addition of the field."""
     fact_digest: str = ""
     """Content address of the facts supplied, so the ledger key moves when they do."""
 

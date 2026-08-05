@@ -460,6 +460,82 @@ def test_a_possessive_of_a_known_entity_is_not_an_invented_one(narrated: World) 
     assert not any(v.code == "unknown_entity" for v in verdict.violations), verdict.violations
 
 
+def test_a_capitalised_run_never_crosses_a_sentence_boundary(narrated: World) -> None:
+    """Regression, verbatim from the five-world narration: the terminal full stop
+    was stripped *before* the capitalisation test, so a sentence ending in an
+    entity name fused with the next sentence's first word — 'Food Halls
+    Promotional', 'Chidubem Okafor Please' — and two real names were rejected as
+    inventions. The run must close at sentence-terminal punctuation."""
+    facts = {f.id: f for f in narrated.facts}
+    fact = narrated.facts.first()
+
+    for text, entity in (
+        ("Margin held in Food Halls. Promotional depth was agreed centrally.", "Food Halls"),
+        ("Sent to Chidubem Okafor. Please review before Friday.", "Chidubem Okafor"),
+    ):
+        verdict = validate(
+            _request(allowed_fact_ids=[fact.id]),
+            GeneratedNarrative(
+                text=text,
+                claims=[GeneratedClaim(text=text, supporting_fact_ids=[fact.id])],
+            ),
+            facts,
+            entity_names=frozenset({entity}),
+        )
+        assert not any(v.code == "unknown_entity" for v in verdict.violations), (
+            text, verdict.violations,
+        )
+
+    # The boundary split must not blind the check to a genuine invention that
+    # follows a real name — only the welding was wrong, not the suspicion.
+    verdict = validate(
+        _request(allowed_fact_ids=[fact.id]),
+        GeneratedNarrative(
+            text="Margin held in Food Halls. Westgate Logistics reviewed it.",
+            claims=[GeneratedClaim(text="Reviewed.", supporting_fact_ids=[fact.id])],
+        ),
+        facts,
+        entity_names=frozenset({"Food Halls"}),
+    )
+    assert any(v.code == "unknown_entity" for v in verdict.violations)
+
+
+def test_any_sentence_opener_before_a_real_name_is_not_an_invented_entity(narrated: World) -> None:
+    """The opener allow-list generalised: 'In Mobile Ordering' passed while
+    'Within Mobile Ordering' was rejected, because the escape only fired for the
+    nine words the list happened to hold. A run that fails containment is now
+    retried without its first word — a capitalised opener fused to a real name is
+    the dominant false positive — and only rejected if the remainder is still
+    nothing of this world."""
+    facts = {f.id: f for f in narrated.facts}
+    fact = narrated.facts.first()
+
+    verdict = validate(
+        _request(allowed_fact_ids=[fact.id]),
+        GeneratedNarrative(
+            text="Within Mobile Ordering, conversion held to plan.",
+            claims=[GeneratedClaim(text="Conversion held.", supporting_fact_ids=[fact.id])],
+        ),
+        facts,
+        entity_names=frozenset({"Mobile Ordering"}),
+    )
+    assert not any(v.code == "unknown_entity" for v in verdict.violations), verdict.violations
+
+    # Dropping one word is the escape, not a hole: an invented compound whose
+    # tail merely brushes a real name still fails, because the remainder after
+    # the drop ('Ordering Taskforce') is contained in no entity name.
+    verdict = validate(
+        _request(allowed_fact_ids=[fact.id]),
+        GeneratedNarrative(
+            text="Meridian Ordering Taskforce met twice.",
+            claims=[GeneratedClaim(text="Met.", supporting_fact_ids=[fact.id])],
+        ),
+        facts,
+        entity_names=frozenset({"Mobile Ordering"}),
+    )
+    assert any(v.code == "unknown_entity" for v in verdict.violations)
+
+
 def test_a_truncated_reference_gets_feedback_naming_the_exact_id(narrated: World) -> None:
     """The other live finding: a model that writes {{fact:0015}} for FACT-0015
     burns every retry unless the rejection says what right looks like. When
@@ -596,25 +672,10 @@ def test_narration_needs_something_to_narrate() -> None:
 
 
 def test_prompts_are_versioned() -> None:
-    assert prompts.versions() == {"section_prose": "3", "section_prose_varied": "1"}
-    assert prompts.SECTION_PROSE.key == "section_prose@3"
-    assert prompts.SECTION_PROSE_VARIED.key == "section_prose_varied@1"
+    assert prompts.versions() == {"section_prose": "4"}
+    assert prompts.SECTION_PROSE.key == "section_prose@4"
     with pytest.raises(KeyError, match="unknown prompt"):
         prompts.get("nope")
-
-
-def test_the_varied_prompt_is_the_stock_one_plus_what_to_avoid() -> None:
-    """A separate prompt rather than a flag, because the prompt key is part of
-    the ledger key: a section rewritten under a different brief is a different
-    generative call and has to be recorded as one. Everything else about the
-    brief — the facts, the cut-off, the forbidden claims — is deliberately
-    identical, so a refined section is held to the constraints a first draft
-    was rather than to looser ones."""
-    varied = prompts.SECTION_PROSE_VARIED.template
-    assert "{avoid}" in varied
-    assert "{avoid}" not in prompts.SECTION_PROSE.template
-    for slot in ("{facts}", "{forbidden}", "{cutoff}", "{feedback}", "{purpose}"):
-        assert slot in varied, slot
 
 
 def test_the_prompt_names_the_facts_and_the_rules(narrated: World) -> None:

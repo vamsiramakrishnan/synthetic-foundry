@@ -1098,15 +1098,34 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "who will read this section and nothing else.",
         ),
         SectionPlan(
+            # "Times matter here" was unsatisfiable as stated, and two writers
+            # independently said so: no fact this section is scoped to renders
+            # a clock time, and the digit rule forbids typing one. Every writer
+            # who passed delivered sequence, so the purpose now asks for what
+            # the facts actually fund — order, not clocks.
             "Timeline", ("ops.incident_opened", "ops.valuation_status", "close."), "any",
             "The sequence, in order, with the moment the close was put at risk made "
-            "explicit. Times matter here; narrative flourish does not.",
+            "explicit. Order matters here; narrative flourish does not. No fact "
+            "supplied renders a clock time — and the digits rule forbids writing one — "
+            "so carry the timeline as sequence: what happened first, what followed, "
+            "and what it forced.",
         ),
         SectionPlan(
+            # This purpose demanded "the hypothesis triage recorded" while the
+            # kinds scope it to the refutation alone — the hypothesis fact sits
+            # in "Root cause". Widening the scope to `ops.cause` would fix the
+            # wording but pull the confirmed cause in too, and — through the
+            # intent's required-first-three rule in `_request_for` — demand
+            # citations the accepted reference narration in
+            # examples/grocery-close never made. So the purpose is brought to
+            # the facts rather than the facts to the purpose: this section owns
+            # the ruling-out, and says where the hypothesis itself lives.
             "Initial assessment and why it was wrong", ("ops.cause_ruled_out",), "any",
-            "State the hypothesis triage recorded and why it was ruled out. Write it as a "
-            "belief held at the time, not as an error — the point is what the evidence "
-            "supported then, not blame now.",
+            "State how the initial attribution was closed: the evidence supplied is the "
+            "refutation, and the belief it tested is implicit in it. Write it as a "
+            "belief examined and ruled out at the time, not as an error — the point is "
+            "what the evidence supported then, not blame now. The hypothesis itself is "
+            "cited under Root cause; this section owns only the ruling-out.",
         ),
         SectionPlan(
             "Root cause", ("ops.cause", "ops.root_cause_classification", "ops.mapping_table_owner"), "any",

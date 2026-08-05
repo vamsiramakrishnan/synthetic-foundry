@@ -11,6 +11,7 @@ repository*, and that a rejection says enough to fix the problem.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -80,6 +81,121 @@ def test_the_rules_name_the_traps_an_agent_falls_into(world: World) -> None:
     assert "superseded" in rules
     assert "required" in rules
     assert "knows_as_of" in rules
+
+
+def test_the_digit_rule_states_what_the_regex_enforces(world: World) -> None:
+    """The check is lexical — any digit run outside a reference, not merely a
+    restated ledger figure — and the rules must say so, with the consequence
+    (spell ordinals and counts in words). Writers who read only the old rule
+    learned the truth from a rejection instead."""
+    rules = " ".join(handshake.RULES).lower()
+    assert "no digit" in rules
+    assert "lexical" in rules
+    assert "words" in rules
+
+
+def test_the_superseded_rule_and_flag_are_relative_to_the_cutoff(world: World) -> None:
+    """`close.status = delayed` superseded by `= final` days later is a status
+    transition, not a wrong belief — and for an author whose `knows_as_of` falls
+    inside the delay it is simply current. The payload flag must say so, and the
+    wrong-belief guidance must claim only facts already superseded at writing
+    time. Three writers hit the old contradiction and resolved it three
+    different ways."""
+    superseded_rule = next(r for r in handshake.RULES if "`superseded: true`" in r)
+    assert "knows_as_of" in superseded_rule
+    assert "confidence of the moment" in superseded_rule
+
+    document = handshake.requests_document(world)
+    facts = {f.id: f for f in world.facts}
+    delayed = next(
+        f for f in world.facts if f.kind == "close.status" and f.is_superseded
+    )
+    hypothesis = next(
+        f for f in world.facts if f.kind == "ops.cause" and f.is_superseded
+    )
+
+    seen_current, seen_past = False, False
+    for request in document["requests"]:
+        cutoff = request["knows_as_of"]
+        for payload in request["facts"]:
+            fact = facts[payload["id"]]
+            if fact.valid_to is None:
+                assert not payload["superseded"]
+                continue
+            expected = cutoff is None or fact.valid_to <= datetime.fromisoformat(cutoff)
+            assert payload["superseded"] == expected, (request["id"], payload["id"])
+            if payload["id"] == delayed.id and not payload["superseded"]:
+                # The defect case: the ledger has moved on, the author had not.
+                seen_current = True
+            if payload["id"] == hypothesis.id and payload["superseded"]:
+                seen_past = True
+    assert seen_current, "no request saw the delayed status as its author did — as current"
+    assert seen_past, "the refuted hypothesis must still arrive marked superseded after refutation"
+
+
+def test_a_purpose_never_quotes_a_figure_its_facts_do_not_fund(world: World) -> None:
+    """The escalation thread's root-cause message quoted its event summary —
+    'leaving 16,183 SKUs unmapped' — while the fact carrying that count sat in
+    another document's scope, so the request demanded a figure it had withheld
+    and the digit rule forbade typing. Every digit run a purpose quotes must
+    appear in some supplied fact's statement."""
+    import re
+
+    document = handshake.requests_document(world)
+    for request in document["requests"]:
+        funded = " ".join(payload["statement"] for payload in request["facts"])
+        # Multi-digit runs only: a purpose saying "someone hitting this at 2am"
+        # is colour, not a figure the writer is asked to state, and single
+        # digits are how such colour is written. Every quoted *figure* in this
+        # corpus — a SKU count, an incident reference — is several digits long.
+        for run in re.findall(r"\d[\d,.]+", request["purpose"]):
+            assert run in funded, (
+                f"{request['id']} quotes {run!r} in its purpose but no supplied fact carries it"
+            )
+
+
+def test_the_escalation_email_can_cite_the_date_the_close_moved_to(world: World) -> None:
+    """Its purpose announces the close moving; `close.delay` itself is only
+    measured days after this thread's cut-off, so the revised date is the fact
+    that honestly funds the announcement."""
+    facts = {f.id: f for f in world.facts}
+    thread = [r for r in handshake.pending(world) if r.artifact_type == "email_thread"]
+    assert thread
+    last = max(thread, key=lambda r: r.section)
+    kinds = {facts[f].kind for f in last.allowed_fact_ids}
+    assert "close.revised_date" in kinds
+    assert "close.delay" not in kinds, (
+        "the realised delay postdates the thread's cut-off; offering it is a not_yet_known trap"
+    )
+
+
+def test_the_rca_timeline_asks_for_sequence_not_clock_times(world: World) -> None:
+    """Two writers independently called the old purpose unsatisfiable: 'times
+    matter here', no supplied fact rendering a clock time, and a rules text
+    forbidding digits. The purpose must ask for what the facts fund."""
+    request = next(
+        r for r in handshake.pending(world)
+        if r.artifact_type == "incident_rca" and r.section == "Timeline"
+    )
+    assert "Times matter" not in request.purpose
+    assert "sequence" in request.purpose.lower()
+
+
+def test_the_initial_assessment_purpose_asks_only_for_what_it_funds(world: World) -> None:
+    """The old purpose demanded 'the hypothesis triage recorded' while the
+    section's scope held only the refutation — the hypothesis fact lives under
+    Root cause. The purpose now owns the ruling-out and says where the
+    hypothesis is told."""
+    facts = {f.id: f for f in world.facts}
+    request = next(
+        r for r in handshake.pending(world)
+        if r.artifact_type == "incident_rca"
+        and r.section == "Initial assessment and why it was wrong"
+    )
+    kinds = {facts[f].kind for f in request.allowed_fact_ids}
+    assert kinds == {"ops.cause_ruled_out"}
+    assert "State the hypothesis" not in request.purpose
+    assert "Root cause" in request.purpose
 
 
 def test_a_request_never_offers_a_fact_the_author_could_not_know(world: World) -> None:

@@ -66,10 +66,6 @@ class Prompt:
             facts="\n".join(lines) or "  (none)",
             forbidden="\n".join(f"  - {c}" for c in request.forbidden_claims) or "  (none)",
             feedback=f"\nThe previous attempt was rejected:\n{feedback}\n" if feedback else "",
-            # Rendered only by a template that has the slot. `str.format`
-            # ignores a keyword the template never names, so the stock prompt
-            # is untouched by this existing at all.
-            avoid="\n\n".join(f"  ---\n  {text}" for text in request.avoid_texts) or "  (none)",
         )
 
 
@@ -80,7 +76,15 @@ SECTION_PROSE = Prompt(
     # difference between prose that is legal and prose that argues. The template
     # changed, so the version does; a ledger key is only honest if a changed
     # prompt changes it.
-    version="3",
+    #
+    # v4 makes the rules state what the validator enforces, in step with the
+    # same rewording of `handshake.RULES`: the digit rule is lexical (no digit
+    # runs anywhere outside a reference, not merely "no restated figures"), and
+    # a fact whose validity ended before the cut-off is a past belief. The
+    # handshake's rules text is not itself a ledger-key component, but the
+    # brief a writer answers under changed on both paths, and this version is
+    # the one key component that records which brief that was.
+    version="4",
     template="""\
 Write the "{section}" section of a {artifact_type} for {audience}.
 
@@ -110,10 +114,13 @@ You must not claim:
 {forbidden}
 {feedback}
 Rules:
-- Every numeric value must appear as a {{{{fact:ID}}}} reference, never as digits.
+- No digits anywhere outside a {{{{fact:ID}}}} reference — the check is lexical.
+  Spell any other number (an ordinal, a count) out in words, or leave it out.
 - Every assertion must be supported by at least one of the facts above.
 - Do not mention anything not present in the facts above.
 - Facts marked REQUIRED must appear.
+- A fact whose validity had ended by your cut-off is a past belief. Tell it as
+  history — never as the current position.
 - Write to the purpose. Listing the facts in the order supplied is not the job.
 - Weight the facts. Not every one deserves a sentence.
 
@@ -121,41 +128,8 @@ Return the prose, and a list of the claims it makes with the fact IDs supporting
 """,
 )
 
-#: The same brief, plus what this section must not sound like.
-#:
-#: A separate prompt rather than a flag on the first, because the prompt key is
-#: part of the ledger key: a section rewritten under a different brief is a
-#: different generative call and has to be recorded as one, or a replay would
-#: hand back the prose the rewrite was supposed to replace.
-#:
-#: The avoid-set is not a style note. `worldloom refine` measures which
-#: passages are near-duplicates of each other (`similarity.near_duplicate_pairs`,
-#: exact, not sampled), hands the offending text over verbatim, and then
-#: *checks* that the answer moved: a rewrite still above the similarity
-#: threshold is rejected with the measured figure. "Be more varied" is advice;
-#: "you are 0.86 similar to this text, get below 0.55" is a target.
-SECTION_PROSE_VARIED = Prompt(
-    name="section_prose_varied",
-    version="1",
-    template=SECTION_PROSE.template.replace(
-        "You must not claim:\n{forbidden}\n{feedback}",
-        """You must not claim:
-{forbidden}
-
-This section is one of several in the corpus that currently read almost
-identically. Here is the prose it is being confused with — you must not
-resemble it. Same facts, genuinely different document: change what you lead
-with, what you subordinate, what you leave to the table, and the shape of the
-sentences. Do not simply reword it phrase by phrase; that scores as the same
-passage and will be rejected.
-{avoid}
-{feedback}""",
-    ),
-)
-
 _REGISTRY: dict[str, Prompt] = {
     SECTION_PROSE.name: SECTION_PROSE,
-    SECTION_PROSE_VARIED.name: SECTION_PROSE_VARIED,
 }
 
 

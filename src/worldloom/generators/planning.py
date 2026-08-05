@@ -446,7 +446,22 @@ def artifact_intents(
         # cleanest record of knowledge arriving in order.
         intent("email_thread", "operations", "technology", roles["svc_desk"],
                [k["fact_feed_status"], k["fact_incident_ref"], k["fact_hypothesis"],
-                k["fact_cause_ruled_out"], k["fact_cause"], k["fact_close_delayed"]],
+                k["fact_cause_ruled_out"], k["fact_cause"], k["fact_close_delayed"],
+                # Appended, never inserted: the first three of this list that
+                # land in a message's allowed set become its required facts
+                # (`_request_for` caps required at three, in this order), and
+                # the reference narration in examples/grocery-close cites
+                # exactly those. What the two additions fund: the root-cause
+                # message's own purpose quotes its event summary, which names
+                # the unmapped-SKU count, and the escalation message announces
+                # the close moving — both figures were quoted at the writer
+                # while the facts carrying them sat only in other documents'
+                # scopes, so the request demanded what it had withheld. The
+                # realised delay in days is deliberately NOT added: it is only
+                # measured when the close lands, days after this thread's
+                # cut-off, and an allowed fact the author cannot cite without
+                # tripping `not_yet_known` is a trap, not a widening.
+                k["fact_affected"], k["fact_revised_date"]],
                [k["event_incident_opened"], k["event_hypothesis"],
                 k["event_root_cause"], k["event_close_delayed"]], "small",
                "The incident was escalated by email before any formal record existed; "
