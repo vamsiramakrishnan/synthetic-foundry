@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from .generators.operations import business_days_after, period_end
 from .parameters import DEFAULT, Parameters
+from .recipe import locale_of
 from .rng import Rng
 from .scenarios import lore_index
 
@@ -96,10 +97,19 @@ class QuarterlyCapitalReturn:
             unit_share_of=unit_share_of,
             physics=self.physics,
         )
+        # This corpus's own working week, for the start date *and* the walk.
+        # Both, because `liquidity.generate`'s own note says the two must agree:
+        # a series begun on one calendar and stepped on another is a series
+        # nothing can check. `banking.validate.liquidity_cadence_gap` reads the
+        # same locale, and until this line existed it failed a Gulf bank
+        # truthfully — the observations really were landing on Fridays.
+        calendar = locale_of(world.recipe)
         series = liquidity.generate(
             rng.derive("liquidity"),
-            start=business_days_after(period_end(self.period), _LIQUIDITY_START_BD),
+            start=business_days_after(period_end(self.period), _LIQUIDITY_START_BD,
+                                      calendar),
             days=regulatory.LIQUIDITY_DAYS,
+            calendar=calendar,
             physics=self.physics,
         )
         affected_book = next(

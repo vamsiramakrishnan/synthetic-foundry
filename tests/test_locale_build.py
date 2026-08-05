@@ -357,20 +357,17 @@ def test_a_hand_written_document_may_state_industry_pools_in_any_order() -> None
 # ---------------------------------------------------------------------------
 
 
-def test_the_working_week_does_not_reach_the_close_calendar() -> None:
-    """The gap this change leaves open, and the sharpest one.
+def test_the_working_week_reaches_the_close_calendar() -> None:
+    """This test was written the other way up, asserting the gap: a Gulf
+    retailer's close was due on the day a Sydney retailer's was, because
+    `MonthEndClose.run` called `operations.generate` without a calendar and no
+    world carried a route from its locale to that argument. It is the assertion
+    that failed the day the argument was passed, which is what it was for.
 
-    `locales.GULF` works Sunday to Thursday and the arithmetic knows it —
-    `Locale.business_days_after` returns a different date, and
-    `operations.generate` has taken a `calendar` since the protocol was
-    written. What no world carries is a route from its locale to that
-    argument: `MonthEndClose.run` calls `operations.generate` without one, and
-    `scenarios.py` is where that line lives. So a Gulf retailer's close is due
-    on the day a Sydney retailer's is.
-
-    Asserted rather than described, because the assertion is what will fail the
-    day the argument is passed — which is the signal that this docstring, and
-    the `--locale` help text that repeats it, need rewriting.
+    Both directions, because a calendar that moved every corpus would be as
+    wrong as one that moved none: August ends on a Monday, and four working
+    days later is Friday the 4th in Sydney and Sunday the 6th in Manama —
+    Gulf works Sunday to Thursday, so it has already spent its weekend.
     """
     from worldloom.scenarios import MonthEndClose
 
@@ -383,12 +380,11 @@ def test_the_working_week_does_not_reach_the_close_calendar() -> None:
     def due(world):  # type: ignore[no-untyped-def]
         return next(f.text_value for f in world.facts if f.kind == "close.due_date")
 
-    assert due(au) == due(gulf)
-    # And what the corpus *would* say if the calendar arrived, so the gap is
-    # legible from here rather than only from `locales.GULF`.
     ends = date(2026, 8, 31)
     assert locales.AUSTRALIA.business_days_after(ends, 4) == date(2026, 9, 4)
     assert locales.GULF.business_days_after(ends, 4) == date(2026, 9, 6)
+    assert due(au) == "2026-09-04"
+    assert due(gulf) == "2026-09-06"
 
 
 def test_the_liquidity_cadence_check_asks_this_corpus_own_calendar() -> None:
@@ -396,13 +392,14 @@ def test_the_liquidity_cadence_check_asks_this_corpus_own_calendar() -> None:
     day" on the engine's Monday-to-Friday, so it would have failed a correct
     Gulf series for a gap that is its weekend. It now asks the recipe.
 
-    Two halves, and both are asserted because each alone reads like the other's
-    bug. On the default calendar nothing moves — a bank validates exactly as it
-    did. On a Gulf recipe the check fires, and that failure is *true*:
-    `regulatory.generate` still builds the series on the default calendar (see
-    `generators/liquidity.py`, which names the same gap from the other side),
-    so a Gulf bank really is observing its LCR on Fridays. This is the only
-    thing in the corpus that reports the locale never reached the episode.
+    Both halves, because each alone reads like the other's bug. On the default
+    calendar nothing moves — a bank validates exactly as it did. On a Gulf
+    recipe it validates too, and only because the *generator* moved with the
+    checker: this assertion read `"liquidity_cadence_gap" in codes` while
+    `liquidity.generate` was still stepping Monday to Friday, and the failure
+    was true — a Gulf bank really was observing its LCR on Fridays. Checker and
+    generator now read one locale, so what is asserted is that they agree, and
+    that the series lands on days the company works.
     """
     from worldloom.banking_scenarios import QuarterlyCapitalReturn
 
@@ -412,5 +409,11 @@ def test_the_liquidity_cadence_check_asks_this_corpus_own_calendar() -> None:
 
     gulf = build(BankingWorld, "midsize_adi", locale="gulf").run(
         QuarterlyCapitalReturn(period=period))
-    codes = {v.code for v in gulf.validate().violations}
-    assert "liquidity_cadence_gap" in codes
+    assert gulf.validate().ok
+    observed = sorted(f.valid_from.date() for f in gulf.facts
+                      if f.kind == "liquidity.lcr")
+    assert observed, "no observations to check the cadence of"
+    # Friday and Saturday are the Gulf weekend, so no observation may land on
+    # one. Asserted against the days rather than the count: a series that
+    # simply had fewer points would pass a gap check and still be wrong.
+    assert all(locales.GULF.is_business_day(day) for day in observed)

@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from .generators.operations import business_days_after, period_end
 from . import profiles as _profiles
 from .parameters import DEFAULT, Parameters
+from .recipe import locale_of
 from .rng import Rng
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -193,6 +194,16 @@ class MonthEndClose:
             period=self.period,
             company_id=world.company.id,
             roles=roles,
+            # The corpus's own working week. `operations.generate` has accepted
+            # a calendar since locales landed and no caller passed one, so the
+            # working week was carried and inert: a Gulf company closed on
+            # Monday-to-Friday arithmetic and its due date fell on a Friday it
+            # does not work. Read off the recipe rather than the world because
+            # that is where the jurisdiction is recorded, and `locale_of`
+            # answers `locales.DEFAULT` for a corpus that names none — the same
+            # object `operations.CALENDAR` already was, so every existing
+            # corpus is the bytes it was.
+            calendar=locale_of(world.recipe),
             lore_by_target=index,
             incident_likelihood=likelihood,
             force_incident=self.include_operational_incident,

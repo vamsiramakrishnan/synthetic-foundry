@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .parameters import DEFAULT, Parameters
+from .recipe import locale_of
 from .rng import Rng
 from .scenarios import lore_index
 
@@ -136,6 +137,11 @@ class QuarterlyReserving:
             text=(world._recipe.get("pack") or {}).get("episode_text") or None,
             existing_philosophy=existing_philosophy,
             existing_margin_policy=existing_margin_policy,
+            # This corpus's own working week — see `MonthEndClose.run`. Every
+            # date the reserving cycle places is the quarter end plus a count of
+            # working days, so without this a Gulf insurer signs off its
+            # triangle on a Friday.
+            calendar=locale_of(world.recipe),
             physics=self.physics,
         )
 

@@ -349,12 +349,11 @@ Frankfurt and you get Katharina Kirchgässner in Berlin at `Supermarket BW 001`.
 A pack's own `name_pools`, `regions` and `headquarters` still win over the
 locale's, the same precedence `Pack.regions` has always had.
 
-One piece does not arrive: the **working week**. `Locale.working_week` and
-`holidays` are read by `business_days_after`, but nothing passes a calendar to
-`operations.generate` or `liquidity.generate`, so a Gulf close is still due on
-Monday-to-Friday arithmetic. A bank built at `--locale gulf` fails banking's
-`liquidity_cadence_gap` for exactly that reason, and the failure is true: the
-series really is observing LCR on Fridays.
+The **working week** arrives too. August 2026 ends on a Monday, and four
+working days later is Friday the 4th in Sydney and Sunday the 6th in Manama,
+because the Gulf week runs Sunday to Thursday and has already spent its
+weekend. The retail close, the bank's LCR observations and the insurer's
+reserving dates all step on the corpus's own calendar.
 
 **`--timeline`** replaces repetition with a history. `--periods 6` runs six
 closes signed by the same twenty-three people, drawn from the same distribution:

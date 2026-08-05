@@ -52,7 +52,7 @@ from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import episode_text
 from .finance import previous_periods
-from .operations import _at, business_days_after, period_end
+from .operations import CALENDAR, Calendar, _at, business_days_after, period_end
 from .triangles import TrianglePosition
 
 MONEY = "AUD_millions"
@@ -148,6 +148,7 @@ def generate(
     text: Mapping[str, str] | None = None,
     existing_philosophy: CanonicalFact | None = None,
     existing_margin_policy: CanonicalFact | None = None,
+    calendar: Calendar = CALENDAR,
     physics: Parameters = DEFAULT,
 ) -> ReservingEpisode:
     """Generate the phase-1 reserving cycle for the quarter ending *period*.
@@ -177,8 +178,13 @@ def generate(
     ends = period_end(period)
     prior_period = previous_periods(period, 3)[0]
     prior_ends = period_end(prior_period)
-    bd = lambda n: business_days_after(ends, n)  # noqa: E731 — read as arithmetic
-    prior_bd = lambda n: business_days_after(prior_ends, n)  # noqa: E731
+    # Every date this episode places is `ends` plus a count of *working* days,
+    # so the calendar is the difference between a quarter that closes on a
+    # Thursday and one that closes on a day the company does not work. Defaulted
+    # to the engine's, which is `locales.DEFAULT` by identity, so an insurer
+    # built before a locale could reach here is the bytes it was.
+    bd = lambda n: business_days_after(ends, n, calendar)  # noqa: E731 — read as arithmetic
+    prior_bd = lambda n: business_days_after(prior_ends, n, calendar)  # noqa: E731
 
     lt = roles["cat_lt_liability"]
     claims_sys, actuarial_sys = roles["sys_claims"], roles["sys_actuarial"]
