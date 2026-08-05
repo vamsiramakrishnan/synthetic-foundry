@@ -217,14 +217,30 @@ def test_a_standing_claim_is_dated_so_it_cannot_re_date_the_company(listed_pe) -
 
 
 def test_the_corpus_records_where_its_facet_lore_came_from(listed_pe) -> None:
-    """Recorded on the recipe rather than dropped. ``recipe.rebuild`` does not
-    replay the key yet — see ``world.extend_lore`` — and a corpus that asserts
-    something with no record of why is worse than one whose record is ahead of
-    its rebuilder."""
+    """The claims, not the commitments they became. Every id and date in a
+    commitment is a property of the world it landed in, so a rebuild that
+    re-attached them would collide with ids its own minter had issued; the claim
+    is what the build was given, and replaying it re-runs the construction."""
     _, faceted = listed_pe
-    recorded = faceted.world.recipe["lore"]
-    assert [entry["id"] for entry in recorded] == \
-           [c.id for c in faceted.world.lore[-2:]]
+    recorded = faceted.world.recipe["lore_claims"]
+    assert [entry["source"] for entry in recorded] == ["listing:listed",
+                                                       "governance:private_equity"]
+    assert all(entry["constrains"] for entry in recorded)
+
+
+def test_a_faceted_corpus_rebuilds_from_its_own_recipe(listed_pe) -> None:
+    """The gap `world.extend_lore` used to record and not close. A corpus whose
+    recipe replays into a world without its facet lore is a *different company*
+    reported as the same one — different unit formation dates, different
+    artifact density — which is the one failure a recipe exists to prevent."""
+    from worldloom import recipe as recipe_module
+
+    _, faceted = listed_pe
+    again = recipe_module.rebuild(faceted.world.recipe)
+    assert [c.model_dump() for c in again.lore] == \
+           [c.model_dump() for c in faceted.world.lore]
+    assert [p.model_dump() for p in again.people] == \
+           [p.model_dump() for p in faceted.world.people]
 
 
 def test_facet_lore_composes_with_a_packs_own_rather_than_replacing_it() -> None:

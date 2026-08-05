@@ -42,6 +42,12 @@ if TYPE_CHECKING:  # pragma: no cover
 #: artifacts it is spelled into.
 LOCALE_KEY = "locale"
 
+#: Where a corpus records the facet claims its lore was minted from. Written by
+#: ``world.extend_lore`` rather than by ``build_recipe``, because the claims
+#: reach a build through the domain's own ``lore_claims`` field and never pass
+#: through this module on the way in — see ``_with_lore_claims`` for the way out.
+LORE_CLAIMS_KEY = "lore_claims"
+
 
 class RecipeError(Exception):
     """Raised when a corpus cannot be rebuilt from what it carries."""
@@ -341,6 +347,28 @@ def _with_seasonality(spec: Any, seasonality: Any) -> Any:
         ) from exc
 
 
+def _with_lore_claims(spec: Any, claims: Any) -> Any:
+    """*spec* rebound to the facet lore it was built with, or untouched.
+
+    Same posture as ``_with_roles``, and load-bearing for the same reason. Facet
+    lore is an *input* to the organisation — it dates business units, attaches
+    persona traits and decides artifact density — so a corpus rebuilt without it
+    is a different company with the same recipe, which is the one failure
+    ``rebuild`` exists to make impossible.
+    """
+    if not claims:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, lore_claims=claims)
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records facet lore, but {type(spec).__name__} does not"
+            f" accept any: {exc}"
+        ) from exc
+
+
 def _with_roles(spec: Any, role_table: Any) -> Any:
     """*spec* rebound to an authored role table, or untouched when there is none.
 
@@ -431,6 +459,17 @@ def rebuild(
         (row[0], row[1], row[2], row[3]) for row in authored_roles
     )
 
+    # Reconstructed up front beside the physics and the trading year, and for
+    # the same reason: a recipe whose facet lore failed to load and fell back to
+    # none would rebuild a world with different unit formation dates and a
+    # different artifact density while reporting success.
+    try:
+        from . import facets as _facets
+
+        lore_claims = _facets.claims_from_document(recipe.get(LORE_CLAIMS_KEY) or ())
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RecipeError(f"this corpus's recorded facet lore does not load: {exc}") from exc
+
     if recipe.get("pack") is not None:
         # A pack-built world: the recipe carries the pack whole, and the
         # pack's base names the engine. Same closed-vocabulary posture — the
@@ -449,6 +488,7 @@ def rebuild(
             )
         spec = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT)
         spec = _with_estate(spec, recipe.get("estate"))
+        spec = _with_lore_claims(spec, lore_claims)
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
     else:
         try:
@@ -479,6 +519,7 @@ def rebuild(
         # both branches one path and turns a domain that still does not accept
         # one into a stated error instead of a `TypeError` from a constructor.
         spec = _with_estate(spec, recipe.get("estate"))
+        spec = _with_lore_claims(spec, lore_claims)
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
 
     # Re-attached rather than passed to the spec, because no world spec accepts

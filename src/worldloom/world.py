@@ -916,25 +916,26 @@ def extend_lore(
     the identical object's contents and nothing moves at all. That is what makes
     a no-facet build byte-identical rather than merely usually-identical.
 
-    **The recipe records the claims' commitments, and cannot yet replay them.**
-    Written because a corpus that asserts something ought to record where the
-    assertion came from, and because this is the exact payload a replay needs.
-    ``recipe.rebuild`` does not read the key yet — it reconstructs physics,
-    seasonality, role table, estate and pack, and a world-level lore field is
-    not among them — so a faceted corpus rebuilt from its recipe today comes
-    back without its facet lore. Recorded rather than dropped so that gap is
-    visible in the artifact instead of only in a changelog; closing it is
-    ``lore=`` on ``build_recipe`` and a ``LoreCommitment`` round-trip in
-    ``rebuild``.
+    **The recipe records the claims, not the commitments they became.** The
+    commitments are the *output* of this function and every id and date in them
+    is a property of the world they landed in; a rebuild that re-attached them
+    would paste two commitments onto a world built without them, colliding with
+    ids the minter had already issued and dating the organisation by lore it was
+    not built from. The claim is what the build was given, so replaying it
+    re-runs this same construction — the posture ``physics``, ``role_table`` and
+    ``seasonality`` already take. ``recipe.rebuild`` reads the key back through
+    ``facets.claims_from_document``.
     """
     if not claims:
         return base, recipe
     from . import facets as facets_module
 
+    from .recipe import LORE_CLAIMS_KEY
+
     implied = facets_module.commit(claims, minter, alongside=base)
     return (*base, *implied), {
         **recipe,
-        "lore": [commitment.model_dump(mode="json") for commitment in implied],
+        LORE_CLAIMS_KEY: [claim.as_dict() for claim in claims],
     }
 
 

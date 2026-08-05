@@ -491,6 +491,7 @@ def build(
     # facet registry moves under it, whereas a stored `listing=listed` would
     # replay whatever `listed` came to mean later while reporting success.
     facet_roles: tuple[tuple[str, str, str, str | None], ...] = ()
+    facet_lore: tuple[Any, ...] = ()
     facet_calendar: str | None = None
     facet_estate: str | None = None
     facet_overrides: dict[str, Any] = {}
@@ -541,20 +542,15 @@ def build(
         console.print(
             f"[dim]facets:[/dim] {', '.join(f'{k}={v}' for k, v in sorted(resolved.chosen.items()))}"
         )
-        # Lore and unmet wants are printed, never carried. A `LoreConstraint`
-        # this build cannot attach to a domain's own lore would be exactly the
-        # carried-cited-and-inert failure `packs.lint` exists to catch, and a
-        # facet layer that reproduced it would look load-bearing while changing
-        # nothing. Saying so is the only honest pressure for a seam that takes
-        # them — today that seam is a pack's `lore`.
+        # Claims rather than constraints, because a claim is what a domain can
+        # mint: `world.extend_lore` supplies the id and the effective date this
+        # flag has no business choosing. This used to print the lore as `unmet`
+        # and tell the caller to write a pack, which was honest while no seam
+        # existed and is now merely stale — the same carried-cited-and-inert
+        # failure in reverse, a capability reported as missing while it works.
+        facet_lore = resolved.claims
         for want in facets_module.unmet(resolved):
             console.print(f"[yellow]unmet:[/yellow] {escape(want)}")
-        if resolved.lore:
-            console.print(
-                f"[yellow]unmet:[/yellow] {len(resolved.lore)} lore constraint(s) these"
-                " facets imply — build has no seam to add lore to a domain's own;"
-                " put them on a pack's `lore` and pass --pack"
-            )
 
     # Estate: an explicit `--estate` beats a facet's, because the caller said it
     # and the facet only implied it. Same rule the SDK's `.facets()` states.
@@ -616,11 +612,13 @@ def build(
         this claim honestly has that nothing here implements is evidence, and
         the only failure would be letting it pass unsaid.
         """
-        if not facet_roles and facet_calendar is None:
+        if not facet_roles and facet_calendar is None and not facet_lore:
             return builder
         from dataclasses import replace as _replace_claimed
 
         changes: dict[str, Any] = {}
+        if facet_lore:
+            changes["lore_claims"] = facet_lore
         if facet_roles:
             from . import roles as roles_module
 
@@ -645,14 +643,19 @@ def build(
             try:
                 builder = _replace_claimed(builder, **{name: value})
             except TypeError:
+                # Keyed by field rather than by an if/else on one of them: with
+                # two entries the else branch was the role message by
+                # elimination, and the third entry would have reported missing
+                # lore as missing roles.
                 console.print(
-                    f"[yellow]unmet:[/yellow] the facets imply {name}"
-                    f" {facet_calendar!r} and {type(builder).__name__} has no such"
-                    " field, so nothing carries it"
-                    if name == "seasonality" else
-                    f"[yellow]unmet:[/yellow] the facets imply {len(facet_roles)}"
-                    f" role(s) and {type(builder).__name__} has no role table to"
-                    " append them to, so nothing mints them"
+                    "[yellow]unmet:[/yellow] the facets imply "
+                    + {
+                        "seasonality": f"the {facet_calendar!r} trading calendar",
+                        "role_table": f"{len(facet_roles)} role(s)",
+                        "lore_claims": f"{len(facet_lore)} lore commitment(s)",
+                    }[name]
+                    + f" and {type(builder).__name__} has no `{name}` field, so"
+                    " nothing carries them"
                 )
                 continue
             if name == "seasonality":

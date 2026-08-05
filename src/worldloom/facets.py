@@ -57,7 +57,7 @@ from .parameters import DEFAULT, Parameters, Span
 
 __all__ = [
     "Choice", "Facet", "FACETS", "Implication", "LoreClaim", "Resolved", "choices",
-    "commit", "describe", "publish", "resolve",
+    "claims_from_document", "commit", "describe", "publish", "resolve",
 ]
 
 
@@ -180,6 +180,39 @@ class LoreClaim:
     kind: LoreKind
     assertion: str
     constrains: tuple[LoreConstraint, ...]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"source": self.source, "kind": self.kind.value,
+                "assertion": self.assertion,
+                "constrains": [c.model_dump(mode="json") for c in self.constrains]}
+
+
+def claims_from_document(payload: Any) -> tuple[LoreClaim, ...]:
+    """Claims as a recipe stored them.
+
+    The claims and not the commitments they became, which is the whole reason
+    a recipe can replay them. A commitment carries an id off the build's own
+    minter and a date off the lore it joined; storing those and re-attaching
+    them would be a rebuild that *pasted* two commitments onto a world built
+    without them, so the ids would collide with whatever the minter had already
+    issued and the organisation would be dated by lore it was not built from.
+    The claim is what the build was given, so replaying it re-runs the same
+    construction — the same posture as ``physics`` and ``role_table``.
+    """
+    return tuple(
+        LoreClaim(
+            source=str(entry["source"]),
+            # Through the enum rather than kept as a string: `LoreKind` and
+            # `ConstraintKind` are closed vocabularies, and a recipe naming a
+            # kind that no longer exists must fail on load rather than build a
+            # world whose lore constrains something the engine ignores.
+            kind=LoreKind(entry["kind"]),
+            assertion=str(entry["assertion"]),
+            constrains=tuple(LoreConstraint.model_validate(c)
+                             for c in entry["constrains"]),
+        )
+        for entry in payload
+    )
 
 
 @dataclass(frozen=True)

@@ -235,9 +235,15 @@ registry moves under it, where a stored `listing=listed` would replay whatever
 `listed` came to mean later while reporting success. What a facet implies and
 nothing implements — an analyst consensus, a regulator with a pricing
 determination — is printed as `unmet:` rather than dropped, the same evidence a
-probe's unbound leaf is. Facet **lore** is in that category today: `build` has
-no seam to add lore to a domain's own, so it is reported and you paste it into a
-pack's `lore`.
+probe's unbound leaf is.
+
+Facet **lore** is not in that category. `world.extend_lore` mints it into the
+domain's own lore before the organisation is generated, because lore is an
+*input*: it dates the business units, attaches persona traits, and decides how
+much status reporting a close produces. The recipe records the **claims** it was
+minted from — under `lore_claims`, not the finished commitments, whose ids and
+dates belong to the world they landed in — so a faceted corpus rebuilds into
+itself.
 
 **`--messiness`** grades how well the archive is kept: `pristine`, `well_run`,
 `lived_in`, `neglected`. Every corpus so far has been almost perfectly kept, and
