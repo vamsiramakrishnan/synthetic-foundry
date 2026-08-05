@@ -251,6 +251,16 @@ class InsuranceWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    estate: str | None = None
+    """Grow a technology landscape: ``"small"``, ``"medium"`` or ``"large"``
+    (``landscape.INSURANCE.profiles``).
+
+    Insurance is where this matters most and where it was most out of reach.
+    ``insurance_org.generate`` returns ``services=()``, so a reserving corpus
+    has had no technology graph whatsoever — blast radius, "who gets paged" and
+    "what does nothing route around" were not thin questions here, they were
+    unanswerable ones. ``None`` still mints nothing, which is what keeps every
+    insurer built before this field existed byte-identical."""
     role_table: tuple[tuple[str, str, str, str | None], ...] | None = None
     """Who exists in this organisation (``worldloom.roles``).
 
@@ -318,12 +328,39 @@ class InsuranceWorld:
             role_table=self.role_table,
         )
 
+        systems, services = org.systems, org.services
+        if self.estate is not None:
+            from .generators import estate as estate_module
+            from .landscape import INSURANCE
+
+            grown = estate_module.generate(
+                rng.derive("estate"), minter,
+                profile=self.estate,
+                landscape=INSURANCE,
+                # Empty, and legitimately so: this is the one vertical whose
+                # core services are `()`, which makes every generated node's
+                # layer come out of the systems alone. `core_layers` handles it
+                # — there is simply nothing to infer a layer for.
+                core_services=org.services,
+                core_systems=org.systems,
+                # An insurer's role table has no technology roles at all, so
+                # ownership goes to the three people who already own its
+                # systems of record. That is the honest answer rather than a
+                # placeholder: in an organisation with no CIO, the claims
+                # director really does own the claims feed.
+                owner_ids=estate_module.owners(
+                    org.roles, "chief_actuary", "claims_director", "financial_controller",
+                ),
+            )
+            systems = (*systems, *grown.systems)
+            services = (*services, *grown.services)
+
         return World(
             company=org.company,
             _business_units=org.business_units,
             _people=org.people,
-            _systems=org.systems,
-            _services=org.services,
+            _systems=systems,
+            _services=services,
             _cost_centres=org.cost_centres,
             _categories=org.categories,
             _sites=org.sites,
@@ -344,6 +381,7 @@ class InsuranceWorld:
                 employees=self.employees,
                 annual_revenue=self.annual_revenue,
                 pack=self.pack,
+                estate=self.estate,
                 physics=self.physics,
                 role_table=self.role_table,
             ),

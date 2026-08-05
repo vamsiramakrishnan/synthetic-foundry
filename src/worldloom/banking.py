@@ -254,6 +254,19 @@ class BankingWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    estate: str | None = None
+    """Grow a technology landscape around the capital-return episode's own four
+    services: ``"small"``, ``"medium"`` or ``"large"``
+    (``landscape.BANKING.profiles``).
+
+    ``None`` mints nothing, which is what keeps every bank built before this
+    field existed byte-identical — the estate appends ids after the core's, and
+    ``Minter`` counts per prefix, so no other entity moves either.
+
+    The vocabulary is not a knob here: a bank gets banking's, resolved in
+    ``build``. What varies between corpora is how *large* the landscape is,
+    which is what this field says; what the services are called is a property of
+    being a bank."""
     role_table: tuple[tuple[str, str, str, str | None], ...] | None = None
     """Who exists in this organisation (``worldloom.roles``).
 
@@ -325,12 +338,42 @@ class BankingWorld:
             role_table=self.role_table,
         )
 
+        systems, services = org.systems, org.services
+        if self.estate is not None:
+            from .generators import estate as estate_module
+            from .landscape import BANKING
+
+            # Appended after the core, never mixed into it. The capital-return
+            # episode's causality runs through `collateral-valuation-sync` and
+            # `rwa-capital-engine` — a generated service may depend on either,
+            # neither's own `depends_on` is ever edited. See
+            # `generators/estate.py`; `generators/organisation.py` does the same
+            # thing for retail, and the two would be one call if this module
+            # could reach inside `banking_org`.
+            grown = estate_module.generate(
+                rng.derive("estate"), minter,
+                profile=self.estate,
+                landscape=BANKING,
+                core_services=org.services,
+                core_systems=org.systems,
+                # The two roles that already own this bank's own services. A
+                # bank has no "platform engineer" the way retail does, and
+                # handing service ownership to the regulatory reporting manager
+                # or the treasurer is the kind of detail that makes a corpus
+                # read as generated.
+                owner_ids=estate_module.owners(
+                    org.roles, "platform_lead", "platform_senior",
+                ),
+            )
+            systems = (*systems, *grown.systems)
+            services = (*services, *grown.services)
+
         return World(
             company=org.company,
             _business_units=org.business_units,
             _people=org.people,
-            _systems=org.systems,
-            _services=org.services,
+            _systems=systems,
+            _services=services,
             _cost_centres=org.cost_centres,
             _categories=org.categories,
             _sites=org.sites,
@@ -351,6 +394,7 @@ class BankingWorld:
                 employees=self.employees,
                 annual_revenue=self.annual_revenue,
                 pack=self.pack,
+                estate=self.estate,
                 physics=self.physics,
                 role_table=self.role_table,
             ),

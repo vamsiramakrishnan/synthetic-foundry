@@ -204,6 +204,31 @@ def _under(spec: Any, physics: Any, default: Any) -> Any:
         ) from exc
 
 
+def _with_estate(spec: Any, estate: Any) -> Any:
+    """*spec* rebound to a recorded estate size, or untouched when there is none.
+
+    Applied to the pack-built branch as well as the archetype one, which it was
+    not before. A pack-built retailer could always be given ``--estate`` — the
+    CLI rebinds the builder after ``from_pack`` — and ``build_recipe`` recorded
+    it, but ``rebuild`` only passed it on the non-pack path. So a pack corpus
+    with a hundred-node landscape rebuilt into one with nine and reported
+    success, which is the single failure mode a recipe exists to make
+    impossible. Same posture as ``_under`` and ``_with_roles`` on a spec that
+    cannot carry one: an error, never a silent smaller world.
+    """
+    if estate is None:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, estate=estate)
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records an estate, but {type(spec).__name__} does not"
+            f" accept one: {exc}"
+        ) from exc
+
+
 def _with_seasonality(spec: Any, seasonality: Any) -> Any:
     """*spec* rebound to a recorded trading year, or untouched when there is none."""
     if seasonality is None:
@@ -320,6 +345,7 @@ def rebuild(
                 f" registered — registered: {', '.join(domains.names())}"
             )
         spec = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT)
+        spec = _with_estate(spec, recipe.get("estate"))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
     else:
         try:
@@ -342,13 +368,14 @@ def rebuild(
             archetype=shape,
             employees=recipe.get("employees"),
             annual_revenue=recipe.get("annual_revenue"),
-            # Only passed when the recipe carries one. The estate generator's
-            # service-name pools are retail's, so only retail's world accepts
-            # the argument at all (see `generators/estate.py`); handing it
-            # unconditionally to every registered domain would make a bank
-            # fail to rebuild over a keyword it was never offered.
-            **({} if recipe.get("estate") is None else {"estate": recipe["estate"]}),
         ), physics, DEFAULT)
+        # Rebound after construction rather than passed as a keyword, which is
+        # what the archetype branch used to do. The keyword form was safe only
+        # while retail's world was the only one that accepted `estate`; now that
+        # banking's and insurance's do too, going through `_with_estate` gives
+        # both branches one path and turns a domain that still does not accept
+        # one into a stated error instead of a `TypeError` from a constructor.
+        spec = _with_estate(spec, recipe.get("estate"))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
 
     for step in recipe.get("steps", ()):
