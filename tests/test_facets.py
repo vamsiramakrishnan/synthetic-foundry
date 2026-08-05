@@ -45,8 +45,21 @@ def test_an_empty_intersection_is_refused_with_the_arithmetic() -> None:
 
 
 def test_claims_that_cannot_both_be_true_are_named_as_such() -> None:
-    assert not facets.resolve(listing="mutual", governance="private_equity").ok
-    assert not facets.resolve(listing="listed", governance="private_equity").ok is False
+    """And claims that merely sound incompatible are not.
+
+    The second assertion was written `not ... .ok is False`, which Python parses
+    as `not (ok is False)` — the opposite of how it reads, and true whenever
+    `ok` is anything but exactly `False`. It would have passed on a resolve that
+    returned `None`. Both directions are stated plainly here because a
+    conflict rule that refused too much would be as wrong as one that refused
+    too little, and only one of those shows up as a failing test.
+    """
+    mutual_fund = facets.resolve(listing="mutual", governance="private_equity")
+    assert not mutual_fund.ok
+    assert any(c.rule == "excludes" for c in mutual_fund.conflicts)
+
+    # A listed company owned by a fund is ordinary — plenty of them exist.
+    assert facets.resolve(listing="listed", governance="private_equity").ok
 
 
 def test_an_unknown_facet_or_value_lists_what_exists() -> None:
