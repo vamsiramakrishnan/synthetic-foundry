@@ -69,9 +69,12 @@ Generate a world deterministically from a seed, then validate it.
 | `--employees` | Override the archetype's stated headcount. |
 | `--estate` | Grow a service landscape around the episode's own services: small, medium or large. Without it the estate is the four services and five systems the close names and nothing else — nine nodes whether the archetype has three stores or sixteen hundred, so nothing has a blast radius and `worldloom topology` has little to read. Omit it and every existing corpus is byte-identical. |
 | `--eval-density` | How much of the world's own size the evaluation set and its fan-out documents are allowed to exploit: `low` trims the optional close documents to the floor a benchmark needs; `standard` is today's corpus, unchanged; `high` adds direct-lookup, comparison, and cross-period cases (and the documents to source them from) that only exist once a world has more units, categories, sites, or periods to ask about. `standard` reproduces every existing corpus byte for byte. |
+| `--facet` | Say what the company *is*, as `name=value` — `--facet listing=listed --facet maturity=legacy`. Repeatable; `worldloom pack facets` lists the dimensions and what each value commits the world to. A facet is not a label: `listed` mints an audit committee chair and a head of investor relations, raises status-report density, and puts the audit committee in the filing approval chain, because that is what being listed means operationally. Contradictory claims are refused naming both rather than merged — there is no listed mutual. Consequences a facet has that nothing here implements are printed rather than dropped. Costs, and the second one is the surprising one: the implied roles are appended to the organisation, so headcount exceeds what --employees stated; and naming any facet settles *every* facet at its registry default, which is what makes the claims composable but means `--facet listing=listed` alone also asserts trading_pattern=steady — a flat year, replacing the engine's 21% December. Say `--facet trading_pattern=christmas_peak` to keep it. An explicit --estate beats a facet's, and a pack's own trading year beats one a facet implies, because you said those and the facet only implied it. |
 | `--format`, `-f` | Render these formats. Repeatable. Omit to plan artifacts without rendering. |
 | `--incident` | Force the operational incident on or off. Omit to let the seed and lore decide. |
 | `--inspired-by` | Describe a real business and build a world of that shape (e.g. 'a large Australian grocer'). Shape only — no data about it is used. |
+| `--locale` | The jurisdiction this corpus is in: `australia`, `united_kingdom`, `germany` or `gulf` (`worldloom pack locales`). Every world this tool has built is Australian, and in more places than place names: a German subsidiary's variance memo printing `(1,234)` where every German report prints `-1.234` tells a reader the corpus is synthetic, and tells them from the punctuation. What this reaches is the *render* half — the digit grammar, applied corpus-wide so a table and the prose citing it cannot disagree — and it rides the recipe, so a localised corpus rebuilds spelled the same way. What it does not reach is the build half: whose names the people have, what the sites are called, which days are working days. Those come from a pack's `name_pools`, `regions` and `headquarters` today, and a locale that silently left them Australian while claiming Frankfurt is the thing to know before using this. Omit it and every existing corpus is byte-identical. |
+| `--messiness` | How well the archive is kept: `pristine`, `well_run`, `lived_in` or `neglected` (`worldloom pack messiness`). Every Worldloom corpus so far has been almost perfectly kept, and a retriever that has only ever seen a tidy archive has not been tested against anything. What this does *not* relax is the invariant: every imperfection is recorded, so a reader holding only the corpus can establish mechanically that the stale page is stale and what the current position is. Costs: the corpus gains documents that are wrong on purpose, so a benchmark scored against it is measuring recency and provenance reasoning as well as retrieval. `pristine` is the default and writes nothing at all. |
 | `--narrate` | Generate prose with the built-in deterministic provider (no network, no key). |
 | `--out`, `-o` | Directory to write the corpus into. |
 | `--overwrite` | Replace the destination if it exists. |
@@ -81,6 +84,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
+| `--timeline` | Sample a history rather than repeating a month: `quiet`, `steady` or `turbulent`. `--periods 6` runs six closes signed by the same twenty-three people, drawn from the same distribution — six identical months with the dates changed. A density schedules incidents and org changes across those periods instead, so a controller who departs in period 2 means periods 3-6 are signed by their successor and "which month went wrong" becomes answerable from the corpus. Needs --periods to have room to work in. Costs: the schedule states incidents in *both* directions once it schedules any, so it and --incident cannot both decide; and hires are not sampled, because a new post's title is a business decision and a sampler inventing one would write the least plausible sentence in the corpus. |
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
 
 ### `worldloom compose`
@@ -285,6 +289,69 @@ worldloom pack check <SOURCE>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit findings as JSON — an agent authoring a pack should read data. |
+
+### `worldloom pack export`
+
+Keep a derived world: a mosaic variant or a settled probe, as a pack.
+
+```
+worldloom pack export <OUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--count`, `-n` | Size of the mosaic the world came from. |
+| `--engine`, `-e` | Engine that mosaic ran on. |
+| `--json` | Emit the bundle as data instead of writing files. |
+| `--name` | Name for a minted skeleton pack. |
+| `--onto` | Apply the derivation to an existing pack rather than minting a skeleton. What an author who already has a pack and has just probed its physics wants; without it the identity fields are placeheld and `pack check` names every one. |
+| `--probe` | Keep a settled probe's physics instead of a mosaic world. |
+| `--seed`, `-s` | Base seed of that mosaic. |
+| `--world`, `-w` | Keep this mosaic world, by its index. Needs --count, --seed and --engine to match the mosaic it came from — the field is re-derived deterministically rather than read back from disk, so the same arguments give the same world without a build. |
+
+### `worldloom pack facets`
+
+Every dimension of what a company *is*, and what claiming it commits to.
+
+```
+worldloom pack facets <NAME>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the registry as data. |
+
+### `worldloom pack landscapes`
+
+The technology-estate vocabularies `--estate` grows a landscape out of.
+
+```
+worldloom pack landscapes <NAME>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the pools as data. |
+
+### `worldloom pack locales`
+
+Jurisdictions, as the conventions a corpus gives itself away by.
+
+```
+worldloom pack locales <NAME>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the conventions as data. |
+
+### `worldloom pack messiness`
+
+How well the archive is kept, as named profiles `build --messiness` takes.
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit as data. |
 
 ### `worldloom pack params`
 
