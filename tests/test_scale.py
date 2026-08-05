@@ -45,19 +45,33 @@ def _world(periods: int) -> World:
 def test_a_collection_is_immutable_so_binding_one_once_cannot_change_an_answer() -> None:
     """The premise the hoisting in `_Validator.__init__` rests on.
 
-    Two reads of `world.facts` are equal collections and *different objects*,
-    and `Collection` has no mutator — so a check that binds one before its loop
-    sees exactly what a check that re-read it inside the loop would have seen.
-    If either half of that ever stops being true, the hoisting becomes a
-    behaviour change rather than a speed-up, and this is the test that says so.
+    This was written the other way up — asserting `world.facts` hands back a
+    *different object* every read, because it did, and the hoisting was safe in
+    spite of that rather than because of it. `World` memoises its accessors now,
+    so two reads are the same object and the hoisting is safe trivially. What
+    still has to hold is the half that was always doing the work: `Collection`
+    has no mutator, so nothing a check does between two reads can make the
+    second answer differently.
+
+    A memoised accessor makes the no-mutator rule *more* load-bearing, not less
+    — a cached wrapper that could be appended to would leak one check's writes
+    into every later one — which is why the mutator sweep stays and the identity
+    assertion is now the other way round.
     """
     world = _world(1)
     first, second = world.facts, world.facts
-    assert first is not second, "the accessor mints a new Collection per read"
-    assert first == second
+    assert first is second, "the accessor memoises its Collection"
     assert list(first) == list(second)
     for name in ("append", "extend", "add", "remove", "insert", "pop", "clear"):
-        assert not hasattr(Collection, name), f"Collection.{name} would make binding unsafe"
+        assert not hasattr(Collection, name), f"Collection.{name} would make caching unsafe"
+
+    # And a world derived from another gets its own wrappers, never the
+    # donor's — `__post_init__` resets the cache for exactly this reason.
+    from dataclasses import replace as _replace
+
+    trimmed = _replace(world, _facts=world._facts[:5])
+    assert trimmed.facts is not world.facts
+    assert len(list(trimmed.facts)) == 5 and len(list(world.facts)) == len(world._facts)
 
 
 def test_validate_reads_each_world_accessor_a_bounded_number_of_times() -> None:
