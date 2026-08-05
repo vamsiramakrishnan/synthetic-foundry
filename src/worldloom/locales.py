@@ -9,13 +9,17 @@ says where it is by:
 
 * whose names its people have (``generators/names.GIVEN``/``FAMILY``);
 * what a company's second word is (``COMPANY_SECOND``: "Retail Group", never
-  "Handelsgruppe", never "Trading W.L.L.");
+  "Handelsgruppe", never "Trading W.L.L.") — and *which* second word depends on
+  the industry as well as the country, which is what ``industry_suffixes``
+  below is for: a German mutual insurer is a Versicherungsverein auf
+  Gegenseitigkeit and a German cooperative bank is an eG, and neither may take
+  the other's form;
 * which days it does not work — ``business_days_after`` counts Monday to Friday
   and knows no public holiday, so a Gulf employer's Friday close lands on its
   weekend and its Sunday does not count;
 * when its year starts — ``fiscal_year_start_month`` is on the archetype, the
-  pack, and the ``Company`` model, and **nothing reads it** (see the module
-  note below);
+  pack, and the ``Company`` model, and no *locale* could reach any of the three
+  (see the module note below);
 * and how a figure is spelled: ``render/values.format_value`` writes
   ``1,234.50`` and ``(1,234)`` unconditionally, in every DOCX, PPTX, PDF,
   Markdown file and BM25 index entry the tool produces.
@@ -70,14 +74,19 @@ single-generator would teach the wrong shape to the next author.
   costume. A fixed-date table is honest about what it covers, and the presets
   below say in ``about`` which of their real holidays it misses.
 
-**One field here is inert today, and it is inert everywhere else too.**
-``fiscal_year_start_month`` is set by ``Pack``, copied into three org
-generators, stored on ``models.Company`` — and read by nothing. The close
-calendar derives from the calendar month (``operations.period_end``), quarters
-are just the period label, and no comparative series is anchored to a year
-start. Carrying it here does not make it work; it makes the locale *say* what
-this jurisdiction's answer is, in one place, so that when the calendar does
-learn about fiscal years there is somewhere for it to ask.
+**``fiscal_year_start_month`` is no longer inert, and the route it took is the
+one to copy.** It is set by ``Pack``, copied into three org generators and
+stored on ``models.Company``; what was missing was any way for a *locale* to
+supply it, so a German corpus kept the engine's July year. ``applied_to`` below
+is that way — it rebinds an archetype's ``currency`` and
+``fiscal_year_start_month`` from the jurisdiction, and an *authored* archetype
+(a pack's) is returned untouched because a pack stating a currency is the
+narrower claim. ``models.Company.fiscal`` had already written down the rule
+this implements: the locale supplies the default and the company carries the
+answer. The pairing matters as much as either half — ``operations.generate``
+derives ``CloseEpisode.fiscal`` from the *calendar's* year start and
+``Company.fiscal`` from the *company's*, so a locale that moved one and not the
+other would give one corpus two accounts of its own financial year.
 """
 
 from __future__ import annotations
@@ -172,7 +181,12 @@ class Locale:
     engine's pool is retail-and-Anglo ("Retail Group", "Holdings"); a locale's
     is what a company in that jurisdiction is actually called. Only the suffix,
     because the first word is invented branding and belongs to no country —
-    ``COMPANY_FIRST`` stays a shared pool."""
+    ``COMPANY_FIRST`` stays a shared pool.
+
+    This is the **retail** pool, and ``suffixes_for`` says so: it is what
+    ``generators/names.company_name`` has always drawn from, and every entry in
+    every preset below is a trading company's second word. A bank's and an
+    insurer's are ``industry_suffixes``."""
 
     # -- money and figures -------------------------------------------------
 
@@ -183,6 +197,38 @@ class Locale:
     selecting ``germany`` gets EUR without the author having to remember to say
     so twice, and that a locale whose figures are spelled ``1.234,56`` cannot
     be paired with AUD by accident."""
+
+    industry_suffixes: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    """Company suffixes for a vertical that is not retail, as ``(engine, pool)``.
+
+    **Why per industry at all.** ``company_suffixes`` above is a retail pool by
+    construction — Germany's entries are Handelsgruppe and Handel GmbH — so a
+    bank drawing from it would be a Frankfurt trading group, which is why
+    ``banking_org`` and ``insurance_org`` kept ``_BANK_SUFFIX`` and
+    ``_INSURER_SUFFIX`` of their own and stayed English under every locale. The
+    conventions really are per industry and not only per country: Germany's
+    mutual insurer is a *Versicherungsverein auf Gegenseitigkeit*, a legal form
+    its banks may not take and its cooperatives are barred from insurance
+    business under, and a German cooperative bank is an *eG*, which no insurer
+    is. One pool per jurisdiction cannot express that.
+
+    **Keyed by the registered engine name** — ``retail``, ``banking``,
+    ``insurance``: the vocabulary ``domains.Domain.name`` and ``Pack.base``
+    already use, so a locale and a pack name a vertical the same way.
+    Deliberately *not* ``Archetype.industry``, which is authored prose
+    ("Supermarkets and omnichannel retail") and cannot be a registry key.
+
+    **``retail`` is refused as a key**, because ``company_suffixes`` is already
+    the answer for it and two places to state one pool is one place that can
+    stop being the one a generator draws from — the rule this module applied to
+    ``names.COMPANY_SECOND`` and ``hierarchy.REGIONS``.
+
+    A tuple of pairs rather than a mapping, for two reasons that both bite: a
+    frozen dataclass with a ``dict`` field is silently unhashable at first
+    ``hash()`` rather than at definition, and JSON has no order, so
+    ``as_dict``/``from_document`` can only round-trip to an equal value if the
+    order is derivable. Entries are therefore held sorted by key, and
+    ``__post_init__`` refuses any other order rather than quietly re-sorting."""
 
     group_separator: str = ","
     decimal_separator: str = "."
@@ -226,9 +272,12 @@ class Locale:
     scope — see the module docstring."""
 
     fiscal_year_start_month: int = 7
-    """When the financial year starts, 1-12. Inert today, everywhere: see the
-    module docstring's closing note. Carried so the answer exists in the same
-    place as the rest of the jurisdiction's conventions."""
+    """When the financial year starts, 1-12.
+
+    Reached through ``applied_to``, which rebinds an un-authored archetype's own
+    field from this one — so ``Company.fiscal_year_start_month`` and the
+    ``Calendar`` protocol's both come from here and cannot disagree. A pack's
+    stays the narrower claim; see ``applied_to`` and the module docstring."""
 
     # -- provenance --------------------------------------------------------
 
@@ -256,6 +305,48 @@ class Locale:
             if len(set(pool)) != len(pool):
                 repeated = sorted({e for e in pool if list(pool).count(e) > 1})
                 raise ValueError(f"{label} repeats {repeated}")
+
+        # Same pool discipline as the four above, applied per vertical. Reached
+        # through the same loop deliberately: a bank's suffix pool that repeats
+        # an entry is the identical "the pool is bigger than it is" failure, and
+        # a second, laxer copy of the rule here would be the drift this whole
+        # field exists to prevent.
+        seen: list[str] = []
+        for engine, pool in self.industry_suffixes:
+            engine = str(engine)
+            if not engine.strip():
+                raise ValueError("an industry_suffixes entry has a blank engine name")
+            if engine == "retail":
+                raise ValueError(
+                    "industry_suffixes may not key 'retail': `company_suffixes` is"
+                    " already this locale's retail pool, and two places to state"
+                    " one pool is one place that can stop being the one"
+                    " `names.company_name` draws from"
+                )
+            seen.append(engine)
+            if not pool:
+                raise ValueError(f"industry_suffixes[{engine!r}] holds no suffixes")
+            if any(not str(entry).strip() for entry in pool):
+                raise ValueError(
+                    f"industry_suffixes[{engine!r}] contains a blank or"
+                    " whitespace-only entry"
+                )
+            if len(set(pool)) != len(pool):
+                repeated = sorted({e for e in pool if list(pool).count(e) > 1})
+                raise ValueError(f"industry_suffixes[{engine!r}] repeats {repeated}")
+        if len(set(seen)) != len(seen):
+            raise ValueError(f"industry_suffixes names an engine twice: {sorted(seen)}")
+        # Sorted rather than sorted-on-read, so that `from_document(as_dict(x))`
+        # is `x` and not merely equivalent to it. JSON objects carry no order,
+        # so the only order a document can rebuild is one the value already
+        # guarantees; re-sorting silently here would make an author's file and
+        # the value it produced two different documents.
+        if seen != sorted(seen):
+            raise ValueError(
+                f"industry_suffixes must be sorted by engine name; got {seen}."
+                " The order is what lets a locale round-trip through JSON as an"
+                " equal value rather than a reordered one."
+            )
 
         if not self.cities:
             raise ValueError("a locale needs at least one headquarters city")
@@ -338,6 +429,34 @@ class Locale:
                 f"fiscal_year_start_month {self.fiscal_year_start_month} is not a month"
             )
 
+    # -- naming ------------------------------------------------------------
+
+    def suffixes_for(self, industry: str) -> tuple[str, ...]:
+        """What a company in *industry* is called here, after its brand word.
+
+        *industry* is a registered engine name (``retail``, ``banking``,
+        ``insurance``) — see ``industry_suffixes``. ``retail`` resolves to
+        ``company_suffixes``, which is the one pool this locale has always had
+        and is retail's by construction.
+
+        **An engine this locale says nothing about falls back to the retail
+        pool rather than raising**, which is the opposite of ``named``'s posture
+        on an unknown locale, and deliberately. An unknown locale *name* is a
+        typo with no other reading; an unknown engine is a vertical that landed
+        after this locale was authored, and refusing it would make that
+        vertical unbuildable in this jurisdiction — an engine outage caused by
+        a naming table. The fallback is stated rather than silent: every preset
+        in this module answers for all three shipped engines, so it is never
+        taken by a shipped build, and ``publish`` prints what each locale
+        actually states so an author can see the gap before hitting it.
+        """
+        if industry == "retail":
+            return self.company_suffixes
+        for engine, pool in self.industry_suffixes:
+            if engine == industry:
+                return pool
+        return self.company_suffixes
+
     # -- the calendar ------------------------------------------------------
 
     def is_business_day(self, day: date) -> bool:
@@ -412,6 +531,14 @@ class Locale:
             "holidays": [list(entry) for entry in self.holidays],
             "fiscal_year_start_month": self.fiscal_year_start_month,
         }
+        # Written only when the locale states one, the same conditional rule
+        # `recipe.build_recipe` follows: a key that appears unconditionally puts
+        # an empty object into every locale document ever written for a value
+        # that changes nothing.
+        if self.industry_suffixes:
+            payload["industry_suffixes"] = {
+                engine: list(pool) for engine, pool in self.industry_suffixes
+            }
         if self.about:
             payload["about"] = self.about
         if self.source:
@@ -442,6 +569,50 @@ class Locale:
             "currency": self.currency,
             "fiscal_year_start_month": self.fiscal_year_start_month,
         }
+
+    def applied_to(self, archetype: Any) -> Any:
+        """*archetype* with the two conventions this jurisdiction decides.
+
+        ``currency`` and ``fiscal_year_start_month`` are the only two fields an
+        ``archetypes.Archetype`` holds that are a *jurisdiction's* answer rather
+        than the company's own shape, and both were unreachable from a locale:
+        ``Pack.currency`` reached ``Archetype.currency`` and from there every
+        money fact's unit, and a locale had no route at all — so a Frankfurt
+        corpus spelled its figures ``1.234,50`` and denominated them in AUD.
+        This is that route, and it is the field's own docstring made operative:
+        "a locale whose figures are spelled 1.234,56 cannot be paired with AUD
+        by accident".
+
+        **An authored archetype is returned untouched.** ``Archetype.authored``
+        is set only by ``packs.archetype_of``, so it means a pack stated this
+        company's currency and financial year explicitly — the narrower claim,
+        which beats a jurisdiction's default exactly as ``Pack.regions`` beats
+        ``Locale.regions``. A pack that *wants* the locale's answers merges
+        ``pack_overrides`` above, which carries both.
+
+        **What this does not do is rescale anything.** ``annual_revenue`` is
+        stated in currency units and stays the number it was: the archetype's
+        scale is a claim about how big the company is, and applying an exchange
+        rate here would make a locale change what happened rather than what it
+        is called — the line this module's class docstring draws.
+
+        ``currency_unit`` (thousands/millions) is deliberately not here: a bank
+        reports in millions and a grocer in thousands in the same country. See
+        the module docstring.
+
+        Duck-typed rather than importing ``Archetype``, the posture
+        ``recipe.py``'s ``_under``/``_with_estate`` take on a spec: this module
+        is imported by the generators and must not import the registry back.
+        """
+        from dataclasses import replace as _replace
+
+        if getattr(archetype, "authored", False):
+            return archetype
+        return _replace(
+            archetype,
+            currency=self.currency,
+            fiscal_year_start_month=self.fiscal_year_start_month,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -491,6 +662,19 @@ AUSTRALIA = Locale(
     company_suffixes=(
         "Retail Group", "Group", "Holdings", "Retail", "Commerce Group",
         "Trading Group", "Retail Holdings",
+    ),
+    # Extracted verbatim, in order, from `banking_org._BANK_SUFFIX` and
+    # `insurance_org._INSURER_SUFFIX` — the same discipline as the four pools
+    # above and load-bearing for the same reason. Those two generators draw
+    # `rng.choice` from their module constants today; the day they ask the
+    # locale instead, `midsize_adi` and `midsize_general_insurer` at any seed
+    # must produce the identical company name, and only a verbatim extraction
+    # makes that a fact rather than a hope. `tests/test_locale_build.py` pins
+    # the equality against the constants themselves.
+    industry_suffixes=(
+        ("banking", ("Banking Group", "Bank", "Banking Corporation", "Mutual Bank")),
+        ("insurance",
+         ("Insurance Group", "General Insurance", "Assurance", "Mutual Insurance")),
     ),
     currency="AUD",
     fiscal_year_start_month=7,
@@ -548,6 +732,24 @@ UNITED_KINGDOM = Locale(
     company_suffixes=(
         "Group plc", "Holdings plc", "Retail Group", "Group", "Holdings Limited",
         "Trading Limited", "Retail Holdings",
+    ),
+    # `plc` and `Limited` are the Companies Act forms every UK company takes and
+    # are not a banking or insurance convention at all — which is the point of
+    # including this preset here as well as in Germany's: the industry signal in
+    # the UK is the *noun* ("Bank", "Building Society", "Assurance"), not the
+    # legal suffix, and a registry that only ever showed the German case would
+    # teach an author that per-industry means per-legal-form.
+    #
+    # "Building Society" is the one entry carrying real structure: a mutual
+    # deposit-taker under the Building Societies Act 1986, which is not a
+    # company and therefore takes no `plc` or `Limited` — hence its bare form
+    # here. "Friendly Society" would be the insurance analogue and is left out:
+    # the shape a Worldloom insurer generates is a general insurer, and a
+    # friendly society is a life and health mutual.
+    industry_suffixes=(
+        ("banking", ("Bank plc", "Banking Group plc", "Bank Limited", "Building Society")),
+        ("insurance",
+         ("Insurance plc", "Insurance Limited", "Assurance plc", "Mutual Insurance")),
     ),
     currency="GBP",
     # Same as Australia's, and stated rather than defaulted so the sameness is
@@ -614,6 +816,30 @@ GERMANY = Locale(
     company_suffixes=(
         "Handelsgruppe", "Gruppe", "Holding", "Handel GmbH", "Handelsholding",
         "Gruppe AG", "Handel",
+    ),
+    # The preset that makes the case for this field existing. German banking and
+    # German insurance take *different legal forms from each other*, not merely
+    # different nouns: a cooperative bank is an `eG` (eingetragene
+    # Genossenschaft, under the Genossenschaftsgesetz) and a mutual insurer is a
+    # `VVaG` — a Versicherungsverein auf Gegenseitigkeit, spelled `a.G.` in a
+    # company name — because German cooperatives are barred from carrying on
+    # insurance business, so the two mutual forms are not interchangeable. One
+    # `company_suffixes` pool per jurisdiction cannot express that, and a
+    # "Meridian Handelsgruppe" holding a banking licence is what it produced.
+    #
+    # `AG` and `SE` (Societas Europaea) are the stock forms a listed German bank
+    # or insurer takes. Two real forms are deliberately absent, and for one
+    # reason: `Sparkasse` and `Landesbank` are public-law institutions
+    # (Anstalten des öffentlichen Rechts) named after the region or Land that
+    # carries them — "Hamburger Sparkasse", not "Kestrel Sparkasse" — so
+    # composing them with this project's invented English brand word
+    # (`names.COMPANY_FIRST`) would produce a name no German reader would
+    # accept. The pool is the forms that compose with an invented brand.
+    industry_suffixes=(
+        ("banking", ("Bank AG", "Bankgruppe", "Privatbank AG", "Bank SE", "Volksbank eG")),
+        ("insurance",
+         ("Versicherung AG", "Versicherungsgruppe", "Versicherung a.G.",
+          "Assekuranz AG", "Versicherung SE")),
     ),
     currency="EUR",
     group_separator=".",
@@ -690,6 +916,24 @@ GULF = Locale(
         "Trading Group", "Holding", "Group Holding", "Trading L.L.C.",
         "Group", "Commercial Group", "Retail Group",
     ),
+    # `P.J.S.C.` — public joint stock company — is not a stylistic choice here
+    # the way `plc` is in the UK entry: UAE law reserves banking and insurance
+    # to public joint stock companies, so a bank or an insurer in this
+    # jurisdiction is one, and the retail pool's `L.L.C.` is a form neither may
+    # take. Dotted to match `Trading L.L.C.` above rather than because one
+    # spelling is more correct — both are current in English-language filings,
+    # and a corpus that used both would be a corpus disagreeing with itself.
+    #
+    # `Takaful` is the Islamic mutual-insurance structure, ordinary in the Gulf
+    # and carried alongside the conventional forms rather than instead of them:
+    # the market runs both, and a preset that showed only one would be the
+    # caricature the registry's other entries already refuse to be.
+    industry_suffixes=(
+        ("banking", ("Bank P.J.S.C.", "Bank", "Islamic Bank P.J.S.C.", "Banking Group")),
+        ("insurance",
+         ("Insurance P.J.S.C.", "Insurance Company", "Takaful P.J.S.C.",
+          "General Insurance")),
+    ),
     currency="AED",
     # The digit grammar is Australia's. Western digits, comma groups, full-stop
     # point and the accounting parenthesis are what the region's English-language
@@ -746,6 +990,28 @@ def named(name: str) -> Locale:
         ) from None
 
 
+def resolve(value: Locale | Mapping[str, Any] | str | None) -> Locale:
+    """The locale a build was given: nothing, a name, a document, or one of these.
+
+    The single entry point a world spec's ``locale`` field goes through, and one
+    function rather than three copies of the same four-branch conditional in
+    ``retail``, ``banking`` and ``insurance``: the branch that matters is the
+    first, and a vertical that got it slightly wrong would build Australia and
+    say Germany with nothing to notice it by.
+
+    ``None`` is ``DEFAULT`` — every world built before a spec could carry a
+    locale *was* Australian, so that is a fact about those worlds and not a gap
+    in them. A ``Locale`` passes through, which is what lets a caller compose
+    one in Python (``dataclasses.replace(locales.GERMANY, holidays=…)``) without
+    round-tripping it through JSON to be accepted.
+    """
+    if value is None:
+        return DEFAULT
+    if isinstance(value, Locale):
+        return value
+    return from_document(value)
+
+
 def from_document(payload: Mapping[str, Any] | str) -> Locale:
     """A locale from a pack or a recipe: a name, or conventions of its own."""
     if isinstance(payload, str):
@@ -773,6 +1039,14 @@ def from_document(payload: Mapping[str, Any] | str) -> Locale:
         decimal_separator=str(payload.get("decimal_separator", ".")),
         negative=str(payload.get("negative", "parenthesised")),  # type: ignore[arg-type]
         percent_gap=str(payload.get("percent_gap", "")),
+        industry_suffixes=tuple(
+            (str(engine), tuple(str(entry) for entry in pool))
+            # Sorted on the way in because a JSON object has no order and the
+            # value's does — see the field. `__post_init__` refuses an unsorted
+            # tuple, so this is what makes a hand-written document loadable
+            # without making the in-memory ordering an accident.
+            for engine, pool in sorted(dict(payload.get("industry_suffixes") or {}).items())
+        ),
         working_week=tuple(int(day) for day in payload.get("working_week", MONDAY_TO_FRIDAY)),
         holidays=tuple(
             (int(entry[0]), int(entry[1])) for entry in payload.get("holidays", ())
@@ -790,5 +1064,5 @@ def publish() -> dict[str, Any]:
 __all__ = [
     "AUSTRALIA", "DEFAULT", "GERMANY", "GULF", "LOCALES", "MONDAY_TO_FRIDAY",
     "SUNDAY_TO_THURSDAY", "UNITED_KINGDOM", "Locale", "Negative",
-    "from_document", "named", "publish",
+    "from_document", "named", "publish", "resolve",
 ]

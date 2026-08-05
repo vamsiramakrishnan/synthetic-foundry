@@ -49,7 +49,6 @@ from typing import Any
 from . import archetypes as archetype_registry
 from . import validate as validate_module
 from .archetypes import MIDSIZE_ADI, Archetype
-from .generators.operations import business_days_after
 from .ids import Minter
 from .models import (
     Authority,
@@ -296,6 +295,18 @@ class BankingWorld:
     argues where the seam lives and why ``()`` keeps an existing bank
     byte-identical."""
 
+    locale: Any = None
+    """Where this bank is (``worldloom.locales``). See ``RetailWorld.locale`` —
+    same contract, same precedence, and ``None`` is the Australian default every
+    bank built before this field existed was made of.
+
+    One thing it does not yet reach here, and it is this vertical's alone: the
+    bank's own name. ``banking_org`` draws its second word from
+    ``_BANK_SUFFIX``, a module pool, rather than from
+    ``Locale.suffixes_for("banking")`` — which now exists precisely so it can.
+    Until that draw moves, a Frankfurt bank is named in English rather than
+    misnamed as a Handelsgruppe, which is the honest of the two failures."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> BankingWorld:
         """A world shaped like the institution *description* names. Shape only."""
@@ -319,11 +330,18 @@ class BankingWorld:
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
+        from . import locales as locales_module
         from . import recipe as recipe_module
         from .generators import banking_org
 
         rng = Rng(self.seed)
         minter = Minter()
+
+        # Resolved before anything is minted, and refused here rather than
+        # defaulted. See `RetailWorld.build` for the argument; it is the same
+        # one three times because the failure is the same three times.
+        locale = locales_module.resolve(self.locale)
+        archetype = locale.applied_to(self.archetype)
 
         if self.pack is not None:
             from . import packs as packs_module
@@ -342,17 +360,20 @@ class BankingWorld:
             estate=self.estate,
             physics=self.physics,
             role_table=self.role_table,
+            # What it was given, not what it resolved to — `RetailWorld.build`.
+            locale=self.locale,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = banking_org.generate(
             rng.derive("organisation"), minter,
-            archetype=self.archetype, lore=commitments,
+            archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
             voices=dict(self.pack.voices) if self.pack is not None else None,
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
+            locale=locale,
             physics=self.physics,
             role_table=self.role_table,
         )
@@ -404,8 +425,8 @@ class BankingWorld:
             seed=self.seed,
             _roles=org.roles,
             _minter=minter,
-            _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
-            _archetype=self.archetype,
+            _annual_revenue=self.annual_revenue or archetype.annual_revenue,
+            _archetype=archetype,
             _generator_version=worldloom_version,
             _recipe=recipe,
         )
@@ -577,6 +598,28 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # observation supersedes nothing (`generators/regulatory.generate`) — so
     # gaplessness is demanded inside a chain and never expected between
     # chains, which is where the corpus actually has no observations at all.
+    #
+    # And "the next business day" is asked of *this corpus's* calendar rather
+    # than of the engine's. It was `business_days_after`'s two-argument form,
+    # which is Monday-to-Friday with no holiday table — so this check computed
+    # an Australian answer for a bank wherever it was, and a Gulf treasury's
+    # correct Sunday-to-Thursday series would have been failed for a gap that is
+    # its weekend. A validator that fails a correct world is worse than one that
+    # misses a bad one: it teaches the author to distrust the gate.
+    #
+    # The consequence today runs the other way and is worth knowing before
+    # reading a failure. `regulatory.generate` still calls `liquidity.generate`
+    # on the default calendar (`generators/liquidity.py` names that gap), so a
+    # bank built with `locale="gulf"` produces observations on Fridays and none
+    # on Sundays, and this check now says so instead of agreeing with it. That
+    # failure is true — the series really is on the wrong days — and it is the
+    # only thing in the corpus that reports the locale never reached the
+    # episode generator. It goes away when that one argument is passed, not
+    # when this check is loosened.
+    from . import recipe as recipe_module
+
+    calendar = recipe_module.locale_of(world.recipe)
+
     lcr_by_id = {f.id: f for f in facts if f.kind == "liquidity.lcr"}
     next_in_chain = {f.supersedes: f for f in lcr_by_id.values() if f.supersedes}
     chain_starts = sorted(
@@ -587,7 +630,7 @@ def _checks(world: World) -> tuple[list[Violation], int]:
         while earlier.id in next_in_chain:
             later = next_in_chain[earlier.id]
             checks += 1
-            expected = business_days_after(earlier.valid_from.date(), 1)
+            expected = calendar.business_days_after(earlier.valid_from.date(), 1)
             if later.valid_from.date() != expected:
                 fail("liquidity_cadence_gap", later.id,
                      f"follows {earlier.valid_from.date().isoformat()} but is dated"

@@ -249,6 +249,37 @@ class RetailWorld:
     built before this existed byte-identical — the same guarantee ``estate``
     above makes, and for the same structural reason."""
 
+    locale: Any = None
+    """Where this company is (``worldloom.locales``): a registry name or a
+    ``Locale``.
+
+    ``None`` is ``locales.DEFAULT`` — Australia, which is what every world built
+    before this field existed *was*, so an un-set locale is byte-identical
+    rather than close.
+
+    **Why it is a build field and not only a recipe key.** A locale decides two
+    halves. The *render* half — the digit grammar — is read back off the recipe
+    at render time and needs nothing here. The *build* half is what this field
+    is for: the region labels printed into every site name, the pools the
+    people are drawn from, the city the headquarters is in, the second word of
+    the company's name, and (through ``Locale.applied_to``) the currency every
+    money fact is denominated in and the month its financial year opens. All of
+    those are decided inside ``organisation.generate``, so a locale that arrives
+    after ``build()`` arrives too late — the same argument ``lore_claims`` above
+    makes about lore being an input, and the same failure if it is ignored: a
+    corpus that is entirely plausible and quietly not the one that was asked
+    for.
+
+    A name or a ``Locale``, and ``build`` records *what it was given* on the
+    recipe rather than what it resolved to — see ``recipe._locale_document``. A
+    corpus that said ``"germany"`` must rebuild still saying it, not carrying a
+    frozen copy of what the registry said about Germany that day.
+
+    A pack's own ``regions``, ``name_pools`` and ``headquarters`` still win
+    where they overlap, and an authored archetype keeps its currency and
+    financial year: a pack is a claim about *this company*, a locale about the
+    country it is in."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int,
                     physics: Parameters = DEFAULT) -> RetailWorld:
@@ -285,11 +316,26 @@ class RetailWorld:
         already on the timeline — the world's beginning, not yet any close.
         """
         from . import __version__ as worldloom_version
+        from . import locales as locales_module
         from . import recipe as recipe_module
         from .generators import organisation
 
         rng = Rng(self.seed)
         minter = Minter()
+
+        # Resolved before anything is minted, and refused here if it does not
+        # resolve — `locales.named` refuses an unknown name for the reason that
+        # applies with most force at this exact line: a build that fell back to
+        # Australia's pools would produce a Frankfurt company whose people are
+        # called Rafferty, whose sites are in NSW and whose every figure is
+        # plausible, with nothing in the corpus to notice the drop by.
+        locale = locales_module.resolve(self.locale)
+        # The archetype's own two jurisdiction-decided fields, rebound. Applied
+        # to the local name and not to `self.archetype`, so the spec a caller
+        # holds is unchanged and `World._archetype` below carries the archetype
+        # the world was actually built at — the currency every money fact is
+        # stated in comes off it, in this module and again in `MonthEndClose`.
+        archetype = locale.applied_to(self.archetype)
 
         if self.pack is not None:
             from . import packs as packs_module
@@ -311,11 +357,16 @@ class RetailWorld:
             physics=self.physics,
             role_table=self.role_table,
             seasonality=self.seasonality,
+            # `self.locale`, not the resolved `locale`: the recipe stores what
+            # it was given. A corpus built as "germany" replays as "germany" and
+            # picks up any correction the registry later makes; storing the
+            # resolved dict would freeze a copy of the registry into it.
+            locale=self.locale,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = organisation.generate(
             rng.derive("organisation"), minter,
-            archetype=self.archetype, lore=commitments,
+            archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
             voices=dict(self.pack.voices) if self.pack is not None else None,
@@ -323,6 +374,7 @@ class RetailWorld:
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
+            locale=locale,
             physics=self.physics,
             role_table=self.role_table,
         )
@@ -344,8 +396,8 @@ class RetailWorld:
             seed=self.seed,
             _roles=org.roles,
             _minter=minter,
-            _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
-            _archetype=self.archetype,
+            _annual_revenue=self.annual_revenue or archetype.annual_revenue,
+            _archetype=archetype,
             _generator_version=worldloom_version,
             _recipe=recipe,
         )

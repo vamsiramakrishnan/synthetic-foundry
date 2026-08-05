@@ -13,12 +13,14 @@ recipe that carried derived state would be a second source of truth about the
 world beside the world.
 
 One entry earns its place by a different argument from the rest. ``locale`` is
-not needed to rebuild the world — the generators take their regions, names and
-currency from the pack — but it *is* needed to render the corpus that comes out,
-because how a figure is spelled is a jurisdiction's convention and nothing in the
-world model records it. So the recipe is also where a corpus says where it is
-written, and ``locale_of`` explains why that is here rather than on the artifacts
-it is spelled into.
+needed twice over and in two different ways. It is a *build* input, like the
+seed and the physics — the region labels on every site, the pools the people are
+drawn from, the currency the facts are denominated in — and it is the only
+build-time decision that is *also* needed after the world exists, because how a
+figure is spelled is a jurisdiction's convention and nothing in the world model
+records it. A world spec carries it in and ``build_recipe`` writes it back out;
+``locale_of`` explains why the recipe is where it is read from rather than the
+artifacts it is spelled into.
 
 The immediate reason this exists is the actor handshake. Driving an episode from
 the CLI means suspending it between decisions, and the honest way to resume a
@@ -30,7 +32,7 @@ That works only if the corpus knows how to rebuild itself.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -191,6 +193,17 @@ def _locale_document(locale: Any) -> Any:
 
         named(locale)  # refuse an unknown name here, not on rebuild
         return locale
+    if isinstance(locale, Mapping):
+        # Already a document. Reached on the rebuild path: `_with_locale` hands
+        # the spec the recorded payload verbatim rather than a resolved
+        # `Locale`, so an un-named jurisdiction's conventions arrive back here
+        # in the shape they were stored in. Round-tripped rather than passed
+        # through untouched, so a document that would not load is refused where
+        # every other recipe value is — at the point it is written, not at
+        # render time in another process.
+        from .locales import from_document
+
+        return from_document(locale).as_dict()
     return locale.as_dict()
 
 
@@ -235,11 +248,18 @@ def locale_of(recipe: dict[str, Any]) -> Locale:
 def with_locale(recipe: dict[str, Any], locale: str | Locale) -> dict[str, Any]:
     """A copy of *recipe* set in *locale*.
 
-    The seam for everything that decides a jurisdiction after the world is
-    built — a pack field, a CLI flag, a `facets` consequence. It is a function
-    here rather than a keyword everywhere because the recipe is minted deep
-    inside a domain's world spec (``retail.RetailWorld.build``) and the thing
-    that knows the jurisdiction is usually further out than that.
+    The seam for a caller that has a built world and a jurisdiction, and no
+    longer the seam a *build* should use. A locale is a build input — see this
+    module's docstring and ``retail.RetailWorld.locale`` — so a flag that
+    reaches a builder should set ``locale=`` on the spec and let
+    ``build_recipe`` write the key. Applying it here afterwards records the
+    jurisdiction while leaving the world Australian, and the two are then
+    inconsistent in a way only a rebuild reveals: the rebuild honours the
+    recorded locale and produces a *different world* from the one that shipped.
+
+    It stays for the case it is still right for: attaching a figure grammar to a
+    world already built, which is what a vertical whose spec takes no locale
+    needs and what ``rebuild`` falls back to for exactly that vertical.
 
     Same shape as ``with_step``: a copy, never a mutation, so a caller holding
     the old recipe still holds the world it describes.
@@ -369,6 +389,34 @@ def _with_lore_claims(spec: Any, claims: Any) -> Any:
         ) from exc
 
 
+def _with_locale(spec: Any, locale: Any) -> tuple[Any, bool]:
+    """*spec* rebound to the recorded jurisdiction, and whether it took it.
+
+    The odd one out among the rebinders here, and the boolean is why. Every
+    other one — ``_under``, ``_with_estate``, ``_with_roles`` — raises when a
+    spec cannot carry what the recipe recorded, because there is no other route
+    for the value and rebuilding without it would be a different world reported
+    as the same one. A locale has *two* halves and only one of them is a build
+    input: the figure grammar is read back off the recipe at render time by
+    ``render/values.corpus_locale``, so a domain whose world spec has no
+    ``locale`` field still renders this corpus correctly, and refusing it would
+    make an out-of-tree vertical unrebuildable over a value it never used.
+
+    So this reports rather than raises, and the caller re-attaches the recorded
+    payload to a spec that could not take it. What is *not* silent is the
+    difference: a spec that took the locale mints the key itself through
+    ``build_recipe``, so the two paths converge on the same recipe.
+    """
+    if locale is None:
+        return spec, False
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, locale=locale), True
+    except TypeError:
+        return spec, False
+
+
 def _with_roles(spec: Any, role_table: Any) -> Any:
     """*spec* rebound to an authored role table, or untouched when there is none.
 
@@ -448,10 +496,12 @@ def rebuild(
             f"this corpus's recorded trading year does not load: {exc}"
         ) from exc
 
-    # Resolved here for its side effect only — the world is built without it,
-    # and only renderers read it back. Checked this early anyway, beside the
-    # physics and the trading year, because the alternative is a rebuild that
-    # succeeds and then fails at render time in a different process.
+    # Resolved here for its side effect: the value is not used on this line and
+    # a locale that does not load must stop the rebuild before any of it runs,
+    # beside the physics and the trading year. The alternative used to be a
+    # rebuild that succeeded and failed at render time in a different process;
+    # now that the world spec builds with the locale, it would be a rebuild that
+    # failed halfway through minting an organisation instead.
     locale_of(recipe)
 
     authored_roles = recipe.get("role_table")
@@ -489,6 +539,7 @@ def rebuild(
         spec = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT)
         spec = _with_estate(spec, recipe.get("estate"))
         spec = _with_lore_claims(spec, lore_claims)
+        spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
     else:
         try:
@@ -520,23 +571,30 @@ def rebuild(
         # one into a stated error instead of a `TypeError` from a constructor.
         spec = _with_estate(spec, recipe.get("estate"))
         spec = _with_lore_claims(spec, lore_claims)
+        spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
 
-    # Re-attached rather than passed to the spec, because no world spec accepts
-    # a locale: the half a locale decides at *build* time (regions, name pools,
-    # currency) reaches the generators through the pack, and the half it decides
-    # at *render* time (the figure grammar) is read back off the recipe by
-    # `render/values.corpus_locale`. A freshly built world mints its own recipe
-    # from `build_recipe`, which knows nothing of a locale attached afterwards,
-    # so without this line a German corpus would rebuild into an identical world
-    # that renders `243,800`. That is the exact failure `rebuild` exists to make
-    # impossible, in the one dimension that survives only on the recipe.
+    # Passed to the spec above, and this is the fallback for a spec that could
+    # not take it. It used to be the only path, because no world spec accepted a
+    # locale at all: the build half (regions, name pools, currency, the working
+    # week) was reachable only through a pack's own fields, and the render half
+    # (the figure grammar) survives on the recipe alone, so re-attaching after
+    # the build was the whole of what could be done. The three shipped verticals
+    # now take a `locale` and build with it, which is what makes a rebuilt
+    # German corpus the same *world* and not merely the same spelling.
+    #
+    # It stays for the domain registered outside this repository whose world
+    # spec has no such field. That corpus was built without a build-half locale
+    # by construction, so re-attaching the key is exactly right for it: the
+    # figure grammar is restored and nothing else was ever there to restore.
     #
     # The recorded payload is copied across verbatim rather than round-tripped
     # through `locale_of`: a recipe that named `"germany"` must rebuild into one
     # that still names it, not into one carrying a frozen copy of what the
-    # registry said about Germany on the day it was rebuilt.
-    if recipe.get(LOCALE_KEY) is not None:
+    # registry said about Germany on the day it was rebuilt. `build_recipe`
+    # keeps that promise on the rebound path too — the spec carries the payload
+    # it was given, never the resolved `Locale`.
+    if recipe.get(LOCALE_KEY) is not None and not localised:
         world = world.extend(recipe={**world.recipe, LOCALE_KEY: recipe[LOCALE_KEY]})
 
     for step in recipe.get("steps", ()):

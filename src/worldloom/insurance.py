@@ -288,6 +288,23 @@ class InsuranceWorld:
     ``world.extend_lore`` argues where the seam lives and why ``()`` keeps an
     existing insurer byte-identical."""
 
+    locale: Any = None
+    """Where this insurer is (``worldloom.locales``). See ``RetailWorld.locale``
+    — same contract, same precedence.
+
+    This vertical had the furthest to travel. ``insurance_org.generate`` grew
+    ``name_pools``, ``headquarters``, ``regions`` and ``locale`` to match its
+    two siblings, and ``build`` below still passed none of the four — so an
+    insurer was Australian whatever any pack or locale said, and *no argument
+    would move it*. The pack half of that is fixed here alongside the locale,
+    because the two are one precedence rule and forwarding half of it would
+    leave a pack's own geography still dropped.
+
+    The insurer's *name* is the one thing still unmoved:
+    ``insurance_org._INSURER_SUFFIX`` is a module pool rather than
+    ``Locale.suffixes_for("insurance")``. Same gap as banking's, stated on
+    ``BankingWorld.locale``."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> InsuranceWorld:
         """A world shaped like the insurer *description* names. Shape only."""
@@ -312,11 +329,17 @@ class InsuranceWorld:
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
+        from . import locales as locales_module
         from . import recipe as recipe_module
         from .generators import insurance_org
 
         rng = Rng(self.seed)
         minter = Minter()
+
+        # Resolved before anything is minted, and refused here rather than
+        # defaulted. See `RetailWorld.build`.
+        locale = locales_module.resolve(self.locale)
+        archetype = locale.applied_to(self.archetype)
 
         if self.pack is not None:
             from . import packs as packs_module
@@ -335,14 +358,25 @@ class InsuranceWorld:
             estate=self.estate,
             physics=self.physics,
             role_table=self.role_table,
+            # What it was given, not what it resolved to — `RetailWorld.build`.
+            locale=self.locale,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = insurance_org.generate(
             rng.derive("organisation"), minter,
-            archetype=self.archetype, lore=commitments,
+            archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
             voices=dict(self.pack.voices) if self.pack is not None else None,
+            # The three the siblings have always forwarded and this one never
+            # did. Their absence read as a decision and was an omission: the
+            # generator has taken all three since it was written, so a pack
+            # naming its own regions, people or head office had them accepted,
+            # validated, embedded in the recipe — and dropped here.
+            name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
+            headquarters=self.pack.headquarters if self.pack is not None else None,
+            regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
+            locale=locale,
             physics=self.physics,
             role_table=self.role_table,
         )
@@ -391,8 +425,8 @@ class InsuranceWorld:
             seed=self.seed,
             _roles=org.roles,
             _minter=minter,
-            _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
-            _archetype=self.archetype,
+            _annual_revenue=self.annual_revenue or archetype.annual_revenue,
+            _archetype=archetype,
             _generator_version=worldloom_version,
             _recipe=recipe,
         )

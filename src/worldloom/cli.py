@@ -330,15 +330,20 @@ def build(
             "has built is Australian, and in more places than place names: a "
             "German subsidiary's variance memo printing `(1,234)` where every "
             "German report prints `-1.234` tells a reader the corpus is synthetic, "
-            "and tells them from the punctuation. What this reaches is the *render* "
-            "half — the digit grammar, applied corpus-wide so a table and the prose "
-            "citing it cannot disagree — and it rides the recipe, so a localised "
-            "corpus rebuilds spelled the same way. What it does not reach is the "
-            "build half: whose names the people have, what the sites are called, "
-            "which days are working days. Those come from a pack's `name_pools`, "
-            "`regions` and `headquarters` today, and a locale that silently left "
-            "them Australian while claiming Frankfurt is the thing to know before "
-            "using this. Omit it and every existing corpus is byte-identical."
+            "and tells them from the punctuation. It reaches the *render* half — "
+            "the digit grammar, applied corpus-wide so a table and the prose citing "
+            "it cannot disagree — and the *build* half: the region labels in every "
+            "site name, the pools the people are drawn from, the headquarters city, "
+            "the retailer's own second word, and the currency and financial year "
+            "every money fact is stated in. A pack's `name_pools`, `regions`, "
+            "`headquarters` and currency still win where they overlap, because a "
+            "pack is a claim about this company and a locale about the country it "
+            "is in. One thing it still does not reach: the working week never "
+            "leaves the world spec, so the close calendar counts Monday to Friday "
+            "wherever the corpus is set, and a bank's or insurer's own name comes "
+            "from its vertical's pool rather than the locale's. It rides the "
+            "recipe, so a localised corpus rebuilds as the same world spelled the "
+            "same way. Omit it and every existing corpus is byte-identical."
         ),
     ),
     messiness: str = typer.Option(
@@ -662,20 +667,49 @@ def build(
                 claimed_calendar.append(value)
         return builder
 
-    def _localised(built: Any) -> Any:
-        """*built* set in the requested jurisdiction, untouched without one.
+    def _localised(builder: Any) -> Any:
+        """*builder* set in the requested jurisdiction, untouched without one.
 
-        On the recipe rather than on the builder, because that is where the
-        locale lives: ``recipe.locale_of``'s docstring argues it out — the
-        recipe is the only document a corpus has that is *singular*, so two
-        artifacts cannot disagree about how a figure is spelled. Applied here,
-        before any episode, so this matches `recipe.rebuild` exactly; the steps
-        copy the key forward and a localised corpus rebuilds spelled the same.
+        On the **builder**, because a locale is a build input: the region
+        labels printed into every site name, the pools the people are drawn
+        from, the headquarters city, the currency every money fact is
+        denominated in. This used to attach the locale to the finished world's
+        recipe instead — the only thing that could be done while no world spec
+        accepted one — and the result was a corpus that *recorded* Frankfurt
+        and was built in Sydney. Two things were wrong with that, and the
+        second is the one a test caught: the corpus was half localised, and its
+        own rebuild was not, because `recipe.rebuild` reads the recorded locale
+        and now builds with it. A build and its replay would have disagreed.
+
+        `_localised_recipe` below is the other half, for a vertical whose spec
+        cannot take one.
         """
         if locale is None:
-            return built
-        from .recipe import with_locale
+            return builder
+        from dataclasses import replace as _replace_locale
 
+        try:
+            return _replace_locale(builder, locale=locale)
+        except TypeError:
+            return builder
+
+    def _localised_recipe(built: Any) -> Any:
+        """The figure grammar, attached to a world whose spec would not take it.
+
+        A domain registered outside this repository may have no ``locale``
+        field, and the *render* half of a locale survives on the recipe alone
+        (``render/values.corpus_locale``). So that corpus still spells its
+        figures the requested way and simply has no build-half locale — which
+        is the truth about it, not a fallback dressed as one.
+
+        A no-op when the builder took the locale, because ``build_recipe``
+        wrote the key itself. Exactly the shape ``recipe.rebuild`` uses, so the
+        two paths cannot drift.
+        """
+        from .recipe import LOCALE_KEY, with_locale
+
+        if locale is None or built.recipe.get(LOCALE_KEY) is not None:
+            return built
         return built.extend(recipe=with_locale(built.recipe, locale))
 
     def _under_physics(spec: Any) -> Any:
@@ -746,7 +780,7 @@ def build(
                 **({} if estate is None else {"estate": estate}),
             )
         ))
-        world = _localised(builder.build())
+        world = _localised_recipe(_localised(builder).build())
         for index in range(max(1, periods)):
             world = world.run(_under_physics(
                 single_episode(_step_period(period, index, domain.period_step_months))
@@ -762,7 +796,7 @@ def build(
 
             builder = _replace_builder(builder, estate=estate)
         builder = _claimed(builder)
-        world = _localised(builder.build())
+        world = _localised_recipe(_localised(builder).build())
 
     # The actor provider is resolved before the loop, and a replay makes it
     # unreachable for the same reason a replayed narration does: a fallback that
@@ -3702,14 +3736,18 @@ def pack_locales(
     German report prints `-1.234` tells a reader the document is synthetic, and
     tells them from the punctuation.
 
-    `worldloom build --locale <name>` sets one, and it reaches **half** of what
-    is printed below. The figure grammar is corpus-wide and rides the recipe, so
-    every renderer and the retrieval index spell one number one way. The rest —
-    whose names the people have, what the site regions are called, which days are
-    working days, when the fiscal year starts — is decided inside the generators
-    at build time and still comes from a pack's `name_pools`, `regions` and
-    `headquarters`. The gap is worth knowing before you claim Frankfurt: the
-    figures will be German and the staff will not be.
+    `worldloom build --locale <name>` sets one, and it reaches most of what is
+    printed below. The figure grammar is corpus-wide and rides the recipe, so
+    every renderer and the retrieval index spell one number one way; the region
+    labels, the name pools, the headquarters city, the currency and the fiscal
+    year reach the generators at build time, so the staff, the sites and the
+    units are the jurisdiction's too. A pack's own `name_pools`, `regions`,
+    `headquarters` and currency are the narrower claim and still win.
+
+    One column below does not move yet, and it is the `week`: the close calendar
+    counts business days on the engine's Monday-to-Friday wherever the corpus is
+    set, because no world spec carries a calendar into the episode generators.
+    Claim Dubai and the close is still due on a Sydney Friday.
 
     Dates in facts stay ISO 8601 deliberately, and are not a field here: a
     locale that made one renderer print `03/04/2026` while the fact said
@@ -3751,8 +3789,9 @@ def pack_locales(
         )
     console.print(
         "\n[dim]`worldloom build --locale <name>` sets one. It reaches the figure"
-        " grammar corpus-wide; the name pools and site regions still come from a"
-        " pack — see this command's help.[/dim]"
+        " grammar corpus-wide and the regions, names, headquarters, currency and"
+        " fiscal year at build time; the working week above does not reach the"
+        " close calendar yet — see this command's help.[/dim]"
     )
 
 
