@@ -90,3 +90,50 @@ def test_it_writes_to_the_purpose_rather_than_listing(staged: World, narration: 
     # And the section that carries the argument reads as an argument.
     drivers = texts["ART-0003/Drivers"]
     assert "structural" in drivers
+
+
+def test_any_currency_renders_as_money_not_only_the_four_somebody_listed() -> None:
+    """A live defect, and the kind a reader finds rather than a test.
+
+    This was an allow-list of AUD/USD/GBP/EUR while `Pack.currency` accepted any
+    string, so a pack denominated in AED printed `240,900 AED_thousands` instead
+    of `AED 240,900 thousands` — and silently dropped the ` adverse` suffix that
+    tells a reader a negative variance is bad news.
+    """
+    from datetime import datetime, timezone
+
+    from worldloom.models import Authority, CanonicalFact, Quantity
+    from worldloom.narrative.references import render_value
+
+    def fact(amount: float, unit: str) -> CanonicalFact:
+        return CanonicalFact(
+            id="FACT-0001", kind="financial.revenue.actual", subject="BU-0001",
+            value=Quantity(amount=amount, unit=unit),
+            valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            authority=Authority.SYSTEM_OF_RECORD,
+        )
+
+    for code in ("AUD", "AED", "CHF", "SGD", "JPY", "INR"):
+        assert render_value(fact(240900, f"{code}_thousands")) == f"{code} 240,900 thousands"
+        assert render_value(fact(-2900, f"{code}_thousands")).endswith(" adverse")
+
+
+def test_a_unit_that_is_not_a_currency_is_not_rendered_as_one() -> None:
+    """ISO 4217 is three uppercase letters and nothing else this corpus mints
+    resembles that — but the shape test has to be narrow enough to prove it."""
+    from datetime import datetime, timezone
+
+    from worldloom.models import Authority, CanonicalFact, Quantity
+    from worldloom.narrative.references import render_value
+
+    def fact(unit: str) -> CanonicalFact:
+        return CanonicalFact(
+            id="FACT-0001", kind="k", subject="s",
+            value=Quantity(amount=12, unit=unit),
+            valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            authority=Authority.SYSTEM_OF_RECORD,
+        )
+
+    assert render_value(fact("SKUs")) == "12 SKUs"
+    assert render_value(fact("business_days")) == "12 business days"
+    assert render_value(fact("bps")).endswith("favourable")

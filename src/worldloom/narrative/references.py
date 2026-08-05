@@ -79,7 +79,7 @@ def render_value(fact: CanonicalFact) -> str:
         return f"{amount:.2f}%"
     if unit == "bps":
         return f"{abs(amount):,.0f} bps {'adverse' if amount < 0 else 'favourable'}"
-    if unit.startswith(("AUD", "USD", "GBP", "EUR")):
+    if _is_money(unit):
         currency, _, scale = unit.partition("_")
         rendered = f"{currency} {magnitude}"
         if scale:
@@ -88,6 +88,26 @@ def render_value(fact: CanonicalFact) -> str:
     if unit == "business_days":
         return f"{magnitude} business day" + ("" if amount == 1 else "s")
     return f"{magnitude} {unit}"
+
+
+def _is_money(unit: str) -> bool:
+    """Whether a unit names a currency, by its shape rather than by a list.
+
+    This was an allow-list of four — AUD, USD, GBP, EUR — and `Pack.currency`
+    has always accepted any string. So a pack denominated in AED, CHF, SGD, JPY
+    or INR fell through to the generic branch and printed
+    `240,900 AED_thousands` instead of `AED 240,900 thousands`, and silently
+    lost the ` adverse` suffix that tells a reader a negative variance is bad
+    news. A live defect for every currency nobody thought to add, and the kind
+    that gets found by a reader rather than by a test.
+
+    ISO 4217 is exactly three uppercase letters, which no other unit this corpus
+    mints resembles — `percent`, `bps`, `business_days` and `SKUs` are all
+    lowercase-led or longer. Matching the shape means a currency works because
+    it is a currency, not because somebody remembered it.
+    """
+    head, _, _ = unit.partition("_")
+    return len(head) == 3 and head.isascii() and head.isupper() and head.isalpha()
 
 
 def describe(fact: CanonicalFact, subject: str | None = None) -> str:
