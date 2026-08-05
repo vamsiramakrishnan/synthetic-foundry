@@ -243,6 +243,18 @@ class Variant:
     coordinates: tuple[float, ...]
     engine: str = "retail"
     estate: str | None = None
+    vocabulary: str = ""
+    """Which ``worldloom.vocabulary`` preset this world's divisions are named
+    from. Empty is the archetype's own words.
+
+    Not an ``Axis``, and that is a decision rather than an omission. The axes
+    are a *continuous* space that ``farthest_first`` disperses over, and every
+    world's whole shape is read off its coordinates — adding a twelfth dimension
+    would move every existing world's headcount and span in order to vary a
+    string, which would make the before/after this exists to be measured by
+    unreadable. Vocabularies are instead dealt out in `_field` from a permuted
+    registry, which guarantees what dispersion only approximates: no two worlds
+    of a mosaic speak the same words until the registry runs out."""
 
     @property
     def functions(self) -> tuple[str, ...]:
@@ -267,6 +279,20 @@ class Variant:
             span=self.span, levels=self.levels, engine=engine or self.engine,
         ))
 
+    def speaks(self, shape: Any) -> Any:
+        """*shape*, saying this world's words — or *shape* itself, unchanged.
+
+        Returns the archetype it was given whenever this variant has no
+        vocabulary, which is every engine whose unit kinds nothing in
+        ``worldloom.vocabulary`` names, and every archetype a pack authored.
+        A build that goes through here and gets nothing back is therefore
+        byte-identical to one that never called it, which is what lets the
+        caller apply it unconditionally.
+        """
+        from .vocabulary import spoken
+
+        return spoken(shape, self.vocabulary)
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "index": self.index,
@@ -277,6 +303,7 @@ class Variant:
             "engine": self.engine,
             "calendar": self.calendar,
             "estate": self.estate,
+            "vocabulary": self.vocabulary,
             "functions": list(self.functions),
             "physics": {name: span.as_dict() for name, span in sorted(self.overrides.items())},
         }
@@ -290,6 +317,11 @@ class Variant:
         if any(axis.name == "calendar" for axis in ENGINES[self.engine]):
             parts.append(f"{self.calendar} calendar")
         parts.append("no estate" if self.estate is None else f"{self.estate} estate")
+        # Named only when there is one, for `calendar`'s reason above: printing
+        # "no vocabulary" beside every world of an engine this registry does not
+        # cover would report a dimension the mosaic did not actually vary.
+        if self.vocabulary:
+            parts.append(f"{self.vocabulary} vocabulary")
         return ", ".join(parts)
 
 
@@ -421,6 +453,7 @@ def _field(
         )
 
     chosen = farthest_first(points, manhattan, count)
+    dialects = _vocabularies(engine, seed)
     # Re-indexed and re-seeded in selection order so world 1 is the first
     # chosen, not whichever candidate happened to survive the filter first.
     return tuple(
@@ -435,9 +468,46 @@ def _field(
             coordinates=feasible[at].coordinates,
             engine=feasible[at].engine,
             estate=feasible[at].estate,
+            # By position, so `mosaic -n 3` and `mosaic -n 5` agree on the words
+            # of the worlds they share — the property `field`'s docstring
+            # already promises for seeds and shapes, extended to vocabulary
+            # because a corpus a user rebuilt with a larger `-n` renaming every
+            # division of the worlds they already had would be worse than no
+            # variation at all.
+            vocabulary=dialects[position % len(dialects)] if dialects else "",
         )
         for position, at in enumerate(chosen)
     )
+
+
+def _vocabularies(engine: str, seed: int) -> tuple[str, ...]:
+    """The words this mosaic's worlds will be dealt, in the order they are dealt.
+
+    A permutation rather than a per-world draw. Five independent draws from
+    eleven names collide about half the time, and two worlds of a mosaic being
+    the same company is the exact defect this varies vocabulary to fix — the
+    module already refuses to let dispersion be approximated by sampling, and
+    this is the same argument one dimension over.
+
+    Permuted rather than taken in registry order because the alternative makes
+    ``mosaic --seed`` a lie about words: every seed would produce the same five
+    companies with different figures inside them. ``rng.Rng`` gives the stream a
+    name of its own, so adding a draw here can never reshuffle anything else a
+    seed decides.
+
+    Cycles when the registry is shorter than the mosaic — a nine-world banking
+    mosaic reuses three vocabularies. Cycling and not refusing, because a world
+    that shares another's words still differs in headcount, depth, estate and
+    physics, and a mosaic that would not build at all is a worse answer than one
+    that repeats a name.
+    """
+    from .rng import Rng
+    from .vocabulary import for_engine
+
+    available = for_engine(engine)
+    if not available:
+        return ()
+    return tuple(Rng(seed).derive("vocabulary").shuffled(available))
 
 
 def from_probe(

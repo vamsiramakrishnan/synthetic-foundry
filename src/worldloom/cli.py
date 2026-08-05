@@ -1822,7 +1822,12 @@ def mosaic(
 
     written: list[str] = []
     for variant in variants:
-        spec = domain.world(seed=variant.seed, archetype=shape)
+        # `speaks` gives the variant its own division, category and site-format
+        # names (`worldloom.vocabulary`) without touching a share, a margin or a
+        # site count, and returns `shape` unchanged for any engine whose unit
+        # kinds nothing names — so this line varies what the five worlds are
+        # *called* and cannot vary what they are.
+        spec = domain.world(seed=variant.seed, archetype=variant.speaks(shape))
         changes: dict[str, Any] = {
             "physics": variant.physics,
             "role_table": variant.role_table(),

@@ -43,6 +43,24 @@ class Archetype:
     employees: int = 80_000
     units: tuple[UnitSpec, ...] = ()
 
+    vocabulary: str = ""
+    """Which ``worldloom.vocabulary`` preset supplied these units' *words*.
+
+    Empty means the archetype's own, written below — which is what every build
+    that does not ask for a vocabulary gets, and the reason adding this field
+    changed no corpus by a byte. A non-empty value is always accompanied by a
+    ``key`` qualified with it (``"omnichannel_retailer+wholesale_club"``), so a
+    recipe that stores the key alone rebuilds the words as well as the figures."""
+
+    authored: bool = False
+    """These words were written by a pack author, not by this registry.
+
+    Set only by ``packs.archetype_of``. ``vocabulary.spoken`` returns an
+    authored archetype untouched: ``Pack.units`` names every division, category
+    and site format explicitly, and a generated vocabulary overriding that would
+    invert the specificity rule the rest of the pack surface follows — a pack's
+    ``regions`` already beat a locale's pool for the same reason."""
+
     @property
     def site_count(self) -> int:
         return sum(fmt.count for unit in self.units for fmt in unit.site_formats)
@@ -371,13 +389,30 @@ _INSPIRATION: dict[str, str] = {
 
 
 def get(key: str) -> Archetype:
-    """Look up an archetype by key."""
+    """Look up an archetype by key, optionally qualified with a vocabulary.
+
+    ``"omnichannel_retailer"`` is the shape with its own words.
+    ``"omnichannel_retailer+wholesale_club"`` is the same shape — identical
+    shares, margins, site counts and unit keys — spoken as a membership
+    warehouse club (``worldloom.vocabulary``).
+
+    Resolved *here*, in the one function every caller already goes through,
+    rather than by adding a parameter to each of them. That is what makes the
+    qualified form work from ``build --archetype``, from ``Blueprint.archetype``
+    and, load-bearing, from ``recipe.rebuild`` — which reads back the single
+    ``archetype`` string a world stored and would otherwise rebuild a mosaic
+    world with its figures intact and every division renamed back.
+    """
+    from .vocabulary import QUALIFIER, spoken
+
+    base, _, dialect = key.partition(QUALIFIER)
     try:
-        return _REGISTRY[key]
+        shape = _REGISTRY[base]
     except KeyError:
         raise KeyError(
-            f"unknown archetype {key!r}. Registered: {', '.join(sorted(_REGISTRY))}"
+            f"unknown archetype {base!r}. Registered: {', '.join(sorted(_REGISTRY))}"
         ) from None
+    return spoken(shape, dialect) if dialect else shape
 
 
 def inspired_by(description: str) -> Archetype:

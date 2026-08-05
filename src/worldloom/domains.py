@@ -113,9 +113,22 @@ def register_domain(domain: Domain) -> None:
 
 
 def for_archetype(key: str) -> Domain | None:
-    """The domain that owns *key*, or ``None`` for an unclaimed archetype."""
+    """The domain that owns *key*, or ``None`` for an unclaimed archetype.
+
+    A key may be qualified with a vocabulary (``"midsize_adi+mutual_bank"`` —
+    see ``worldloom.vocabulary``), and the qualifier is stripped before the
+    lookup because it names *words*, not a vertical: a bank that calls its
+    divisions Member Banking and Community Business is still built by the
+    banking engine. Stripping here rather than at each call site is what keeps
+    ``Domain.archetype_keys`` a set of shapes — a domain enumerating its
+    archetypes crossed with every vocabulary would be a registry that grew when
+    somebody added a name to a word list.
+    """
+    from .vocabulary import QUALIFIER
+
+    base = key.partition(QUALIFIER)[0]
     for domain in _DOMAINS.values():
-        if key in domain.archetype_keys:
+        if base in domain.archetype_keys:
             return domain
     return None
 

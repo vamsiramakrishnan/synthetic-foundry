@@ -346,9 +346,16 @@ def archetype_of(pack: Pack) -> Archetype:
     The key is derived from the pack name so recipes and registries stay
     string-keyed; pack archetypes are not registered globally — a pack travels
     with its corpus rather than living in the process.
+
+    ``authored=True`` is the line that keeps a pack winning. ``Pack.units``
+    names every division, category and site format, and ``vocabulary.spoken``
+    returns an authored archetype untouched — so a corpus built from a pack
+    keeps the author's words whatever else asks for a vocabulary, the same
+    precedence ``Pack.regions`` already has over a locale's region pool.
     """
     return Archetype(
         key=f"pack:{pack.name}",
+        authored=True,
         label=pack.description or pack.name,
         industry=pack.industry,
         currency=pack.currency,
