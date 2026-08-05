@@ -14,6 +14,15 @@ exists to pose, from **both** — a family that only one of the two fails is a
 finding about that heuristic, not about the corpus; a family both fail is
 structurally hard. `compare()` makes that reading explicit.
 
+**A question is a per-world draw too** (`phrasing.py`). The answer already was:
+a mosaic's five worlds have five sets of facts. The *question* was one sentence
+typed once into the taxonomy and emitted identically into every world, so
+thirty-one of a five-world mosaic's questions were byte-identical in all five
+and the retrieval spread for those families was exactly zero. `phrasing` deals
+each vocabulary a complete wording of the benchmark, chosen by dispersion over
+the token sets a retriever actually ranks on, and confined to the one field
+grading never reads.
+
 **Retrieval is graded, not generation.** An expected answer is free text and
 grading text against text needs a judge, which would put a model inside the
 measurement. But the manifest already records which facts each artifact carries,
@@ -24,6 +33,7 @@ nothing but the corpus.
 
 from __future__ import annotations
 
+from . import phrasing
 from .bm25 import Bm25
 from .index import Passage, document_texts, passages
 from .score import (
@@ -52,4 +62,5 @@ __all__ = [
     "score",
     "compare",
     "render_agreement",
+    "phrasing",
 ]

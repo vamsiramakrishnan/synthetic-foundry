@@ -326,6 +326,10 @@ class MonthEndClose:
             intents = tuple(advanced._artifact_intents[len(prior_intents):])
 
         from . import graphs
+        # Imported here rather than at module scope for the reason `graphs` is:
+        # `evaluate` pulls in the render layer through its index, and a
+        # scenario is imported by everything that builds anything.
+        from .evaluate import phrasing
 
         cases = evaluation.evaluation_cases(
             minter,
@@ -366,7 +370,19 @@ class MonthEndClose:
             # A pack's evaluation-text overrides ride the recipe, the same
             # seam `episode_text` uses for the episode itself, so a
             # re-voiced benchmark rebuilds with no pack file on hand.
-            text=(world._recipe.get("pack") or {}).get("evaluation_text") or None,
+            #
+            # A world that speaks a dealt vocabulary re-voices the benchmark
+            # too, through the same seam and *underneath* the pack: the
+            # taxonomy's phrasing is the same sentence in every world, so a
+            # mosaic of five companies asked thirty-one of its questions
+            # byte-identically five times. `evaluate.phrasing` deals each
+            # vocabulary a wording (`overrides` returns None for every world
+            # that speaks none, which is every stock build, so this line is a
+            # no-op wherever it was one before). Pack overrides win, because an
+            # author who re-voiced a question said what they meant and a deal
+            # is a default.
+            text={**(phrasing.overrides(world) or {}),
+                  **((world._recipe.get("pack") or {}).get("evaluation_text") or {})} or None,
         )
 
         if self.actors is not None:
