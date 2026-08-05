@@ -55,12 +55,14 @@ from pathlib import Path
 from typing import Any
 
 from . import archetypes, domains, landscape, profiles
+from .company import FUNCTIONS as _FUNCTIONS
 from .parameters import DEFAULT, Parameters, Span
 from .roles import from_shape, to_rows
 
 __all__ = [
-    "Blueprint", "Built", "banking", "built", "companies", "cross", "dispersed",
-    "engine", "insurance", "mosaic_of", "probe_of", "retail", "sweep",
+    "Blueprint", "Built", "banking", "built", "companies", "cross", "described",
+    "dispersed", "engine", "insurance", "mosaic_of", "probe_of", "retail",
+    "sweep",
 ]
 
 
@@ -90,7 +92,33 @@ class Blueprint:
     estate_size: str | None = None
     estate_vocabulary: str | None = None
     employees: int | None = None
+    annual_revenue: int | None = None
+    """The company's scale in the archetype's own ``currency_unit``. Unlike
+    ``employees`` this one is load-bearing on every path — every money fact in
+    the corpus is derived from it (``generators/finance``) — which is why it is
+    worth a field of its own rather than being left to a pack."""
+
+    pack_source: Any = None
+    """A ``packs.Pack`` this world is built from, or ``None``. Held rather than
+    folded into ``archetype_key`` because a pack is not a shape: it also carries
+    the company's name, its lore, its voices and its geography, and
+    ``World.from_pack`` is a different constructor from ``World(...)``."""
+
+    locale_name: str | None = None
+    """The jurisdiction this corpus is written in. Applied to the *recipe*
+    after the build rather than to the builder, because that is where a locale
+    lives — ``recipe.locale_of`` argues out why — and no world spec accepts
+    one."""
+
     facet_choices: Mapping[str, str] = _field(default_factory=dict)
+    role_rows: tuple[tuple[str, str, str, str | None], ...] = ()
+    """A finished organisation, when something upstream already built one — a
+    resolved company specification is the case this exists for. Kept apart from
+    ``shape``/``implied_roles`` rather than reverse-engineered into them,
+    because a table that has already passed ``roles.review`` is a stronger
+    thing than the shape it came from, and re-synthesising it here would throw
+    away the leadership rows a describer wrote by hand."""
+
     implied_roles: tuple[tuple[str, str, str, str | None], ...] = ()
     implied_lore: tuple[Any, ...] = ()
     """The ``facets.LoreClaim``s the chosen facets commit this world to, minted
@@ -211,6 +239,55 @@ class Blueprint:
         different claim from how many people the corpus names."""
         return replace(self, employees=employees)
 
+    def revenue(self, annual: int) -> Blueprint:
+        """Annual revenue, in the archetype's own ``currency_unit``.
+
+        A value and not a range, because the engine reads it once: every money
+        fact in the corpus is a share of this figure. Contrast ``physics``,
+        which sets the bands the engine *draws inside*.
+        """
+        return replace(self, annual_revenue=annual)
+
+    def located(self, locale: str) -> Blueprint:
+        """The jurisdiction. Refuses an unknown one here rather than at render.
+
+        Reaches the figure grammar corpus-wide. Whether it reaches the people,
+        the regions and the head office as well depends on there being a pack:
+        that half has one door and it is ``organisation.generate``'s
+        ``name_pools``/``regions``/``headquarters``, which only a pack fills.
+        ``worldloom.company`` composes one when a description carries an
+        identity; a bare blueprint does not, so this is the render half alone.
+        """
+        from . import locales
+
+        locales.named(locale)
+        return replace(self, locale_name=locale)
+
+    def pack(self, source: Any) -> Blueprint:
+        """Build from an authored pack — its shape, lore, name and geography.
+
+        Refuses the fields a pack already states, rather than picking a winner.
+        A pack *is* the company; a blueprint field beside it would be a second
+        account of the same thing, which is what the recipe exists to make
+        impossible.
+        """
+        from . import packs
+
+        loaded = source if hasattr(source, "units") else packs.load(source)
+        restated = [
+            name for name, given in (
+                ("archetype", self.archetype_key is not None),
+                ("staff", self.employees is not None),
+                ("revenue", self.annual_revenue is not None),
+            ) if given
+        ]
+        if restated:
+            raise ValueError(
+                f"a pack already states {restated}; drop those calls or edit the"
+                " pack — a build with two answers has no rule for which wins"
+            )
+        return replace(self, pack_source=loaded, domain_name=loaded.base)
+
     # -- realisation -------------------------------------------------------
 
     @property
@@ -219,6 +296,22 @@ class Blueprint:
 
     @property
     def seasonality(self) -> profiles.Seasonality | None:
+        """The trading year this world is built *and run* under.
+
+        A pack's own wins, and reading it here rather than only in ``build`` is
+        load-bearing: ``World.from_pack`` puts the pack's year on the builder,
+        ``build_recipe`` records it, and ``recipe.rebuild`` hands the recorded
+        year to *every episode*. So a blueprint that built under the pack's year
+        and ran its closes under none would produce a corpus its own recipe
+        rebuilds differently — the one failure a recipe exists to make
+        impossible, and silent, because both corpora validate.
+        """
+        if self.pack_source is not None:
+            from . import packs
+
+            packed = packs.seasonality_of(self.pack_source)
+            if packed is not None:
+                return packed
         return None if self.calendar_name is None else profiles.named(self.calendar_name)
 
     def role_table(self) -> tuple[tuple[str, str, str, str | None], ...] | None:
@@ -235,6 +328,8 @@ class Blueprint:
         mean headcount exceeds what `org()` requested; the alternative is
         dropping a role the claim requires, which is worse and quieter.
         """
+        if self.role_rows:
+            return self.role_rows
         if self.shape is None and not self.implied_roles:
             return None
         rows: list[tuple[str, str, str, str | None]] = []
@@ -267,6 +362,9 @@ class Blueprint:
             "shape": dict(self.shape) if self.shape else None,
             "calendar": self.calendar_name,
             "estate": self.estate_size,
+            "locale": self.locale_name,
+            "revenue": self.annual_revenue,
+            "pack": None if self.pack_source is None else self.pack_source.name,
             "physics": {name: span.as_dict()
                         for name, span in sorted(self.physics_overrides.items())},
             "facets": dict(sorted(self.facet_choices.items())),
@@ -285,7 +383,6 @@ class Blueprint:
                 f"no domain named {self.domain_name!r}; known: {domains.names()}"
             )
         key = self.archetype_key or registered.default_archetype
-        shape = archetypes.get(key)
 
         changes: dict[str, Any] = {"physics": self.parameters}
         table = self.role_table()
@@ -303,9 +400,19 @@ class Blueprint:
             # are conditional.
             changes["lore_claims"] = self.implied_lore
 
-        spec = registered.world(seed=self.seed, archetype=shape,
-                                **({} if self.employees is None
-                                   else {"employees": self.employees}))
+        if self.pack_source is not None:
+            # A different constructor, not a different argument: `from_pack`
+            # resolves the archetype, the lore and the trading year off the
+            # pack, and reproducing that here would be a second implementation
+            # of the pack contract that could drift from the one the CLI uses.
+            spec = registered.world.from_pack(self.pack_source, seed=self.seed)
+        else:
+            spec = registered.world(
+                seed=self.seed, archetype=archetypes.get(key),
+                **({} if self.employees is None else {"employees": self.employees}),
+                **({} if self.annual_revenue is None
+                   else {"annual_revenue": self.annual_revenue}),
+            )
         # `replace` rather than constructor keywords: a domain registered
         # outside this repository may not accept every field, and this way the
         # failure names the field rather than being a TypeError on a keyword
@@ -317,14 +424,28 @@ class Blueprint:
                 raise TypeError(
                     f"{type(spec).__name__} does not accept {name!r}: {exc}"
                 ) from exc
-        return Built(spec.build(), self)
+        if self.locale_name is not None:
+            try:
+                # When the engine's builder has a `locale` field the build half
+                # reaches the generators directly — regions, name pools, head
+                # office. When it does not, this is a no-op and the render half
+                # below is all a locale gets; `company.resolve` reports that
+                # shortfall rather than leaving it to be discovered.
+                spec = replace(spec, locale=self.locale_name)
+            except TypeError:
+                pass
+        world = spec.build()
+        if self.locale_name is not None:
+            # On the recipe, after the build, exactly as `cli._localised` does
+            # it and for the reason `recipe.locale_of` gives: the recipe is the
+            # only document a corpus has that is singular, so two artifacts
+            # cannot disagree about how a figure is spelled. Doing it here
+            # rather than in `Built` means a blueprint's world is localised
+            # before any episode runs, which is where `recipe.rebuild` puts it.
+            from .recipe import with_locale
 
-
-#: Departments, drawn longest-first so a deeper organisation gets more of them.
-_FUNCTIONS: tuple[str, ...] = (
-    "Executive", "Finance", "Technology", "Operations", "Merchandising",
-    "ServiceOperations", "Risk", "Supply Chain", "Digital", "People",
-)
+            world = world.extend(recipe=with_locale(world.recipe, self.locale_name))
+        return Built(world, self)
 
 
 def _nearest_parameter(name: str) -> str:
@@ -465,6 +586,80 @@ def engine(name: str, *, seed: int = 8128) -> Blueprint:
     if domains.by_name(name) is None:
         raise KeyError(f"no domain named {name!r}; known: {domains.names()}")
     return Blueprint(domain_name=name, seed=seed)
+
+
+def described(
+    specification: Any,
+    *,
+    seed: int = 8128,
+    strict: bool = True,
+) -> Blueprint:
+    """A blueprint from a company specification — a document, a path, or a spec.
+
+    The one entry point that starts from *what kind of company this is* rather
+    than from which engine builds it. Everything it sets, a caller could set by
+    hand; what it adds is that the nine surfaces are resolved together, so a
+    contradiction between two of them is a sentence rather than a corpus.
+
+        sdk.described({"industry": "general insurance", "geo": "germany",
+                       "facets": {"listing": "listed", "trading_pattern": "steady"}})
+
+    The result is an ordinary ``Blueprint``, which is the point: it can be
+    crossed, swept, dispersed, and further constrained like any other, and the
+    description is not carried past this call. ``worldloom.company.resolve``
+    returns the same resolution with its ``unmet`` list intact when you want to
+    read what the description committed to and the engine did not honour.
+
+    ``strict=False`` returns a blueprint even when the description conflicts,
+    for a caller who wants to inspect the conflicts rather than catch them.
+    Nothing downstream is relaxed: the same refusals fire again at ``build()``,
+    because they are the engine's and not this function's.
+    """
+    from . import company as company_module
+
+    spec = (specification if isinstance(specification, company_module.CompanySpec)
+            else company_module.from_document(specification))
+    resolution = company_module.resolve(spec)
+    if strict:
+        resolution.raise_for_conflicts()
+    return from_resolution(resolution, seed=seed)
+
+
+def from_resolution(resolution: Any, *, seed: int = 8128) -> Blueprint:
+    """A resolved specification as a blueprint. The bridge, made addressable.
+
+    Separate from ``described`` so that a caller who resolved a description
+    themselves — to read its ``unmet``, or to amend it — does not have to
+    resolve it twice. Deliberately mechanical: every assignment below is a
+    consequence the resolution already computed and argued for, and this
+    function makes no decision of its own.
+    """
+    blueprint = Blueprint(
+        domain_name=resolution.engine or "retail",
+        seed=seed,
+        archetype_key=resolution.archetype_key or None,
+        physics_overrides=dict(resolution.physics),
+        calendar_name=resolution.calendar,
+        estate_size=resolution.estate,
+        locale_name=resolution.locale,
+        facet_choices=dict(resolution.facet_choices),
+        implied_lore=tuple(resolution.lore_claims),
+        unmet=tuple(resolution.unmet),
+    )
+    if resolution.pack is not None:
+        # A pack carries the shape, the scale and the name, so the fields it
+        # states are not set beside it — `Blueprint.pack` refuses exactly those,
+        # and this is why: two accounts of one company is what the resolution
+        # already refused one layer up.
+        return replace(blueprint, pack_source=resolution.pack,
+                       domain_name=resolution.pack.base, archetype_key=None,
+                       role_rows=resolution.role_table or ())
+    return replace(
+        blueprint,
+        employees=resolution.employees,
+        annual_revenue=resolution.annual_revenue,
+        role_rows=resolution.role_table or (),
+    )
 
 
 def retail(*, seed: int = 8128) -> Blueprint:

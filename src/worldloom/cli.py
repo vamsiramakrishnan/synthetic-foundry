@@ -299,6 +299,28 @@ def build(
             "an evaluation case needs. 0 (the default) touches nothing."
         ),
     ),
+    spec: Path = typer.Option(
+        None, "--spec",
+        help=(
+            "Build from a company specification: one JSON document that says "
+            "what kind of company this is, instead of the nine surfaces that "
+            "each say a piece of it. `worldloom pack spec` prints the schema "
+            "and `--template` writes a starter. Every field resolves into a "
+            "seam that already exists — an archetype, a vocabulary, facets, "
+            "physics ranges, a role table, a locale, a pack — so this adds no "
+            "capability the flags lack; what it adds is that the pieces are "
+            "resolved *together*, so a description that contradicts itself is "
+            "a sentence rather than a corpus. Two things worth knowing. It "
+            "refuses the flags it subsumes (--archetype, --inspired-by, "
+            "--pack, --employees, --facet, --physics, --locale, --estate) "
+            "rather than merging with them, because two accounts of one "
+            "company is what a recipe exists to make impossible. And a "
+            "specification is never recorded: it resolves to consequences and "
+            "the recipe records those, exactly as --facet records "
+            "consequences rather than facet names, so the corpus replays "
+            "after the registries move underneath it."
+        ),
+    ),
     facet: list[str] = typer.Option(
         None, "--facet",
         help=(
@@ -424,7 +446,66 @@ def build(
         )
         raise typer.Exit(code=2)
 
-    pack_obj = None
+    # One document instead of nine surfaces. Resolved here, before anything is
+    # built, and its consequences are then indistinguishable from the flags'
+    # own — which is the whole design: a specification is a *composer*, so
+    # everything below this block is the code that already existed, reading
+    # values that arrived by a shorter route. Nothing about a spec reaches the
+    # recipe; its consequences do, exactly as `--facet` records consequences
+    # rather than facet names.
+    resolution = None
+    annual_revenue: int | None = None
+    if spec is not None:
+        subsumed = [
+            flag for flag, given in (
+                ("--archetype", archetype != "omnichannel_retailer"),
+                ("--inspired-by", inspired_by is not None),
+                ("--pack", pack is not None),
+                ("--employees", employees is not None),
+                ("--facet", bool(facet)),
+                ("--physics", physics is not None),
+                ("--locale", locale is not None),
+                ("--estate", estate is not None),
+            ) if given
+        ]
+        if subsumed:
+            err.print(
+                f"[red]error:[/red] {', '.join(subsumed)} cannot be combined with"
+                " --spec; the specification already says what kind of company"
+                " this is, and two accounts of one company is the thing a"
+                " corpus's own recipe exists to make impossible. Put the claim"
+                " in the document."
+            )
+            raise typer.Exit(code=2)
+        from . import company as company_module
+
+        try:
+            resolution = company_module.resolve(company_module.from_document(spec))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            err.print(f"[red]error:[/red] {spec}: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        if not resolution.ok:
+            err.print("[red]error:[/red] this description cannot be built:")
+            for conflict in resolution.conflicts:
+                err.print(f"  [yellow]{conflict.rule}[/yellow] {escape(str(conflict))}")
+            raise typer.Exit(code=2)
+        # Assigned onto the flags' own locals rather than threaded through a
+        # parallel path. Two paths to one build is how the second one quietly
+        # stops matching the first, and everything below has already been
+        # argued for once.
+        archetype = resolution.archetype_key or archetype
+        employees = resolution.employees
+        annual_revenue = resolution.annual_revenue
+        estate = resolution.estate
+        locale = resolution.locale
+        console.print(
+            "[dim]spec:[/dim] "
+            + ", ".join(f"{k}={v}" for k, v in sorted(resolution.facet_choices.items()))
+        )
+        for want in resolution.unmet:
+            console.print(f"[yellow]unmet:[/yellow] {escape(want)}")
+
+    pack_obj = None if resolution is None else resolution.pack
     if pack is not None:
         # A pack supplies the shape, the lore, and the name, so the flags that
         # would supply them another way are refused rather than merged.
@@ -450,6 +531,29 @@ def build(
             raise typer.Exit(code=2) from exc
         for finding in packs_module.lint(pack_obj):
             err.print(f"[yellow]pack:[/yellow] {escape(finding)}")
+        shape = packs_module.archetype_of(pack_obj)
+        domain = domains.by_name(pack_obj.base)
+        if domain is None:
+            err.print(
+                f"[red]error:[/red] pack base {pack_obj.base!r} names no registered"
+                f" engine; registered: {', '.join(domains.names())}"
+            )
+            raise typer.Exit(code=2)
+    elif pack_obj is not None:
+        # A specification that carried an identity composed one, or named one to
+        # load. Only the named one is linted: `packs.lint` exists to hold an
+        # *author* to what they wrote, and a composed pack was written by this
+        # tool from a description that has already been resolved and refused
+        # against every registry it touches. Running it anyway would report one
+        # finding that is simply false — "the pack carries no lore" — because a
+        # specification's lore reaches the world through `lore_claims` and
+        # `world.extend_lore`, never through `Pack.lore`, and that seam's own
+        # docstring is the argument for why.
+        from . import packs as packs_module
+
+        if resolution is None or resolution.spec.pack:
+            for finding in packs_module.lint(pack_obj):
+                err.print(f"[yellow]pack:[/yellow] {escape(finding)}")
         shape = packs_module.archetype_of(pack_obj)
         domain = domains.by_name(pack_obj.base)
         if domain is None:
@@ -557,6 +661,29 @@ def build(
         for want in facets_module.unmet(resolved):
             console.print(f"[yellow]unmet:[/yellow] {escape(want)}")
 
+    #: The whole organisation a specification resolved, when one did. Kept apart
+    #: from `facet_roles` because it is a different kind of thing: facet roles
+    #: are rows to *append* to the engine's table, and this is a table that has
+    #: already been through `roles.review` with the engine's own spine placed in
+    #: it, the describer's leadership rows added, and the facets' roles folded
+    #: in. Appending it to the shipped table would duplicate every spine key.
+    spec_role_table: Any = None
+    if resolution is not None:
+        # Round-tripped through the recipe's own serialisation for the reason
+        # the facet path does it: a facet declares `Span(120, 300)` with Python
+        # ints and `overrides_from` coerces to float on the way back, so a
+        # recipe written here would carry `120` where its own replay carries
+        # `120.0`.
+        from .parameters import overrides_from as _overrides_from
+
+        facet_overrides = _overrides_from(
+            {name: span.as_dict() for name, span in resolution.physics.items()}
+        )
+        facet_calendar = resolution.calendar
+        facet_estate = resolution.estate
+        facet_lore = resolution.lore_claims
+        spec_role_table = resolution.role_table
+
     # Estate: an explicit `--estate` beats a facet's, because the caller said it
     # and the facet only implied it. Same rule the SDK's `.facets()` states.
     estate = estate if estate is not None else facet_estate
@@ -617,14 +744,21 @@ def build(
         this claim honestly has that nothing here implements is evidence, and
         the only failure would be letting it pass unsaid.
         """
-        if not facet_roles and facet_calendar is None and not facet_lore:
+        if (not facet_roles and facet_calendar is None and not facet_lore
+                and spec_role_table is None):
             return builder
         from dataclasses import replace as _replace_claimed
 
         changes: dict[str, Any] = {}
         if facet_lore:
             changes["lore_claims"] = facet_lore
-        if facet_roles:
+        if spec_role_table is not None:
+            # Substituted, not appended — see `spec_role_table`'s note. The
+            # engine's spine is already inside it, placed by `roles.from_shape`
+            # and checked by `roles.review`, which is more than the append path
+            # can say for a table it never looks at as a whole.
+            changes["role_table"] = spec_role_table
+        elif facet_roles:
             from . import roles as roles_module
 
             try:
@@ -656,7 +790,11 @@ def build(
                     "[yellow]unmet:[/yellow] the facets imply "
                     + {
                         "seasonality": f"the {facet_calendar!r} trading calendar",
-                        "role_table": f"{len(facet_roles)} role(s)",
+                        "role_table": (
+                            f"{len(spec_role_table)} role(s)"
+                            if spec_role_table is not None
+                            else f"{len(facet_roles)} role(s)"
+                        ),
                         "lore_claims": f"{len(facet_lore)} lore commitment(s)",
                     }[name]
                     + f" and {type(builder).__name__} has no `{name}` field, so"
@@ -772,6 +910,11 @@ def build(
             if pack_obj is not None
             else domain.world(
                 seed=seed, archetype=shape, employees=employees,
+                # Only when a specification stated one. Passed conditionally
+                # rather than as `annual_revenue=None` so a domain registered
+                # outside this repository, which may have no such field, keeps
+                # building exactly as it did.
+                **({} if annual_revenue is None else {"annual_revenue": annual_revenue}),
                 # Every vertical has its own landscape vocabulary now
                 # (`worldloom.landscape`), so this is no longer refused. It was
                 # refused rather than mis-served for as long as the only pools
@@ -789,13 +932,31 @@ def build(
         builder = _under_physics(
             RetailWorld.from_pack(pack_obj, seed=seed)
             if pack_obj is not None
-            else RetailWorld(seed=seed, archetype=shape, employees=employees)
+            else RetailWorld(
+                seed=seed, archetype=shape, employees=employees,
+                # See the single-episode branch: conditional, so a build that
+                # states no revenue is the bytes it always was.
+                **({} if annual_revenue is None else {"annual_revenue": annual_revenue}),
+            )
         )
         if estate is not None:
             from dataclasses import replace as _replace_builder
 
             builder = _replace_builder(builder, estate=estate)
         builder = _claimed(builder)
+        if resolution is not None and not claimed_calendar:
+            # A trading year the *pack* carries has to reach the closes too, and
+            # `_claimed` deliberately does not put a pack's year in
+            # `claimed_calendar` — it yields to the builder's rather than
+            # setting one. That is right for `--pack`, whose corpora were built
+            # before this mattered and must not move. It is wrong here: a
+            # specification's calendar reaches a composed pack *and* the
+            # builder, `build_recipe` records it, and `recipe.rebuild` hands the
+            # recorded year to every `MonthEndClose`. A build that skipped the
+            # closes would rebuild into a different corpus and report success.
+            carried_year = getattr(builder, "seasonality", None)
+            if carried_year is not None:
+                claimed_calendar.append(carried_year)
         world = _localised_recipe(_localised(builder).build())
 
     # The actor provider is resolved before the loop, and a replay makes it
@@ -3974,6 +4135,78 @@ def pack_export_command(
         f" with `worldloom build --pack {written['pack']}"
         + (f" --physics {written['physics']}" if "physics" in written else "")
         + "`.[/dim]"
+    )
+
+
+@pack_app.command("spec")
+def pack_spec(
+    template: bool = typer.Option(
+        False, "--template",
+        help="Emit a starter specification instead of the schema.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Emit the schema as data."),
+) -> None:
+    """The one document that says what kind of company this is.
+
+    Nine surfaces answer that question today — an archetype key, `--employees`,
+    a `--facet`, `--locale`, `--estate`, a `--physics` file, a `--pack`, a
+    vocabulary qualifier, and revenue, which can only be said by writing a
+    pack. Somebody describing a business has to know which of the nine each
+    clause belongs to, and two of them interact in a way nobody predicts:
+    naming *any* facet settles *every* facet at its registry default, so
+    `--facet listing=listed` alone also asserts a flat trading year.
+
+    A specification is one document instead, and it is a composer rather than
+    an engine: every field resolves into a seam that is already load-bearing,
+    so it adds no capability the flags lack. What it adds is that the pieces
+    are resolved together. A description saying 40bn of revenue across twelve
+    employees is refused with both numbers and the registered shapes that bound
+    them; one saying premium margins in a fragmented market is refused with the
+    arithmetic; one claiming a trading year on an engine whose builder has no
+    field for one is reported rather than dropped.
+
+    It is not a pack, and the difference is worth knowing before choosing.
+    A pack is *identity* — a company's name, its divisions, their books, its
+    voices — embedded verbatim in the corpus recipe. A specification is a
+    *description*, naming no company at all, and is embedded not at all: it
+    resolves to consequences and the recipe records those, so the corpus
+    replays after the facet registry, the archetype table or the locale presets
+    move underneath it. A specification that carries an `identity` composes
+    into a pack, which is the only way its `geo` reaches the people and the
+    sites rather than only the figure grammar; a specification that names a
+    `pack` uses it whole, and the pack wins over everything derived.
+
+    Build one with `worldloom build --spec company.json`.
+    """
+    from . import company as company_module
+
+    if template:
+        typer.echo(json.dumps(company_module.template(), indent=2))
+        return
+
+    published = company_module.describe()
+    if as_json:
+        typer.echo(json.dumps(published, indent=2))
+        return
+
+    for entry in published["fields"]:
+        mark = {"value": "one value", "range": "a range",
+                "open": "free text"}[entry["kind"]]
+        console.print(f"[bold]{escape(entry['field'])}[/bold] [cyan]{mark}[/cyan]"
+                      + (f" [dim]← {escape(entry['registry'])}[/dim]"
+                         if entry["registry"] else ""))
+        console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+    console.print(
+        f"\n[dim]engines: {', '.join(published['engines'])}"
+        f"\narchetypes: {', '.join(published['archetypes'])}"
+        f"\nlocales: {', '.join(published['locales'])}"
+        f"\ncalendars: {', '.join(published['calendars'])}"
+        f"\nestates: {', '.join(published['estates'])}"
+        f"\n{len(published['parameters'])} physics parameter(s) —"
+        " `worldloom pack params`."
+        "\n\nA value may only be one the registry holds; a range may only"
+        " narrow one the engine draws inside. Start from"
+        " `worldloom pack spec --template`.[/dim]"
     )
 
 

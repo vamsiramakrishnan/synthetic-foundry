@@ -84,6 +84,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
+| `--spec` | Build from a company specification: one JSON document that says what kind of company this is, instead of the nine surfaces that each say a piece of it. `worldloom pack spec` prints the schema and `--template` writes a starter. Every field resolves into a seam that already exists — an archetype, a vocabulary, facets, physics ranges, a role table, a locale, a pack — so this adds no capability the flags lack; what it adds is that the pieces are resolved *together*, so a description that contradicts itself is a sentence rather than a corpus. Two things worth knowing. It refuses the flags it subsumes (--archetype, --inspired-by, --pack, --employees, --facet, --physics, --locale, --estate) rather than merging with them, because two accounts of one company is what a recipe exists to make impossible. And a specification is never recorded: it resolves to consequences and the recipe records those, exactly as --facet records consequences rather than facet names, so the corpus replays after the registries move underneath it. |
 | `--timeline` | Sample a history rather than repeating a month: `quiet`, `steady` or `turbulent`. `--periods 6` runs six closes signed by the same twenty-three people, drawn from the same distribution — six identical months with the dates changed. A density schedules incidents and org changes across those periods instead, so a controller who departs in period 2 means periods 3-6 are signed by their successor and "which month went wrong" becomes answerable from the corpus. Needs --periods to have room to work in. Costs: the schedule states incidents in *both* directions once it schedules any, so it and --incident cannot both decide; and hires are not sampled, because a new post's title is a business decision and a sampler inventing one would write the least plausible sentence in the corpus. |
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
 
@@ -372,6 +373,15 @@ The trading years a pack may choose by name.
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit as data. |
+
+### `worldloom pack spec`
+
+The one document that says what kind of company this is.
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the schema as data. |
+| `--template` | Emit a starter specification instead of the schema. |
 
 ### `worldloom pack targets`
 

@@ -194,7 +194,87 @@ success for work that reached no engine.
 
 ---
 
-## Saying what kind of company it is
+## Saying what kind of company it is, in one document
+
+Nine surfaces answer "what kind of company is this?" — an archetype key,
+`--employees`, a `--facet`, `--locale`, `--estate`, a `--physics` file, a
+`--pack`, a vocabulary qualifier, and revenue, which can only be said by
+writing a pack. Each is documented below and each is right; between them they
+require you to know which of nine places each clause of a sentence belongs to,
+and two interact in a way nobody predicts.
+
+A **company specification** is that sentence as one document:
+
+```bash
+worldloom pack spec                        # the schema, and which registry each field draws on
+worldloom pack spec --template             # a starter you can edit
+worldloom build --spec company.json --seed 8128 --out ./corpus
+```
+
+```json
+{
+  "industry": "General insurance",
+  "geo": "germany",
+  "facets": {"listing": "listed", "competition": "fragmented",
+             "maturity": "legacy", "trading_pattern": "steady"},
+  "organisation": {"headcount": 26, "span": 5, "levels": 3},
+  "leadership": [{"key": "chief_underwriting",
+                  "title": "Chief Underwriting Officer",
+                  "function": "Executive", "reports_to": "ceo"}],
+  "identity": {"company_name": "Rheinmark Versicherung",
+               "headquarters": "Munich, Germany"}
+}
+```
+
+It is a **composer, not an engine**. Every field resolves into a seam that is
+already load-bearing — `archetypes.get`, `vocabulary.spoken`, `facets.resolve`,
+`parameters.with_overrides`, `roles.from_shape`, `locales.named`, `packs.Pack` —
+so it adds no capability the flags lack. What it adds is that the pieces are
+resolved *together*, and three things follow from that:
+
+* **It refuses a description that contradicts itself, with the arithmetic.**
+  "40bn of revenue across twelve employees" is refused naming both numbers and
+  the registered shapes that bound them — the envelope is computed from the
+  archetype registry (97,500 to 514,286 per head, widened by the factor the
+  registry itself spans) rather than typed in, so registering a fifth archetype
+  moves it. Premium margins in a fragmented market is refused by
+  `facets.resolve`'s own empty-intersection arithmetic; an over-determined
+  headcount/span/depth by `roles.from_shape`'s.
+* **It reports what it cannot honour, rather than dropping it.** A trading year
+  on an engine whose world builder has no `seasonality` field; a margin band on
+  a vertical whose generators never draw from `retail.*`; a `geo` with no
+  identity to carry its people and regions; a named rival, which nothing here
+  mints an entity for. Same `unmet:` channel a facet's `wants` uses, and for
+  the same reason.
+* **It is never recorded.** A pack is embedded in the recipe verbatim, because
+  the pack *is* how the world was made. A specification resolves to
+  consequences and the recipe records *those*, exactly as `--facet` records
+  consequences rather than facet names — so the corpus replays byte-for-byte
+  after the facet registry, the archetype table or the locale presets move
+  underneath it.
+
+**A specification is not a pack, and the boundary is `company_name`.** A pack
+is *identity*: a company's name, its divisions, their books, its voices, and
+`pack_export` marks every one of those `PLACEHOLDER` because nothing derived
+can honestly supply them. A specification is a *description* — true of a class
+of businesses, naming no company at all. Supplying `identity.company_name` is
+what lets a description compose *into* a pack, which is how a description names
+the company at all — a `geo` reaches the people, the site regions and the head
+office on its own, through `--locale`. Naming a `pack` instead uses it whole, and the
+pack then wins over everything derived — the same precedence `Pack.regions`
+already has over a locale's pool.
+
+`--spec` refuses the flags it subsumes (`--archetype`, `--inspired-by`,
+`--pack`, `--employees`, `--facet`, `--physics`, `--locale`, `--estate`) rather
+than merging with them. `--seed`, `--periods`, `--incident`, `--messiness`,
+`--timeline` and the formats are untouched: the specification says what the
+company *is*, and those say what happens to it.
+
+In Python the same surface is `sdk.described(document)`, which returns an
+ordinary `Blueprint` — so a description can be crossed, swept and dispersed
+like any other.
+
+## Saying what kind of company it is, one attribute at a time
 
 The four flags below are the difference between "a corpus" and "the corpus you
 were asked for". Each is a no-op when omitted, so every corpus already built is
@@ -259,15 +339,22 @@ has left with nobody named in their place. Counts are a budget, not a quota: a
 small world has fewer corrections to be stale about and the pass takes what it
 can support.
 
-**`--locale`** puts the corpus somewhere. It reaches **half** of what a locale
-is, and the half matters: the figure grammar, corpus-wide, so the DOCX, the
-Markdown, the PPTX and the retrieval index all spell one number one way —
-`1.234,50` and `-1.234` in Germany, where before every corpus printed `1,234.50`
-and `(1,234)` whatever its pack said. The other half — whose names the people
-have, what the site regions are called, which days are working days — is decided
-inside the generators at build time and still comes from a pack's `name_pools`,
-`regions` and `headquarters`. Claim Frankfurt with `--locale` alone and the
-figures will be German and the staff will not be.
+**`--locale`** puts the corpus somewhere. It reaches the *figure grammar*,
+corpus-wide, so the DOCX, the Markdown, the PPTX and the retrieval index all
+spell one number one way — `1.234,50` and `-1.234` in Germany, where before
+every corpus printed `1,234.50` and `(1,234)` whatever its pack said. And it
+reaches the *build*: the region labels in every site name, the pools the people
+are drawn from, the headquarters city, the currency and the fiscal year. Claim
+Frankfurt and you get Katharina Kirchgässner in Berlin at `Supermarket BW 001`.
+A pack's own `name_pools`, `regions` and `headquarters` still win over the
+locale's, the same precedence `Pack.regions` has always had.
+
+One piece does not arrive: the **working week**. `Locale.working_week` and
+`holidays` are read by `business_days_after`, but nothing passes a calendar to
+`operations.generate` or `liquidity.generate`, so a Gulf close is still due on
+Monday-to-Friday arithmetic. A bank built at `--locale gulf` fails banking's
+`liquidity_cadence_gap` for exactly that reason, and the failure is true: the
+series really is observing LCR on Fridays.
 
 **`--timeline`** replaces repetition with a history. `--periods 6` runs six
 closes signed by the same twenty-three people, drawn from the same distribution:
