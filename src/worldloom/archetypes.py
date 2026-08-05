@@ -350,11 +350,113 @@ MIDSIZE_GENERAL_INSURER = Archetype(
 )
 
 
+def _transport_spend() -> tuple[CategorySpec, ...]:
+    """Third-party spend categories, share of the unit's addressable spend.
+
+    The fourth reading of these two fields, and the one that finally makes the
+    ``share``/``margin`` pair mean what a procurement function means by them:
+    ``share`` is the category's share of what this division *buys in*, and
+    ``margin`` is the margin the division earns on the work that spend goes
+    into. That is the same arithmetic slot a retail category uses and a bank's
+    product book borrows — deliberately, because ``hierarchy.generate`` is the
+    one dimension machine all four verticals run through.
+
+    ``Subcontract Labour`` is the category the procure-to-pay cycle's contested
+    order sits on: labour is bought by the crew-day against a rate card, which
+    is what makes a quantity and a rate two separately contestable numbers. A
+    tonne of aggregate delivered short is a quantity dispute and nothing else;
+    a crew-day billed at the wrong rate is the price half of a three-way match,
+    and this vertical needs a category that can carry both.
+    """
+    return (
+        CategorySpec("Subcontract Labour", 0.42, 0.096),
+        CategorySpec("Civil Materials", 0.31, 0.134),
+        CategorySpec("Plant Hire", 0.27, 0.118),
+    )
+
+
+def _utilities_spend() -> tuple[CategorySpec, ...]:
+    return (
+        CategorySpec("Specialist Subcontract", 0.40, 0.088),
+        CategorySpec("Cable and Conductor", 0.38, 0.141),
+        CategorySpec("Traffic Management", 0.22, 0.126),
+    )
+
+
+def _facilities_spend() -> tuple[CategorySpec, ...]:
+    return (
+        CategorySpec("Hard Services and Maintenance", 0.55, 0.152),
+        CategorySpec("Cleaning and Soft Services", 0.45, 0.109),
+    )
+
+
+#: A mid-size Australian infrastructure services group — the procure-to-pay
+#: vertical's shape. Shape only, like the three above it: the scale is the
+#: sector's, the spend categories are generic construction and utilities
+#: contracting, and every figure is generated from a seed.
+#:
+#: Why this kind of business rather than a manufacturer or a hospital group,
+#: both of which also buy heavily. A services contractor's cost base is
+#: *bought in* — subcontractors, plant, materials — so the purchase order is
+#: not a back-office artifact, it is where the money is committed, and the
+#: month-end accrual for what has been received and not yet invoiced is a
+#: material number rather than a rounding. That is what makes the composition
+#: this vertical exists to demonstrate — a goods receipt deciding a general
+#: ledger figure — a real dependency and not a contrivance.
+#:
+#: Revenue per head sits inside the envelope the registry already spans (see
+#: ``company.productivity_envelope``), which is a constraint a fifth archetype
+#: has to respect rather than a coincidence: an archetype outside it would
+#: widen the envelope and quietly stop the scale check refusing the figures it
+#: was written to refuse.
+MIDSIZE_INFRASTRUCTURE_SERVICES = Archetype(
+    key="midsize_infrastructure_services",
+    label="Mid-size Australian infrastructure services group",
+    industry="Infrastructure services and contracting",
+    currency="AUD",
+    currency_unit="thousands",
+    fiscal_year_start_month=7,
+    # ~3.2bn in thousands. Rounded to the scale of the sector, not to any filing.
+    annual_revenue=3_200_000,
+    employees=9_500,
+    units=(
+        UnitSpec(
+            key="transport", name="Transport Infrastructure", kind="transport_infrastructure",
+            share=0.46,
+            categories=_transport_spend(),
+            site_formats=(
+                SiteFormat("Depot", 34, 1.00),
+                SiteFormat("Project Office", 12, 0.42),
+            ),
+        ),
+        UnitSpec(
+            key="utilities", name="Utilities and Energy", kind="utilities_services",
+            share=0.34,
+            categories=_utilities_spend(),
+            site_formats=(
+                SiteFormat("Network Depot", 21, 1.00),
+                # A materials yard holds stock, not turnover — the same
+                # zero-revenue-weight shape `hierarchy.py` documents for a
+                # distribution centre and banking reuses for an operations centre.
+                SiteFormat("Materials Yard", 5, 0.0),
+            ),
+        ),
+        UnitSpec(
+            key="facilities", name="Facilities Management", kind="facilities_management",
+            share=0.20,
+            categories=_facilities_spend(),
+            site_formats=(SiteFormat("Facilities Hub", 9, 1.60),),
+        ),
+    ),
+)
+
+
 _REGISTRY: dict[str, Archetype] = {
     AUSTRALIAN_GROCERY.key: AUSTRALIAN_GROCERY,
     OMNICHANNEL_RETAILER.key: OMNICHANNEL_RETAILER,
     MIDSIZE_ADI.key: MIDSIZE_ADI,
     MIDSIZE_GENERAL_INSURER.key: MIDSIZE_GENERAL_INSURER,
+    MIDSIZE_INFRASTRUCTURE_SERVICES.key: MIDSIZE_INFRASTRUCTURE_SERVICES,
 }
 
 #: What `inspired_by` accepts, and the archetype each phrase resolves to.
@@ -385,6 +487,16 @@ _INSPIRATION: dict[str, str] = {
     "general insurer": "midsize_general_insurer",
     "australian insurer": "midsize_general_insurer",
     "general insurance": "midsize_general_insurer",
+    # Deliberately no bare "services" or "contractor": both occur inside
+    # descriptions of businesses that are nothing like this one ("financial
+    # services", "a contractor to the grocery trade"), and the longest-phrase
+    # rule below would not save them — it only breaks ties between phrases that
+    # all matched.
+    "infrastructure services": "midsize_infrastructure_services",
+    "civil contractor": "midsize_infrastructure_services",
+    "construction services": "midsize_infrastructure_services",
+    "engineering services": "midsize_infrastructure_services",
+    "utilities contractor": "midsize_infrastructure_services",
 }
 
 

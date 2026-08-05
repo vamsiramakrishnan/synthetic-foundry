@@ -61,6 +61,16 @@ from .banking_scenarios import QuarterlyCapitalReturn
 from .insurance import InsuranceWorld
 from .insurance_scenarios import QuarterlyReserving
 
+# And the fourth. Worth naming what this line is, because it is the one seam a
+# vertical needs that is not a registry: there is no plugin discovery, so a
+# domain module registers by *being imported*, and the only thing that imports
+# it unconditionally is this file. Everything else procurement touches in core
+# it reaches through `register_domain`, `register_step`,
+# `register_artifact_types` and `register_domain_checks`; this import is the
+# fifth seam, and it is a hand edit.
+from .procurement import ProcureToPayWorld
+from .procurement_scenarios import PurchaseToPayCycle
+
 # Same contract as the banking imports above: importing this is what registers
 # the `routine_notice` artifact type (build --distractors's plainest family),
 # and a corpus that carries one must compile identically whether this process
@@ -85,6 +95,8 @@ __all__ = [
     "QuarterlyCapitalReturn",
     "InsuranceWorld",
     "QuarterlyReserving",
+    "ProcureToPayWorld",
+    "PurchaseToPayCycle",
     # entities
     "Company",
     "BusinessUnit",
