@@ -61,12 +61,16 @@ RULES: tuple[str, ...] = (
     " days') or left out. A restated number is a copy that can drift from the"
     " ledger.",
     "Every assertion you make must be supported by at least one of the facts below,"
-    " and you must list your claims with the fact IDs supporting each.",
+    " and you must list your claims with the fact IDs supporting each. The converse"
+    " is equally strict: every fact you reference in prose must be cited by at least"
+    " one of your claims — a reference without a claim behind it is an unchecked"
+    " figure in the document.",
     "Do not mention any organisation, person, system, or metric that is not in the"
     " facts below. The check is mechanical: any run of two or more Capitalised"
     " Words that is not a name, or part of a name, of this world is rejected — so"
     " spell entity names exactly as supplied, and do not Title Case ordinary"
-    " phrases.",
+    " phrases. Job titles and names that appear only in background context are not"
+    " world entities and need not be spelled exactly.",
     "Facts marked `required: true` must appear.",
     "You know only what the facts below say, as of `knows_as_of`. Do not anticipate"
     " anything discovered later.",
@@ -93,6 +97,11 @@ RULES: tuple[str, ...] = (
     " check.",
     "Not every fact deserves a sentence. Weight them. A division that performed to"
     " plan warrants a clause; the one that did not warrants the paragraph.",
+    "A reference like {{{{fact:FACT-0001}}}} substitutes the fact's rendered value"
+    " verbatim into your prose — the same number, formatted for the locale, that"
+    " appears in the finished document's tables. Write your sentences around that"
+    " substitution: a fact rendering as 'AUD 1,234 thousands' asks for different"
+    " grammar than one rendering as '45%'.",
 )
 
 

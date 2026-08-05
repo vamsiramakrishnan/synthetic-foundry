@@ -635,4 +635,26 @@ def spread(variants: Sequence[Variant]) -> dict[str, Any]:
     }
 
 
-__all__ = ["AXES", "ENGINES", "Axis", "Variant", "describe", "field", "spread"]
+def register_engine(engine: str, axes: tuple[Axis, ...]) -> None:
+    """Register the axes that a mosaic will vary for a vertical.
+
+    Called by domain modules (procurement, future verticals) to define what
+    varies in a mosaic of their worlds. Redefinition is refused — every engine
+    may appear only once. An engine is registered by only one vertical, so a
+    collision is a wiring error rather than a legitimate override.
+
+    Raised rather than silently absorbed if an engine is already known, because
+    a duplicate in the registration chain is a wiring error: either the module
+    was imported twice, or two domains collided on the same engine name. Neither
+    is silent-and-plausible.
+    """
+    if engine in ENGINES:
+        raise KeyError(
+            f"engine {engine!r} is already registered. Each engine may appear"
+            f" only once; a collision is a wiring error in one of the modules"
+            f" calling register_engine."
+        )
+    ENGINES[engine] = axes
+
+
+__all__ = ["AXES", "ENGINES", "Axis", "Variant", "describe", "field", "spread", "register_engine"]

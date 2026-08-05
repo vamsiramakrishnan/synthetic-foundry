@@ -573,7 +573,29 @@ def publish() -> dict[str, Any]:
     return {name: value.as_dict() for name, value in sorted(LANDSCAPES.items())}
 
 
+def register(name: str, landscape: Landscape) -> None:
+    """Register an estate vocabulary for a vertical.
+
+    Called by domain modules (procurement, future verticals) to add their own
+    estate vocabularies to the global registry. Redefinition is refused — every
+    name may appear only once. A vocabulary is named only once per vertical, so
+    a name collision is a wiring error rather than a legitimate override.
+
+    Raised rather than silently absorbed if a name is already known, because a
+    duplicate in the registration chain is a wiring error: either the module was
+    imported twice, or two domains collided on the same name. Neither is
+    silent-and-plausible.
+    """
+    if name in LANDSCAPES:
+        raise KeyError(
+            f"landscape {name!r} is already registered. Each landscape name may"
+            f" appear only once; a collision is a wiring error in one of the"
+            f" modules calling register."
+        )
+    LANDSCAPES[name] = landscape
+
+
 __all__ = [
     "BANKING", "DEFAULT", "GENERATIVE", "INSURANCE", "LANDSCAPES", "RETAIL",
-    "SIZED", "Landscape", "from_document", "named", "publish",
+    "SIZED", "Landscape", "from_document", "named", "publish", "register",
 ]

@@ -85,12 +85,16 @@ from .rng import Rng
 from .validate import RECONCILIATION_TOLERANCE, Violation
 from .world import World, extend_lore
 
-# Imported for its side effect: registering procurement's artifact types with
-# the document compiler. Kept at module scope so that importing
-# `worldloom.procurement` — which `worldloom/__init__` always does — is
-# sufficient for a corpus loaded in a fresh process to compile and validate
-# identically everywhere.
+# Imported for its side effects: registering procurement's artifact types with
+# the document compiler, and registering its physics parameters. Kept at module
+# scope so that importing `worldloom.procurement` — which `worldloom/__init__`
+# always does — is sufficient for a corpus loaded in a fresh process to compile,
+# validate, and access procurement's parameters identically everywhere.
 from . import procurement_documents  # noqa: F401  (registration)
+from .generators.procurement_match import SPANS as _PROCUREMENT_SPANS
+from . import parameters as _parameters_module
+
+_parameters_module.register(_PROCUREMENT_SPANS)
 
 #: Archetype keys that build a ``ProcureToPayWorld``. The recipe rebuilder and
 #: the CLI dispatch on this.

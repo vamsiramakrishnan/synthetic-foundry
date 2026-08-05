@@ -870,6 +870,15 @@ def build(
             )
             raise typer.Exit(code=2) from exc
 
+    if employees is not None:
+        err.print(
+            f"[red]error:[/red] --employees is not yet threaded into organisation synthesis."
+            f" Specifying headcount is deferred to the episode grammar (Phase 2, `docs/next-phase-plan.md`),"
+            f" where declared slots for carry-forward will let a builder state it once for a"
+            f" multi-period episode rather than per-period. Use the archetype's own headcount for now."
+        )
+        raise typer.Exit(code=2)
+
     if single_episode is not None:
         refused = [
             flag for flag, given in (
@@ -1067,6 +1076,16 @@ def build(
             # Only when a facet put one on the builder — see `claimed_calendar`.
             **({} if not claimed_calendar else {"seasonality": claimed_calendar[0]}),
         )
+
+    if periods > 1 and single_episode is not None:
+        err.print(
+            f"[red]error:[/red] --periods {periods} is not supported for {domain.name}."
+            f" Multi-period support for single-episode verticals arrives with the episode"
+            f" grammar (Phase 2, `docs/next-phase-plan.md`), which will define carry-forward"
+            f" as declared slots in the episode specification rather than hand-coded per-vertical."
+            f" For now, build one period per world."
+        )
+        raise typer.Exit(code=2)
 
     if timeline is not None and single_episode is None:
         # A history rather than a repetition. Note what is *not* here: no new
