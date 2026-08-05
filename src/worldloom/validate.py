@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .ids import id_prefix, is_id
-from .models import Authority, FormulaKind, Lifecycle
+from .models import Authority, ErrorType, FormulaKind, Lifecycle
 
 if TYPE_CHECKING:  # pragma: no cover
     from .world import World
@@ -1000,22 +1000,48 @@ class _Validator:
                     f" who left {person.left.isoformat()}",
                 )
 
-        # A unit's leader has to be employed for the unit's whole life, not just
-        # at some point in it. Checked at the moment the unit forms because that
-        # is the one instant every unit has; a leader who later departs is caught
-        # by the departure scenario reassigning the post.
+        # A unit's leader has to have been employed for as long as they have led
+        # it. That used to be checked against the unit's *formation*, on the
+        # stated grounds that formation is the one instant every unit has and
+        # "a leader who later departs is caught by the departure scenario
+        # reassigning the post". The unstated half of that reasoning was that
+        # `leader_id` therefore always names the *founding* leader — true for
+        # every corpus this project had ever built, because nothing scheduled a
+        # reorganisation and no departure had ever removed a unit leader.
+        #
+        # It stopped being true the moment a history could contain either
+        # (`worldloom.timeline`), and the check then fired on perfectly coherent
+        # worlds: a division formed in 2022 whose managing director was hired in
+        # 2023 and promoted in 2026 is an ordinary company, not a temporal
+        # violation. So the instant a leader is measured against is when they
+        # *took the unit* — the `org.unit_leader_changed` fact the hand-over
+        # mints — falling back to formation for a unit that never changed hands.
+        # A corpus with no hand-overs is checked exactly as before, same check
+        # count and same message.
+        handover: dict[str, object] = {}
+        for fact in w.facts:
+            if fact.kind != "org.unit_leader_changed" or fact.valid_from is None:
+                continue
+            latest = handover.get(fact.subject)
+            if latest is None or fact.valid_from > latest:  # type: ignore[operator]
+                handover[fact.subject] = fact.valid_from
         for unit in w.business_units:
             leader = w.people.get(unit.leader_id)
             if leader is None or unit.formed is None:
                 continue
             self.checks += 1
-            if leader.joined is not None and leader.joined > unit.formed:
+            since = handover.get(unit.id, unit.formed)
+            if leader.joined is not None and leader.joined > since:  # type: ignore[operator]
+                held = (
+                    f"led from {since.isoformat()} by"  # type: ignore[attr-defined]
+                    if unit.id in handover
+                    else f"formed {unit.formed.isoformat()} under"
+                )
                 self.fail(
                     "temporal",
                     "leader_not_yet_employed",
                     unit.id,
-                    f"formed {unit.formed.isoformat()} under {leader.id},"
-                    f" who joined {leader.joined.isoformat()}",
+                    f"{held} {leader.id}, who joined {leader.joined.isoformat()}",
                 )
 
         for case in w.evaluations:
@@ -1050,6 +1076,139 @@ class _Validator:
                 self.fail("lore", "effective_reversed", commitment.id, "effective_to precedes effective_from")
 
     # -- deliberate imperfection ------------------------------------------
+
+    def _artifact_facts(self) -> dict[str, list[str]]:
+        """Artifact id → the facts it cites, from whichever record the world has.
+
+        Both, because the two live at different stages: a built world holds
+        ``artifact_intents`` and no manifest until it is rendered, and a corpus
+        loaded from disk may hold a manifest whose intents were never written
+        out. A check that read only one would silently pass on half the corpora
+        it was written for, which is the failure mode ``validate`` exists to not
+        have.
+        """
+        cited: dict[str, list[str]] = {}
+        for intent in self.world.artifact_intents:
+            cited[intent.id] = list(intent.required_fact_ids)
+        for entry in self.world.artifacts:
+            if entry.supporting_fact_ids or entry.id not in cited:
+                cited[entry.id] = list(entry.supporting_fact_ids)
+        return cited
+
+    def imperfection(self) -> None:
+        """A recorded imperfection must be establishable from the corpus itself.
+
+        This is the check that makes deliberate mess safe to generate at all
+        (``worldloom.messiness``). A synthetic enterprise is allowed to be as
+        untidy as a real one — stale pages, quotations that have gone out of
+        date, documents whose author left — but only because the corpus can
+        *explain* every one of them. An imperfection a reader cannot establish
+        from the ledger is indistinguishable from a generator defect, and the
+        label asserting it was deliberate is then the corpus vouching for
+        something it cannot show.
+
+        So each labelled kind has to carry its own evidence:
+
+        ``stale_status``
+            The named document must cite at least one fact the ledger later
+            superseded, and must not also cite the successor. The first half is
+            what makes "stale" falsifiable — without a correction on the record
+            there is nothing the document is stale *relative to*. The second is
+            the sharper one: a document carrying both the old figure and its
+            replacement is a history, and calling it stale would have the corpus
+            assert a defect its own citations deny.
+
+        ``outdated_owner``
+            The named document's author must actually have left, and the fact
+            named as canonical must be about that person — which is what a reader
+            follows to find who took the work on. A document whose author is
+            still at their desk is not orphaned, whatever the label says.
+
+        Deliberately silent on the kinds it says nothing about
+        (``material_omission``, ``political_understatement``, and the rest): what
+        would count as evidence differs per kind, and a check that guessed would
+        refuse hand-authored corpora for being differently right.
+        """
+        w = self.world
+        facts = {fact.id: fact for fact in w.facts}
+        cited_by = self._artifact_facts()
+        successors: dict[str, str] = {
+            fact.supersedes: fact.id for fact in w.facts if fact.supersedes
+        }
+
+        for error in w.intentional_errors:
+            if error.error_type is ErrorType.STALE_STATUS:
+                cited = cited_by.get(error.artifact_id)
+                if cited is None:
+                    continue
+                superseded = [
+                    fact_id for fact_id in cited
+                    if fact_id in facts and facts[fact_id].is_superseded
+                ]
+                self.checks += 1
+                if not superseded:
+                    self.fail(
+                        "intentional",
+                        "stale_without_correction",
+                        error.id,
+                        f"labels {error.artifact_id} stale, but that document cites"
+                        " no fact the ledger ever superseded, so nothing in the"
+                        " corpus establishes what it is stale relative to",
+                    )
+                    continue
+
+                carried = sorted(
+                    successors[fact_id] for fact_id in superseded
+                    if successors.get(fact_id) in cited
+                )
+                self.checks += 1
+                if carried:
+                    self.fail(
+                        "intentional",
+                        "stale_carries_correction",
+                        error.id,
+                        f"labels {error.artifact_id} stale, but it cites {carried}"
+                        " alongside the facts they replace — a document holding"
+                        " both figures is a history, not an out-of-date copy",
+                    )
+
+            elif error.error_type is ErrorType.OUTDATED_OWNER:
+                author_id = self._author_of(error.artifact_id)
+                author = w.people.get(author_id) if author_id else None
+                if author is None:
+                    continue
+                self.checks += 1
+                if author.left is None:
+                    self.fail(
+                        "intentional",
+                        "owner_still_here",
+                        error.id,
+                        f"labels {error.artifact_id} orphaned, but its author"
+                        f" {author.id} has no leaving date on the roster",
+                    )
+                if not error.canonical_fact_id:
+                    continue
+                departure = facts.get(error.canonical_fact_id)
+                if departure is None:
+                    continue
+                self.checks += 1
+                if departure.subject != author.id:
+                    self.fail(
+                        "intentional",
+                        "departure_not_recorded",
+                        error.id,
+                        f"points at {departure.id}, which is about"
+                        f" {departure.subject} rather than the departed author"
+                        f" {author.id}, so the corpus records no succession a"
+                        " reader could follow",
+                    )
+
+    def _author_of(self, artifact_id: str) -> str | None:
+        entry = self.world.artifacts.get(artifact_id)
+        if entry is not None:
+            return entry.author_id
+        intent = self.world.artifact_intents.get(artifact_id)
+        return intent.author_id if intent is not None else None
 
     def intentional(self) -> None:
         """A labelled error must actually contradict the canonical fact it names.
@@ -1358,6 +1517,7 @@ class _Validator:
         self.temporal()
         self.lore()
         self.intentional()
+        self.imperfection()
         self.actors()
         self.evaluation()
         # Domain groups last, in name order so the report is stable however

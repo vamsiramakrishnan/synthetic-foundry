@@ -67,6 +67,13 @@ from .insurance_scenarios import QuarterlyReserving
 # built it or is only reading it back.
 from .generators import distractors as _distractors  # noqa: F401
 
+# Same contract again, one level up: importing this is what registers the
+# `Imperfections` recipe verb, and a corpus built with a messiness profile
+# cannot rebuild itself in a process where that verb is unknown. `recipe.rebuild`
+# would raise `unknown scenario` — a corpus that reports a clean recipe and
+# refuses to replay, which is the exact failure lazy registration always is.
+from . import messiness  # noqa: F401
+
 __version__ = "0.1.0"
 
 __all__ = [

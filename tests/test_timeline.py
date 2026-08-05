@@ -213,3 +213,26 @@ def test_a_sampled_history_changes_who_signs_and_still_validates(
     replayed = rebuild(advanced._recipe)
     assert replayed.facts.ids() == advanced.facts.ids()
     assert replayed._roles == advanced._roles
+
+
+def test_a_unit_may_be_handed_to_somebody_hired_after_it_existed() -> None:
+    """A defect this feature found, kept as a test because it will come back.
+
+    ``leader_not_yet_employed`` measured a unit's leader against the unit's
+    *formation*, on the assumption that ``leader_id`` always names the founding
+    leader — true only while nothing could reorganise. Seed 2 promotes somebody
+    hired in 2024 to lead a division formed in 2022, which is an ordinary
+    company and used to be a temporal violation.
+    """
+    world = RetailWorld(seed=2).build()
+    history = timeline.sample(roster=timeline.Roster.of(world), start="2026-01",
+                              periods=6, seed=2, density=timeline.STEADY)
+    handovers = [step for step in history if isinstance(step, Reorganisation)]
+    assert handovers, "seed 2 at STEADY should reorganise once"
+
+    unit = world.business_units.by_id(world._roles[f"unit_{handovers[0].unit_key}"])
+    leader = world.people.by_id(world._roles[handovers[0].new_leader_role])
+    assert leader.joined > unit.formed, "the case is only interesting if they joined later"
+
+    report = history.run(world).compile().validate()
+    assert report.ok, report.violations[:5]
