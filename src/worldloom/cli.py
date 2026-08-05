@@ -1712,6 +1712,16 @@ def mosaic(
         None, "--incident/--no-incident",
         help="Force the operational incident. Omit to let each world's seed and lore decide.",
     ),
+    probe_file: Path = typer.Option(
+        None, "--probe",
+        help=(
+            "Take the axes from a settled probe instead of this engine's defaults. "
+            "The probe decides what varies and between which bounds; the algorithm "
+            "still decides which N. Every parameter the probe bound becomes an axis "
+            "over the interval it argued for, and axes it said nothing about keep "
+            "their defaults."
+        ),
+    ),
     describe: bool = typer.Option(
         False, "--describe", help="Print what a mosaic varies, and build nothing.",
     ),
@@ -1761,8 +1771,16 @@ def mosaic(
         return
 
     try:
-        variants = mosaic_module.field(count, seed=seed, engine=engine)
-    except (KeyError, ValueError) as exc:
+        if probe_file is not None:
+            from . import probe as probe_module
+
+            session = probe_module.Session.from_document(
+                json.loads(probe_file.read_text(encoding="utf-8"))
+            )
+            variants = mosaic_module.from_probe(session, count, seed=seed, engine=engine)
+        else:
+            variants = mosaic_module.field(count, seed=seed, engine=engine)
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 

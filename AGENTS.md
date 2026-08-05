@@ -170,6 +170,28 @@ Deterministic throughout. World *N* uses `seed + N - 1`, so a mosaic's third
 world is reproducible without building the first two, and a smaller mosaic is a
 prefix of a larger one.
 
+**From a premise, end to end.** `--probe` takes the axes from a settled probe
+instead of the engine's defaults:
+
+```bash
+worldloom probe open -p "A specialty apparel retailer, 180 stores."
+# ... answer its questions ...
+worldloom mosaic --probe probe.json -n 5 --out ./apparel
+```
+
+The probe decides **what varies and between which bounds**; the algorithm still
+decides **which N**. That division is the point — a model is good at arguing
+that a business of this kind runs margins in that band and bad at picking five
+points that cover a seven-dimensional space; a farthest-point traversal is the
+reverse, and neither is asked to do the other's job.
+
+Every parameter the probe bound becomes an axis over the interval it argued for,
+and no world's range ever escapes that envelope. Axes the probe said nothing
+about keep their defaults, so a probe that reasoned about margin and ignored
+reporting depth still gets five different reporting depths. A probe that bound
+nothing at all is refused rather than quietly falling back — it would report
+success for work that reached no engine.
+
 ---
 
 ## Deriving the physics, optionally

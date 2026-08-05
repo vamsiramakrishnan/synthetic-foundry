@@ -221,6 +221,7 @@ Build several companies at once, as unlike each other as the rules allow.
 | `--out`, `-o` | Directory to write the worlds into. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Consecutive periods per world. |
+| `--probe` | Take the axes from a settled probe instead of this engine's defaults. The probe decides what varies and between which bounds; the algorithm still decides which N. Every parameter the probe bound becomes an axis over the interval it argued for, and axes it said nothing about keep their defaults. |
 | `--seed`, `-s` | Base seed. World N uses seed+N-1. |
 
 ### `worldloom narrate`

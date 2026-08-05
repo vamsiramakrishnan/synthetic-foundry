@@ -93,6 +93,18 @@ class Axis:
     parameter: str | None = None
     """The registry parameter this axis moves, when it moves one. ``None`` for
     the axes that shape the organisation rather than its physics."""
+    band: float | None = None
+    """Half the width of the span each world gets, when it should not be the
+    engine's own.
+
+    ``None`` means "carry the engine's width across", which is right for this
+    module's own axes: they move a parameter's *level* over a range wider than
+    the engine's, and the engine's width is the variation-within-a-corpus the
+    engine intended. It is wrong for a probe-derived axis, where the interval
+    is not a range of levels but the *envelope a model argued for* — so there
+    the band is a fraction of that envelope and every world's span stays inside
+    what the model actually claimed. Widening past it would spend the model's
+    reasoning and report having honoured it."""
 
     def at(self, coordinate: float) -> float:
         value = self.low + coordinate * (self.high - self.low)
@@ -283,24 +295,35 @@ class Variant:
 
 def _candidate(
     index: int, coordinates: Sequence[float], *, seed: int, engine: str = "retail",
+    axes: Sequence[Axis] | None = None,
 ) -> Variant | None:
     """One variant from one point in the unit cube, or ``None`` if unbuildable."""
-    axes = ENGINES[engine]
+    axes = ENGINES[engine] if axes is None else tuple(axes)
     values = {axis.name: axis.at(coordinate)
               for axis, coordinate in zip(axes, coordinates, strict=True)}
+    # The raw unit coordinate as well as the value it maps to. A banded axis
+    # needs the coordinate: it squeezes the centre inward by half a band, which
+    # is a different mapping from `Axis.at`'s, and using the already-mapped
+    # value here put a margin envelope of [0.50, 0.58] at 0.79.
+    unit = {axis.name: coordinate
+            for axis, coordinate in zip(axes, coordinates, strict=True)}
 
     overrides: dict[str, Span] = {}
     for axis in axes:
         if axis.parameter is None:
             continue
         engine_span = DEFAULT.span(axis.parameter)
-        centre = values[axis.name]
         # A band around the sampled point rather than the point itself. A span
         # whose ends are equal is a constant, and a world whose every figure is
-        # the same number is not a world — the width is the engine's own,
-        # carried across so the *variation within* a corpus stays what the
-        # engine intended while the *level* moves.
-        half = (engine_span.high - engine_span.low) / 2.0
+        # the same number is not a world.
+        half = axis.band if axis.band is not None else (engine_span.high - engine_span.low) / 2.0
+        # For a derived axis the sampled centre is squeezed inward by the band,
+        # so the resulting span cannot escape the envelope the probe argued
+        # for. `Axis.at` maps the coordinate across the whole interval, which is
+        # what this module's own axes want and what a probe's must not have.
+        centre = (values[axis.name] if axis.band is None
+                  else axis.low + half
+                  + unit[axis.name] * max(0.0, (axis.high - axis.low) - 2 * half))
         low, high = centre - half, centre + half
         if engine_span.kind == "integer":
             low, high = round(low), round(high)
@@ -365,12 +388,20 @@ def field(
         )
     if count == 0:
         return ()
+    return _field(count, seed=seed, engine=engine, axes=ENGINES[engine], pool=pool)
 
+
+def _field(
+    count: int, *, seed: int, engine: str, axes: Sequence[Axis], pool: int = _POOL,
+) -> tuple[Variant, ...]:
+    """``field``, over an explicit axis set. Shared with ``from_probe``."""
+    if count == 0:
+        return ()
     feasible: list[Variant] = []
     points: list[tuple[float, ...]] = []
-    for coordinates in halton(len(ENGINES[engine]), pool):
+    for coordinates in halton(len(axes), pool):
         variant = _candidate(len(feasible), coordinates,
-                             seed=seed + len(feasible), engine=engine)
+                             seed=seed + len(feasible), engine=engine, axes=axes)
         if variant is None:
             continue
         feasible.append(variant)
@@ -407,6 +438,86 @@ def field(
         )
         for position, at in enumerate(chosen)
     )
+
+
+def from_probe(
+    session: Any,
+    count: int,
+    *,
+    seed: int = 8128,
+    engine: str = "retail",
+) -> tuple[Variant, ...]:
+    """A mosaic whose axes a model reasoned its way to, rather than this module's.
+
+    The two halves of this project's variety machinery have until now been
+    unable to talk to each other. ``probe`` lets a model derive a world by
+    Socratic questioning and hands back ranges it argued for; ``field`` samples
+    a space this module hardcoded and hands back worlds. A model that reasoned
+    carefully to "specialty apparel clears six units in ten at full price, so
+    margin lives in [0.50, 0.58]" then had to watch that range be ignored,
+    because a mosaic sampled ``retail.margin.erosion`` across the engine's own
+    bounds regardless.
+
+    So: the probe decides **what varies and between which bounds**, and the
+    algorithm decides **which N**. That division is the point. A model is good
+    at arguing that a business of this kind has margins in that band and bad at
+    picking five points that cover a seven-dimensional space; a farthest-point
+    traversal is the reverse. Neither half is asked to do the other's job.
+
+    Concretely, every terminal the probe bound becomes an axis over the interval
+    the probe settled on, replacing this module's default axis for that
+    parameter if it had one and adding it if it did not. Axes the probe said
+    nothing about keep their defaults — a probe that reasoned about margin and
+    ignored reporting depth should still get five different reporting depths,
+    not five copies of the engine's.
+
+    A probe that bound *nothing* is refused rather than silently falling back to
+    the default field: it means the model answered every question without ever
+    reaching the engine, and returning an ordinary mosaic would report success
+    for work that changed nothing.
+    """
+    from . import probe as probe_module
+
+    if engine not in ENGINES:
+        raise KeyError(f"unknown engine {engine!r}; known: {sorted(ENGINES)}")
+
+    resolution = probe_module.resolve(session.graph)
+    if not resolution.usable:
+        raise ValueError(
+            "this probe cannot produce physics yet: "
+            + "; ".join([*resolution.unanswered,
+                         *(str(c) for c in resolution.contradictions)])
+        )
+    if not resolution.overrides:
+        raise ValueError(
+            "this probe bound no terminal parameter, so there is nothing for a"
+            " mosaic to vary that it would not have varied anyway. Every leaf"
+            " is unbound: "
+            + ", ".join(u.key for u in resolution.unbound[:5])
+            + ". Bind one to a parameter from `worldloom pack params`, or ask"
+            " for an ordinary mosaic."
+        )
+
+    derived: list[Axis] = []
+    for name, span in sorted(resolution.overrides.items()):
+        engine_span = DEFAULT.span(name)
+        derived.append(Axis(
+            name=name.rsplit(".", 1)[-1],
+            low=span.low, high=span.high,
+            integral=engine_span.kind == "integer",
+            parameter=name,
+            # A quarter of the envelope, so a world's band is narrow enough for
+            # the five to differ and wide enough that no world's figures are all
+            # one number. The envelope itself is never exceeded.
+            band=(span.high - span.low) / 4.0,
+            about=f"Derived: {span.source or 'this probe'} settled it at"
+                  f" [{span.low:g}, {span.high:g}].",
+        ))
+
+    claimed = {axis.parameter for axis in derived}
+    kept = tuple(axis for axis in ENGINES[engine]
+                 if axis.parameter is None or axis.parameter not in claimed)
+    return _field(count, seed=seed, engine=engine, axes=kept + tuple(derived))
 
 
 def describe(engine: str = "retail") -> dict[str, Any]:

@@ -308,3 +308,86 @@ def test_an_unknown_engine_says_which_exist() -> None:
 def test_the_estate_axis_changes_the_size_of_the_graph() -> None:
     """Otherwise the axis is a label on a field that never moves."""
     assert len({v.estate for v in mosaic.field(6)}) > 1
+
+
+# ---------------------------------------------------------------------------
+# The bridge: a model decides what varies, the algorithm decides which N
+# ---------------------------------------------------------------------------
+
+
+def probed():  # type: ignore[no-untyped-def]
+    from worldloom import probe
+    from worldloom.probe import Answer, SubQuestion
+
+    session = probe.Session("A specialty apparel retailer, 180 stores.")
+    session = session.committed(Answer(
+        question=probe.ROOT, claim="Specialty apparel; margin follows markdown.",
+        raises=[
+            SubQuestion(key="gross_margin", asks="Budgeted gross margin?",
+                        because="The engine draws it and the premise fixes its band.",
+                        layer="measures", domain_low=0.2, domain_high=0.7,
+                        binds="retail.margin.budget"),
+            SubQuestion(key="erosion", asks="Margin lost to promotion?",
+                        because="Apparel discounts hard and late in the season.",
+                        layer="measures", domain_low=0.001, domain_high=0.09,
+                        binds="retail.margin.erosion"),
+        ]))
+    session = session.committed(Answer(question="gross_margin", claim="Low fifties.",
+                                       low=0.50, high=0.58, source="sector median"))
+    return session.committed(Answer(question="erosion", claim="Heavy markdown.",
+                                    low=0.04, high=0.07))
+
+
+def test_a_probes_bounds_are_never_exceeded() -> None:
+    """The reason a derived axis has its own band.
+
+    This module's own axes move a parameter's *level* and carry the engine's
+    width across. A probe's interval is not a range of levels — it is the
+    envelope a model argued for — so a world whose span escaped it would spend
+    the reasoning and report having honoured it. The first version did exactly
+    that, putting a [0.50, 0.58] margin envelope at 0.79, by using the mapped
+    value where it needed the raw coordinate.
+    """
+    for variant in mosaic.from_probe(probed(), 4):
+        margin = variant.physics.span("retail.margin.budget")
+        erosion = variant.physics.span("retail.margin.erosion")
+        assert 0.50 - 1e-9 <= margin.low and margin.high <= 0.58 + 1e-9
+        assert 0.04 - 1e-9 <= erosion.low and erosion.high <= 0.07 + 1e-9
+
+
+def test_a_probe_still_yields_worlds_that_differ() -> None:
+    """Inside the envelope, not collapsed onto one point in it."""
+    variants = mosaic.from_probe(probed(), 4)
+    assert len({v.physics.span("retail.margin.budget").low for v in variants}) == 4
+    assert len({(v.headcount, v.span, v.levels) for v in variants}) == 4
+
+
+def test_axes_a_probe_said_nothing_about_keep_their_defaults() -> None:
+    """A probe that reasoned about margin and ignored reporting depth should
+    still get different reporting depths, not five copies of the engine's."""
+    variants = mosaic.from_probe(probed(), 5)
+    assert len({v.levels for v in variants}) > 1
+    assert len({v.estate for v in variants}) > 1
+
+
+def test_a_probe_that_bound_nothing_is_refused_rather_than_ignored() -> None:
+    """Falling back to the default field would report success for work that
+    changed nothing."""
+    from worldloom import probe
+    from worldloom.probe import Answer, SubQuestion
+
+    session = probe.Session("A business.").committed(Answer(
+        question=probe.ROOT, claim="Something.",
+        raises=[SubQuestion(key="returns", asks="Return rate?", because="it matters",
+                            layer="measures", domain_low=0.0, domain_high=1.0)]))
+    session = session.committed(Answer(question="returns", claim="A third.",
+                                       low=0.3, high=0.35))
+    with pytest.raises(ValueError, match="bound no terminal"):
+        mosaic.from_probe(session, 3)
+
+
+def test_an_unsettled_probe_is_refused() -> None:
+    from worldloom import probe
+
+    with pytest.raises(ValueError, match="cannot produce physics"):
+        mosaic.from_probe(probe.Session("A business."), 3)
