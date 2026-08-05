@@ -124,7 +124,24 @@ class ScanTfIdf:
             if not query_norm or not norm:
                 out.append(0.0)
                 continue
-            dot = sum(weight * vector.get(term, 0.0) for term, weight in query_vector.items())
+            # Accumulated in an explicit loop, not `sum()`, and that is the
+            # whole reason this line has a comment. **CPython 3.12 changed
+            # `builtins.sum()` to use Neumaier compensated summation for
+            # floats** (gh-100425), so `sum(floats)` and a left-to-right `+=`
+            # over the same floats give different last bits on 3.12+ and
+            # identical ones on 3.11. This reference existed to model what the
+            # shipped scorer does; written with `sum()` it modelled what
+            # *CPython* does, and the pin passed on 3.11 and failed on 3.12 and
+            # 3.13 for a difference that was in the reference rather than in the
+            # implementation being checked.
+            #
+            # `ScanBm25.scores` above was always written this way, which is
+            # exactly why bm25 never failed. Naive accumulation is also the
+            # version-independent choice: a retriever whose scores depend on
+            # which Python built the corpus cannot be pinned at all.
+            dot = 0.0
+            for term, weight in query_vector.items():
+                dot += weight * vector.get(term, 0.0)
             out.append(dot / (query_norm * norm))
         return out
 
