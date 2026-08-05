@@ -325,6 +325,8 @@ class MonthEndClose:
             # planner did not write.
             intents = tuple(advanced._artifact_intents[len(prior_intents):])
 
+        from . import graphs
+
         cases = evaluation.evaluation_cases(
             minter,
             episode=episode,
@@ -353,6 +355,14 @@ class MonthEndClose:
             history=world._facts,
             prior_intents=prior_intents,
             density=self.eval_density,
+            # The estate, as the graph it has always been. The taxonomy owns
+            # what it asks; it cannot own what it can *see*, and until this
+            # line it could see names and figures but no structure — so a
+            # world running 101 services with 18 chokepoints was asked exactly
+            # the questions a nine-service prop list was. Passed as a graph
+            # rather than as the world so a family here cannot quietly start
+            # reading some other field of it.
+            estate=graphs.dependency_graph(world),
             # A pack's evaluation-text overrides ride the recipe, the same
             # seam `episode_text` uses for the episode itself, so a
             # re-voiced benchmark rebuilds with no pack file on hand.

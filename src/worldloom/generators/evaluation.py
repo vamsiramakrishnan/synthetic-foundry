@@ -36,6 +36,21 @@ five-period build asked the same "prior period" question a two-period build
 did. Density does not touch the hard families — incident, authority, causal —
 because padding a fixed-size, already-hard family with easy rephrasings would
 lower its average difficulty, not test the corpus at scale.
+
+``estate`` is the other axis, and it was added for a measurement rather than
+for a wish. ``evaluate/across.survey`` over a five-world mosaic reported **210
+questions, 42 distinct, all 42 byte-identical in all five worlds** — a
+five-corpus benchmark that is one benchmark with five answer keys. The mosaic
+was doing its job: it handed the taxonomy five structurally unlike companies,
+one of them running 101 services with 18 chokepoints and two of them running
+the episode's nine-node prop list. This module asked all five the same
+questions, because every family here fills its templates from unit and category
+names — which a mosaic does not vary — and no family read the estate at all,
+even though ``graphs.py`` could have told it everything. ``estate_shape`` is the
+three questions only the graph can answer, and four questions in ``incident``
+say which estate they are being asked of, because "why was the close delayed"
+asked of four candidate services and asked of a hundred are not the same
+question. Silent, to the byte, in a world whose estate is the prop list.
 """
 
 from __future__ import annotations
@@ -43,6 +58,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact, EvaluationCase, EvaluationType
@@ -214,6 +230,45 @@ EVAL_TEXT: dict[str, str] = {
         "Who was accountable for {unit}'s {measure} in {period}, given that it moved"
         " beyond the band they are held to?",
     "a.accountability.who_accountable": "{person}.",
+    # -- the estate, read as a graph ---------------------------------------------
+    #
+    # Empty in every world whose estate is the episode's own prop list — see
+    # `_Taxonomy._read_estate` for the gate and why it is where it is.
+    "q.estate.blast_radius":
+        "Of the {scale} this company runs, would a failure in {service} have reached"
+        " {name}?",
+    "a.estate.blast_radius":
+        "Yes — {name} depends on it, directly or through something else, and {count}"
+        " things do in total.",
+    "q.estate.routed_around":
+        "Is {service} the only way anything reaches {system}, or does the estate"
+        " route around it?",
+    "a.estate.routed_around":
+        "It routes around — {count} other service(s) reach {system} without it. What"
+        " nothing routes around is {names}.",
+    "q.estate.chain_to_record":
+        "How deep is the longest chain of services that ends at {system}, and what"
+        " sits at the top of it?",
+    "a.estate.chain_to_record": "{hops} hops, with {name} at the top.",
+    "q.estate.abstain_recovery":
+        "Which of the {scale} this company runs has a tested disaster-recovery"
+        " failover for {system}?",
+    # -- estate-scaled restatements of the incident families ----------------------
+    #
+    # The same questions the no-estate world asks, re-anchored on what this
+    # world actually has. See `_Taxonomy.estate` on why these are gated rather
+    # than unconditional.
+    "q.incident.why_delayed.estate":
+        "Of the {scale} this company runs, which one's failure delayed the {period}"
+        " close, and how?",
+    "q.incident.undetected.estate":
+        "The mapping table sits under {system}, which {reach} service(s) depend on."
+        " What allowed the valuation failure to reach production undetected?",
+    "q.authority.confirmed_cause.estate":
+        "Across the {scale} in this estate, what is the confirmed root cause of the"
+        " valuation failure?",
+    "q.citation.mapping_owner.estate":
+        "Who owns the product hierarchy mapping table held in {system}?",
 }
 
 
@@ -243,6 +298,51 @@ class Subjects:
         return self.names.get(subject_id, subject_id)
 
 
+#: How many things must transitively depend on the service the incident ran
+#: through before the estate families are worth asking.
+#:
+#: Two, not three, is what the episode's own prop list gives: the valuation job
+#: reads the hierarchy sync and the close orchestrator waits on the valuation
+#: job, and the RCA says both of those in so many words. A *third* dependent is
+#: the first one no document in the corpus mentions — which is the whole reason
+#: to consult the graph rather than the prose. So the gate is not "does this
+#: world have an estate" (a flag the taxonomy is not handed and would have to
+#: be plumbed as one more thing to keep in sync); it is "does the graph know
+#: something the documents do not", measured, which is the property the
+#: families actually depend on.
+ESTATE_REACH_MINIMUM = 3
+
+
+@dataclass(frozen=True)
+class _EstateReading:
+    """One world's dependency graph, read once, for the families below.
+
+    Every field is an exact count or an id sequence for the same reason
+    ``graphs.py`` states: an evaluation set regenerates byte-for-byte, so a
+    ranking that depends on set iteration order or on a float is a ranking that
+    can differ between machines. Ties break on the node id at the point of
+    sorting, here as there.
+    """
+
+    service: str
+    """The service the incident ran through — the mapping sync."""
+    system: str
+    """The system of record under it, whose mapping table has no owner."""
+    scale: int
+    """Services and systems in the estate, together. Both, because a dependency
+    that stopped at the system boundary would miss two services whose only
+    relationship is the record they both read (`graphs.dependency_graph`)."""
+    reach: tuple[str, ...]
+    """What transitively depends on ``service``, largest blast radius first."""
+    chokepoints: tuple[tuple[str, int], ...]
+    """What nothing routes around, and how much each one gates."""
+    detour: int
+    """How many things still reach ``system`` with ``service`` removed. Zero
+    means the mapping sync is itself the single point of failure."""
+    chain: tuple[str, ...]
+    """The longest chain of services ending at ``system``."""
+
+
 class _Taxonomy:
     """Builds the case set for one episode."""
 
@@ -259,6 +359,7 @@ class _Taxonomy:
         prior_intents: tuple[ArtifactIntent, ...] = (),
         text: Mapping[str, str] = EVAL_TEXT,
         density: float = 1.0,
+        estate: Any = None,
     ) -> None:
         self.minter = minter
         self.episode = episode
@@ -299,6 +400,14 @@ class _Taxonomy:
         self._fact_index: dict[str, CanonicalFact] = {
             f.id: f for f in (*history, *facts, *episode.facts)
         }
+
+        # Read once, in the constructor, because two different things consult
+        # it: the estate families below, and the incident families, which
+        # re-anchor their *questions* on the estate when there is one. Reading
+        # it twice would be two chances for the two to disagree about whether
+        # this world has an estate at all.
+        self._estate_graph = estate
+        self.estate = self._read_estate()
 
     # -- helpers -----------------------------------------------------------
 
@@ -376,6 +485,87 @@ class _Taxonomy:
         from .cases import reachable_fact_ids
 
         return reachable_fact_ids(self.prior_intents, self.intents)
+
+    def _read_estate(self) -> _EstateReading | None:
+        """This world's estate, measured — or ``None`` when there is nothing to ask.
+
+        Three conditions, and each one is a case that would otherwise be minted
+        and then be worthless:
+
+        **There has to be an incident.** Not because a graph question needs one
+        logically, but because of the trap ``cases.answerable`` exists for: the
+        generated estate carries no facts of its own. `estate.generate` mints
+        `Service` and `System` entities and nothing else, so *no artifact
+        requires a fact whose subject is a generated node*, and a case grounded
+        on one would be dropped — or worse, a case grounded on nothing at all
+        would survive `answerable` (an empty expected-fact set is trivially
+        reachable) and then pass `score._covers` for free, inflating the
+        scorecard with questions nobody answered. The incident's facts are the
+        only ones in the corpus whose subject is a service at all, so they are
+        the only honest anchor a graph question has. Each family below cites
+        the ones that are actually about the entity it asks about.
+
+        **The graph has to reach past the episode.** See
+        ``ESTATE_REACH_MINIMUM``.
+
+        **The two anchors have to be in the graph.** A composed estate that
+        renamed them, or a vertical whose episode names no service, gets no
+        estate families rather than a case about a node that is not there.
+        """
+        graph = self._estate_graph
+        if graph is None or not self.episode.had_incident:
+            return None
+
+        from .. import graphs
+
+        keys = self.episode.keys
+        by_id = {fact.id: fact for fact in self.episode.facts}
+        # Derived from the facts rather than from a hardcoded id: the mapping
+        # sync is whatever the control failure was classified against, and the
+        # system of record is whatever carries the unowned mapping table. A
+        # re-voiced or composed episode moves those ids; it does not move what
+        # they mean.
+        service = by_id[keys["fact_classification"]].subject
+        system = by_id[keys["fact_owner"]].subject
+        if service not in graph or system not in graph:
+            return None
+
+        reach = graphs.blast_radius(graph, service)
+        if len(reach) < ESTATE_REACH_MINIMUM:
+            return None
+
+        # Largest blast radius first, ties on the id — the same ranking rule
+        # `graphs.ServiceRank.key` states, for the same reason.
+        ranked = tuple(sorted(
+            reach, key=lambda node: (-len(graphs.blast_radius(graph, node)), node)
+        ))
+
+        without = graph.copy()
+        without.remove_node(service)
+        detour = len(graphs.blast_radius(without, system))
+
+        # The chain is taken over the ancestors of the system of record, not
+        # over the whole estate. "The longest chain in the estate" is a fact
+        # about a landscape; "the longest chain that ends at the unowned
+        # mapping table" is a fact about *this incident*, and it is the one the
+        # cited facts are actually evidence for.
+        upstream = graph.subgraph([system, *sorted(graphs.blast_radius(graph, system))])
+        chain = graphs.longest_chain(upstream)
+
+        return _EstateReading(
+            service=service,
+            system=system,
+            scale=graph.number_of_nodes(),
+            reach=ranked,
+            chokepoints=graphs.chokepoints(graph),
+            detour=detour,
+            chain=chain,
+        )
+
+    @property
+    def _scale(self) -> str:
+        """The estate's size, as the question's own words for its search space."""
+        return f"{self.estate.scale} services and systems" if self.estate else ""
 
     # -- families ----------------------------------------------------------
 
@@ -598,8 +788,22 @@ class _Taxonomy:
         jira = self.artifact.get("jira_issues")
 
         # -- causal chains -------------------------------------------------
+        #
+        # The four questions below that read `self.estate` ask the same thing
+        # of a different search space, and that is the honest half of the
+        # phrasing lever (see `evaluation_cases`): "why was the close delayed"
+        # has one candidate service in a nine-node prop list and a hundred in a
+        # real landscape, so a question that does not say which estate it is
+        # being asked of is a different question in the two worlds while
+        # reading as the same string. Only the question surface moves — the
+        # expected answer, the cited facts, the difficulty and the sources are
+        # the same in both branches, because the estate changed what has to be
+        # ruled out, not what is true.
         self.case(
-            self.t("q.incident.why_delayed", period=self.period), EvaluationType.CAUSAL_MULTI_HOP,
+            self.t("q.incident.why_delayed.estate", scale=self._scale, period=self.period)
+            if self.estate else
+            self.t("q.incident.why_delayed", period=self.period),
+            EvaluationType.CAUSAL_MULTI_HOP,
             self.t("a.incident.why_delayed", cause=cause.text_value,
                    days=int(delay.value.amount)),
             [k["fact_feed_status"], cause.id, delayed.id, delay.id], difficulty="hard",
@@ -607,6 +811,10 @@ class _Taxonomy:
             sources=[rca, record], distractors=[stale],
         )
         self.case(
+            self.t("q.incident.undetected.estate",
+                   system=self.subjects.name(self.estate.system),
+                   reach=len(self.estate.reach))
+            if self.estate else
             self.t("q.incident.undetected"),
             EvaluationType.CAUSAL_MULTI_HOP,
             self.t("a.incident.undetected"),
@@ -660,6 +868,8 @@ class _Taxonomy:
 
         # -- authority -------------------------------------------------------
         self.case(
+            self.t("q.authority.confirmed_cause.estate", scale=self._scale)
+            if self.estate else
             self.t("q.authority.confirmed_cause"),
             EvaluationType.AUTHORITY_RESOLUTION, cause.text_value or "",
             [cause.id, hypothesis.id], difficulty="hard",
@@ -685,7 +895,11 @@ class _Taxonomy:
 
         # -- citation and cross-artifact -------------------------------------
         self.case(
-            self.t("q.citation.mapping_owner"), EvaluationType.CITATION_REQUIRED,
+            self.t("q.citation.mapping_owner.estate",
+                   system=self.subjects.name(self.estate.system))
+            if self.estate else
+            self.t("q.citation.mapping_owner"),
+            EvaluationType.CITATION_REQUIRED,
             self.t("a.citation.mapping_owner"), [k["fact_owner"]],
             reasoning="The correct answer is that the field is empty, which is not abstaining.",
             sources=[rca, jira],
@@ -1085,6 +1299,104 @@ class _Taxonomy:
                 sources=[self.artifact.get("finance_workbook")],
             )
 
+    def estate_shape(self) -> None:
+        """What only the dependency graph can answer.
+
+        Three questions, and none of them has an answer written down anywhere
+        in the corpus as a sentence: how far a failure reaches, what nothing
+        routes around, and how deep the chain under the system of record runs.
+        A keyword retriever cannot shortcut a question nobody wrote a sentence
+        about — which is the argument `graphs.py`'s docstring makes for the
+        module existing, made good here.
+
+        Where the answer *is* carried is the ServiceNow bundle: the incident
+        artifact renders `cmdb_ci` and `cmdb_rel_ci` beside the incident
+        itself, so every edge these questions turn on ships in the corpus, in
+        the same artifact as the facts each case cites. That is what makes the
+        family answerable rather than merely unanswered — and what makes it
+        hard, since the retrievable *passages* are prose and the answer is in a
+        relationship table the passage index does not index.
+
+        Silent in a world whose estate is the episode's own prop list, and it
+        must be: the mapping sync has exactly two dependents there and the RCA
+        names both, so all three questions would be restatements of documents
+        the corpus already has. See `_read_estate`.
+        """
+        estate = self.estate
+        if estate is None:
+            return
+        keys = self.episode.keys
+        record = self.artifact.get("servicenow_incident")
+        rca = self.artifact.get("incident_rca")
+        stale = self.artifact.get("confluence_page")
+
+        # Named subject rather than "what would have stopped", because *which*
+        # thing gets named is itself a reading of this world's graph — the
+        # largest dependent is a generated service nobody wrote a sentence
+        # about in one world and the valuation job the RCA is entirely about in
+        # another. That is the only lever in this module that makes a family
+        # legitimately easier in one world than another: the question is the
+        # same shape, and the corpus happens to have narrated its subject.
+        largest = self.subjects.name(estate.reach[0])
+        self.case(
+            self.t("q.estate.blast_radius", scale=self._scale,
+                   service=self.subjects.name(estate.service), name=largest),
+            EvaluationType.CAUSAL_MULTI_HOP,
+            self.t("a.estate.blast_radius", name=largest, count=len(estate.reach)),
+            [keys["fact_classification"], keys["fact_feed_status"]], difficulty="hard",
+            reasoning="Transitive, not direct: the answer is every ancestor in the"
+                      " dependency graph, and no document lists them.",
+            sources=[record, rca], distractors=[stale],
+        )
+
+        # Only when something *does* route around it. When nothing does, the
+        # mapping sync is the single point of failure and `incident.undetected`
+        # already tells that story from the control side — asking it again from
+        # the graph side would be the restatement this whole family exists to
+        # stop producing.
+        if estate.detour and estate.chokepoints:
+            self.case(
+                self.t("q.estate.routed_around",
+                       service=self.subjects.name(estate.service),
+                       system=self.subjects.name(estate.system)),
+                EvaluationType.CAUSAL_MULTI_HOP,
+                self.t("a.estate.routed_around", count=estate.detour,
+                       system=self.subjects.name(estate.system),
+                       names=", ".join(
+                           self.subjects.name(node) for node, _ in estate.chokepoints[:3]
+                       )),
+                [keys["fact_owner"], keys["fact_classification"]], difficulty="hard",
+                reasoning="Blast radius and single-point-of-failure are different"
+                          " measures, and the intuitive answer confuses them: the"
+                          " service the incident ran through is well routed around,"
+                          " and the estate's real gates are elsewhere.",
+                sources=[record, rca], distractors=[stale],
+            )
+
+        if len(estate.chain) >= 2:
+            self.case(
+                self.t("q.estate.chain_to_record",
+                       system=self.subjects.name(estate.system)),
+                EvaluationType.CAUSAL_MULTI_HOP,
+                self.t("a.estate.chain_to_record", hops=len(estate.chain) - 1,
+                       name=self.subjects.name(estate.chain[0])),
+                [keys["fact_owner"]], difficulty="hard",
+                reasoning="Depth, counted in edges. A document that names the two"
+                          " hops the incident took is the confident wrong answer.",
+                sources=[record], distractors=[rca],
+            )
+
+        # False by construction at every estate size, which is the bar
+        # `history_abstentions` sets: nothing in this generator models a
+        # recovery posture for anything, so growing the estate adds services
+        # without ever adding the fact this asks for.
+        self.abstain(
+            self.t("q.estate.abstain_recovery", scale=self._scale,
+                   system=self.subjects.name(estate.system)),
+            "Resilience posture is not modelled at any estate size — the graph"
+            " records what depends on what, never what has been tested.",
+        )
+
     def history_abstentions(self) -> None:
         """History questions that stay unanswerable regardless of how large
         the world grows.
@@ -1123,6 +1435,7 @@ def evaluation_cases(
     prior_intents: tuple[ArtifactIntent, ...] = (),
     text: Mapping[str, str] | None = None,
     density: float = 1.0,
+    estate: Any = None,
 ) -> tuple[EvaluationCase, ...]:
     """Derive the evaluation set for one episode.
 
@@ -1137,12 +1450,34 @@ def evaluation_cases(
     ``density`` is the ``--eval-density`` knob's numeric value, riding the
     recipe via ``MonthEndClose.eval_density`` — see the module docstring for
     what it does and does not change.
+
+    ``estate`` is the world's dependency graph (``graphs.dependency_graph``),
+    or ``None``. It is a graph rather than a ``World`` on purpose: everything
+    the taxonomy wants from the estate is a graph measure, and taking the world
+    itself would let a family here reach for anything at all — which is how a
+    generator ends up depending on a field nobody knew it read. ``None``
+    reproduces every case set built before this argument existed, and so does
+    passing a graph the episode's prop list did not outgrow: the estate
+    families and the estate-scaled question surfaces both gate on the same
+    measured reading (``_Taxonomy._read_estate``), so a world with no estate
+    asks none of them and loses nothing.
+
+    That gating is also what keeps the phrasing lever honest. The mosaic varies
+    organisation shape, calendar, and estate; it does not vary the business
+    vocabulary, so a taxonomy that fills its templates from unit and category
+    names renders **identically** in five structurally different companies. The
+    estate is the axis the mosaic moves furthest — 9 nodes to 101 across five
+    worlds — and it is the only one every fact in this module can be anchored
+    to, so it is what the questions are re-anchored on. It deliberately does
+    not reach the financial families: an estate is not evidence about how
+    revenue should be asked after, and rephrasing those against it would be
+    variation bought with a false premise.
     """
     taxonomy = _Taxonomy(
         minter, episode=episode, facts=facts, subjects=subjects, intents=intents,
         period=period, history=history, prior_intents=prior_intents,
         text=episode_text.merged(EVAL_TEXT, text, field="evaluation_text"),
-        density=density,
+        density=density, estate=estate,
     )
     taxonomy.direct_lookup()
     taxonomy.numerical_comparison()
@@ -1160,6 +1495,10 @@ def evaluation_cases(
     # gated inside on the fan-out documents actually being planned.
     taxonomy.communications()
     taxonomy.accountability_measure()
+    # Last, for the same id-stability reason every family above it was
+    # appended rather than inserted: a world with no estate mints nothing here,
+    # so no `EVAL-` id in any corpus already built can move.
+    taxonomy.estate_shape()
 
     # One last pass of the rule every family is supposed to apply for itself.
     #
