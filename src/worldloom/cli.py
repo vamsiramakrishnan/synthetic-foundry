@@ -411,13 +411,6 @@ def build(
                 # Same reasoning as its neighbour: the trend shapes retail's
                 # comparative history, and a single-episode vertical has none.
                 ("--trend", trend != 0.0),
-                # The estate generator's service-name pools are retail's. A
-                # bank whose landscape is called "pricing-engine" and
-                # "click-collect-api" would be worse than a thin one, so this
-                # is refused rather than mis-served — `worldloom compose` is
-                # the path for a vertical whose vocabulary this module does not
-                # have, because there the model brings the vocabulary.
-                ("--estate", estate is not None),
                 # Retail-only for now: the knob's growth (category commentary,
                 # site-level cases) is argued entirely from retail's own
                 # hierarchy in `scenarios.py`/`generators/evaluation.py`.
@@ -437,7 +430,15 @@ def build(
         builder = _under_physics(
             domain.world.from_pack(pack_obj, seed=seed)
             if pack_obj is not None
-            else domain.world(seed=seed, archetype=shape, employees=employees)
+            else domain.world(
+                seed=seed, archetype=shape, employees=employees,
+                # Every vertical has its own landscape vocabulary now
+                # (`worldloom.landscape`), so this is no longer refused. It was
+                # refused rather than mis-served for as long as the only pools
+                # were retail's: a bank whose landscape is called
+                # `click-collect-api` is worse than a bank with no landscape.
+                **({} if estate is None else {"estate": estate}),
+            )
         )
         world = builder.build()
         for index in range(max(1, periods)):
