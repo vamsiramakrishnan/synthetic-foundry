@@ -52,6 +52,7 @@ from .archetypes import MIDSIZE_ADI, Archetype
 from .ids import Minter
 from .models import (
     Authority,
+    CanonicalFact,
     ConstraintKind,
     Lifecycle,
     LoreCommitment,
@@ -482,6 +483,24 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # Citing only the corrected figures would make the correction unverifiable
     # from the document: the pair (superseded, superseding) is what says which
     # figures moved.
+    #
+    # These three read `facts` and nothing about the entry, so they are computed
+    # once instead of once per restatement. Not a tidy-up: at 11,264 artifacts
+    # this module was 94% of `validate`'s whole runtime, and this loop's two
+    # full-collection scans were 33 seconds of it. `Collection` is immutable and
+    # `facts` is a snapshot list, so hoisting cannot change an answer — the same
+    # argument `_Validator.__init__`'s binding rests on.
+    earliest_confirmed_cause = min(
+        (f.valid_from for f in facts
+         if f.kind == "ops.cause" and f.authority is Authority.CONFIRMED),
+        default=None,
+    )
+    # The books that genuinely moved: the ones whose corrected fact supersedes
+    # a filed one. A property of the world, not of any one restatement.
+    moved_books = {
+        f.subject for f in facts
+        if f.kind == "capital.rwa_by_book" and f.supersedes
+    }
     for entry in world.artifacts:
         if not entry.restates or entry.artifact_type not in FILING_TYPES:
             continue
@@ -507,12 +526,10 @@ def _checks(world: World) -> tuple[list[Violation], int]:
 
         # -- (c) corrections follow confirmation ---------------------------
         checks += 1
-        confirmed = [
-            f for f in facts
-            if f.kind == "ops.cause" and f.authority is Authority.CONFIRMED
-            and f.valid_from <= entry.created_at
-        ]
-        if not confirmed:
+        # "some confirmed cause existed by then" is a question about the
+        # *earliest* one, so the list this used to build was thrown away except
+        # for its emptiness.
+        if earliest_confirmed_cause is None or earliest_confirmed_cause > entry.created_at:
             fail("correction_before_confirmation", entry.id,
                  "was created before any confirmed cause existed — a restatement"
                  " lodged ahead of its own root cause is a correction guessing")
@@ -529,13 +546,10 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                  f" covered {sorted(periods(originally))}")
 
         # -- (e) the correction is scoped to the error ----------------------
-        # Books that genuinely moved are the ones whose corrected fact
-        # supersedes a filed one. A restatement citing a *new* figure for any
-        # other book would be a second, unexplained correction.
-        moved_books = {
-            f.subject for f in facts
-            if f.kind == "capital.rwa_by_book" and f.supersedes
-        }
+        # `moved_books` is hoisted above: a restatement citing a *new* figure
+        # for a book that never moved would be a second, unexplained correction,
+        # and which books moved is a fact about the world rather than about this
+        # restatement.
         for new_id in sorted(cited - originally):
             fact = by_id.get(new_id)
             if fact is None or fact.kind != "capital.rwa_by_book":
@@ -652,13 +666,22 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # them), so with two quarters they stay open simultaneously — matching
     # `holds_at` alone without the period filter double-counts them against
     # a total that only ever meant its own quarter's books.
+    # Bucketed by period in one pass rather than re-scanned per total. With Q
+    # quarters there are Q totals and Q x B books, so the old shape was O(Q x N)
+    # and this loop alone was 38 seconds of an 82-second validate at 1,024
+    # periods. `holds_at` still runs per candidate, because *that* filter is
+    # genuinely about the total's own instant; only the period filter is a
+    # property the fact carries and can therefore be indexed.
+    books_by_period: dict[str | None, list[CanonicalFact]] = {}
+    for fact in facts:
+        if fact.kind == "capital.rwa_by_book" and fact.value:
+            books_by_period.setdefault(fact.period, []).append(fact)
+
     for total in (f for f in facts if f.kind == "capital.rwa_total"
                   and f.authority is Authority.SYSTEM_OF_RECORD and f.value):
         books = [
-            f for f in facts
-            if f.kind == "capital.rwa_by_book" and f.value
-            and f.period == total.period
-            and f.holds_at(total.valid_from)
+            f for f in books_by_period.get(total.period, ())
+            if f.holds_at(total.valid_from)
         ]
         if not books:
             continue
@@ -674,17 +697,27 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # above applies to the capital and RWA amounts a ratio is derived from,
     # once a second quarter's own (also never-superseded, for the same
     # reason) amounts can otherwise be picked up alongside the first's.
-    capital_amounts = [f for f in facts if f.kind == "capital.cet1_capital" and f.value]
-    rwa_totals = [f for f in facts if f.kind == "capital.rwa_total"
-                  and f.authority is Authority.SYSTEM_OF_RECORD and f.value]
+    # Same bucketing, same reason: a ratio is checked against the amounts in its
+    # *own* period, so period is an index key and only `holds_at` needs a scan.
+    capital_by_period: dict[str | None, list[CanonicalFact]] = {}
+    rwa_by_period: dict[str | None, list[CanonicalFact]] = {}
+    for fact in facts:
+        if fact.kind == "capital.cet1_capital" and fact.value:
+            capital_by_period.setdefault(fact.period, []).append(fact)
+        elif (fact.kind == "capital.rwa_total" and fact.value
+              and fact.authority is Authority.SYSTEM_OF_RECORD):
+            rwa_by_period.setdefault(fact.period, []).append(fact)
+
     for ratio in (f for f in facts
                   if f.kind in ("capital.cet1_ratio", "capital.cet1_ratio_as_filed")
                   and f.authority is Authority.SYSTEM_OF_RECORD and f.value):
         capital_at = [
-            f for f in capital_amounts if f.period == ratio.period and f.holds_at(ratio.valid_from)
+            f for f in capital_by_period.get(ratio.period, ())
+            if f.holds_at(ratio.valid_from)
         ]
         rwa_at = [
-            f for f in rwa_totals if f.period == ratio.period and f.holds_at(ratio.valid_from)
+            f for f in rwa_by_period.get(ratio.period, ())
+            if f.holds_at(ratio.valid_from)
         ]
         if not capital_at or not rwa_at:
             continue
