@@ -1,0 +1,1013 @@
+{
+  "artifact_types": [
+    {
+      "key": "actuarial_valuation_report",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 0,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Central estimate",
+          "kinds": [
+            "reserves.central_estimate_total",
+            "reserves.ultimate",
+            "reserves.ibnr"
+          ],
+          "scope": "any",
+          "purpose": "State the strengthened central estimate by cohort and in total, plainly. This is the actuary's own report; it does not soften the figure for the committee that will decide how much of it to book."
+        },
+        {
+          "heading": "Attribution",
+          "kinds": [
+            "reserves.attribution_pattern_change",
+            "reserves.attribution_deterioration"
+          ],
+          "scope": "any",
+          "purpose": "The split between pattern change and genuine deterioration, and that the two do not resolve into one figure — both are on the record."
+        },
+        {
+          "heading": "Recommendation and the booked position",
+          "kinds": [
+            "reserves.committee_recommendation",
+            "reserves.booked_total"
+          ],
+          "scope": "any",
+          "purpose": "State the committee's recommendation, then — quoting the figure exactly as finance's own decision memo states it — what was actually booked. The gap between the two is not this report's decision to explain; it is the memo's."
+        },
+        {
+          "heading": "Basis of valuation",
+          "kinds": [
+            "reserves.philosophy",
+            "reserves.risk_margin_policy_pct"
+          ],
+          "scope": "any",
+          "purpose": "One paragraph: the standing margin policy this valuation was performed under."
+        }
+      ]
+    },
+    {
+      "key": "audit_committee_pack",
+      "authority": "approved_report",
+      "lifecycle": "reviewed",
+      "lag": {
+        "days": 1,
+        "hours": 10,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Result",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "group",
+          "purpose": "The group position, stated once and without commentary. The committee is not the management meeting; it needs the number to hold the rest of the pack against, not an argument about it."
+        },
+        {
+          "heading": "Close control",
+          "kinds": [
+            "close."
+          ],
+          "scope": "any",
+          "purpose": "Whether the close met its committed date and, if not, what moved it. This is the committee's actual business — the integrity of the reporting process, not the performance it reports."
+        },
+        {
+          "heading": "Matters for the committee",
+          "kinds": [
+            "ops.root_cause_classification",
+            "ops.mapping_table_owner"
+          ],
+          "scope": "any",
+          "purpose": "Control failures and unowned components, stated plainly and without mitigation. A pack that softens these is the document the committee exists to not receive."
+        }
+      ]
+    },
+    {
+      "key": "board_risk_committee_summary",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 4,
+        "hours": 0,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Position",
+          "kinds": [
+            "capital.cet1_ratio",
+            "capital.cet1_delta",
+            "capital.minimum_cet1_requirement"
+          ],
+          "scope": "group",
+          "purpose": "Three sentences: the restated ratio, the movement, and that the bank remains above the minimum. Confident register; the committee wants the outcome."
+        },
+        {
+          "heading": "Restatement",
+          "kinds": [
+            "capital.return_status",
+            "capital.restatement_reason",
+            "capital.error_materiality"
+          ],
+          "scope": "group",
+          "purpose": "What was restated and why, briefly. Write only what the facts given support — this paper deliberately does not raise the control-failure classification or the review history."
+        },
+        {
+          "heading": "Regulator engagement",
+          "kinds": [
+            "regulatory.notification"
+          ],
+          "scope": "group",
+          "purpose": "That the regulator was notified within the window. Nothing about any response — none is recorded."
+        }
+      ]
+    },
+    {
+      "key": "capital_return",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 0,
+        "minutes": 30
+      },
+      "word": false
+    },
+    {
+      "key": "cfo_variance_memo",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 17,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Position",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "group",
+          "purpose": "State the group result against plan and say plainly whether the period was acceptable. Lead with the number that matters most, not with the first one in the list. The CFO already knows the shape of the month; give them the sentence they will repeat to the board."
+        },
+        {
+          "heading": "By business unit",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "unit",
+          "purpose": "Attribute the group position to divisions. Say which unit carried the miss and which held up, and do not give equal airtime to units that behaved normally. A division performing to plan warrants a clause, not a paragraph."
+        },
+        {
+          "heading": "Drivers",
+          "kinds": [
+            "metric."
+          ],
+          "scope": "any",
+          "purpose": "Explain what moved margin and whether it is structural or one-off. This is the section the CFO reads twice; it must connect a cause to a figure rather than list metrics. Where a driver sits inside a division rather than across the group, say so."
+        },
+        {
+          "heading": "Close timetable",
+          "kinds": [
+            "close.",
+            "ops.cause",
+            "ops.workaround",
+            "financial.incident_pl_impact"
+          ],
+          "scope": "any",
+          "purpose": "Report whether the close met its committed date and, if not, what stopped it. Distinguish a calendar impact from a P&L impact explicitly — conflating them is the most common error in this kind of memo."
+        },
+        {
+          "heading": "Recommendation",
+          "kinds": [
+            "ops.remediation",
+            "ops.root_cause_classification",
+            "ops.mapping_table_owner"
+          ],
+          "scope": "any",
+          "purpose": "Say what should happen next and who has to decide. Be specific about which remediation addresses the underlying control and which addresses detection only; a reader who cannot tell them apart will approve the cheaper one."
+        }
+      ]
+    },
+    {
+      "key": "claims_emergence_note",
+      "authority": "working_document",
+      "lifecycle": "draft",
+      "lag": {
+        "days": 0,
+        "hours": 4,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Actual versus expected",
+          "kinds": [
+            "claims.actual_vs_expected",
+            "claims.incurred_to_date"
+          ],
+          "scope": "any",
+          "purpose": "State the deviation by cohort: what incurred was expected to be under the prior pattern, and what it actually was. Working-paper register — this is the low-authority document that happens to be right."
+        }
+      ]
+    },
+    {
+      "key": "close_calendar",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 1,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Commitment",
+          "kinds": [
+            "close.due_date"
+          ],
+          "scope": "any",
+          "purpose": "State the committed date for the period. This is a standing published document; write it as policy, not as news."
+        },
+        {
+          "heading": "Escalation",
+          "kinds": [
+            "close.revised_date",
+            "close.status",
+            "close.delay"
+          ],
+          "scope": "any",
+          "purpose": "What happens when the date moves, and where the period ended up. Procedural register — this is read by people looking up a rule."
+        }
+      ]
+    },
+    {
+      "key": "confluence_page",
+      "authority": "unofficial_note",
+      "lifecycle": "draft",
+      "lag": {
+        "days": 0,
+        "hours": 0,
+        "minutes": 20
+      },
+      "word": false,
+      "sections": [
+        {
+          "heading": "Current position",
+          "kinds": [
+            "ops.feed_status",
+            "ops.incident_opened"
+          ],
+          "scope": "any",
+          "purpose": "A triage status page written while the incident is open. It knows the symptom and the first guess and nothing more. Write with the confidence of the moment, which later turns out to have been misplaced."
+        },
+        {
+          "heading": "Next steps",
+          "kinds": [
+            "ops.cause"
+          ],
+          "scope": "any",
+          "purpose": "What the team is doing about it right now. Provisional by nature. This page is never updated, so it must not hedge in a way that would age well."
+        }
+      ]
+    },
+    {
+      "key": "email_thread",
+      "authority": "unofficial_note",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 0,
+        "minutes": 25
+      },
+      "word": false
+    },
+    {
+      "key": "executive_summary",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 15,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "In brief",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "group",
+          "purpose": "Three sentences at most. An executive committee wants the result, the direction, and whether anything requires them. Confident register, no hedging, no methodology."
+        },
+        {
+          "heading": "Close",
+          "kinds": [
+            "close.",
+            "financial.incident_pl_impact"
+          ],
+          "scope": "any",
+          "purpose": "State whether the books closed on time and whether the result was affected. This paper deliberately does not raise the control failure behind the delay — write only what the facts given support."
+        },
+        {
+          "heading": "Focus next period",
+          "kinds": [
+            "metric."
+          ],
+          "scope": "any",
+          "purpose": "Name the one or two measures the committee should watch, and why. Forward-looking, brief, and free of operational detail."
+        }
+      ]
+    },
+    {
+      "key": "finance_workbook",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 0,
+        "minutes": 50
+      },
+      "word": false
+    },
+    {
+      "key": "incident_rca",
+      "authority": "approved_report",
+      "lifecycle": "reviewed",
+      "lag": {
+        "days": 0,
+        "hours": 2,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Summary",
+          "kinds": [
+            "ops.feed_status",
+            "ops.affected_records"
+          ],
+          "scope": "any",
+          "purpose": "What failed, how much was affected, and what it stopped. Written for someone who will read this section and nothing else."
+        },
+        {
+          "heading": "Timeline",
+          "kinds": [
+            "ops.incident_opened",
+            "ops.valuation_status",
+            "close."
+          ],
+          "scope": "any",
+          "purpose": "The sequence, in order, with the moment the close was put at risk made explicit. Times matter here; narrative flourish does not."
+        },
+        {
+          "heading": "Initial assessment and why it was wrong",
+          "kinds": [
+            "ops.cause_ruled_out"
+          ],
+          "scope": "any",
+          "purpose": "State the hypothesis triage recorded and why it was ruled out. Write it as a belief held at the time, not as an error — the point is what the evidence supported then, not blame now."
+        },
+        {
+          "heading": "Root cause",
+          "kinds": [
+            "ops.cause",
+            "ops.root_cause_classification",
+            "ops.mapping_table_owner"
+          ],
+          "scope": "any",
+          "purpose": "The confirmed cause, and the condition that allowed it to persist. An unassigned owner is itself a finding and should be stated as one."
+        },
+        {
+          "heading": "Contributing factors",
+          "kinds": [
+            "ops.previous_similar_incident",
+            "ops.workaround"
+          ],
+          "scope": "any",
+          "purpose": "What made this more likely or harder to catch. Recurrence is the strongest signal available; if there is precedent, lead with it."
+        },
+        {
+          "heading": "Actions",
+          "kinds": [
+            "ops.remediation"
+          ],
+          "scope": "any",
+          "purpose": "What is being done, by whom, and which action addresses the control rather than the symptom. Distinguish the two; a reader must not be able to mistake improved detection for a fixed control."
+        }
+      ]
+    },
+    {
+      "key": "internal_audit_review",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 4,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Ruling",
+          "kinds": [
+            "review.challenge_status",
+            "review.challenge"
+          ],
+          "scope": "any",
+          "purpose": "The finding first: the second-line challenge is upheld. Audit writes rulings, not observations."
+        },
+        {
+          "heading": "The challenge and the filing decision",
+          "kinds": [
+            "capital.return_approval",
+            "capital.return_filed_at"
+          ],
+          "scope": "any",
+          "purpose": "Establish the sequence on the record: the challenge predated the approval, and the return was lodged with the challenge open. State it neutrally; the sequence itself is the finding."
+        },
+        {
+          "heading": "Root cause and classification",
+          "kinds": [
+            "ops.cause",
+            "ops.root_cause_classification",
+            "ops.collateral_mapping_owner"
+          ],
+          "scope": "any",
+          "purpose": "The confirmed cause and the control failure beneath it. An unregistered owner is itself a finding and is stated as one."
+        },
+        {
+          "heading": "Treatment",
+          "kinds": [
+            "capital.collateral_treatment"
+          ],
+          "scope": "any",
+          "purpose": "What the collateral actually was, against what the working paper assumed."
+        },
+        {
+          "heading": "Remediation",
+          "kinds": [
+            "ops.remediation"
+          ],
+          "scope": "any",
+          "purpose": "Which action fixes the control and which only improves detection. A reader must not be able to mistake one for the other."
+        },
+        {
+          "heading": "Restatement",
+          "kinds": [
+            "capital.restatement_reason"
+          ],
+          "scope": "any",
+          "purpose": "The correction as lodged, in one paragraph, for the committee's record."
+        }
+      ]
+    },
+    {
+      "key": "jira_issues",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 0,
+        "minutes": 0
+      },
+      "word": false
+    },
+    {
+      "key": "knowledge_article",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 3,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "When to use this",
+          "kinds": [
+            "ops.feed_status",
+            "ops.affected_records"
+          ],
+          "scope": "any",
+          "purpose": "The symptom a future reader will recognise. Written so someone hitting this at 2am can tell in one sentence whether they are in the right article."
+        },
+        {
+          "heading": "Cause",
+          "kinds": [
+            "ops.cause",
+            "ops.mapping_table_owner"
+          ],
+          "scope": "any",
+          "purpose": "Why it happens, briefly, and who to go to. Enough that the procedure below makes sense; not a root-cause analysis."
+        },
+        {
+          "heading": "Procedure",
+          "kinds": [
+            "ops.workaround"
+          ],
+          "scope": "any",
+          "purpose": "The steps, in order, imperative mood. A reader should be able to follow this without understanding the cause."
+        }
+      ]
+    },
+    {
+      "key": "margin_decision_memo",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 6,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "The decision",
+          "kinds": [
+            "reserves.booked_strengthening",
+            "reserves.margin_released"
+          ],
+          "scope": "any",
+          "purpose": "State what was booked and what margin was released to cover the difference, under the standing combined-ratio target."
+        },
+        {
+          "heading": "The central estimate",
+          "kinds": [
+            "reserves.central_estimate_total",
+            "reserves.committee_recommendation"
+          ],
+          "scope": "any",
+          "purpose": "Quote the actuarial central estimate exactly as the valuation report states it — this memo's decision is measured against that figure, not against a paraphrase of it."
+        },
+        {
+          "heading": "The standing gap",
+          "kinds": [
+            "reserves.held_vs_central_gap"
+          ],
+          "scope": "any",
+          "purpose": "State that the booked reserve now sits below the central estimate, by how much, and that the policy basis for the release is the standing margin philosophy, not an exception to it."
+        }
+      ]
+    },
+    {
+      "key": "meeting_minutes",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 3,
+        "minutes": 0
+      },
+      "word": false
+    },
+    {
+      "key": "member_report",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 12,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Result",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "group",
+          "purpose": "The result, written for the people who own the company and are not investors. Plain register, no market framing, no growth story — a mutual reports stewardship, and the reader is being told what was done with their money."
+        },
+        {
+          "heading": "What it means for members",
+          "kinds": [
+            "metric.",
+            "close."
+          ],
+          "scope": "any",
+          "purpose": "What follows for members from the figures given. Prudence outranks pace here; where a measure implies caution, say so rather than reframing it."
+        }
+      ]
+    },
+    {
+      "key": "ministerial_brief",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 8,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Position",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "group",
+          "purpose": "The position, briefly, for a reader who has thirty seconds and may be asked about it publicly. No jargon and no hedging that would read badly quoted back."
+        },
+        {
+          "heading": "On the record",
+          "kinds": [
+            "close.",
+            "ops."
+          ],
+          "scope": "any",
+          "purpose": "Everything the period put on the record, including what went wrong. This company minutes everything because everything is discoverable, so a brief that omits an operational failure is the omission somebody later finds."
+        }
+      ]
+    },
+    {
+      "key": "peak_trading_review",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 0,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "The month in the year",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "group",
+          "purpose": "This is a month the year is planned around, so judge it as such. Against plan is the wrong frame on its own — the plan already contains the season. Say whether the peak delivered what a peak has to deliver."
+        },
+        {
+          "heading": "Where the peak landed",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "unit",
+          "purpose": "Which divisions carried the peak and which did not trade through it. A commercial register, not a finance one; this is read by people who will buy differently next year because of it."
+        },
+        {
+          "heading": "What it says about the plan",
+          "kinds": [
+            "metric."
+          ],
+          "scope": "any",
+          "purpose": "What the peak's own measures imply for the rest of the year. Forward-looking and short; skip gracefully if the measures given say nothing."
+        }
+      ]
+    },
+    {
+      "key": "remediation_scope_review",
+      "authority": "approved_report",
+      "lifecycle": "reviewed",
+      "lag": {
+        "days": 0,
+        "hours": 6,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "What the fix has to cover",
+          "kinds": [
+            "ops.cause",
+            "ops.affected_records"
+          ],
+          "scope": "any",
+          "purpose": "The cause, and the extent of what depends on the thing that has to change. This is the section that justifies the review existing: state the reach rather than gesturing at it."
+        },
+        {
+          "heading": "Who owns it",
+          "kinds": [
+            "ops.mapping_table_owner"
+          ],
+          "scope": "any",
+          "purpose": "Ownership of the component being changed. An unassigned owner is the finding, not a gap in the paperwork — write it as the finding, and say what follows from a change to something nobody owns."
+        },
+        {
+          "heading": "Scope of the remediation",
+          "kinds": [
+            "ops.remediation"
+          ],
+          "scope": "any",
+          "purpose": "What the proposed work does and does not cover. Be explicit about which action addresses the control and which addresses detection; a reader who cannot tell them apart will approve the cheaper one."
+        },
+        {
+          "heading": "Whether it has held before",
+          "kinds": [
+            "ops.previous_similar_incident"
+          ],
+          "scope": "any",
+          "purpose": "Precedent, and what it says about whether this scope is enough. If there is a prior occurrence, lead with it — a fix that did not hold is the strongest argument available for widening the scope."
+        }
+      ]
+    },
+    {
+      "key": "reserve_triangle_workbook",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 1,
+        "minutes": 0
+      },
+      "word": false
+    },
+    {
+      "key": "routine_notice",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 4,
+        "minutes": 0
+      },
+      "word": false,
+      "sections": [
+        {
+          "heading": "Status",
+          "kinds": [
+            ""
+          ],
+          "scope": "any",
+          "purpose": "A routine periodic notice. State the figures given plainly, in one or two sentences, and stop — the whole point of this document is that there is nothing to report."
+        }
+      ]
+    },
+    {
+      "key": "rwa_working_paper",
+      "authority": "working_document",
+      "lifecycle": "draft",
+      "lag": {
+        "days": 0,
+        "hours": 1,
+        "minutes": 30
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Methodology and treatment",
+          "kinds": [
+            "capital.collateral_treatment"
+          ],
+          "scope": "any",
+          "purpose": "State the treatment applied to each material book, and the basis for it. Written with a working paper's confidence — this is the document whose treatment the second line will dispute, and it does not know that yet."
+        },
+        {
+          "heading": "Capital position",
+          "kinds": [
+            "capital.cet1_ratio",
+            "capital.rwa_total"
+          ],
+          "scope": "any",
+          "purpose": "The computed position as the paper states it. Figures only as references; the paper argues method, not outcome."
+        },
+        {
+          "heading": "Correction",
+          "kinds": [
+            "ops.cause",
+            "capital.rwa_understatement",
+            "capital.error_materiality"
+          ],
+          "scope": "any",
+          "purpose": "Version two only: what the confirmed cause changed about the treatment and the position. State it as a correction of this paper's own earlier method, plainly."
+        },
+        {
+          "heading": "Basis of preparation",
+          "kinds": [
+            "close."
+          ],
+          "scope": "any",
+          "purpose": "One line: prepared from the locked ledger for the quarter."
+        }
+      ]
+    },
+    {
+      "key": "second_line_challenge_memo",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 3,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Finding",
+          "kinds": [
+            "review.challenge"
+          ],
+          "scope": "any",
+          "purpose": "The challenge, on the record: what was sampled, what could not be confirmed, and what the reviewer requires before sign-off. Formal, insistent, precise — this memo exists to be citable later."
+        },
+        {
+          "heading": "Treatment under challenge",
+          "kinds": [
+            "capital.collateral_treatment"
+          ],
+          "scope": "any",
+          "purpose": "State the preparer's treatment and the reviewer's position beside each other, without resolving them — the disagreement is the content."
+        },
+        {
+          "heading": "Status",
+          "kinds": [
+            "review.challenge_status"
+          ],
+          "scope": "any",
+          "purpose": "The challenge's standing under the filing norm: logged, open, not blocking. State the norm as the memo's author sees it — a precondition the deadline does not waive."
+        },
+        {
+          "heading": "Position as drafted",
+          "kinds": [
+            "capital.cet1_ratio",
+            "capital.rwa_total"
+          ],
+          "scope": "any",
+          "purpose": "The figures the draft return would file if lodged unaltered."
+        }
+      ]
+    },
+    {
+      "key": "service_impact_assessment",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 1,
+        "minutes": 30
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "What failed",
+          "kinds": [
+            "ops.feed_status",
+            "ops.affected_records"
+          ],
+          "scope": "any",
+          "purpose": "The failure and its size, for a reader who has to decide what to do about it in the next hour. No history, no cause — this document exists because the estate is too large for anyone to hold the answer in their head, so state what is known and be precise about the scale."
+        },
+        {
+          "heading": "What it reaches",
+          "kinds": [
+            "ops.valuation_status"
+          ],
+          "scope": "any",
+          "purpose": "What downstream is affected and what is not. The whole point of the assessment: a reader must be able to tell whether their own service is in scope without asking anybody. Say plainly where the boundary is."
+        },
+        {
+          "heading": "Holding position",
+          "kinds": [
+            "ops.workaround",
+            "ops.cause"
+          ],
+          "scope": "any",
+          "purpose": "What is being run in the meantime and on what basis. Provisional register — this is written while the incident is open and will be read by people deciding whether to wait."
+        }
+      ]
+    },
+    {
+      "key": "servicenow_incident",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 0,
+        "minutes": 5
+      },
+      "word": false
+    },
+    {
+      "key": "sponsor_pack",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 4,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Against the plan",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "group",
+          "purpose": "The month against the plan the sponsor holds. Lead with the variance, not the actual — the fund knows what it underwrote and is reading for the gap."
+        },
+        {
+          "heading": "By division",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "unit",
+          "purpose": "Where the gap sits. Every line gets asked about, so attribute it rather than summarising it, and do not give equal space to divisions that did what they said they would."
+        },
+        {
+          "heading": "Drivers and actions",
+          "kinds": [
+            "metric.",
+            "close."
+          ],
+          "scope": "any",
+          "purpose": "What moved the number and what is being done. Cost discipline is the standing theme and the register is brisk; this is a monthly document read by someone with a hold period."
+        }
+      ]
+    },
+    {
+      "key": "unit_close_commentary",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 20,
+        "minutes": 0
+      },
+      "word": false,
+      "sections": [
+        {
+          "heading": "Performance",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "unit",
+          "purpose": "One unit's month, argued by the person who partners it. Say what the unit delivered against plan and why, in a finance business partner's commercial register — this is the paragraph the divisional MD forwards. Do not restate the group position; the unit is the whole subject."
+        },
+        {
+          "heading": "Watch items",
+          "kinds": [
+            "metric."
+          ],
+          "scope": "any",
+          "purpose": "What this unit should watch next period, if the metrics given warrant anything. One or two sentences; skip gracefully if nothing does."
+        }
+      ]
+    },
+    {
+      "key": "working_note",
+      "authority": "working_document",
+      "lifecycle": "draft",
+      "lag": {
+        "days": 0,
+        "hours": 18,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Where the close stands",
+          "kinds": [
+            "close."
+          ],
+          "scope": "any",
+          "purpose": "A controller's own note, written mid-close for their own use. Terse, provisional, dated in its thinking. Not a report."
+        },
+        {
+          "heading": "Running note",
+          "kinds": [
+            "ops."
+          ],
+          "scope": "any",
+          "purpose": "Working observations in the order they were made, including what is still unknown. It is legitimate — and realistic — for this to read as unfinished."
+        }
+      ]
+    }
+  ]
+}

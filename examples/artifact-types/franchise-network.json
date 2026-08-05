@@ -1,0 +1,128 @@
+{
+  "name": "franchise-network",
+  "base": "retail",
+  "description": "Convenience franchisor: company-operated stores beside a franchised network",
+  "company_name": "Kerbside Convenience Group",
+  "industry": "Franchised convenience retail",
+  "currency": "AUD",
+  "currency_unit": "thousands",
+  "annual_revenue": 1840000,
+  "employees": 2600,
+  "headquarters": "Adelaide, Australia",
+  "regions": ["SA", "VIC", "NSW", "QLD", "WA", "TAS"],
+  "system_brands": {
+    "erp": "Kerbside Ledger",
+    "mdm": "Network Master",
+    "pos": "Forecourt POS"
+  },
+  "units": [
+    {
+      "key": "company_stores",
+      "name": "Company Stores",
+      "kind": "owned_retail",
+      "share": 0.36,
+      "categories": [
+        {"name": "Food to Go", "share": 0.44, "margin": 0.41},
+        {"name": "Grocery and Household", "share": 0.36, "margin": 0.24},
+        {"name": "Chilled Drinks", "share": 0.2, "margin": 0.33}
+      ],
+      "site_formats": [
+        {"name": "Metro Store", "count": 46, "revenue_weight": 1.0},
+        {"name": "Highway Store", "count": 12, "revenue_weight": 1.6}
+      ]
+    },
+    {
+      "key": "franchise_network",
+      "name": "Franchise Network",
+      "kind": "franchised_retail",
+      "share": 0.64,
+      "categories": [
+        {"name": "Wholesale Supply", "share": 0.71, "margin": 0.12},
+        {"name": "Franchise Fees", "share": 0.19, "margin": 0.86},
+        {"name": "Network Marketing Levy", "share": 0.1, "margin": 0.55}
+      ],
+      "site_formats": [
+        {"name": "Franchised Store", "count": 210, "revenue_weight": 0.8}
+      ]
+    }
+  ],
+  "artifact_types": [
+    {
+      "key": "franchisee_trading_statement",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {"days": 0, "hours": 20, "minutes": 0},
+      "word": true,
+      "sections": [
+        {
+          "heading": "Network position",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "group",
+          "purpose": "State the network's month against plan, for a reader who is a small-business owner rather than a manager. They are not staff and they are not investors: they run one store, they pay a fee computed off these figures, and they are entitled to see the arithmetic behind it. Plain register, no growth story, and no framing that would read as a sales pitch to somebody whose lease depends on it."
+        },
+        {
+          "heading": "By trading division",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit.",
+            "financial.gross_margin_pct."
+          ],
+          "scope": "unit",
+          "purpose": "Separate what the company's own stores did from what the franchised network did, and do not let the first stand in for the second. A franchisee's whole question about this document is whether the group is trading its own estate harder than the one it sells supply to, so answer it rather than presenting one blended line."
+        },
+        {
+          "heading": "Basis of this statement",
+          "kinds": ["close."],
+          "scope": "any",
+          "purpose": "Whether the books closed when they were promised, and what follows for the fee run if they did not. Procedural register — this is the paragraph a franchisee's accountant reads. A late close is not an apology here, it is a date that moves, so state the date."
+        }
+      ],
+      "filing": {
+        "author_role": "controller",
+        "fallback_role": "cfo",
+        "domain": "finance",
+        "audience": "all_staff",
+        "size": "medium",
+        "facts": ["headline", "close_status"],
+        "rationale": "A franchisor computes every franchisee's fee off the group's own reported month, so it owes the network a statement of that month rather than an assurance about it."
+      }
+    }
+  ],
+  "lore": [
+    {
+      "kind": "norm",
+      "assertion": "Every franchisee receives a monthly trading statement, because the franchise agreement computes their fee off the group's reported figures and gives them a right to see them.",
+      "effective_from": "2019-04",
+      "constrains": [
+        {
+          "kind": "artifact_density",
+          "target": "filing/franchisee_trading_statement",
+          "effect": "The network is sent a statement of the month every period",
+          "magnitude": 1.0
+        },
+        {
+          "kind": "terminology",
+          "target": "trading statement",
+          "effect": "A franchisee is sent a statement, never a report — the word is in the agreement"
+        }
+      ]
+    },
+    {
+      "kind": "tension",
+      "assertion": "Wholesale supply to the network carries a thin margin the company's own stores do not, so a month that reads well at group level can read badly to a franchisee.",
+      "effective_from": "2022-09",
+      "constrains": [
+        {
+          "kind": "metric_emphasis",
+          "target": "forecast_miss/franchise_network",
+          "effect": "Supply volumes are forecast optimistically and the network unit misses",
+          "magnitude": 1.6
+        }
+      ]
+    }
+  ]
+}

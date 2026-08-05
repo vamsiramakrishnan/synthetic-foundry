@@ -79,6 +79,34 @@ REMEDIATION_REVIEW_REACH = 20
 #: reaches it at all four quarter ends, which is what that profile *means*.
 PEAK_TRADING_INDEX = 1.10
 
+#: The fact bundles a *declaratively authored* filing may ask for, and what each
+#: one is (``documents.FilingPlan.facts``, ``worldloom.doctypes``).
+#:
+#: A closed vocabulary, and the closure is the point. The engine's own filings
+#: name fact ids because they are written in this function and can see the ones
+#: it computed; an authored type is JSON and cannot, so the choice on offer is
+#: either fact *kinds* — which would let a document reach past the planner into
+#: the ledger for figures no episode gave it — or the cuts this function has
+#: already made. These are those cuts. A bundle that came out empty this episode
+#: contributes nothing rather than naming a fact that does not exist, which is
+#: the same discipline ``filings`` itself follows: lore states what the company
+#: files, the episode states what there was to file it about.
+#:
+#: Values are the description ``worldloom pack targets``-style tooling prints;
+#: the keys are the contract.
+FILING_BUNDLES: dict[str, str] = {
+    "headline": "the period's figures at group and unit level — what the"
+                " variance memo argues over",
+    "group": "the same figures, company subjects only — for a reader who is an"
+             " owner rather than a manager",
+    "close_status": "whether the books closed when they were promised, and by"
+                    " how much they did not",
+    "control_failure": "the classification of what went wrong and who owns the"
+                       " component behind it; empty on a clean close, and"
+                       " withheld under `--actors` for the reason the four"
+                       " owner reports below withhold it",
+}
+
 
 def artifact_intents(
     minter: Minter,
@@ -503,19 +531,22 @@ def artifact_intents(
     # the committee has not read is not one — and because the outlines
     # partition the same month differently for each reader.
     #
-    # **A note on `audience`, which is doing two jobs.** It names the reader
-    # for the narrative request, and it selects an access policy through
-    # `world._policy_for`. Where the two disagree the policy has to win: a
-    # document its own author cannot open fails `author_cannot_see_own_artifact`
-    # and stops the corpus, where a reader named less precisely than it could
-    # be is a wording problem. Retail mints four policies, none of them named
-    # for a committee, a fund or a minister, and an unrecognised audience falls
-    # back to the *technology* policy — so `audience="audit_committee"` locks
-    # the CFO out of the pack they wrote. So these carry the access class
-    # instead, and the actual reader is stated in each filing's rationale and
-    # in its outline's purposes. Naming the real audiences needs a policy
-    # minted for each in `generators/organisation.py` and a row in
-    # `world._policy_for`; both are one line and neither is in this change.
+    # **A note on `audience`, which is doing two jobs.** It names the reader for
+    # the narrative request, and it selects an access policy through
+    # `world._policy_for`. These used to carry the *access class*
+    # (`executive_committee`) rather than the reader, because an unrecognised
+    # audience fell through to whatever policy happened to be last in the tuple
+    # — "Technology and service operations" in retail — and `audit_committee`
+    # therefore locked the CFO out of the pack they wrote.
+    #
+    # `_policy_for` now has a row for each of these, so they name the reader and
+    # still resolve to the access class that governs the document *inside* the
+    # company. That distinction is the point and is worth stating: a policy
+    # decides who here may open it, and these four readers are all *outside* the
+    # org chart — an audit committee, a fund, a members' body, a minister — so
+    # no `allow_functions` describes them and minting a policy each would put
+    # four rows in `world.json` for every corpus ever built. Who receives it is
+    # the filing's own business; who may open it is the policy's.
     #
     # `close_status` is the pair every one of them carries: whether the books
     # closed when they were promised, and by how much they did not. That is the
@@ -539,13 +570,13 @@ def artifact_intents(
         # timetable and the control failure, and the result only as the figure
         # the rest is held against. Signed by the CFO: the committee receives
         # management's account and then decides whether to believe it.
-        intent("audit_committee_pack", "finance", "executive_committee", roles["cfo"],
+        intent("audit_committee_pack", "finance", "audit_committee", roles["cfo"],
                money + close_status + control_failure, [episode.close_event_id], "medium",
                "A listed company's audit committee reviews the numbers, and the "
                "control environment behind them, before the market sees either.")
 
     if files("sponsor_pack"):
-        intent("sponsor_pack", "finance", "executive_committee", roles["cfo"],
+        intent("sponsor_pack", "finance", "sponsor", roles["cfo"],
                money + close_status, [episode.close_event_id], "medium",
                "A fund with a hold period reads a pack every month and asks about "
                "every line.")
@@ -557,7 +588,7 @@ def artifact_intents(
         # different cover — which is the failure four near-identical filings
         # would actually be.
         group = [f.id for f in financial_facts if f.subject.startswith("CO")]
-        intent("member_report", "strategy", "all_staff", roles["ceo"],
+        intent("member_report", "strategy", "members", roles["ceo"],
                group + close_status, [episode.close_event_id], "small",
                "A mutual reports to the people who own it, and stewardship rather "
                "than return is what the report is about.")
@@ -573,9 +604,69 @@ def artifact_intents(
         # channel) must still produce the brief rather than raise.
         author = roles.get("public_accountability") or roles["ceo"]
         group = [f.id for f in financial_facts if f.subject.startswith("CO")]
-        intent("ministerial_brief", "strategy", "executive_committee", author,
+        intent("ministerial_brief", "strategy", "minister", author,
                group + close_status + control_failure, [episode.close_event_id], "small",
                "A government-owned company briefs its minister on the period, and the "
                "brief is itself discoverable.")
+
+    # -- what an authored type says it is for ---------------------------
+    #
+    # Everything above names its artifact type in Python, which is right: those
+    # choices — who signs a sponsor pack, which facts an audit committee is
+    # owed — are arguments about the episode, and an argument belongs in code.
+    # What that shape cannot do is let a *model* add a document type, because
+    # every one of the thirty this engine declares needs a call written here
+    # before any company can file it.
+    #
+    # So the loop below plans the types whose four choices are data
+    # (`documents.FilingPlan`, authored through `worldloom.doctypes` and
+    # carried in a pack). The gate is unchanged — `files()` reads the same
+    # summed lore adjustment, and a type nothing asked for is not planned — and
+    # `filing_plan` returns None for every type declared by a module, so each of
+    # the filings above is skipped here rather than planned twice.
+    #
+    # A no-op on every build that loads no authored type, which is every build
+    # this repository ships: `asked` is empty without lore at
+    # `facets.FILING_PREFIX`, and each of the five keys the shipped facets do
+    # put there plans itself above. Verified by diff, not by assertion.
+    from .. import documents as documents_module
+
+    bundles = {
+        "headline": money,
+        "group": [f.id for f in financial_facts if f.subject.startswith("CO")],
+        "close_status": close_status,
+        "control_failure": control_failure,
+    }
+    # Sorted, because `asked` is built by summing over lore and two commitments
+    # naming two types must not put them in the plan in whichever order the
+    # world's lore happened to be minted. ART ids are identity.
+    for artifact_type in sorted(asked):
+        plan = documents_module.filing_plan(artifact_type)
+        if plan is None or not files(artifact_type):
+            continue
+        # `or` down the chain rather than `roles[...]`, the same shape the
+        # ministerial brief uses: an author role that exists only when some
+        # facet was claimed must not raise in a build where it was not.
+        author = (
+            roles.get(plan.author_role)
+            or roles.get(plan.fallback_role)
+            or roles.get("ceo")
+        )
+        if author is None:
+            continue
+        cited: list[str] = []
+        for bundle in plan.facts:
+            for fact_id in bundles.get(bundle, ()):
+                if fact_id not in cited:
+                    cited.append(fact_id)
+        # `written_at` derives a document's date from the newest fact it cites,
+        # so an intent citing nothing has no date and raises there. A bundle
+        # this episode left empty — the control failure on a clean close — is a
+        # legitimate reason for that, and the honest answer is that the company
+        # had nothing to file rather than a document about nothing.
+        if not cited:
+            continue
+        intent(artifact_type, plan.domain, plan.audience, author,
+               cited, [episode.close_event_id], plan.size, plan.rationale)
 
     return tuple(intents)

@@ -43,6 +43,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .archetypes import Archetype
+from .doctypes import DocumentType
 from .generators.hierarchy import CategorySpec, SiteFormat, UnitSpec
 from .ids import Minter
 from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
@@ -292,6 +293,25 @@ class Pack(PackModel):
     revenue line.
     """
 
+    artifact_types: list[DocumentType] = Field(default_factory=list)
+    """Document types this company files that the engine does not have.
+
+    The fifth thing a pack authors, and the one that was missing for the same
+    reason lore was before packs existed: an artifact type is
+    ``(Authority, Lifecycle)``, a ``timedelta`` and a tuple of ``SectionPlan``,
+    which is data in three tables out of four — but there was no loader, so a
+    model could give a company a name, divisions, books, voices and backstory
+    and could not give it a single document of its own.
+
+    They ride the pack rather than a file of their own, and that is the
+    determinism argument in one line: a pack embeds in the recipe verbatim, so
+    a corpus carrying an authored type rebuilds with the type, in any process,
+    with no file on hand. A ``--doctypes`` flag would be a second thing to
+    remember and a corpus that replays into a different document set when you
+    forget it. See ``worldloom.doctypes`` for the schema, the lint, and why the
+    compiler stays code.
+    """
+
     regions: list[str] = Field(default_factory=list)
     """Region labels for the site estate (``generators/hierarchy.py``'s
     ``region`` field and the site names built from it — e.g. a site named
@@ -352,7 +372,19 @@ def archetype_of(pack: Pack) -> Archetype:
     returns an authored archetype untouched — so a corpus built from a pack
     keeps the author's words whatever else asks for a vocabulary, the same
     precedence ``Pack.regions`` already has over a locale's region pool.
+
+    **This is also where the pack's authored artifact types are installed**, and
+    the placement is deliberate rather than convenient. It is the one function
+    on the path from any ``Pack`` — loaded from a file, rebuilt from a recipe,
+    or constructed in Python through the SDK — to a world built from it, so a
+    corpus can never be compiled with the types its own pack declared missing.
+    ``load`` would be the obvious home and is the wrong one: ``worldloom pack
+    check`` loads a pack it is only inspecting, and linting a document must not
+    change the process that lints it.
     """
+    from . import doctypes
+
+    doctypes.install(pack.artifact_types)
     return Archetype(
         key=f"pack:{pack.name}",
         authored=True,
@@ -538,6 +570,15 @@ def lint(pack: Pack) -> list[str]:
         dict(domain.evaluation_text), pack.evaluation_text, field="evaluation_text"
     ))
 
+    # The pack's own document types, before its lore is read — because the lore
+    # rule below asks whether a `filing/<type>` target names a type that exists,
+    # and "exists" includes the ones this pack is declaring.
+    from . import doctypes
+    from .facets import FILING_PREFIX as _FILING_PREFIX
+
+    findings.extend(doctypes.lint(pack.artifact_types, base=pack.base))
+    authored = {spec.key for spec in pack.artifact_types}
+
     consulted: dict[str, str] = dict(domain.consulted_targets)
     for index, commitment in enumerate(pack.lore):
         hits = 0
@@ -564,6 +605,38 @@ def lint(pack: Pack) -> list[str]:
                     )
             elif constraint.kind is ConstraintKind.TERMINOLOGY:
                 hits += 1  # terminology reaches prose, not a generator switch
+            elif constraint.target.startswith(_FILING_PREFIX):
+                # A filing ask. It is an `artifact_density` constraint at a
+                # `filing/<type>` target (`facets.FILING_PREFIX`), and it is
+                # consulted by every engine — `scenarios.filings` sums it and
+                # `generators.planning` gates on it — but no engine publishes
+                # it in `consulted_targets`, because the target is a namespace
+                # rather than a name and the set of legal keys is the artifact
+                # registry rather than the engine's. Without this branch a pack
+                # that gives its company a document of its own is told the
+                # claim will be "carried, cited, and change nothing", which is
+                # both false and the exact opposite of what happens.
+                #
+                # What *is* checkable is the type. A positive ask for a type
+                # neither the engine declares nor this pack authors plans
+                # nothing; the same claim as `facets.unmet` makes, said where a
+                # pack author will read it. A negative one is left alone for
+                # the reason `facets.unmet` leaves it alone: "this company
+                # files fewer of X" is satisfied by X not existing.
+                hits += 1
+                artifact_type = constraint.target[len(_FILING_PREFIX):]
+                from . import documents
+
+                if (constraint.magnitude or 0.0) > 0.0 and not (
+                    artifact_type in authored or artifact_type in documents.declared_types()
+                ):
+                    findings.append(
+                        f"lore[{index}]: filing target {artifact_type!r} names no"
+                        " artifact type — nothing declares it and this pack does not"
+                        " author it, so the claim resolves, plans nothing, and"
+                        " reports success. Declare it under `artifact_types`, or name"
+                        " one of the engine's."
+                    )
             elif _consults(constraint.target, consulted):
                 hits += 1
             else:

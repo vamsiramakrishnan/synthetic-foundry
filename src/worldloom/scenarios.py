@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from .generators.operations import business_days_after, period_end
-from . import profiles as _profiles
+from . import documents, profiles as _profiles
 from .parameters import DEFAULT, Parameters
 from .recipe import locale_of
 from .rng import Rng
@@ -549,6 +549,20 @@ def _announcer(world, change):
         if person is not None:
             return person
     return world.people.by_id(world._roles["ceo"])
+
+
+#: `personnel_notice` is minted below and declared by nobody, so `standing`
+#: falls through and a succession announcement is an unreviewed draft that
+#: nothing chose — `documents.declared_types`' own docstring states the gap and
+#: says the fix is a registration from whichever module owns the scenario. This
+#: is not that fix; deciding a succession note's authority is a modelling
+#: decision of its own. What it is, is the *name* being spoken for, and that
+#: became load-bearing when artifact types became authorable: the compiler's
+#: tables are process-global, so a pack declaring this key would set the
+#: authority of a document in some other world built by the same process, and
+#: `register_artifact_types` cannot refuse it because nothing registered a value
+#: for it to disagree with.
+documents.reserve_artifact_types("personnel_notice")
 
 
 def _personnel_notice(minter, change, successor, period: str) -> tuple:

@@ -76,9 +76,178 @@ _LAG: dict[str, timedelta] = {
 }
 
 
+@dataclass(frozen=True)
+class FilingPlan:
+    """How a *declaratively* authored artifact type gets planned into an episode.
+
+    The fourth table, and the one the three above did not need. ``_STANDING``,
+    ``_LAG`` and ``_OUTLINES`` describe a document that something already
+    decided to write; nothing describes the deciding. For the engine's own
+    types that decision is code — ``generators/planning.py`` names each type in
+    a call that also chooses its author, its reader and its facts — and code is
+    the right shape for it, because those choices are arguments about the
+    episode rather than about the document.
+
+    An authored type has no such code and cannot get any: the whole premise is
+    that a model adds a document type without editing Python. So the *same four
+    choices* are stated here as data, and ``planning``'s filing block reads this
+    table for the types it does not name itself. The gate is unchanged — lore at
+    ``facets.FILING_PREFIX + key`` still decides *whether* the company files it
+    — so this says only what the document is when it is filed, never that it is.
+
+    ``facts`` is a closed vocabulary of *bundles the planner already computes*,
+    not fact ids and not fact kinds. That boundary is the same one lore draws:
+    an author picks from what the episode produced, and cannot reach past the
+    planner into the ledger. It also means a bundle that this episode left empty
+    simply contributes nothing, rather than naming a fact that does not exist.
+    """
+
+    author_role: str
+    """The engine role key that signs it. Resolved through the world's own role
+    table at plan time, so a role this build did not mint falls through to
+    ``fallback_role`` rather than raising."""
+
+    fallback_role: str = ""
+    """Who signs it when ``author_role`` was not minted. The
+    ``ministerial_brief``'s ``roles.get("public_accountability") or
+    roles["ceo"]`` is the precedent: a filing whose author role exists only
+    when some facet was claimed must still be filed, by somebody, in a build
+    where it was not."""
+
+    domain: str = "finance"
+    audience: str = "all_staff"
+    """The document's access class, *not* its literal reader. ``world.
+    _policy_for`` maps this onto an access policy and falls back to the most
+    restrictive one, so an audience nobody minted a policy for locks the
+    author out of their own document and trips
+    ``author_cannot_see_own_artifact``. The filing block in ``planning`` states
+    this at length; the lint restates it, because an authored type is exactly
+    where somebody will write ``audience: "franchisees"``."""
+
+    size: str = "medium"
+    rationale: str = ""
+    facts: tuple[str, ...] = ()
+    """Which of the planner's fact bundles this document is given. See
+    ``generators/planning.FILING_BUNDLES`` for the closed set and what each
+    one is."""
+
+
+#: Artifact type names a scenario mints and no module declares. See
+#: ``reserve_artifact_types``, which is the only way in.
+_RESERVED: set[str] = set()
+
+#: Filing plans for declaratively authored types. Written by
+#: ``doctypes.install``; read by ``generators.planning``. Empty in every build
+#: that loads no authored type, which is every build this repository ships.
+_FILINGS: dict[str, FilingPlan] = {}
+
+
 def standing(artifact_type: str) -> tuple[Authority, Lifecycle]:
     """The authority and lifecycle an artifact of this type carries."""
     return _STANDING.get(artifact_type, (Authority.WORKING_DOCUMENT, Lifecycle.DRAFT))
+
+
+def reserve_artifact_types(*names: str) -> None:
+    """Claim *names* as artifact types a scenario mints without declaring.
+
+    The sixth registration seam, and the narrowest. ``declared_types``' docstring
+    already names the case it exists for: ``scenarios._personnel_notice`` mints
+    ``personnel_notice`` intents and nothing declares that type, so a succession
+    announcement is silently an unreviewed draft. Declaring it in core is the
+    wrong fix — ``tests/test_thin_waist.py`` counts the name as retail
+    vocabulary and this is a core module — and the right one is a registration
+    from whichever module owns the scenario, which is a change of its own.
+
+    What made the gap worth naming *now* is that artifact types became
+    authorable. The compiler's tables are process-global, so a pack claiming one
+    of these names would set the standing of a document in some *other* world
+    built by the same process — and ``register_artifact_types`` cannot refuse it,
+    because nothing registered the name for it to disagree with. Reserving it
+    says "this name is spoken for" without making a modelling claim about the
+    authority, which is precisely the claim nobody is in a position to make yet.
+
+    Called at package import, the same contract every seam here follows.
+    """
+    _RESERVED.update(names)
+
+
+def reserved_types() -> frozenset[str]:
+    """Every reserved artifact type name.
+
+    Kept honest by ``tests/test_doctypes.py``, which scans the modules the
+    package imports for every artifact type name a planner mints and requires
+    each one to be either declared or reserved. A name that becomes declared
+    stops needing a reservation; a name that appears in a new scenario and gets
+    neither is a test failure rather than a silent draft.
+    """
+    return frozenset(_RESERVED)
+
+
+def filing_plan(artifact_type: str) -> FilingPlan | None:
+    """How to plan a filing of *artifact_type*, or ``None`` for the engine's own.
+
+    ``None`` is the answer for all thirty types this repository declares, and
+    that is what keeps the generic filing block in ``generators/planning`` a
+    no-op on every build that loads no authored type: the block iterates the
+    lore's filing asks and skips every one whose type plans itself in code.
+    """
+    return _FILINGS.get(artifact_type)
+
+
+def narrated_kinds() -> frozenset[str]:
+    """Every fact-kind prefix some declared artifact type is written about.
+
+    The lint's evidence for "this outline cites a kind no generator produces",
+    and it is deliberately the *narrated* set rather than a hand-kept registry
+    of what the generators emit. There is no such registry — fact kinds are
+    string literals spread across four generator modules — and a hand-kept copy
+    of them would go stale in the one direction that matters, reporting a real
+    kind as invented on the day somebody adds a generator.
+
+    Derived from ``_OUTLINES`` instead, so it moves when the engine moves. The
+    claim it supports is therefore narrower than "no generator produces this"
+    and has to be read as what it is: *no document this engine ships is about
+    this*. That is a necessary condition rather than a sufficient one, and it
+    is enough to catch the two failures worth catching — a typo
+    (``financail.revenue.``) and an invented vocabulary (``esg.scope_three.``),
+    both of which resolve to zero facts and compile into an empty document.
+
+    The empty prefix is dropped. ``routine_notice`` cites ``("",)`` — "every
+    fact I was given" — which is a legitimate outline and a useless membership
+    test, since every kind starts with it.
+    """
+    return frozenset(
+        kind
+        for plans in _OUTLINES.values()
+        for plan in plans
+        for kind in plan.kinds
+        if kind
+    )
+
+
+def scoped_kinds() -> frozenset[str]:
+    """The fact-kind prefixes declared outlines use with a ``group``/``unit`` scope.
+
+    Every one of them is a ``financial.`` prefix today, and that is not an
+    accident of taste: ``outline``'s ``in_scope`` filters on the *subject* of a
+    fact, and only the financial generators state one figure per company and
+    another per business unit. An ``ops.`` or ``close.`` fact is about the
+    episode, so a section that asks for ``close.`` facts scoped to ``unit``
+    resolves to nothing and disappears — silently, because a section with no
+    facts is deliberately dropped rather than left empty.
+
+    Published so the lint can say that from the registry rather than from a
+    literal list of financial prefixes that would be wrong the moment a vertical
+    generated a unit-scoped operational measure.
+    """
+    return frozenset(
+        kind
+        for plans in _OUTLINES.values()
+        for plan in plans
+        if plan.scope != "any"
+        for kind in plan.kinds
+        if kind
+    )
 
 
 def declared_types() -> frozenset[str]:
@@ -123,6 +292,7 @@ def register_artifact_types(
     lags: dict[str, "timedelta"] | None = None,
     outlines: dict[str, tuple["SectionPlan", ...]] | None = None,
     compilers: dict[str, Any] | None = None,
+    filings: dict[str, FilingPlan] | None = None,
 ) -> None:
     """Add a domain module's artifact types to the compiler's tables.
 
@@ -137,12 +307,19 @@ def register_artifact_types(
     Re-registering the same value is harmless; changing what an existing type
     means is refused, because two modules that disagree about a type's standing
     would make an artifact's authority depend on import order.
+
+    ``filings`` is the same seam for a type whose *planning* is data rather than
+    code — see ``FilingPlan``. It rides this function rather than a second one
+    so there stays exactly one door into these tables, and so the conflict rule
+    below covers it too: two sources disagreeing about who signs a document is
+    the same class of import-order bug as two disagreeing about its authority.
     """
     for table, additions in (
         (_STANDING, standing),
         (_LAG, lags),
         (_OUTLINES, outlines),
         (_COMPILERS, compilers),
+        (_FILINGS, filings),
     ):
         for key, value in (additions or {}).items():
             if key in table and table[key] != value:
