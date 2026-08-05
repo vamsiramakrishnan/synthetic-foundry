@@ -483,7 +483,7 @@ def probe_worlds(probe: str, count: int = 5) -> dict[str, Any]:
 
 
 def probe_resolve(probe: str) -> dict[str, Any]:
-    """The graph as engine physics, plus the parameters it wanted and could not reach."""
+    """The graph as engine physics and accountabilities, plus what it could not reach."""
     from . import probe as probe_module
 
     session = _probe_session(probe)
@@ -493,6 +493,15 @@ def probe_resolve(probe: str) -> dict[str, Any]:
         "overrides": {
             name: span.as_dict() for name, span in sorted(resolution.overrides.items())
         },
+        # The objectives layer's output, beside the measures layer's. Emitted as
+        # the lore constraint it becomes as well as the finding it is, because
+        # the constraint is the thing a caller pastes into a pack — a payload
+        # that made them assemble `{"kind": "accountability", ...}` by hand
+        # would be one more place for the target's shape to be got wrong.
+        "accountabilities": [
+            {**a.as_dict(), "constraint": a.constraint().model_dump(mode="json")}
+            for a in resolution.accountabilities
+        ],
         "unbound": [
             {"key": u.key, "asks": u.asks, "claim": u.claim, "unit": u.unit,
              "low": u.bounds.low, "high": u.bounds.high}
@@ -694,6 +703,9 @@ TOOLS: tuple[dict[str, Any], ...] = (
             "the parent, rather than picking a number with nothing under it. A leaf "
             "may bind to a terminal parameter, which is how it reaches the engine; if "
             "nothing fits, leave it unbound and say what it should have been called. "
+            "An objectives-layer leaf binds the other way instead, with `answers_for`: "
+            "a role and the measure it answers for, its interval being the tolerance "
+            "band in per cent. "
             "Refused if it cannot hold alongside what you have already said — nobody "
             "wrote down which combinations are illegal, they fall out of propagating "
             "the relations you supplied. Returns the next question with the acceptance."
@@ -719,6 +731,15 @@ TOOLS: tuple[dict[str, Any], ...] = (
                 "binds": {
                     "type": "string",
                     "description": "A terminal parameter, on leaves only.",
+                },
+                "answers_for": {
+                    "type": "string",
+                    "description": "The other channel, for an objectives-layer leaf:"
+                                   " 'role_key/fact_kind' — who answers, and for which"
+                                   " of the figures in `accountable_measures`. Then"
+                                   " low/high are the tolerance band in per cent, not a"
+                                   " parameter range. A leaf sets this or `binds`,"
+                                   " never both.",
                 },
                 "raises": {
                     "type": "array",
@@ -748,6 +769,13 @@ TOOLS: tuple[dict[str, Any], ...] = (
                             "domain_low": {"type": "number", "description": "Omit for unbounded."},
                             "domain_high": {"type": "number", "description": "Omit for unbounded."},
                             "binds": {"type": "string"},
+                            "answers_for": {
+                                "type": "string",
+                                "description": "'role_key/fact_kind', if this leaf is an"
+                                               " accountability. Its domain is then the"
+                                               " tolerance band in per cent and must be"
+                                               " stated at both ends.",
+                            },
                         },
                         "required": ["key", "asks", "because"],
                     },
@@ -782,8 +810,10 @@ TOOLS: tuple[dict[str, Any], ...] = (
         "name": "probe_resolve",
         "description": (
             "Turn a settled probe into overrides for the engine's parameter registry, "
-            "plus the leaves that bound to nothing — parameters this world needed and "
-            "the engine cannot yet read. Those are reported, never dropped: they are "
+            "the accountabilities its objectives layer settled — who answers for which "
+            "measure, within what tolerance, ready to paste into a pack's lore — and "
+            "the leaves that bound to nothing: parameters this world needed and the "
+            "engine cannot yet read. Those last are reported, never dropped: they are "
             "the only honest evidence for growing the registry."
         ),
         "schema": {

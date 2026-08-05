@@ -786,3 +786,191 @@ def test_replay_is_stable_across_repeats():
     first = probe.replay(PREMISE, roots, entries)
     for _ in range(3):
         assert probe.replay(PREMISE, roots, entries).ordered == first.ordered
+
+
+# ---------------------------------------------------------------------------
+# The second channel: objectives resolve to accountabilities, not to spans
+# ---------------------------------------------------------------------------
+
+TARGET = "gm_md/financial.revenue.variance"
+
+
+def objective(key: str = "gm_md_revenue", *, target: str = TARGET,
+              low: float = 2.0, high: float = 4.0, **kwargs: object) -> Answer:
+    return answer(key, low, high, answers_for=target, **kwargs)  # type: ignore[arg-type]
+
+
+def objectives_graph(key: str = "gm_md_revenue", *, unit: str = "percent") -> Graph:
+    return graph(root(key, low=0.0, high=100.0, unit=unit))
+
+
+def test_the_measure_vocabulary_is_computed_rather_than_maintained():
+    """`probe.MEASURES` is exactly the numeric fact kinds the three shipped
+    engines mint in their default episodes.
+
+    Hand-kept, it would be wrong within a month and wrong *silently*: the
+    failure is a model being told a perfectly good measure does not exist,
+    which it has no way to argue with. Same mechanism as `roles.SPINE`.
+    """
+    from worldloom.banking import BankingWorld
+    from worldloom.banking_scenarios import QuarterlyCapitalReturn
+    from worldloom.insurance import InsuranceWorld, QuarterlyReserving
+    from worldloom.retail import RetailWorld
+    from worldloom.scenarios import MonthEndClose
+
+    episodes = (
+        RetailWorld(seed=8128).build().run(
+            MonthEndClose(period="2026-03", include_operational_incident=True)),
+        BankingWorld(seed=8128).build().run(QuarterlyCapitalReturn(period="2026-03")),
+        InsuranceWorld(seed=8128).build().run(QuarterlyReserving(period="2026-03")),
+    )
+    minted = {f.kind for world in episodes for f in world.facts if f.value is not None}
+    assert set(probe.MEASURES) == minted
+
+
+def test_an_objective_leaf_resolves_to_an_accountability_and_not_to_a_span():
+    settled = probe.accept(objectives_graph(), objective(
+        claim="The GM managing director answers for revenue against budget.")).graph
+    resolution = probe.resolve(settled)
+    assert resolution.overrides == {}
+    (found,) = resolution.accountabilities
+    assert (found.role, found.measure) == ("gm_md", "financial.revenue.variance")
+    assert found.band == Interval(2.0, 4.0)
+    # And never an unbound finding: it bound to something, just not to a
+    # terminal. "Who answers for revenue" is not a number the registry lacks.
+    assert resolution.unbound == ()
+
+
+def test_the_accountability_carries_enough_to_build_the_lore_constraint():
+    from worldloom.models import ConstraintKind
+
+    settled = probe.accept(objectives_graph(), objective(claim="Answers for it.")).graph
+    (found,) = probe.resolve(settled).accountabilities
+    constraint = found.constraint()
+    assert constraint.kind is ConstraintKind.ACCOUNTABILITY
+    assert constraint.target == TARGET
+    assert constraint.effect == "Answers for it."
+    # The tight end of the band, not the midpoint: committing to the loose end
+    # asserts a laxer regime than the reasoning supports and leaves an
+    # accountability edge that never fires.
+    assert constraint.magnitude == 2.0
+
+
+def test_the_band_resolved_is_the_propagated_one_not_the_stated_one():
+    """A tolerance tightened by a link must resolve tightened — reading the
+    stated band back would throw away the one thing links are for."""
+    tightened = probe.accept(
+        graph(root("tolerance", low=0.0, high=100.0)),
+        Answer(question="tolerance", claim="Judged tightly.", low=2.0, high=8.0,
+               raises=[SubQuestion(
+                   key="gm_md_revenue", asks="what band?", because="It is the objective.",
+                   unit="percent", relation="scales", factor_low=0.25, factor_high=0.5,
+                   domain_low=0.5, domain_high=6.0, answers_for=TARGET,
+               )]),
+    ).graph
+    tightened = probe.accept(tightened, objective(low=0.5, high=4.0)).graph
+    (found,) = probe.resolve(tightened).accountabilities
+    # 2..8 scaled by 0.25..0.5 gives 0.5..4.0, met with the answer: the parent
+    # squeezes it even though the leaf was answered wider.
+    assert found.band.low == pytest.approx(0.5) and found.band.high == pytest.approx(4.0)
+
+
+def test_a_measure_no_engine_mints_is_refused_like_an_unknown_terminal():
+    rejections = probe.review(objectives_graph(), objective(target="gm_md/vibes.overall"))
+    assert [r.rule for r in rejections] == ["unknown_measure"]
+
+
+def test_a_target_missing_either_half_is_refused():
+    for target in ("gm_md", "gm_md/", "/financial.revenue.variance"):
+        rejections = probe.review(objectives_graph(), objective(target=target))
+        assert [r.rule for r in rejections] == ["malformed_accountability"], target
+
+
+def test_a_tolerance_outside_the_sane_band_is_refused():
+    # Above a quarter is not a tolerance but the absence of one; below a tenth
+    # of a per cent is breached by the rounding the corpus prints at.
+    wide = probe.review(objectives_graph(), objective(low=30.0, high=40.0))
+    assert [r.rule for r in wide] == ["tolerance_out_of_band"]
+    fine = probe.review(objectives_graph(), objective(low=0.001, high=0.01))
+    assert [r.rule for r in fine] == ["tolerance_out_of_band"]
+    # And an unstated one, which is what a leaf that named a target and no
+    # numbers gives: the band is the claim, so leaving it open states nothing.
+    open_ended = probe.review(graph(root("gm_md_revenue")), Answer(
+        question="gm_md_revenue", claim="Answers for it.", answers_for=TARGET))
+    assert [r.rule for r in open_ended] == ["unstated_tolerance"]
+
+
+def test_a_leaf_may_not_be_both_a_measure_and_an_accountability():
+    """The interval cannot be a parameter's range and a tolerance band at once,
+    which is the whole reason `answers_for` is not a second meaning for
+    `binds`."""
+    rejections = probe.review(objectives_graph(), objective(binds="retail.margin.budget"))
+    assert "two_channels" in {r.rule for r in rejections}
+
+
+def test_the_same_role_cannot_answer_for_the_same_measure_twice():
+    settled = probe.accept(objectives_graph(), objective()).graph
+    settled = probe.Graph(  # a second, still-open question aiming at the same target
+        settled.premise,
+        {**settled.questions,
+         "cfo_revenue": Question(key="cfo_revenue", asks="and the CFO?", unit="percent",
+                                 domain=Interval(0.0, 100.0), depth=0)},
+        settled.max_depth, settled.layers, settled.links,
+    )
+    rejections = probe.review(settled, objective("cfo_revenue"))
+    assert [r.rule for r in rejections] == ["accountability_taken"]
+    # Two *different* roles on one measure is an org chart, not a collision.
+    assert probe.review(settled, objective("cfo_revenue",
+                                           target="cfo/financial.revenue.variance")) == []
+
+
+def test_an_accountability_on_a_branch_is_refused_the_way_a_bind_is():
+    rejections = probe.review(objectives_graph(), objective(raises=[SubQuestion(
+        key="under", asks="what drives it?", because="It is not primitive.",
+        domain_low=1.0, domain_high=2.0,
+    )]))
+    assert "accountable_branch" in {r.rule for r in rejections}
+
+
+def test_the_brief_hands_over_the_measures_and_the_band():
+    document = probe.brief_document(
+        probe.frontier(objectives_graph()), premise=PREMISE)
+    assert TARGET.split("/")[1] in document["accountable_measures"]
+    assert document["tolerance_band_pct"] == {"low": probe.TOLERANCE.low,
+                                              "high": probe.TOLERANCE.high}
+
+
+def test_an_accountability_survives_the_ledger():
+    entries = [probe.ledger_entry(objective(claim="Answers for revenue."))]
+    rebuilt = probe.replay(PREMISE, (root("gm_md_revenue", low=0.0, high=100.0),), entries)
+    (found,) = probe.resolve(rebuilt).accountabilities
+    assert found.target == TARGET and found.magnitude == 2.0
+
+
+def test_the_constraint_a_probe_emits_mints_a_fact_about_a_person():
+    """The claim the whole channel rests on: reasoning in the objectives layer
+    reaches a build, rather than evaporating at the socket."""
+    from worldloom import archetypes
+    from worldloom.generators import organisation
+    from worldloom.generators.org_builder import ACCOUNTABILITY_KIND
+    from worldloom.ids import Minter
+    from worldloom.models import LoreCommitment, LoreKind
+    from worldloom.rng import Rng
+
+    settled = probe.accept(objectives_graph(), objective(
+        claim="The GM managing director answers for revenue against budget.")).graph
+    (found,) = probe.resolve(settled).accountabilities
+
+    minter = Minter()
+    lore = (LoreCommitment(
+        id=minter.next("LORE"), kind=LoreKind.NORM, assertion=found.effect,
+        effective_from="2023-04", constrains=[found.constraint()],
+    ),)
+    org = organisation.generate(
+        Rng(8128, "organisation"), minter,
+        archetype=archetypes.get("omnichannel_retailer"), lore=lore,
+    )
+    (fact,) = [f for f in org.founding_facts if f.kind == ACCOUNTABILITY_KIND]
+    assert fact.subject in {p.id for p in org.people}
+    assert fact.text_value == found.measure
+    assert fact.value is not None and fact.value.amount == found.magnitude
