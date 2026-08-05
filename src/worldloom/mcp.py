@@ -268,9 +268,19 @@ def submit_section(
     # difference in what the two say. An *unchanged* body scored 0.55 against
     # its own exemplar under that mistake and sailed through the gate, so the
     # loop reported four accepted rewrites and moved the corpus not at all.
+    #
+    # "Exactly" now includes the corpus's locale. `passages` spells its figures
+    # the way the documents do, so a candidate substituted in the engine's own
+    # grammar over a German corpus would differ from its exemplar in the
+    # punctuation of every figure it cites — the same defect in a new notation,
+    # scoring a verbatim copy as varied prose.
     from .narrative import references
+    from .render.values import corpus_locale
 
-    candidate = f"{ir.title}\n{heading}\n{references.substitute(text, facts)}"
+    candidate = (
+        f"{ir.title}\n{heading}\n"
+        f"{references.substitute(text, facts, locale=corpus_locale(world))}"
+    )
 
     # Every other passage in the corpus, so a rewrite cannot escape one
     # duplicate group by joining another. The section being replaced is

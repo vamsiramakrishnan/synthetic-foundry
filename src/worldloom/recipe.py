@@ -12,6 +12,14 @@ seed, and the ordered scenario steps — because everything else is derived, and
 recipe that carried derived state would be a second source of truth about the
 world beside the world.
 
+One entry earns its place by a different argument from the rest. ``locale`` is
+not needed to rebuild the world — the generators take their regions, names and
+currency from the pack — but it *is* needed to render the corpus that comes out,
+because how a figure is spelled is a jurisdiction's convention and nothing in the
+world model records it. So the recipe is also where a corpus says where it is
+written, and ``locale_of`` explains why that is here rather than on the artifacts
+it is spelled into.
+
 The immediate reason this exists is the actor handshake. Driving an episode from
 the CLI means suspending it between decisions, and the honest way to resume a
 deterministic pipeline is not to serialise its mid-flight state but to rebuild
@@ -26,7 +34,13 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .locales import Locale
     from .world import World
+
+#: Where a corpus's jurisdiction is recorded. One key, because a locale is one
+#: corpus-wide decision — see ``locale_of`` for why it lives here and not on the
+#: artifacts it is spelled into.
+LOCALE_KEY = "locale"
 
 
 class RecipeError(Exception):
@@ -110,6 +124,7 @@ def build_recipe(
     physics: Any = None,
     role_table: Any = None,
     seasonality: Any = None,
+    locale: Any = None,
 ) -> dict[str, Any]:
     """The recipe for a freshly built world, before any scenario has run.
 
@@ -140,8 +155,90 @@ def build_recipe(
         # general-retail year every corpus before this traded on, so an
         # absent key means exactly that rather than "unknown".
         **({} if seasonality is None else {"seasonality": seasonality.as_dict()}),
+        # Same conditional rule, and here it is load-bearing twice over: an
+        # absent key means `locales.DEFAULT`, which is what every corpus built
+        # before locales existed *was*, and the default build's byte diff is
+        # what proves it.
+        **_locale_payload(locale),
         "steps": [],
     }
+
+
+def _locale_payload(locale: Any) -> dict[str, Any]:
+    return {} if locale is None else {LOCALE_KEY: _locale_document(locale)}
+
+
+def _locale_document(locale: Any) -> Any:
+    """A locale as the recipe stores it: a registry name, or its conventions.
+
+    Both shapes, because ``locales.from_document`` reads both and they mean
+    different things to a reader six months later. ``"germany"`` says *this
+    corpus is set in the jurisdiction the registry calls Germany*, and picks up
+    any correction the registry later makes to it; a dict says *these exact
+    conventions*, and is what a pack-authored locale with no registry name has
+    to store. Storing the dict for a named locale would freeze a copy of the
+    registry into every corpus, which is the second-source-of-truth this module
+    exists to avoid.
+    """
+    if isinstance(locale, str):
+        from .locales import named
+
+        named(locale)  # refuse an unknown name here, not on rebuild
+        return locale
+    return locale.as_dict()
+
+
+def locale_of(recipe: dict[str, Any]) -> Locale:
+    """The jurisdiction this corpus was built in.
+
+    **Why the recipe carries this and the artifacts do not.**
+    ``render/docx._negative_text`` established the rule the hard way — how a
+    figure is spelled "has to be a corpus-wide decision applied in one place",
+    because a table that printed ``-10,200`` in Word and ``(10,200)`` in
+    Markdown was one document disagreeing with another about one number. The
+    recipe is the only document a corpus has that is *singular*: there is one of
+    it, it survives the round trip to disk (``World._recipe``), and it already
+    holds every other build-time decision that is not derivable from the world.
+    Two artifacts in a corpus cannot disagree about the locale because there is
+    not one locale per artifact to disagree with.
+
+    ``ArtifactIR`` was the other candidate and is wrong on both counts. It is
+    per-artifact, so it *could* disagree; and it is persisted field-for-field by
+    ``corpus.write_jsonl``, so a new field would rewrite the artifact IR of
+    every corpus ever built for a value that is the same in all of them.
+
+    An absent key is ``locales.DEFAULT`` rather than an error: every corpus
+    built before this existed carries no locale and *was* Australian, so that is
+    a fact about those corpora and not a gap in them.
+    """
+    from .locales import DEFAULT, from_document
+
+    payload = recipe.get(LOCALE_KEY)
+    if payload is None:
+        return DEFAULT
+    try:
+        return from_document(payload)
+    except (KeyError, TypeError, ValueError) as exc:
+        # Loud, for the reason `locales.named` refuses an unknown name: a corpus
+        # whose locale failed to load and fell back to the engine's would render
+        # a Frankfurt company's variance memo in Australian punctuation and
+        # report success. There is nothing in the output to notice the drop by.
+        raise RecipeError(f"this corpus's recorded locale does not load: {exc}") from exc
+
+
+def with_locale(recipe: dict[str, Any], locale: str | Locale) -> dict[str, Any]:
+    """A copy of *recipe* set in *locale*.
+
+    The seam for everything that decides a jurisdiction after the world is
+    built — a pack field, a CLI flag, a `facets` consequence. It is a function
+    here rather than a keyword everywhere because the recipe is minted deep
+    inside a domain's world spec (``retail.RetailWorld.build``) and the thing
+    that knows the jurisdiction is usually further out than that.
+
+    Same shape as ``with_step``: a copy, never a mutation, so a caller holding
+    the old recipe still holds the world it describes.
+    """
+    return {**recipe, LOCALE_KEY: _locale_document(locale)}
 
 
 def _physics_payload(physics: Any) -> dict[str, Any]:
@@ -323,6 +420,12 @@ def rebuild(
             f"this corpus's recorded trading year does not load: {exc}"
         ) from exc
 
+    # Resolved here for its side effect only — the world is built without it,
+    # and only renderers read it back. Checked this early anyway, beside the
+    # physics and the trading year, because the alternative is a rebuild that
+    # succeeds and then fails at render time in a different process.
+    locale_of(recipe)
+
     authored_roles = recipe.get("role_table")
     role_table = None if authored_roles is None else tuple(
         (row[0], row[1], row[2], row[3]) for row in authored_roles
@@ -377,6 +480,23 @@ def rebuild(
         # one into a stated error instead of a `TypeError` from a constructor.
         spec = _with_estate(spec, recipe.get("estate"))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
+
+    # Re-attached rather than passed to the spec, because no world spec accepts
+    # a locale: the half a locale decides at *build* time (regions, name pools,
+    # currency) reaches the generators through the pack, and the half it decides
+    # at *render* time (the figure grammar) is read back off the recipe by
+    # `render/values.corpus_locale`. A freshly built world mints its own recipe
+    # from `build_recipe`, which knows nothing of a locale attached afterwards,
+    # so without this line a German corpus would rebuild into an identical world
+    # that renders `243,800`. That is the exact failure `rebuild` exists to make
+    # impossible, in the one dimension that survives only on the recipe.
+    #
+    # The recorded payload is copied across verbatim rather than round-tripped
+    # through `locale_of`: a recipe that named `"germany"` must rebuild into one
+    # that still names it, not into one carrying a frozen copy of what the
+    # registry said about Germany on the day it was rebuilt.
+    if recipe.get(LOCALE_KEY) is not None:
+        world = world.extend(recipe={**world.recipe, LOCALE_KEY: recipe[LOCALE_KEY]})
 
     for step in recipe.get("steps", ()):
         name = step.get("scenario")
@@ -441,6 +561,6 @@ def has_actor_step(recipe: dict[str, Any]) -> bool:
 
 
 __all__ = [
-    "RecipeError", "STEPS", "build_recipe", "has_actor_step", "rebuild",
-    "register_step", "with_step",
+    "LOCALE_KEY", "RecipeError", "STEPS", "build_recipe", "has_actor_step",
+    "locale_of", "rebuild", "register_step", "with_locale", "with_step",
 ]

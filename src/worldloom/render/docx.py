@@ -24,11 +24,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..compiler.style import StyleGenome, genome
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import ArtifactIR, ArtifactSection, CanonicalFact, Table
 from ..narrative import references
 from ..rng import Rng
 from . import Rendered, RenderError, ooxml, slug_for
-from .values import format_value
+from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
@@ -214,10 +215,14 @@ def _negative_text(value: float, text: str, convention: str) -> str:
     does so invisibly, because each format is internally consistent.
 
     Varying the convention is still legitimate diversity; it just has to be a
-    corpus-wide decision applied in one place. The honest route is the IR's own
-    `number_format` — a column declaring `#,##0;-#,##0` would reach every
-    renderer through `format_value` and they would all agree. That is a
-    compile-time change, not a render-time one, so it is not smuggled in here.
+    corpus-wide decision applied in one place. That place now exists and it is
+    not here: `locales.Locale.negative` is decided once for the corpus, recorded
+    on the recipe, resolved once per render pass by `values.corpus_locale`, and
+    spelled by `format_value` — so a locale whose negatives are signed prints
+    `-1.234` in Word *and* in Markdown *and* in the BM25 index, which is the
+    property this function refuses to break. A genome that varied the convention
+    per document would still be a second answer to a question the corpus has
+    already answered, so `number_negatives` stays unapplied.
 
     Kept as a function rather than deleted at the call sites so the reason
     survives next to the temptation.
@@ -422,7 +427,7 @@ def _contents(document, ir: ArtifactIR, g: StyleGenome) -> None:  # type: ignore
     _field(document.add_paragraph(), r' TOC \o "1-2" \h \z \u ')
     document.add_page_break()
 
-def _table(document, table: Table, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+def _table(document, table: Table, g: StyleGenome, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
     """One IR table as a Word table.
 
     A label column then one column per measure, matching the Markdown rendering
@@ -478,7 +483,7 @@ def _table(document, table: Table, g: StyleGenome) -> None:  # type: ignore[no-u
             value = cell.value if cell else None
             negative = isinstance(value, (int, float)) and value < 0
             negatives.append(negative)
-            text = format_value(value, column.number_format) if cell else ""
+            text = format_value(value, column.number_format, locale=locale) if cell else ""
             if negative:
                 text = _negative_text(value, text, g.number_negatives)
             cells[index].text = text
@@ -506,7 +511,7 @@ def _table(document, table: Table, g: StyleGenome) -> None:  # type: ignore[no-u
 _BAR_WIDTH = 28
 
 
-def _figure(document, chart, table: Table, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+def _figure(document, chart, table: Table, g: StyleGenome, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
     """A declared chart, drawn with the means Word gives us for free.
 
     Not a native chart: python-docx has no API for DrawingML charts, and the two
@@ -547,7 +552,9 @@ def _figure(document, chart, table: Table, g: StyleGenome) -> None:  # type: ign
         cells = grid.add_row().cells
         cells[0].text = name
         cells[1].text = _negative_text(
-            value, format_value(value, column.number_format if column else None), g.number_negatives
+            value,
+            format_value(value, column.number_format if column else None, locale=locale),
+            g.number_negatives,
         )
         cells[2].text = "█" * max(1, round(abs(value) / widest * _BAR_WIDTH))
         for index, cell in enumerate(cells):
@@ -569,7 +576,7 @@ def _figure(document, chart, table: Table, g: StyleGenome) -> None:  # type: ign
         note.runs[0].font.size = Pt(_heading_pt(g, _TS_CAPTION))
 
 
-def _section(document, section: ArtifactSection, facts, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+def _section(document, section: ArtifactSection, facts, g: StyleGenome, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
     heading = document.add_heading(section.heading, level=1)
     _style_heading(
         heading, size_pt=_heading_pt(g, _TS_HEADING), colour_hex=g.colour_roles["body_text"],
@@ -580,7 +587,7 @@ def _section(document, section: ArtifactSection, facts, g: StyleGenome) -> None:
         marker.runs[0].italic = True
 
     if section.body:
-        text = references.substitute(section.body, facts) if facts else section.body
+        text = references.substitute(section.body, facts, locale=locale) if facts else section.body
         # Blank lines are paragraph breaks. Word has no other way to say it, and a
         # single run containing newlines renders as one unbroken block.
         from docx.shared import Pt
@@ -593,7 +600,7 @@ def _section(document, section: ArtifactSection, facts, g: StyleGenome) -> None:
                     run.font.size = Pt(_heading_pt(g, _TS_BODY))
                     run.font.color.rgb = _rgb(g.colour_roles["body_text"])
     elif section.table is not None:
-        _table(document, section.table, g)
+        _table(document, section.table, g, locale)
     else:
         awaiting = document.add_paragraph(_AWAITING)
         awaiting.runs[0].italic = True
@@ -604,15 +611,25 @@ def _section(document, section: ArtifactSection, facts, g: StyleGenome) -> None:
     # under finished prose in the Markdown renderer.
     for chart in section.charts:
         if section.table is not None:
-            _figure(document, chart, section.table, g)
+            _figure(document, chart, section.table, g, locale)
 
 
-def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> bytes:
+def render(
+    ir: ArtifactIR,
+    facts: dict[str, CanonicalFact] | None = None,
+    *,
+    locale: Locale = DEFAULT_LOCALE,
+) -> bytes:
     """Render one IR to DOCX bytes.
 
     Prose carries ``{{fact:ID}}`` references; *facts* resolves them at render
     time. Without it the references stay visible, which is the right failure — a
     document that quietly drops a figure reads as complete and is not.
+
+    *locale* is the corpus's, resolved once by ``render_all`` and threaded down
+    rather than looked up per table — see ``values.corpus_locale``. It defaults
+    to the engine's so that rendering a single IR without a world (the idiom
+    every determinism test in ``tests/test_docx.py`` uses) still works.
     """
     docx = _require_docx()
     document = docx.Document()
@@ -624,7 +641,7 @@ def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> byt
     _contents(document, ir, g)
 
     for section in ir.sections:
-        _section(document, section, facts, g)
+        _section(document, section, facts, g, locale)
 
     if ir.metadata.get("voice"):
         closing = document.add_paragraph(
@@ -658,6 +675,7 @@ def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> byt
 def render_all(world: World) -> list[Rendered]:
     """Render every document-shaped artifact in *world*."""
     facts = {fact.id: fact for fact in world.facts}
+    locale = corpus_locale(world)
     out: list[Rendered] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
@@ -668,7 +686,7 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.docx",
                 media_type=MEDIA_TYPE,
-                payload=render(ir, facts),
+                payload=render(ir, facts, locale=locale),
             )
         )
     return out

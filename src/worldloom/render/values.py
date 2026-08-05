@@ -27,7 +27,31 @@ the same bytes it always did.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+
+if TYPE_CHECKING:  # pragma: no cover
+    from ..world import World
+
+
+def corpus_locale(world: World) -> Locale:
+    """The one locale every renderer of *world* must spell figures with.
+
+    Here rather than in each renderer, and called exactly once per render pass,
+    for the reason this module exists at all: five renderers each resolving a
+    locale for themselves is five chances to resolve it differently, and the
+    symptom would be a Word memo and its Markdown twin punctuating one figure
+    two ways — the divergence ``render/docx._negative_text`` was written to
+    close. One lookup, one answer, threaded down.
+
+    It reads the recipe, which is the corpus's own record of how it was made and
+    the only singular document it has. See ``recipe.locale_of`` for why the
+    jurisdiction lives there rather than on the IR.
+    """
+    from ..recipe import locale_of
+
+    return locale_of(world.recipe)
 
 #: How a workbook renders a negative in an accounting format: parenthesised, not
 #: signed. Followed here so a table lifted out of the workbook into prose reads

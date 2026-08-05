@@ -36,11 +36,12 @@ from xml.sax.saxutils import escape as _escape
 from ..compiler.compose import compose, plan_from_ir
 from ..compiler.grammar import GrammarViolation
 from ..compiler.plan import SizeClass
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import ArtifactIR, ArtifactSection, CanonicalFact, Table
 from ..narrative import references
 from . import Rendered, RenderError, ooxml, slug_for
 from .docx import HANDLES
-from .values import format_value
+from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
@@ -293,7 +294,7 @@ def _styles() -> dict:  # type: ignore[no-untyped-def]
 # ---------------------------------------------------------------------------
 
 
-def _table_flowable(table: Table, frame_width: float, styles: dict):  # type: ignore[no-untyped-def]
+def _table_flowable(table: Table, frame_width: float, styles: dict, locale: Locale = DEFAULT_LOCALE):  # type: ignore[no-untyped-def]
     """One IR table as a paginating platypus table.
 
     ``repeatRows=1`` is what gives this renderer real pagination for free: when
@@ -337,7 +338,7 @@ def _table_flowable(table: Table, frame_width: float, styles: dict):  # type: ig
         for column in table.columns:
             cell = row.cells.get(column.key)
             value = cell.value if cell else None
-            text = format_value(value, column.number_format) if cell else ""
+            text = format_value(value, column.number_format, locale=locale) if cell else ""
             negative = isinstance(value, (int, float)) and value < 0
             # A negative is already parenthesised by `format_value`; colour is
             # the second signal, never the only one, so the table survives
@@ -358,7 +359,7 @@ def _table_flowable(table: Table, frame_width: float, styles: dict):  # type: ig
     return grid
 
 
-def _figure_flowables(chart, table: Table, frame_width: float, styles: dict) -> list:  # type: ignore[no-untyped-def]
+def _figure_flowables(chart, table: Table, frame_width: float, styles: dict, locale: Locale = DEFAULT_LOCALE) -> list:  # type: ignore[no-untyped-def]
     """A declared chart, drawn as proportional bars from the same cells the
     table above shows — never a second computation of the data.
 
@@ -423,7 +424,7 @@ def _figure_flowables(chart, table: Table, frame_width: float, styles: dict) -> 
     for name, value in values:
         colour = colors.HexColor(f"#{_NEGATIVE if value < 0 else _HEADER_FILL}")
         fraction = min(1.0, abs(value) / widest)
-        formatted = format_value(value, column.number_format if column else None)
+        formatted = format_value(value, column.number_format if column else None, locale=locale)
         data.append([
             Paragraph(_escape(name), styles["cell"]),
             Paragraph(_escape(formatted), styles["cell_right"]),
@@ -440,7 +441,11 @@ def _figure_flowables(chart, table: Table, frame_width: float, styles: dict) -> 
 
 
 def _section_flowables(
-    section: ArtifactSection, facts: dict[str, CanonicalFact] | None, styles: dict, frame_width: float
+    section: ArtifactSection,
+    facts: dict[str, CanonicalFact] | None,
+    styles: dict,
+    frame_width: float,
+    locale: Locale = DEFAULT_LOCALE,
 ) -> list:
     """One IR section as a run of flowables: heading, then body or table."""
     from reportlab.platypus import Paragraph, Spacer
@@ -457,12 +462,12 @@ def _section_flowables(
         flow.append(Paragraph(_escape(section.purpose), styles["purpose"]))
 
     if section.body:
-        text = references.substitute(section.body, facts) if facts else section.body
+        text = references.substitute(section.body, facts, locale=locale) if facts else section.body
         for block in (part.strip() for part in text.split("\n\n")):
             if block:
                 flow.append(Paragraph(_escape(block), styles["body"]))
     elif section.table is not None:
-        flow.append(_table_flowable(section.table, frame_width, styles))
+        flow.append(_table_flowable(section.table, frame_width, styles, locale))
         if section.table.note:
             flow.append(Paragraph(_escape(section.table.note), styles["note"]))
     else:
@@ -475,7 +480,7 @@ def _section_flowables(
     # that defect first shipped, in the Markdown renderer.
     for chart in section.charts:
         if section.table is not None:
-            flow.extend(_figure_flowables(chart, section.table, frame_width, styles))
+            flow.extend(_figure_flowables(chart, section.table, frame_width, styles, locale))
 
     flow.append(Spacer(1, 4))
     return flow
@@ -568,6 +573,7 @@ def render(
     *,
     artifact_type: str = "",
     size_class: SizeClass = "medium",
+    locale: Locale = DEFAULT_LOCALE,
 ) -> bytes:
     """Render one IR to PDF bytes.
 
@@ -579,7 +585,8 @@ def render(
     (see ``_plan``); both default to values that compose against every
     artifact type this renderer ships against, so a bare ``render(ir, facts)``
     — the shape `tests/test_docx.py`'s idiom uses — still works for a
-    determinism check that does not care about composition.
+    determinism check that does not care about composition. *locale* defaults
+    the same way and for the same reason; ``render_all`` passes the corpus's.
     """
     _require_reportlab()
     from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph
@@ -606,7 +613,7 @@ def render(
     ))
 
     for section in plan.sections:
-        story.extend(_section_flowables(section, facts, styles, frame_width))
+        story.extend(_section_flowables(section, facts, styles, frame_width, locale))
 
     if ir.metadata.get("voice"):
         story.append(Paragraph(
@@ -670,6 +677,7 @@ def render_all(world: World) -> list[Rendered]:
     quietly drift apart.
     """
     facts = {fact.id: fact for fact in world.facts}
+    locale = corpus_locale(world)
     out: list[Rendered] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
@@ -681,7 +689,8 @@ def render_all(world: World) -> list[Rendered]:
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.pdf",
                 media_type=MEDIA_TYPE,
                 payload=render(
-                    ir, facts, artifact_type=intent.artifact_type, size_class=intent.size_profile
+                    ir, facts, artifact_type=intent.artifact_type,
+                    size_class=intent.size_profile, locale=locale,
                 ),
             )
         )

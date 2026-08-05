@@ -12,9 +12,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import AUTHORITY_RANK, Authority, Table
 from ..narrative import references
-from ..render.values import format_value
+from ..render.values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
@@ -38,20 +39,29 @@ class Passage:
         return AUTHORITY_RANK[self.authority]
 
 
-def table_text(table: Table) -> str:
+def table_text(table: Table, *, locale: Locale = DEFAULT_LOCALE) -> str:
     """A table as the flat text a naive ingester would extract from it.
 
     Public (not `_table_text`) because `stats.py` needs the identical flattening
     to build whole-document text — a table has to look the same to the word-count
     report as it does to the retriever it is also feeding, or the two would be
     silently describing different corpora.
+
+    *locale* is the corpus's, and it belongs here for a reason that is easy to
+    miss: this is not a *view* of the corpus, it is what a retriever gets asked
+    to match against. An index built in Australian punctuation over a German
+    corpus would fail to find `1.234,50` — the string the reader actually sees
+    in the document — while reporting a healthy score against a query nobody
+    would type. The index has to be spelled the way the documents are.
     """
     lines = [table.title, " ".join(column.label for column in table.columns)]
     for row in table.rows:
         cells = [row.label]
         for column in table.columns:
             cell = row.cells.get(column.key)
-            cells.append(format_value(cell.value, column.number_format) if cell else "")
+            cells.append(
+                format_value(cell.value, column.number_format, locale=locale) if cell else ""
+            )
         lines.append(" ".join(cells))
     if table.note:
         lines.append(table.note)
@@ -67,6 +77,7 @@ def passages(world: World, *, include_hidden: bool = False) -> list[Passage]:
     """
     facts = {fact.id: fact for fact in world.facts}
     manifest = {entry.id: entry for entry in world.artifacts}
+    locale = corpus_locale(world)
 
     out: list[Passage] = []
     for ir in world.artifact_irs:
@@ -77,10 +88,10 @@ def passages(world: World, *, include_hidden: bool = False) -> list[Passage]:
             if section.hidden and not include_hidden:
                 continue
             if section.body:
-                text = references.substitute(section.body, facts)
+                text = references.substitute(section.body, facts, locale=locale)
                 cited = frozenset(references.referenced(section.body)) | frozenset(section.fact_ids)
             elif section.table is not None:
-                text = table_text(section.table)
+                text = table_text(section.table, locale=locale)
                 cited = frozenset(
                     cell.fact_id
                     for row in section.table.rows
@@ -119,6 +130,7 @@ def document_texts(world: World, *, include_hidden: bool = False) -> dict[str, s
     not.
     """
     facts = {fact.id: fact for fact in world.facts}
+    locale = corpus_locale(world)
     out: dict[str, str] = {}
     for ir in world.artifact_irs:
         pieces = [ir.title]
@@ -127,9 +139,9 @@ def document_texts(world: World, *, include_hidden: bool = False) -> dict[str, s
                 continue
             if section.body:
                 pieces.append(section.heading)
-                pieces.append(references.substitute(section.body, facts))
+                pieces.append(references.substitute(section.body, facts, locale=locale))
             elif section.table is not None:
                 pieces.append(section.heading)
-                pieces.append(table_text(section.table))
+                pieces.append(table_text(section.table, locale=locale))
         out[ir.id] = "\n".join(pieces)
     return out

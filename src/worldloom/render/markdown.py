@@ -16,16 +16,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import ArtifactIR, CanonicalFact, Chart, Table
 from ..narrative import references
 from . import Rendered, slug_for
-from .values import format_value
+from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
 
 
-def _table(table: Table) -> str:
+def _table(table: Table, locale: Locale = DEFAULT_LOCALE) -> str:
     """One table as GitHub-flavoured Markdown."""
     header = ["", *[column.label for column in table.columns]]
     lines = [
@@ -36,7 +37,7 @@ def _table(table: Table) -> str:
         cells = [f"**{row.label}**" if row.emphasis else row.label]
         for column in table.columns:
             cell = row.cells.get(column.key)
-            text = format_value(cell.value, column.number_format) if cell else ""
+            text = format_value(cell.value, column.number_format, locale=locale) if cell else ""
             cells.append(f"**{text}**" if row.emphasis and text else text)
         lines.append("| " + " | ".join(cells) + " |")
 
@@ -63,12 +64,21 @@ def _caption(chart: Chart, table: Table | None) -> str:
     return "\n\n".join(lines)
 
 
-def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> bytes:
+def render(
+    ir: ArtifactIR,
+    facts: dict[str, CanonicalFact] | None = None,
+    *,
+    locale: Locale = DEFAULT_LOCALE,
+) -> bytes:
     """Render one IR to Markdown bytes.
 
     Prose carries ``{{fact:ID}}`` references; *facts* resolves them at render time.
     Without it the references stay visible, which is the right failure — a document
     that quietly drops a figure reads as complete and is not.
+
+    *locale* spells every figure, in the table and in the prose alike. Defaulted
+    rather than required because a determinism check that renders one IR in
+    isolation has no world to ask; ``render_all`` always passes the corpus's.
     """
     parts: list[str] = [f"# {ir.title}"]
     if ir.subtitle:
@@ -93,9 +103,12 @@ def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> byt
         parts.append(heading)
 
         if section.body:
-            parts.append(references.substitute(section.body, facts) if facts else section.body)
+            parts.append(
+                references.substitute(section.body, facts, locale=locale)
+                if facts else section.body
+            )
         elif section.table is not None:
-            parts.append(_table(section.table))
+            parts.append(_table(section.table, locale))
 
         else:
             parts.append(
@@ -135,6 +148,7 @@ def own_elsewhere(*artifact_types: str) -> None:
 
 def render_all(world: World) -> list[Rendered]:
     """Render every artifact that has no more specific format."""
+    locale = corpus_locale(world)
     out: list[Rendered] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
@@ -145,7 +159,7 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.md",
                 media_type="text/markdown",
-                payload=render(ir, {fact.id: fact for fact in world.facts}),
+                payload=render(ir, {fact.id: fact for fact in world.facts}, locale=locale),
             )
         )
     return out
