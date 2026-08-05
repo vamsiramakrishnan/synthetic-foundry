@@ -107,6 +107,22 @@ def _shingles(text: str) -> frozenset[tuple[str, ...]]:
     return similarity.shingles(tokens(text), SHINGLE_SIZE)
 
 
+def _near_duplicate_reading(
+    pool: list[Passage],
+) -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, ...], ...]]:
+    """``(pairs, groups)`` for *pool*, from one pass of the join.
+
+    Both readings come from the same pair list because they are the same
+    measurement asked two ways, and running the join twice to answer it twice
+    would let the pair count and the group count disagree about a corpus if
+    anything about the shingling ever became order-dependent.
+    """
+    pairs = similarity.near_duplicate_pairs(
+        [_shingles(p.text) for p in pool], NEAR_DUPLICATE_THRESHOLD
+    )
+    return pairs, similarity.clusters(pairs, len(pool))
+
+
 def near_duplicate_clusters(pool: list[Passage]) -> tuple[tuple[int, ...], ...]:
     """Groups of mutually near-duplicate passages, largest first.
 
@@ -114,11 +130,7 @@ def near_duplicate_clusters(pool: list[Passage]) -> tuple[tuple[int, ...], ...]:
     repeat; this says *which* passages they are, so an author can look at the
     eleven that are one template and fix the template rather than guess.
     """
-    return similarity.clusters(
-        similarity.near_duplicate_pairs([_shingles(p.text) for p in pool],
-                                        NEAR_DUPLICATE_THRESHOLD),
-        len(pool),
-    )
+    return _near_duplicate_reading(pool)[1]
 
 
 def _near_duplicates(pool: list[Passage]) -> tuple[int, int]:
@@ -137,12 +149,13 @@ def _near_duplicates(pool: list[Passage]) -> tuple[int, int]:
     build-order §12's Gate 1 (10,000 artifacts, fifty million pairs) exists to
     stop being true. A diversity number that silently becomes uncomputable at
     the scale where diversity is most at risk is worse than no number.
+
+    The *rate* built from this pair count is a different matter — see
+    `Stats.near_duplicate_share` for why the pair count needs a companion once
+    a corpus is large.
     """
     total_pairs = len(pool) * (len(pool) - 1) // 2
-    pairs = similarity.near_duplicate_pairs(
-        [_shingles(p.text) for p in pool], NEAR_DUPLICATE_THRESHOLD
-    )
-    return len(pairs), total_pairs
+    return len(_near_duplicate_reading(pool)[0]), total_pairs
 
 
 def _texts_and_citations(world: World) -> tuple[dict[str, str], dict[str, set[str]]]:
@@ -206,6 +219,12 @@ class Stats:
     near_duplicate_pairs: int
     near_duplicate_total_pairs: int
     near_duplicate_rate: float
+    near_duplicate_groups: int
+    """How many distinct templates the corpus is repeating."""
+    near_duplicate_grouped_passages: int
+    """How many passages are inside one of those groups."""
+    largest_near_duplicate_group: int
+    """How many times the worst-repeated template is repeated."""
     facts_per_document: Distribution
     fact_density: Distribution
     """Facts cited per 100 tokens, per document — how densely prose cites the
@@ -219,6 +238,39 @@ class Stats:
     true minimum of 0 would say nothing about the facts that *are* used."""
     evals_by_type: dict[str, int]
     eval_count: int
+
+    @property
+    def near_duplicate_share(self) -> float:
+        """The fraction of passages sitting inside a near-duplicate group.
+
+        The reading to quote once a corpus is large, because
+        `near_duplicate_rate` stops distinguishing anything there and the
+        arithmetic says why. Take *K* templates each stamped out *m* times over
+        *n = K·m* passages. The qualifying pairs are the within-template ones,
+        ``K·m(m-1)/2``, against ``n(n-1)/2`` in total, so the rate is exactly
+        ``(m-1)/(K·m-1)`` — which **saturates at 1/K**. Both denominators are
+        quadratic in the repetition, and they cancel. At eight templates the
+        rate reads 0.097 when each is copied four times and 0.124 when each is
+        copied ninety-six times: the corpus got twenty-four times more
+        repetitive and the number moved by under three points, because it never
+        had anywhere to go. It reports how many templates a corpus repeats,
+        and is almost blind to how hard it repeats them.
+
+        Measured on this engine's own retail corpus, growing the history alone
+        (1, 6, 12, 24, 48 and 96 periods): the rate reads 0.000, 0.005, 0.007,
+        0.008, 0.007, 0.007 — flat, and flattest exactly where the repetition
+        got worst — while the largest single duplicate family goes 0, 5, 11,
+        23, 47, 95 and this share goes 0.00, 0.17, 0.27, 0.28, 0.37, 0.37. At
+        96 periods one template covers ninety-five passages and the rate is
+        indistinguishable from what it read when that template covered five.
+
+        Both are kept rather than one replacing the other. The rate is still
+        the honest answer to "how much of this corpus is redundant against the
+        rest of it", which is the question a retriever asks; this is the answer
+        to "how much of it is a photocopy", which is the question an author
+        asks. `refine` acts on the second.
+        """
+        return (self.near_duplicate_grouped_passages / self.passage_count) if self.passage_count else 0.0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -236,6 +288,10 @@ class Stats:
                 "pairs": self.near_duplicate_pairs,
                 "total_pairs": self.near_duplicate_total_pairs,
                 "rate": self.near_duplicate_rate,
+                "groups": self.near_duplicate_groups,
+                "grouped_passages": self.near_duplicate_grouped_passages,
+                "largest_group": self.largest_near_duplicate_group,
+                "share": self.near_duplicate_share,
             },
             "facts_per_document": self.facts_per_document.as_dict(),
             "fact_density_per_100_tokens": self.fact_density.as_dict(),
@@ -263,6 +319,14 @@ class Stats:
                 f"  {'near-duplicates'.ljust(width)} {self.near_duplicate_pairs}/{self.near_duplicate_total_pairs}"
                 f" passage pair(s) ≥{self.near_duplicate_threshold:.0%} shingled Jaccard"
                 f" ({self.near_duplicate_rate:.1%})"
+            )
+            # Printed on its own line rather than folded into the one above,
+            # because the two disagree on a large corpus and a reader has to see
+            # both to notice. See `near_duplicate_share`.
+            lines.append(
+                f"  {'repeated passages'.ljust(width)} {self.near_duplicate_grouped_passages}/{self.passage_count}"
+                f" ({self.near_duplicate_share:.1%}) in {self.near_duplicate_groups} group(s),"
+                f" largest {self.largest_near_duplicate_group}"
             )
         else:
             lines.append(f"  {'near-duplicates'.ljust(width)} n/a (no compiled passages for this corpus)")
@@ -314,7 +378,11 @@ def compute(world: World) -> Stats:
     type_token_ratio = (len(vocabulary) / total_tokens) if total_tokens else 0.0
 
     pool = passages(world) if world.artifact_irs else []
-    near_pairs, near_total = _near_duplicates(pool)
+    # One join, both readings. Calling `_near_duplicates` and then
+    # `near_duplicate_clusters` would shingle and join the whole pool twice for
+    # two halves of one answer — which is the cost the join exists to avoid.
+    near_pairs_found, near_groups = _near_duplicate_reading(pool)
+    near_total = len(pool) * (len(pool) - 1) // 2
 
     facts_per_document: list[float] = []
     fact_density: list[float] = []
@@ -344,9 +412,12 @@ def compute(world: World) -> Stats:
         type_token_ratio=type_token_ratio,
         passage_count=len(pool),
         near_duplicate_threshold=NEAR_DUPLICATE_THRESHOLD,
-        near_duplicate_pairs=near_pairs,
+        near_duplicate_pairs=len(near_pairs_found),
         near_duplicate_total_pairs=near_total,
-        near_duplicate_rate=(near_pairs / near_total) if near_total else 0.0,
+        near_duplicate_rate=(len(near_pairs_found) / near_total) if near_total else 0.0,
+        near_duplicate_groups=len(near_groups),
+        near_duplicate_grouped_passages=sum(len(group) for group in near_groups),
+        largest_near_duplicate_group=max((len(group) for group in near_groups), default=0),
         facts_per_document=Distribution.of(facts_per_document),
         fact_density=Distribution.of(fact_density),
         fact_count=len(all_fact_ids),
@@ -371,6 +442,10 @@ def diff(a: Stats, b: Stats, *, a_label: str = "a", b_label: str = "b") -> str:
         ("vocabulary size", a.vocabulary_size, b.vocabulary_size),
         ("type-token ratio", round(a.type_token_ratio, 4), round(b.type_token_ratio, 4)),
         ("near-duplicate rate", round(a.near_duplicate_rate, 4), round(b.near_duplicate_rate, 4)),
+        # The row that actually moves when a corpus gets more repetitive; the
+        # rate above barely does. See `Stats.near_duplicate_share`.
+        ("repeated passage share", round(a.near_duplicate_share, 4), round(b.near_duplicate_share, 4)),
+        ("largest duplicate group", a.largest_near_duplicate_group, b.largest_near_duplicate_group),
         ("fact density (median, /100 tok)", round(a.fact_density.median, 2), round(b.fact_density.median, 2)),
         ("facts cited", a.fact_count - a.uncited_fact_count, b.fact_count - b.uncited_fact_count),
         ("eval cases", a.eval_count, b.eval_count),

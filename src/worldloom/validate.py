@@ -156,6 +156,26 @@ class _Validator:
         self.violations: list[Violation] = []
         self.checks = 0
         self._known: dict[str, set[str]] = {}
+        # The collections a check resolves *by id* while looping over another
+        # collection, bound once here.
+        #
+        # `Collection.by_id` indexes on first use and caches the index, which
+        # would make each of those lookups constant time — except that
+        # `World.facts` (and every sibling accessor) is a property that
+        # constructs a *new* Collection on every read, so the cached index dies
+        # with the temporary object that held it. Written the obvious way,
+        # `for fact in w.facts: w.events.get(fact.event_id)` therefore rebuilds
+        # the whole event index once per fact: measured on a 48-period corpus
+        # (28,389 facts, 351 events) that one line was 28,665 index rebuilds and
+        # 10.1M getattr calls, and `temporal()` alone was 3.6s of validate's
+        # 4.5s. Binding the collection once is not a micro-optimisation — it is
+        # the difference between linear and quadratic in corpus size, and the
+        # answer is identical either way because a Collection is immutable.
+        self._people = world.people
+        self._facts = world.facts
+        self._events = world.events
+        self._artifacts = world.artifacts
+        self._intents = world.artifact_intents
         self._build_index()
 
     # -- helpers -----------------------------------------------------------
@@ -308,7 +328,7 @@ class _Validator:
             if artifact.access_policy_id is None:
                 continue
             policy = policies.get(artifact.access_policy_id)
-            author = self.world.people.get(artifact.author_id)
+            author = self._people.get(artifact.author_id)
             if policy is None or author is None:
                 continue
             self.checks += 1
@@ -603,7 +623,7 @@ class _Validator:
     # -- graph -------------------------------------------------------------
 
     def graph(self) -> None:
-        people = self.world.people
+        people = self._people
 
         self.checks += 1
         roots = people.where(manager_id=None)
@@ -859,7 +879,7 @@ class _Validator:
 
     def temporal(self) -> None:
         w = self.world
-        facts = w.facts
+        facts = self._facts
 
         superseded_by: dict[str, str] = {}
         for fact in facts:
@@ -892,9 +912,9 @@ class _Validator:
                     f" which begins later ({earlier.valid_from.isoformat()})",
                 )
 
-        for event in w.events:
+        for event in self._events:
             for cause_id in event.caused_by:
-                cause = w.events.get(cause_id)
+                cause = self._events.get(cause_id)
                 if cause is None:
                     continue
                 self.checks += 1
@@ -909,7 +929,7 @@ class _Validator:
         for fact in facts:
             if not fact.event_id:
                 continue
-            event = w.events.get(fact.event_id)
+            event = self._events.get(fact.event_id)
             if event is None:
                 continue
             self.checks += 1
@@ -975,8 +995,8 @@ class _Validator:
         # cheapest way for an org change to go wrong — plan a close, then have
         # its author depart mid-quarter, and the reviewer signing the March
         # report left in February.
-        for artifact in w.artifacts:
-            person = w.people.get(artifact.author_id)
+        for artifact in self._artifacts:
+            person = self._people.get(artifact.author_id)
             if person is None:
                 continue
             if person.joined is not None and person.joined > artifact.created_at:
@@ -1026,7 +1046,7 @@ class _Validator:
             if latest is None or fact.valid_from > latest:  # type: ignore[operator]
                 handover[fact.subject] = fact.valid_from
         for unit in w.business_units:
-            leader = w.people.get(unit.leader_id)
+            leader = self._people.get(unit.leader_id)
             if leader is None or unit.formed is None:
                 continue
             self.checks += 1
@@ -1174,7 +1194,7 @@ class _Validator:
 
             elif error.error_type is ErrorType.OUTDATED_OWNER:
                 author_id = self._author_of(error.artifact_id)
-                author = w.people.get(author_id) if author_id else None
+                author = self._people.get(author_id) if author_id else None
                 if author is None:
                     continue
                 self.checks += 1
@@ -1204,10 +1224,10 @@ class _Validator:
                     )
 
     def _author_of(self, artifact_id: str) -> str | None:
-        entry = self.world.artifacts.get(artifact_id)
+        entry = self._artifacts.get(artifact_id)
         if entry is not None:
             return entry.author_id
-        intent = self.world.artifact_intents.get(artifact_id)
+        intent = self._intents.get(artifact_id)
         return intent.author_id if intent is not None else None
 
     def intentional(self) -> None:
@@ -1219,7 +1239,7 @@ class _Validator:
         for error in self.world.intentional_errors:
             if not error.canonical_fact_id:
                 continue
-            fact = self.world.facts.get(error.canonical_fact_id)
+            fact = self._facts.get(error.canonical_fact_id)
             if fact is None:
                 continue
             self.checks += 1
@@ -1303,7 +1323,7 @@ class _Validator:
             self.check_ref(task.id, "created_by", task.created_by, expect="PERSON")
             self.check_ref(task.id, "owner_id", task.owner_id, expect="PERSON")
             self.check_refs(task.id, "fact_ids", task.fact_ids, expect=FACT_REFS)
-            owner = w.people.get(task.owner_id) if task.owner_id else None
+            owner = self._people.get(task.owner_id) if task.owner_id else None
             if owner is None:
                 continue
             self.checks += 1
