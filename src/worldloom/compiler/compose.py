@@ -22,11 +22,11 @@ Two failure modes are treated differently on purpose:
 
 There is a third caller shape neither of those serves, and `try_compose` exists
 for it: a command **surveying a whole corpus** — `worldloom diversity`,
-`refine.measure` — where one unsatisfiable plan among thirty-five is a finding
+`stats.measure` — where one unsatisfiable plan among thirty-five is a finding
 about that artifact and not a reason to refuse to report on the other
 thirty-four. Raising is right for a caller composing one artifact it intends to
 render; it is wrong for a caller counting shapes, and for a while it meant
-`diversity` and `refine --check` exited with a traceback on any corpus built
+every surveying command exited with a traceback on any corpus built
 with ``--distractors``. See `try_compose`.
 """
 
@@ -328,14 +328,13 @@ def try_compose(
 
     Returns the `CompositionError` instead of raising it. That is the entire
     difference, and it is not a convenience — it is the difference between a
-    report and a crash. `worldloom diversity` and `refine.measure` walk every
+    report and a crash. `worldloom diversity` and `stats.measure` walk every
     artifact in a corpus to count shapes; one unsatisfiable plan among them is a
     finding about that artifact, and refusing to report on the rest because of
     it is a strictly worse answer than reporting on the rest and naming the one.
     Measured: at thirty-five artifacts, a single stale-draft distractor took
-    `diversity` down with a traceback; on the cheapest growth path there is
-    (2,186 artifacts in 18.8s with the fact count unchanged) it took down the
-    whole measure-target-rewrite-gate loop those commands exist to close.
+    `diversity` down with a traceback — and did so on the cheapest growth path
+    there is (2,186 artifacts in 18.8s with the fact count unchanged).
 
     `compose` keeps raising, and callers that are about to *render* the thing
     they composed should keep calling it. A renderer with no components cannot

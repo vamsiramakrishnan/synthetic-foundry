@@ -26,12 +26,14 @@ section order — never in whichever order a worker's future happens to resolve.
 That is the whole determinism argument for concurrency: it changes *when* a call
 happens, never what it produces or where it lands.
 
-**Checkpointing rides the same plan.** ``on_accepted`` fires once per section a
-worker actually generates (never for a replay), so a long ``narrate auto`` run can
-persist accepted, paid-for prose to a sidecar as it goes rather than only at the
-end — see ``narrative/checkpoint.py``. The entry handed to that callback carries a
-scratch id, not the sequential one the finished corpus will use for that section;
-only the single-threaded assembly pass decides that, once, in order.
+**``on_accepted`` rides the same plan.** It fires once per section a worker
+actually generates (never for a replay), so a caller that wants to persist
+accepted prose as it lands can, rather than only at the end. Its original
+caller — a checkpoint sidecar for the deleted ``narrate auto`` command — is
+gone, but the seam is generically useful and tested, so it stays. The entry
+handed to the callback carries a scratch id, not the sequential one the
+finished corpus will use for that section; only the single-threaded assembly
+pass decides that, once, in order.
 """
 
 from __future__ import annotations
@@ -268,9 +270,9 @@ def _plan(
     """Decide every section's fate before calling anything.
 
     Shared by ``narrate`` and ``preflight`` so the two can never disagree about
-    what counts as a replay versus a live call — the numbers `narrate auto`
-    prints before spending money are the same computation the run itself does,
-    not a second estimate that could drift from it.
+    what counts as a replay versus a live call — a caller reporting what a pass
+    *would* do gets the same computation the run itself does, not a second
+    estimate that could drift from it.
     """
     by_key = {entry.key: entry for entry in ledger}
     ir_slots: list[list[_Slot]] = []
@@ -326,9 +328,9 @@ def _ledger_entry(
     narrative: GeneratedNarrative,
     attempts: int,
 ) -> GenerationLedgerEntry:
-    """Build the ledger row for one live job. *id* is the only thing that
-    differs between the checkpoint's provisional copy and the run's real one —
-    see ``narrate``."""
+    """Build the ledger row for one live job. *id* is the only thing the
+    single-threaded assembly pass decides; the copy handed to ``on_accepted``
+    mid-run carries a provisional one — see ``narrate``."""
     assert slot.request is not None  # only "live" slots reach here
     return GenerationLedgerEntry(
         id=id,
@@ -349,11 +351,9 @@ class Preflight:
     """What a narration pass would do, computed without calling *provider* once.
 
     ``replay_keys`` is every ledger key `narrate` would serve from *ledger*
-    without a call — a caller distinguishing "replayed from the checkpoint"
-    from "replayed from the corpus's own ledger" (`narrate auto`'s preflight
-    banner) does it by intersecting this with the set of keys its checkpoint
-    sidecar carries; `preflight` itself doesn't know which source a hit came
-    from, only that it was one.
+    without a call. A caller with its own cache of prior answers can intersect
+    this with the keys that cache carries to attribute each hit; `preflight`
+    itself doesn't know which source a hit came from, only that it was one.
     """
 
     total_sections: int
@@ -425,18 +425,17 @@ def narrate(
 
     A provider's ``complete()`` must therefore be safe to call from more than
     one thread at once when ``concurrency > 1`` — every provider shipped here
-    is (each call is self-contained), with one exception worth flagging:
-    `harness.AntigravityProvider` calls ``asyncio.run()`` per call, which is
-    fine from a plain worker thread (no event loop already running there) but
-    would raise if it were ever invoked from a thread that already has one.
+    is, because each call is self-contained. (The one exception ever shipped,
+    an adapter that ran ``asyncio.run()`` per call, was deleted with the
+    API-caller path; a future provider with per-call event loops would trip
+    the same constraint, which is why it stays written down.)
 
     ``on_accepted``, if given, is called once per section actually generated
     (never for a replay — nothing new happened), the moment its provider call
     is validated and accepted, from whichever thread produced it — so it must
-    be its own thread-safe callable. That is `narrate auto --concurrency`'s
-    checkpoint hook (`narrative/checkpoint.py`): a crash can land between any
-    two workers finishing, so persistence has to happen at acceptance, not
-    after this function's own single-threaded reassembly gets around to it.
+    be its own thread-safe callable: a crash can land between any two workers
+    finishing, so a caller persisting acceptances has to do it here, not after
+    this function's own single-threaded reassembly gets around to it.
     """
     if world.seed is None:
         raise NarrationError("narration needs a seeded world")
@@ -454,10 +453,10 @@ def narrate(
     # Continue the GEN sequence rather than restarting it at 1 — mirrors
     # `compiler/handshake.py`'s plan `accept()`, and for the same reason: this
     # world's ledger can already carry GEN entries (an earlier narration pass,
-    # an accepted plan batch, or — the case that made this load-bearing rather
-    # than defensive — a checkpoint-resumed run, whose sidecar the caller
-    # folds into `ledger`). A fresh count starting at 1 would mint an id some
-    # already-recorded entry owns.
+    # an accepted plan batch, or any prior entries a caller folds into
+    # `ledger` — the case that first made this load-bearing was a resumed run
+    # replaying its own earlier acceptances). A fresh count starting at 1
+    # would mint an id some already-recorded entry owns.
     next_gen = 1 + highest_numeric_suffix("GEN", (entry.id for entry in ledger))
 
     def _run(slot: _Slot) -> tuple[GeneratedNarrative, int]:
@@ -494,11 +493,10 @@ def narrate(
                 slot.result = slot.future.result()
         finally:
             # `cancel_futures` drops whatever had not yet started; anything
-            # already running is left to finish (and checkpoint) rather than
-            # abandoned, so a `NarrationError` from one exhausted section can
-            # never race the checkpoint write of a section that succeeded
-            # before it — see the failure-semantics note in `narrate auto`'s
-            # CLI wiring for what that guarantee is *for*.
+            # already running is left to finish (and fire `on_accepted`)
+            # rather than abandoned, so a `NarrationError` from one exhausted
+            # section can never race the acceptance callback of a section
+            # that succeeded before it.
             pool.shutdown(wait=True, cancel_futures=True)
 
     recorded: list[GenerationLedgerEntry] = []

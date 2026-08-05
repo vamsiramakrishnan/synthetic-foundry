@@ -187,7 +187,7 @@ class World:
     #: a property minting a fresh wrapper per read. `world.facts.by_id(x)` in a
     #: loop rebuilt the whole index every iteration, and the pattern is
     #: everywhere: `documents.py`, the two vertical document modules,
-    #: `generators/communications.py`, `refine.py`, `cli.py`,
+    #: `generators/communications.py`, `stats.py`, `cli.py`,
     #: `generators/distractors.py`. Profiling a 24-period build, `by_id` was
     #: 13.1s of 30s across 49M `getattr` calls; a 256-period bank took 99s to
     #: build and 36s to validate.
@@ -603,8 +603,9 @@ class World:
 
         ``concurrency`` and ``on_accepted`` pass straight through to
         ``compiler.narrate`` — see its docstring for the determinism argument
-        (why a thread pool here never changes a byte of output) and for what
-        ``on_accepted`` is for (`narrate auto --concurrency`'s checkpoint hook).
+        (why a thread pool here never changes a byte of output) and for
+        ``on_accepted``, the per-section acceptance seam a long-running caller
+        can use to persist paid work incrementally.
         """
         from .narrative import compiler
 
@@ -935,9 +936,10 @@ class World:
         # perfectly intact. It never fired before because the two in-place
         # callers — `narrate accept` and `plan accept` — run on corpora that
         # have not been rendered yet, so `in_place` was always False for them.
-        # `worldloom mcp`'s `submit_section` is the first caller to write back
-        # over a corpus with an `artifacts/` directory in it, and it found this
-        # immediately.
+        # The first caller to write back over a corpus with an `artifacts/`
+        # directory in it — the refine loop's since-deleted `submit_section`
+        # MCP tool — found this immediately, and the guard outlives it because
+        # any future in-place writer of a rendered corpus hits the same path.
         if self.root is not None and not self._rendered and not in_place:
             source_dir = self.root / corpus.ARTIFACTS_DIR
             if source_dir.is_dir():

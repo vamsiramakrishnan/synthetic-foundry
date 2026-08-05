@@ -268,7 +268,7 @@ class Stats:
         the honest answer to "how much of this corpus is redundant against the
         rest of it", which is the question a retriever asks; this is the answer
         to "how much of it is a photocopy", which is the question an author
-        asks. `refine` acts on the second.
+        asks. `measure` below reports the second, cluster by cluster.
         """
         return (self.near_duplicate_grouped_passages / self.passage_count) if self.passage_count else 0.0
 
@@ -457,4 +457,215 @@ def diff(a: Stats, b: Stats, *, a_label: str = "a", b_label: str = "b") -> str:
     return "\n".join(lines)
 
 
-__all__ = ["Distribution", "Stats", "compute", "diff", "SHINGLE_SIZE", "NEAR_DUPLICATE_THRESHOLD"]
+# ---------------------------------------------------------------------------
+# The repetition measurement, as one reading
+# ---------------------------------------------------------------------------
+#
+# Formerly the "measure" step of `worldloom refine`, a rewrite loop this
+# repository deleted: the loop was built and gated against `DeterministicProvider`
+# template prose, and a five-world proof run on real model prose measured its
+# target — repeated passages — at zero in every world (0/46, 0/50, 0/52, 0/46,
+# 0/43). The repetition it fought was an artifact of the deterministic fake, not
+# of any real writer. The *measurement* survives the loop because it answers a
+# question independent of it — "what does this corpus repeat, right now?" — and
+# `worldloom diversity` and the `measure_corpus` MCP tool both report it.
+
+
+@dataclass(frozen=True)
+class Measurement:
+    """What the corpus repeats, right now."""
+
+    passages: int
+    duplicate_pairs: int
+    clusters: tuple[tuple[int, ...], ...]
+    """Groups of mutually near-duplicate passages, by index into ``pool``."""
+    pool: tuple[Passage, ...]
+    artifacts: int
+    distinct_shapes: int
+    shape_collisions: tuple[tuple[str, tuple[int, ...]], ...]
+    uncomposable: tuple[tuple[str, str, str, str], ...] = ()
+    """``(intent_id, artifact_type, code, detail)`` for artifacts whose plan the
+    compiler cannot satisfy, and which therefore have no shape to fingerprint.
+
+    Carried rather than raised. `artifacts` and `distinct_shapes` are counts over
+    what *could* be fingerprinted, so a corpus with unsatisfiable plans would
+    otherwise report a shape census that quietly covered a subset without either
+    reading saying so. Empty on a corpus with no such artifact, which is every
+    corpus this repository ships except one built with ``--distractors``."""
+
+    @property
+    def duplicate_rate(self) -> float:
+        """Duplicate pairs as a fraction of all pairs."""
+        total = self.passages * (self.passages - 1) // 2
+        return self.duplicate_pairs / total if total else 0.0
+
+    @property
+    def repeated_passages(self) -> int:
+        """How many passages sit in some duplicate cluster — the number a
+        reader cares about. A pair count squares with cluster size and so
+        overstates a single eleven-way repeat as fifty-five problems."""
+        return sum(len(group) for group in self.clusters)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "passages": self.passages,
+            "duplicate_pairs": self.duplicate_pairs,
+            "duplicate_rate": round(self.duplicate_rate, 6),
+            "repeated_passages": self.repeated_passages,
+            "clusters": [
+                {
+                    "size": len(group),
+                    "artifacts": sorted({self.pool[i].artifact_id for i in group}),
+                    "excerpt": self.pool[group[0]].text[:160],
+                }
+                for group in self.clusters
+            ],
+            "artifacts": self.artifacts,
+            "distinct_shapes": self.distinct_shapes,
+            "shape_collisions": [
+                {"digest": digest, "count": len(members)}
+                for digest, members in self.shape_collisions
+            ],
+            "uncomposable": [
+                {"artifact_id": intent_id, "artifact_type": artifact_type,
+                 "code": code, "detail": detail}
+                for intent_id, artifact_type, code, detail in self.uncomposable
+            ],
+        }
+
+    def __str__(self) -> str:
+        line = (
+            f"Repetition — {self.repeated_passages} of {self.passages} passage(s) "
+            f"in {len(self.clusters)} duplicate group(s); "
+            f"{self.distinct_shapes} distinct shape(s) across {self.artifacts} artifact(s)"
+        )
+        if self.uncomposable:
+            # Appended to the same line rather than left to `as_dict`: the shape
+            # census above is over `self.artifacts`, and a reader who is not told
+            # the denominator excludes something will read it as the whole corpus.
+            line += f" ({len(self.uncomposable)} more have no composable shape)"
+        return line
+
+
+def measure(world: World) -> Measurement:
+    """Prose repetition and structural repetition together, in one reading.
+
+    Together because they are different failures with different fixes: twenty
+    distinct shapes can still say the same sentences inside all of them, and one
+    shape used twenty times can carry twenty genuinely different arguments. A
+    reading that reported only one of them would declare victory over the other.
+    """
+    from .compiler import diversity as diversity_module
+
+    pool = tuple(passages(world))
+    pairs, groups = _near_duplicate_reading(list(pool))
+
+    shapes = census(world)
+    collisions = diversity_module.collisions(list(shapes.fingerprints))
+    distinct = len({fp.digest() for fp in shapes.fingerprints})
+
+    return Measurement(
+        passages=len(pool),
+        duplicate_pairs=len(pairs),
+        clusters=groups,
+        pool=pool,
+        artifacts=len(shapes.fingerprints),
+        distinct_shapes=distinct,
+        shape_collisions=collisions,
+        uncomposable=shapes.uncomposable,
+    )
+
+
+@dataclass(frozen=True)
+class ShapeCensus:
+    """Every artifact's structural shape, and every artifact that has none.
+
+    The two lists are the point. A shape census that reported only the shapes it
+    found would be a census over a silently-chosen subset, and the number a
+    reader takes from it — "eight distinct shapes across thirty-five artifacts"
+    — would be wrong in the denominator rather than merely incomplete.
+    """
+
+    fingerprints: tuple[Any, ...]
+    """``compiler.diversity.Fingerprint`` rows. Typed loosely so this module
+    keeps its compiler imports inside the functions that need them."""
+    artifact_ids: tuple[str, ...]
+    """Parallel to ``fingerprints``. Kept beside them rather than recovered by
+    re-walking the IR, because `diversity.collisions` returns *positions* and a
+    position is only useful if it can be turned back into the artifact an author
+    has to open."""
+    uncomposable: tuple[tuple[str, str, str, str], ...]
+    """``(artifact_id, artifact_type, code, detail)``, in corpus order."""
+
+
+def census(world: World) -> ShapeCensus:
+    """Structural fingerprints for every compilable artifact, and what refused.
+
+    Anything neither the workbook nor the document renderer claims is a record
+    projection rather than a component composition and has no shape to
+    fingerprint — the same split ``worldloom diversity`` draws.
+
+    Public, and `cli.py`'s `diversity` calls it, where the CLI used to hold a
+    separate copy of this walk on the stated principle that a library must not
+    depend on its own front end. That principle is intact — the dependency still
+    runs one way — but the duplication was not free: every reader of the census
+    has to agree on which artifacts are in it, and additionally on how an
+    unsatisfiable plan is *counted*. Two copies of that were how one command
+    could crash on a corpus while another reported on it.
+
+    Returns the failures rather than raising them; see `compose.try_compose` for
+    why a survey is the caller shape that needs it.
+    """
+    from .compiler import diversity as diversity_module
+    from .compiler.compose import Composition, plan_from_ir, try_compose
+    from .render.docx import HANDLES as DOCX_TYPES
+    from .render.xlsx import HANDLES as XLSX_TYPES
+
+    out: list[Any] = []
+    ids: list[str] = []
+    refused: list[tuple[str, str, str, str]] = []
+    for ir in world.artifact_irs:
+        intent = world.artifact_intents.by_id(ir.intent_id)
+        # A workbook composes with fmt="xlsx" — its lineage sheet is xlsx-only,
+        # so composing it as "docx" refuses on a component that does not fit.
+        # Every other handled type composes with fmt="docx". Anything neither
+        # renderer claims (a Jira, Confluence, or ServiceNow bundle) is a record
+        # projection rather than a component composition (see
+        # `docs/artifact-compiler.md` §9.5) and has no shape to fingerprint —
+        # the same split `tests/test_diversity.py`'s own regression fixture
+        # draws. Not counted as `uncomposable` either: it is not a defect, it is
+        # a kind of artifact this census has nothing to say about.
+        if intent.artifact_type in XLSX_TYPES:
+            fmt = "xlsx"
+        elif intent.artifact_type in DOCX_TYPES:
+            fmt = "docx"
+        else:
+            continue
+        plan = plan_from_ir(
+            ir, artifact_type=intent.artifact_type, size_class=intent.size_profile
+        )
+        composed = try_compose(plan, fmt=fmt)
+        if isinstance(composed, Composition):
+            out.append(diversity_module.fingerprint(composed))
+            ids.append(ir.id)
+        else:
+            # `ir.id`, not `composed.intent_id`: the plan's `intent_id` is the
+            # intent's, and a caller told an artifact is unfingerprintable needs
+            # the id it can go and open. They coincide today and are not required
+            # to.
+            refused.append((ir.id, intent.artifact_type, composed.code, composed.detail))
+    return ShapeCensus(tuple(out), tuple(ids), tuple(refused))
+
+
+__all__ = [
+    "Distribution",
+    "Measurement",
+    "ShapeCensus",
+    "Stats",
+    "census",
+    "compute",
+    "diff",
+    "measure",
+    "SHINGLE_SIZE",
+    "NEAR_DUPLICATE_THRESHOLD",
+]

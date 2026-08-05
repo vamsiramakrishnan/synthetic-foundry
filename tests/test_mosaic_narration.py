@@ -113,7 +113,7 @@ def test_the_prose_is_where_the_passages_come_from(finished: Path, plans: Path) 
 def test_the_duplicate_detection_loop_finally_has_something_to_read(
     finished: Path, plans: Path
 ) -> None:
-    """`refine`, the similarity join and every near-duplicate reading work over
+    """The similarity join and every near-duplicate reading work over
     passages, and a plan-only world has almost none — so they reported a clean
     corpus by having nothing to look at, which is the least useful way to pass."""
     from worldloom.stats import near_duplicate_clusters

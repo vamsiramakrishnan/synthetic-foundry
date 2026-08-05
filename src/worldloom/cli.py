@@ -1174,8 +1174,8 @@ def build(
             # Unreachable on purpose: a replay that quietly falls back to
             # generating would not be a replay. Its id comes from what the
             # artifacts record as `narrated_by` — the id is a key component,
-            # so replaying a corpus narrated by any other provider (anthropic,
-            # gemini, a harness) under a fixed id missed every key. It is NOT
+            # so replaying a corpus narrated under any other `--model-id`
+            # with a fixed id here missed every key. It is NOT
             # derived from the ledger's model_ids: an actor-mode corpus's
             # ledger legitimately carries the actor provider's entries beside
             # the narration's (CI's package job proved it, the first commit of
@@ -1315,8 +1315,7 @@ def narrate_accept(
             f"[red]error:[/red] {len(responses)} response(s) supplied but this corpus"
             " has no section awaiting prose — nothing was reviewed and nothing was"
             " committed.\n[dim]Every section already carries prose. Run `worldloom"
-            " status` to see where this corpus actually is; `worldloom refine` is what"
-            " rewrites prose that already exists.[/dim]"
+            " status` to see where this corpus actually is.[/dim]"
         )
         raise typer.Exit(code=2)
 
@@ -1354,239 +1353,6 @@ def narrate_accept(
         )
         console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
     if not _report(narrated, quiet=as_json):
-        raise typer.Exit(code=1)
-
-
-@narrate_app.command("auto")
-def narrate_auto(
-    corpus: str = typer.Argument(..., help="Corpus path to narrate."),
-    model: str = typer.Option(
-        None, "--model",
-        help="Model id. A `gemini-*` id routes to the Gemini provider"
-        " (`worldloom[gemini]`, GEMINI_API_KEY); anything else — and the"
-        " default — routes to Anthropic (`worldloom[llm]`, ANTHROPIC_API_KEY)."
-        " Defaults: `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL` /"
-        " `GEMINI_DEFAULT_MODEL`.",
-    ),
-    retries: int = typer.Option(
-        2, "--retries",
-        help="Rejections the compiler will absorb per section before giving up.",
-    ),
-    harness: str = typer.Option(
-        None, "--harness",
-        help="Answer each request with an agent harness instead of a bare model:"
-        " `claude-code` (the claude CLI in headless mode, its own auth) or"
-        " `antigravity` (a Google Antigravity Agent; `worldloom[antigravity]`,"
-        " GEMINI_API_KEY). `--model` passes through to the harness.",
-    ),
-    concurrency: int = typer.Option(
-        1, "--concurrency",
-        help="Live generation calls to run at once, across a thread pool. 1 (the"
-        " default) opens no thread pool at all — today's behaviour, byte for"
-        " byte. Raising it only changes when calls happen: the recorded ledger"
-        " is identical at any concurrency, because completion order never"
-        " reaches it (see narrative/compiler.py's module docstring).",
-    ),
-    yes: bool = typer.Option(
-        False, "--yes", "-y",
-        help="Skip the confirmation prompt after the preflight summary. Always"
-        " skipped when stdin is not a terminal (CI, a script) — the summary is"
-        " still printed either way.",
-    ),
-) -> None:
-    """Run requests -> generate -> validate -> accept in-process, against a live model.
-
-    Same loop `narrate requests` / write / `narrate accept` drives by hand, minus the
-    human round trip: the compiler's own retry loop (`compiler._generate`) calls the
-    model directly and feeds a rejection's violations back as the next attempt's
-    prompt, so this is the existing retry mechanism with a live model behind it, not
-    a second one. Every call still lands in the generation ledger keyed on
-    (seed, call site, fact digest, model id, prompt version) exactly like the
-    deterministic and hand-written paths, which is what makes a later
-    `--replay` build reproduce this corpus byte-for-byte with no model, key, or
-    network involved — `test_a_world_replays_with_the_provider_unreachable` and
-    `test_an_exported_corpus_replays_byte_for_byte` in tests/test_narrative.py prove
-    that property already, generically over any `Provider`; they just happen to have
-    only ever been exercised against deterministic ones.
-    `test_anthropic_narrate_auto_ledger_replays_offline` in
-    tests/test_anthropic_provider.py closes that gap for this specific,
-    non-deterministic provider.
-
-    Before a single call, a preflight prints how many sections are total,
-    already in the ledger, already checkpointed, and left to call live, plus
-    the provider id and a rough token estimate — see `tests/test_narrate_concurrency.py`.
-    Accepted sections persist incrementally to `narration-checkpoint.jsonl`
-    inside *corpus* as they land, so a crash or an interrupted run loses no
-    paid model output: rerunning this exact command resumes, replaying every
-    checkpointed section instead of calling for it again. A section that
-    exhausts its retry budget still aborts the run — `NarrationError`, exit
-    code 2 — but everything accepted before that point is already safe on
-    disk, and the error says how many sections and that rerunning resumes.
-    The sidecar is deleted once a run completes successfully; a corpus that
-    finished without ever crashing is byte-identical to one narrated with no
-    checkpointing at all.
-    """
-    import os
-    import sys
-
-    from .narrative import (
-        ANTHROPIC_DEFAULT_MODEL,
-        AnthropicProvider,
-        AntigravityProvider,
-        ClaudeCodeProvider,
-        GeminiProvider,
-        NarrationError,
-        ProviderError,
-        checkpoint,
-        compiler,
-    )
-
-    if concurrency < 1:
-        err.print(f"[red]error:[/red] --concurrency must be at least 1, not {concurrency}")
-        raise typer.Exit(code=2)
-
-    # `--harness` names an agent runtime and overrides the model-prefix
-    # routing below — a harness picks (or is told) its model itself, so the
-    # prefix stops being the routing signal the moment one is named.
-    if harness is not None:
-        if harness == "claude-code":
-            # Preflight here, not just in the provider, so the failure comes
-            # before a corpus is loaded — same shape as the key checks below.
-            import shutil as _shutil
-
-            if _shutil.which("claude") is None:
-                err.print(
-                    "[red]error:[/red] --harness claude-code needs the `claude`"
-                    " CLI on PATH. Install it from https://claude.com/claude-code"
-                    " and run it once to authenticate."
-                )
-                raise typer.Exit(code=2)
-            make_provider = lambda: ClaudeCodeProvider(model=model)  # noqa: E731
-        elif harness == "antigravity":
-            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-            if not api_key:
-                err.print(
-                    "[red]error:[/red] --harness antigravity needs GEMINI_API_KEY"
-                    " (GOOGLE_API_KEY also works). Export one before running"
-                    " `worldloom narrate auto`."
-                )
-                raise typer.Exit(code=2)
-            make_provider = lambda: AntigravityProvider(model=model, api_key=api_key)  # noqa: E731
-        else:
-            err.print(
-                f"[red]error:[/red] --harness takes claude-code or antigravity, not {harness!r}"
-            )
-            raise typer.Exit(code=2)
-    # Routed by model-id prefix rather than a separate --provider flag: every
-    # Gemini id starts with "gemini-" and no Anthropic id does, so the prefix
-    # is unambiguous, and one flag that means one thing beats two flags that
-    # can contradict each other.
-    elif model and model.startswith("gemini"):
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            err.print(
-                "[red]error:[/red] GEMINI_API_KEY is not set (GOOGLE_API_KEY also"
-                " works). Export one before running `worldloom narrate auto`."
-            )
-            raise typer.Exit(code=2)
-        make_provider = lambda: GeminiProvider(model=model, api_key=api_key)  # noqa: E731
-    else:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            err.print(
-                "[red]error:[/red] ANTHROPIC_API_KEY is not set."
-                " Export it before running `worldloom narrate auto`."
-            )
-            raise typer.Exit(code=2)
-        make_provider = lambda: AnthropicProvider(  # noqa: E731
-            model=model or ANTHROPIC_DEFAULT_MODEL, api_key=api_key
-        )
-
-    world = _compiled(_load(corpus), corpus)
-
-    # A crash-and-resume sidecar, not a corpus file — see narrative/checkpoint.py.
-    # Loaded before the provider is even asked anything, so a rerun after a
-    # crash sees exactly what the interrupted run already paid for.
-    checkpoint_path = Path(corpus) / checkpoint.FILENAME
-    checkpointed = checkpoint.load(checkpoint_path)
-    checkpoint_keys = frozenset(entry.key for entry in checkpointed)
-    ledger = tuple(world._ledger) + checkpointed
-
-    try:
-        provider = make_provider()
-        plan = compiler.preflight(world, provider, ledger=ledger)
-    except (ProviderError, NarrationError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
-
-    # `preflight`'s `replay_keys` doesn't know which ledger a hit came from —
-    # split it here by intersecting with the checkpoint's own keys, so the
-    # summary can tell "already in this corpus's ledger" apart from
-    # "recovered from an interrupted run", which are different facts about
-    # the corpus even though `narrate()` treats both as an ordinary replay.
-    from_checkpoint = len(plan.replay_keys & checkpoint_keys)
-    from_ledger = len(plan.replay_keys) - from_checkpoint
-    # `~4 chars/token` is the standard rough-English heuristic — the count it
-    # is applied to (`live_prompt_chars`) is exact, not guessed: the sum of
-    # what `Prompt.render()` will actually send for every live call.
-    token_estimate = plan.live_prompt_chars // 4
-
-    console.print(f"[bold]narrate auto[/bold] preflight — [bold]{corpus}[/bold]")
-    console.print(f"  sections total             {plan.total_sections:,}")
-    console.print(f"  replayed from ledger        {from_ledger:,}")
-    console.print(f"  replayed from checkpoint    {from_checkpoint:,}")
-    console.print(f"  live calls to make          {plan.live_count:,}")
-    console.print(f"  provider                    {provider.id}")
-    console.print(
-        f"  prompt size                 {plan.live_prompt_chars:,} chars"
-        f" (~{token_estimate:,} tokens, rough)\n"
-    )
-
-    if plan.live_count and not yes and sys.stdin.isatty():
-        if not typer.confirm("Proceed?", default=False):
-            console.print("[yellow]aborted[/yellow] — no call was made.")
-            raise typer.Exit(code=0)
-
-    writer = checkpoint.Writer(checkpoint_path)
-    try:
-        narrated = world.narrate(
-            provider, ledger=ledger, retries=retries,
-            concurrency=concurrency, on_accepted=writer,
-        )
-    except (ProviderError, NarrationError) as exc:
-        writer.close()
-        safe = len(checkpoint.load(checkpoint_path))
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        if safe:
-            err.print(
-                f"[yellow]{safe} section(s)[/yellow] accepted before this failure"
-                f" are safe in [bold]{checkpoint_path}[/bold]. Rerunning this exact"
-                " command resumes from there instead of paying for them again."
-            )
-        raise typer.Exit(code=2) from exc
-    writer.close()
-
-    written = narrated.export(corpus, overwrite=True)
-    # Only reached after a full success — an aborted run above never calls
-    # this, so its checkpoint stays on disk for the next attempt to find.
-    checkpoint.consume(checkpoint_path)
-
-    calls, replayed, rejected = narrated._narration
-    # `calls` counts every attempt including rejected ones (`1 + attempts` per new
-    # section, see compiler.narrate); subtracting `rejected` back out leaves exactly
-    # the count of sections that were newly generated this run, so the two together
-    # give the sections-narrated total the summary promises without the compiler
-    # needing to expose a fourth number for it.
-    generated = calls - rejected
-    console.print(
-        f"[green]✓[/green] {generated + replayed} section(s) narrated with [bold]{provider.id}[/bold]"
-    )
-    console.print(
-        f"[dim]narration:[/dim] {calls} provider call(s), {replayed} replayed from"
-        f" the ledger, {rejected} rejected attempt(s)\n"
-    )
-    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
-    if not _report(narrated):
         raise typer.Exit(code=1)
 
 
@@ -2986,7 +2752,7 @@ def diversity(
     from .compiler.diversity import Fingerprint, Quotas, check, report
     from .compiler.diversity import collisions as diversity_collisions
     from .evaluate.index import passages
-    from .refine import census
+    from .stats import census
 
     world = _load(corpus)
     if not world.artifact_irs:
@@ -3002,11 +2768,11 @@ def diversity(
             # not two different tracebacks for two ways of having nothing.
             pass
 
-    # One walk, shared with `refine.measure`, rather than the near-copy this
-    # command used to hold. The two have to agree on which artifacts are in the
-    # census — `refine` targets what `diversity` reports — and holding the walk
-    # twice was how this command came to crash on a corpus `refine` could still
-    # read, and vice versa.
+    # One walk, shared with `stats.measure` (and so with the `measure_corpus`
+    # MCP tool), rather than the near-copy this command used to hold. Every
+    # reader of the census has to agree on which artifacts are in it, and
+    # holding the walk twice was how this command came to crash on a corpus
+    # another reader could still measure, and vice versa.
     shapes = census(world)
     fingerprints: list[Fingerprint] = list(shapes.fingerprints)
     fingerprint_ids: list[str] = list(shapes.artifact_ids)
@@ -3349,22 +3115,17 @@ def mcp(
         False, "--tools", help="List the tools and exit, without starting a server.",
     ),
 ) -> None:
-    """Serve Worldloom's measurements and gates as MCP tools, over stdio.
+    """Serve Worldloom's readings and gates as MCP tools, over stdio.
 
-    Every other agent path here makes the agent a *function*: the CLI renders a
-    request, the agent answers it once, the CLI validates. That cannot run a
-    loop — it can only be run by one. Refinement is iterative by nature (measure,
-    fix the worst thing, measure again), so the algorithms become tools and the
-    agent holds the loop.
+    Read-only over corpora, by design: every corpus write path stays behind the
+    CLI handshakes, which validate a whole response document and commit
+    all-or-nothing. What the tools add is the ability to ask the same question —
+    what repeats, what depends on what, does it still validate — again and again
+    from inside a session, as data rather than a table. The probe tools also
+    serve here because a probe is dozens of question/answer turns, and a session
+    that holds that loop itself beats being invoked once per question.
 
-    What does not move is the division of labour: `next_target` is chosen by the
-    measurement rather than by the agent's sense of what looks repetitive, and
-    `submit_section` runs the same claim, reference and entity validators a first
-    draft goes through plus the similarity gate. An agent cannot talk its way
-    past any of it, which is what makes handing over the loop safe.
-
-    `.mcp.json` at the repository root wires this into Claude Code, and the
-    `worldloom-refine` skill drives it.
+    `.mcp.json` at the repository root wires this into Claude Code.
     """
     from . import mcp as mcp_module
 
@@ -3381,184 +3142,6 @@ def mcp(
     except RuntimeError as exc:
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
-
-
-@app.command()
-def refine(
-    corpus: str = typer.Argument(..., help="Corpus path to refine in place."),
-    rounds: int = typer.Option(
-        3, "--rounds", help="How many measure-target-rewrite passes to run at most.",
-    ),
-    budget: int = typer.Option(
-        16, "--budget", help="Sections to rewrite per round. The loop's cost ceiling.",
-    ),
-    harness: str = typer.Option(
-        "claude-code", "--harness",
-        help="Who writes the rewrites: `claude-code` (the claude CLI headless, its own"
-        " auth), `antigravity`, or `fake` for the deterministic stand-in — which writes"
-        " no real prose and exists so the loop is testable with no model.",
-    ),
-    model: str = typer.Option(None, "--model", help="Model id, passed to the harness."),
-    retries: int = typer.Option(
-        2, "--retries", help="Rejections absorbed per section before it is left alone.",
-    ),
-    check: bool = typer.Option(
-        False, "--check",
-        help="Measure and report only. Exits non-zero if anything still repeats — for"
-        " CI, and for a hook that wants to know whether a loop is finished.",
-    ),
-    as_json: bool = typer.Option(False, "--json", help="Emit the measurements as JSON."),
-) -> None:
-    """Measure what a corpus repeats, rewrite only what repeats, and prove it moved.
-
-    The headless half of the refinement loop. `worldloom mcp` gives the same
-    algorithms to an agent as tools so it can drive the loop itself; this drives
-    the loop *at* an agent, one bounded request at a time, for CI and batches.
-    Both run the identical targeting and the identical gate, so the interactive
-    and headless paths cannot drift into two definitions of "better".
-
-    The economics are the point. A three-period corpus has ~130 sections and ~16
-    that actually duplicate each other. Re-narrating everything to fix them is
-    what an open loop does; this rewrites the sixteen. Each rewrite is briefed
-    with the passage it must stop resembling, and rejected — with the measured
-    similarity — if it did not get far enough away.
-    """
-    import json as json_module
-
-    from . import refine as refine_module
-
-    world = _load(corpus)
-    history = [refine_module.measure(world)]
-
-    if check:
-        outstanding = refine_module.targets(history[0], budget=1_000_000)
-        if as_json:
-            typer.echo(json_module.dumps(
-                {**history[0].as_dict(), "outstanding": len(outstanding)}, indent=2
-            ))
-        else:
-            console.print(str(history[0]))
-            console.print(f"  {len(outstanding)} section(s) still worth rewriting")
-        if outstanding:
-            raise typer.Exit(code=1)
-        return
-
-    provider = _refine_provider(harness, model)
-    console.print(str(history[0]))
-
-    rewritten = failed = 0
-    for round_number in range(1, max(1, rounds) + 1):
-        targets = refine_module.targets(history[-1], budget=budget)
-        if not targets:
-            console.print("[green]✓[/green] nothing repeats — the loop is done")
-            break
-        console.print(
-            f"\n[bold]round {round_number}[/bold] — {len(targets)} target(s)"
-            f" of {history[-1].passages} passage(s)"
-        )
-        for target in targets:
-            outcome = _rewrite_one(corpus, target, provider, retries=retries)
-            if outcome:
-                rewritten += 1
-                console.print(f"  [green]✓[/green] {target.id}  {outcome}")
-            else:
-                failed += 1
-                console.print(f"  [yellow]—[/yellow] {target.id}  left as it was")
-
-        history.append(refine_module.measure(_load(corpus)))
-        console.print(f"  {history[-1]}")
-        if refine_module.plateaued(history):
-            console.print(
-                "[dim]the last round bought less than a passage; stopping rather than"
-                " spending the rest of the budget on a corpus that is as good as it"
-                " is going to get[/dim]"
-            )
-            break
-
-    if as_json:
-        typer.echo(json_module.dumps({
-            "rounds": len(history) - 1,
-            "rewritten": rewritten,
-            "left_alone": failed,
-            "before": history[0].as_dict(),
-            "after": history[-1].as_dict(),
-        }, indent=2))
-        return
-
-    console.print(
-        f"\n[green]✓[/green] {rewritten} section(s) rewritten"
-        + (f", {failed} left as they were" if failed else "")
-        + f"\n[dim]repeated passages {history[0].repeated_passages} →"
-        f" {history[-1].repeated_passages}"
-        f" of {history[-1].passages}. Only the sections that repeated were touched;"
-        f" the other {history[-1].passages - history[0].repeated_passages} were never"
-        f" sent to a model.[/dim]"
-    )
-
-
-def _refine_provider(harness: str, model: str | None) -> Any:
-    """The writer behind `worldloom refine`."""
-    from .narrative import DeterministicProvider
-    from .narrative.harness import AntigravityProvider, ClaudeCodeProvider
-
-    if harness == "fake":
-        return DeterministicProvider()
-    if harness == "claude-code":
-        return ClaudeCodeProvider(model=model)
-    if harness == "antigravity":
-        return AntigravityProvider(model=model)
-    err.print(f"[red]error:[/red] unknown harness {harness!r}; expected claude-code, antigravity or fake")
-    raise typer.Exit(code=2)
-
-
-def _rewrite_one(corpus: str, target: Any, provider: Any, *, retries: int) -> str:
-    """One target, up to *retries* rejections, committed through the MCP tool body.
-
-    Committed through `mcp.submit_section` rather than through a second commit
-    path, deliberately: an agent driving the loop interactively and this command
-    driving it headlessly must write the corpus the same way, or a refined corpus
-    would carry different ledger entries depending on which door it came through.
-    """
-    from . import mcp as mcp_module
-    from .narrative import prompts
-    from .narrative.compiler import _request_for
-    from .narrative.providers import ProviderError
-
-    world = _load(corpus)
-    facts = {fact.id: fact for fact in world.facts}
-    ir = next((i for i in world.artifact_irs if i.id == target.artifact_id), None)
-    section = next((s for s in ir.sections if s.heading == target.heading), None) if ir else None
-    if ir is None or section is None:
-        return ""
-
-    prompt = prompts.get(prompts.SECTION_PROSE_VARIED.name)
-    request = _request_for(world, ir, section, facts).model_copy(
-        update={"avoid_texts": list(target.avoid_texts)}
-    )
-
-    feedback = ""
-    for _ in range(max(1, retries + 1)):
-        try:
-            narrative = provider.complete(request, prompt, facts, feedback=feedback)
-        except ProviderError as exc:
-            # A harness that cannot run is not the retry loop's problem — no
-            # rewording fixes an unauthenticated CLI. Same split the narration
-            # compiler draws.
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
-
-        result = mcp_module.submit_section(
-            corpus, target.artifact_id, target.heading, narrative.text,
-            [claim.model_dump(mode="json") for claim in narrative.claims],
-            model_id=provider.id,
-        )
-        if result.get("accepted"):
-            return str(result.get("detail", ""))
-        # The rejection becomes the next attempt's feedback verbatim — including
-        # the measured similarity, which is the one piece of feedback an author
-        # can actually act on.
-        feedback = "\n".join(f"- {v['code']}: {v['detail']}" for v in result.get("violations", []))
-    return ""
 
 
 def _for_stats(name: str) -> World:

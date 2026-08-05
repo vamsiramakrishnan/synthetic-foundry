@@ -226,8 +226,8 @@ to restructure the sentence, not to drop the requirement.
 
 ## When not to write it yourself
 
-There are three tiers here, not two, and which one fits depends on what the
-prose is for.
+There are two tiers here, and which one fits depends on what the prose is
+for.
 
 `worldloom build ... --narrate` (or `worldloom demo`) fills every section using
 the built-in `DeterministicProvider` — no model, no network, template sentences
@@ -238,57 +238,17 @@ rule right and produces one flat sentence per fact, always in the same shape.
 Reach for it only when you need *a* corpus fast and prose quality does not
 matter to what you're testing.
 
-```bash
-worldloom narrate auto ./corpus --model claude-sonnet-5
-worldloom narrate auto ./corpus --model gemini-3.6-flash    # same loop, Gemini answering
-worldloom narrate auto ./corpus --harness claude-code       # an agent harness answering,
-worldloom narrate auto ./corpus --harness antigravity       # not a bare model call
-```
-
-`worldloom narrate auto` sits between that and this file's loop. It runs the
-exact same request → generate → validate → accept cycle described above —
-`facts` table, `must_not_claim`, `knows_as_of`, the `{{fact:ID}}` rule, the
-claims JSON shape, every rejection code in this document — except an Anthropic
-model answers each request in-process instead of you, and a rejection is
-retried against that model automatically rather than coming back to you to
-fix. The result is not template sentences: it is real, varied prose, checked
-by the identical validator this file describes, at whatever volume a live
-model can produce. What it is *not* is the top bar. A model under time
-pressure to clear the validator on the fewest retries writes to the letter of
-the rules, not always to the spirit of "lead with the position" and "weight
-facts by what they're worth" further up this file — the difference between
-prose that passes and prose that argues. Reach for it when you need good bulk
-prose and narrating every section by hand does not scale to the corpus size;
-reach for the hand-written loop when a document is worth getting exactly
-right, or when you are the one deciding what "exactly right" means for a
-scenario nobody has written prose for yet.
-
-At enterprise size — thousands of sections, hours of live calls — three more
-flags matter. `--concurrency N` fans live generation out to a thread pool of N
-workers; the default of 1 is today's behaviour, byte for byte, and raising it
-changes only *when* calls happen, never what they produce or what order the
-ledger records them in (`_plan` in `narrative/compiler.py` decides every
-section's fate before a thread is spun up, and ids are minted afterward,
-single-threaded, strictly in section order). Every accepted section is
-persisted incrementally to `narration-checkpoint.jsonl` inside the corpus as
-it lands, so a crash — killed process, lost connection, an exhausted retry
-budget on one stubborn section — never re-pays for work already accepted:
-rerunning the exact same command resumes, replaying every checkpointed section
-and only calling live for what is left. The checkpoint is consumed and deleted
-the moment a run finishes cleanly, so a corpus that never crashed is
-byte-identical to one narrated with no checkpointing at all. Before any call,
-a preflight prints how many sections are total, already in the ledger, already
-checkpointed, and left to call live, the provider id, and a rough token
-estimate; `--yes` skips the confirmation that follows (skipped automatically
-when stdin is not a terminal, so CI never blocks on it, but the numbers are
-always printed).
-
-```bash
-worldloom narrate auto ./corpus --model claude-sonnet-5 --concurrency 8
-worldloom narrate auto ./corpus --model claude-sonnet-5 --concurrency 8 --yes  # non-interactive
-```
+Everything else is this file's loop: you write the prose. There is no
+in-process API caller to fall back to — one existed (`narrate auto`, driving
+Anthropic or Gemini directly) and was deleted, because the writer this project
+is designed around is you, the coding harness, and a second writer path
+violated the first line of AGENTS.md. Bulk is handled by the loop itself:
+`narrate requests` hands out every request at once, you answer them all in one
+`responses.json`, and `narrate accept` commits all-or-nothing, so a
+hundred-section corpus is one round trip plus however many rejection fixes it
+costs — not a hundred.
 
 The moment someone needs documents that read like the real thing a controller
 or a service desk actually wrote — varied emphasis, an argued position,
-register that shifts with the audience — that's either loop, and this file is
-the contract both of them are held to.
+register that shifts with the audience — that's your loop, and this file is
+the contract it is held to.

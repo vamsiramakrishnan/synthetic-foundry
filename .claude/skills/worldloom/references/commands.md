@@ -206,7 +206,7 @@ worldloom inspect <CORPUS>
 
 ### `worldloom mcp`
 
-Serve Worldloom's measurements and gates as MCP tools, over stdio.
+Serve Worldloom's readings and gates as MCP tools, over stdio.
 
 | Option | Purpose |
 | --- | --- |
@@ -248,22 +248,6 @@ worldloom narrate accept <CORPUS>
 | `--from`, `-i` | Response JSON from the agent. |
 | `--json` | Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table. |
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
-
-### `worldloom narrate auto`
-
-Run requests -> generate -> validate -> accept in-process, against a live model.
-
-```
-worldloom narrate auto <CORPUS>
-```
-
-| Option | Purpose |
-| --- | --- |
-| `--concurrency` | Live generation calls to run at once, across a thread pool. 1 (the default) opens no thread pool at all — today's behaviour, byte for byte. Raising it only changes when calls happen: the recorded ledger is identical at any concurrency, because completion order never reaches it (see narrative/compiler.py's module docstring). |
-| `--harness` | Answer each request with an agent harness instead of a bare model: `claude-code` (the claude CLI in headless mode, its own auth) or `antigravity` (a Google Antigravity Agent; `worldloom[antigravity]`, GEMINI_API_KEY). `--model` passes through to the harness. |
-| `--model` | Model id. A `gemini-*` id routes to the Gemini provider (`worldloom[gemini]`, GEMINI_API_KEY); anything else — and the default — routes to Anthropic (`worldloom[llm]`, ANTHROPIC_API_KEY). Defaults: `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL` / `GEMINI_DEFAULT_MODEL`. |
-| `--retries` | Rejections the compiler will absorb per section before giving up. |
-| `--yes`, `-y` | Skip the confirmation prompt after the preflight summary. Always skipped when stdin is not a terminal (CI, a script) — the summary is still printed either way. |
 
 ### `worldloom narrate requests`
 
@@ -514,24 +498,6 @@ worldloom probe worlds <PATH>
 | --- | --- |
 | `--count`, `-n` | How many worlds. |
 | `--out`, `-o` | Write JSON here instead of stdout. |
-
-### `worldloom refine`
-
-Measure what a corpus repeats, rewrite only what repeats, and prove it moved.
-
-```
-worldloom refine <CORPUS>
-```
-
-| Option | Purpose |
-| --- | --- |
-| `--budget` | Sections to rewrite per round. The loop's cost ceiling. |
-| `--check` | Measure and report only. Exits non-zero if anything still repeats — for CI, and for a hook that wants to know whether a loop is finished. |
-| `--harness` | Who writes the rewrites: `claude-code` (the claude CLI headless, its own auth), `antigravity`, or `fake` for the deterministic stand-in — which writes no real prose and exists so the loop is testable with no model. |
-| `--json` | Emit the measurements as JSON. |
-| `--model` | Model id, passed to the harness. |
-| `--retries` | Rejections absorbed per section before it is left alone. |
-| `--rounds` | How many measure-target-rewrite passes to run at most. |
 
 ### `worldloom render`
 

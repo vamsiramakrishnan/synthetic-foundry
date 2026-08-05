@@ -1,8 +1,8 @@
 """Commands that survey a corpus must report an unsatisfiable plan, not raise.
 
-Three ways of building a corpus took `worldloom diversity` and
-`worldloom refine --check` down with a traceback, at *any* size — a 35-artifact
-build was enough:
+Three ways of building a corpus took `worldloom diversity` (and every other
+reader of the shape census) down with a traceback, at *any* size — a
+35-artifact build was enough:
 
 * any banking corpus, on `capital_return`'s "Capital position" sheet;
 * any insurance corpus, on `reserve_triangle_workbook`'s "Book position" sheet;
@@ -34,7 +34,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from worldloom import RetailWorld, refine
+from worldloom import RetailWorld, mcp, stats
 from worldloom.cli import app
 from worldloom.compiler.audit import WARNING, audit
 from worldloom.compiler.components import REGISTRY, roles_for
@@ -297,10 +297,13 @@ def test_an_uncomposable_artifact_is_not_a_failing_exit_code(
     assert runner.invoke(app, ["diversity", str(distractor_corpus)]).exit_code == 0
 
 
-def test_refine_check_reports_rather_than_crashing(distractor_corpus: Path) -> None:
-    result = runner.invoke(app, ["refine", str(distractor_corpus), "--check"])
-    assert result.exit_code == 0, result.output
-    assert "no composable shape" in result.output
+def test_measure_corpus_reports_rather_than_crashing(distractor_corpus: Path) -> None:
+    """The MCP tool is the census's other front door, and has to survive the
+    same corpus `diversity` does — a tool error is data an agent can act on,
+    but a refusal to measure a measurable corpus is not."""
+    reading = mcp.call("measure_corpus", {"corpus": str(distractor_corpus)})
+    assert "error" not in reading, reading
+    assert reading["uncomposable"], "the fixture must contain a refusal"
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +323,7 @@ def test_the_census_keeps_ids_parallel_to_fingerprints(plain_world: World) -> No
     if it can be turned back into the artifact an author has to open. A census
     that appended an id for a refused artifact would shift every later id by
     one and send readers to the wrong document."""
-    shapes = refine.census(plain_world)
+    shapes = stats.census(plain_world)
     assert len(shapes.fingerprints) == len(shapes.artifact_ids)
     assert len(set(shapes.artifact_ids)) == len(shapes.artifact_ids)
 
@@ -332,7 +335,7 @@ def test_a_refused_artifact_is_absent_from_the_fingerprints_and_named_once() -> 
     world = RetailWorld(seed=8128).build()
     world = world.run(MonthEndClose(period="2026-03", include_operational_incident=True))
     world = world.compile()
-    shapes = refine.census(world)
+    shapes = stats.census(world)
     refused_ids = {row[0] for row in shapes.uncomposable}
     assert refused_ids.isdisjoint(set(shapes.artifact_ids))
 
@@ -340,9 +343,9 @@ def test_a_refused_artifact_is_absent_from_the_fingerprints_and_named_once() -> 
 def test_measure_carries_the_refusals_rather_than_propagating_them(
     distractor_corpus: Path,
 ) -> None:
-    measurement = refine.measure(World.load(str(distractor_corpus)).compile())
+    measurement = stats.measure(World.load(str(distractor_corpus)).compile())
     assert measurement.uncomposable, "the fixture must contain a refusal"
-    assert measurement.artifacts == len(refine.census(
+    assert measurement.artifacts == len(stats.census(
         World.load(str(distractor_corpus)).compile()
     ).fingerprints)
     # The shape census is over `artifacts`, so the string a reader sees has to
@@ -354,7 +357,7 @@ def test_measure_carries_the_refusals_rather_than_propagating_them(
 def test_a_corpus_with_nothing_refused_reports_an_empty_list(plain_world: World) -> None:
     """The quiet case. A field that is only ever exercised when something is
     wrong is a field nobody notices has stopped working."""
-    measurement = refine.measure(plain_world)
+    measurement = stats.measure(plain_world)
     assert measurement.uncomposable == ()
     assert "no composable shape" not in str(measurement)
     assert measurement.as_dict()["uncomposable"] == []

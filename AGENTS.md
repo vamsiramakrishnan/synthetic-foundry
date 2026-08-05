@@ -88,43 +88,41 @@ like every other.
 
 ---
 
-## Closing the loop
+## The refine loop that is deliberately not here
 
 Narration is open-loop: every section gets one request and one attempt, and
-nothing afterwards looks at what the corpus became. So the writer of section 47
-never learns that sections 12 and 31 already said this, and a three-period
-grocery corpus comes out with **44 of its 130 passages in 16 near-duplicate
-groups**.
+nothing afterwards looks at what the corpus became. This repository once closed
+that loop — a `worldloom refine` command, MCP rewrite tools, a skill, and a
+`Stop` hook — rewriting whichever sections a similarity join said were
+near-duplicates of each other. It was deleted, and a future reader deserves the
+reason rather than just the absence.
 
-`worldloom refine` closes it. Measure what repeats, rewrite only what repeats,
-and prove each rewrite moved:
+The loop was built and gated against `DeterministicProvider`, the template
+writer CI uses, whose one-sentence-per-fact prose genuinely does repeat: three
+closes from one template put tens of passages into near-duplicate groups. On
+real model prose the problem it fought does not exist. A five-world proof run
+measured the loop's target — passages sitting in a near-duplicate group — at
+**zero in every world** (0/46, 0/50, 0/52, 0/46, 0/43). A writer that varies by
+nature never gave the loop anything to do; the repetition was an artifact of
+the deterministic fake, and no real writer reproduces it. The loop's headless
+driver and API adapters were also the only code violating the first line of
+this document, and they went with it.
+
+The *measurement* survives the loop, because "what does this corpus repeat?" is
+worth asking of any corpus whoever narrated it — not least as the check that
+the finding above stays true:
 
 ```bash
-worldloom refine ./corpus --harness claude-code   # drive the loop headlessly
-worldloom refine ./corpus --check                 # measure only; exits 1 if anything repeats
+worldloom diversity ./corpus --near-duplicates   # the groups, named
+worldloom stats ./corpus                         # the same reading among the rest
 ```
 
-The economics are the point: ~130 sections, ~16 duplicates, 16 rewrites. Each
-one is briefed with the passage it must stop resembling and rejected — with the
-measured similarity — if it did not get far enough away. The loop stops when the
-measurement plateaus rather than when the budget runs out.
-
-**Or hold the loop yourself.** `worldloom mcp` serves the same algorithms as
-tools over stdio, and `.mcp.json` wires them into Claude Code:
-
-```
-measure_corpus  →  next_target  →  write it  →  submit_section  →  repeat
-```
-
-The `worldloom-refine` skill drives that loop, and a `Stop` hook
-(`.claude/hooks/refine_guard.py`) refuses to let a session end while duplicates
-remain — a skill can be forgotten mid-session, a hook cannot.
-
-What does not change either way: `next_target` is chosen by the measurement, not
-by anyone's sense of what looks repetitive, and `submit_section` runs the same
-claim, reference and entity validators a first draft goes through *plus* the
-similarity gate. Widening how much you may vary does not widen what you may
-assert.
+**`worldloom mcp`** serves the read-only tools over stdio — `measure_corpus`,
+`corpus_topology`, `corpus_series`, `validate_corpus`, and the probe tools —
+and `.mcp.json` wires them into Claude Code, so a session can ask those
+questions repeatedly, as data, without leaving the loop it is actually running:
+writing prose through `narrate requests` / `narrate accept`. No tool writes a
+corpus; every corpus write path stays behind the handshakes.
 
 ---
 

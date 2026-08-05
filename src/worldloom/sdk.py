@@ -4,10 +4,10 @@ Every capability in this project is reachable from the CLI, and the CLI is the
 wrong shape for most of what you would want to do with them. A command is a
 *fixed pipeline*: it takes flags, runs one arrangement of the machinery, and
 exits. ``worldloom mosaic -n 5`` is one arrangement. So is ``build``, so is
-``refine``. Wanting a different arrangement — five organisation shapes crossed
-with three trading calendars, each refined until it plateaus, keeping only the
-ones whose blast radius exceeds ten — means either a new flag, a new command, or
-a shell script gluing JSON between processes.
+``evaluate``. Wanting a different arrangement — five organisation shapes crossed
+with three trading calendars, keeping only the ones whose blast radius exceeds
+ten — means either a new flag, a new command, or a shell script gluing JSON
+between processes.
 
 That ceiling is the reason this module exists, and it is a real one rather than
 an aesthetic complaint. The combinatorics this project is *for* live in the

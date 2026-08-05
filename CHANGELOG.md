@@ -119,44 +119,27 @@ One coherent enterprise, taken all the way through. Two, in fact.
   (`recipe.register_step`) each vertical seeds from its own module, and two
   thin-waist exceptions were paid down rather than a third added.
 
-- **The refinement loop: `worldloom refine`, `worldloom mcp`, a skill and a hook.**
-  Narration is open-loop — every section gets one request and one attempt, and
-  nothing afterwards looks at what the corpus became, so the writer of section
-  47 never learns that sections 12 and 31 already said this. A three-period
-  grocery corpus comes out with **44 of its 130 passages in 16 near-duplicate
-  groups**.
+- **Repetition measured; the rewrite loop deleted before release.** Narration
+  is open-loop — every section gets one request and one attempt, and nothing
+  afterwards looks at what the corpus became — and a refinement loop
+  (`worldloom refine`, MCP rewrite tools, a skill and a Stop hook) was built to
+  close it: measure what repeats, rewrite only what repeats, gate each rewrite
+  on the measured similarity. It was deleted before release, on evidence. The
+  loop was built and gated against `DeterministicProvider` template prose,
+  where three closes from one template genuinely repeat; a five-world proof run
+  on real model prose measured its target — passages in a near-duplicate group
+  — at zero in every world (0/46, 0/50, 0/52, 0/46, 0/43). The repetition it
+  fought was an artifact of the deterministic fake, and its API adapters were
+  the only code violating "this repository does not call a language model".
 
-  The loop closes it, and the algorithm owns three of the four steps.
-  *Measure* runs the exact similarity join over the corpus's own passages.
-  *Target* keeps one member of each cluster and ranks the rest — which is where
-  the economics are: ~130 sections, ~16 that actually repeat, 16 rewrites
-  rather than 130. *Constrain* hands the exemplar's text over as the brief,
-  because "be more varied" is advice and "here is the passage you are being
-  confused with" is a constraint. *Gate* re-measures the answer and rejects a
-  rewrite that did not move, quoting the figure — the model is never asked to
-  assess its own variety. Then it stops on a plateau rather than when the
-  budget runs out.
-
-  Two ways to drive it, running identical algorithms so they cannot drift into
-  different definitions of "better". `worldloom refine --harness claude-code`
-  drives it headlessly, one bounded request at a time. `worldloom mcp` serves
-  the same functions as MCP tools — `measure_corpus`, `next_target`,
-  `submit_section`, `corpus_topology`, `corpus_series`, `validate_corpus` — so
-  a Claude Code session **holds the loop itself** rather than being called by
-  it; `.mcp.json` wires it in, the `worldloom-refine` skill drives it, and a
-  `Stop` hook refuses to let a session end while duplicates remain, because a
-  skill can be forgotten mid-session and a hook cannot.
-
-  Every existing validator still runs on a rewrite, unchanged. Widening how
-  much an author may *vary* does not widen what it may *assert*.
-
-  Three defects found while building it, each fixed rather than asserted
-  around, and all three of the same shape — the loop appearing to work while
-  changing nothing. The gate compared a templated draft against rendered prose,
-  which scores a verbatim copy near zero. It then compared a bare body against
-  a full passage, which scores an *unchanged* body at 0.55 and passes it. And
-  it compared only against the exemplar, so two sections told to stop
-  resembling the same passage both moved away from it and landed on each other.
+  What ships is the measurement, which is worth having about any corpus
+  whoever narrated it: `stats.measure` runs the exact similarity join over the
+  corpus's own passages beside a structural shape census, `worldloom diversity
+  --near-duplicates` names the groups, and `worldloom mcp` serves the
+  read-only tools — `measure_corpus`, `corpus_topology`, `corpus_series`,
+  `validate_corpus`, and the probe tools — over stdio, with `.mcp.json` wiring
+  them into Claude Code. No MCP tool writes a corpus; every corpus write path
+  stays behind the CLI handshakes.
 
   Also fixed: `World.export` copied artifacts twice on an in-place export of a
   corpus that had been rendered, raising `FileExistsError` on a corpus that was
@@ -296,19 +279,18 @@ One coherent enterprise, taken all the way through. Two, in fact.
   company's declared currency, in three generators. The insurer example is
   no longer Australian, and proves it byte-reproducibly.
 
-- **Narration at scale.** `worldloom narrate auto` drives the whole
-  requests→generate→validate→accept loop in-process against the Anthropic API
-  (`worldloom[llm]` extra), behind the same Provider contract and the same
-  validators as hand-written prose. Every response lands in the generation
-  ledger, so a narrated corpus still replays byte-for-byte offline — proven by
-  a test whose fake provider answers differently on every call. The same
-  command routes `--model gemini-*` to Gemini (`worldloom[gemini]`), and
-  `--harness claude-code` / `--harness antigravity` put a whole agent harness
-  behind each request — one fresh session per section, because the request is
-  the whole of what an author knows. At size: `--concurrency N` fans sections
-  out with byte-identical output at any worker count, accepted sections
-  checkpoint incrementally so a crash never loses paid model output, and a
-  preflight counts the work before the first call.
+- **Narration at scale, without an API caller.** There is no `narrate auto`
+  and no model-SDK extra: an in-process API path (Anthropic, Gemini, and two
+  agent-harness adapters) was built and then deleted before release, because
+  the product is driven by a coding harness through the `narrate requests` /
+  `narrate accept` handshake and the SDK — an API caller was a second writer
+  path this repository's first line says it does not have. What ships from
+  that work is the scale machinery in `narrative/compiler.py`, which any
+  provider benefits from: `narrate(concurrency=N)` fans sections out with
+  byte-identical output at any worker count (section fate and ledger order are
+  decided before a thread runs), `preflight` counts the work before the first
+  call, and the `on_accepted` seam hands each accepted section out as it
+  lands so a long-running caller can persist paid work incrementally.
 
 - **A benchmark that scales with the world.** `build --eval-density
   {low,standard,high}` grows the evaluation set and the fan-out layer from
