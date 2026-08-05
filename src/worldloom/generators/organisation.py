@@ -126,7 +126,10 @@ _PERSONAS: tuple[tuple[str, str, str, str, str, float, float, float, tuple[str, 
      ("strategically", "headwinds")),
 )
 
-#: Which persona each role writes with.
+#: Which persona each role writes with. Exhaustive over ``_ROLES`` — a role
+#: missing from here used to be indistinguishable from one deliberately left to
+#: a default, so ``tests/test_personas.py`` asserts the coverage rather than
+#: trusting it.
 _ROLE_PERSONA = {
     "ceo": "PERSONA-EXEC",
     "cfo": "PERSONA-CFO",
@@ -144,18 +147,82 @@ _ROLE_PERSONA = {
     "merch_analyst": "PERSONA-MERCH",
 }
 
-#: Business-unit finance partners all write with the same persona.
-_UNIT_ROLE_PERSONA = {"_md": "PERSONA-EXEC", "_bp": "PERSONA-FIN-BP", "buyer": "PERSONA-MERCH-LEAD"}
+#: The per-unit roles ``generate`` appends (``roles.UNIT_ROLES``), by suffix.
+#: ``_buyer`` is named here now; it used to be reached through the catch-all
+#: default below, which is exactly what disguised that default as load-bearing
+#: when it was an accident.
+_UNIT_ROLE_PERSONA = {"_md": "PERSONA-EXEC", "_bp": "PERSONA-FIN-BP", "_buyer": "PERSONA-MERCH-LEAD"}
+
+#: By function, for a role neither table above names — which means an authored
+#: table (``roles.from_shape`` invents ``role_017``), since the engine's own is
+#: covered. ``roles.review`` already tells whoever wrote that table that a
+#: role's function is what decides "cost centre and persona"; until this
+#: existed it decided only the cost centre.
+_FUNCTION_PERSONA = {
+    "Executive": "PERSONA-EXEC",
+    "Finance": "PERSONA-FIN-BP",
+    "Audit": "PERSONA-AUDIT",
+    "Technology": "PERSONA-ENG-PLATFORM",
+    "ServiceOperations": "PERSONA-SVC-OPS",
+    "Merchandising": "PERSONA-MERCH",
+}
+
+#: Last resort: an authored role in a function this engine has never heard of.
+#: Named, and the same choice banking and insurance already made — a role with
+#: no other claim on a register writes as general management.
+_DEFAULT_PERSONA = "PERSONA-EXEC"
 
 
-def _persona_for(role: str) -> str:
-    """The default persona a role writes with — one lookup, used both to
-    assign people and to base a pack's voice override on."""
-    return (
-        _ROLE_PERSONA.get(role)
-        or _UNIT_ROLE_PERSONA.get(role[-3:])
-        or _UNIT_ROLE_PERSONA["buyer"]
-    )
+def _persona_for(role: str, function: str = "") -> str:
+    """The persona a role writes with — one lookup, used both to assign people
+    and to base a pack's voice override on.
+
+    Four layers, narrowing to widest, and the widest is the one that was wrong.
+    This used to end at ``_UNIT_ROLE_PERSONA["buyer"]``, so every role the key
+    and suffix layers missed wrote in a supermarket merchandising leader's
+    register: an authored ``chief_actuary`` on this engine included, and every
+    ``role_017`` a synthesised organisation contains.
+
+    Not an error instead, though a missing mapping reads like one. The engine's
+    own table is covered exhaustively and a test holds it that way, which
+    catches a gap before it ships rather than after; and a table from
+    ``roles.from_shape`` legitimately invents keys and functions this module has
+    never seen, so refusing them would make the authorable organisation
+    unbuildable — the one thing ``roles`` exists to allow.
+    """
+    if role in _ROLE_PERSONA:
+        return _ROLE_PERSONA[role]
+    for suffix, persona in _UNIT_ROLE_PERSONA.items():
+        if role.endswith(suffix):
+            return persona
+    return _FUNCTION_PERSONA.get(function, _DEFAULT_PERSONA)
+
+
+def _check_persona_ids(voiced: dict[str, Any], minted: dict[str, str]) -> None:
+    """Refuse a pack ``persona`` naming an id this world does not have.
+
+    A dangling id would otherwise leave the role on its default, which is
+    discovered as a register reading slightly wrong three thousand lines of
+    prose later — the same silent-miss shape as the fallthrough above, and the
+    reason this refuses where an unknown *role* key is merely skipped: a role
+    the engine does not have is a pack over-specifying, while a persona id
+    nothing answers to is a reference that goes nowhere.
+    """
+    engine = frozenset(persona[0] for persona in _PERSONAS)
+    for role, spec in voiced.items():
+        if not spec.persona:
+            continue
+        # A clone inherits its numeric temperament from its base and a pack may
+        # not author that (see `packs.PackVoice`), so a clone's base is always
+        # an engine persona — which also makes a chain of clones
+        # unrepresentable rather than merely discouraged.
+        allowed = engine if role in minted else engine | frozenset(minted.values())
+        if spec.persona not in allowed:
+            raise ValueError(
+                f"voices[{role!r}].persona names {spec.persona!r}, which is not a"
+                f" persona this world has: {', '.join(sorted(allowed))}"
+            )
+
 
 def _merch_unit(unit_ids: dict[str, str]) -> str:
     """Which unit merchandising systems sits under.
@@ -230,17 +297,31 @@ def generate(
     finance_cc = minter.next("CC")
     platform_cc = minter.next("CC")
 
-    # A voiced role writes with a pack persona — a clone of its default one,
-    # built after the defaults below. The ids are derivable from the role
-    # alone, which is what lets `assign` name them before the clones exist.
+    # A voiced role writes with a pack persona — a clone of its base, built
+    # after the defaults below. The ids are derivable from the role alone,
+    # which is what lets `assign` name them before the clones exist. A spec
+    # that only remaps mints nothing: it points its role at a persona that
+    # already exists, and a role writing in an existing register does not need
+    # a second copy of it under a new id.
+    #
+    # Roles the table does not hold are dropped here rather than at the clone
+    # loop, because such a role must not orphan a persona *or* be nameable as
+    # another role's base.
+    function_of = {row[0]: row[2] for row in role_table}
+    voiced: dict[str, Any] = {
+        role: spec for role, spec in sorted((voices or {}).items()) if role in function_of
+    }
     pack_voice_ids = {
         role: f"PERSONA-PACK-{role.upper().replace('_', '-')}"
-        for role in (voices or {})
+        for role, spec in voiced.items() if not spec.is_remap()
     }
+    persona_remap = {role: spec.persona for role, spec in voiced.items() if spec.is_remap()}
+    _check_persona_ids(voiced, pack_voice_ids)
 
     def assign(role: str, title: str, function: str):  # type: ignore[no-untyped-def]
         """Retail's one decision per person: unit by role-key convention, cost
-        centre by function, persona by role then unit-role suffix."""
+        centre by function, persona by ``_persona_for`` — which reads the
+        function too, so the pair are decided from the same fact."""
         business_unit = None
         if role.endswith(("_md", "_bp")):
             business_unit = unit_ids[role[:-3]]
@@ -253,7 +334,11 @@ def generate(
             else platform_cc if title.endswith(("Engineer", "Data Platform"))
             else None
         )
-        return business_unit, cost_centre, pack_voice_ids.get(role) or _persona_for(role)
+        return business_unit, cost_centre, (
+            pack_voice_ids.get(role)
+            or persona_remap.get(role)
+            or _persona_for(role, function)
+        )
 
     pools = name_pools or {}
     role_ids, people = mint_people(
@@ -348,21 +433,24 @@ def generate(
         )
         for persona_id, label, voice, complexity, depth, optimism, risk, political, phrases in _PERSONAS
     )
-    # Pack voices: each voiced role gets a clone of its default persona with
-    # the voice and phrases swapped — a clone per role rather than an edit of
-    # the shared persona, so voicing the CFO never re-voices everyone who
-    # shares the CFO's register. Numeric temperament stays the engine's.
-    if voices:
+    # Pack voices: each voiced role gets a clone of its base persona with the
+    # authored fields swapped — a clone per role rather than an edit of the
+    # shared persona, so voicing the CFO never re-voices everyone who shares the
+    # CFO's register. The base is the pack's if it named one and the role's own
+    # default otherwise. Numeric temperament stays the engine's either way,
+    # which is what makes an unnamed field mean "keep" rather than "clear".
+    if pack_voice_ids:
         by_id = {p.id: p for p in personas}
         clones = []
-        for role, spec in sorted(voices.items()):
-            if role not in role_ids:
-                continue  # linted upstream; an unknown role must not orphan a persona
-            base = by_id[_persona_for(role)]
+        for role, persona_id in pack_voice_ids.items():
+            spec = voiced[role]
+            base = by_id[spec.persona or _persona_for(role, function_of[role])]
             clones.append(base.model_copy(update={
-                "id": pack_voice_ids[role],
+                "id": persona_id,
                 "label": f"{base.label} ({role})",
                 "voice": spec.voice or base.voice,
+                "sentence_complexity": spec.sentence_complexity or base.sentence_complexity,
+                "technical_depth": spec.technical_depth or base.technical_depth,
                 "favourite_phrases": list(spec.phrases) or list(base.favourite_phrases),
             }))
         personas += tuple(clones)

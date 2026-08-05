@@ -108,14 +108,66 @@ class PackCommitment(PackModel):
 class PackVoice(PackModel):
     """How one role writes: an override of that role's default persona.
 
-    Voice and favourite phrases only — the persona's numeric temperament
-    (optimism, risk tolerance, political awareness) stays the engine's,
-    because those knobs interact with the deliberate-imperfection machinery
-    in ways a pack author cannot see from outside.
+    The persona's numeric temperament (optimism, risk tolerance, political
+    awareness) stays the engine's, because those knobs interact with the
+    deliberate-imperfection machinery in ways a pack author cannot see from
+    outside. Everything else about how a role sounds is authorable here.
+
+    Two shapes, and which one you wrote decides what the build does:
+
+    * **A voice.** Any of ``voice``, ``phrases``, ``sentence_complexity`` or
+      ``technical_depth`` set: the role writes with a *new* persona, cloned
+      from a base with those fields swapped. A clone per role rather than an
+      edit of the shared persona, so voicing the CFO never re-voices everyone
+      who shares the CFO's register. Its id is ``PERSONA-PACK-<ROLE>``
+      (``persona_id_for``) — derivable, and therefore nameable by another role.
+      ``persona`` names the base; omitted, the base is whatever persona the
+      engine gives that role.
+    * **A remap.** ``persona`` alone: the role writes with a persona that
+      already exists — one of the engine's, or the one another role in this
+      pack defined. No clone is minted, because a role that writes in an
+      existing register does not need a second copy of it under a new id.
+
+    Which is how a pack reaches the two things it could not before: *which*
+    persona a role writes with, and a persona of its own that more than one
+    role can share.
+
+    A clone's base must be an engine persona. Temperament is inherited and a
+    pack may not author it, so a clone of a clone would take an engine
+    persona's numbers by a longer route while reading as though it had its
+    own — the build refuses that, and refuses a ``persona`` naming an id no
+    persona has.
     """
 
     voice: str | None = None
     phrases: list[str] = Field(default_factory=list, max_length=4)
+    sentence_complexity: Literal["low", "medium", "high"] | None = None
+    technical_depth: Literal["low", "medium", "high"] | None = None
+    persona: str = Field(default="", pattern=r"^$|^PERSONA-[A-Z0-9-]+$")
+
+    def is_remap(self) -> bool:
+        """Whether this spec only points at a persona that already exists.
+
+        The rule lives here rather than in each org generator because all three
+        read it, and a fourth engine copying a *derived* rule is how the two
+        halves of an override discipline drift apart.
+        """
+        return bool(self.persona) and not (
+            self.voice or self.phrases or self.sentence_complexity or self.technical_depth
+        )
+
+
+def persona_id_for(role: str) -> str:
+    """The id the clone of a voiced *role*'s persona is minted under.
+
+    Published because a remap has to name it: two roles share one authored
+    voice by the second one setting ``persona`` to ``persona_id_for(first)``.
+    The org generators derive the same string; they do not import this module
+    (a generator that imported the pack surface would make packs a dependency
+    of every build, pack or not), so this is the documented half of a shared
+    convention rather than its only definition.
+    """
+    return f"PERSONA-PACK-{role.upper().replace('_', '-')}"
 
 
 class PackNamePools(PackModel):
@@ -171,7 +223,9 @@ class Pack(PackModel):
     override renames the product without relabelling the concept."""
     voices: dict[str, PackVoice] = Field(default_factory=dict)
     """Per-role persona overrides, keyed by the engine's role keys. The
-    highest-leverage texture a pack owns: prose is written in these voices."""
+    highest-leverage texture a pack owns: prose is written in these voices,
+    and — see ``PackVoice`` — an entry either authors a persona for its role
+    or points that role at one that already exists."""
     episode_text: dict[str, str] = Field(default_factory=dict)
     """Overrides of the engine's surface-text templates, keyed by the keys
     ``worldloom pack texts`` lists. This is where a pack re-voices the
@@ -352,7 +406,13 @@ def lint(pack: Pack) -> list[str]:
                 f"system_brands[{slot!r}] names no {pack.base} system slot —"
                 f" slots: {', '.join(sorted(slots))}"
             )
+    # Only the roles whose specs author a voice mint a persona id; a remap
+    # naming any other `PERSONA-PACK-` id is pointing at nothing.
+    minted = {
+        persona_id_for(role) for role, spec in pack.voices.items() if not spec.is_remap()
+    }
     for role in sorted(pack.voices):
+        spec = pack.voices[role]
         known = role in domain.role_keys or any(
             role.endswith(suffix) for suffix in domain.unit_role_suffixes
         )
@@ -362,6 +422,25 @@ def lint(pack: Pack) -> list[str]:
                 f" {', '.join(domain.role_keys)}; per-unit roles end in"
                 f" {', '.join(domain.unit_role_suffixes)} (e.g."
                 f" {pack.units[0].key}{domain.unit_role_suffixes[0]})"
+            )
+        # Whether a `persona` names one of the *engine's* ids cannot be decided
+        # here — no domain publishes its persona ids, and the build refuses an
+        # unknown one by name. What is decidable here is the pack's own
+        # internal consistency, and both of these are fatal at build time, so
+        # naming them in the lint is the difference between an author reading
+        # their mistake and hitting it.
+        if spec.persona in minted and not spec.is_remap():
+            findings.append(
+                f"voices[{role!r}] authors a voice over base {spec.persona!r}, which is"
+                " another role's pack persona — a clone takes its numeric temperament"
+                " from an engine persona, so its base must be one. Name an engine"
+                " persona, or drop the voice fields to make this a plain remap."
+            )
+        elif spec.persona.startswith("PERSONA-PACK-") and spec.persona not in minted:
+            findings.append(
+                f"voices[{role!r}].persona names {spec.persona!r}, which no role in this"
+                " pack defines — a PERSONA-PACK- id exists only for a role whose own"
+                " entry sets voice, phrases, sentence_complexity or technical_depth"
             )
 
     # A pool narrower than the engine's own headcount for this pack recycles a
@@ -477,5 +556,6 @@ def to_recipe(pack: Pack) -> dict[str, Any]:
 
 
 __all__ = [
-    "Pack", "PackCommitment", "PackNamePools", "archetype_of", "lint", "load", "lore_of", "to_recipe",
+    "Pack", "PackCommitment", "PackNamePools", "PackVoice", "archetype_of", "lint", "load",
+    "lore_of", "persona_id_for", "to_recipe",
 ]

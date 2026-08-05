@@ -30,6 +30,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from dataclasses import dataclass
+from typing import Any
 
 from ..ids import Minter
 from ..models import (
@@ -124,6 +125,10 @@ _PERSONAS: tuple[tuple[str, str, str, str, str, float, float, float, tuple[str, 
      ("well capitalised", "prudent")),
 )
 
+#: Which persona each role writes with. Exhaustive over ``_ROLES``, and
+#: ``tests/test_personas.py`` holds it that way — the ``.get(role, default)``
+#: this replaced could not tell a role deliberately left to the default from
+#: one nobody had got round to mapping.
 _ROLE_PERSONA = {
     "ceo": "PERSONA-BANK-EXEC",
     "cfo": "PERSONA-BANK-CFO",
@@ -144,6 +149,61 @@ _ROLE_PERSONA = {
     "svc_desk": "PERSONA-BANK-SVC",
     "svc_incident": "PERSONA-BANK-SVC",
 }
+
+#: The per-unit roles ``generate`` appends, by suffix. Banking mints only unit
+#: MDs; naming the suffix keeps them from depending on the catch-all below,
+#: which is what let retail's equivalent hide a bug for three verticals.
+_UNIT_ROLE_PERSONA = {"_md": "PERSONA-BANK-EXEC"}
+
+#: By function, for a role neither table above names — which means an authored
+#: table (``roles.from_shape`` invents ``role_017``), since the engine's own is
+#: covered. ``roles.review`` already tells an author that a role's function
+#: decides "cost centre and persona"; until this existed it decided only the
+#: cost centre, and a Head of Prudential Reporting nobody had mapped wrote as
+#: an executive.
+_FUNCTION_PERSONA = {
+    "Executive": "PERSONA-BANK-EXEC",
+    "Finance": "PERSONA-REG-REPORTING",
+    "Risk": "PERSONA-PRUDENTIAL",
+    "Treasury": "PERSONA-TREASURY",
+    "Audit": "PERSONA-BANK-AUDIT",
+    "Technology": "PERSONA-RISK-PLATFORM",
+    "ServiceOperations": "PERSONA-BANK-SVC",
+}
+
+#: Last resort: an authored role in a function this engine has never heard of.
+#: The engine's long-standing default, now named and reached only from here.
+_DEFAULT_PERSONA = "PERSONA-BANK-EXEC"
+
+
+def _persona_for(role: str, function: str = "") -> str:
+    """The persona a role writes with — see ``organisation._persona_for``, whose
+    layering and whose argument for a named default over a build-time refusal
+    this mirrors exactly. Banking's fallthrough was narrower than retail's (an
+    unmapped role wrote as an executive rather than as a supermarket buyer) but
+    the same shape: silent, and unable to distinguish intent from omission."""
+    if role in _ROLE_PERSONA:
+        return _ROLE_PERSONA[role]
+    for suffix, persona in _UNIT_ROLE_PERSONA.items():
+        if role.endswith(suffix):
+            return persona
+    return _FUNCTION_PERSONA.get(function, _DEFAULT_PERSONA)
+
+
+def _check_persona_ids(voiced: dict[str, Any], minted: dict[str, str]) -> None:
+    """Refuse a pack ``persona`` naming an id this world does not have — see
+    ``organisation._check_persona_ids``."""
+    engine = frozenset(persona[0] for persona in _PERSONAS)
+    for role, spec in voiced.items():
+        if not spec.persona:
+            continue
+        allowed = engine if role in minted else engine | frozenset(minted.values())
+        if spec.persona not in allowed:
+            raise ValueError(
+                f"voices[{role!r}].persona names {spec.persona!r}, which is not a"
+                f" persona this world has: {', '.join(sorted(allowed))}"
+            )
+
 
 #: Name pools for what a bank runs. Module-owned, like the role table: pushing
 #: these into ``generators/names.py`` would grow a "temporary" file the docs
@@ -204,11 +264,18 @@ def generate(
     risk_cc = minter.next("CC")
 
     # See organisation.py: voiced roles write with pack personas, cloned from
-    # their defaults after the default tuple is built.
+    # their bases after the default tuple is built, while a remap points its
+    # role at a persona that already exists and mints nothing.
+    function_of = {row[0]: row[2] for row in role_table}
+    voiced: dict[str, Any] = {
+        role: spec for role, spec in sorted((voices or {}).items()) if role in function_of
+    }
     pack_voice_ids = {
         role: f"PERSONA-PACK-{role.upper().replace('_', '-')}"
-        for role in (voices or {})
+        for role, spec in voiced.items() if not spec.is_remap()
     }
+    persona_remap = {role: spec.persona for role, spec in voiced.items() if spec.is_remap()}
+    _check_persona_ids(voiced, pack_voice_ids)
 
     def assign(role: str, title: str, function: str):  # type: ignore[no-untyped-def]
         """Banking's one decision per person: MDs sit in their unit and the
@@ -224,7 +291,11 @@ def generate(
             else risk_cc if function in ("Risk", "Technology")
             else None
         )
-        persona = pack_voice_ids.get(role) or _ROLE_PERSONA.get(role, "PERSONA-BANK-EXEC")
+        persona = (
+            pack_voice_ids.get(role)
+            or persona_remap.get(role)
+            or _persona_for(role, function)
+        )
         return business_unit, cost_centre, persona
 
     pools = name_pools or {}
@@ -324,17 +395,18 @@ def generate(
         )
         for persona_id, label, voice, complexity, depth, optimism, risk, political, phrases in _PERSONAS
     )
-    if voices:
+    if pack_voice_ids:
         by_id = {p.id: p for p in personas}
         clones = []
-        for role, spec in sorted(voices.items()):
-            if role not in role_ids:
-                continue  # linted upstream; an unknown role must not orphan a persona
-            base = by_id[_ROLE_PERSONA.get(role, "PERSONA-BANK-EXEC")]
+        for role, persona_id in pack_voice_ids.items():
+            spec = voiced[role]
+            base = by_id[spec.persona or _persona_for(role, function_of[role])]
             clones.append(base.model_copy(update={
-                "id": pack_voice_ids[role],
+                "id": persona_id,
                 "label": f"{base.label} ({role})",
                 "voice": spec.voice or base.voice,
+                "sentence_complexity": spec.sentence_complexity or base.sentence_complexity,
+                "technical_depth": spec.technical_depth or base.technical_depth,
                 "favourite_phrases": list(spec.phrases) or list(base.favourite_phrases),
             }))
         personas += tuple(clones)

@@ -104,6 +104,10 @@ _PERSONAS: tuple[tuple[str, str, str, str, str, float, float, float, tuple[str, 
      ("control objective", "we uphold the finding")),
 )
 
+#: Which persona each role writes with. Exhaustive over ``_ROLES``, and
+#: ``tests/test_personas.py`` holds it that way — the ``.get(role, default)``
+#: this replaced could not tell a role deliberately left to the default from
+#: one nobody had got round to mapping.
 _ROLE_PERSONA = {
     "ceo": "PERSONA-INS-EXEC",
     "cfo": "PERSONA-INS-CFO",
@@ -113,6 +117,53 @@ _ROLE_PERSONA = {
     "claims_director": "PERSONA-CLAIMS",
     "audit": "PERSONA-INS-AUDIT",
 }
+
+#: The per-unit roles ``generate`` appends, by suffix — unit MDs only, as in
+#: banking. Named rather than left to the catch-all below for the same reason.
+_UNIT_ROLE_PERSONA = {"_md": "PERSONA-INS-EXEC"}
+
+#: By function, for a role neither table above names. This engine's table is
+#: the thinnest of the three and consults all of it (``roles.SPINE``), so an
+#: authored insurer table is mostly roles this module has never seen — which
+#: makes the function layer here load-bearing rather than theoretical.
+_FUNCTION_PERSONA = {
+    "Executive": "PERSONA-INS-EXEC",
+    "Finance": "PERSONA-INS-CONTROLLER",
+    "Actuarial": "PERSONA-RESERVING-ACTUARY",
+    "Claims": "PERSONA-CLAIMS",
+    "Audit": "PERSONA-INS-AUDIT",
+}
+
+#: Last resort: an authored role in a function this engine has never heard of.
+#: The engine's long-standing default, now named and reached only from here.
+_DEFAULT_PERSONA = "PERSONA-INS-EXEC"
+
+
+def _persona_for(role: str, function: str = "") -> str:
+    """The persona a role writes with — see ``organisation._persona_for`` for
+    the layering and for why an unmapped role is resolved rather than refused."""
+    if role in _ROLE_PERSONA:
+        return _ROLE_PERSONA[role]
+    for suffix, persona in _UNIT_ROLE_PERSONA.items():
+        if role.endswith(suffix):
+            return persona
+    return _FUNCTION_PERSONA.get(function, _DEFAULT_PERSONA)
+
+
+def _check_persona_ids(voiced: dict[str, Any], minted: dict[str, str]) -> None:
+    """Refuse a pack ``persona`` naming an id this world does not have — see
+    ``organisation._check_persona_ids``."""
+    engine = frozenset(persona[0] for persona in _PERSONAS)
+    for role, spec in voiced.items():
+        if not spec.persona:
+            continue
+        allowed = engine if role in minted else engine | frozenset(minted.values())
+        if spec.persona not in allowed:
+            raise ValueError(
+                f"voices[{role!r}].persona names {spec.persona!r}, which is not a"
+                f" persona this world has: {', '.join(sorted(allowed))}"
+            )
+
 
 #: Name pools for what a general insurer runs. Module-owned, like the role
 #: table — see ``banking_org``'s identical comment for why these do not move
@@ -164,10 +215,18 @@ def generate(
     finance_cc = minter.next("CC")
     actuarial_cc = minter.next("CC")
 
+    # See organisation.py: a voiced role writes with a clone of its base, a
+    # remap points its role at a persona that already exists.
+    function_of = {row[0]: row[2] for row in role_table}
+    voiced: dict[str, Any] = {
+        role: spec for role, spec in sorted((voices or {}).items()) if role in function_of
+    }
     pack_voice_ids = {
         role: f"PERSONA-PACK-{role.upper().replace('_', '-')}"
-        for role in (voices or {})
+        for role, spec in voiced.items() if not spec.is_remap()
     }
+    persona_remap = {role: spec.persona for role, spec in voiced.items() if spec.is_remap()}
+    _check_persona_ids(voiced, pack_voice_ids)
 
     def assign(role: str, title: str, function: str):  # type: ignore[no-untyped-def]
         """One decision per person: MDs sit in their unit; cost centres split
@@ -181,7 +240,11 @@ def generate(
             else actuarial_cc if function in ("Actuarial", "Claims")
             else None
         )
-        persona = pack_voice_ids.get(role) or _ROLE_PERSONA.get(role, "PERSONA-INS-EXEC")
+        persona = (
+            pack_voice_ids.get(role)
+            or persona_remap.get(role)
+            or _persona_for(role, function)
+        )
         return business_unit, cost_centre, persona
 
     role_ids, people = mint_people(
@@ -245,17 +308,18 @@ def generate(
         )
         for persona_id, label, voice, complexity, depth, optimism, risk, political, phrases in _PERSONAS
     )
-    if voices:
+    if pack_voice_ids:
         by_id = {p.id: p for p in personas}
         clones = []
-        for role, spec in sorted(voices.items()):
-            if role not in role_ids:
-                continue
-            base = by_id[_ROLE_PERSONA.get(role, "PERSONA-INS-EXEC")]
+        for role, persona_id in pack_voice_ids.items():
+            spec = voiced[role]
+            base = by_id[spec.persona or _persona_for(role, function_of[role])]
             clones.append(base.model_copy(update={
-                "id": pack_voice_ids[role],
+                "id": persona_id,
                 "label": f"{base.label} ({role})",
                 "voice": spec.voice or base.voice,
+                "sentence_complexity": spec.sentence_complexity or base.sentence_complexity,
+                "technical_depth": spec.technical_depth or base.technical_depth,
                 "favourite_phrases": list(spec.phrases) or list(base.favourite_phrases),
             }))
         personas += tuple(clones)
