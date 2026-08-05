@@ -2983,12 +2983,10 @@ def diversity(
     whole corpus at once, the same way `evaluate` always scores the whole
     evaluation set at once.
     """
-    from .compiler.compose import compose, plan_from_ir
-    from .compiler.diversity import Fingerprint, Quotas, check, fingerprint, report
+    from .compiler.diversity import Fingerprint, Quotas, check, report
     from .compiler.diversity import collisions as diversity_collisions
     from .evaluate.index import passages
-    from .render.docx import HANDLES as DOCX_ARTIFACT_TYPES
-    from .render.xlsx import HANDLES as XLSX_ARTIFACT_TYPES
+    from .refine import census
 
     world = _load(corpus)
     if not world.artifact_irs:
@@ -3004,29 +3002,32 @@ def diversity(
             # not two different tracebacks for two ways of having nothing.
             pass
 
-    fingerprints: list[Fingerprint] = []
-    # Kept beside the fingerprints rather than recovered by re-walking the IR:
-    # `collisions()` returns positions, and a position is only useful if it can
-    # be turned back into the artifact an author has to open.
-    fingerprint_ids: list[str] = []
-    for ir in world.artifact_irs:
-        intent = world.artifact_intents.by_id(ir.intent_id)
-        # A workbook composes with fmt="xlsx" — its lineage sheet is xlsx-only, so
-        # composing it as "docx" raises `ValueError` about a component that does
-        # not fit. Every other handled type composes with fmt="docx". Anything
-        # neither renderer claims (a Jira, Confluence, or ServiceNow bundle) is a
-        # record projection rather than a component composition (see
-        # `docs/artifact-compiler.md` §9.5) and has no shape to fingerprint — the
-        # same split `tests/test_diversity.py`'s own regression fixture draws.
-        if intent.artifact_type in XLSX_ARTIFACT_TYPES:
-            fmt = "xlsx"
-        elif intent.artifact_type in DOCX_ARTIFACT_TYPES:
-            fmt = "docx"
-        else:
-            continue
-        plan = plan_from_ir(ir, artifact_type=intent.artifact_type, size_class=intent.size_profile)
-        fingerprints.append(fingerprint(compose(plan, fmt=fmt)))
-        fingerprint_ids.append(ir.id)
+    # One walk, shared with `refine.measure`, rather than the near-copy this
+    # command used to hold. The two have to agree on which artifacts are in the
+    # census — `refine` targets what `diversity` reports — and holding the walk
+    # twice was how this command came to crash on a corpus `refine` could still
+    # read, and vice versa.
+    shapes = census(world)
+    fingerprints: list[Fingerprint] = list(shapes.fingerprints)
+    fingerprint_ids: list[str] = list(shapes.artifact_ids)
+
+    if shapes.uncomposable:
+        # Printed before the report, not after, and outside the `if
+        # fingerprints` branch: this is the denominator. A reader who sees
+        # "8 distinct shape(s)" without first being told the census skipped
+        # three artifacts has been given a number over a subset and no way to
+        # know it. Printed to stderr and *not* an exit code — nothing here is a
+        # failure of this command, and a corpus with an unsatisfiable plan is
+        # still a corpus worth reporting on.
+        err.print(
+            f"[yellow]![/yellow] {len(shapes.uncomposable)} artifact(s) have no"
+            " composable shape and are not in the census below"
+        )
+        for artifact_id, artifact_type, code, detail in shapes.uncomposable[:10]:
+            err.print(f"  [yellow]{code}[/yellow] {artifact_id} ({artifact_type}): {escape(detail)}")
+        if len(shapes.uncomposable) > 10:
+            err.print(f"  [dim]+{len(shapes.uncomposable) - 10} more[/dim]")
+        err.print("")
 
     if not fingerprints:
         console.print("[green]✓[/green] nothing compilable to fingerprint")

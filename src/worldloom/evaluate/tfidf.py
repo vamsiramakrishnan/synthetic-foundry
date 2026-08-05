@@ -32,7 +32,9 @@ argument needs the *only* difference between them to be the ranking math.
 
 from __future__ import annotations
 
+import heapq
 import math
+from array import array
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -47,12 +49,22 @@ class TfIdf:
     — `score.py` and the CLI hold a retriever behind one name, and the only
     thing that should distinguish `--retriever bm25` from `--retriever tfidf` is
     which class gets constructed.
+
+    Inverted for the same reason `Bm25` is, and with the same bit-identity
+    obligation — see that class's docstring for the argument in full. The one
+    difference worth stating here is what a posting can carry: BM25's per-term
+    contribution to a document is fully determined at build time, so its
+    postings hold finished numbers, whereas a cosine's contribution is
+    ``query_weight × document_weight`` and only half of that product exists
+    before a query arrives. So these postings hold the document's own term
+    weight and the query weight is applied at query time — the same
+    multiplication the scan version did, moved rather than removed.
     """
 
     documents: list[str]
-    _vectors: list[dict[str, float]] = field(default_factory=list)
     _norms: list[float] = field(default_factory=list)
     _idf: dict[str, float] = field(default_factory=dict)
+    _postings: dict[str, tuple[array, array]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         term_counts = [Counter(tokens(document)) for document in self.documents]
@@ -74,9 +86,10 @@ class TfIdf:
             for term, df in document_frequency.items()
         }
 
-        vectors: list[dict[str, float]] = []
         norms: list[float] = []
-        for counts in term_counts:
+        indices: dict[str, array] = {}
+        weights: dict[str, array] = {}
+        for index, counts in enumerate(term_counts):
             vector = {
                 # `1 + log(tf)`: the "l" (logarithmic) weighting from SMART's ltc
                 # scheme. A term's fifth occurrence adds much less than its
@@ -86,37 +99,82 @@ class TfIdf:
                 term: (1 + math.log(frequency)) * self._idf[term]
                 for term, frequency in counts.items()
             }
-            vectors.append(vector)
             norms.append(math.sqrt(sum(weight * weight for weight in vector.values())))
-        self._vectors = vectors
+            # The norm is computed from the document's whole vector before the
+            # vector is transposed away, because it is a property of the
+            # document and there is no cheap way back to it from the postings.
+            for term, weight in vector.items():
+                if term not in indices:
+                    indices[term] = array("i")
+                    weights[term] = array("d")
+                indices[term].append(index)
+                weights[term].append(weight)
         self._norms = norms
+        # Ascending document order, from walking the documents in order — no
+        # sort, and nothing here iterates a set.
+        self._postings = {term: (indices[term], weights[term]) for term in indices}
 
-    def scores(self, query: str) -> list[float]:
-        """Cosine similarity between *query* and each document, in document order."""
+    def _query_vector(self, query: str) -> tuple[dict[str, float], float]:
+        """The query as a weighted vector and its norm, exactly as the scan
+        version built it — including the insertion order, which is the order
+        the dot products below accumulate in and therefore part of the answer."""
         query_counts = Counter(tokens(query))
         query_vector = {
             term: (1 + math.log(frequency)) * self._idf[term]
             for term, frequency in query_counts.items()
             if term in self._idf  # a query term never seen in the corpus has no idf and no signal
         }
-        query_norm = math.sqrt(sum(weight * weight for weight in query_vector.values()))
+        return query_vector, math.sqrt(sum(weight * weight for weight in query_vector.values()))
 
-        out = []
-        for vector, norm in zip(self._vectors, self._norms):
-            if not query_norm or not norm:
-                out.append(0.0)
+    def scores(self, query: str) -> list[float]:
+        """Cosine similarity between *query* and each document, in document order."""
+        query_vector, query_norm = self._query_vector(query)
+        out = [0.0] * len(self._norms)
+        if not query_norm:
+            return out
+        # Each document accumulates its dot product over the query's terms in
+        # `query_vector` order — the same order the per-document scan used, so
+        # the same double. Terms the document lacks are skipped rather than
+        # added as `weight * 0.0`; every weight here is strictly positive (idf
+        # is floored at 1 above and `1 + log(tf)` at 1), so no partial sum is
+        # ever negative zero and dropping the zeros is exact.
+        for term, weight in query_vector.items():
+            posting = self._postings.get(term)
+            if posting is None:
                 continue
-            dot = sum(weight * vector.get(term, 0.0) for term, weight in query_vector.items())
-            out.append(dot / (query_norm * norm))
-        return out
+            for index, document_weight in zip(*posting):
+                out[index] += weight * document_weight
+        return [
+            (dot / (query_norm * norm)) if norm else 0.0
+            for dot, norm in zip(out, self._norms)
+        ]
 
     def rank(self, query: str, *, limit: int) -> list[tuple[int, float]]:
         """The *limit* best documents as ``(index, score)``, best first.
 
         Same tie-break as `Bm25.rank`: ties break on index so a run is
         reproducible rather than depending on Python's sort stability plus
-        floating-point coincidence.
+        floating-point coincidence. And the same sparse accumulate plus heap,
+        for the same reason — see `Bm25.rank`.
         """
-        scored = list(enumerate(self.scores(query)))
-        scored.sort(key=lambda pair: (-pair[1], pair[0]))
-        return [pair for pair in scored[:limit] if pair[1] > 0.0]
+        query_vector, query_norm = self._query_vector(query)
+        if not query_norm:
+            return []
+        dots: dict[int, float] = {}
+        for term, weight in query_vector.items():
+            posting = self._postings.get(term)
+            if posting is None:
+                continue
+            for index, document_weight in zip(*posting):
+                dots[index] = dots.get(index, 0.0) + weight * document_weight
+        norms = self._norms
+        candidates = [
+            (-(dot / (query_norm * norms[index])), index)
+            for index, dot in dots.items()
+            if norms[index]
+        ]
+        return [
+            (index, -negated)
+            for negated, index in heapq.nsmallest(limit, candidates)
+            if -negated > 0.0
+        ]

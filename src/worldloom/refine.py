@@ -111,6 +111,17 @@ class Measurement:
     artifacts: int
     distinct_shapes: int
     shape_collisions: tuple[tuple[str, tuple[int, ...]], ...]
+    uncomposable: tuple[tuple[str, str, str, str], ...] = ()
+    """``(intent_id, artifact_type, code, detail)`` for artifacts whose plan the
+    compiler cannot satisfy, and which therefore have no shape to fingerprint.
+
+    Carried rather than raised. `artifacts` and `distinct_shapes` are counts over
+    what *could* be fingerprinted, so a corpus with unsatisfiable plans would
+    otherwise report a shape census that quietly covered a subset — and the loop
+    would compare this round's census against last round's over two different
+    subsets without either one saying so. Empty on a corpus with no such
+    artifact, which is every corpus this repository ships except one built with
+    ``--distractors``."""
 
     @property
     def duplicate_rate(self) -> float:
@@ -146,14 +157,25 @@ class Measurement:
                 {"digest": digest, "count": len(members)}
                 for digest, members in self.shape_collisions
             ],
+            "uncomposable": [
+                {"artifact_id": intent_id, "artifact_type": artifact_type,
+                 "code": code, "detail": detail}
+                for intent_id, artifact_type, code, detail in self.uncomposable
+            ],
         }
 
     def __str__(self) -> str:
-        return (
+        line = (
             f"Repetition — {self.repeated_passages} of {self.passages} passage(s) "
             f"in {len(self.clusters)} duplicate group(s); "
             f"{self.distinct_shapes} distinct shape(s) across {self.artifacts} artifact(s)"
         )
+        if self.uncomposable:
+            # Appended to the same line rather than left to `as_dict`: the shape
+            # census above is over `self.artifacts`, and a reader who is not told
+            # the denominator excludes something will read it as the whole corpus.
+            line += f" ({len(self.uncomposable)} more have no composable shape)"
+        return line
 
 
 def measure(world: World) -> Measurement:
@@ -170,37 +192,80 @@ def measure(world: World) -> Measurement:
     pairs = similarity.near_duplicate_pairs(sets, NEAR_DUPLICATE_THRESHOLD)
     clusters = similarity.clusters(pairs, len(pool))
 
-    fingerprints = _fingerprints(world)
-    collisions = diversity_module.collisions(fingerprints)
-    distinct = len({fp.digest() for fp in fingerprints})
+    shapes = census(world)
+    collisions = diversity_module.collisions(list(shapes.fingerprints))
+    distinct = len({fp.digest() for fp in shapes.fingerprints})
 
     return Measurement(
         passages=len(pool),
         duplicate_pairs=len(pairs),
         clusters=clusters,
         pool=pool,
-        artifacts=len(fingerprints),
+        artifacts=len(shapes.fingerprints),
         distinct_shapes=distinct,
         shape_collisions=collisions,
+        uncomposable=shapes.uncomposable,
     )
 
 
-def _fingerprints(world: World) -> list[diversity_module.Fingerprint]:
-    """Structural fingerprints for every compilable artifact.
+@dataclass(frozen=True)
+class ShapeCensus:
+    """Every artifact's structural shape, and every artifact that has none.
+
+    The two lists are the point. A shape census that reported only the shapes it
+    found would be a census over a silently-chosen subset, and the number a
+    reader takes from it — "eight distinct shapes across thirty-five artifacts"
+    — would be wrong in the denominator rather than merely incomplete.
+    """
+
+    fingerprints: tuple[diversity_module.Fingerprint, ...]
+    artifact_ids: tuple[str, ...]
+    """Parallel to ``fingerprints``. Kept beside them rather than recovered by
+    re-walking the IR, because `diversity.collisions` returns *positions* and a
+    position is only useful if it can be turned back into the artifact an author
+    has to open."""
+    uncomposable: tuple[tuple[str, str, str, str], ...]
+    """``(artifact_id, artifact_type, code, detail)``, in corpus order."""
+
+
+def census(world: World) -> ShapeCensus:
+    """Structural fingerprints for every compilable artifact, and what refused.
 
     Anything neither the workbook nor the document renderer claims is a record
     projection rather than a component composition and has no shape to
-    fingerprint — the same split ``worldloom diversity`` draws, duplicated here
-    rather than imported from the CLI because a library must not depend on its
-    own front end.
+    fingerprint — the same split ``worldloom diversity`` draws.
+
+    Public, and `cli.py`'s `diversity` calls it, where the two used to hold
+    separate copies of this walk on the stated principle that a library must not
+    depend on its own front end. That principle is intact — the dependency still
+    runs one way — but the duplication was not free: the CLI copy and this one
+    have to agree on which artifacts are in the census for `refine`'s
+    measurements to mean anything next to `diversity`'s report, and they now
+    additionally have to agree on how an unsatisfiable plan is *counted*. Two
+    copies of that were how one command could crash on a corpus while the other
+    reported on it.
+
+    Returns the failures rather than raising them; see `compose.try_compose` for
+    why a survey is the caller shape that needs it.
     """
-    from .compiler.compose import compose, plan_from_ir
+    from .compiler.compose import Composition, plan_from_ir, try_compose
     from .render.docx import HANDLES as DOCX_TYPES
     from .render.xlsx import HANDLES as XLSX_TYPES
 
     out: list[diversity_module.Fingerprint] = []
+    ids: list[str] = []
+    refused: list[tuple[str, str, str, str]] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
+        # A workbook composes with fmt="xlsx" — its lineage sheet is xlsx-only,
+        # so composing it as "docx" refuses on a component that does not fit.
+        # Every other handled type composes with fmt="docx". Anything neither
+        # renderer claims (a Jira, Confluence, or ServiceNow bundle) is a record
+        # projection rather than a component composition (see
+        # `docs/artifact-compiler.md` §9.5) and has no shape to fingerprint —
+        # the same split `tests/test_diversity.py`'s own regression fixture
+        # draws. Not counted as `uncomposable` either: it is not a defect, it is
+        # a kind of artifact this census has nothing to say about.
         if intent.artifact_type in XLSX_TYPES:
             fmt = "xlsx"
         elif intent.artifact_type in DOCX_TYPES:
@@ -210,8 +275,17 @@ def _fingerprints(world: World) -> list[diversity_module.Fingerprint]:
         plan = plan_from_ir(
             ir, artifact_type=intent.artifact_type, size_class=intent.size_profile
         )
-        out.append(diversity_module.fingerprint(compose(plan, fmt=fmt)))
-    return out
+        composed = try_compose(plan, fmt=fmt)
+        if isinstance(composed, Composition):
+            out.append(diversity_module.fingerprint(composed))
+            ids.append(ir.id)
+        else:
+            # `ir.id`, not `composed.intent_id`: the plan's `intent_id` is the
+            # intent's, and a caller told an artifact is unfingerprintable needs
+            # the id it can go and open. They coincide today and are not required
+            # to.
+            refused.append((ir.id, intent.artifact_type, composed.code, composed.detail))
+    return ShapeCensus(tuple(out), tuple(ids), tuple(refused))
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +491,9 @@ __all__ = [
     "Measurement",
     "PROGRESS_FLOOR",
     "REWRITE_CEILING",
+    "ShapeCensus",
     "Target",
+    "census",
     "judge",
     "measure",
     "plateaued",

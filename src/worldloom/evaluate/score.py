@@ -201,28 +201,55 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
     index = index_cls([passage.text for passage in pool])
     cases = list(world.evaluations)
 
+    # Rank every case once. This used to happen twice — `rank(question,
+    # limit=1)` in the calibration pass below and `rank(question, limit=k)` in
+    # the grading loop — which is the same accumulation over the same postings
+    # for the same query, done again to read one number off the front of it. On
+    # a 96-period corpus that was half of the command's whole cost.
+    #
+    # The calibration is unchanged, not approximated: `rank` returns
+    # best-score-first, and a top-1 call agrees with a top-k call on the top
+    # element for every k >= 1 — including when the top score is zero, where
+    # both return an empty list because the `> 0.0` filter is applied per pair.
+    ranked_by_case = [index.rank(case.question, limit=k) for case in cases]
+
     # Calibrate the abstention threshold on the answerable questions, so it
     # reflects this corpus rather than a number chosen in advance.
     tops = []
-    for case in cases:
+    for case, ranked in zip(cases, ranked_by_case):
         if case.expects_abstention:
             continue
-        ranked = index.rank(case.question, limit=1)
         if ranked:
             tops.append(ranked[0][1])
     tops.sort()
     median = tops[len(tops) // 2] if tops else 0.0
     floor = median * ABSTENTION_FRACTION
 
-    # Every fact any passage carries. Computed once, before the loop, because
+    # Which passages carry which fact. Computed once, before the loop, because
     # it is a property of the corpus rather than of a case — and because asking
     # it per case over the whole pool is the quadratic shape `similarity.py`
-    # exists to avoid.
-    carried_anywhere = {fact for passage in pool for fact in passage.fact_ids}
+    # exists to avoid. The authority branch below asked exactly that question,
+    # `[p for p in pool if set(case.expected_fact_ids) & p.fact_ids]`, once per
+    # case — and rebuilt the expected-fact set once per *passage*, since the
+    # `set(...)` sits inside the comprehension's condition.
+    #
+    # Each fact's positions come out ascending without a sort because the loop
+    # walks the pool in order; the inner iteration is over a frozenset and its
+    # order reaches nothing, which is the property that matters here — the only
+    # readings taken below are a maximum and an emptiness test, neither of which
+    # can see the order it was given.
+    passages_by_fact: dict[str, list[int]] = {}
+    for position, passage in enumerate(pool):
+        for fact_id in passage.fact_ids:
+            passages_by_fact.setdefault(fact_id, []).append(position)
+
+    # Every fact any passage carries — the key set of the index above, which is
+    # the same set the previous comprehension built and one fewer pass over the
+    # pool to build it.
+    carried_anywhere = set(passages_by_fact)
 
     card = Scorecard(k=k, retriever=retriever)
-    for case in cases:
-        ranked = index.rank(case.question, limit=k)
+    for case, ranked in zip(cases, ranked_by_case):
         found = [pool[position] for position, _ in ranked]
         best = ranked[0][1] if ranked else 0.0
 
@@ -253,7 +280,18 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
                 detail = "top hit predates the cut-off and carries the fact"
 
         elif case.evaluation_type is EvaluationType.AUTHORITY_RESOLUTION:
-            carrying = [p for p in pool if set(case.expected_fact_ids) & p.fact_ids]
+            # The authority ranks of every passage carrying any expected fact,
+            # read off the index instead of re-scanning the pool. A passage
+            # carrying two of the expected facts appears twice here where the
+            # old list held it once; that is invisible to both readings taken
+            # from it — `max` of a multiset is the `max` of its set, and a
+            # multiset is empty exactly when its set is — and deduplicating
+            # would cost a pass to produce an identical answer.
+            carrying = [
+                pool[position].authority_rank
+                for fact_id in case.expected_fact_ids
+                for position in passages_by_fact.get(fact_id, ())
+            ]
             if not carrying or not found:
                 passed, detail = False, "no passage carries the expected fact"
             else:
@@ -265,7 +303,7 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
                 # scored as authority resolution while carrying none of the
                 # answer. Resolving authority means surfacing the document the
                 # answer actually rests on, at the standing the answer needs.
-                best_rank = max(p.authority_rank for p in carrying)
+                best_rank = max(carrying)
                 top = found[0]
                 answers = bool(set(case.expected_fact_ids) & top.fact_ids)
                 passed = top.authority_rank >= best_rank and answers

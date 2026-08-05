@@ -13,12 +13,21 @@ Two failure modes are treated differently on purpose:
 * A plan cannot be satisfied at all — a required beat has no fitting component,
   or the artifact is over budget even after every optional beat is dropped. Both
   are defects in the plan, not something this module can paper over, so both
-  raise ``ValueError`` naming the shortfall.
+  raise `CompositionError` naming the shortfall.
 * The resulting sequence is not grammatical. That is not this module's call to
   make alone: ``grammar.check`` runs and its violations are carried on the
   returned ``Composition`` rather than raised, so a caller can inspect every
   problem at once and decide whether an ungrammatical draft is worth showing to
   a narrator anyway.
+
+There is a third caller shape neither of those serves, and `try_compose` exists
+for it: a command **surveying a whole corpus** — `worldloom diversity`,
+`refine.measure` — where one unsatisfiable plan among thirty-five is a finding
+about that artifact and not a reason to refuse to report on the other
+thirty-four. Raising is right for a caller composing one artifact it intends to
+render; it is wrong for a caller counting shapes, and for a while it meant
+`diversity` and `refine --check` exited with a traceback on any corpus built
+with ``--distractors``. See `try_compose`.
 """
 
 from __future__ import annotations
@@ -67,6 +76,48 @@ _COMPONENT_CAP: dict[SizeClass, int] = {
     "medium": 7,
     "long": 12,
 }
+
+
+class CompositionError(ValueError):
+    """A plan this module cannot satisfy, and which part of it could not be met.
+
+    A `ValueError` subclass rather than a new exception hierarchy: every caller
+    that already wrote ``except ValueError`` around `compose` — `cli.py`'s
+    `diversity`, the pptx and pdf renderers, the compiler's own tests — keeps
+    working unchanged, and gains the structured fields only if it asks for them.
+
+    The fields exist because the message alone is not something a surveying
+    caller can group, count or sort by. `worldloom diversity` on a corpus with
+    three unsatisfiable artifacts should be able to say *what kind* of
+    unsatisfiable, and "read the sentence" is not an answer at eleven thousand
+    artifacts.
+    """
+
+    #: ``no_fitting_component`` — a required beat's ``semantic_role`` has no
+    #: component in this format at this density and row count. Almost always a
+    #: hole in `components.py` rather than anything about the artifact; see
+    #: `audit.role_row_coverage_gap`, which finds them statically.
+    #:
+    #: ``over_budget`` — the artifact's required beats outnumber the component
+    #: cap for its size class, with no optional beat left to shed. Almost always
+    #: the opposite: nothing is missing from the registry, the artifact simply
+    #: is not the size it says it is.
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str,
+        intent_id: str,
+        artifact_type: str,
+        fmt: str,
+        detail: str,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.intent_id = intent_id
+        self.artifact_type = artifact_type
+        self.fmt = fmt
+        self.detail = detail
 
 
 @dataclass(frozen=True)
@@ -182,10 +233,18 @@ def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composit
             # to omit it, not a reason to fail the whole artifact.
             dropped.append(beat.key)
         else:
-            raise ValueError(
+            raise CompositionError(
                 f"{plan.artifact_type} ({plan.intent_id}): required beat {beat.key!r} "
                 f"(role {beat.semantic_role!r}) has no component that fits format "
-                f"{fmt!r} at density {density} with {rows} row(s) of evidence"
+                f"{fmt!r} at density {density} with {rows} row(s) of evidence",
+                code="no_fitting_component",
+                intent_id=plan.intent_id,
+                artifact_type=plan.artifact_type,
+                fmt=fmt,
+                detail=(
+                    f"required beat {beat.key!r} (role {beat.semantic_role!r}) has no "
+                    f"component in {fmt} at density {density} with {rows} row(s)"
+                ),
             )
 
     # -- 2. the size budget --------------------------------------------------
@@ -206,10 +265,32 @@ def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composit
             # The shortfall is against *required* beats — dropping one of those
             # would silently produce a document missing part of its argument,
             # which is editing, not composing. Say so instead.
-            raise ValueError(
+            #
+            # Deliberately *not* fixed by widening the cap, which is the tempting
+            # reading when a real corpus trips it. The case that surfaced this is
+            # `--distractors`: `generators/distractors.py` mints a stale earlier
+            # draft of an `incident_rca` and labels it ``size_profile="small"``,
+            # while `documents.py` resolves every `incident_rca` — draft or final
+            # — to the same six required sections. Six beats against a cap of
+            # four. Raising ``small`` to six would make it mean what ``long``
+            # means (see `_COMPONENT_CAP`, whose bands are set from the outlines
+            # `documents.py` actually ships), so the one honest statement in the
+            # system would be deleted to silence it. The contradiction is between
+            # the size *label* and the artifact type, and this is the only place
+            # that holds both facts and can therefore name it.
+            raise CompositionError(
                 f"{plan.artifact_type} ({plan.intent_id}): over budget by "
                 f"{over - len(to_drop)} required component(s) for size class "
-                f"{plan.size_class!r} (cap {cap}) even after dropping every optional beat"
+                f"{plan.size_class!r} (cap {cap}) even after dropping every optional beat",
+                code="over_budget",
+                intent_id=plan.intent_id,
+                artifact_type=plan.artifact_type,
+                fmt=fmt,
+                detail=(
+                    f"size class {plan.size_class!r} caps this artifact at {cap} "
+                    f"component(s), but its outline resolves to {len(plan.beats)} beat(s), "
+                    f"{sum(1 for b, _ in selected if not b.optional)} of them required"
+                ),
             )
         # Reported in plan order, not drop-decision order, so `dropped` reads as
         # a scan of the artifact rather than a ranking nobody asked to see.
@@ -238,6 +319,37 @@ def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composit
         dropped=tuple(dropped),
         violations=violations,
     )
+
+
+def try_compose(
+    plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None
+) -> Composition | CompositionError:
+    """`compose`, for a caller surveying many artifacts rather than making one.
+
+    Returns the `CompositionError` instead of raising it. That is the entire
+    difference, and it is not a convenience — it is the difference between a
+    report and a crash. `worldloom diversity` and `refine.measure` walk every
+    artifact in a corpus to count shapes; one unsatisfiable plan among them is a
+    finding about that artifact, and refusing to report on the rest because of
+    it is a strictly worse answer than reporting on the rest and naming the one.
+    Measured: at thirty-five artifacts, a single stale-draft distractor took
+    `diversity` down with a traceback; on the cheapest growth path there is
+    (2,186 artifacts in 18.8s with the fact count unchanged) it took down the
+    whole measure-target-rewrite-gate loop those commands exist to close.
+
+    `compose` keeps raising, and callers that are about to *render* the thing
+    they composed should keep calling it. A renderer with no components cannot
+    write a file, so for them an unsatisfiable plan really is the end of the
+    call; only a caller that is counting can carry on past one.
+
+    The returned error is a value, not a swallowed exception: it carries
+    ``code``, ``intent_id``, ``artifact_type`` and ``detail``, so a survey can
+    group thousands of them by kind instead of printing thousands of sentences.
+    """
+    try:
+        return compose(plan, fmt=fmt, rng=rng)
+    except CompositionError as error:
+        return error
 
 
 # ---------------------------------------------------------------------------
@@ -394,7 +506,7 @@ def plan_for(
     )
 
 
-__all__ = ["Composition", "compose", "plan_for"]
+__all__ = ["Composition", "CompositionError", "compose", "plan_for", "try_compose"]
 
 
 def plan_from_ir(

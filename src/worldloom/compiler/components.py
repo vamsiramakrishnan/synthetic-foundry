@@ -381,12 +381,50 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         max_rows=1,
     ),
     _spec(
-        "xlsx.report_sheet", "evidence summary explain_change comparison", "xlsx",
+        "xlsx.report_sheet", "evidence summary explain_change comparison position decision", "xlsx",
         purpose=(
             "One sheet of the workbook's own reporting hierarchy, already a table before "
             "this component ever sees it — the sheet as it stands, not a paragraph "
             "pretending to be one."
         ),
+        # `position` and `decision` were added after every banking and every
+        # insurance corpus was found to crash `worldloom diversity` outright:
+        # `capital_return`'s "Capital position" sheet and
+        # `reserve_triangle_workbook`'s "Book position" sheet are `position`
+        # beats carrying zero evidence rows, and the only xlsx-capable
+        # `position` component was `finance.kpi_grid`, which floors at eight.
+        # `capital_return`'s "Basis of restatement" is a `decision` beat and
+        # **no** component in this registry could be spelled in xlsx at all —
+        # `mgmt.decision_panel` and `mgmt.options_matrix` are both prose-format
+        # only. So a whole vertical's workbooks were unfingerprintable.
+        #
+        # Added here rather than as new atoms because a new atom would be this
+        # one wearing a different name, which is the failure `core.narrative`'s
+        # note at the end of this tuple warns about. This component's identity
+        # is *that it is a sheet of this workbook*; which narrative role the
+        # sheet plays is the beat's business. A capital-position sheet and a
+        # variance-drivers sheet are the same kind of object with different
+        # contents, and giving them separate atoms would say otherwise.
+        #
+        # Two neighbours to check, because registry order is first refusal and
+        # this atom is declared before both. For `decision` there is no
+        # interaction at all: nothing else reaches xlsx. For `position` this now
+        # precedes `finance.kpi_grid` (declared next) on an xlsx beat carrying
+        # 8-20 rows at density ≥ 0.2 — a combination no corpus in this
+        # repository produces. Every xlsx `position` beat across retail (12 and
+        # 48 periods), banking, insurance and a distractor build carries exactly
+        # zero rows, which is the shape this component's own comment below
+        # explains is normal for a workbook sheet. So nothing that composed
+        # before composes differently now; the change is only that three
+        # artifacts that raised now resolve.
+        #
+        # `chronology` and `management` are deliberately *not* added, though
+        # both have the same zero-row xlsx hole. `core.schedule` already spells
+        # them in xlsx from one row up, so the gap is at exactly zero — a
+        # schedule sheet committing to no dates — and nothing has ever asked
+        # for one. `compiler/audit.py`'s `role_row_coverage_gap` reports those
+        # remaining holes rather than this file guessing atoms ahead of a real
+        # beat, which is the same discipline `core.narrative` records.
         # The fix for the single largest source of `core.narrative` traffic in
         # the measured corpus: every finance-workbook sheet (Summary, Business
         # Unit P&L, Category P&L, Variance Drivers, Incident Impact, Store
