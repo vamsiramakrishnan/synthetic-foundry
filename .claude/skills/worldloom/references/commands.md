@@ -207,6 +207,21 @@ Serve Worldloom's measurements and gates as MCP tools, over stdio.
 | --- | --- |
 | `--tools` | List the tools and exit, without starting a server. |
 
+### `worldloom mosaic`
+
+Build several companies at once, as unlike each other as the rules allow.
+
+| Option | Purpose |
+| --- | --- |
+| `--count`, `-n` | How many worlds. |
+| `--describe` | Print what a mosaic varies, and build nothing. |
+| `--incident` | Force the operational incident. Omit to let each world's seed and lore decide. |
+| `--json` | Emit the plan as data. |
+| `--out`, `-o` | Directory to write the worlds into. |
+| `--period`, `-p` | Reporting period, YYYY-MM. |
+| `--periods` | Consecutive periods per world. |
+| `--seed`, `-s` | Base seed. World N uses seed+N-1. |
+
 ### `worldloom narrate`
 
 Hand prose requests to an agent, and validate what comes back.

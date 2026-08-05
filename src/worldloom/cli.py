@@ -1694,6 +1694,125 @@ def render(
 
 
 @app.command()
+def mosaic(
+    count: int = typer.Option(5, "--count", "-n", help="How many worlds."),
+    seed: int = typer.Option(8128, "--seed", "-s", help="Base seed. World N uses seed+N-1."),
+    out: Path = typer.Option(None, "--out", "-o", help="Directory to write the worlds into."),
+    period: str = typer.Option("2026-03", "--period", "-p", help="Reporting period, YYYY-MM."),
+    periods: int = typer.Option(1, "--periods", help="Consecutive periods per world."),
+    incident: bool = typer.Option(
+        None, "--incident/--no-incident",
+        help="Force the operational incident. Omit to let each world's seed and lore decide.",
+    ),
+    describe: bool = typer.Option(
+        False, "--describe", help="Print what a mosaic varies, and build nothing.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Emit the plan as data."),
+) -> None:
+    """Build several companies at once, as unlike each other as the rules allow.
+
+    Varying the seed does not do this. A seed decides names, figures, and which
+    month the incident lands in; it does not decide headcount, span of control,
+    reporting depth, trading calendar, or how fast an organisation finds the
+    cause of an outage. Five seeds produce one company with different names on
+    the same twenty-three people — which is a fine corpus and a poor dataset,
+    because a model evaluated against it has seen one enterprise five times.
+
+    Candidates are covered with a low-discrepancy sequence rather than drawn at
+    random (random points clump, and a clump is a company shape the tool never
+    produces), filtered to the ones that can actually be built, and then the
+    furthest apart are chosen by farthest-point traversal. Deterministic: the
+    same request gives the same mosaic, and each world carries a recipe that
+    rebuilds it on its own.
+
+    `--describe` prints the axes without building anything, which is the right
+    first call — deciding whether five worlds are worth the wait should not
+    require generating five worlds.
+    """
+    from . import mosaic as mosaic_module
+
+    if describe:
+        document = mosaic_module.describe()
+        if as_json:
+            typer.echo(json.dumps(document, indent=2))
+            return
+        console.print("[bold]What a mosaic varies[/bold]\n")
+        for axis in document["axes"]:
+            bound = f"{axis['low']:g}–{axis['high']:g}"
+            console.print(f"[bold]{escape(axis['name'])}[/bold] [cyan]{bound}[/cyan]"
+                          + (f" [dim]→ {axis['parameter']}[/dim]" if axis["parameter"] else ""))
+            console.print(f"  [dim]{escape(axis['about'])}[/dim]")
+        console.print(f"\n[dim]calendars: {', '.join(document['calendars'])}[/dim]")
+        return
+
+    try:
+        variants = mosaic_module.field(count, seed=seed)
+    except ValueError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    spread = mosaic_module.spread(variants)
+    if as_json:
+        typer.echo(json.dumps(
+            {"spread": spread, "worlds": [v.as_dict() for v in variants]}, indent=2))
+        if out is None:
+            return
+
+    if out is None:
+        console.print("[bold]The mosaic[/bold] [dim]— nothing written; pass --out to build[/dim]\n")
+        for variant in variants:
+            console.print(f"  [bold]{variant.index}[/bold] seed {variant.seed}"
+                          f"  {escape(variant.summary())}")
+        console.print(
+            f"\n[dim]{spread['distinct_shapes']} distinct shape(s),"
+            f" headcounts {spread['headcounts']}, spans {spread['spans']},"
+            f" {len(spread['calendars'])} calendar(s).[/dim]"
+        )
+        return
+
+    from .retail import RetailWorld
+    from .scenarios import MonthEndClose
+
+    written: list[str] = []
+    for variant in variants:
+        world = RetailWorld(
+            seed=variant.seed,
+            physics=variant.physics,
+            role_table=variant.role_table(),
+            seasonality=variant.seasonality,
+        ).build()
+        for index in range(max(1, periods)):
+            world = world.run(MonthEndClose(
+                period=_step_period(period, index, 1),
+                include_operational_incident=incident,
+                physics=variant.physics,
+                seasonality=variant.seasonality,
+            ))
+        target = out / f"world-{variant.index:02d}"
+        written.append(str(world.export(target, overwrite=True)))
+        report = world.validate()
+        mark = "[green]✓[/green]" if report.ok else "[red]✗[/red]"
+        console.print(f"{mark} [bold]world {variant.index}[/bold] {escape(variant.summary())}"
+                      f" [dim]— {report.checks_run} checks,"
+                      f" {len(report.violations)} violation(s)[/dim]")
+        if not report.ok:
+            for violation in report.violations[:3]:
+                err.print(f"    [yellow]{violation.code}[/yellow] {escape(violation.detail)}")
+
+    (out / "mosaic.json").write_text(
+        json.dumps({"seed": seed, "spread": spread,
+                    "worlds": [v.as_dict() for v in variants]}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    console.print(
+        f"\n[green]✓[/green] {len(written)} world(s) written under [bold]{out}[/bold]"
+        f"\n[dim]{spread['distinct_shapes']} distinct organisation shape(s);"
+        f" headcounts {spread['headcounts']}; {len(spread['calendars'])} calendar(s)."
+        f" The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
+    )
+
+
+@app.command()
 def inspect(
     corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
     facts: bool = typer.Option(False, "--facts", help="List facts."),

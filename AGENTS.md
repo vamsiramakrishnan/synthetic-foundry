@@ -128,6 +128,41 @@ assert.
 
 ---
 
+## Many companies at once
+
+Varying the seed does not give you several enterprises. A seed decides names,
+figures, and which month the incident lands in; it does not decide headcount,
+span of control, reporting depth, trading calendar, or how fast an organisation
+finds the cause of an outage. Five seeds produce **one company with different
+names on the same twenty-three people** — a fine corpus and a poor dataset,
+because a model evaluated against it has seen one enterprise five times.
+
+```bash
+worldloom mosaic --describe              # what varies, building nothing
+worldloom mosaic -n 5                    # the plan, still building nothing
+worldloom mosaic -n 5 --incident --out ./mosaic
+```
+
+Each world lands in `./mosaic/world-NN/` with its own recipe, so any one of them
+rebuilds alone. `mosaic.json` records the plan. Measured on five worlds: five
+distinct organisation shapes, five distinct title sets, mean title overlap 0.72
+against 1.00 for five plain seeds — and every world validates clean.
+
+Candidates are covered with a low-discrepancy sequence rather than drawn at
+random, because random points clump and a clump is a company shape the tool
+never produces. They are filtered to what can actually be built — headcount,
+span and depth are three numbers with two degrees of freedom, so the
+over-determined combinations are discarded rather than rounded into feasibility
+— and then the furthest apart are chosen by farthest-point traversal. That last
+step is worth its cost: measured at 2.5× the minimum separation of simply taking
+the first five candidates.
+
+Deterministic throughout. World *N* uses `seed + N - 1`, so a mosaic's third
+world is reproducible without building the first two, and a smaller mosaic is a
+prefix of a larger one.
+
+---
+
 ## Deriving the physics, optionally
 
 A pack supplies *values* — this unit's share, that category's name. The ranges

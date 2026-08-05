@@ -58,6 +58,17 @@ existed.
 the number a service declares and the position it actually occupies cannot
 disagree. That is exactly the invariant the validator enforces on an estate it
 did not generate.
+
+**The construction is the engine's; the words are the vertical's.** Everything
+above is industry-agnostic — nothing about layering, chokepoint placement or
+derived tiers is retail. What *was* retail is the naming, and it lived here as
+four pools and a system table, which is why `--estate` had to be refused for
+every other vertical: a bank whose landscape is called `click-collect-api` is
+worse than a bank with no landscape. The pools now live in
+``worldloom.landscape`` as a named, validated ``Landscape`` a pack or an engine
+picks, this module takes one as an argument, and its default is the retail
+vocabulary extracted verbatim — so an un-overridden build is the same bytes, not
+close to them.
 """
 
 from __future__ import annotations
@@ -66,6 +77,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 from ..ids import Minter
+from ..landscape import DEFAULT as DEFAULT_LANDSCAPE
+from ..landscape import Landscape
 from ..models import Service, System
 from ..rng import Rng
 
@@ -74,77 +87,28 @@ Layer = Literal["edge", "domain", "platform", "data", "system"]
 #: Layer to depth. A service may depend only on a strictly lower depth, which
 #: is what makes the generated estate acyclic by construction rather than by
 #: inspection.
+#:
+#: Not part of the ``Landscape`` vocabulary, and that is the line between the
+#: two modules: these five strings are this generator's coordinate system, not
+#: anything a reader sees. Nothing prints them — `Service` carries no layer at
+#: all — while the code below reasons about them structurally, building
+#: bottom-up in this order, deriving `criticality_tier` from them, and placing
+#: the gate at ``DEPTH[layer] > DEPTH["platform"]``. A vocabulary free to rename
+#: "platform" would have to move all three, which is the construction that makes
+#: a cycle unconstructible.
 DEPTH: dict[str, int] = {
     "edge": 4, "domain": 3, "platform": 2, "data": 1, "system": 0,
 }
 
-#: Size profiles. Service counts per layer, then systems. Deliberately not
-#: derived from the archetype's headcount: a 15,000-person retailer and a
-#: 15,000-person insurer have very differently shaped estates, and inventing a
-#: ratio that claims otherwise would be a fabricated benchmark of exactly the
-#: kind `stats.py` refuses to print. The profile is the author's statement of
-#: how big the landscape is; the archetype states how big the *business* is.
+#: The engine's own size profiles and chokepoint count, re-exported from the
+#: default vocabulary. Kept as module names because they are what this module
+#: has always published — a caller reading `estate.PROFILES` to list the sizes
+#: `--estate` accepts should not have to learn where they moved to. A landscape
+#: that authors its own is what those callers get when they ask *it*.
 PROFILES: dict[str, dict[str, int]] = {
-    "small":  {"edge": 3, "domain": 5, "platform": 3, "data": 3, "system": 3},
-    "medium": {"edge": 8, "domain": 14, "platform": 6, "data": 8, "system": 6},
-    "large":  {"edge": 18, "domain": 34, "platform": 10, "data": 18, "system": 12},
+    size: dict(counts) for size, counts in DEFAULT_LANDSCAPE.profiles.items()
 }
-
-#: How many platform services are single-provider chokepoints. Two is enough to
-#: make the measure mean something and few enough that the estate does not read
-#: as one giant monolith with leaves.
-CHOKEPOINTS = 2
-
-#: Name parts, per layer. Engine defaults, in the same sense as
-#: `generators/names.py`'s person pools: a pack overriding them is the next
-#: rung, and the pools live here so that "the names a maintainer edits" and
-#: "the names a pack edits" can only ever be one set.
-_EDGE = (
-    "storefront-web", "store-colleague-app", "self-checkout-client", "kiosk-ui",
-    "customer-account-portal", "click-collect-api", "delivery-tracking-web",
-    "loyalty-app", "supplier-portal", "returns-desk-ui", "gift-card-web",
-    "price-check-terminal", "warehouse-handheld", "driver-app", "call-centre-console",
-    "franchise-portal", "b2b-ordering-api", "in-store-signage",
-)
-_DOMAIN = (
-    "pricing-engine", "promotions-engine", "basket-service", "order-orchestrator",
-    "fulfilment-router", "stock-availability", "replenishment-planner",
-    "range-planning", "supplier-onboarding", "payments-gateway", "refunds-service",
-    "loyalty-points", "delivery-slotting", "returns-processing", "invoice-matching",
-    "purchase-order-service", "markdown-optimiser", "space-planning",
-    "labour-scheduling", "shrinkage-analytics", "customer-profile",
-    "recommendation-service", "search-ranking", "tax-calculation",
-    "credit-check-service", "fraud-screening", "warranty-registration",
-    "subscription-billing", "gift-card-ledger", "carbon-reporting",
-    "allergen-lookup", "recipe-service", "store-locator", "wait-time-estimator",
-)
-_PLATFORM = (
-    "identity-provider", "config-service", "event-bus", "feature-flags",
-    "notification-gateway", "audit-log", "secrets-broker", "api-gateway",
-    "job-scheduler", "observability-collector",
-)
-_DATA = (
-    "sales-feed", "stock-movement-feed", "supplier-master-feed", "price-change-feed",
-    "customer-consent-feed", "warehouse-stock-extract", "pos-transaction-stream",
-    "forecast-publisher", "colleague-roster-extract", "gl-journal-extract",
-    "margin-cube-builder", "basket-analytics-pipeline", "waste-reporting-extract",
-    "supplier-invoice-feed", "range-change-feed", "loyalty-event-stream",
-    "delivery-telemetry-feed", "store-footfall-feed",
-)
-_SYSTEMS = (
-    ("Workforce Central", "Rostering, time and attendance for the store estate", "colleague_roster"),
-    ("Vendor Exchange", "Supplier master, contracts and trading terms", "supplier_master"),
-    ("Warehouse Control", "Distribution centre stock and pick management", "warehouse_stock"),
-    ("Transport Desk", "Route planning and delivery execution", "delivery_plan"),
-    ("People Hub", "Employee records, payroll input and org structure", "employee_record"),
-    ("Contact Centre Suite", "Customer contacts, cases and escalations", "customer_case"),
-    ("Range Studio", "Assortment and space planning of record", "range_plan"),
-    ("Treasury Desk", "Cash, banking and settlement positions", "settlement"),
-    ("Property Register", "Leases, sites and store fit-out records", "site_lease"),
-    ("Learning Exchange", "Colleague training records and compliance sign-off", "training_record"),
-    ("Loyalty Core", "Member records, points balances and redemptions", "loyalty_member"),
-    ("Insurance Register", "Group insurance programme and claims register", "insurance_claim"),
-)
+CHOKEPOINTS = DEFAULT_LANDSCAPE.chokepoints
 
 
 @dataclass(frozen=True)
