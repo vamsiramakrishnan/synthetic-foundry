@@ -31,27 +31,53 @@ from .requests import (
     NarrativeRequest,
     Verdict,
     Violation,
+    superseded_for,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
+    from datetime import datetime
+
     from ..models import CanonicalFact
     from ..world import World
 
 #: Stated in every request, so an agent needs no other source for the contract.
+#:
+#: Reworded after five writer agents passed a 182-section narration only by
+#: reading the validator source: the rules as first stated promised less than
+#: the code enforced (the digit rule), described a mechanism they did not name
+#: (the entity rule), and asserted something false of half the facts it covered
+#: (the supersession rule — a status transition is not a wrong belief, and the
+#: flag is now computed against the author's cut-off, see
+#: ``requests.superseded_for``). The rules are the contract; they must state
+#: exactly what the code enforces, or the code is the contract and the rules
+#: are decoration.
 RULES: tuple[str, ...] = (
     "Write only the prose for this one section. No heading, no preamble.",
-    "Every number, date, and amount must appear as a {{fact:ID}} reference using an"
-    " ID from `facts` below. Never write a figure, percentage, or date as digits —"
-    " a restated number is a copy that can drift from the ledger.",
+    "Prose may contain no digit characters at all outside a {{fact:ID}} reference"
+    " — the check is lexical, not semantic. Never write a figure, percentage, or"
+    " date as digits: every number the ledger holds goes in as a reference to an"
+    " ID from `facts` below, and any other number — an ordinal, a count, a"
+    " duration — must be spelled out in words ('the second attempt', 'three"
+    " days') or left out. A restated number is a copy that can drift from the"
+    " ledger.",
     "Every assertion you make must be supported by at least one of the facts below,"
     " and you must list your claims with the fact IDs supporting each.",
     "Do not mention any organisation, person, system, or metric that is not in the"
-    " facts below.",
+    " facts below. The check is mechanical: any run of two or more Capitalised"
+    " Words that is not a name, or part of a name, of this world is rejected — so"
+    " spell entity names exactly as supplied, and do not Title Case ordinary"
+    " phrases.",
     "Facts marked `required: true` must appear.",
     "You know only what the facts below say, as of `knows_as_of`. Do not anticipate"
     " anything discovered later.",
-    "A fact marked `superseded: true` was believed at the time and later proved"
-    " wrong. You may refer to it as a past belief, never as the current position.",
+    "`superseded` is computed against your `knows_as_of`. A fact marked"
+    " `superseded: true` had already been replaced or proved wrong before this"
+    " author wrote: refer to it as a past position — 'it was initially recorded"
+    " as…' — never as the current one. A fact the corpus superseded only *after*"
+    " `knows_as_of` arrives marked `superseded: false`: state it with the"
+    " confidence of the moment, and do not hedge against a future the author"
+    " could not see. Where `purpose` places the writing at a still earlier moment"
+    " in a sequence, the purpose wins.",
     # The rules above are prohibitions. These four are the ones that make prose
     # good rather than merely legal — a section that satisfies every constraint
     # and says nothing is a section that passed validation and failed its job.
@@ -76,6 +102,7 @@ def _fact_payload(
     required: bool,
     subject: str | None = None,
     comparator: str | None = None,
+    cutoff: datetime | None = None,
 ) -> dict[str, Any]:
     return {
         "id": fact.id,
@@ -86,7 +113,12 @@ def _fact_payload(
         "kind": fact.kind,
         "authority": fact.authority.value,
         "valid_from": fact.valid_from.isoformat(),
-        "superseded": fact.is_superseded,
+        # Relative to the author's cut-off, never the corpus's final state.
+        # `fact.is_superseded` here handed a triage-era author `close.status =
+        # delayed` stamped superseded, while the section's purpose demanded
+        # the confidence of the moment — three writers hit the contradiction
+        # and resolved it three different ways. `superseded_for` owns the rule.
+        "superseded": superseded_for(fact, cutoff),
         "required": required,
     }
 
@@ -114,6 +146,7 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
                 required=f in request.required_fact_ids,
                 subject=request.subjects.get(f),
                 comparator=request.comparators.get(f),
+                cutoff=request.temporal_cutoff,
             )
             for f in request.allowed_fact_ids
             if f in facts

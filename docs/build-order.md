@@ -584,6 +584,22 @@ The measured retail coupling, for whichever is chosen:
 ## 7a. Sequence, confirmed
 
 1. **Diversity** (artifact compiler §14.B) — style genomes, layout families, fingerprints and batch quotas, and the plan handshake that lets a model propose structure under grammar validation. The measured baseline it must beat: a 12-period corpus of 120 artifacts carries only **11 distinct section shapes**, and DOCX sizes across 72 files span 38,658–40,618 bytes. Every close pack in the estate is the same document with different numbers.
+
+   *The measurement side is now complete, and the selection side has its
+   missing half.* `compiler.diversity.collisions` names which artifacts share
+   a shape rather than counting how many shapes there were, and
+   `diversity --near-duplicates` reports the same failure one level down, in
+   the prose: passages whose text is near-identical, grouped and attributed,
+   through the exact similarity join in `similarity.py` (which returns
+   precisely the pairs a full pairwise scan would and is fast enough for the
+   §12 Gate 1 corpus, where the pairwise scan was not). On the selection side,
+   `select` was only ever *per artifact* — it spreads the alternatives offered
+   for one document and is silent about the batch, so running it independently
+   across a hundred artifacts is itself a mechanism for producing the 11-shape
+   result. `assign` is the batch-level counterpart, carrying what earlier
+   periods already spent. What remains is the integration this step is really
+   about: wiring `assign` into generation, which moves bytes and therefore
+   needs its own flag and its own gate.
 2. **The second vertical**, per the open question above.
 3. **Extract the industry-pack interface from the two**, never before. A pack API designed against one industry encodes that industry's assumptions in the shape of the abstraction — the same reason there is still no scenario DSL.
 

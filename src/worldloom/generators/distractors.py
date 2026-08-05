@@ -31,17 +31,47 @@ derived personal copy is the next most instructive (near-duplicate confusion),
 and a routine notice is pure volume. When the eligible pool for a family runs
 dry, the remaining budget rolls to the next family rather than erroring — a
 small world simply gets less noise than it asked for.
+
+**The second half of this module is decay rather than volume** (``apply_messiness``,
+graded by ``worldloom.messiness``). A real archive is not only full of documents
+that answer nothing; it is also full of documents that answer *wrongly* — a page
+nobody updated after the figure moved, an email quoting a workbook that has since
+been restated, a runbook whose author left. Those live here rather than in a
+module of their own because every sentence of the contract above applies to them
+unchanged: no new fact, no new entity, no new event; every cited fact is one a
+real document already cites, so grading safety is preserved for exactly the same
+structural reason; and the same eligibility and dating helpers do the work.
+
+What is different, and is the whole reason the family is safe to build, is that
+each one is **recorded**. A distractor needs no explanation because it asserts
+nothing new. An imperfection asserts something the ledger contradicts, so it is
+labelled as an ``IntentionalError`` naming the canonical fact, and
+``validate.intentional`` refuses a label the corpus cannot substantiate. The
+corpus's promise was never that a synthetic enterprise is tidier than a real one
+— it was that no document contradicts the ledger *without the ledger saying so*.
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
+from collections.abc import Mapping
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 from .. import documents
 from ..ids import Minter, id_prefix, is_id
-from ..models import ArtifactIntent, Authority, CanonicalFact, Lifecycle
+from ..models import (
+    ArtifactIntent,
+    Authority,
+    CanonicalFact,
+    ErrorType,
+    IntentionalError,
+    Lifecycle,
+)
 from ..rng import Rng
 from ..world import World
+
+if TYPE_CHECKING:  # pragma: no cover
+    from ..messiness import Messiness
 
 #: Artifact types a "draft" or "personal copy" reading does not fit.
 #:
@@ -444,6 +474,526 @@ def apply(world: World, *, count: int) -> World:
 
 
 # ---------------------------------------------------------------------------
+# Decay — recorded imperfection, graded by `worldloom.messiness`
+# ---------------------------------------------------------------------------
+
+#: Registers a stale document may be re-circulated in, longest lag first.
+#: A stale document has to date *after* the correction it missed, and the only
+#: dial available is the type's own lag (``documents.written_at`` is "newest
+#: cited fact plus a type lag" and nothing here may choose a date by hand — a
+#: chosen date is exactly the copy-of-a-fact this project forbids everywhere
+#: else). Trying the long lags first is therefore trying the constructions most
+#: likely to clear the correction at all; a world whose corrections resolve
+#: faster than eighteen hours falls through to the shorter ones.
+_STALE_REGISTERS: tuple[str, ...] = ("working_note", "knowledge_article", "confluence_page")
+
+#: The same table read the other way, for a document that must date *before* the
+#: correction — it was right when written. Shortest lag first, for the mirrored
+#: reason: the tighter the window between a figure being recorded and being
+#: corrected, the shorter the lag that still fits inside it.
+_QUOTING_REGISTERS: tuple[str, ...] = tuple(reversed(_STALE_REGISTERS))
+
+
+def _corrections(world: World) -> list[tuple[CanonicalFact, CanonicalFact]]:
+    """``(superseded, successor)`` pairs the ledger already records.
+
+    The substrate for both staleness and disagreement, and deliberately *found*
+    rather than manufactured: this module mints no fact, so the only figures it
+    can be wrong about are ones the world corrected on its own. That is what
+    makes every imperfection here explicable from the corpus — the explanation
+    was already there before the imperfection was.
+
+    Both halves are required. A fact with ``valid_to`` set but no successor is a
+    figure that stopped applying rather than one that was corrected, and a
+    document carrying it is out of scope rather than out of date.
+    """
+    by_id = _facts_by_id(world)
+    pairs: list[tuple[CanonicalFact, CanonicalFact]] = []
+    for successor in world._facts:
+        if not successor.supersedes:
+            continue
+        old = by_id.get(successor.supersedes)
+        if old is None or old.valid_to is None:
+            continue
+        pairs.append((old, successor))
+    return sorted(pairs, key=lambda pair: pair[0].id)
+
+
+def _citations(world: World) -> dict[str, list[ArtifactIntent]]:
+    """Fact id → the planned documents that cite it, in id order.
+
+    Id order rather than date order because it is the one total order that does
+    not move when a lag table changes, and every choice made from this table has
+    to be reproducible from the seed alone.
+    """
+    index: dict[str, list[ArtifactIntent]] = {}
+    for intent in sorted(world._artifact_intents, key=lambda i: i.id):
+        for fact_id in intent.required_fact_ids:
+            index.setdefault(fact_id, []).append(intent)
+    return index
+
+
+def _reading(fact: CanonicalFact) -> str:
+    """A fact's value in the form ``validate.intentional`` compares against.
+
+    A measured fact is compared numerically by ``_quantity_matches``, so the
+    string has to parse back to exactly the same float — ``repr`` rather than a
+    formatted figure, because ``f"{x:g}"`` rounds to six significant digits and
+    a seven-digit revenue would then be reported as a canonical mismatch. A
+    textual fact is compared by containment, so its own text is what to state.
+    An early draft of insurance's labelled imperfection tripped this exact check
+    by writing a descriptive sentence instead of the value.
+    """
+    if fact.value is not None:
+        amount = float(fact.value.amount)
+        return str(int(amount)) if amount.is_integer() else repr(amount)
+    return (fact.text_value or "").strip()
+
+
+def _employed_at(world: World, author_id: str, when: datetime) -> bool:
+    """Whether *author_id* was on the roster at *when*.
+
+    Both minting builders borrow their author from the document they attach to,
+    and both then move the *date* — forward past a correction, or back before
+    one. A borrowed voice is therefore not automatically a valid one: a stale
+    page dated a week after its source was written can land after its author
+    left, and ``temporal.author_already_departed`` fails it. That check runs
+    against the rendered manifest rather than the plan, so an in-memory
+    ``world.validate()`` passes and `worldloom render` is where it surfaces —
+    which is exactly how this was found, and why the constraint is enforced at
+    the point the date is chosen rather than hoped for afterwards.
+
+    Boundaries match ``temporal``'s own, strictly: an artifact dated at the
+    instant someone left is refused there, so it is refused here.
+    """
+    person = world.people.get(author_id)
+    if person is None:
+        return False
+    if person.joined is not None and person.joined > when:
+        return False
+    return person.left is None or person.left > when
+
+
+def _probe(source: ArtifactIntent, register: str, cited: list[str]) -> ArtifactIntent:
+    """A throwaway intent, only to ask ``documents.written_at`` what it would date to."""
+    return ArtifactIntent(
+        id="ART-0000",
+        artifact_type=register,
+        domain=source.domain,
+        audience=source.audience,
+        author_id=source.author_id,
+        required_fact_ids=cited,
+        size_profile="small",
+    )
+
+
+def _subset_of(
+    source: ArtifactIntent, old: CanonicalFact, new: CanonicalFact,
+    facts: dict[str, CanonicalFact], rng: Rng,
+) -> list[str]:
+    """*old* plus a seed-chosen handful of what *source* cites alongside it.
+
+    Two filters, and each is load-bearing.
+
+    *No newer than old*, which pins the document's date to ``old.valid_from +
+    lag`` and leaves the register — the only thing actually being chosen — in
+    sole control of where it lands. It also makes it impossible to cite the
+    correction by accident: *new* is newer than *old* by construction, so the
+    filter excludes it with no special case, and a document carrying both a
+    figure and its replacement would be a history rather than an imperfection.
+
+    *No other superseded fact*, so the document is out of date about exactly one
+    thing. Without this a page could carry two corrections and the label would
+    name one of them, leaving a reader unable to tell which claim the corpus was
+    making — and it is not hypothetical: ``validate.imperfection`` caught the
+    weaker version of this rule on the fourth stale page of a three-period retail
+    world, where a second figure recorded and corrected in the same hour passed
+    the date filter alongside its own replacement.
+    """
+    pool = [
+        fact_id
+        for fact_id in source.required_fact_ids
+        if fact_id != old.id
+        and fact_id in facts
+        and facts[fact_id].valid_from <= old.valid_from
+        and not facts[fact_id].is_superseded
+    ]
+    keep = rng.integer(0, min(2, len(pool))) if pool else 0
+    extra = set(rng.sample(pool, keep)) if keep else set()
+    return [fact_id for fact_id in source.required_fact_ids if fact_id == old.id or fact_id in extra]
+
+
+def _anchor(
+    old: CanonicalFact, new: CanonicalFact, cited: list[str], source: ArtifactIntent,
+    world: World, facts: dict[str, CanonicalFact], citations: dict[str, list[ArtifactIntent]],
+    rng: Rng,
+) -> str | None:
+    """A later fact that dates a stale document past the correction it missed.
+
+    Lag alone does not get there. ``documents.written_at`` is the newest cited
+    fact plus a type lag, so a document citing only facts at or before *old*
+    can be at most eighteen hours after it — and an organisation that confirms a
+    cause the same afternoon corrects itself faster than that. The honest way to
+    move the date is to cite something the document really would have carried:
+    one *later* figure, which is what makes it a page that was touched after the
+    correction and still left the old number in place. That is the realistic
+    shape anyway — nobody rewrites a page from scratch, they edit the top of it.
+
+    Three constraints, each guarding something:
+
+    * the anchor must already be cited by a real document, so this pass never
+      becomes the only route to a fact and the grading-safety property the
+      module's docstring claims stays true for the decay family too;
+    * it must not be *new* itself, nor the successor of anything already cited,
+      or the document would carry both a figure and its correction and stop
+      being stale at all (``validate.imperfection`` fails exactly that);
+    * it must not itself be superseded, because a page anchored on a second
+      out-of-date figure muddles which correction the label is about.
+
+    Preference is for facts the source document already cites, then anything in
+    the same domain — a stale finance page anchored on an unrelated technology
+    figure would be strange in a way nothing downstream would catch.
+    """
+    carried = {facts[fact_id].id for fact_id in cited if fact_id in facts}
+    forbidden = {new.id} | {
+        fact.id for fact in world._facts if fact.supersedes in carried
+    }
+
+    def usable(fact_id: str) -> bool:
+        fact = facts.get(fact_id)
+        return (
+            fact is not None
+            and fact_id not in forbidden
+            and fact_id not in carried
+            and not fact.is_superseded
+            and fact.valid_from > new.valid_from
+            and bool(citations.get(fact_id))
+        )
+
+    near = sorted(fact_id for fact_id in source.required_fact_ids if usable(fact_id))
+    if near:
+        return near[rng.integer(0, len(near) - 1)]
+    wider = sorted(
+        fact_id for fact_id, intents in citations.items()
+        if usable(fact_id) and any(intent.domain == source.domain for intent in intents)
+    )
+    if not wider:
+        return None
+    return wider[rng.integer(0, len(wider) - 1)]
+
+
+def _stale_republication(
+    old: CanonicalFact, new: CanonicalFact, sources: list[ArtifactIntent],
+    world: World, facts: dict[str, CanonicalFact],
+    citations: dict[str, list[ArtifactIntent]], minter: Minter, rng: Rng,
+) -> tuple[ArtifactIntent, IntentionalError] | None:
+    """A page written after the figure moved that still carries the old one.
+
+    The one thing that makes this staleness rather than history is the date, and
+    the date is derived: the document has to land *after* ``new.valid_from`` — the
+    instant the corrected figure went on the record — while citing only facts at
+    or before ``old.valid_from``. Nothing is stamped by hand, so
+    ``temporal.cites_future_fact`` has nothing to catch and the reader can
+    recompute the whole argument from the two timestamps.
+
+    Returns ``None`` when no source and register combination can carry it — a
+    corpus whose every later figure is itself superseded, one with no later
+    figure at all, or one where every candidate voice had left by the date the
+    document would have to bear. Each of those simply has no stale page to write,
+    and forcing one would mean choosing a date or inventing an author.
+    """
+    for source in sources:
+        cited = _subset_of(source, old, new, facts, rng)
+        anchor = _anchor(old, new, cited, source, world, facts, citations, rng)
+        if anchor is None:
+            continue
+        cited = [*cited, anchor]
+
+        for register in _STALE_REGISTERS:
+            if register == source.artifact_type:
+                continue
+            at = documents.written_at(_probe(source, register, cited), facts)
+            if at <= new.valid_from or not _employed_at(world, source.author_id, at):
+                continue
+            stale = ArtifactIntent(
+                id=minter.next("ART"),
+                artifact_type=register,
+                domain=source.domain,
+                audience=source.audience,
+                author_id=source.author_id,
+                required_fact_ids=cited,
+                size_profile="small",
+                rationale=(
+                    f"Still in circulation and out of date: written after {new.id} "
+                    f"corrected {old.id}, and carrying the superseded figure anyway. "
+                    "Nothing revises it and nothing supersedes it, which is what makes "
+                    "it a live document rather than an archived draft — the reader has "
+                    "to establish its staleness from its own date, not from a label on "
+                    "its face."
+                ),
+            )
+            return stale, IntentionalError(
+                id=minter.next("ERR"),
+                artifact_id=stale.id,
+                error_type=ErrorType.STALE_STATUS,
+                observed_value=(
+                    f"{old.kind} for {old.subject} is given as {_reading(old)}, which "
+                    f"stopped being the position at {old.valid_to.isoformat()}"
+                ),
+                canonical_value=_reading(new),
+                canonical_fact_id=new.id,
+                note=(
+                    "Deliberate staleness. Establishable without this label: the "
+                    f"document cites {old.id}, which carries a valid_to; {new.id} "
+                    "records what replaced it; and the document's own created_at "
+                    "falls after that. The label says it was meant, not that it "
+                    "happened."
+                ),
+            )
+    return None
+
+
+def _quoting_secondary(
+    old: CanonicalFact, new: CanonicalFact, sources: list[ArtifactIntent],
+    world: World, facts: dict[str, CanonicalFact], minter: Minter, rng: Rng,
+) -> tuple[ArtifactIntent, IntentionalError] | None:
+    """A secondary document quoting a figure that was right when it quoted it.
+
+    The mirror of ``_stale_republication`` and a different defect, which is why
+    both exist: nobody was careless here. The document dates *before* the
+    correction, so its author could not have known, and it is wrong now only
+    because a third document — the one carrying ``new`` — moved on without it.
+    That is the "right in the workbook, wrong in the email quoting it" case, and
+    the corpus states the whole of it structurally:
+
+    * it cites ``old``, which the ledger marks superseded;
+    * it ``derived_from`` the document it quoted, which is what makes it
+      *secondary* rather than a second independent record;
+    * some other document cites ``new``, so there is a live disagreement rather
+      than an orphaned old figure;
+    * its ``created_at`` precedes ``new.valid_from``, which is the exoneration.
+
+    Refused, rather than approximated, when any of those cannot be built. In
+    particular the parent has to have been written first or
+    ``supersession.derives_from_later_artifact`` would fire — correctly, since a
+    document cannot quote one that did not exist.
+    """
+    for source in sources:
+        cited = _subset_of(source, old, new, facts, rng)
+        for register in _QUOTING_REGISTERS:
+            if register == source.artifact_type:
+                continue
+            at = documents.written_at(_probe(source, register, cited), facts)
+            if at >= new.valid_from or not _employed_at(world, source.author_id, at):
+                continue
+            parent = next(
+                (
+                    candidate for candidate in sources
+                    if documents.written_at(candidate, facts) <= at
+                ),
+                None,
+            )
+            if parent is None:
+                continue
+            secondary = ArtifactIntent(
+                id=minter.next("ART"),
+                artifact_type=register,
+                domain=source.domain,
+                audience=source.audience,
+                author_id=source.author_id,
+                required_fact_ids=cited,
+                size_profile="small",
+                derived_from=[parent.id],
+                rationale=(
+                    f"A secondary document quoting {parent.id}. The figure it "
+                    f"carries was the position when it was written and stopped "
+                    f"being so at {new.valid_from.isoformat()}; nobody went back "
+                    "to it. Two documents in circulation that disagree, and the "
+                    "ledger says which is current and why the other is not "
+                    "anybody's fault."
+                ),
+            )
+            return secondary, IntentionalError(
+                id=minter.next("ERR"),
+                artifact_id=secondary.id,
+                error_type=ErrorType.STALE_STATUS,
+                observed_value=(
+                    f"quotes {parent.id} for {old.kind} on {old.subject} as "
+                    f"{_reading(old)}, correct when written at {at.isoformat()}"
+                ),
+                canonical_value=_reading(new),
+                canonical_fact_id=new.id,
+                note=(
+                    "Deliberate disagreement, not deliberate carelessness: this "
+                    f"document predates {new.id}. Establishable from the corpus "
+                    f"alone — it derives from {parent.id}, cites the superseded "
+                    f"{old.id}, and another document carries {new.id}."
+                ),
+            )
+    return None
+
+
+def _orphaned(
+    world: World, facts: dict[str, CanonicalFact], minter: Minter,
+) -> list[IntentionalError]:
+    """Documents whose author has left, with the departure that orphaned them.
+
+    Mints nothing. It does not have to: a world that has run a ``Departure``
+    already contains documents nobody answers for, and the only thing missing
+    was any record that the corpus knew. Manufacturing a departure to create one
+    would be a canonical change — who works here is a scenario's decision, not a
+    post-processing pass's — so this kind is honestly empty on a world where
+    nobody has left, the same graceful degradation ``apply`` uses throughout.
+
+    The departure fact is *found* by subject: a canonical fact about the author
+    that dates from their leaving. That is what a reader follows to establish the
+    orphaning, and it carries the succession, so the label is a pointer to the
+    corpus's own answer rather than a second copy of it.
+    """
+    departures: dict[str, CanonicalFact] = {}
+    for person in sorted(world._people, key=lambda p: p.id):
+        if person.left is None:
+            continue
+        candidates = [
+            fact for fact in world._facts
+            if fact.subject == person.id and fact.valid_from >= person.left
+        ]
+        if candidates:
+            departures[person.id] = min(candidates, key=lambda f: (f.valid_from, f.id))
+
+    already = {
+        error.artifact_id for error in world._intentional_errors
+        if error.error_type is ErrorType.OUTDATED_OWNER
+    }
+    found: list[IntentionalError] = []
+    for intent in sorted(world._artifact_intents, key=lambda i: i.id):
+        departure = departures.get(intent.author_id)
+        if departure is None or intent.id in already:
+            continue
+        # A document written after its author left is a different defect
+        # entirely — `temporal.author_not_employed` catches it — and calling it
+        # an orphan would launder a real incoherence as a deliberate one.
+        if documents.written_at(intent, facts) >= departure.valid_from:
+            continue
+        author = world.people.get(intent.author_id)
+        found.append(
+            IntentionalError(
+                id=minter.next("ERR"),
+                artifact_id=intent.id,
+                error_type=ErrorType.OUTDATED_OWNER,
+                observed_value=(
+                    f"authored by {author.name if author else intent.author_id}"
+                    f" ({author.title if author else 'unknown role'}), who has since"
+                    " left; the document names no successor and was never reissued"
+                ),
+                canonical_value=_reading(departure),
+                canonical_fact_id=departure.id,
+                note=(
+                    "Deliberate orphaning, and nothing was invented to produce it: "
+                    "the author's own record carries a leaving date, and "
+                    f"{departure.id} says who took the work on. The document was "
+                    "left where it was."
+                ),
+            )
+        )
+    return found
+
+
+def apply_messiness(
+    world: World, *, messiness: Messiness, recorded_as: str | Mapping[str, Any] | None = None,
+) -> World:
+    """Add the imperfections *messiness* asks for, and record the step.
+
+    Called through ``worldloom.messiness.apply``/``Imperfections``, which owns
+    the named profiles and the recipe verb; this is the half that knows what a
+    document is. Split that way for the same reason ``parameters`` and the
+    generators that read it are split: the registry is what an author edits, and
+    the generator is what has to stay byte-identical when they do not.
+
+    A no-op at zero, and deliberately so — the default build must stay
+    byte-identical to a world that never heard of this pass, and the cheapest
+    guarantee is that the zero case touches neither the intents, nor the errors,
+    nor the recipe.
+
+    **Budget, not quota.** Each kind takes what the world can support and stops.
+    A world with two corrections cannot have five stale pages without inventing
+    a figure to be stale about, and inventing one is the single thing this pass
+    may never do.
+    """
+    if messiness.degree <= 0:
+        return world
+    if world._minter is None:
+        raise ValueError("imperfections need a generator-backed world; build one from a seed")
+
+    from ..recipe import with_step
+
+    facts = _facts_by_id(world)
+    minter = world._minter
+    rng = Rng(world.seed).derive("messiness")
+
+    new_intents: list[ArtifactIntent] = []
+    errors: list[IntentionalError] = []
+
+    corrections = _corrections(world)
+    citations = _citations(world)
+
+    # (a) staleness — a document that missed a correction it postdates.
+    remaining = messiness["staleness"]
+    spent: set[str] = set()
+    for old, new in corrections:
+        if remaining <= 0:
+            break
+        sources = citations.get(old.id) or []
+        if not sources:
+            continue
+        made = _stale_republication(old, new, sources, world, facts, citations, minter, rng)
+        if made is None:
+            continue
+        intent, error = made
+        new_intents.append(intent)
+        errors.append(error)
+        spent.add(old.id)
+        remaining -= 1
+
+    # (b) disagreement — a document that predates one. Corrections already spent
+    # on a stale page are skipped rather than reused: two documents built from
+    # one correction would put the same figure in circulation twice under two
+    # different explanations, and a reader could not tell which label described
+    # which document without reading both.
+    remaining = messiness["disagreement"]
+    for old, new in corrections:
+        if remaining <= 0:
+            break
+        if old.id in spent:
+            continue
+        sources = citations.get(old.id) or []
+        # No live disagreement unless something actually carries the corrected
+        # figure. Without this the "wrong" document would be the only account of
+        # the measure in the corpus, which is a hole, not a contradiction.
+        if not sources or not citations.get(new.id):
+            continue
+        made = _quoting_secondary(old, new, sources, world, facts, minter, rng)
+        if made is None:
+            continue
+        intent, error = made
+        new_intents.append(intent)
+        errors.append(error)
+        remaining -= 1
+
+    # (c) orphaning — documents the roster already stranded, now recorded.
+    errors.extend(_orphaned(world, facts, minter)[: messiness["orphaning"]])
+
+    return world.extend(
+        artifact_intents=tuple(new_intents),
+        intentional_errors=tuple(errors),
+        recipe=with_step(
+            world._recipe, "Imperfections",
+            profile=recorded_as if recorded_as is not None else messiness.as_dict(),
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -472,4 +1022,4 @@ documents.register_artifact_types(
     },
 )
 
-__all__ = ["apply"]
+__all__ = ["apply", "apply_messiness"]

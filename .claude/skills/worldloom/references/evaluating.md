@@ -233,3 +233,46 @@ with the manifest's `supporting_fact_ids` standing in for the citations
 `passages()` would otherwise compute, and reports near-duplicates as "n/a" (no
 compiled passages exist to shingle). Every generated corpus uses the compiled
 path and gets the full report, near-duplicates included.
+
+## The shape behind the numbers
+
+`worldloom series ./corpus` decomposes a period-keyed fact series into trend,
+season, and residual, and names the periods the first two do not explain.
+Multiplicative throughout, so a residual reads as a percentage of normal —
+`1.08` is "eight per cent above what the trend and the season predicted".
+
+Outliers are scored on **median absolute deviation**, not a z-score, and the
+reason is worth carrying: an outlier inflates the standard deviation it would
+be measured against, so several of them mask each other and the detector fails
+hardest exactly when there is most to find. The decomposition refits once with
+the first pass's outliers replaced by what the first pass expected, so a single
+spike cannot tilt the trend that every other month is then judged against.
+
+Read it as a corpus check. An incident month *should* sit outside the pattern;
+if it does not, the corpus is asserting a disruption its own figures do not
+show. And a decomposition is only meaningful on a history that has one: build
+with `--comparatives 23 --trend 0.004` for two years with a direction in them.
+Without `--trend` the level is flat by construction, every seasonally-adjusted
+month looks like every other, and no question about direction has an answer in
+the data.
+
+## The estate as a graph
+
+`worldloom topology ./corpus` reads what depends on what. Services are ranked
+by **blast radius** — how much falls over transitively when one does — and
+separately by **gates**, how much has no second path to what it serves. Those
+are genuinely different: a well-replicated shared platform has a large blast
+radius and gates nothing, while a small unloved mapping job can gate the whole
+close.
+
+The ranking is derived from the graph rather than declared, so it can disagree
+with an archetype's hand-set `criticality_tier`, and that disagreement is a
+finding. So is a dependency chain of zero hops: it means the service catalogue
+is a flat list of unrelated names rather than a system, and no multi-hop
+question about the estate has an answer.
+
+`validate` reads the same graphs, and fails a cycle through any number of hops,
+a forked supersession chain (two facts replacing one, which leaves "what is
+current" ambiguous), and a provenance loop that uses a different relationship
+on each edge. None of those were reachable by the single-edge walks that
+preceded them.

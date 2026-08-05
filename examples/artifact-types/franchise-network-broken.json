@@ -1,0 +1,293 @@
+{
+  "name": "franchise-network-broken",
+  "base": "retail",
+  "description": "Every artifact-type lint rule, firing at once. Do not build this.",
+  "company_name": "Kerbside Convenience Group (broken example)",
+  "industry": "Franchised convenience retail",
+  "currency": "AUD",
+  "currency_unit": "thousands",
+  "annual_revenue": 1840000,
+  "employees": 2600,
+  "headquarters": "Adelaide, Australia",
+  "regions": [
+    "SA",
+    "VIC",
+    "NSW",
+    "QLD",
+    "WA",
+    "TAS"
+  ],
+  "system_brands": {
+    "erp": "Kerbside Ledger",
+    "mdm": "Network Master",
+    "pos": "Forecourt POS"
+  },
+  "units": [
+    {
+      "key": "company_stores",
+      "name": "Company Stores",
+      "kind": "owned_retail",
+      "share": 0.36,
+      "categories": [
+        {
+          "name": "Food to Go",
+          "share": 0.44,
+          "margin": 0.41
+        },
+        {
+          "name": "Grocery and Household",
+          "share": 0.36,
+          "margin": 0.24
+        },
+        {
+          "name": "Chilled Drinks",
+          "share": 0.2,
+          "margin": 0.33
+        }
+      ],
+      "site_formats": [
+        {
+          "name": "Metro Store",
+          "count": 46,
+          "revenue_weight": 1.0
+        },
+        {
+          "name": "Highway Store",
+          "count": 12,
+          "revenue_weight": 1.6
+        }
+      ]
+    },
+    {
+      "key": "franchise_network",
+      "name": "Franchise Network",
+      "kind": "franchised_retail",
+      "share": 0.64,
+      "categories": [
+        {
+          "name": "Wholesale Supply",
+          "share": 0.71,
+          "margin": 0.12
+        },
+        {
+          "name": "Franchise Fees",
+          "share": 0.19,
+          "margin": 0.86
+        },
+        {
+          "name": "Network Marketing Levy",
+          "share": 0.1,
+          "margin": 0.55
+        }
+      ],
+      "site_formats": [
+        {
+          "name": "Franchised Store",
+          "count": 210,
+          "revenue_weight": 0.8
+        }
+      ]
+    }
+  ],
+  "artifact_types": [
+    {
+      "key": "personnel_notice",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+        "hours": 4
+      },
+      "sections": [
+        {
+          "heading": "Position",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit."
+          ],
+          "scope": "group",
+          "purpose": "State the month against plan."
+        }
+      ],
+      "filing": {
+        "author_role": "controller",
+        "fallback_role": "cfo",
+        "domain": "finance",
+        "audience": "all_staff",
+        "size": "small",
+        "facts": [
+          "headline"
+        ],
+        "rationale": "A placeholder rationale, so this type's only fault is its key."
+      }
+    },
+    {
+      "key": "cfo_variance_memo",
+      "authority": "unofficial_note",
+      "lifecycle": "draft",
+      "lag": {
+        "hours": 1
+      },
+      "sections": [
+        {
+          "heading": "Position",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit."
+          ],
+          "scope": "group",
+          "purpose": "State the month against plan."
+        }
+      ],
+      "filing": {
+        "author_role": "controller",
+        "fallback_role": "cfo",
+        "domain": "finance",
+        "audience": "all_staff",
+        "size": "small",
+        "facts": [
+          "headline"
+        ],
+        "rationale": "A placeholder rationale, so this type's only fault is its key."
+      }
+    },
+    {
+      "key": "network_bulletin",
+      "authority": "working_document",
+      "lifecycle": "draft",
+      "lag": {
+        "hours": 2
+      },
+      "word": false,
+      "sections": []
+    },
+    {
+      "key": "network_bulletin",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 3
+      },
+      "sections": [
+        {
+          "heading": "Outlook",
+          "kinds": [
+            "esg.scope_three."
+          ],
+          "scope": "any",
+          "purpose": "A section about a vocabulary this engine has never generated."
+        },
+        {
+          "heading": "Outlook",
+          "kinds": [
+            "ops.cause"
+          ],
+          "scope": "unit",
+          "purpose": "A repeated heading, over operational facts that belong to the episode rather than to a division."
+        },
+        {
+          "heading": "Supporting facts",
+          "kinds": [
+            "financial.revenue.actual"
+          ],
+          "scope": "any",
+          "purpose": "A heading the compiler already appends itself."
+        },
+        {
+          "heading": "Everything",
+          "kinds": [
+            "financial."
+          ],
+          "scope": "any",
+          "purpose": "Every figure in the document, again."
+        }
+      ],
+      "filing": {
+        "author_role": "network_director",
+        "fallback_role": "franchise_liaison",
+        "domain": "network",
+        "audience": "franchisees",
+        "size": "medium",
+        "facts": [
+          "headline",
+          "drivers"
+        ],
+        "rationale": "A bulletin whose author, reader and figures are all named wrong."
+      }
+    },
+    {
+      "key": "supplier_scorecard",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+        "hours": 6
+      },
+      "sections": [
+        {
+          "heading": "Position",
+          "kinds": [
+            "financial.revenue.",
+            "financial.gross_profit."
+          ],
+          "scope": "group",
+          "purpose": "State the month against plan."
+        }
+      ],
+      "filing": {
+        "author_role": "merch_lead",
+        "domain": "finance",
+        "audience": "all_staff",
+        "size": "small",
+        "facts": [
+          "headline"
+        ],
+        "rationale": "Correct in every respect except that nobody signs it when the role is absent."
+      }
+    }
+  ],
+  "lore": [
+    {
+      "kind": "norm",
+      "assertion": "Every franchisee receives a monthly trading statement, because the franchise agreement computes their fee off the group's reported figures and gives them a right to see them.",
+      "effective_from": "2019-04",
+      "constrains": [
+        {
+          "kind": "artifact_density",
+          "target": "filing/franchisee_trading_statement",
+          "effect": "The network is sent a statement of the month every period",
+          "magnitude": 1.0
+        },
+        {
+          "kind": "terminology",
+          "target": "trading statement",
+          "effect": "A franchisee is sent a statement, never a report — the word is in the agreement"
+        }
+      ]
+    },
+    {
+      "kind": "tension",
+      "assertion": "Wholesale supply to the network carries a thin margin the company's own stores do not, so a month that reads well at group level can read badly to a franchisee.",
+      "effective_from": "2022-09",
+      "constrains": [
+        {
+          "kind": "metric_emphasis",
+          "target": "forecast_miss/franchise_network",
+          "effect": "Supply volumes are forecast optimistically and the network unit misses",
+          "magnitude": 1.6
+        }
+      ]
+    },
+    {
+      "kind": "norm",
+      "assertion": "The board is sent a network health review every month.",
+      "effective_from": "2021-01",
+      "constrains": [
+        {
+          "kind": "artifact_density",
+          "target": "filing/network_health_review",
+          "effect": "A document nobody has declared",
+          "magnitude": 1.0
+        }
+      ]
+    }
+  ]
+}

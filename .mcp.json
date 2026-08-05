@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "worldloom": {
+      "command": "worldloom",
+      "args": ["mcp"],
+      "env": {}
+    }
+  }
+}

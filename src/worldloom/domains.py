@@ -49,6 +49,17 @@ class Domain:
     the thin-waist ratchet test forbids "quarter" in core code — so the
     stepping arithmetic is generic and each domain states its own cadence
     here; banking registers 3."""
+    default_archetype: str = ""
+    """Which of ``archetype_keys`` this domain builds when a caller names the
+    *domain* rather than an archetype — what ``worldloom mosaic --engine`` picks.
+
+    Stated by the domain for the same reason ``period_step_months`` is: core is
+    forbidden from naming a vertical, so it cannot hold a map from a domain's
+    name to one of its archetype keys. Deriving it instead — the lowest sorted
+    key, say — would silently pick whichever archetype happens to sort first,
+    which for a domain owning more than one is not the one it builds by
+    default, and nothing would say that had happened."""
+
     consulted_targets: tuple[tuple[str, str], ...] = ()
     """The lore-constraint targets this engine's generators actually read,
     as ``(target, what it changes)`` pairs. Published so a pack author — human
@@ -102,9 +113,22 @@ def register_domain(domain: Domain) -> None:
 
 
 def for_archetype(key: str) -> Domain | None:
-    """The domain that owns *key*, or ``None`` for an unclaimed archetype."""
+    """The domain that owns *key*, or ``None`` for an unclaimed archetype.
+
+    A key may be qualified with a vocabulary (``"midsize_adi+mutual_bank"`` —
+    see ``worldloom.vocabulary``), and the qualifier is stripped before the
+    lookup because it names *words*, not a vertical: a bank that calls its
+    divisions Member Banking and Community Business is still built by the
+    banking engine. Stripping here rather than at each call site is what keeps
+    ``Domain.archetype_keys`` a set of shapes — a domain enumerating its
+    archetypes crossed with every vocabulary would be a registry that grew when
+    somebody added a name to a word list.
+    """
+    from .vocabulary import QUALIFIER
+
+    base = key.partition(QUALIFIER)[0]
     for domain in _DOMAINS.values():
-        if key in domain.archetype_keys:
+        if base in domain.archetype_keys:
             return domain
     return None
 

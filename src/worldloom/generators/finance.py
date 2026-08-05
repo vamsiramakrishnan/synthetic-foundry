@@ -25,21 +25,25 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from .. import profiles
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, Category, Quantity, Site
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 
 MONEY = "AUD_thousands"
 PERCENT = "percent"
 BPS = "bps"
 
-#: Trading index by calendar month. A grocer's December is not its February, and a
-#: twelve-month trend that ignores that reads as noise around a flat line rather
-#: than as a business. Shape only — the amplitude is generic retail seasonality.
-SEASONALITY: dict[int, float] = {
-    1: 0.96, 2: 0.88, 3: 0.97, 4: 0.98, 5: 0.99, 6: 0.99,
-    7: 1.00, 8: 0.99, 9: 0.98, 10: 1.01, 11: 1.04, 12: 1.21,
-}
+#: Trading index by calendar month. A grocer's December is not its February, and
+#: a twelve-month trend that ignores that reads as noise around a flat line
+#: rather than as a business.
+#:
+#: Now `profiles.RETAIL_CHRISTMAS`, re-exported here because it was a public
+#: name and `series.py`'s docstring cites it. The values are unchanged and the
+#: registry enforces what kept them correct by hand: they average exactly one,
+#: so the profile changes the shape of a year and never the size of the company.
+SEASONALITY: dict[int, float] = dict(profiles.RETAIL_CHRISTMAS.index)
 
 
 @dataclass(frozen=True)
@@ -104,8 +108,15 @@ def _closed_at(period: str, template: datetime) -> datetime:
     return first + timedelta(days=3)
 
 
-def _season(period: str) -> float:
-    return SEASONALITY[int(period.split("-")[1])]
+def _season(period: str, season: profiles.Seasonality) -> float:
+    return season.of(period)
+
+
+def _months_between(origin: str, target: str) -> int:
+    """Signed month offset from *origin* to *target*, both ``YYYY-MM``."""
+    origin_year, origin_month = (int(part) for part in origin.split("-"))
+    target_year, target_month = (int(part) for part in target.split("-"))
+    return (target_year - origin_year) * 12 + (target_month - origin_month)
 
 
 class _Ledger:
@@ -170,7 +181,14 @@ def generate(
     annual_revenue: int,
     lore_by_target: dict[str, list[str]],
     comparative_months: int = 0,
+    trend_pct: float = 0.0,
     money_unit: str = MONEY,
+    # The trading year this business has. `profiles.DEFAULT` is the general
+    # retail one every world used before this argument existed, so an unpassed
+    # profile is byte-identical — and naming it here is the point: a bank or an
+    # insurer wants `profiles.PROFILES["flat"]`, and until now could not say so.
+    seasonality: profiles.Seasonality = profiles.DEFAULT,
+    physics: Parameters = DEFAULT,
 ) -> Financials:
     """Generate a company's financial facts for one period, plus a trend behind it.
 
@@ -181,6 +199,15 @@ def generate(
     ``comparative_months`` adds prior periods at actual only. A trend needs
     actuals; it does not need every prior month's budget, and generating them
     would triple the fact count to fill a column nobody reads.
+
+    ``trend_pct`` compounds the level per month, so a comparative history
+    *grows* instead of oscillating around a flat line. Without it a year of
+    comparatives is one number with a fixed seasonal wobble on top: every
+    month's figure is drawn around the same level, so a seasonally-adjusted
+    series is flat by construction and "is this month's shortfall part of a
+    trend" has no answer in the data. Defaults to 0.0, which multiplies every
+    figure by exactly 1.0 — an IEEE identity, not an approximate one, which is
+    what keeps every existing corpus byte-identical rather than nearly so.
 
     ``money_unit`` is the archetype's own ``f"{currency}_{currency_unit}"`` —
     every retail archetype in this repository resolves to ``MONEY``, which is
@@ -208,11 +235,18 @@ def generate(
         """Unit budget and actual for a period. Actual is skewed adverse."""
         budget: dict[str, int] = {}
         actual: dict[str, int] = {}
-        season = _season(target_period)
+        season = _season(target_period, seasonality)
+        # Compounded from the reporting period, so the offset is negative for
+        # every comparative and the history sits *below* the current month at a
+        # positive trend. Applied as a trailing factor rather than folded into
+        # the level, because at the default `trend_pct` this is a multiply by
+        # exactly 1.0 and leaves the existing expression's floating-point
+        # result bit-identical — reassociating it would not.
+        growth = (1.0 + trend_pct) ** _months_between(period, target_period)
         for key in unit_ids:
             unit_rng = rng.derive(f"revenue/{target_period}/{key}")
-            unit_budget = int(round(monthly * unit_shares[key] * season, -2))
-            miss_pct = unit_rng.number(-0.065, 0.015, places=4)
+            unit_budget = int(round(monthly * unit_shares[key] * season * growth, -2))
+            miss_pct = physics.number("retail.revenue.miss_pct", unit_rng)
             budget[key] = unit_budget
             actual[key] = int(round(unit_budget * (1 + miss_pct), -2))
         return budget, actual
@@ -320,10 +354,16 @@ def generate(
         gp_actual: dict[str, int] = {}
         cat_gp_actual: dict[str, int] = {}
         cat_gp_budget: dict[str, int] = {}
+        # The category spread is the one span here the registry cannot hand over
+        # resolved: it carries its high bound as a multiple of the per-unit
+        # `erosion` drawn below, so the call site does the multiplication.
+        spread = physics.span("retail.margin.category_spread")
         for key, unit_id in unit_ids.items():
             margin_rng = rng.derive(f"margin/{target_period}/{key}")
-            budget_margin = unit_margin(unit_id, margin_rng.number(0.20, 0.34, places=4))
-            erosion = margin_rng.number(0.002, 0.020, places=4)
+            budget_margin = unit_margin(
+                unit_id, physics.number("retail.margin.budget", margin_rng)
+            )
+            erosion = physics.number("retail.margin.erosion", margin_rng)
             gp_budget[key] = int(round(budget[key] * budget_margin))
             gp_actual[key] = int(round(actual[key] * (budget_margin - erosion)))
 
@@ -336,7 +376,11 @@ def generate(
             # spread is real; the total is still exactly what was drawn above.
             eroded = [
                 max(
-                    c.margin_profile - margin_rng.number(-0.004, 2 * erosion, places=4),
+                    c.margin_profile
+                    - physics.number(
+                        "retail.margin.category_spread", margin_rng,
+                        high=spread.high * erosion,
+                    ),
                     0.001,
                 )
                 for c in members
@@ -414,7 +458,8 @@ def generate(
             _drivers(ledger, rng, unit_ids, company_id, target_period, at,
                      erp_id, commerce_id, close_event_id, lore_by_target,
                      budget, actual, gp_budget, gp_actual,
-                     group_budget, group_actual, group_gp_budget, group_gp_actual)
+                     group_budget, group_actual, group_gp_budget, group_gp_actual,
+                     physics=physics)
 
         return budget, actual
 
@@ -445,6 +490,8 @@ def _drivers(
     budget: dict[str, int], actual: dict[str, int],
     gp_budget: dict[str, int], gp_actual: dict[str, int],
     group_budget: int, group_actual: int, group_gp_budget: int, group_gp_actual: int,
+    *,
+    physics: Parameters = DEFAULT,
 ) -> None:
     """The derived metrics a variance memo argues from."""
     margin_move = round(
@@ -463,8 +510,10 @@ def _drivers(
 
     if "digital" in unit_ids:
         conv_rng = rng.derive(f"conversion/{period}")
-        forecast = conv_rng.number(3.0, 3.4, places=2)
-        actual_conv = round(forecast - conv_rng.number(0.05, 0.40, places=2), 2)
+        forecast = physics.number("retail.conversion.forecast_pct", conv_rng)
+        actual_conv = round(
+            forecast - physics.number("retail.conversion.shortfall_pct", conv_rng), 2
+        )
         ledger.measure("metric.online_conversion_rate.forecast", unit_ids["digital"], period,
                        forecast, PERCENT, at=at, source=commerce_id, event=event,
                        lore=lore_by_target.get("online_conversion_rate", []))

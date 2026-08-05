@@ -76,7 +76,15 @@ SECTION_PROSE = Prompt(
     # difference between prose that is legal and prose that argues. The template
     # changed, so the version does; a ledger key is only honest if a changed
     # prompt changes it.
-    version="3",
+    #
+    # v4 makes the rules state what the validator enforces, in step with the
+    # same rewording of `handshake.RULES`: the digit rule is lexical (no digit
+    # runs anywhere outside a reference, not merely "no restated figures"), and
+    # a fact whose validity ended before the cut-off is a past belief. The
+    # handshake's rules text is not itself a ledger-key component, but the
+    # brief a writer answers under changed on both paths, and this version is
+    # the one key component that records which brief that was.
+    version="4",
     template="""\
 Write the "{section}" section of a {artifact_type} for {audience}.
 
@@ -106,10 +114,13 @@ You must not claim:
 {forbidden}
 {feedback}
 Rules:
-- Every numeric value must appear as a {{{{fact:ID}}}} reference, never as digits.
+- No digits anywhere outside a {{{{fact:ID}}}} reference — the check is lexical.
+  Spell any other number (an ordinal, a count) out in words, or leave it out.
 - Every assertion must be supported by at least one of the facts above.
 - Do not mention anything not present in the facts above.
 - Facts marked REQUIRED must appear.
+- A fact whose validity had ended by your cut-off is a past belief. Tell it as
+  history — never as the current position.
 - Write to the purpose. Listing the facts in the order supplied is not the job.
 - Weight the facts. Not every one deserves a sentence.
 
@@ -117,7 +128,9 @@ Return the prose, and a list of the claims it makes with the fact IDs supporting
 """,
 )
 
-_REGISTRY: dict[str, Prompt] = {SECTION_PROSE.name: SECTION_PROSE}
+_REGISTRY: dict[str, Prompt] = {
+    SECTION_PROSE.name: SECTION_PROSE,
+}
 
 
 def get(name: str = SECTION_PROSE.name) -> Prompt:

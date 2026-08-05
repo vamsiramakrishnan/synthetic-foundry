@@ -12,10 +12,37 @@ against a fact ledger; a list of claims each carrying its supporting fact IDs ca
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from pydantic import Field, model_validator
 
 from ..models import Model
+
+if TYPE_CHECKING:  # pragma: no cover
+    from ..models import CanonicalFact
+
+
+def superseded_for(fact: CanonicalFact, cutoff: datetime | None) -> bool:
+    """Whether *fact* was already superseded for an author writing at *cutoff*.
+
+    Not the same question as ``fact.is_superseded``, and the difference cost
+    three writers a round each. The ledger's flag is about the corpus's final
+    state; a request is about one author's moment. ``close.status = delayed``
+    is superseded by ``close.status = final`` days later — but the author whose
+    ``knows_as_of`` falls inside the delay is *required* to state "delayed" as
+    the current position, and a request that hands them the fact stamped
+    ``superseded: true`` (with a rule saying such facts were "proved wrong")
+    contradicts its own purpose. Nobody was wrong; the world just moved on
+    after the author stopped looking.
+
+    So: superseded *for this author* means the fact's validity had already
+    ended by their cut-off. A fact superseded only after the cut-off is, for
+    them, simply current. With no cut-off the author sees the finished world,
+    and the ledger's own flag is the right answer.
+    """
+    if fact.valid_to is None:
+        return False
+    return cutoff is None or fact.valid_to <= cutoff
 
 
 class NarrativeRequest(Model):

@@ -39,6 +39,17 @@ dependencies = [
     "pydantic>=2.6",
     "typer>=0.12",
     "rich>=13.0",
+    # `worldloom.graphs` — the dependency, provenance, supersession and
+    # reporting graphs, and the validator checks that read them. Core rather
+    # than an extra because `worldloom validate` runs those checks on every
+    # corpus, and a coherence gate that is skipped when an optional package is
+    # missing is not a gate.
+    "networkx>=3.2",
+    # `worldloom.series` and `worldloom.similarity`. Both use numpy only for
+    # elementwise and integer arithmetic, which is bit-identical everywhere;
+    # neither performs a matrix product, which is the operation that would not
+    # be. Pure-wheel, no compiler, no BLAS requirement at import.
+    "numpy>=1.26",
 ]
 
 [project.urls]
@@ -55,18 +66,13 @@ pptx = ["python-pptx>=1.0"]
 polars = ["polars>=0.20"]
 pandas = ["pandas>=2.0"]
 arrow = ["pyarrow>=15.0"]
-# `worldloom narrate auto` — the only stage that calls a model, so it is the only
-# stage that needs this. Everything else in the package runs with no API key.
-llm = ["anthropic>=0.40"]
-# The Gemini route through the same command (`--model gemini-*`). Satisfied
-# transitively by `pip install google-antigravity` too — Google's agent SDK
-# depends on google-genai — so an Antigravity environment needs no extra step.
-gemini = ["google-genai>=1.0"]
-# The Antigravity *harness* route (`narrate auto --harness antigravity`): a
-# whole Agent runtime answers each request, not a bare model call. Brings the
-# gemini extra's SDK along as its own dependency. The claude-code harness has
-# no extra — it needs the `claude` CLI on PATH, not a Python package.
-antigravity = ["google-antigravity>=0.1"]
+# `worldloom mcp` — the readings and gates as tools, spoken over stdio to an
+# agent harness. An extra rather than a core dependency because every other
+# command works without it: the same measurements are reachable through
+# `worldloom diversity`, `topology`, `series` and `validate`, which need no
+# protocol at all. No model-SDK extra exists: this package never calls a
+# language model — the coding harness driving it is the writer.
+mcp = ["mcp>=1.2"]
 # Every renderer at once — the ordinary way to install the tool rather than
 # the library. `pip install "worldloom[all]"`.
 all = [
@@ -74,8 +80,12 @@ all = [
     "python-docx>=1.1",
     "reportlab>=4.0",
     "python-pptx>=1.0",
+    "mcp>=1.2",
 ]
-dev = ["pytest>=8.0", "openpyxl>=3.1", "python-docx>=1.1", "reportlab>=4.0", "python-pptx>=1.0"]
+dev = [
+    "pytest>=8.0", "openpyxl>=3.1", "python-docx>=1.1", "reportlab>=4.0",
+    "python-pptx>=1.0", "mcp>=1.2",
+]
 
 [project.scripts]
 worldloom = "worldloom.cli:app"

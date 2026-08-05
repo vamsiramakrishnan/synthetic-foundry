@@ -119,6 +119,150 @@ One coherent enterprise, taken all the way through. Two, in fact.
   (`recipe.register_step`) each vertical seeds from its own module, and two
   thin-waist exceptions were paid down rather than a third added.
 
+- **Repetition measured; the rewrite loop deleted before release.** Narration
+  is open-loop — every section gets one request and one attempt, and nothing
+  afterwards looks at what the corpus became — and a refinement loop
+  (`worldloom refine`, MCP rewrite tools, a skill and a Stop hook) was built to
+  close it: measure what repeats, rewrite only what repeats, gate each rewrite
+  on the measured similarity. It was deleted before release, on evidence. The
+  loop was built and gated against `DeterministicProvider` template prose,
+  where three closes from one template genuinely repeat; a five-world proof run
+  on real model prose measured its target — passages in a near-duplicate group
+  — at zero in every world (0/46, 0/50, 0/52, 0/46, 0/43). The repetition it
+  fought was an artifact of the deterministic fake, and its API adapters were
+  the only code violating "this repository does not call a language model".
+
+  What ships is the measurement, which is worth having about any corpus
+  whoever narrated it: `stats.measure` runs the exact similarity join over the
+  corpus's own passages beside a structural shape census, `worldloom diversity
+  --near-duplicates` names the groups, and `worldloom mcp` serves the
+  read-only tools — `measure_corpus`, `corpus_topology`, `corpus_series`,
+  `validate_corpus`, and the probe tools — over stdio, with `.mcp.json` wiring
+  them into Claude Code. No MCP tool writes a corpus; every corpus write path
+  stays behind the CLI handshakes.
+
+  Also fixed: `World.export` copied artifacts twice on an in-place export of a
+  corpus that had been rendered, raising `FileExistsError` on a corpus that was
+  perfectly intact. It had never fired because the only in-place callers ran on
+  corpora with no `artifacts/` directory yet — and fixing it revealed a second,
+  older defect it had been masking. CI's agent-handshake step submits
+  deliberately invalid prose to prove the guardrail rejects it, and had been
+  doing so against an already-narrated corpus: `review()` had nothing to review,
+  the responses were never looked at, and the step passed only because that
+  `FileExistsError` made the command exit non-zero. The guardrail the step is
+  named for had not been exercised since rendering was added to it. `narrate
+  accept` now refuses responses submitted into a corpus with no section awaiting
+  prose, instead of printing "0 section(s) accepted" and exiting zero, and the
+  CI step runs its rejection first — while sections are genuinely pending.
+
+- **The estate becomes a landscape.** `worldloom topology` on the largest world
+  this tool builds reported **nine** services and systems and a three-hop
+  dependency chain — because nine is exactly what the month-end-close episode
+  names. Categories scale with the archetype, sites scale, facts scale; the
+  estate did not, which made blast radius meaningless, gave "who gets paged" a
+  single answer, and left the incident's stale mapping table reading as bad
+  luck rather than as the kind of thing sitting in every estate of that size.
+  `build --estate small|medium|large` grows the rest of the landscape around
+  the episode's own services: layered (edge → domain → platform → data →
+  system of record) so acyclicity is *unconstructible* rather than merely
+  checked, with chokepoints **placed** — each backed by a store only it may
+  reach, because a shared service whose dependencies everything else can also
+  reach directly dominates nothing. 101 nodes, a ten-hop chain, and the close
+  orchestrator finally has a blast radius. The episode's four services are
+  never edited, so its causality is bit-for-bit unchanged, and omitting the
+  flag leaves every existing corpus byte-identical.
+
+- **`worldloom compose` — the third handshake, and the first over entities.**
+  `narrate` bounds what a model may *say* and checks it against the fact
+  ledger; `plan` bounds how it may *shape* a document and checks it against a
+  component grammar. This bounds what the company *runs* — services, systems,
+  ownership, dependencies, declared criticality, and the lore explaining why
+  the landscape looks that way — and checks it against `worldloom.graphs`. The
+  graph library built for other reasons turned out to be exactly the validator
+  that judgement needs.
+
+  It exists because the generated estate cannot serve every vertical: its
+  name pools are retail's, banking's landscape is not called
+  `click-collect-api`, and the insurer ships with no services at all. A pool
+  per industry is the wrong answer — it puts an ever-growing list of invented
+  names into the engine, the contamination §7 forbids. An industry's
+  vocabulary is the thing a model is genuinely better at than a table, so the
+  model brings it and the harness refuses anything incoherent: a cycle through
+  any number of hops, a dependency resolving to nothing, an owner who does not
+  work here, a tier the graph contradicts, lore that constrains nothing, and
+  an estate in which nothing is a single point of failure. Every violation is
+  reported at once, nothing commits unless everything passes, and the accepted
+  composition lands in the generation ledger — so a composed corpus rebuilds
+  from its own recipe with no provider reachable, and refuses loudly rather
+  than quietly rebuilding into the *un*composed world if its ledger is
+  missing.
+
+- **The world as graphs, and the defects only a graph could see.**
+  `worldloom.graphs` reads the four graphs the schema always had and nothing
+  ever looked at: the service/system dependency graph, the artifact provenance
+  DAG across all four relationships at once, the fact supersession forest, and
+  the reporting tree. It closed three real invariant gaps corpus-wide, for
+  every vertical at the same time — a dependency cycle through more than one
+  hop (the old check caught a service that depended on *itself* and nothing
+  longer), a **forked supersession chain** (two facts replacing one, which
+  leaves "what is current" ambiguous; the fact-layer walk built a dict keyed on
+  the superseded id and let the second writer win, so this could never
+  surface), and a provenance loop that uses a different relationship on each
+  edge. `worldloom topology` is the reading: services ranked by *blast radius*
+  and separately by *gates* — how much has no second path to what they serve,
+  computed from dominator trees, because "lots of things depend on it" and
+  "nothing routes around it" are different properties and a replicated platform
+  has the first without the second. Every measure is an exact integer count
+  with ties broken on id; there is no centrality score anywhere in it, because
+  ranking by a float from an iterative solver is an argmax a different SciPy
+  build can flip, and a rank that moves between machines is not a rank.
+
+- **Near-duplicate detection that survives Gate 1.** `stats` has always
+  reported an exact near-duplicate rate over passages, computed by comparing
+  every pair — defensible at 120 artifacts and uncomputable at the 10,000
+  build-order §12 targets, which is to say it would have stopped working on
+  exactly the corpora whose repetition most needs auditing. `worldloom.similarity`
+  keeps the *answer* and changes the algorithm: a prefix-filtered similarity
+  join returns precisely the pairs a full scan would and provably misses none.
+  Measured at 158× on corpus-shaped input, and pinned against brute force over
+  randomised inputs rather than a fixture, because an off-by-one in a prefix
+  bound is the only interesting way it can be wrong. `diversity
+  --near-duplicates` turns the rate into a finding: *which* documents are one
+  template, named. MinHash and banded LSH ship alongside for the regime past
+  the exact one, labelled approximate and able to state the recall their band
+  configuration implies.
+
+- **Batch diversity, not just per-artifact.** `compiler.diversity.select` picks
+  the *k* most-unlike alternatives for one artifact and is silent about the
+  batch — run independently for a hundred artifacts it hands every one of them
+  index 0, which is how §7a's measured defect (120 artifacts, 11 distinct
+  shapes) is produced in the first place. `assign` spreads shapes *across* a
+  batch, carrying what earlier periods already spent so period two does not
+  reproduce period one; `collisions` names which artifacts share a shape rather
+  than counting how many shapes there were.
+
+- **Time series behind the figures.** `worldloom.series` decomposes a
+  period-keyed fact series into trend, season and residual, and names the
+  periods the first two do not explain — read it as a corpus check, since an
+  incident month that does *not* sit outside the pattern is a corpus asserting
+  a disruption its own numbers do not show. Outliers are scored on median
+  absolute deviation rather than a z-score, because outliers inflate the
+  standard deviation they would be measured against and several of them mask
+  each other; the decomposition refits once with the first pass's outliers
+  replaced by what it expected, so one spike cannot tilt the trend every other
+  month is then judged against. Two defects found by its own tests and fixed
+  in the algorithm rather than the assertion: a local (Hampel) filter mistakes
+  a genuine seasonal peak for a spike, and a robust scale of zero — routine
+  when more than half a sample is identical, which generated figures often are
+  — silently disabled the detector on exactly the obvious cases.
+
+- **`build --trend`.** Monthly compound growth behind the comparative history.
+  Without it a year of comparatives oscillates around a flat level, so a
+  seasonally-adjusted series is flat by construction and no question about
+  direction has an answer in the data. 0.0 multiplies by exactly 1.0 — an IEEE
+  identity — so every existing corpus is byte-identical, asserted rather than
+  reasoned about.
+
 - **Two retrievers, so hardness claims survive a change of heuristic.**
   `evaluate --retriever {bm25,tfidf,both}` — the existing baseline was
   already BM25, so the second family is TF-IDF cosine with shared
@@ -135,19 +279,18 @@ One coherent enterprise, taken all the way through. Two, in fact.
   company's declared currency, in three generators. The insurer example is
   no longer Australian, and proves it byte-reproducibly.
 
-- **Narration at scale.** `worldloom narrate auto` drives the whole
-  requests→generate→validate→accept loop in-process against the Anthropic API
-  (`worldloom[llm]` extra), behind the same Provider contract and the same
-  validators as hand-written prose. Every response lands in the generation
-  ledger, so a narrated corpus still replays byte-for-byte offline — proven by
-  a test whose fake provider answers differently on every call. The same
-  command routes `--model gemini-*` to Gemini (`worldloom[gemini]`), and
-  `--harness claude-code` / `--harness antigravity` put a whole agent harness
-  behind each request — one fresh session per section, because the request is
-  the whole of what an author knows. At size: `--concurrency N` fans sections
-  out with byte-identical output at any worker count, accepted sections
-  checkpoint incrementally so a crash never loses paid model output, and a
-  preflight counts the work before the first call.
+- **Narration at scale, without an API caller.** There is no `narrate auto`
+  and no model-SDK extra: an in-process API path (Anthropic, Gemini, and two
+  agent-harness adapters) was built and then deleted before release, because
+  the product is driven by a coding harness through the `narrate requests` /
+  `narrate accept` handshake and the SDK — an API caller was a second writer
+  path this repository's first line says it does not have. What ships from
+  that work is the scale machinery in `narrative/compiler.py`, which any
+  provider benefits from: `narrate(concurrency=N)` fans sections out with
+  byte-identical output at any worker count (section fate and ledger order are
+  decided before a thread runs), `preflight` counts the work before the first
+  call, and the `on_accepted` seam hands each accepted section out as it
+  lands so a long-running caller can persist paid work incrementally.
 
 - **A benchmark that scales with the world.** `build --eval-density
   {low,standard,high}` grows the evaluation set and the fan-out layer from

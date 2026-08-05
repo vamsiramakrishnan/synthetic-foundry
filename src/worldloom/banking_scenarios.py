@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .generators.operations import business_days_after, period_end
+from .parameters import DEFAULT, Parameters
+from .recipe import locale_of
 from .rng import Rng
 from .scenarios import lore_index
 
@@ -44,6 +46,15 @@ class QuarterlyCapitalReturn:
     """
 
     period: str
+    physics: Parameters = DEFAULT
+    """The world physics this quarter's figures are drawn from.
+
+    Defaulted, and every generator below defaults the same way, so a scenario
+    constructed as it always was draws from the engine's own ranges and rebuilds
+    byte-identically. Held on the scenario rather than read from module state
+    for ``parameters.Parameters``' own reason: a generator whose output depended
+    on what an earlier caller had set would not be replayable.
+    """
 
     def run(self, world: World) -> World:
         from . import banking_documents
@@ -84,11 +95,22 @@ class QuarterlyCapitalReturn:
             books=books,
             affected_book_id=roles["cat_sme_secured"],
             unit_share_of=unit_share_of,
+            physics=self.physics,
         )
+        # This corpus's own working week, for the start date *and* the walk.
+        # Both, because `liquidity.generate`'s own note says the two must agree:
+        # a series begun on one calendar and stepped on another is a series
+        # nothing can check. `banking.validate.liquidity_cadence_gap` reads the
+        # same locale, and until this line existed it failed a Gulf bank
+        # truthfully — the observations really were landing on Fridays.
+        calendar = locale_of(world.recipe)
         series = liquidity.generate(
             rng.derive("liquidity"),
-            start=business_days_after(period_end(self.period), _LIQUIDITY_START_BD),
+            start=business_days_after(period_end(self.period), _LIQUIDITY_START_BD,
+                                      calendar),
             days=regulatory.LIQUIDITY_DAYS,
+            calendar=calendar,
+            physics=self.physics,
         )
         affected_book = next(
             c for c in world._categories if c.id == roles["cat_sme_secured"]
@@ -121,6 +143,7 @@ class QuarterlyCapitalReturn:
             # The archetype's own currency — every RWA and CET1-capital fact
             # used to say "AUD_millions" regardless of what a pack named.
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            physics=self.physics,
         )
 
         intents, errors = banking_documents.artifact_intents(

@@ -31,6 +31,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from . import similarity
 from .evaluate.bm25 import tokens
 from .evaluate.index import Passage, document_texts, passages
 
@@ -103,35 +104,58 @@ def _shingles(text: str) -> frozenset[tuple[str, ...]]:
     same thing here as it does to the thing that would actually be confused by
     it: a retriever indexing this corpus.
     """
-    words = tokens(text)
-    if len(words) < SHINGLE_SIZE:
-        return frozenset({tuple(words)}) if words else frozenset()
-    return frozenset(tuple(words[i : i + SHINGLE_SIZE]) for i in range(len(words) - SHINGLE_SIZE + 1))
+    return similarity.shingles(tokens(text), SHINGLE_SIZE)
+
+
+def _near_duplicate_reading(
+    pool: list[Passage],
+) -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, ...], ...]]:
+    """``(pairs, groups)`` for *pool*, from one pass of the join.
+
+    Both readings come from the same pair list because they are the same
+    measurement asked two ways, and running the join twice to answer it twice
+    would let the pair count and the group count disagree about a corpus if
+    anything about the shingling ever became order-dependent.
+    """
+    pairs = similarity.near_duplicate_pairs(
+        [_shingles(p.text) for p in pool], NEAR_DUPLICATE_THRESHOLD
+    )
+    return pairs, similarity.clusters(pairs, len(pool))
+
+
+def near_duplicate_clusters(pool: list[Passage]) -> tuple[tuple[int, ...], ...]:
+    """Groups of mutually near-duplicate passages, largest first.
+
+    The finding behind the rate. `_near_duplicates` says a tenth of the pairs
+    repeat; this says *which* passages they are, so an author can look at the
+    eleven that are one template and fix the template rather than guess.
+    """
+    return _near_duplicate_reading(pool)[1]
 
 
 def _near_duplicates(pool: list[Passage]) -> tuple[int, int]:
     """``(near-duplicate pairs, total pairs)`` among *pool*, by shingled Jaccard.
 
-    Exact, pairwise, O(n^2) — deliberately, not a MinHash approximation. A
-    corpus large enough for that to matter is larger than anything this tool
-    renders today (see `AGENTS.md`'s scale figures), and the entire premise of
-    this report is a number a skeptical reader can recompute by hand from the
-    passage text; trading that for an approximate one to save time nobody is
-    spending would be a strange economy.
+    Still the exact count — the same pairs a full pairwise scan returns, not a
+    MinHash estimate of them — because the premise of this whole report is a
+    number a skeptical reader can recompute by hand from the passage text. What
+    changed is only how long getting it takes: `similarity.near_duplicate_pairs`
+    reaches the same answer through a prefix-filtered similarity join instead of
+    comparing all n(n-1)/2 pairs.
+
+    That mattered more than it looked. The O(n^2) version defended itself on
+    the grounds that no corpus this tool renders is big enough for the cost to
+    bite — which was true of a 120-artifact close and is precisely what
+    build-order §12's Gate 1 (10,000 artifacts, fifty million pairs) exists to
+    stop being true. A diversity number that silently becomes uncomputable at
+    the scale where diversity is most at risk is worse than no number.
+
+    The *rate* built from this pair count is a different matter — see
+    `Stats.near_duplicate_share` for why the pair count needs a companion once
+    a corpus is large.
     """
-    shingle_sets = [_shingles(p.text) for p in pool]
     total_pairs = len(pool) * (len(pool) - 1) // 2
-    near = 0
-    for i in range(len(pool)):
-        a = shingle_sets[i]
-        for j in range(i + 1, len(pool)):
-            b = shingle_sets[j]
-            union = a | b
-            if not union:
-                continue
-            if len(a & b) / len(union) >= NEAR_DUPLICATE_THRESHOLD:
-                near += 1
-    return near, total_pairs
+    return len(_near_duplicate_reading(pool)[0]), total_pairs
 
 
 def _texts_and_citations(world: World) -> tuple[dict[str, str], dict[str, set[str]]]:
@@ -195,6 +219,12 @@ class Stats:
     near_duplicate_pairs: int
     near_duplicate_total_pairs: int
     near_duplicate_rate: float
+    near_duplicate_groups: int
+    """How many distinct templates the corpus is repeating."""
+    near_duplicate_grouped_passages: int
+    """How many passages are inside one of those groups."""
+    largest_near_duplicate_group: int
+    """How many times the worst-repeated template is repeated."""
     facts_per_document: Distribution
     fact_density: Distribution
     """Facts cited per 100 tokens, per document — how densely prose cites the
@@ -208,6 +238,39 @@ class Stats:
     true minimum of 0 would say nothing about the facts that *are* used."""
     evals_by_type: dict[str, int]
     eval_count: int
+
+    @property
+    def near_duplicate_share(self) -> float:
+        """The fraction of passages sitting inside a near-duplicate group.
+
+        The reading to quote once a corpus is large, because
+        `near_duplicate_rate` stops distinguishing anything there and the
+        arithmetic says why. Take *K* templates each stamped out *m* times over
+        *n = K·m* passages. The qualifying pairs are the within-template ones,
+        ``K·m(m-1)/2``, against ``n(n-1)/2`` in total, so the rate is exactly
+        ``(m-1)/(K·m-1)`` — which **saturates at 1/K**. Both denominators are
+        quadratic in the repetition, and they cancel. At eight templates the
+        rate reads 0.097 when each is copied four times and 0.124 when each is
+        copied ninety-six times: the corpus got twenty-four times more
+        repetitive and the number moved by under three points, because it never
+        had anywhere to go. It reports how many templates a corpus repeats,
+        and is almost blind to how hard it repeats them.
+
+        Measured on this engine's own retail corpus, growing the history alone
+        (1, 6, 12, 24, 48 and 96 periods): the rate reads 0.000, 0.005, 0.007,
+        0.008, 0.007, 0.007 — flat, and flattest exactly where the repetition
+        got worst — while the largest single duplicate family goes 0, 5, 11,
+        23, 47, 95 and this share goes 0.00, 0.17, 0.27, 0.28, 0.37, 0.37. At
+        96 periods one template covers ninety-five passages and the rate is
+        indistinguishable from what it read when that template covered five.
+
+        Both are kept rather than one replacing the other. The rate is still
+        the honest answer to "how much of this corpus is redundant against the
+        rest of it", which is the question a retriever asks; this is the answer
+        to "how much of it is a photocopy", which is the question an author
+        asks. `measure` below reports the second, cluster by cluster.
+        """
+        return (self.near_duplicate_grouped_passages / self.passage_count) if self.passage_count else 0.0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -225,6 +288,10 @@ class Stats:
                 "pairs": self.near_duplicate_pairs,
                 "total_pairs": self.near_duplicate_total_pairs,
                 "rate": self.near_duplicate_rate,
+                "groups": self.near_duplicate_groups,
+                "grouped_passages": self.near_duplicate_grouped_passages,
+                "largest_group": self.largest_near_duplicate_group,
+                "share": self.near_duplicate_share,
             },
             "facts_per_document": self.facts_per_document.as_dict(),
             "fact_density_per_100_tokens": self.fact_density.as_dict(),
@@ -252,6 +319,14 @@ class Stats:
                 f"  {'near-duplicates'.ljust(width)} {self.near_duplicate_pairs}/{self.near_duplicate_total_pairs}"
                 f" passage pair(s) ≥{self.near_duplicate_threshold:.0%} shingled Jaccard"
                 f" ({self.near_duplicate_rate:.1%})"
+            )
+            # Printed on its own line rather than folded into the one above,
+            # because the two disagree on a large corpus and a reader has to see
+            # both to notice. See `near_duplicate_share`.
+            lines.append(
+                f"  {'repeated passages'.ljust(width)} {self.near_duplicate_grouped_passages}/{self.passage_count}"
+                f" ({self.near_duplicate_share:.1%}) in {self.near_duplicate_groups} group(s),"
+                f" largest {self.largest_near_duplicate_group}"
             )
         else:
             lines.append(f"  {'near-duplicates'.ljust(width)} n/a (no compiled passages for this corpus)")
@@ -303,7 +378,11 @@ def compute(world: World) -> Stats:
     type_token_ratio = (len(vocabulary) / total_tokens) if total_tokens else 0.0
 
     pool = passages(world) if world.artifact_irs else []
-    near_pairs, near_total = _near_duplicates(pool)
+    # One join, both readings. Calling `_near_duplicates` and then
+    # `near_duplicate_clusters` would shingle and join the whole pool twice for
+    # two halves of one answer — which is the cost the join exists to avoid.
+    near_pairs_found, near_groups = _near_duplicate_reading(pool)
+    near_total = len(pool) * (len(pool) - 1) // 2
 
     facts_per_document: list[float] = []
     fact_density: list[float] = []
@@ -333,9 +412,12 @@ def compute(world: World) -> Stats:
         type_token_ratio=type_token_ratio,
         passage_count=len(pool),
         near_duplicate_threshold=NEAR_DUPLICATE_THRESHOLD,
-        near_duplicate_pairs=near_pairs,
+        near_duplicate_pairs=len(near_pairs_found),
         near_duplicate_total_pairs=near_total,
-        near_duplicate_rate=(near_pairs / near_total) if near_total else 0.0,
+        near_duplicate_rate=(len(near_pairs_found) / near_total) if near_total else 0.0,
+        near_duplicate_groups=len(near_groups),
+        near_duplicate_grouped_passages=sum(len(group) for group in near_groups),
+        largest_near_duplicate_group=max((len(group) for group in near_groups), default=0),
         facts_per_document=Distribution.of(facts_per_document),
         fact_density=Distribution.of(fact_density),
         fact_count=len(all_fact_ids),
@@ -360,6 +442,10 @@ def diff(a: Stats, b: Stats, *, a_label: str = "a", b_label: str = "b") -> str:
         ("vocabulary size", a.vocabulary_size, b.vocabulary_size),
         ("type-token ratio", round(a.type_token_ratio, 4), round(b.type_token_ratio, 4)),
         ("near-duplicate rate", round(a.near_duplicate_rate, 4), round(b.near_duplicate_rate, 4)),
+        # The row that actually moves when a corpus gets more repetitive; the
+        # rate above barely does. See `Stats.near_duplicate_share`.
+        ("repeated passage share", round(a.near_duplicate_share, 4), round(b.near_duplicate_share, 4)),
+        ("largest duplicate group", a.largest_near_duplicate_group, b.largest_near_duplicate_group),
         ("fact density (median, /100 tok)", round(a.fact_density.median, 2), round(b.fact_density.median, 2)),
         ("facts cited", a.fact_count - a.uncited_fact_count, b.fact_count - b.uncited_fact_count),
         ("eval cases", a.eval_count, b.eval_count),
@@ -371,4 +457,215 @@ def diff(a: Stats, b: Stats, *, a_label: str = "a", b_label: str = "b") -> str:
     return "\n".join(lines)
 
 
-__all__ = ["Distribution", "Stats", "compute", "diff", "SHINGLE_SIZE", "NEAR_DUPLICATE_THRESHOLD"]
+# ---------------------------------------------------------------------------
+# The repetition measurement, as one reading
+# ---------------------------------------------------------------------------
+#
+# Formerly the "measure" step of `worldloom refine`, a rewrite loop this
+# repository deleted: the loop was built and gated against `DeterministicProvider`
+# template prose, and a five-world proof run on real model prose measured its
+# target — repeated passages — at zero in every world (0/46, 0/50, 0/52, 0/46,
+# 0/43). The repetition it fought was an artifact of the deterministic fake, not
+# of any real writer. The *measurement* survives the loop because it answers a
+# question independent of it — "what does this corpus repeat, right now?" — and
+# `worldloom diversity` and the `measure_corpus` MCP tool both report it.
+
+
+@dataclass(frozen=True)
+class Measurement:
+    """What the corpus repeats, right now."""
+
+    passages: int
+    duplicate_pairs: int
+    clusters: tuple[tuple[int, ...], ...]
+    """Groups of mutually near-duplicate passages, by index into ``pool``."""
+    pool: tuple[Passage, ...]
+    artifacts: int
+    distinct_shapes: int
+    shape_collisions: tuple[tuple[str, tuple[int, ...]], ...]
+    uncomposable: tuple[tuple[str, str, str, str], ...] = ()
+    """``(intent_id, artifact_type, code, detail)`` for artifacts whose plan the
+    compiler cannot satisfy, and which therefore have no shape to fingerprint.
+
+    Carried rather than raised. `artifacts` and `distinct_shapes` are counts over
+    what *could* be fingerprinted, so a corpus with unsatisfiable plans would
+    otherwise report a shape census that quietly covered a subset without either
+    reading saying so. Empty on a corpus with no such artifact, which is every
+    corpus this repository ships except one built with ``--distractors``."""
+
+    @property
+    def duplicate_rate(self) -> float:
+        """Duplicate pairs as a fraction of all pairs."""
+        total = self.passages * (self.passages - 1) // 2
+        return self.duplicate_pairs / total if total else 0.0
+
+    @property
+    def repeated_passages(self) -> int:
+        """How many passages sit in some duplicate cluster — the number a
+        reader cares about. A pair count squares with cluster size and so
+        overstates a single eleven-way repeat as fifty-five problems."""
+        return sum(len(group) for group in self.clusters)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "passages": self.passages,
+            "duplicate_pairs": self.duplicate_pairs,
+            "duplicate_rate": round(self.duplicate_rate, 6),
+            "repeated_passages": self.repeated_passages,
+            "clusters": [
+                {
+                    "size": len(group),
+                    "artifacts": sorted({self.pool[i].artifact_id for i in group}),
+                    "excerpt": self.pool[group[0]].text[:160],
+                }
+                for group in self.clusters
+            ],
+            "artifacts": self.artifacts,
+            "distinct_shapes": self.distinct_shapes,
+            "shape_collisions": [
+                {"digest": digest, "count": len(members)}
+                for digest, members in self.shape_collisions
+            ],
+            "uncomposable": [
+                {"artifact_id": intent_id, "artifact_type": artifact_type,
+                 "code": code, "detail": detail}
+                for intent_id, artifact_type, code, detail in self.uncomposable
+            ],
+        }
+
+    def __str__(self) -> str:
+        line = (
+            f"Repetition — {self.repeated_passages} of {self.passages} passage(s) "
+            f"in {len(self.clusters)} duplicate group(s); "
+            f"{self.distinct_shapes} distinct shape(s) across {self.artifacts} artifact(s)"
+        )
+        if self.uncomposable:
+            # Appended to the same line rather than left to `as_dict`: the shape
+            # census above is over `self.artifacts`, and a reader who is not told
+            # the denominator excludes something will read it as the whole corpus.
+            line += f" ({len(self.uncomposable)} more have no composable shape)"
+        return line
+
+
+def measure(world: World) -> Measurement:
+    """Prose repetition and structural repetition together, in one reading.
+
+    Together because they are different failures with different fixes: twenty
+    distinct shapes can still say the same sentences inside all of them, and one
+    shape used twenty times can carry twenty genuinely different arguments. A
+    reading that reported only one of them would declare victory over the other.
+    """
+    from .compiler import diversity as diversity_module
+
+    pool = tuple(passages(world))
+    pairs, groups = _near_duplicate_reading(list(pool))
+
+    shapes = census(world)
+    collisions = diversity_module.collisions(list(shapes.fingerprints))
+    distinct = len({fp.digest() for fp in shapes.fingerprints})
+
+    return Measurement(
+        passages=len(pool),
+        duplicate_pairs=len(pairs),
+        clusters=groups,
+        pool=pool,
+        artifacts=len(shapes.fingerprints),
+        distinct_shapes=distinct,
+        shape_collisions=collisions,
+        uncomposable=shapes.uncomposable,
+    )
+
+
+@dataclass(frozen=True)
+class ShapeCensus:
+    """Every artifact's structural shape, and every artifact that has none.
+
+    The two lists are the point. A shape census that reported only the shapes it
+    found would be a census over a silently-chosen subset, and the number a
+    reader takes from it — "eight distinct shapes across thirty-five artifacts"
+    — would be wrong in the denominator rather than merely incomplete.
+    """
+
+    fingerprints: tuple[Any, ...]
+    """``compiler.diversity.Fingerprint`` rows. Typed loosely so this module
+    keeps its compiler imports inside the functions that need them."""
+    artifact_ids: tuple[str, ...]
+    """Parallel to ``fingerprints``. Kept beside them rather than recovered by
+    re-walking the IR, because `diversity.collisions` returns *positions* and a
+    position is only useful if it can be turned back into the artifact an author
+    has to open."""
+    uncomposable: tuple[tuple[str, str, str, str], ...]
+    """``(artifact_id, artifact_type, code, detail)``, in corpus order."""
+
+
+def census(world: World) -> ShapeCensus:
+    """Structural fingerprints for every compilable artifact, and what refused.
+
+    Anything neither the workbook nor the document renderer claims is a record
+    projection rather than a component composition and has no shape to
+    fingerprint — the same split ``worldloom diversity`` draws.
+
+    Public, and `cli.py`'s `diversity` calls it, where the CLI used to hold a
+    separate copy of this walk on the stated principle that a library must not
+    depend on its own front end. That principle is intact — the dependency still
+    runs one way — but the duplication was not free: every reader of the census
+    has to agree on which artifacts are in it, and additionally on how an
+    unsatisfiable plan is *counted*. Two copies of that were how one command
+    could crash on a corpus while another reported on it.
+
+    Returns the failures rather than raising them; see `compose.try_compose` for
+    why a survey is the caller shape that needs it.
+    """
+    from .compiler import diversity as diversity_module
+    from .compiler.compose import Composition, plan_from_ir, try_compose
+    from .render.docx import HANDLES as DOCX_TYPES
+    from .render.xlsx import HANDLES as XLSX_TYPES
+
+    out: list[Any] = []
+    ids: list[str] = []
+    refused: list[tuple[str, str, str, str]] = []
+    for ir in world.artifact_irs:
+        intent = world.artifact_intents.by_id(ir.intent_id)
+        # A workbook composes with fmt="xlsx" — its lineage sheet is xlsx-only,
+        # so composing it as "docx" refuses on a component that does not fit.
+        # Every other handled type composes with fmt="docx". Anything neither
+        # renderer claims (a Jira, Confluence, or ServiceNow bundle) is a record
+        # projection rather than a component composition (see
+        # `docs/artifact-compiler.md` §9.5) and has no shape to fingerprint —
+        # the same split `tests/test_diversity.py`'s own regression fixture
+        # draws. Not counted as `uncomposable` either: it is not a defect, it is
+        # a kind of artifact this census has nothing to say about.
+        if intent.artifact_type in XLSX_TYPES:
+            fmt = "xlsx"
+        elif intent.artifact_type in DOCX_TYPES:
+            fmt = "docx"
+        else:
+            continue
+        plan = plan_from_ir(
+            ir, artifact_type=intent.artifact_type, size_class=intent.size_profile
+        )
+        composed = try_compose(plan, fmt=fmt)
+        if isinstance(composed, Composition):
+            out.append(diversity_module.fingerprint(composed))
+            ids.append(ir.id)
+        else:
+            # `ir.id`, not `composed.intent_id`: the plan's `intent_id` is the
+            # intent's, and a caller told an artifact is unfingerprintable needs
+            # the id it can go and open. They coincide today and are not required
+            # to.
+            refused.append((ir.id, intent.artifact_type, composed.code, composed.detail))
+    return ShapeCensus(tuple(out), tuple(ids), tuple(refused))
+
+
+__all__ = [
+    "Distribution",
+    "Measurement",
+    "ShapeCensus",
+    "Stats",
+    "census",
+    "compute",
+    "diff",
+    "measure",
+    "SHINGLE_SIZE",
+    "NEAR_DUPLICATE_THRESHOLD",
+]

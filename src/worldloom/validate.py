@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .ids import id_prefix, is_id
-from .models import Authority, FormulaKind, Lifecycle
+from .models import Authority, ErrorType, FormulaKind, Lifecycle
 
 if TYPE_CHECKING:  # pragma: no cover
     from .world import World
@@ -156,6 +156,26 @@ class _Validator:
         self.violations: list[Violation] = []
         self.checks = 0
         self._known: dict[str, set[str]] = {}
+        # The collections a check resolves *by id* while looping over another
+        # collection, bound once here.
+        #
+        # `Collection.by_id` indexes on first use and caches the index, which
+        # would make each of those lookups constant time — except that
+        # `World.facts` (and every sibling accessor) is a property that
+        # constructs a *new* Collection on every read, so the cached index dies
+        # with the temporary object that held it. Written the obvious way,
+        # `for fact in w.facts: w.events.get(fact.event_id)` therefore rebuilds
+        # the whole event index once per fact: measured on a 48-period corpus
+        # (28,389 facts, 351 events) that one line was 28,665 index rebuilds and
+        # 10.1M getattr calls, and `temporal()` alone was 3.6s of validate's
+        # 4.5s. Binding the collection once is not a micro-optimisation — it is
+        # the difference between linear and quadratic in corpus size, and the
+        # answer is identical either way because a Collection is immutable.
+        self._people = world.people
+        self._facts = world.facts
+        self._events = world.events
+        self._artifacts = world.artifacts
+        self._intents = world.artifact_intents
         self._build_index()
 
     # -- helpers -----------------------------------------------------------
@@ -308,7 +328,7 @@ class _Validator:
             if artifact.access_policy_id is None:
                 continue
             policy = policies.get(artifact.access_policy_id)
-            author = self.world.people.get(artifact.author_id)
+            author = self._people.get(artifact.author_id)
             if policy is None or author is None:
                 continue
             self.checks += 1
@@ -603,7 +623,7 @@ class _Validator:
     # -- graph -------------------------------------------------------------
 
     def graph(self) -> None:
-        people = self.world.people
+        people = self._people
 
         self.checks += 1
         roots = people.where(manager_id=None)
@@ -636,6 +656,122 @@ class _Validator:
             self.checks += 1
             if service.id in service.depends_on:
                 self.fail("graph", "self_dependency", service.id, "service depends on itself")
+
+        self.structure()
+
+    def structure(self) -> None:
+        """The invariants only a graph can see.
+
+        Everything above walks one edge at a time and catches what one hop can
+        catch: a service that depends on itself, a person who manages
+        themselves. Three defects are invisible at that resolution, and each
+        one has been reachable in this schema since the schema existed:
+
+        * **A cycle through more than one hop.** ``A → B → C → A`` passes the
+          self-dependency check above three times and is still an estate that
+          can never start.
+        * **A forked supersession chain.** ``temporal()`` builds
+          ``superseded_by[fact.supersedes] = fact.id`` and lets the second
+          writer win, so two facts replacing one earlier fact — which makes
+          "what is current" ambiguous with no rule for choosing — has never
+          been able to surface. The artifact layer has checked exactly this
+          (``superseded_twice``) since documents started being republished;
+          the fact layer, where it matters more, never did.
+        * **A provenance loop across relationships.** Each of ``derived_from``,
+          ``supersedes``, ``revises`` and ``restates`` is checked for its own
+          semantics, and none of those checks can see a loop that uses a
+          different relationship on each edge.
+
+        Delegated to ``graphs.py`` rather than hand-rolled here, because the
+        reading these need is the same reading ``worldloom topology`` prints,
+        and two implementations of "is this acyclic" that could disagree is
+        exactly one implementation too many.
+        """
+        from . import graphs
+
+        for label, graph in (
+            ("service_cycle", graphs.dependency_graph(self.world)),
+            ("reporting_cycle", graphs.reporting_graph(self.world)),
+            ("provenance_cycle", graphs.provenance_graph(self.world)),
+        ):
+            self.checks += 1
+            for cycle in graphs.cycles(graph):
+                self.fail("graph", label, cycle[0],
+                          f"cycle through {' → '.join(cycle)} → {cycle[0]}")
+
+        self.estate()
+
+        # One check per superseded fact, counted whether or not it forks: a
+        # counter incremented only inside the failure branch would report zero
+        # checks on a healthy corpus, which reads as "this was never checked"
+        # — and on the corpus where it matters most, the one that passes.
+        supersession = graphs.supersession_graph(self.world)
+        self.checks += sum(1 for node in supersession if supersession.in_degree(node))
+        for fact_id, superseding in graphs.forks(supersession):
+            self.fail(
+                "graph", "fact_superseded_twice", fact_id,
+                f"superseded by {', '.join(superseding)} — a forked chain leaves two"
+                " facts current with no rule for choosing between them",
+            )
+
+    def estate(self) -> None:
+        """The service landscape has to be a landscape, not a list of names.
+
+        These are cheap on the nine-node estate a stock build produces and are
+        the whole gate on one that a *model* authored (``worldloom compose``),
+        where nothing about the construction can be relied on. Three
+        properties, and each one is a thing a plausible-looking authored estate
+        gets wrong:
+
+        * **A service is owned by someone who works here, and was there to own
+          it.** The referential check upstream proves the id resolves; it does
+          not prove the owner had joined, or had not left. An estate assembled
+          from role names is exactly where that goes wrong.
+        * **A declared criticality tier is not contradicted by the graph.**
+          A tier-1 service that nothing depends on and that depends on nothing
+          is an isolated node claiming to be the most important thing in the
+          company. The generator derives tier from position so it cannot say
+          that; an author can, and does.
+        * **A service runs on a system, and the system exists.** Same
+          reasoning: `system_id` resolving is referential, but a service whose
+          system is one *it also depends on transitively through something
+          else* is fine, while a service with no system at all is a service
+          nobody can deploy.
+
+        Deliberately *not* checked here: acyclicity and layering. The first is
+        `structure()`'s, corpus-wide, and duplicating it would be two
+        implementations of one invariant. The second is not a core concept at
+        all — `Service` carries no layer, and giving it one so this check could
+        read it would put a generator's private vocabulary into the thin waist
+        for the convenience of a check that acyclicity already covers.
+        """
+        w = self.world
+        people = w.people
+        systems = {system.id for system in w.systems}
+        depended_on = {target for service in w.services for target in service.depends_on}
+
+        for service in w.services:
+            self.checks += 1
+            owner = people.get(service.owner_id)
+            if owner is not None and owner.left is not None and owner.joined is not None:
+                if owner.left < owner.joined:
+                    self.fail("graph", "owner_never_employed", service.id,
+                              f"owner {owner.id} left before they joined")
+
+            self.checks += 1
+            isolated = not service.depends_on and service.id not in depended_on
+            if isolated and service.criticality_tier <= 2:
+                self.fail(
+                    "graph", "tier_contradicts_graph", service.id,
+                    f"declares criticality tier {service.criticality_tier} but nothing"
+                    " depends on it and it depends on nothing — an isolated node cannot"
+                    " be the most critical thing in the estate",
+                )
+
+            self.checks += 1
+            if service.system_id not in systems:
+                self.fail("graph", "service_without_system", service.id,
+                          f"runs on {service.system_id!r}, which is not a system of this world")
 
     # -- financial ---------------------------------------------------------
 
@@ -743,7 +879,7 @@ class _Validator:
 
     def temporal(self) -> None:
         w = self.world
-        facts = w.facts
+        facts = self._facts
 
         superseded_by: dict[str, str] = {}
         for fact in facts:
@@ -776,9 +912,9 @@ class _Validator:
                     f" which begins later ({earlier.valid_from.isoformat()})",
                 )
 
-        for event in w.events:
+        for event in self._events:
             for cause_id in event.caused_by:
-                cause = w.events.get(cause_id)
+                cause = self._events.get(cause_id)
                 if cause is None:
                     continue
                 self.checks += 1
@@ -793,7 +929,7 @@ class _Validator:
         for fact in facts:
             if not fact.event_id:
                 continue
-            event = w.events.get(fact.event_id)
+            event = self._events.get(fact.event_id)
             if event is None:
                 continue
             self.checks += 1
@@ -859,8 +995,8 @@ class _Validator:
         # cheapest way for an org change to go wrong — plan a close, then have
         # its author depart mid-quarter, and the reviewer signing the March
         # report left in February.
-        for artifact in w.artifacts:
-            person = w.people.get(artifact.author_id)
+        for artifact in self._artifacts:
+            person = self._people.get(artifact.author_id)
             if person is None:
                 continue
             if person.joined is not None and person.joined > artifact.created_at:
@@ -884,22 +1020,48 @@ class _Validator:
                     f" who left {person.left.isoformat()}",
                 )
 
-        # A unit's leader has to be employed for the unit's whole life, not just
-        # at some point in it. Checked at the moment the unit forms because that
-        # is the one instant every unit has; a leader who later departs is caught
-        # by the departure scenario reassigning the post.
+        # A unit's leader has to have been employed for as long as they have led
+        # it. That used to be checked against the unit's *formation*, on the
+        # stated grounds that formation is the one instant every unit has and
+        # "a leader who later departs is caught by the departure scenario
+        # reassigning the post". The unstated half of that reasoning was that
+        # `leader_id` therefore always names the *founding* leader — true for
+        # every corpus this project had ever built, because nothing scheduled a
+        # reorganisation and no departure had ever removed a unit leader.
+        #
+        # It stopped being true the moment a history could contain either
+        # (`worldloom.timeline`), and the check then fired on perfectly coherent
+        # worlds: a division formed in 2022 whose managing director was hired in
+        # 2023 and promoted in 2026 is an ordinary company, not a temporal
+        # violation. So the instant a leader is measured against is when they
+        # *took the unit* — the `org.unit_leader_changed` fact the hand-over
+        # mints — falling back to formation for a unit that never changed hands.
+        # A corpus with no hand-overs is checked exactly as before, same check
+        # count and same message.
+        handover: dict[str, object] = {}
+        for fact in w.facts:
+            if fact.kind != "org.unit_leader_changed" or fact.valid_from is None:
+                continue
+            latest = handover.get(fact.subject)
+            if latest is None or fact.valid_from > latest:  # type: ignore[operator]
+                handover[fact.subject] = fact.valid_from
         for unit in w.business_units:
-            leader = w.people.get(unit.leader_id)
+            leader = self._people.get(unit.leader_id)
             if leader is None or unit.formed is None:
                 continue
             self.checks += 1
-            if leader.joined is not None and leader.joined > unit.formed:
+            since = handover.get(unit.id, unit.formed)
+            if leader.joined is not None and leader.joined > since:  # type: ignore[operator]
+                held = (
+                    f"led from {since.isoformat()} by"  # type: ignore[attr-defined]
+                    if unit.id in handover
+                    else f"formed {unit.formed.isoformat()} under"
+                )
                 self.fail(
                     "temporal",
                     "leader_not_yet_employed",
                     unit.id,
-                    f"formed {unit.formed.isoformat()} under {leader.id},"
-                    f" who joined {leader.joined.isoformat()}",
+                    f"{held} {leader.id}, who joined {leader.joined.isoformat()}",
                 )
 
         for case in w.evaluations:
@@ -935,6 +1097,139 @@ class _Validator:
 
     # -- deliberate imperfection ------------------------------------------
 
+    def _artifact_facts(self) -> dict[str, list[str]]:
+        """Artifact id → the facts it cites, from whichever record the world has.
+
+        Both, because the two live at different stages: a built world holds
+        ``artifact_intents`` and no manifest until it is rendered, and a corpus
+        loaded from disk may hold a manifest whose intents were never written
+        out. A check that read only one would silently pass on half the corpora
+        it was written for, which is the failure mode ``validate`` exists to not
+        have.
+        """
+        cited: dict[str, list[str]] = {}
+        for intent in self.world.artifact_intents:
+            cited[intent.id] = list(intent.required_fact_ids)
+        for entry in self.world.artifacts:
+            if entry.supporting_fact_ids or entry.id not in cited:
+                cited[entry.id] = list(entry.supporting_fact_ids)
+        return cited
+
+    def imperfection(self) -> None:
+        """A recorded imperfection must be establishable from the corpus itself.
+
+        This is the check that makes deliberate mess safe to generate at all
+        (``worldloom.messiness``). A synthetic enterprise is allowed to be as
+        untidy as a real one — stale pages, quotations that have gone out of
+        date, documents whose author left — but only because the corpus can
+        *explain* every one of them. An imperfection a reader cannot establish
+        from the ledger is indistinguishable from a generator defect, and the
+        label asserting it was deliberate is then the corpus vouching for
+        something it cannot show.
+
+        So each labelled kind has to carry its own evidence:
+
+        ``stale_status``
+            The named document must cite at least one fact the ledger later
+            superseded, and must not also cite the successor. The first half is
+            what makes "stale" falsifiable — without a correction on the record
+            there is nothing the document is stale *relative to*. The second is
+            the sharper one: a document carrying both the old figure and its
+            replacement is a history, and calling it stale would have the corpus
+            assert a defect its own citations deny.
+
+        ``outdated_owner``
+            The named document's author must actually have left, and the fact
+            named as canonical must be about that person — which is what a reader
+            follows to find who took the work on. A document whose author is
+            still at their desk is not orphaned, whatever the label says.
+
+        Deliberately silent on the kinds it says nothing about
+        (``material_omission``, ``political_understatement``, and the rest): what
+        would count as evidence differs per kind, and a check that guessed would
+        refuse hand-authored corpora for being differently right.
+        """
+        w = self.world
+        facts = {fact.id: fact for fact in w.facts}
+        cited_by = self._artifact_facts()
+        successors: dict[str, str] = {
+            fact.supersedes: fact.id for fact in w.facts if fact.supersedes
+        }
+
+        for error in w.intentional_errors:
+            if error.error_type is ErrorType.STALE_STATUS:
+                cited = cited_by.get(error.artifact_id)
+                if cited is None:
+                    continue
+                superseded = [
+                    fact_id for fact_id in cited
+                    if fact_id in facts and facts[fact_id].is_superseded
+                ]
+                self.checks += 1
+                if not superseded:
+                    self.fail(
+                        "intentional",
+                        "stale_without_correction",
+                        error.id,
+                        f"labels {error.artifact_id} stale, but that document cites"
+                        " no fact the ledger ever superseded, so nothing in the"
+                        " corpus establishes what it is stale relative to",
+                    )
+                    continue
+
+                carried = sorted(
+                    successors[fact_id] for fact_id in superseded
+                    if successors.get(fact_id) in cited
+                )
+                self.checks += 1
+                if carried:
+                    self.fail(
+                        "intentional",
+                        "stale_carries_correction",
+                        error.id,
+                        f"labels {error.artifact_id} stale, but it cites {carried}"
+                        " alongside the facts they replace — a document holding"
+                        " both figures is a history, not an out-of-date copy",
+                    )
+
+            elif error.error_type is ErrorType.OUTDATED_OWNER:
+                author_id = self._author_of(error.artifact_id)
+                author = self._people.get(author_id) if author_id else None
+                if author is None:
+                    continue
+                self.checks += 1
+                if author.left is None:
+                    self.fail(
+                        "intentional",
+                        "owner_still_here",
+                        error.id,
+                        f"labels {error.artifact_id} orphaned, but its author"
+                        f" {author.id} has no leaving date on the roster",
+                    )
+                if not error.canonical_fact_id:
+                    continue
+                departure = facts.get(error.canonical_fact_id)
+                if departure is None:
+                    continue
+                self.checks += 1
+                if departure.subject != author.id:
+                    self.fail(
+                        "intentional",
+                        "departure_not_recorded",
+                        error.id,
+                        f"points at {departure.id}, which is about"
+                        f" {departure.subject} rather than the departed author"
+                        f" {author.id}, so the corpus records no succession a"
+                        " reader could follow",
+                    )
+
+    def _author_of(self, artifact_id: str) -> str | None:
+        entry = self._artifacts.get(artifact_id)
+        if entry is not None:
+            return entry.author_id
+        intent = self._intents.get(artifact_id)
+        return intent.author_id if intent is not None else None
+
     def intentional(self) -> None:
         """A labelled error must actually contradict the canonical fact it names.
 
@@ -944,7 +1239,7 @@ class _Validator:
         for error in self.world.intentional_errors:
             if not error.canonical_fact_id:
                 continue
-            fact = self.world.facts.get(error.canonical_fact_id)
+            fact = self._facts.get(error.canonical_fact_id)
             if fact is None:
                 continue
             self.checks += 1
@@ -1028,7 +1323,7 @@ class _Validator:
             self.check_ref(task.id, "created_by", task.created_by, expect="PERSON")
             self.check_ref(task.id, "owner_id", task.owner_id, expect="PERSON")
             self.check_refs(task.id, "fact_ids", task.fact_ids, expect=FACT_REFS)
-            owner = w.people.get(task.owner_id) if task.owner_id else None
+            owner = self._people.get(task.owner_id) if task.owner_id else None
             if owner is None:
                 continue
             self.checks += 1
@@ -1242,6 +1537,7 @@ class _Validator:
         self.temporal()
         self.lore()
         self.intentional()
+        self.imperfection()
         self.actors()
         self.evaluation()
         # Domain groups last, in name order so the report is stable however

@@ -83,6 +83,84 @@ jobs:
           worldloom render "${{ runner.temp }}/reference" -f docx -f xlsx -f markdown
           worldloom validate "${{ runner.temp }}/reference"
 
+      # The analysis surfaces, on a corpus big enough for each to say something.
+      # `topology` and `series` are readings rather than gates — they exit zero
+      # on a corpus with a defect in it, because `validate` owns pass/fail — so
+      # what this step proves is that they run at scale and that their JSON is
+      # stable: the same corpus read twice must produce the same bytes, which is
+      # the property that lets either one be diffed in a downstream CI at all.
+      - name: The readings run and are stable
+        run: |
+          worldloom build --seed 8128 --incident --archetype australian_grocery \
+            --comparatives 23 --trend 0.004 --narrate -f markdown \
+            --out "${{ runner.temp }}/measured"
+          worldloom topology "${{ runner.temp }}/measured" --json > /tmp/topology-a.json
+          worldloom topology "${{ runner.temp }}/measured" --json > /tmp/topology-b.json
+          diff /tmp/topology-a.json /tmp/topology-b.json
+          worldloom series "${{ runner.temp }}/measured" --json > /tmp/series-a.json
+          worldloom series "${{ runner.temp }}/measured" --json > /tmp/series-b.json
+          diff /tmp/series-a.json /tmp/series-b.json
+          worldloom diversity "${{ runner.temp }}/measured" --near-duplicates
+          # And the trended build replays byte-for-byte like every other knob.
+          worldloom build --seed 8128 --incident --archetype australian_grocery \
+            --comparatives 23 --trend 0.004 --replay "${{ runner.temp }}/measured" \
+            -f markdown --out "${{ runner.temp }}/measured-again"
+          diff -r "${{ runner.temp }}/measured" "${{ runner.temp }}/measured-again"
+
+      # The estate: generated on the engine that has pools, authored on the one
+      # that does not. Both paths end at the same place — a landscape that
+      # validates and a topology that can be read — and the composed corpus
+      # additionally has to rebuild from its own ledger, because a
+      # model-authored estate that only exists in the run that made it is one
+      # run's output rather than an artifact.
+      - name: The estate grows, composes, and rebuilds
+        run: |
+          worldloom build --seed 8128 --incident --archetype australian_grocery \
+            --estate large --out "${{ runner.temp }}/estate"
+          worldloom validate "${{ runner.temp }}/estate"
+          worldloom topology "${{ runner.temp }}/estate" --json > /tmp/estate.json
+          python3 - <<'EOF'
+          import json
+          reading = json.load(open("/tmp/estate.json"))
+          assert len(reading["services"]) > 50, reading["services"][:3]
+          assert len(reading["longest_dependency_chain"]) > 5, reading["longest_dependency_chain"]
+          assert reading["chokepoints"], "a landscape with nothing gating anything is a diagram"
+          assert not reading["dependency_cycles"]
+          EOF
+          # The composition handshake, driven by a scripted stand-in so the
+          # contract is covered with no model in CI — the same posture the
+          # narration and actor handshakes take.
+          worldloom build --seed 8128 --archetype midsize_general_insurer \
+            --out "${{ runner.temp }}/composed"
+          worldloom compose requests "${{ runner.temp }}/composed" -o compose-request.json
+          python3 tests/scripted_composer.py compose-request.json estate-response.json
+          worldloom compose accept "${{ runner.temp }}/composed" --from estate-response.json \
+            --model-id ci-scripted-composer
+          worldloom validate "${{ runner.temp }}/composed"
+          worldloom topology "${{ runner.temp }}/composed"
+          # And an incoherent estate must be refused rather than committed.
+          python3 tests/scripted_composer.py compose-request.json bad-estate.json --cycle
+          if worldloom compose accept "${{ runner.temp }}/composed" --from bad-estate.json; then
+            echo "a dependency cycle was accepted"
+            exit 1
+          fi
+
+      # The repetition measurement, on a corpus that genuinely repeats: three
+      # deterministic closes are one template stamped out three times, and the
+      # readings must say so rather than report a clean corpus by having
+      # nothing to look at. (The rewrite loop that used to act on this reading
+      # was deleted — its target measured zero on real model prose across a
+      # five-world proof run; the deterministic fake was the only writer that
+      # ever repeated itself. The measurement stays because the question stays.)
+      - name: The repetition measurement still reads
+        run: |
+          worldloom build --seed 8128 --incident --periods 3 --narrate -f markdown \
+            --out "${{ runner.temp }}/repetitive"
+          worldloom diversity "${{ runner.temp }}/repetitive" --near-duplicates \
+            | grep -q "near-duplicate passage groups"
+          # And the tool surface an agent is handed serves the same reading.
+          worldloom mcp --tools | grep -q measure_corpus
+
       # The corpus has to be hard, not just coherent. A keyword baseline with no
       # notion of time or authority is scored against the evaluation set, and the
       # score is asserted to stay low on the types the corpus exists to pose. If
@@ -172,16 +250,34 @@ jobs:
         run: |
           worldloom build --seed 8128 --incident --out "${{ runner.temp }}/agent"
           worldloom narrate requests "${{ runner.temp }}/agent" -o requests.json
+
+          # The rejection first, while sections are still awaiting prose.
+          #
+          # This used to run *last*, against a corpus every section of which had
+          # already been narrated — so `review()` had nothing to review, the
+          # deliberately-invalid responses were never looked at, and the step
+          # passed only because an unrelated `FileExistsError` in `export` made
+          # the command exit non-zero. Fixing that bug is what revealed it. The
+          # guardrail this step is named for had not been exercised since
+          # rendering was added to it.
+          python3 tests/scripted_agent.py requests.json bad.json --restate
+          if worldloom narrate accept "${{ runner.temp }}/agent" --from bad.json; then
+            echo "a restated figure was accepted — the guardrail is not working"
+            exit 1
+          fi
+
+          # Then the good pass, which must still be accepted whole.
           python3 tests/scripted_agent.py requests.json responses.json
           worldloom narrate accept "${{ runner.temp }}/agent" --from responses.json \
             --model-id ci-scripted-agent
           worldloom render "${{ runner.temp }}/agent" -f markdown -f xlsx -f docx
           worldloom validate "${{ runner.temp }}/agent"
 
-          # And a violation must be rejected rather than quietly accepted.
-          python3 tests/scripted_agent.py requests.json bad.json --restate
-          if worldloom narrate accept "${{ runner.temp }}/agent" --from bad.json; then
-            echo "a restated figure was accepted — the guardrail is not working"
+          # And submitting into a corpus with nothing left awaiting prose is an
+          # error rather than a silent no-op — the exact shape that let the
+          # rejection above go unexercised.
+          if worldloom narrate accept "${{ runner.temp }}/agent" --from responses.json; then
+            echo "responses were accepted into a corpus with nothing awaiting prose"
             exit 1
           fi
 

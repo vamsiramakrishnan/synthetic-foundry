@@ -100,8 +100,8 @@ def highest_numeric_suffix(prefix: str, ids: Iterable[str]) -> int:
 
     Ignores any id sharing *prefix* whose suffix is not a bare number, rather
     than raising on it — a scratch id minted by a different scheme under the
-    same prefix (a narration checkpoint's ``GEN-CKPT-<hex>``, see
-    ``narrative/compiler.py``; a foreign provider's ledger entry, see
+    same prefix (the provisional ``GEN-CKPT-<hex>`` entries ``on_accepted``
+    hands out, see ``narrative/compiler.py``; a foreign provider's ledger entry, see
     ``test_foreign_ledger_entries_are_harmless_to_replay``) must not stop a
     legitimate sequence from continuing, or worse, crash it.
 

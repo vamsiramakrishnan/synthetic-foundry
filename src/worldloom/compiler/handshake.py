@@ -640,9 +640,9 @@ def accept(world: World, responses: dict[str, ProposedPlan], *, model_id: str) -
     # may already carry entries minted by narration (or an earlier accepted
     # plan batch), and starting back at GEN-0001 would mint an id that already
     # names something else. `highest_numeric_suffix` also shields this against
-    # a narration checkpoint's `GEN-CKPT-<hex>` entries reaching a resumed
-    # corpus's ledger (`narrative/compiler.py`) — the naive `int(...)` this
-    # used to do would raise on that suffix instead of skipping it.
+    # the provisional `GEN-CKPT-<hex>` entries `on_accepted` hands out reaching
+    # a resumed corpus's ledger (`narrative/compiler.py`) — the naive `int(...)`
+    # this used to do would raise on that suffix instead of skipping it.
     next_gen = 1 + highest_numeric_suffix("GEN", (entry.id for entry in world.ledger))
 
     reqs = requests(world)

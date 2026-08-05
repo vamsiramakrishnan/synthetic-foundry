@@ -61,11 +61,28 @@ from .banking_scenarios import QuarterlyCapitalReturn
 from .insurance import InsuranceWorld
 from .insurance_scenarios import QuarterlyReserving
 
+# And the fourth. Worth naming what this line is, because it is the one seam a
+# vertical needs that is not a registry: there is no plugin discovery, so a
+# domain module registers by *being imported*, and the only thing that imports
+# it unconditionally is this file. Everything else procurement touches in core
+# it reaches through `register_domain`, `register_step`,
+# `register_artifact_types` and `register_domain_checks`; this import is the
+# fifth seam, and it is a hand edit.
+from .procurement import ProcureToPayWorld
+from .procurement_scenarios import PurchaseToPayCycle
+
 # Same contract as the banking imports above: importing this is what registers
 # the `routine_notice` artifact type (build --distractors's plainest family),
 # and a corpus that carries one must compile identically whether this process
 # built it or is only reading it back.
 from .generators import distractors as _distractors  # noqa: F401
+
+# Same contract again, one level up: importing this is what registers the
+# `Imperfections` recipe verb, and a corpus built with a messiness profile
+# cannot rebuild itself in a process where that verb is unknown. `recipe.rebuild`
+# would raise `unknown scenario` — a corpus that reports a clean recipe and
+# refuses to replay, which is the exact failure lazy registration always is.
+from . import messiness  # noqa: F401
 
 __version__ = "0.1.0"
 
@@ -78,6 +95,8 @@ __all__ = [
     "QuarterlyCapitalReturn",
     "InsuranceWorld",
     "QuarterlyReserving",
+    "ProcureToPayWorld",
+    "PurchaseToPayCycle",
     # entities
     "Company",
     "BusinessUnit",

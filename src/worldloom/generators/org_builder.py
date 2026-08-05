@@ -37,15 +37,19 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from ..ids import Minter
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import (
     Authority,
     BusinessUnit,
     CanonicalFact,
+    ConstraintKind,
     Employee,
     EnterpriseEvent,
     LoreCommitment,
     LoreKind,
+    Quantity,
 )
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import names
 
@@ -113,7 +117,7 @@ def _depth(role: str, managers: dict[str, str | None], seen: frozenset[str] = fr
     return 0 if manager is None else 1 + _depth(manager, managers, seen | {role})
 
 
-def _joined_date(rng: Rng, role: str, depth: int) -> datetime:
+def _joined_date(rng: Rng, role: str, depth: int, physics: Parameters = DEFAULT) -> datetime:
     """A join date for *role*, further back the closer it sits to the org root.
 
     An executive who has been here a decade and an analyst hired last year is a
@@ -132,7 +136,16 @@ def _joined_date(rng: Rng, role: str, depth: int) -> datetime:
     # than landing on day zero.
     min_years = max(0.5, 6.0 - depth * 2.0)
     max_years = min_years + 6.0
-    tenure_days = tenure_rng.number(min_years, max_years) * 365.25
+    # The only registry draw in this module that is not the range it replaced:
+    # `org.tenure.years` is the *position within* the band above, because the
+    # band's ends are derived from depth and a pack cannot state them as one
+    # range. Scaling a unit draw is bit-identical to drawing across
+    # [min_years, max_years] directly — `Rng.number` is `random.uniform`, which
+    # is `a + (b - a) * random()`, and float multiplication commutes — so this
+    # is a rewrite of the arithmetic and not of the world. Verified across every
+    # band `depth` can produce rather than argued from the identity alone.
+    position = physics.number("org.tenure.years", tenure_rng)
+    tenure_days = (min_years + position * (max_years - min_years)) * 365.25
     return _LATEST_JOIN - timedelta(days=tenure_days)
 
 
@@ -158,6 +171,8 @@ def mint_people(
     assign: Callable[[str, str, str], Assignment],
     given: Sequence[str] | None = None,
     family: Sequence[str] | None = None,
+    locale: Locale = DEFAULT_LOCALE,
+    physics: Parameters = DEFAULT,
 ) -> tuple[dict[str, str], list[Employee]]:
     """Mint one person per role row, in table order.
 
@@ -167,18 +182,29 @@ def mint_people(
     mechanism: name pools, id sequence, join date, and a ``left`` of ``None``,
     because departures are a scenario's concern, not the beginning's.
 
-    ``given``/``family`` pass straight through to ``names.people_names`` —
-    ``None`` for the engine's own pools, or a pack's ``name_pools`` handed
-    down by the domain module. This is mechanism deciding *how many* names it
-    needs and *which* pools to draw them from; it is still not the mechanism's
-    business to know why one pool was chosen over another.
+    ``given``/``family``/``locale`` pass straight through to
+    ``names.people_names``, which owns the precedence between them: a pack's
+    ``name_pools`` is a claim about *this company's* people and beats the
+    ``locale``, which is a claim about the country they are in. Stated once
+    there rather than resolved here, because three domain modules call this and
+    three copies of "pool or locale" is three places the rule can drift.
+
+    ``locale`` is threaded rather than left to ``people_names``'s own default
+    for the reason ``hierarchy.generate`` gives about ``regions``: reaching for
+    a module default *shadows* the locale a caller already decided, and it does
+    so invisibly — a Frankfurt company whose staff are all called Rafferty is
+    entirely plausible prose, so there is nothing in the corpus to notice the
+    drop by. Defaulted here so an un-localised call draws from the same
+    Australian pools it always did.
 
     Draw order is contract: names from ``rng.derive("people")``, join dates
     from ``rng.derive("founding")`` — the labels both original generators used,
-    kept so existing seeds reproduce their worlds.
+    kept so existing seeds reproduce their worlds. A locale changes *which*
+    pool is sampled and never how many draws are taken from it, so a localised
+    world differs in its names and in nothing downstream of them.
     """
     person_names = names.people_names(
-        rng.derive("people"), len(role_table), given=given, family=family
+        rng.derive("people"), len(role_table), given=given, family=family, locale=locale
     )
     founding_rng = rng.derive("founding")
     role_ids: dict[str, str] = {}
@@ -192,7 +218,7 @@ def mint_people(
                 id=person_id,
                 name=person_name,
                 title=title,
-                joined=_joined_date(founding_rng, role, depth_of[role]),
+                joined=_joined_date(founding_rng, role, depth_of[role], physics),
                 left=None,
                 manager_id=None,  # wired by `wire_managers`, once every role has an id
                 business_unit_id=business_unit,
@@ -281,6 +307,79 @@ def apply_traits(
         person if person.id not in traits else person.model_copy(update={"traits": traits[person.id]})
         for person in people
     )
+
+
+#: What an accountability fact is called. One kind, not one per measure, so a
+#: reader asking "what is this person answerable for" has a single thing to look
+#: for and the measure they are answerable *for* is the fact's own text.
+ACCOUNTABILITY_KIND = "org.accountability"
+
+#: The tolerance band a role is judged within, when its lore does not say. Five
+#: per cent because that is the band a variance memo in this corpus treats as
+#: worth explaining — it is a default, and a pack that means something else
+#: should say so rather than inherit this.
+DEFAULT_TOLERANCE_PCT = 5.0
+
+
+def accountability_facts(
+    minter: Minter,
+    lore: tuple[LoreCommitment, ...],
+    role_ids: dict[str, str],
+) -> tuple[CanonicalFact, ...]:
+    """One fact per ``accountability`` constraint: this person, this measure.
+
+    The edge the corpus did not have. A budget attaches to a business unit and
+    a variance is reported against it, but nothing anywhere said who answers
+    for either — so a reader could ask what the miss *was* and never who was
+    answerable for it.
+
+    Targets are written ``role_key/fact_kind`` and resolved through
+    ``role_ids``, exactly as ``persona_trait`` is and for the same reason: lore
+    is authored before the graph exists and cannot know who ``PERSON-0017``
+    will be. A target naming a role this world does not have is skipped rather
+    than raising — a pack shared across archetypes will legitimately name roles
+    one of them lacks, and ``packs.lint`` is where an author is told about it.
+
+    Minted last and only when lore asks for it. Both halves matter: no shipped
+    lore carries this kind, so every existing corpus mints nothing here and is
+    byte-identical, and appending after the founding milestones means the FACT
+    sequence can only grow at the end rather than renumbering a fact some
+    narration already cites.
+    """
+    facts: list[CanonicalFact] = []
+    for commitment in lore:
+        for constraint in commitment.constrains:
+            if constraint.kind is not ConstraintKind.ACCOUNTABILITY:
+                continue
+            role, _, measure = constraint.target.partition("/")
+            person_id = role_ids.get(role)
+            if person_id is None or not measure:
+                continue
+            facts.append(CanonicalFact(
+                id=minter.next("FACT"),
+                kind=ACCOUNTABILITY_KIND,
+                subject=person_id,
+                # The measure as text and the tolerance as the value, because
+                # the fact makes one claim in two parts: *what* this person is
+                # judged on, and *how far* it may move before anyone asks. Two
+                # facts would make the second orphanable.
+                text_value=measure,
+                value=Quantity(
+                    amount=(DEFAULT_TOLERANCE_PCT if constraint.magnitude is None
+                            else constraint.magnitude),
+                    unit="percent",
+                ),
+                # From when the commitment that created it takes effect, not
+                # from a timestamp the caller passed in: an accountability
+                # begins when the thing that assigned it does, and dating it
+                # otherwise would let `World.org_at` report somebody answerable
+                # for a measure before anyone had made them so.
+                valid_from=(_month_start(commitment.effective_from)
+                            if commitment.effective_from else _LATEST_JOIN),
+                authority=Authority.SYSTEM_OF_RECORD,
+                lore_ids=[commitment.id],
+            ))
+    return tuple(facts)
 
 
 def founding_milestones(

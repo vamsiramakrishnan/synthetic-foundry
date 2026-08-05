@@ -336,6 +336,10 @@ def test_no_core_check_groups_this_verticals_facts_by_period() -> None:
         "models.py", "world.py", "ids.py", "rng.py", "corpus.py", "collections.py",
         "validate.py", "domains.py", "packs.py", "recipe.py", "cli.py",
         "documents.py",
+        # The analysis layer, core by construction: `graphs` backs validator
+        # checks that run on every corpus, and neither `series` nor
+        # `similarity` knows what industry it is reading.
+        "graphs.py", "series.py", "similarity.py",
         "generators/org_builder.py", "generators/cases.py",
         "generators/communications.py", "generators/hierarchy.py",
         "render/__init__.py", "render/markdown.py", "render/xlsx.py",

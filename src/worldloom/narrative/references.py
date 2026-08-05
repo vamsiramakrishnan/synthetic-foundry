@@ -12,12 +12,32 @@ together, because none of them ever stored it.
 The complementary rule lives in ``claims.py``: a model may not emit a bare numeral
 at all. Substitution guarantees literals cannot drift; claim validation catches
 assertions that drift without a literal in them.
+
+**Why this file spells its own figures, and why the digits are still not its
+own.** ``render/values.format_value`` is the single seam a *cell* goes through;
+this module is the single seam a *sentence* goes through, and they are genuinely
+two presenters. A cell has an Excel number format and no room for words, so it
+says ``(1,234)``; a sentence has no number format and a reader who needs to know
+what the figure measures, so it says ``AUD 1,234 thousands adverse``. Neither can
+be expressed in the other's vocabulary, which is why merging the two functions
+would mean one of them growing a mode switch.
+
+What they must not each own is the *digit grammar*, and until now they did: this
+file had ``,`` and ``.`` typed into its f-strings exactly as ``render/values``
+had. Two formatters that can disagree about the same figure is precisely what
+that module exists to prevent — a German corpus whose table read ``1.234,50``
+and whose prose read ``1,234.50`` two lines below it would be a document
+disagreeing with itself in the one way a reader notices immediately. So both
+presenters now write through the same ``locales.Locale.spell``/``percent``: one
+grammar, two sentences built on it.
 """
 
 from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING
+
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact
@@ -63,23 +83,33 @@ def bare_numbers(text: str) -> list[str]:
     return BARE_NUMBER.findall(strip_references(text))
 
 
-def render_value(fact: CanonicalFact) -> str:
+def render_value(fact: CanonicalFact, *, locale: Locale = DEFAULT_LOCALE) -> str:
     """A fact as a reader would see it in prose.
 
     Formatting lives here rather than at each call site so that the same fact reads
     identically in every document that references it.
+
+    *locale* supplies the digit grammar and nothing else — see the module note.
+    A negative is *worded* here (``adverse``) rather than parenthesised or
+    signed, in every jurisdiction: the accounting parenthesis and the leading
+    minus are table conventions, and a sentence that ended ``AUD (1,234)`` would
+    be a table cell that had wandered into prose.
     """
     if fact.value is None:
         return fact.text_value or ""
 
     amount, unit = fact.value.amount, fact.value.unit
-    magnitude = f"{abs(amount):,.0f}" if float(amount).is_integer() else f"{abs(amount):,.2f}"
+    magnitude = locale.spell(amount, 0 if float(amount).is_integer() else 2)
 
     if unit == "percent":
-        return f"{amount:.2f}%"
+        # Signed rather than worded, and grouped rather than bare, because this
+        # is the same figure `format_value`'s percentage branch writes — that
+        # one keeps its minus too, and the two must not diverge on a number a
+        # memo lifts straight out of the table above it.
+        return locale.percent(f"{'-' if amount < 0 else ''}{locale.spell(amount, 2)}")
     if unit == "bps":
-        return f"{abs(amount):,.0f} bps {'adverse' if amount < 0 else 'favourable'}"
-    if unit.startswith(("AUD", "USD", "GBP", "EUR")):
+        return f"{locale.spell(amount, 0)} bps {'adverse' if amount < 0 else 'favourable'}"
+    if _is_money(unit):
         currency, _, scale = unit.partition("_")
         rendered = f"{currency} {magnitude}"
         if scale:
@@ -90,7 +120,29 @@ def render_value(fact: CanonicalFact) -> str:
     return f"{magnitude} {unit}"
 
 
-def describe(fact: CanonicalFact, subject: str | None = None) -> str:
+def _is_money(unit: str) -> bool:
+    """Whether a unit names a currency, by its shape rather than by a list.
+
+    This was an allow-list of four — AUD, USD, GBP, EUR — and `Pack.currency`
+    has always accepted any string. So a pack denominated in AED, CHF, SGD, JPY
+    or INR fell through to the generic branch and printed
+    `240,900 AED_thousands` instead of `AED 240,900 thousands`, and silently
+    lost the ` adverse` suffix that tells a reader a negative variance is bad
+    news. A live defect for every currency nobody thought to add, and the kind
+    that gets found by a reader rather than by a test.
+
+    ISO 4217 is exactly three uppercase letters, which no other unit this corpus
+    mints resembles — `percent`, `bps`, `business_days` and `SKUs` are all
+    lowercase-led or longer. Matching the shape means a currency works because
+    it is a currency, not because somebody remembered it.
+    """
+    head, _, _ = unit.partition("_")
+    return len(head) == 3 and head.isascii() and head.isupper() and head.isalpha()
+
+
+def describe(
+    fact: CanonicalFact, subject: str | None = None, *, locale: Locale = DEFAULT_LOCALE
+) -> str:
     """A fact as one line: what it is about, what it measures, and what it says.
 
     The subject is the whole point of this function. Without it, a request
@@ -104,23 +156,35 @@ def describe(fact: CanonicalFact, subject: str | None = None) -> str:
     own, so a figure reads the same here as it does in finished prose. Formatting
     it separately is how ``3.4935e+06`` reached a supporting-facts table that a
     human was supposed to read.
+
+    *locale* is forwarded for the same reason: a writer briefed in one grammar
+    and rendered in another is being shown a figure they will not recognise in
+    the finished document. Callers that pass none get the engine's, which is
+    what every caller did before locales existed.
     """
-    measure = render_value(fact) if fact.value is not None else (fact.text_value or "")
+    measure = render_value(fact, locale=locale) if fact.value is not None else (fact.text_value or "")
     lead = f"{subject} · " if subject else ""
     return f"{lead}{fact.kind} = {measure}" if measure else f"{lead}{fact.kind}"
 
 
-def substitute(text: str, facts: dict[str, CanonicalFact]) -> str:
+def substitute(
+    text: str, facts: dict[str, CanonicalFact], *, locale: Locale = DEFAULT_LOCALE
+) -> str:
     """Replace every reference in *text* with its fact's value.
 
     An unresolvable reference is left visible as ``[missing FACT-0001]`` rather
     than silently dropped. A document with a hole in it is a bug worth seeing; one
     that quietly omits a figure reads as complete and is not.
+
+    This is where a locale reaches *prose*. The narrated body is stored with
+    ``{{fact:ID}}`` in it and the figure is spelled at render time, so one
+    corpus's paragraphs re-spell under a locale exactly as its tables do — which
+    is only true because the model was never allowed to type the number.
     """
 
     def replace(match: re.Match[str]) -> str:
         fact = facts.get(match.group("id"))
-        return render_value(fact) if fact else f"[missing {match.group('id')}]"
+        return render_value(fact, locale=locale) if fact else f"[missing {match.group('id')}]"
 
     return REFERENCE.sub(replace, text)
 

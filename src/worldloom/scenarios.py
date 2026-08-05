@@ -16,9 +16,14 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from .generators.operations import business_days_after, period_end
+from . import documents, profiles as _profiles
+from .parameters import DEFAULT, Parameters
+from .recipe import locale_of
 from .rng import Rng
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .generators.operations import CloseEpisode
+    from .generators.planning import EstateReading
     from .world import World
 
 
@@ -81,6 +86,86 @@ def density_adjustment(world: World, target: str) -> float:
     return total
 
 
+def filings(world: World) -> dict[str, float]:
+    """Every artifact type this world's lore asks for or refuses, and by how much.
+
+    The same quantity ``density_adjustment`` reads, at the targets that name an
+    *artifact type* rather than a reporting theme (``facets.FILING_PREFIX``).
+    Summed across commitments for the same reason density is: two claims about
+    one target are two things a company is, and the world is what they come to
+    together. A founder-led listed company keeps its audit committee pack —
+    nothing suppresses that target — and loses its minutes, because one claim
+    aims at that target and nothing outweighs it.
+
+    Read by ``generators.planning``, which supplies the *base* each type starts
+    from: a summed adjustment of zero means "the lore said nothing", which for
+    ``meeting_minutes`` means it is still filed and for ``sponsor_pack`` means
+    it is not. That split belongs to the planner, because which documents a
+    company files by default is a statement about the episode rather than about
+    the lore.
+
+    Lore order decides nothing — the result is read by key — but the iteration
+    is over ordered collections regardless, so two processes agree on the float
+    even where addition does not commute in the last bit.
+    """
+    from .facets import FILING_PREFIX
+
+    out: dict[str, float] = {}
+    for commitment in world.lore:
+        for constraint in commitment.constrains:
+            if constraint.kind.value != "artifact_density":
+                continue
+            if not constraint.target.startswith(FILING_PREFIX):
+                continue
+            artifact_type = constraint.target[len(FILING_PREFIX):]
+            out[artifact_type] = out.get(artifact_type, 0.0) + (constraint.magnitude or 0.0)
+    return out
+
+
+def _estate_reading(world: World, episode: CloseEpisode) -> EstateReading | None:
+    """What the technology landscape says about the paperwork this incident makes.
+
+    Three integers, and no graph: ``generators.planning`` takes readings rather
+    than the estate itself, for the same reason ``evaluation_cases`` takes a
+    graph rather than the world — a plan that could reach into a `DiGraph`
+    would sooner or later start deciding something on a field nobody meant it
+    to see.
+
+    The two anchors are derived from the episode's own facts rather than from
+    role keys, exactly as ``generators/evaluation._EstateReading`` derives
+    them: the failed feed is whatever ``ops.feed_status`` is about, and the
+    system holding the unowned mapping table is whatever ``ops.
+    mapping_table_owner`` is about. A composed or re-voiced estate moves those
+    ids; it does not move what they mean. An anchor that is not in the graph at
+    all — a vertical whose episode names no service, an estate that renamed
+    everything — reads zero, so the filings it gates simply do not happen,
+    which is the honest answer rather than a guess.
+
+    ``None`` without an incident: every reading here is about an incident's
+    reach, and a clean close has none.
+    """
+    if not episode.had_incident:
+        return None
+
+    from . import graphs
+    from .generators.planning import EstateReading
+
+    graph = graphs.dependency_graph(world)
+    by_id = {fact.id: fact for fact in episode.facts}
+
+    def reach(key: str) -> int:
+        fact = by_id.get(episode.keys.get(key, ""))
+        if fact is None or fact.subject not in graph:
+            return 0
+        return len(graphs.blast_radius(graph, fact.subject))
+
+    return EstateReading(
+        scale=graph.number_of_nodes(),
+        incident_reach=reach("fact_feed_status"),
+        unowned_reach=reach("fact_owner"),
+    )
+
+
 @dataclass(frozen=True)
 class MonthEndClose:
     """One month-end close, with or without an operational incident.
@@ -99,6 +184,15 @@ class MonthEndClose:
     Off by default because a scenario run twice against the same world would then
     generate two sets of facts for the overlapping months, and the second would be
     a duplicate rather than a revision. A caller who wants a trend asks for one.
+    """
+    trend_pct: float = 0.0
+    """Monthly compound growth behind the comparative history. Zero is flat.
+
+    Only meaningful with ``comparative_months``: it shapes the *history*, and
+    a close with no history has nothing to shape. Zero by default, and zero
+    multiplies every figure by exactly 1.0, so a corpus built without it is
+    byte-identical to one built before the knob existed — the same discipline
+    ``eval_density`` follows below and for the same reason.
     """
     actors: Any = field(default=None, compare=False)
     """An ``ActorProvider``. ``None`` keeps the deterministic plan.
@@ -128,13 +222,30 @@ class MonthEndClose:
     reason, not because 1.0 is an otherwise meaningful point on the scale.
     """
 
+    seasonality: Any = None
+    """The trading year this business has (``worldloom.profiles``).
+
+    ``None`` means the engine's own general-retail profile, which is what every
+    close before this field existed used. A bank or an insurer wants ``flat``:
+    a premium book that peaks at Christmas is not a subtle error, it is a
+    different industry."""
+
+    physics: Parameters = DEFAULT
+    """The world physics this close is generated under (``worldloom.parameters``).
+
+    Compared and hashed like any other field. It was briefly excluded from
+    both, because a frozen dataclass hashes its comparable fields and a
+    ``Parameters`` carries a Mapping — but excluding it makes two closes with
+    *different physics* compare equal, which is worse than the problem. The fix
+    belongs in ``Parameters``, which now defines its own ``__hash__``.
+    """
+
     def run(self, world: World) -> World:
         """Return a new world with this episode's events, facts, and plans.
 
         The world passed in is not mutated.
         """
         from .generators import evaluation, finance, operations, planning
-        from .retail import BASE_INCIDENT_LIKELIHOOD
 
         if world.seed is None:
             raise ValueError("a scenario needs a seeded world; use RetailWorld(seed=...).build()")
@@ -151,8 +262,13 @@ class MonthEndClose:
         roles = dict(world._roles)
         index = lore_index(world)
 
-        likelihood = BASE_INCIDENT_LIKELIHOOD * likelihood_multiplier(
-            world, "data_quality_incident/inventory"
+        # `probability` and not `chance`: the base rate is decided here, the
+        # lore multiplier is applied here, and the coin is flipped two layers
+        # down in `operations`. A parameter's accessor stops where its
+        # authority stops.
+        likelihood = self.physics.probability(
+            "ops.incident.likelihood",
+            scale=likelihood_multiplier(world, "data_quality_incident/inventory"),
         )
 
         episode = operations.generate(
@@ -160,6 +276,16 @@ class MonthEndClose:
             period=self.period,
             company_id=world.company.id,
             roles=roles,
+            # The corpus's own working week. `operations.generate` has accepted
+            # a calendar since locales landed and no caller passed one, so the
+            # working week was carried and inert: a Gulf company closed on
+            # Monday-to-Friday arithmetic and its due date fell on a Friday it
+            # does not work. Read off the recipe rather than the world because
+            # that is where the jurisdiction is recorded, and `locale_of`
+            # answers `locales.DEFAULT` for a corpus that names none — the same
+            # object `operations.CALENDAR` already was, so every existing
+            # corpus is the bytes it was.
+            calendar=locale_of(world.recipe),
             lore_by_target=index,
             incident_likelihood=likelihood,
             force_incident=self.include_operational_incident,
@@ -172,6 +298,7 @@ class MonthEndClose:
             # lets a pack-built corpus rebuild them with no pack file on hand.
             text=(world._recipe.get("pack") or {}).get("episode_text") or None,
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            physics=self.physics,
         )
 
         # Unit keys come from the world rather than a literal list, because the
@@ -200,11 +327,14 @@ class MonthEndClose:
             annual_revenue=world._annual_revenue,
             lore_by_target=index,
             comparative_months=self.comparative_months,
+            trend_pct=self.trend_pct,
             # The archetype's own currency, not the generator's constant — a
             # pack's `currency`/`currency_unit` used to reach every other
             # surface (documents, narrative rendering) except the fact ledger
             # itself, which minted "AUD_thousands" regardless.
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            seasonality=self.seasonality or _profiles.DEFAULT,
+            physics=self.physics,
         )
         financial_facts = financials.headline
 
@@ -234,6 +364,13 @@ class MonthEndClose:
         if self.eval_density <= 0.5:
             artifact_density = 0.0
 
+        # Accountability facts are those that pair a person with a measure and tolerance.
+        # They exist if lore specified accountability constraints; no shipped lore does.
+        accountability_facts = tuple(
+            f for f in world.facts
+            if f.kind == "org.accountability" and not f.is_superseded
+        )
+
         intents = planning.artifact_intents(
             minter,
             episode=episode,
@@ -246,6 +383,19 @@ class MonthEndClose:
             actor_authored=self.actors is not None,
             categories_by_unit=categories_by_unit,
             eval_density=self.eval_density,
+            accountability_facts=accountability_facts,
+            # What kind of company this is, in the three shapes the plan can
+            # read it. Each is a *reading* rather than the thing itself: the
+            # planner takes no world, and handing it one so it could compute
+            # these would give it the whole ledger to reach into.
+            filings=filings(world),
+            estate=_estate_reading(world, episode),
+            # The trading year, at this period. `self.seasonality or DEFAULT`
+            # is the same fallback `finance.generate` is given above, and it
+            # has to be: the plan must judge the month against the same year
+            # the figures were drawn under, or a corpus would review a peak its
+            # own budget never had.
+            seasonal_index=(self.seasonality or _profiles.DEFAULT).of(self.period),
         )
 
         # The world has to carry this period's events, facts, and standing
@@ -280,6 +430,12 @@ class MonthEndClose:
             # planner did not write.
             intents = tuple(advanced._artifact_intents[len(prior_intents):])
 
+        from . import graphs
+        # Imported here rather than at module scope for the reason `graphs` is:
+        # `evaluate` pulls in the render layer through its index, and a
+        # scenario is imported by everything that builds anything.
+        from .evaluate import phrasing
+
         cases = evaluation.evaluation_cases(
             minter,
             episode=episode,
@@ -293,16 +449,45 @@ class MonthEndClose:
                     unit.id: [s.id for s in world.sites if s.business_unit_id == unit.id]
                     for unit in world.business_units
                 },
+                # Only the people who belong to a unit. A group CFO belongs to
+                # none, and a question about "their unit's variance" would have
+                # no subject — the accountability family skips them rather than
+                # picking one.
+                unit_by_person={
+                    person.id: person.business_unit_id
+                    for person in world.people
+                    if person.business_unit_id is not None
+                },
             ),
             intents=intents,
             period=self.period,
             history=world._facts,
             prior_intents=prior_intents,
             density=self.eval_density,
+            # The estate, as the graph it has always been. The taxonomy owns
+            # what it asks; it cannot own what it can *see*, and until this
+            # line it could see names and figures but no structure — so a
+            # world running 101 services with 18 chokepoints was asked exactly
+            # the questions a nine-service prop list was. Passed as a graph
+            # rather than as the world so a family here cannot quietly start
+            # reading some other field of it.
+            estate=graphs.dependency_graph(world),
             # A pack's evaluation-text overrides ride the recipe, the same
             # seam `episode_text` uses for the episode itself, so a
             # re-voiced benchmark rebuilds with no pack file on hand.
-            text=(world._recipe.get("pack") or {}).get("evaluation_text") or None,
+            #
+            # A world that speaks a dealt vocabulary re-voices the benchmark
+            # too, through the same seam and *underneath* the pack: the
+            # taxonomy's phrasing is the same sentence in every world, so a
+            # mosaic of five companies asked thirty-one of its questions
+            # byte-identically five times. `evaluate.phrasing` deals each
+            # vocabulary a wording (`overrides` returns None for every world
+            # that speaks none, which is every stock build, so this line is a
+            # no-op wherever it was one before). Pack overrides win, because an
+            # author who re-voiced a question said what they meant and a deal
+            # is a default.
+            text={**(phrasing.overrides(world) or {}),
+                  **((world._recipe.get("pack") or {}).get("evaluation_text") or {})} or None,
         )
 
         if self.actors is not None:
@@ -340,6 +525,10 @@ class MonthEndClose:
                 # absent key to 1.0, so an old recipe and an explicit `1.0`
                 # recipe replay identically either way.
                 **({} if self.eval_density == 1.0 else {"eval_density": self.eval_density}),
+                # Same conditional-write rule, same reason: a knob added after
+                # corpora were built must not appear in the recipe of a build
+                # that did not use it.
+                **({} if self.trend_pct == 0.0 else {"trend_pct": self.trend_pct}),
             ),
             **actor_state,
         )
@@ -360,6 +549,20 @@ def _announcer(world, change):
         if person is not None:
             return person
     return world.people.by_id(world._roles["ceo"])
+
+
+#: `personnel_notice` is minted below and declared by nobody, so `standing`
+#: falls through and a succession announcement is an unreviewed draft that
+#: nothing chose — `documents.declared_types`' own docstring states the gap and
+#: says the fix is a registration from whichever module owns the scenario. This
+#: is not that fix; deciding a succession note's authority is a modelling
+#: decision of its own. What it is, is the *name* being spoken for, and that
+#: became load-bearing when artifact types became authorable: the compiler's
+#: tables are process-global, so a pack declaring this key would set the
+#: authority of a document in some other world built by the same process, and
+#: `register_artifact_types` cannot refuse it because nothing registered a value
+#: for it to disagree with.
+documents.reserve_artifact_types("personnel_notice")
 
 
 def _personnel_notice(minter, change, successor, period: str) -> tuple:
@@ -428,6 +631,25 @@ class Hire:
         minter = world._minter
         roles = dict(world._roles)
         at = _period_boundary(self.period)
+
+        # The role table is a mixed index — people, but also systems, services,
+        # access policies and cost centres — and `world.extend` merges the
+        # `roles` returned below over it. So a hire into a key that is already
+        # bound does not add a post, it *replaces* whatever that key meant, with
+        # no event and no fact recording that it changed: the incumbent stays
+        # employed and unreachable, or `roles["sys_erp"]` starts resolving to an
+        # employee. Refused here rather than left to the validator because
+        # nothing downstream can tell the difference between a rebind and a key
+        # that always meant this. `timeline.review` states the same rule up
+        # front, where a whole history can be refused before any of it runs;
+        # this is the last line, for a caller running the scenario directly.
+        if self.role_key in roles:
+            raise ValueError(
+                f"{self.role_key!r} is already bound in this world (to"
+                f" {roles[self.role_key]}); hiring into it would silently"
+                " replace what that key resolves to. Use a new role key, or"
+                " run a Departure first if somebody is leaving the post."
+            )
 
         # A pack's own name pools, if any — so a person hired mid-corpus
         # reads as the same locale as everyone the world minted at the
@@ -513,9 +735,37 @@ class Departure:
         peers = [p for p in employed if p.id != leaver.id and p.function == leaver.function]
         candidates = reports or peers
         if not candidates:
+            # Refused, never skipped. A scenario that quietly did nothing would
+            # report success while the corpus lost a succession its recipe says
+            # happened — and `--replay` would then rebuild a different history
+            # than the one that shipped.
+            #
+            # `timeline` budgets departures per function so a *sampled* history
+            # does not schedule more than the organisation can serve, which is
+            # why this fires far later than it used to. It can still fire,
+            # because that budget is deliberately approximate: a successor drawn
+            # from direct reports may come from another function, and
+            # `Reorganisation` and `Hire` move people between functions after
+            # the budget was struck. The remedy is in the message rather than in
+            # a guess here, because only the caller knows which they want.
+            #
+            # The message deliberately does *not* suggest a bigger organisation,
+            # obvious as that reads: `--employees` is inert. `RetailWorld
+            # .employees` rides the recipe and reaches no generator —
+            # `organisation.generate` reads `archetype.employees` and takes no
+            # employees argument — so `--employees 60` builds the same
+            # twenty-three people and fails in the same period. Advice that does
+            # not work is worse than none, because it costs a build to find out.
+            remaining = sorted(
+                {person.function for person in employed if person.id != leaver.id}
+            )
             raise ValueError(
-                f"no eligible successor for {leaver.id} ({leaver.title}): no direct reports and "
-                f"nobody else in {leaver.function} is employed at {at.isoformat()}"
+                f"no eligible successor for {leaver.id} ({leaver.title}): no direct"
+                f" reports and nobody else in {leaver.function} is employed at"
+                f" {at.isoformat()}. {len(employed)} people remain, across"
+                f" {', '.join(remaining) or 'no other function'}. Shorten"
+                " `--periods`, or use `--timeline quiet`, which schedules no"
+                " departures and builds 96 periods clean."
             )
         successor = min(candidates, key=lambda p: p.id)
 
@@ -611,4 +861,5 @@ __all__ = [
     "lore_index",
     "likelihood_multiplier",
     "density_adjustment",
+    "filings",
 ]

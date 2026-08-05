@@ -63,6 +63,480 @@ worldloom validate ./corpus
 worldloom evaluate ./corpus
 ```
 
+Three more readings answer questions `validate` and `evaluate` cannot, and each
+one is a different question — read all four before calling a corpus measured:
+
+```bash
+worldloom topology ./corpus              # what depends on what, and what nothing routes around
+worldloom series ./corpus                # trend, season, and the periods neither explains
+worldloom diversity ./corpus --near-duplicates   # which documents are one template
+```
+
+`topology` reads the estate as a graph: services ranked by *blast radius* (how
+much falls over transitively when one does) and separately by *gates* (how much
+has no second path to what it serves — a well-replicated platform has a large
+blast radius and gates nothing). Its ranking is derived from the graph, so it
+can disagree with the hand-declared `criticality_tier`, and a zero-hop
+dependency chain means an archetype's service catalogue is a flat list rather
+than a system.
+
+`series` decomposes a period-keyed fact series into trend, season, and residual,
+and names the periods the first two do not explain. Worth building a history for
+first: `--comparatives 23 --trend 0.004` gives two years with a direction in
+them, where the default flat level makes every seasonally-adjusted month look
+like every other.
+
+---
+
+## The refine loop that is deliberately not here
+
+Narration is open-loop: every section gets one request and one attempt, and
+nothing afterwards looks at what the corpus became. This repository once closed
+that loop — a `worldloom refine` command, MCP rewrite tools, a skill, and a
+`Stop` hook — rewriting whichever sections a similarity join said were
+near-duplicates of each other. It was deleted, and a future reader deserves the
+reason rather than just the absence.
+
+The loop was built and gated against `DeterministicProvider`, the template
+writer CI uses, whose one-sentence-per-fact prose genuinely does repeat: three
+closes from one template put tens of passages into near-duplicate groups. On
+real model prose the problem it fought does not exist. A five-world proof run
+measured the loop's target — passages sitting in a near-duplicate group — at
+**zero in every world** (0/46, 0/50, 0/52, 0/46, 0/43). A writer that varies by
+nature never gave the loop anything to do; the repetition was an artifact of
+the deterministic fake, and no real writer reproduces it. The loop's headless
+driver and API adapters were also the only code violating the first line of
+this document, and they went with it.
+
+The *measurement* survives the loop, because "what does this corpus repeat?" is
+worth asking of any corpus whoever narrated it — not least as the check that
+the finding above stays true:
+
+```bash
+worldloom diversity ./corpus --near-duplicates   # the groups, named
+worldloom stats ./corpus                         # the same reading among the rest
+```
+
+**`worldloom mcp`** serves the read-only tools over stdio — `measure_corpus`,
+`corpus_topology`, `corpus_series`, `validate_corpus`, and the probe tools —
+and `.mcp.json` wires them into Claude Code, so a session can ask those
+questions repeatedly, as data, without leaving the loop it is actually running:
+writing prose through `narrate requests` / `narrate accept`. No tool writes a
+corpus; every corpus write path stays behind the handshakes.
+
+---
+
+## Many companies at once
+
+Varying the seed does not give you several enterprises. A seed decides names,
+figures, and which month the incident lands in; it does not decide headcount,
+span of control, reporting depth, trading calendar, or how fast an organisation
+finds the cause of an outage. Five seeds produce **one company with different
+names on the same twenty-three people** — a fine corpus and a poor dataset,
+because a model evaluated against it has seen one enterprise five times.
+
+```bash
+worldloom mosaic --describe                       # what varies, building nothing
+worldloom mosaic -n 5                             # the plan, still building nothing
+worldloom mosaic -n 5 --incident --out ./mosaic
+worldloom mosaic -e banking -n 5 --out ./banks    # or insurance
+```
+
+Each engine varies its own physics, because the parameters are its own: a
+retailer's margin erosion and incident tempo, a bank's capital headroom and how
+badly its filed risk-weighted assets understate the truth, an insurer's tail
+length and how bad the news the actuary has to deliver is. Only the retail
+engine varies a trading year, because `finance.generate` is the one generator
+that reads one. Estate size is an axis for all three, so a mosaic of banks spans
+9 to 101 nodes and the corpus can be asked what has a blast radius.
+
+Each world lands in `./mosaic/world-NN/` with its own recipe, so any one of them
+rebuilds alone. `mosaic.json` records the plan. Measured on five worlds: five
+distinct organisation shapes, five distinct title sets, mean title overlap 0.72
+against 1.00 for five plain seeds — and every world validates clean.
+
+Candidates are covered with a low-discrepancy sequence rather than drawn at
+random, because random points clump and a clump is a company shape the tool
+never produces. They are filtered to what can actually be built — headcount,
+span and depth are three numbers with two degrees of freedom, so the
+over-determined combinations are discarded rather than rounded into feasibility
+— and then the furthest apart are chosen by farthest-point traversal. That last
+step is worth its cost: measured at 2.5× the minimum separation of simply taking
+the first five candidates.
+
+Deterministic throughout. World *N* uses `seed + N - 1`, so a mosaic's third
+world is reproducible without building the first two, and a smaller mosaic is a
+prefix of a larger one.
+
+**From a premise, end to end.** `--probe` takes the axes from a settled probe
+instead of the engine's defaults:
+
+```bash
+worldloom probe open -p "A specialty apparel retailer, 180 stores."
+# ... answer its questions ...
+worldloom mosaic --probe probe.json -n 5 --out ./apparel
+```
+
+The probe decides **what varies and between which bounds**; the algorithm still
+decides **which N**. That division is the point — a model is good at arguing
+that a business of this kind runs margins in that band and bad at picking five
+points that cover a seven-dimensional space; a farthest-point traversal is the
+reverse, and neither is asked to do the other's job.
+
+Every parameter the probe bound becomes an axis over the interval it argued for,
+and no world's range ever escapes that envelope. Axes the probe said nothing
+about keep their defaults, so a probe that reasoned about margin and ignored
+reporting depth still gets five different reporting depths. A probe that bound
+nothing at all is refused rather than quietly falling back — it would report
+success for work that reached no engine.
+
+---
+
+## Saying what kind of company it is, in one document
+
+Nine surfaces answer "what kind of company is this?" — an archetype key,
+`--employees`, a `--facet`, `--locale`, `--estate`, a `--physics` file, a
+`--pack`, a vocabulary qualifier, and revenue, which can only be said by
+writing a pack. Each is documented below and each is right; between them they
+require you to know which of nine places each clause of a sentence belongs to,
+and two interact in a way nobody predicts.
+
+A **company specification** is that sentence as one document:
+
+```bash
+worldloom pack spec                        # the schema, and which registry each field draws on
+worldloom pack spec --template             # a starter you can edit
+worldloom build --spec company.json --seed 8128 --out ./corpus
+```
+
+```json
+{
+  "industry": "General insurance",
+  "geo": "germany",
+  "facets": {"listing": "listed", "competition": "fragmented",
+             "maturity": "legacy", "trading_pattern": "steady"},
+  "organisation": {"headcount": 26, "span": 5, "levels": 3},
+  "leadership": [{"key": "chief_underwriting",
+                  "title": "Chief Underwriting Officer",
+                  "function": "Executive", "reports_to": "ceo"}],
+  "identity": {"company_name": "Rheinmark Versicherung",
+               "headquarters": "Munich, Germany"}
+}
+```
+
+It is a **composer, not an engine**. Every field resolves into a seam that is
+already load-bearing — `archetypes.get`, `vocabulary.spoken`, `facets.resolve`,
+`parameters.with_overrides`, `roles.from_shape`, `locales.named`, `packs.Pack` —
+so it adds no capability the flags lack. What it adds is that the pieces are
+resolved *together*, and three things follow from that:
+
+* **It refuses a description that contradicts itself, with the arithmetic.**
+  "40bn of revenue across twelve employees" is refused naming both numbers and
+  the registered shapes that bound them — the envelope is computed from the
+  archetype registry (97,500 to 514,286 per head, widened by the factor the
+  registry itself spans) rather than typed in, so registering a fifth archetype
+  moves it. Premium margins in a fragmented market is refused by
+  `facets.resolve`'s own empty-intersection arithmetic; an over-determined
+  headcount/span/depth by `roles.from_shape`'s.
+* **It reports what it cannot honour, rather than dropping it.** A trading year
+  on an engine whose world builder has no `seasonality` field; a margin band on
+  a vertical whose generators never draw from `retail.*`; a `geo` with no
+  identity to carry its people and regions; a named rival, which nothing here
+  mints an entity for. Same `unmet:` channel a facet's `wants` uses, and for
+  the same reason.
+* **It is never recorded.** A pack is embedded in the recipe verbatim, because
+  the pack *is* how the world was made. A specification resolves to
+  consequences and the recipe records *those*, exactly as `--facet` records
+  consequences rather than facet names — so the corpus replays byte-for-byte
+  after the facet registry, the archetype table or the locale presets move
+  underneath it.
+
+**A specification is not a pack, and the boundary is `company_name`.** A pack
+is *identity*: a company's name, its divisions, their books, its voices, and
+`pack_export` marks every one of those `PLACEHOLDER` because nothing derived
+can honestly supply them. A specification is a *description* — true of a class
+of businesses, naming no company at all. Supplying `identity.company_name` is
+what lets a description compose *into* a pack, which is how a description names
+the company at all — a `geo` reaches the people, the site regions and the head
+office on its own, through `--locale`. Naming a `pack` instead uses it whole, and the
+pack then wins over everything derived — the same precedence `Pack.regions`
+already has over a locale's pool.
+
+`--spec` refuses the flags it subsumes (`--archetype`, `--inspired-by`,
+`--pack`, `--employees`, `--facet`, `--physics`, `--locale`, `--estate`) rather
+than merging with them. `--seed`, `--periods`, `--incident`, `--messiness`,
+`--timeline` and the formats are untouched: the specification says what the
+company *is*, and those say what happens to it.
+
+In Python the same surface is `sdk.described(document)`, which returns an
+ordinary `Blueprint` — so a description can be crossed, swept and dispersed
+like any other.
+
+## Saying what kind of company it is, one attribute at a time
+
+The four flags below are the difference between "a corpus" and "the corpus you
+were asked for". Each is a no-op when omitted, so every corpus already built is
+byte-identical, and each rides the recipe, so a corpus built with them rebuilds
+itself with none of them on the command line.
+
+```bash
+worldloom pack facets                      # the dimensions, and what each value commits to
+worldloom pack messiness                   # how well the archive is kept
+worldloom pack locales                     # jurisdictions, and which half of one a build reaches
+worldloom pack landscapes                  # what an estate is called, per vertical
+
+worldloom build --facet listing=listed --facet maturity=legacy --seed 8128 --out ./corpus
+worldloom build --locale germany --messiness lived_in --seed 8128 --out ./corpus
+worldloom build --periods 12 --timeline turbulent --seed 8128 --out ./corpus
+```
+
+**`--facet`** says what the company *is* rather than what it has. A `Pack` is a
+closed schema of twenty fields, each threaded by hand into a generator, so
+"listed" could only ever have been a boolean nothing read. A facet is instead a
+claim that emits **consequences into vocabularies that already exist** —
+parameter ranges, lore, roles, a trading year, an estate size — so `listed`
+mints an audit committee chair and a head of investor relations, raises
+status-report density, and puts the audit committee in the filing approval
+chain. Two consequences of that are worth knowing before you use it:
+
+* Naming *any* facet settles *every* facet at its registry default. That is what
+  makes claims composable, and it means `--facet listing=listed` alone also
+  asserts `trading_pattern=steady` — a flat year, replacing the engine's 21%
+  December. Say `--facet trading_pattern=christmas_peak` to keep it.
+* Contradictory claims are refused naming both, with the arithmetic where there
+  is any: a mutual runs 16-26% margin and a premium brand 48-62%, and no company
+  is both. `worldloom pack facets` prints every exclusion before you hit one.
+
+The recipe records the **consequences**, never the facet names, and that is the
+stronger of the two: consequences replay this world byte-for-byte after the
+registry moves under it, where a stored `listing=listed` would replay whatever
+`listed` came to mean later while reporting success. What a facet implies and
+nothing implements — an analyst consensus, a regulator with a pricing
+determination — is printed as `unmet:` rather than dropped, the same evidence a
+probe's unbound leaf is.
+
+Facet **lore** is not in that category. `world.extend_lore` mints it into the
+domain's own lore before the organisation is generated, because lore is an
+*input*: it dates the business units, attaches persona traits, and decides how
+much status reporting a close produces. The recipe records the **claims** it was
+minted from — under `lore_claims`, not the finished commitments, whose ids and
+dates belong to the world they landed in — so a faceted corpus rebuilds into
+itself.
+
+**`--messiness`** grades how well the archive is kept: `pristine`, `well_run`,
+`lived_in`, `neglected`. Every corpus so far has been almost perfectly kept, and
+only half of that was ever load-bearing — *no document may contradict the
+ledger*, which does not change. That every document is also current, correctly
+quoted, and owned by somebody still employed was never promised and is not
+realistic. What keeps this a corpus rather than noise is that **every
+imperfection is recorded**: a reader holding only the corpus can establish
+mechanically that the stale page is stale and what the current position is.
+Three kinds ship — a document that missed a correction it postdates, two live
+documents disagreeing with a ledger that says which is right, and an author who
+has left with nobody named in their place. Counts are a budget, not a quota: a
+small world has fewer corrections to be stale about and the pass takes what it
+can support.
+
+**`--locale`** puts the corpus somewhere. It reaches the *figure grammar*,
+corpus-wide, so the DOCX, the Markdown, the PPTX and the retrieval index all
+spell one number one way — `1.234,50` and `-1.234` in Germany, where before
+every corpus printed `1,234.50` and `(1,234)` whatever its pack said. And it
+reaches the *build*: the region labels in every site name, the pools the people
+are drawn from, the headquarters city, the currency and the fiscal year. Claim
+Frankfurt and you get Katharina Kirchgässner in Berlin at `Supermarket BW 001`.
+A pack's own `name_pools`, `regions` and `headquarters` still win over the
+locale's, the same precedence `Pack.regions` has always had.
+
+The **working week** arrives too. August 2026 ends on a Monday, and four
+working days later is Friday the 4th in Sydney and Sunday the 6th in Manama,
+because the Gulf week runs Sunday to Thursday and has already spent its
+weekend. The retail close, the bank's LCR observations and the insurer's
+reserving dates all step on the corpus's own calendar.
+
+**`--timeline`** replaces repetition with a history. `--periods 6` runs six
+closes signed by the same twenty-three people, drawn from the same distribution:
+one month photocopied. A density — `quiet`, `steady`, `turbulent` — schedules
+incidents and org changes across those periods instead, so a controller who
+departs in period 2 means periods 3-6 are signed by their successor, an incident
+in period 3 and not period 4 makes "which month went wrong" answerable, and a
+reorganisation moves who reports to whom *inside one corpus*.
+
+```
+worldloom build --periods 12 --timeline turbulent
+  → 2026-03 MonthEndClose, Reorganisation · 2026-06 MonthEndClose, Departure
+    · 2026-10 MonthEndClose, Departure · 2026-12 MonthEndClose, Reorganisation …
+```
+
+It is a flag rather than a command, and the reason is the recipe. Every scenario
+a timeline can hold already records itself through its own `with_step`, so a
+sampled history rebuilds from the steps it wrote — no new recipe verb, nothing
+added. A `worldloom timeline` command applied to a built corpus would be a
+second build path whose steps the recipe already describes, which is two
+accounts of one history. So: `--periods` says how many, `--timeline` says what
+happens between them.
+
+Three refusals, each stated rather than silently absorbed. The schedule states
+incidents in *both* directions once it schedules any, so `--incident` and a
+non-`quiet` density cannot both decide. `--actors` is refused, because an
+episode resumed from the ledger is driven one decision at a time and a history
+is decided before the first one is taken. And the single-episode verticals are
+refused, because their scenario takes no incident flag at all — a scheduled
+incident would be dropped on the floor and the corpus would be `--periods N`
+wearing a history's name. Hires are not sampled either: a new post's title is a
+business decision, and a sampler inventing one would write the least plausible
+sentence in the corpus.
+
+**Keeping a derived world.** `mosaic` and `probe` both answer "what kind of
+company is this?" and neither answer survives the command that produced it.
+`worldloom pack export` turns one into an artifact that travels:
+
+```bash
+worldloom pack export ./kept --world 3 -n 5        # a mosaic world, kept
+worldloom pack export ./kept --probe probe.json    # a settled probe's physics, kept
+worldloom pack check ./kept/pack.json
+worldloom build --pack ./kept/pack.json --physics ./kept/physics.json --out ./corpus
+```
+
+What comes out is a **bundle, not a pack**. A pack is texture — a name, units,
+books, lore, voices. A variant and a probe are physics and shape. So it writes
+`pack.json` plus the sidecars a pack is not allowed to hold (`physics.json` for
+`build --physics`, `shape.json` for the org table and estate that have no pack
+field at all), rather than widening `Pack` with a physics block and giving a
+build two ways to say one thing. Identity fields come out `TODO`-marked and
+`pack check` names every one: neither a Halton coordinate nor an interval graph
+knows what the company is called, and a name invented there would be signed with
+your own.
+
+---
+
+## Deriving the physics, optionally
+
+A pack supplies *values* — this unit's share, that category's name. The ranges
+every figure is drawn from belong to the engine. Four literals decide how long
+an organisation takes to find the cause of an outage, so every Worldloom
+incident ever generated has resolved at exactly one tempo, whatever the pack
+said the company was.
+
+The same is true of a company's trading year. One twelve-month index — a 21%
+December — is applied to every world the retail engine builds, and since `base`
+may only be `retail` or `banking`, that is every industry pack that is not
+literally a deposit-taking bank. The general insurer shipped in
+`examples/packs/` therefore wrote a premium book that peaked at Christmas.
+`worldloom pack profiles` lists the trading years a pack may pick by name —
+`flat` is the right answer for any business whose revenue is a book rather than
+a till — or a pack may supply twelve months of its own, which must average one.
+
+And a corpus had no way to say who answers for a number. Budgets attach to
+business units, variances are reported and never judged, and the engine's one
+ownership fact resolves to "unassigned" — so *who was accountable for the unit
+that missed* had no answer anywhere. Lore can now say so:
+
+```json
+{"kind": "accountability", "target": "gm_md/financial.revenue.variance",
+ "effect": "The MD answers for revenue against budget", "magnitude": 3.0}
+```
+
+`target` is `role_key/fact_kind` and `magnitude` is the tolerance band in per
+cent. It mints a fact whose **subject is a person** — the first in the project —
+carrying the measure they are judged on and how far it may move before anyone
+asks. `worldloom pack targets` lists it alongside every other consulted target.
+
+`worldloom pack params` prints the numeric ranges, now that they have names, and
+`worldloom build --physics` overrides them. But a list of thirty-seven ranges to
+fill in is the wrong instrument: they are not independent, and "retailer" or
+"insurer" is a label, not a structure. So derive them instead, by descending the
+organisation:
+
+```
+organisation → reporting → roles → objectives → measures
+```
+
+A layer is a *kind* of question, and a level is settled before the one under it
+opens. How the business divides, then how it hangs together, then which titles
+that implies, then what those titles are accountable for — and only at the
+bottom do numbers bind to the engine.
+
+```bash
+worldloom probe open -p "A field-services business, 900 people, four regions."
+worldloom probe next probe.json                     # the question, its layer, its bounds
+#                                                     you answer it
+worldloom probe accept probe.json --from answer.json
+worldloom probe show probe.json                     # the graph as it stands
+worldloom probe worlds probe.json -n 5              # what your answers committed to
+worldloom probe resolve probe.json -o physics.json  # the ranges it settled on
+worldloom build --seed 8128 --physics physics.json --out ./corpus
+```
+
+`probe next` exits 3 when nothing is left to ask, so a loop can tell "finished"
+from "failed" without parsing prose. The physics ride the corpus recipe, so a
+probed corpus replays byte-for-byte with no probe file on hand.
+
+The shape of an answer is the point. You may **narrow** a question and never
+widen it — the bounds you are given are what earlier answers established. If the
+quantity is not primitive, do not pick a number: say so, and raise what it
+follows from as sub-questions, each with a stated relation. Span of control is
+not a number you know about a business; it is what the work's standardisation
+and the supervision it needs produce.
+
+**Link across layers.** Headcount, span and reporting levels are three numbers
+with two degrees of freedom. A `link` states that, and the graph enforces it on
+every answer that follows — in *both* directions, so a measure discovered at the
+bottom can make a structure asserted at the top untenable.
+
+The refusals are computed, not listed. Every relation is invertible, so the
+whole graph is narrowed to arc consistency after each answer; if a range
+empties, the answer is refused naming the chain that broke. Nobody wrote down
+which combinations are illegal — they fall out of the relations you supplied.
+
+Two things at the end. `probe worlds` first: a settled probe describes a *space*
+of worlds, and this returns the ones furthest apart in it, deterministically. If
+they all look the same you have over-constrained it; if they look incoherent a
+link is missing. And a leaf that binds to no terminal parameter is **reported,
+not dropped** — a quantity this world needed and the engine cannot read, which
+is the only honest argument for adding one.
+
+`source` records where a range came from. Sector statistics and published
+benchmarks are priors and are welcome — with web search, use one rather than
+your recollection of one. A named company's own figures are not: this corpus is
+fictional and has to stay that way.
+
+In Claude Code the same surface is MCP tools (`probe_open`, `probe_next`,
+`probe_answer`, `probe_worlds`, `probe_resolve`), so a session holds the loop
+itself rather than being called once per question.
+
+---
+
+## Composing the estate, optionally
+
+A stock world runs four services on five systems, because nine is what the
+episode names. `--estate small|medium|large` grows a real landscape around them
+on the retail engine — layered, with placed chokepoints, and with the episode's
+own services untouched so its causality is unchanged.
+
+For a vertical whose vocabulary the engine does not have — banking's estate is
+not called `click-collect-api`, and the insurer ships with no services at all —
+you author it, and the graph is the grammar:
+
+```bash
+worldloom compose requests ./corpus -o estate.json    # what the company already runs
+#                                                       you write the estate and its lore
+worldloom compose accept ./corpus --from estate.json --model-id <your model>
+worldloom topology ./corpus                           # read what you built
+```
+
+The request carries the company, its units, every existing service with what it
+depends on, who may own something, the closed constraint vocabulary lore may
+use, and the rules — so you can answer without reading the source. Propose
+services and systems under keys of your own; the harness mints the ids.
+
+The refusals are the point, and each is stated in the request before you write
+anything: a dependency cycle through any number of hops, a dependency that
+resolves to nothing, an owner who does not work here, a criticality tier the
+graph contradicts, lore that constrains nothing, and an estate in which nothing
+is a single point of failure. All violations come back at once, and nothing is
+committed unless everything passes. Accepted compositions land in the generation
+ledger, so a composed corpus replays with no provider reachable.
+
 At any point, `worldloom status ./corpus` names the stage the corpus is at and
 the exact command that comes next — resume from that rather than from memory.
 `status`, `validate`, and every `accept` command take `--json` when you would

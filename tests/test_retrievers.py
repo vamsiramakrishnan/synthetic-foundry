@@ -80,13 +80,21 @@ def test_bm25_numbers_are_pinned_exactly(corpus: World) -> None:
     these exact counts staying put across unrelated refactors (adding a second
     retriever chief among them), so this pins the number rather than just the
     inequalities `test_evaluate.py` already checks.
+
+    citation_required moved 2/3 → 3/3 when the escalation thread was given the
+    affected-records fact its own purpose was already quoting (the request had
+    demanded a figure it withheld): the SKU count now legitimately appears in
+    one more document, and the keyword baseline finds it at @5. Deliberate —
+    the corpus grew a citation, not the retriever an ability — and the families
+    the corpus exists to keep hard (authority, temporal, abstention) are
+    unmoved at zero.
     """
     card = score(corpus)
-    assert card.passed == 22
+    assert card.passed == 23
     assert card.by_type() == {
         EvaluationType.AUTHORITY_RESOLUTION: (0, 3),
         EvaluationType.CAUSAL_MULTI_HOP: (1, 3),
-        EvaluationType.CITATION_REQUIRED: (2, 3),
+        EvaluationType.CITATION_REQUIRED: (3, 3),
         EvaluationType.CROSS_ARTIFACT: (4, 4),
         EvaluationType.DIRECT_LOOKUP: (9, 9),
         EvaluationType.EXPECTED_ABSTENTION: (0, 9),

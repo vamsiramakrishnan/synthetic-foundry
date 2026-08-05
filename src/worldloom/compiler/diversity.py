@@ -364,6 +364,20 @@ def _entropy_bits(counts: Mapping[object, int]) -> float:
     return bits
 
 
+#: The row labels `DiversityReport.__str__` prints, in order. Named rather than
+#: inlined so the column width is computed from the labels that actually appear
+#: — a hard-coded "longest one" is a thing to forget to update, and forgetting
+#: it misaligns the whole block by however many characters the new row is wider.
+_ROW_LABELS: tuple[str, ...] = (
+    "n-gram entropy",
+    "max family share",
+    "largest shape group",
+    "repeated shapes",
+    "longest repetition run",
+    "longest same-type run",
+)
+
+
 @dataclass(frozen=True)
 class DiversityReport:
     """What a batch of fingerprints looks like, read as a whole.
@@ -375,16 +389,40 @@ class DiversityReport:
 
     count: int
     distinct_digests: int
+    """How many distinct shapes the batch holds. An **absolute count**, and on
+    its own it is the wrong number to quote: it can only go up as a corpus
+    grows, so a corpus that grew four times more repetitive reports a
+    distinct-shape count at least as good as the small one it grew from. Read
+    `unique_shape_ratio` beside it — that is the reading `check`'s own
+    `Quotas.min_unique_ratio` is computed on, and until this report printed it,
+    the summary omitted the very number its gate was failing the corpus for."""
     ngram_entropy_bits: float
     """Shannon entropy of the pooled component-sequence bigrams (see
     `_NGRAM_SIZE`), in bits. Low entropy means the same adjacent-component
     pairs keep recurring — the retail-close symptom — even when
     `distinct_digests` looks healthy, because entropy is sensitive to
     *proportion*, not merely to the presence of at least one different
-    shape."""
+    shape.
+
+    Proportion is also precisely what it cannot see past. Entropy is a
+    per-observation average, so a batch and the same batch stamped out four
+    times have identical distributions and identical entropy — measured, not
+    argued: this engine's retail corpus at 12 periods (85 artifacts) and at 48
+    periods (340) both read **4.12 bits**, to the digit, while the worst
+    repeated shape went from twelve copies to forty-eight. That is not a defect
+    in the statistic; it is what an average is. It means this number answers
+    "how varied is the shape *vocabulary*" and never "how often is the
+    vocabulary reused", and the second question has to be asked of
+    `largest_shape_group` and `longest_same_type_run` instead."""
     max_family_share: float
     """The largest fraction of all components (pooled across the batch)
-    contributed by any one component family — see `_family`."""
+    contributed by any one component family — see `_family`.
+
+    Scale-invariant for the same reason as `ngram_entropy_bits`, and
+    deliberately kept that way: this is the statistic that caught 78% of every
+    composed component landing in `core`, which is a claim about the vocabulary
+    mix and would be *ruined* by making it sensitive to how many times each
+    shape is stamped. Same 12-vs-48-period corpora: 33% (`core`) both times."""
     max_family: str
     """Which family holds `max_family_share`. Empty string when the batch has
     no components at all."""
@@ -394,7 +432,59 @@ class DiversityReport:
     generated in some sequence, and a run of identical shapes back-to-back in
     that sequence is a different (worse) reader experience than the same
     shapes spread through the batch — `distinct_digests` alone cannot tell
-    those apart."""
+    those apart.
+
+    In practice this reads **1 forever** on anything this engine builds, and
+    the reason is structural rather than fixable here: artifacts are emitted
+    interleaved by type — a calendar, then a workbook, then a memo, then the
+    next period's calendar — so two identical shapes are essentially never
+    adjacent no matter how many copies of each exist. 85 artifacts: 1. 340
+    artifacts, four times as many copies of every template: still 1.
+    `longest_same_type_run` is the same measurement over the sequence a reader
+    actually experiences, and is what `check` gates on."""
+    longest_same_type_run: int
+    """The longest run of identical digests among consecutive artifacts *of the
+    same artifact_type* — the emission order with the other types filtered out.
+
+    This is `longest_repetition_run`'s question asked of a sequence somebody
+    reads. Nobody reads a corpus in emission order; they read all the CFO
+    variance memos, or all the close calendars, and *that* is where twelve
+    identical outlines in a row is the experience. On the corpora above it
+    reads 12 and 48 where the interleaved run reads 1 and 1.
+
+    Always ``>= longest_repetition_run``, provably and not by luck:
+    `Fingerprint.digest` includes ``artifact_type``, so identical digests
+    already imply identical types, and any run that is consecutive in emission
+    order is therefore also consecutive within its own type's subsequence. That
+    containment is what lets `check` move its ceiling onto this field without
+    weakening the gate — nothing the old measure caught can slip past this
+    one."""
+    unique_shape_ratio: float
+    """`distinct_digests` as a fraction of `count` — how much of the batch is a
+    shape nothing else has.
+
+    The scale-aware companion to `distinct_digests`, and the reading to quote
+    when a corpus is large. On the two corpora above: 9/85 = **11%** and 9/340
+    = **2.6%**. The absolute count says "9 distinct shapes" both times and
+    invites the reading that nothing got worse; the ratio says the corpus
+    quadrupled without acquiring a single new shape."""
+    largest_shape_group: int
+    """How many artifacts share the single most-repeated shape.
+
+    The `stats.Stats.largest_near_duplicate_group` of structure, and it moves
+    for the same reason that one does: it is an absolute count of *repetition*
+    rather than of variety, so it grows precisely when the corpus gets worse.
+    12 and 48 on the corpora above — the one headline figure that tracked what
+    the detail section underneath the report had been saying all along."""
+    repeated_shape_share: float
+    """The fraction of artifacts whose shape at least one other artifact also
+    has.
+
+    Distinguishes the two ways a batch can hold few shapes: a corpus with one
+    repeated template among many singletons, and a corpus that is nothing but
+    templates. `unique_shape_ratio` cannot separate those — both can read 11% —
+    and an author deciding whether to rewrite a template or the whole corpus
+    needs to know which one they have."""
     distinct_shapes_by_type: Mapping[str, int]
     """``{artifact_type: distinct digest count}``, in the order each
     artifact_type first appears in the input — a scan order, not an
@@ -402,14 +492,36 @@ class DiversityReport:
 
     def __str__(self) -> str:
         width = max((len(t) for t in self.distinct_shapes_by_type), default=0)
-        width = max(width, len("longest repetition run"))
+        # Over the row labels themselves rather than one hard-coded longest, so
+        # adding a row can never silently break the column the way it did when
+        # "longest same-type run" was assumed to be the widest and "longest
+        # repetition run" is one character longer.
+        width = max(width, *(len(label) for label in _ROW_LABELS))
         bar = "█" * round(10 * self.max_family_share)
         lines = [
-            f"Diversity — {self.count} artifact(s), {self.distinct_digests} distinct shape(s)",
+            f"Diversity — {self.count} artifact(s), {self.distinct_digests} distinct shape(s)"
+            # In the headline, immediately after the count it qualifies. A
+            # reader who takes only the first line away has to take the ratio
+            # with it, because the count alone is the misleading half.
+            f" ({self.unique_shape_ratio:.0%} unique)",
             "─" * (width + 24),
-            f"  {'n-gram entropy'.ljust(width)}  {self.ngram_entropy_bits:.2f} bits",
-            f"  {'max family share'.ljust(width)}  {self.max_family_share:.0%} ({self.max_family or '—'}) {bar}",
-            f"  {'longest repetition run'.ljust(width)}  {self.longest_repetition_run}",
+            f"  {_ROW_LABELS[0].ljust(width)}  {self.ngram_entropy_bits:.2f} bits",
+            f"  {_ROW_LABELS[1].ljust(width)}  {self.max_family_share:.0%} ({self.max_family or '—'}) {bar}",
+            # The three duplication-sensitive rows, kept together and printed
+            # even when they read zero: a row that appears only when a corpus is
+            # bad teaches a reader to skim past its absence.
+            f"  {_ROW_LABELS[2].ljust(width)}  {self.largest_shape_group}",
+            f"  {_ROW_LABELS[3].ljust(width)}  {self.repeated_shape_share:.0%} of artifacts",
+            # Both runs, on their own lines, always — the shape
+            # `stats.Stats.__str__` settled on for the near-duplicate rate and
+            # its share. The two disagree on every corpus this engine builds (1
+            # against 48 on a 48-period retail history) and a reader has to see
+            # both to notice that the first one is measuring emission order
+            # rather than anything they would read. Folding them into one line
+            # would make the disagreement look like an annotation on a single
+            # figure instead of two different measurements.
+            f"  {_ROW_LABELS[4].ljust(width)}  {self.longest_repetition_run}",
+            f"  {_ROW_LABELS[5].ljust(width)}  {self.longest_same_type_run}",
         ]
         if self.distinct_shapes_by_type:
             lines.append("─" * (width + 24))
@@ -461,6 +573,21 @@ def report(fingerprints: Sequence[Fingerprint]) -> DiversityReport:
         longest_run = max(longest_run, current_run)
         previous_digest = digest
 
+    # The same run, per artifact type — the sequence a reader experiences, since
+    # nobody reads a corpus in emission order. One pass, carrying a
+    # (last digest, current run) pair per type, rather than partitioning the
+    # batch into per-type lists and re-walking each: the partition would be a
+    # second full copy of the batch to compute a number the first walk already
+    # has all the information for. See `DiversityReport.longest_same_type_run`
+    # for why this is the field `check` gates on.
+    longest_same_type_run = 0
+    run_state: dict[str, tuple[str, int]] = {}
+    for fp, digest in zip(fingerprints, digests):
+        previous, run = run_state.get(fp.artifact_type, ("", 0))
+        run = run + 1 if digest == previous else 1
+        run_state[fp.artifact_type] = (digest, run)
+        longest_same_type_run = max(longest_same_type_run, run)
+
     # First-appearance order, not `sorted(set(...))`: a `set` of artifact
     # types would iterate in an order this module has no business relying on,
     # and a report is read next to the batch it came from — the scan order a
@@ -472,6 +599,14 @@ def report(fingerprints: Sequence[Fingerprint]) -> DiversityReport:
         artifact_type: len(digest_set) for artifact_type, digest_set in shapes_by_type.items()
     }
 
+    # Counted off `digests` rather than by calling `collisions()`, which walks
+    # the batch again and re-derives every digest to answer half of the same
+    # question. `Counter` sums are order-independent, so nothing here depends on
+    # how the dict iterates.
+    digest_counts = Counter(digests)
+    largest_shape_group = max(digest_counts.values(), default=0)
+    repeated = sum(count for count in digest_counts.values() if count > 1)
+
     return DiversityReport(
         count=len(fingerprints),
         distinct_digests=distinct_digests,
@@ -479,6 +614,13 @@ def report(fingerprints: Sequence[Fingerprint]) -> DiversityReport:
         max_family_share=max_family_share,
         max_family=max_family,
         longest_repetition_run=longest_run,
+        longest_same_type_run=longest_same_type_run,
+        unique_shape_ratio=(distinct_digests / len(fingerprints)) if fingerprints else 0.0,
+        # Zero rather than one on an empty batch: "the worst shape is repeated
+        # once" would be a claim about a shape that is not there. Same stance
+        # `check` takes toward an empty batch meeting every quota.
+        largest_shape_group=largest_shape_group if fingerprints else 0,
+        repeated_shape_share=(repeated / len(fingerprints)) if fingerprints else 0.0,
         distinct_shapes_by_type=distinct_shapes_by_type,
     )
 
@@ -550,11 +692,20 @@ def check(fingerprints: Sequence[Fingerprint], quotas: Quotas = Quotas()) -> lis
             f" above the {quotas.max_single_family_share:.0%} ceiling",
         ))
 
-    if batch.longest_repetition_run > quotas.max_repetition_run:
+    # Gated on the same-type run, not the interleaved one. The interleaved
+    # measure reads 1 on every corpus this engine can build — artifacts are
+    # emitted a calendar, a workbook, a memo, then the next period's calendar,
+    # so two identical shapes are never adjacent — which made this quota
+    # unfireable on real output and left a ceiling of 2 looking like a live
+    # gate. The move cannot weaken the check: `Fingerprint.digest` carries
+    # `artifact_type`, so an interleaved run is always also a same-type run and
+    # `longest_same_type_run >= longest_repetition_run` for every batch. See
+    # `DiversityReport.longest_same_type_run`.
+    if batch.longest_same_type_run > quotas.max_repetition_run:
         violations.append(QuotaViolation(
             "repetition_run_above_quota",
-            f"{batch.longest_repetition_run} consecutive artifacts share an identical shape,"
-            f" above the {quotas.max_repetition_run} ceiling",
+            f"{batch.longest_same_type_run} consecutive artifacts of one type share an"
+            f" identical shape, above the {quotas.max_repetition_run} ceiling",
         ))
 
     if batch.ngram_entropy_bits < quotas.min_entropy_bits:
@@ -604,47 +755,108 @@ def select(candidates: Sequence[Fingerprint], *, k: int, seed: int) -> tuple[int
     Returns indices into *candidates*, in selection order, so the caller
     (who owns the actual candidate objects — plans, renders, whatever a
     `Fingerprint` here stands in for) decides what to do with them.
+
+    The traversal itself lives in ``worldloom.dispersion``. It was lifted out
+    unchanged — same first pick, same strict-improvement tie-break — when
+    ``probe.worlds`` needed the identical algorithm over a completely different
+    thing: whole consistent worlds rather than document shapes. Two copies of
+    "as unlike each other as possible" is two things that can disagree about
+    it, which on a project whose central claim is *measured* diversity is a
+    particularly bad place to keep a fork. What stays here is this module's own
+    judgement — the `distance` a document shape is measured by.
     """
-    n = len(candidates)
-    if k < 0:
-        raise ValueError(f"k must be non-negative, got {k}")
-    if k > n:
-        raise ValueError(f"cannot select {k} candidate(s) from {n}")
-    if k == 0:
-        return ()
+    from ..dispersion import farthest_first
 
-    # The first pick has no "already selected" set to be distant from, so
-    # there is no distance-based reason to prefer any one candidate over
-    # another yet. Lowest index, for the same reason every other tie here
-    # resolves that way: deterministic without inventing a preference the
-    # data does not support.
-    selected: list[int] = [0]
-    if k == 1:
-        return (0,)
+    return farthest_first(candidates, distance, k)
 
-    min_distance_to_selected = [distance(candidates[0], candidates[i]) for i in range(n)]
-    selected_set = {0}
-    while len(selected) < k:
-        best_index = -1
+def collisions(fingerprints: Sequence[Fingerprint]) -> tuple[tuple[str, tuple[int, ...]], ...]:
+    """Shapes used by more than one artifact, and which artifacts used them.
+
+    ``report()`` counts distinct shapes; this names the repeats. The
+    difference is what an author can act on: "120 artifacts, 11 shapes" is a
+    number, and "these fourteen close packs are one shape" is a document to go
+    and look at. Ordered largest group first, then by digest, so ``--json`` is
+    diffable.
+    """
+    grouped: dict[str, list[int]] = {}
+    for index, fp in enumerate(fingerprints):
+        grouped.setdefault(fp.digest(), []).append(index)
+    return tuple(sorted(
+        ((digest, tuple(members)) for digest, members in grouped.items() if len(members) > 1),
+        key=lambda row: (-len(row[1]), row[0]),
+    ))
+
+
+def assign(
+    candidates: Sequence[Sequence[Fingerprint]],
+    *,
+    committed: Sequence[Fingerprint] = (),
+) -> tuple[int, ...]:
+    """One shape per artifact, chosen so the *batch* spreads out.
+
+    ``select`` and this are the two halves of the same problem and neither
+    substitutes for the other. ``select`` works inside one artifact: given the
+    dozen structural alternatives that artifact could take, pick the *k* most
+    unlike each other. That is the right tool for offering a model a varied
+    menu, and it has nothing to say about the batch — run it independently for
+    a hundred artifacts of the same type and it will happily hand every one of
+    them the same first pick, because index 0 is index 0 every time.
+
+    Which is precisely the measured defect build-order §7a.1 records: a
+    12-period corpus of 120 artifacts carrying **11 distinct section shapes**,
+    with DOCX sizes across 72 files spanning 38,658–40,618 bytes. Every close
+    pack in the estate is the same document with different numbers, and no
+    amount of per-artifact selection fixes it, because per-artifact selection
+    is what produced it.
+
+    So this greedily assigns across the batch: artifacts are taken in the
+    order given, and each one gets whichever of *its own* candidates is
+    furthest from every shape already committed — the shapes chosen by earlier
+    artifacts in this call, plus any *committed* shapes an earlier batch
+    already spent (a corpus built one period at a time must not restart the
+    dispersion at every period, or period two reproduces period one exactly).
+
+    Greedy, and honestly so. The exact problem — maximise the minimum pairwise
+    distance over a product of per-artifact candidate sets — is max-min
+    dispersion with assignment constraints and is NP-hard; §14.E is explicit
+    that a solver does not belong here until a recorded fixture proves greedy
+    insufficient. What greedy guarantees is the thing that was actually
+    missing: no artifact takes a shape identical to one already in the batch
+    while a different one is available to it.
+
+    Ties break toward the lowest candidate index, by strict-improvement
+    comparison, exactly as ``select`` does.
+
+    Returns one index per artifact, into that artifact's own candidate list.
+    An artifact with no candidates raises rather than silently taking a
+    default — an empty candidate set means the caller's shape vocabulary is
+    broken, and a quiet fallback would hide it behind exactly the monotony
+    this function exists to break.
+    """
+    for position, options in enumerate(candidates):
+        if not options:
+            raise ValueError(f"artifact {position} has no candidate shapes to assign")
+
+    spent: list[Fingerprint] = list(committed)
+    chosen: list[int] = []
+    for options in candidates:
+        best_index = 0
         best_score = -1.0
-        for i in range(n):
-            if i in selected_set:
-                continue
-            # Strict `>` only: the first (lowest-index) candidate to reach the
-            # best score seen so far keeps it, which is the tie-break.
-            if min_distance_to_selected[i] > best_score:
-                best_score = min_distance_to_selected[i]
-                best_index = i
-        selected.append(best_index)
-        selected_set.add(best_index)
-        for i in range(n):
-            if i in selected_set:
-                continue
-            candidate_distance = distance(candidates[best_index], candidates[i])
-            if candidate_distance < min_distance_to_selected[i]:
-                min_distance_to_selected[i] = candidate_distance
-
-    return tuple(selected)
+        for index, option in enumerate(options):
+            # Distance to the nearest already-spent shape — the same
+            # "furthest from what is already in the batch" rule `select`
+            # applies within one artifact, with the batch standing in for the
+            # selection being built.
+            score = min((distance(option, other) for other in spent), default=float("inf"))
+            if score > best_score:
+                best_score, best_index = score, index
+            if best_score == float("inf"):
+                # Nothing spent yet: every candidate is equally unconstrained,
+                # so the lowest index wins and there is nothing to compare.
+                break
+        chosen.append(best_index)
+        spent.append(options[best_index])
+    return tuple(chosen)
 
 
 __all__ = [
@@ -652,7 +864,9 @@ __all__ = [
     "Fingerprint",
     "QuotaViolation",
     "Quotas",
+    "assign",
     "check",
+    "collisions",
     "distance",
     "fingerprint",
     "report",

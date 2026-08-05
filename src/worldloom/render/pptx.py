@@ -43,10 +43,11 @@ from typing import TYPE_CHECKING
 from ..compiler.compose import compose, plan_from_ir
 from ..compiler.style import StyleGenome, genome
 from ..models import ArtifactIR, CanonicalFact, Row, Table
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..narrative import references
 from ..rng import Rng
 from . import Rendered, RenderError, ooxml, slug_for
-from .values import format_value
+from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
@@ -423,10 +424,14 @@ def _negative_text(value: float, text: str, convention: str) -> str:
     does so invisibly, because each format is internally consistent.
 
     Varying the convention is still legitimate diversity; it just has to be a
-    corpus-wide decision applied in one place. The honest route is the IR's own
-    `number_format` — a column declaring `#,##0;-#,##0` would reach every
-    renderer through `format_value` and they would all agree. That is a
-    compile-time change, not a render-time one, so it is not smuggled in here.
+    corpus-wide decision applied in one place. That place now exists and it is
+    not here: `locales.Locale.negative` is decided once for the corpus, recorded
+    on the recipe, resolved once per render pass by `values.corpus_locale`, and
+    spelled by `format_value` — so a locale whose negatives are signed prints
+    `-1.234` in Word *and* in Markdown *and* in the BM25 index, which is the
+    property this function refuses to break. A genome that varied the convention
+    per document would still be a second answer to a question the corpus has
+    already answered, so `number_negatives` stays unapplied.
 
     Kept as a function rather than deleted at the call sites so the reason
     survives next to the temptation.
@@ -636,11 +641,11 @@ _PROSE_STYLE: dict[str, dict] = {
 _DEFAULT_PROSE_STYLE = {"band": _TS_BODY}
 
 
-def _draw_prose_content(prs, slide_plan, facts, footer_text: str, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
+def _draw_prose_content(prs, slide_plan, facts, footer_text: str, g: StyleGenome = _HOUSE_GENOME, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
     """A section whose content is prose — ``core.position``, ``core.narrative``
     and the rest of the text-shaped components in the registry."""
     slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
-    resolved = references.substitute(slide_plan.body, facts) if facts else slide_plan.body
+    resolved = references.substitute(slide_plan.body, facts, locale=locale) if facts else slide_plan.body
     # Blank lines are paragraph breaks — the same convention `docx.py` follows
     # for the identical reason: a single run holding newlines renders as one
     # unbroken block, not separate paragraphs.
@@ -672,7 +677,7 @@ def _draw_prose_content(prs, slide_plan, facts, footer_text: str, g: StyleGenome
 _MAX_TABLE_ROWS_PER_SLIDE = 6
 
 
-def _column_widths(table: Table, total: int) -> list[int]:
+def _column_widths(table: Table, total: int, locale: Locale = DEFAULT_LOCALE) -> list[int]:
     """Column widths proportional to their content, not divided evenly.
 
     A table whose "statement" column carries a sentence and whose "authority"
@@ -693,7 +698,7 @@ def _column_widths(table: Table, total: int) -> list[int]:
         for row in table.rows:
             cell = row.cells.get(column.key)
             if cell is not None:
-                longest = max(longest, len(format_value(cell.value, column.number_format)))
+                longest = max(longest, len(format_value(cell.value, column.number_format, locale=locale)))
         weights.append(max(longest, 6))
 
     share = sum(weights)
@@ -772,7 +777,7 @@ def _style_cell(
             run.font.color.rgb = _rgb(colour)
 
 
-def _draw_table(slide, table: Table, rows: list[Row], *, note: str | None, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
+def _draw_table(slide, table: Table, rows: list[Row], *, note: str | None, g: StyleGenome = _HOUSE_GENOME, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
     """One table, or one page of a paginated one, as a native PPTX table.
 
     Mirrors `docx.py`'s ``_table``: a label column then one column per
@@ -793,7 +798,7 @@ def _draw_table(slide, table: Table, rows: list[Row], *, note: str | None, g: St
 
     graphic = slide.shapes.add_table(len(rows) + 1, len(table.columns) + 1, box.x, box.y, box.cx, box.cy)
     grid = graphic.table
-    for column, width in zip(grid.columns, _column_widths(table, box.cx)):
+    for column, width in zip(grid.columns, _column_widths(table, box.cx, locale)):
         column.width = width
     _apply_table_density(grid, _cell_padding_pt(g))
     borders = (g.gridline_policy, g.rule_weight)
@@ -825,7 +830,7 @@ def _draw_table(slide, table: Table, rows: list[Row], *, note: str | None, g: St
             cell = row.cells.get(column.key)
             value = cell.value if cell else None
             negative = isinstance(value, (int, float)) and value < 0
-            text = format_value(value, column.number_format) if cell else ""
+            text = format_value(value, column.number_format, locale=locale) if cell else ""
             if negative:
                 text = _negative_text(value, text, g.number_negatives)
             cells[column_index].text = text
@@ -844,7 +849,7 @@ def _draw_table(slide, table: Table, rows: list[Row], *, note: str | None, g: St
         _write(note_shape.text_frame, [note], size=MIN_FONT_PT, colour=_MUTED, italic=True)
 
 
-def draw_metric_cards(slide, table: Table, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
+def draw_metric_cards(slide, table: Table, g: StyleGenome = _HOUSE_GENOME, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
     """A small table as a strip of KPI cards — ``finance.metric_strip`` — one
     box per row, each showing the row's first measure large and its label
     beneath.
@@ -873,7 +878,7 @@ def draw_metric_cards(slide, table: Table, g: StyleGenome = _HOUSE_GENOME) -> No
         card = _textbox(slide, box, fill=g.colour_roles["subtotal_fill"])
         cell = row.cells.get(measure.key) if measure else None
         value = cell.value if cell else None
-        value_text = format_value(value, measure.number_format) if cell else ""
+        value_text = format_value(value, measure.number_format, locale=locale) if cell else ""
         if isinstance(value, (int, float)) and value < 0:
             value_text = _negative_text(value, value_text, g.number_negatives)
         frame = card.text_frame
@@ -895,7 +900,7 @@ def draw_metric_cards(slide, table: Table, g: StyleGenome = _HOUSE_GENOME) -> No
             run.font.color.rgb = _rgb(g.colour_roles["subtotal_text"])
 
 
-def _draw_table_content(prs, slide_plan, footer_text: str, g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
+def _draw_table_content(prs, slide_plan, footer_text: str, g: StyleGenome = _HOUSE_GENOME, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
     table = slide_plan.table
     assert table is not None
 
@@ -906,7 +911,7 @@ def _draw_table_content(prs, slide_plan, footer_text: str, g: StyleGenome = _HOU
     # actually wide or long still gets the table it can honestly hold.
     if slide_plan.component_id == "finance.metric_strip" and 1 <= len(table.rows) <= 6 and len(table.columns) <= 3:
         slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
-        draw_metric_cards(slide, table, g)
+        draw_metric_cards(slide, table, g, locale)
         return
 
     chunks = [
@@ -923,11 +928,12 @@ def _draw_table_content(prs, slide_plan, footer_text: str, g: StyleGenome = _HOU
         # The note belongs to the table, not to any one page of it — shown
         # once, on the first slide, rather than repeated on every
         # continuation where it would read as new information each time.
-        _draw_table(slide, table, rows, note=table.note if index == 0 else None, g=g)
+        _draw_table(slide, table, rows, note=table.note if index == 0 else None, g=g, locale=locale)
 
 
 def _draw_content(  # type: ignore[no-untyped-def]
-    prs, plan: PresentationPlan, slide_plan, facts: dict[str, CanonicalFact], g: StyleGenome = _HOUSE_GENOME
+    prs, plan: PresentationPlan, slide_plan, facts: dict[str, CanonicalFact],
+    g: StyleGenome = _HOUSE_GENOME, locale: Locale = DEFAULT_LOCALE,
 ) -> None:
     """Dispatch one resolved section to a table or prose slide.
 
@@ -941,9 +947,9 @@ def _draw_content(  # type: ignore[no-untyped-def]
     """
     footer_text = f"{plan.metadata.get('company', '')} · {plan.title}"
     if slide_plan.table is not None:
-        _draw_table_content(prs, slide_plan, footer_text, g)
+        _draw_table_content(prs, slide_plan, footer_text, g, locale)
     elif slide_plan.body:
-        _draw_prose_content(prs, slide_plan, facts, footer_text, g)
+        _draw_prose_content(prs, slide_plan, facts, footer_text, g, locale)
     else:
         slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
         body = _textbox(slide, BODY)
@@ -955,12 +961,23 @@ def _draw_content(  # type: ignore[no-untyped-def]
 # ---------------------------------------------------------------------------
 
 
-def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> bytes:
+def render(
+    ir: ArtifactIR,
+    facts: dict[str, CanonicalFact] | None = None,
+    *,
+    locale: Locale = DEFAULT_LOCALE,
+) -> bytes:
     """Render one IR to PPTX bytes.
 
     Prose carries ``{{fact:ID}}`` references; *facts* resolves them at render
     time. Without it the references stay visible, which is the right failure —
     a deck that quietly drops a figure reads as finished and is not.
+
+    *locale* reaches the column widths as well as the cells, which is why
+    `_column_widths` takes one: it measures a column by the longest text it
+    actually holds, and `1.234,50 EUR` is not the same number of characters as
+    `1,234.50` in every jurisdiction. A width measured in one grammar and drawn
+    in another is a table that overflows its box for no visible reason.
     """
     pptx_pkg = _require_pptx()
     plan = _plan(ir)
@@ -978,7 +995,7 @@ def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> byt
         elif slide_plan.kind == "closing":
             _draw_closing(presentation, plan, g)
         else:
-            _draw_content(presentation, plan, slide_plan, facts, g)
+            _draw_content(presentation, plan, slide_plan, facts, g, locale)
 
     properties = presentation.core_properties
     properties.title = ir.title
@@ -1001,6 +1018,7 @@ def render(ir: ArtifactIR, facts: dict[str, CanonicalFact] | None = None) -> byt
 def render_all(world: World) -> list[Rendered]:
     """Render every executive-summary-shaped artifact in *world*."""
     facts = {fact.id: fact for fact in world.facts}
+    locale = corpus_locale(world)
     out: list[Rendered] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
@@ -1011,7 +1029,7 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.pptx",
                 media_type=MEDIA_TYPE,
-                payload=render(ir, facts),
+                payload=render(ir, facts, locale=locale),
             )
         )
     return out

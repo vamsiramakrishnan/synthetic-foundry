@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..models import Category
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from .finance import allocate
 
@@ -69,6 +70,7 @@ def generate(
     books: tuple[Category, ...],
     affected_book_id: str,
     unit_share_of: dict[str, float],
+    physics: Parameters = DEFAULT,
 ) -> CapitalPosition:
     """Draw the quarter's capital position for a set of product books.
 
@@ -82,19 +84,27 @@ def generate(
         raise ValueError(f"affected book {affected_book_id} is not among the books given")
 
     # Total RWA first, in hundreds of millions. The band brackets a mid-size
-    # ADI: mortgage-heavy books risk-weight well below their exposure.
-    rwa_filed = rng.derive("rwa").integer(140, 210) * 100
+    # ADI: mortgage-heavy books risk-weight well below their exposure. The
+    # `* 100` stays at the call site because the span counts hundreds — folding
+    # it into the range would make a pack state the figure in a different unit
+    # from the one the registry documents.
+    rwa_filed = physics.integer("capital.rwa.filed_hundreds", rng.derive("rwa")) * 100
 
     # The filed ratio lands comfortably above the minimum — a bank filing at
     # the floor would make the restatement's materiality question trivial in
     # the other direction.
-    target = rng.derive("ratio").number(12.2, 13.6, places=1)
+    target = physics.number("capital.ratio.target_pct", rng.derive("ratio"))
     cet1_capital = int(round(rwa_filed * target / 100))
 
     # Understatement sized so the corrected ratio stays above the minimum:
     # 3–5% of filed RWA moves the ratio ~40–65bps, and the floor sits at least
     # 150bps below the softest filed ratio this generator can draw.
-    understatement = int(round(rwa_filed * rng.derive("understatement").number(0.03, 0.05), -1))
+    understatement = int(round(
+        rwa_filed * physics.number(
+            "capital.error.understatement_pct", rng.derive("understatement")
+        ),
+        -1,
+    ))
     rwa_corrected = rwa_filed + understatement
 
     weights = [

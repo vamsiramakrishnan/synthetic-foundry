@@ -20,7 +20,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..ids import Minter
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import Category, Site
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 
 
@@ -80,7 +82,12 @@ class Dimensions:
 #: other geographic string the corpus prints (``headquarters``) is a single
 #: pack-authored value, not a pool; this one is a pool because a site estate
 #: needs several regions to distribute across, cycled by ``generate`` below.
-REGIONS: tuple[str, ...] = ("NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT")
+#:
+#: The tuple now lives in ``locales.AUSTRALIA`` and this is an alias, the same
+#: move ``landscape.py`` made on ``estate.PROFILES``: the name is what callers
+#: and ``Pack.regions``'s docstring refer to, so it stays, but two copies of a
+#: pool is one copy that can stop being the one the generator draws from.
+REGIONS: tuple[str, ...] = DEFAULT_LOCALE.regions
 
 
 def generate(
@@ -90,20 +97,31 @@ def generate(
     units: tuple[UnitSpec, ...],
     unit_ids: dict[str, str],
     buyers: dict[str, str],
-    regions: tuple[str, ...] = REGIONS,
+    regions: tuple[str, ...] | None = None,
+    locale: Locale = DEFAULT_LOCALE,
+    physics: Parameters = DEFAULT,
 ) -> Dimensions:
     """Build the category and site dimensions for a set of business units.
 
-    ``regions`` defaults to the module's own pool; a pack overrides it via
-    ``Pack.regions`` (threaded through ``organisation``/``banking_org``), the
-    only geography besides ``headquarters`` a generated corpus surfaces.
-    Cycled by index rather than drawn, same as before the override existed —
-    the sequence must stay exhaustive and evenly spread across a large estate,
-    which an rng draw would not guarantee. An empty tuple here is a caller
-    bug, not a valid "no locale" state — ``Pack.regions`` treats an empty list
-    as "use the default pool" and the callers below never forward an empty
-    one past that point, so this parameter should never actually see one.
+    ``locale`` supplies the region pool; ``regions`` overrides it outright for
+    the one caller that has a narrower claim to make. Both exist, and which
+    wins is the point: a *locale* says where the company is, and a pack's
+    ``Pack.regions`` says which labels this particular estate uses, which is a
+    finer-grained thing than a jurisdiction. A pack that names regions has said
+    something more specific than "put this company in Germany", so it wins.
+
+    ``regions=None`` means "the locale's", which is what makes an un-passed
+    argument byte-identical to before either parameter existed — the default
+    locale's pool *is* the ``REGIONS`` literal. An empty tuple is still a
+    caller bug rather than a valid "no locale" state: ``Pack.regions`` treats
+    an empty list as "use the default pool" and the callers never forward an
+    empty one past that point.
+
+    Cycled by index rather than drawn, unchanged — the sequence must stay
+    exhaustive and evenly spread across a large estate, which an rng draw would
+    not guarantee.
     """
+    regions = regions if regions else locale.regions
     categories: list[Category] = []
     sites: list[Site] = []
     categories_by_unit: dict[str, list[str]] = {}
@@ -134,9 +152,18 @@ def generate(
                 # A zero-revenue format stays exactly zero rather than becoming a
                 # small non-zero number — a distribution centre with $40k of
                 # turnover would reconcile and still be wrong.
+                #
+                # The `round` stays here and `org.site.revenue_spread` must carry
+                # no `places`: what is published to four decimals is the *weight*,
+                # after the format's own multiplier, not the spread that produced
+                # it. Rounding the draw as well is a second rounding, and it moves
+                # roughly one site in seven off the value it had before this
+                # registry existed.
                 weight = (
                     0.0 if fmt.revenue_weight == 0.0
-                    else round(fmt.revenue_weight * site_rng.number(0.62, 1.44), 4)
+                    else round(
+                        fmt.revenue_weight * physics.number("org.site.revenue_spread", site_rng), 4
+                    )
                 )
                 site = Site(
                     id=minter.next("SITE"),
@@ -146,7 +173,7 @@ def generate(
                     business_unit_id=unit_id,
                     format=fmt.name,
                     region=region,
-                    opened=f"{site_rng.integer(1998, 2025)}",
+                    opened=f"{physics.integer('org.site.opened_year', site_rng)}",
                     revenue_weight=weight,
                 )
                 sites.append(site)

@@ -28,19 +28,12 @@ comes back is **checked against the fact ledger**. Restate a number, cite someth
 you were not given, or mention an entity that does not exist, and the prose is
 rejected with the reason.
 
-Narrating by hand doesn't scale past a handful of documents. For bulk prose,
-`pip install "worldloom[llm]"` and run `worldloom narrate auto ./corpus` — the
-same request/validate/reject loop above, with an Anthropic model answering in
-place of the agent and `ANTHROPIC_API_KEY` in the environment. A `--model
-gemini-*` id routes the identical loop to Gemini instead
-(`pip install "worldloom[gemini]"`, or `google-antigravity`, which carries the
-same SDK; `GEMINI_API_KEY`). And `--harness claude-code` or `--harness
-antigravity` puts a whole agent harness behind each request rather than a bare
-model call — Claude Code in headless mode (its own auth, no key here) or a
-Google Antigravity `Agent` (`pip install "worldloom[antigravity]"`) — one
-fresh session per section, because the request is the whole of what that
-author may know. Everything else in this repository, including every one of
-those loops' own tests, runs with no key at all.
+There is no API-caller path, deliberately: this package never calls a language
+model. The writer is the coding harness driving it — Claude Code through the
+`/worldloom` skills, Antigravity, or any agent that can run a terminal — and
+the loop above is the whole contract: the harness reads `requests.json`,
+writes `responses.json`, and submits until accepted. Everything in this
+repository, including every test, runs with no key at all.
 
 That division is the design. The agent supplies judgement and language. The harness
 supplies truth, and refuses anything that contradicts it.

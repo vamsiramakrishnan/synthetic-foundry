@@ -51,6 +51,16 @@ act_app = typer.Typer(
     help="Drive an actor episode: one employee's decision at a time, validated before it changes anything.",
 )
 app.add_typer(act_app, name="act")
+compose_app = typer.Typer(
+    no_args_is_help=True,
+    help="Hand an agent the company's technology estate to author, and check it against the graph.",
+)
+app.add_typer(compose_app, name="compose")
+probe_app = typer.Typer(
+    no_args_is_help=True,
+    help="Derive a world's physics by asking, one question at a time, under propagation.",
+)
+app.add_typer(probe_app, name="probe")
 
 console = Console()
 err = Console(stderr=True)
@@ -88,6 +98,22 @@ def _step_period(period: str, index: int, step_months: int) -> str:
 #: knob's consumers apply to their own counts — see `scenarios.py` and
 #: `generators/evaluation.py`'s docstrings for what each value changes.
 _EVAL_DENSITY_LEVELS: dict[str, float] = {"low": 0.0, "standard": 1.0, "high": 2.0}
+
+#: `--timeline`'s named densities, mapped to the `timeline.Density` each names.
+#: Named on the CLI for the same reason `--eval-density` is: "turbulent" is what
+#: somebody asking for a bad year reasons about, and `Density(incidents=1/3,
+#: departures=1/4, …)` is four rates they would have to invent a relationship
+#: between. `quiet` is deliberately in the table even though it schedules
+#: nothing — it is the null hypothesis `--periods` already builds, and having to
+#: name it is what makes the other two a choice rather than an accident.
+_TIMELINE_DENSITIES: tuple[str, ...] = ("quiet", "steady", "turbulent")
+
+
+def _density(name: str) -> Any:
+    from . import timeline as timeline_module
+
+    return {"quiet": timeline_module.QUIET, "steady": timeline_module.STEADY,
+            "turbulent": timeline_module.TURBULENT}[name]
 
 
 def _summary_table(world: World) -> Table:
@@ -190,6 +216,38 @@ def build(
         0, "--comparatives",
         help="Prior months of actuals to generate, for a trend. 11 gives a rolling year.",
     ),
+    estate: str = typer.Option(
+        None, "--estate",
+        help=(
+            "Grow a service landscape around the episode's own services: small, "
+            "medium or large. Without it the estate is the four services and five "
+            "systems the close names and nothing else — nine nodes whether the "
+            "archetype has three stores or sixteen hundred, so nothing has a blast "
+            "radius and `worldloom topology` has little to read. Omit it and every "
+            "existing corpus is byte-identical."
+        ),
+    ),
+    physics: Path = typer.Option(
+        None, "--physics",
+        help=(
+            "Build under overridden world physics: a JSON file of parameter ranges, "
+            "as `worldloom probe resolve` writes and `worldloom pack params` lists. "
+            "This is what makes a pack able to say the company is a jeweller rather "
+            "than a grocer with the labels changed. Only the ranges that differ from "
+            "the engine's are recorded, so a file restating the defaults builds a "
+            "byte-identical corpus."
+        ),
+    ),
+    trend: float = typer.Option(
+        0.0, "--trend",
+        help=(
+            "Monthly compound growth behind the comparative history, as a fraction "
+            "(0.004 is about 5%/year). Without it a year of comparatives oscillates "
+            "around a flat level, so a seasonally-adjusted series is flat by "
+            "construction and no question about direction has an answer in the data. "
+            "Needs --comparatives. 0.0 reproduces every existing corpus byte for byte."
+        ),
+    ),
     periods: int = typer.Option(
         1, "--periods",
         help=(
@@ -241,6 +299,108 @@ def build(
             "an evaluation case needs. 0 (the default) touches nothing."
         ),
     ),
+    spec: Path = typer.Option(
+        None, "--spec",
+        help=(
+            "Build from a company specification: one JSON document that says "
+            "what kind of company this is, instead of the nine surfaces that "
+            "each say a piece of it. `worldloom pack spec` prints the schema "
+            "and `--template` writes a starter. Every field resolves into a "
+            "seam that already exists — an archetype, a vocabulary, facets, "
+            "physics ranges, a role table, a locale, a pack — so this adds no "
+            "capability the flags lack; what it adds is that the pieces are "
+            "resolved *together*, so a description that contradicts itself is "
+            "a sentence rather than a corpus. Two things worth knowing. It "
+            "refuses the flags it subsumes (--archetype, --inspired-by, "
+            "--pack, --employees, --facet, --physics, --locale, --estate) "
+            "rather than merging with them, because two accounts of one "
+            "company is what a recipe exists to make impossible. And a "
+            "specification is never recorded: it resolves to consequences and "
+            "the recipe records those, exactly as --facet records "
+            "consequences rather than facet names, so the corpus replays "
+            "after the registries move underneath it."
+        ),
+    ),
+    facet: list[str] = typer.Option(
+        None, "--facet",
+        help=(
+            "Say what the company *is*, as `name=value` — `--facet listing=listed "
+            "--facet maturity=legacy`. Repeatable; `worldloom pack facets` lists "
+            "the dimensions and what each value commits the world to. A facet is "
+            "not a label: `listed` mints an audit committee chair and a head of "
+            "investor relations, raises status-report density, and puts the audit "
+            "committee in the filing approval chain, because that is what being "
+            "listed means operationally. Contradictory claims are refused naming "
+            "both rather than merged — there is no listed mutual. Consequences a "
+            "facet has that nothing here implements are printed rather than "
+            "dropped. Costs, and the second one is the surprising one: the implied "
+            "roles are appended to the organisation, so headcount exceeds what "
+            "--employees stated; and naming any facet settles *every* facet at its "
+            "registry default, which is what makes the claims composable but means "
+            "`--facet listing=listed` alone also asserts trading_pattern=steady — a "
+            "flat year, replacing the engine's 21% December. Say "
+            "`--facet trading_pattern=christmas_peak` to keep it. An explicit "
+            "--estate beats a facet's, and a pack's own trading year beats one a "
+            "facet implies, because you said those and the facet only implied it."
+        ),
+    ),
+    locale: str = typer.Option(
+        None, "--locale",
+        help=(
+            "The jurisdiction this corpus is in: `australia`, `united_kingdom`, "
+            "`germany` or `gulf` (`worldloom pack locales`). Every world this tool "
+            "has built is Australian, and in more places than place names: a "
+            "German subsidiary's variance memo printing `(1,234)` where every "
+            "German report prints `-1.234` tells a reader the corpus is synthetic, "
+            "and tells them from the punctuation. It reaches the *render* half — "
+            "the digit grammar, applied corpus-wide so a table and the prose citing "
+            "it cannot disagree — and the *build* half: the region labels in every "
+            "site name, the pools the people are drawn from, the headquarters city, "
+            "the retailer's own second word, and the currency and financial year "
+            "every money fact is stated in. A pack's `name_pools`, `regions`, "
+            "`headquarters` and currency still win where they overlap, because a "
+            "pack is a claim about this company and a locale about the country it "
+            "is in. One thing it still does not reach: the working week never "
+            "leaves the world spec, so the close calendar counts Monday to Friday "
+            "wherever the corpus is set, and a bank's or insurer's own name comes "
+            "from its vertical's pool rather than the locale's. It rides the "
+            "recipe, so a localised corpus rebuilds as the same world spelled the "
+            "same way. Omit it and every existing corpus is byte-identical."
+        ),
+    ),
+    messiness: str = typer.Option(
+        None, "--messiness",
+        help=(
+            "How well the archive is kept: `pristine`, `well_run`, `lived_in` or "
+            "`neglected` (`worldloom pack messiness`). Every Worldloom corpus so "
+            "far has been almost perfectly kept, and a retriever that has only "
+            "ever seen a tidy archive has not been tested against anything. What "
+            "this does *not* relax is the invariant: every imperfection is "
+            "recorded, so a reader holding only the corpus can establish "
+            "mechanically that the stale page is stale and what the current "
+            "position is. Costs: the corpus gains documents that are wrong on "
+            "purpose, so a benchmark scored against it is measuring recency and "
+            "provenance reasoning as well as retrieval. `pristine` is the "
+            "default and writes nothing at all."
+        ),
+    ),
+    timeline: str = typer.Option(
+        None, "--timeline",
+        help=(
+            "Sample a history rather than repeating a month: `quiet`, `steady` or "
+            "`turbulent`. `--periods 6` runs six closes signed by the same "
+            "twenty-three people, drawn from the same distribution — six identical "
+            "months with the dates changed. A density schedules incidents and org "
+            "changes across those periods instead, so a controller who departs in "
+            "period 2 means periods 3-6 are signed by their successor and \"which "
+            "month went wrong\" becomes answerable from the corpus. Needs "
+            "--periods to have room to work in. Costs: the schedule states "
+            "incidents in *both* directions once it schedules any, so it and "
+            "--incident cannot both decide; and hires are not sampled, because a "
+            "new post's title is a business decision and a sampler inventing one "
+            "would write the least plausible sentence in the corpus."
+        ),
+    ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
 ) -> None:
     """Generate a world deterministically from a seed, then validate it.
@@ -263,8 +423,89 @@ def build(
     if distractors < 0:
         err.print("[red]error:[/red] --distractors takes a non-negative count")
         raise typer.Exit(code=2)
+    if messiness is not None:
+        from . import messiness as messiness_module
 
-    pack_obj = None
+        try:
+            messiness_module.named(messiness)
+        except KeyError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+    if locale is not None:
+        from . import locales as locales_module
+
+        try:
+            locales_module.named(locale)
+        except KeyError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+    if timeline is not None and timeline not in _TIMELINE_DENSITIES:
+        err.print(
+            f"[red]error:[/red] --timeline takes {', '.join(_TIMELINE_DENSITIES)},"
+            f" not {timeline!r}"
+        )
+        raise typer.Exit(code=2)
+
+    # One document instead of nine surfaces. Resolved here, before anything is
+    # built, and its consequences are then indistinguishable from the flags'
+    # own — which is the whole design: a specification is a *composer*, so
+    # everything below this block is the code that already existed, reading
+    # values that arrived by a shorter route. Nothing about a spec reaches the
+    # recipe; its consequences do, exactly as `--facet` records consequences
+    # rather than facet names.
+    resolution = None
+    annual_revenue: int | None = None
+    if spec is not None:
+        subsumed = [
+            flag for flag, given in (
+                ("--archetype", archetype != "omnichannel_retailer"),
+                ("--inspired-by", inspired_by is not None),
+                ("--pack", pack is not None),
+                ("--employees", employees is not None),
+                ("--facet", bool(facet)),
+                ("--physics", physics is not None),
+                ("--locale", locale is not None),
+                ("--estate", estate is not None),
+            ) if given
+        ]
+        if subsumed:
+            err.print(
+                f"[red]error:[/red] {', '.join(subsumed)} cannot be combined with"
+                " --spec; the specification already says what kind of company"
+                " this is, and two accounts of one company is the thing a"
+                " corpus's own recipe exists to make impossible. Put the claim"
+                " in the document."
+            )
+            raise typer.Exit(code=2)
+        from . import company as company_module
+
+        try:
+            resolution = company_module.resolve(company_module.from_document(spec))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            err.print(f"[red]error:[/red] {spec}: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        if not resolution.ok:
+            err.print("[red]error:[/red] this description cannot be built:")
+            for conflict in resolution.conflicts:
+                err.print(f"  [yellow]{conflict.rule}[/yellow] {escape(str(conflict))}")
+            raise typer.Exit(code=2)
+        # Assigned onto the flags' own locals rather than threaded through a
+        # parallel path. Two paths to one build is how the second one quietly
+        # stops matching the first, and everything below has already been
+        # argued for once.
+        archetype = resolution.archetype_key or archetype
+        employees = resolution.employees
+        annual_revenue = resolution.annual_revenue
+        estate = resolution.estate
+        locale = resolution.locale
+        console.print(
+            "[dim]spec:[/dim] "
+            + ", ".join(f"{k}={v}" for k, v in sorted(resolution.facet_choices.items()))
+        )
+        for want in resolution.unmet:
+            console.print(f"[yellow]unmet:[/yellow] {escape(want)}")
+
+    pack_obj = None if resolution is None else resolution.pack
     if pack is not None:
         # A pack supplies the shape, the lore, and the name, so the flags that
         # would supply them another way are refused rather than merged.
@@ -298,6 +539,29 @@ def build(
                 f" engine; registered: {', '.join(domains.names())}"
             )
             raise typer.Exit(code=2)
+    elif pack_obj is not None:
+        # A specification that carried an identity composed one, or named one to
+        # load. Only the named one is linted: `packs.lint` exists to hold an
+        # *author* to what they wrote, and a composed pack was written by this
+        # tool from a description that has already been resolved and refused
+        # against every registry it touches. Running it anyway would report one
+        # finding that is simply false — "the pack carries no lore" — because a
+        # specification's lore reaches the world through `lore_claims` and
+        # `world.extend_lore`, never through `Pack.lore`, and that seam's own
+        # docstring is the argument for why.
+        from . import packs as packs_module
+
+        if resolution is None or resolution.spec.pack:
+            for finding in packs_module.lint(pack_obj):
+                err.print(f"[yellow]pack:[/yellow] {escape(finding)}")
+        shape = packs_module.archetype_of(pack_obj)
+        domain = domains.by_name(pack_obj.base)
+        if domain is None:
+            err.print(
+                f"[red]error:[/red] pack base {pack_obj.base!r} names no registered"
+                f" engine; registered: {', '.join(domains.names())}"
+            )
+            raise typer.Exit(code=2)
     elif inspired_by:
         shape = archetype_registry.inspired_by(inspired_by)
         domain = domains.for_archetype(shape.key)
@@ -321,12 +585,300 @@ def build(
     # below.
     single_episode = domain.single_episode if domain is not None else None
 
+    # Resolved once, before anything is built, and applied to the builder *and*
+    # every episode: the world's organisation and the episode's figures are
+    # drawn under the same physics or the corpus is internally inconsistent
+    # about what kind of company it is.
+    from .parameters import DEFAULT as _DEFAULT_PHYSICS
+
+    # What the company *is*, resolved before the ranges it moves. A facet emits
+    # only into vocabularies that already exist and already ride the recipe —
+    # parameter spans, a role table, a trading year, an estate size — which is
+    # why no recipe key was added for this flag and none is wanted. The recipe
+    # records the *consequences*, not the facet names, and that is the stronger
+    # of the two: consequences replay this world byte-for-byte even after the
+    # facet registry moves under it, whereas a stored `listing=listed` would
+    # replay whatever `listed` came to mean later while reporting success.
+    facet_roles: tuple[tuple[str, str, str, str | None], ...] = ()
+    facet_lore: tuple[Any, ...] = ()
+    facet_calendar: str | None = None
+    facet_estate: str | None = None
+    facet_overrides: dict[str, Any] = {}
+    if facet:
+        from . import facets as facets_module
+
+        chosen: dict[str, str] = {}
+        for entry in facet:
+            name, separator, value = entry.partition("=")
+            if not separator or not name.strip() or not value.strip():
+                err.print(
+                    f"[red]error:[/red] --facet takes `name=value`, not {entry!r};"
+                    " run `worldloom pack facets` for the dimensions"
+                )
+                raise typer.Exit(code=2)
+            # A dimension named twice is refused rather than last-wins: keyword
+            # collection would silently drop the earlier claim, and `--facet
+            # listing=listed --facet listing=mutual` is somebody expecting a
+            # contradiction to be caught, not a company to be quietly unlisted.
+            if name.strip() in chosen:
+                err.print(
+                    f"[red]error:[/red] --facet {name.strip()} given twice"
+                    f" ({chosen[name.strip()]!r} and {value.strip()!r}); a facet is"
+                    " one dimension and takes one value"
+                )
+                raise typer.Exit(code=2)
+            chosen[name.strip()] = value.strip()
+        resolved = facets_module.resolve(**chosen)
+        if not resolved.ok:
+            err.print("[red]error:[/red] these claims cannot hold together:")
+            for conflict in resolved.conflicts:
+                err.print(f"  [yellow]{conflict.rule}[/yellow] {escape(str(conflict))}")
+            raise typer.Exit(code=2)
+        # Round-tripped through the recipe's own serialisation rather than used
+        # as constructed, and that is not fastidiousness: a facet declares
+        # `Span(120, 300)` with Python ints, `overrides_from` coerces to float on
+        # the way back, and the recipe written by this build would then carry
+        # `120` where its own replay carries `120.0`. Same world, different bytes,
+        # and the byte-identity gate does not care which of the two is prettier.
+        from .parameters import overrides_from as _overrides_from
+
+        facet_overrides = _overrides_from(
+            {name: span.as_dict() for name, span in resolved.physics.items()}
+        )
+        facet_roles = resolved.roles
+        facet_calendar = resolved.calendar
+        facet_estate = resolved.estate
+        console.print(
+            f"[dim]facets:[/dim] {', '.join(f'{k}={v}' for k, v in sorted(resolved.chosen.items()))}"
+        )
+        # Claims rather than constraints, because a claim is what a domain can
+        # mint: `world.extend_lore` supplies the id and the effective date this
+        # flag has no business choosing. This used to print the lore as `unmet`
+        # and tell the caller to write a pack, which was honest while no seam
+        # existed and is now merely stale — the same carried-cited-and-inert
+        # failure in reverse, a capability reported as missing while it works.
+        facet_lore = resolved.claims
+        for want in facets_module.unmet(resolved):
+            console.print(f"[yellow]unmet:[/yellow] {escape(want)}")
+
+    #: The whole organisation a specification resolved, when one did. Kept apart
+    #: from `facet_roles` because it is a different kind of thing: facet roles
+    #: are rows to *append* to the engine's table, and this is a table that has
+    #: already been through `roles.review` with the engine's own spine placed in
+    #: it, the describer's leadership rows added, and the facets' roles folded
+    #: in. Appending it to the shipped table would duplicate every spine key.
+    spec_role_table: Any = None
+    if resolution is not None:
+        # Round-tripped through the recipe's own serialisation for the reason
+        # the facet path does it: a facet declares `Span(120, 300)` with Python
+        # ints and `overrides_from` coerces to float on the way back, so a
+        # recipe written here would carry `120` where its own replay carries
+        # `120.0`.
+        from .parameters import overrides_from as _overrides_from
+
+        facet_overrides = _overrides_from(
+            {name: span.as_dict() for name, span in resolution.physics.items()}
+        )
+        facet_calendar = resolution.calendar
+        facet_estate = resolution.estate
+        facet_lore = resolution.lore_claims
+        spec_role_table = resolution.role_table
+
+    # Estate: an explicit `--estate` beats a facet's, because the caller said it
+    # and the facet only implied it. Same rule the SDK's `.facets()` states.
+    estate = estate if estate is not None else facet_estate
+
+    physics_value = _DEFAULT_PHYSICS
+    overrides: dict[str, Any] = dict(facet_overrides)
+    if physics is not None:
+        from .parameters import overrides_from
+
+        try:
+            document = json.loads(physics.read_text(encoding="utf-8"))
+            # Applied *over* the facets' for the same reason as the estate: a
+            # file of ranges is a statement, a facet is an implication.
+            overrides.update(overrides_from(document.get("overrides", document)))
+        except (OSError, AttributeError, KeyError, ValueError, json.JSONDecodeError) as exc:
+            err.print(f"[red]error:[/red] {physics}: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+    if overrides:
+        # Rebound only when something was actually overridden, so the identity
+        # check in `_under_physics` still recognises a default build and every
+        # corpus built before facets existed is the same bytes.
+        try:
+            physics_value = _DEFAULT_PHYSICS.with_overrides(overrides)
+        except (KeyError, TypeError, ValueError) as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+
+    #: The trading year a facet actually put on the builder, if any. Held rather
+    #: than re-derived because it has to reach the *episodes* as well: a
+    #: seasonality on the builder is written to the recipe, and `recipe.rebuild`
+    #: hands the recorded one to every `MonthEndClose` — so a build that set it
+    #: on the organisation and not on the closes would produce a corpus its own
+    #: recipe rebuilds differently. Deliberately not the pack's: `--pack` has
+    #: never passed one to a close, and starting now would move the bytes of
+    #: every pack-built corpus already in existence.
+    claimed_calendar: list[Any] = []
+
+    def _claimed(builder: Any) -> Any:
+        """*builder* rebound to whatever the facets oblige, untouched otherwise.
+
+        Roles are appended to the engine's own table rather than replacing it:
+        an audit committee chair is what "listed" *means* operationally, and a
+        build that recorded the claim without minting the role would be the
+        carried-and-inert failure again. That does mean headcount exceeds what
+        `--employees` stated; the alternative is dropping a role the claim
+        requires, which is worse and quieter.
+
+        A trading year yields to one the builder already has — a pack's, which
+        is an authored claim about the business — for the same reason
+        `--estate` beats a facet's above.
+
+        Each consequence is applied on its own, and one a builder cannot carry
+        is *reported* rather than fatal. `BankingWorld` has no `seasonality`
+        field, and every facet set settles `trading_pattern` at its registry
+        default, so refusing the whole set would make `--facet` unusable on two
+        of the three engines over a claim nobody typed. Reported through the
+        same channel `facets.wants` uses, and for the same reason: a consequence
+        this claim honestly has that nothing here implements is evidence, and
+        the only failure would be letting it pass unsaid.
+        """
+        if (not facet_roles and facet_calendar is None and not facet_lore
+                and spec_role_table is None):
+            return builder
+        from dataclasses import replace as _replace_claimed
+
+        changes: dict[str, Any] = {}
+        if facet_lore:
+            changes["lore_claims"] = facet_lore
+        if spec_role_table is not None:
+            # Substituted, not appended — see `spec_role_table`'s note. The
+            # engine's spine is already inside it, placed by `roles.from_shape`
+            # and checked by `roles.review`, which is more than the append path
+            # can say for a table it never looks at as a whole.
+            changes["role_table"] = spec_role_table
+        elif facet_roles:
+            from . import roles as roles_module
+
+            try:
+                base_rows = roles_module.to_rows(roles_module._shipped(domain.name))
+            except (AttributeError, KeyError) as exc:
+                err.print(
+                    f"[red]error:[/red] --facet implies role(s) and the"
+                    f" {getattr(domain, 'name', '?')!r} engine has no table to"
+                    f" append them to: {escape(str(exc))}"
+                )
+                raise typer.Exit(code=2) from exc
+            have = {row[0] for row in base_rows}
+            changes["role_table"] = base_rows + tuple(
+                row for row in facet_roles if row[0] not in have
+            )
+        if facet_calendar is not None and getattr(builder, "seasonality", None) is None:
+            from . import profiles as profiles_module
+
+            changes["seasonality"] = profiles_module.named(facet_calendar)
+        for name, value in changes.items():
+            try:
+                builder = _replace_claimed(builder, **{name: value})
+            except TypeError:
+                # Keyed by field rather than by an if/else on one of them: with
+                # two entries the else branch was the role message by
+                # elimination, and the third entry would have reported missing
+                # lore as missing roles.
+                console.print(
+                    "[yellow]unmet:[/yellow] the facets imply "
+                    + {
+                        "seasonality": f"the {facet_calendar!r} trading calendar",
+                        "role_table": (
+                            f"{len(spec_role_table)} role(s)"
+                            if spec_role_table is not None
+                            else f"{len(facet_roles)} role(s)"
+                        ),
+                        "lore_claims": f"{len(facet_lore)} lore commitment(s)",
+                    }[name]
+                    + f" and {type(builder).__name__} has no `{name}` field, so"
+                    " nothing carries them"
+                )
+                continue
+            if name == "seasonality":
+                claimed_calendar.append(value)
+        return builder
+
+    def _localised(builder: Any) -> Any:
+        """*builder* set in the requested jurisdiction, untouched without one.
+
+        On the **builder**, because a locale is a build input: the region
+        labels printed into every site name, the pools the people are drawn
+        from, the headquarters city, the currency every money fact is
+        denominated in. This used to attach the locale to the finished world's
+        recipe instead — the only thing that could be done while no world spec
+        accepted one — and the result was a corpus that *recorded* Frankfurt
+        and was built in Sydney. Two things were wrong with that, and the
+        second is the one a test caught: the corpus was half localised, and its
+        own rebuild was not, because `recipe.rebuild` reads the recorded locale
+        and now builds with it. A build and its replay would have disagreed.
+
+        `_localised_recipe` below is the other half, for a vertical whose spec
+        cannot take one.
+        """
+        if locale is None:
+            return builder
+        from dataclasses import replace as _replace_locale
+
+        try:
+            return _replace_locale(builder, locale=locale)
+        except TypeError:
+            return builder
+
+    def _localised_recipe(built: Any) -> Any:
+        """The figure grammar, attached to a world whose spec would not take it.
+
+        A domain registered outside this repository may have no ``locale``
+        field, and the *render* half of a locale survives on the recipe alone
+        (``render/values.corpus_locale``). So that corpus still spells its
+        figures the requested way and simply has no build-half locale — which
+        is the truth about it, not a fallback dressed as one.
+
+        A no-op when the builder took the locale, because ``build_recipe``
+        wrote the key itself. Exactly the shape ``recipe.rebuild`` uses, so the
+        two paths cannot drift.
+        """
+        from .recipe import LOCALE_KEY, with_locale
+
+        if locale is None or built.recipe.get(LOCALE_KEY) is not None:
+            return built
+        return built.extend(recipe=with_locale(built.recipe, locale))
+
+    def _under_physics(spec: Any) -> Any:
+        """*spec* rebound to the requested physics, untouched on the default path.
+
+        Untouched rather than always rebound so that a domain registered
+        outside this repository — which may have no ``physics`` field — keeps
+        building exactly as it did.
+        """
+        if physics_value is _DEFAULT_PHYSICS:
+            return spec
+        from dataclasses import replace as _replace_physics
+
+        try:
+            return _replace_physics(spec, physics=physics_value)
+        except TypeError as exc:
+            err.print(
+                f"[red]error:[/red] --physics was given, but {type(spec).__name__}"
+                f" does not accept any: {escape(str(exc))}"
+            )
+            raise typer.Exit(code=2) from exc
+
     if single_episode is not None:
         refused = [
             flag for flag, given in (
                 ("--actors", actors is not None),
                 ("--incident/--no-incident", incident is not None),
                 ("--comparatives", comparatives > 0),
+                # Same reasoning as its neighbour: the trend shapes retail's
+                # comparative history, and a single-episode vertical has none.
+                ("--trend", trend != 0.0),
                 # Retail-only for now: the knob's growth (category commentary,
                 # site-level cases) is argued entirely from retail's own
                 # hierarchy in `scenarios.py`/`generators/evaluation.py`.
@@ -334,6 +886,16 @@ def build(
                 # same reasoning as its neighbours above; `standard` is a
                 # no-op everywhere, so it alone is let through.
                 ("--eval-density", eval_density != "standard"),
+                # A density schedules incidents, and a single-episode vertical's
+                # scenario takes no incident flag at all — `QuarterlyCapitalReturn`
+                # is constructed from a period and nothing else. So a scheduled
+                # incident here would be dropped on the floor and the corpus would
+                # be `--periods N` wearing a history's name. Refused rather than
+                # silently degraded, same as its neighbours; the org half
+                # (departures, reorganisations) is genuinely engine-neutral and is
+                # what makes this worth revisiting when a vertical's episode can
+                # be told a month went wrong.
+                ("--timeline", timeline is not None),
             ) if given
         ]
         if refused:
@@ -343,21 +905,59 @@ def build(
             )
             raise typer.Exit(code=2)
 
-        builder = (
+        builder = _claimed(_under_physics(
             domain.world.from_pack(pack_obj, seed=seed)
             if pack_obj is not None
-            else domain.world(seed=seed, archetype=shape, employees=employees)
-        )
-        world = builder.build()
+            else domain.world(
+                seed=seed, archetype=shape, employees=employees,
+                # Only when a specification stated one. Passed conditionally
+                # rather than as `annual_revenue=None` so a domain registered
+                # outside this repository, which may have no such field, keeps
+                # building exactly as it did.
+                **({} if annual_revenue is None else {"annual_revenue": annual_revenue}),
+                # Every vertical has its own landscape vocabulary now
+                # (`worldloom.landscape`), so this is no longer refused. It was
+                # refused rather than mis-served for as long as the only pools
+                # were retail's: a bank whose landscape is called
+                # `click-collect-api` is worse than a bank with no landscape.
+                **({} if estate is None else {"estate": estate}),
+            )
+        ))
+        world = _localised_recipe(_localised(builder).build())
         for index in range(max(1, periods)):
-            world = world.run(single_episode(_step_period(period, index, domain.period_step_months)))
+            world = world.run(_under_physics(
+                single_episode(_step_period(period, index, domain.period_step_months))
+            ))
     else:
-        builder = (
+        builder = _under_physics(
             RetailWorld.from_pack(pack_obj, seed=seed)
             if pack_obj is not None
-            else RetailWorld(seed=seed, archetype=shape, employees=employees)
+            else RetailWorld(
+                seed=seed, archetype=shape, employees=employees,
+                # See the single-episode branch: conditional, so a build that
+                # states no revenue is the bytes it always was.
+                **({} if annual_revenue is None else {"annual_revenue": annual_revenue}),
+            )
         )
-        world = builder.build()
+        if estate is not None:
+            from dataclasses import replace as _replace_builder
+
+            builder = _replace_builder(builder, estate=estate)
+        builder = _claimed(builder)
+        if resolution is not None and not claimed_calendar:
+            # A trading year the *pack* carries has to reach the closes too, and
+            # `_claimed` deliberately does not put a pack's year in
+            # `claimed_calendar` — it yields to the builder's rather than
+            # setting one. That is right for `--pack`, whose corpora were built
+            # before this mattered and must not move. It is wrong here: a
+            # specification's calendar reaches a composed pack *and* the
+            # builder, `build_recipe` records it, and `recipe.rebuild` hands the
+            # recorded year to every `MonthEndClose`. A build that skipped the
+            # closes would rebuild into a different corpus and report success.
+            carried_year = getattr(builder, "seasonality", None)
+            if carried_year is not None:
+                claimed_calendar.append(carried_year)
+        world = _localised_recipe(_localised(builder).build())
 
     # The actor provider is resolved before the loop, and a replay makes it
     # unreachable for the same reason a replayed narration does: a fallback that
@@ -378,6 +978,30 @@ def build(
         )
         raise typer.Exit(code=2)
 
+    # Same boundary, one step further: an imperfection attaches to a correction
+    # an episode recorded and to documents a planner has already written, and
+    # `--actors agent` exports before either exists.
+    if actors == "agent" and messiness is not None:
+        err.print(
+            "[red]error:[/red] --messiness decays documents the episode has not "
+            "planned yet; --actors agent exports before that episode has run"
+        )
+        raise typer.Exit(code=2)
+
+    # A sampled history is a *schedule*, and an actor episode is a handshake that
+    # resumes from the ledger one decision at a time. Combining them would mean
+    # the resumption had to know which of several closes it was inside, and the
+    # recipe the `agent` path writes by hand above states one close per period
+    # with no org changes between them — so the schedule would be silently
+    # discarded on the first `worldloom act`. Refused rather than half-served.
+    if timeline is not None and actors is not None:
+        err.print(
+            "[red]error:[/red] --timeline and --actors cannot be combined; an "
+            "episode resumed from the ledger is driven one decision at a time and "
+            "a sampled history is decided before the first one is taken"
+        )
+        raise typer.Exit(code=2)
+
     if actors == "agent":
         from dataclasses import replace as _replace
 
@@ -390,6 +1014,7 @@ def build(
             intended = with_step(
                 intended, "MonthEndClose", period=stamp, incident=incident,
                 comparatives=comparatives if index == 0 else 0, actors=True,
+                **({} if trend == 0.0 else {"trend_pct": trend}),
                 # Only recorded away from its default — see `scenarios.py`'s
                 # matching call for why an unconditional write here would
                 # break the byte-identity gate every default build depends on.
@@ -429,22 +1054,74 @@ def build(
     year, month = (int(part) for part in period.split("-"))
     from .actors import ActorProviderError
 
-    for index in range(max(1, periods) if single_episode is None else 0):
-        stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
-        try:
-            world = world.run(
-                MonthEndClose(
-                    period=stamp,
-                    include_operational_incident=incident,
-                    comparative_months=comparatives if index == 0 else 0,
-                    actors=actor_provider,
-                    actor_ledger=actor_ledger,
-                    eval_density=eval_density_value,
-                )
+    def _close(stamp: str, stated: bool | None, index: int) -> Any:
+        return MonthEndClose(
+            period=stamp,
+            include_operational_incident=stated,
+            comparative_months=comparatives if index == 0 else 0,
+            trend_pct=trend if index == 0 else 0.0,
+            actors=actor_provider,
+            actor_ledger=actor_ledger,
+            eval_density=eval_density_value,
+            physics=physics_value,
+            # Only when a facet put one on the builder — see `claimed_calendar`.
+            **({} if not claimed_calendar else {"seasonality": claimed_calendar[0]}),
+        )
+
+    if timeline is not None and single_episode is None:
+        # A history rather than a repetition. Note what is *not* here: no new
+        # recipe verb and no `timeline` key. Every scenario the sampler can emit
+        # already records itself through its own `with_step`, so a sampled
+        # history rebuilds from the steps it wrote — and a recipe entry for the
+        # history beside the steps it produced would be two accounts of one
+        # thing, which is the failure `recipe.py`'s docstring names first.
+        from . import timeline as timeline_module
+
+        density = _density(timeline)
+        if incident is not None and density.incidents:
+            err.print(
+                f"[red]error:[/red] --incident/--no-incident and --timeline"
+                f" {timeline} cannot both decide; the schedule states an incident"
+                " in both directions for every period once it schedules any, so"
+                " a forced flag would either be ignored or make the schedule"
+                " vacuous. Use --timeline quiet to keep the flag."
             )
-        except ActorProviderError as exc:
+            raise typer.Exit(code=2)
+
+        stamps = timeline_module.periods_from(period, max(1, periods))
+        history = timeline_module.sample(
+            roster=timeline_module.Roster.of(world),
+            start=period,
+            periods=max(1, periods),
+            seed=seed,
+            density=density,
+            # The sampler decides *when* something happens; what a close is
+            # remains this command's business, so the episode it schedules is
+            # built here with the same arguments the plain loop uses. `stated`
+            # is the schedule's answer, and `incident` fills the silence a
+            # zero-incident density leaves.
+            episode=lambda stamp, stated: _close(
+                stamp, incident if stated is None else stated, stamps.index(stamp),
+            ),
+        )
+        console.print(
+            f"[dim]timeline:[/dim] {timeline} — "
+            + ", ".join(f"{at} {what}" for at, what in history.outline())
+            + "\n"
+        )
+        try:
+            world = history.run(world)
+        except timeline_module.TimelineError as exc:
             err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
+    else:
+        for index in range(max(1, periods) if single_episode is None else 0):
+            stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
+            try:
+                world = world.run(_close(stamp, incident, index))
+            except ActorProviderError as exc:
+                err.print(f"[red]error:[/red] {escape(str(exc))}")
+                raise typer.Exit(code=2) from exc
 
     if actors == "scripted":
         accepted = sum(1 for entry in world.actor_ledger if entry.result.accepted)
@@ -464,6 +1141,25 @@ def build(
         world = distractors_module.apply(world, count=distractors)
         console.print(f"[dim]distractors:[/dim] {distractors} requested\n")
 
+    # After the distractors and not before, so the decay pass sees the whole
+    # archive: a personal working copy is exactly the kind of document that gets
+    # orphaned when its author leaves, and a corpus whose noise was immune to its
+    # own decay would be a tidier archive than the one it claims to be. Recorded
+    # by name rather than as an expanded budget — `messiness.from_document` reads
+    # a name back, so the recipe stays the small "how it was made" document it is
+    # meant to be, and a profile whose counts are later revised replays as the
+    # profile that was asked for.
+    if messiness is not None:
+        from .messiness import Imperfections
+
+        before = len(world.artifact_intents)
+        world = world.run(Imperfections(profile=messiness))
+        console.print(
+            f"[dim]messiness:[/dim] {messiness} —"
+            f" {len(world.artifact_intents) - before} document(s) added,"
+            f" {len(world.intentional_errors)} recorded imperfection(s) in total\n"
+        )
+
     if narrate or replay is not None:
         from .narrative import DeterministicProvider, ProviderError, UnreachableProvider
 
@@ -478,8 +1174,8 @@ def build(
             # Unreachable on purpose: a replay that quietly falls back to
             # generating would not be a replay. Its id comes from what the
             # artifacts record as `narrated_by` — the id is a key component,
-            # so replaying a corpus narrated by any other provider (anthropic,
-            # gemini, a harness) under a fixed id missed every key. It is NOT
+            # so replaying a corpus narrated under any other `--model-id`
+            # with a fixed id here missed every key. It is NOT
             # derived from the ledger's model_ids: an actor-mode corpus's
             # ledger legitimately carries the actor provider's entries beside
             # the narration's (CI's package job proved it, the first commit of
@@ -602,6 +1298,27 @@ def narrate_accept(
     verdicts = handshake.review(world, responses)
     rejected = {name: v for name, v in verdicts.items() if not v.accepted}
 
+    # Responses supplied, and not one of them was even looked at. That happens
+    # when every section already has prose, so `pending()` is empty and
+    # `review()` has nothing to review — and it printed "✓ 0 section(s)
+    # accepted" and exited zero, which is indistinguishable from success to
+    # anything reading the exit code.
+    #
+    # It is not a corner. CI's agent-handshake step submits *deliberately
+    # invalid* prose to prove the guardrail rejects it, and had been doing so
+    # against an already-narrated corpus: the responses were never reviewed,
+    # the step passed on a `FileExistsError` raised further down in `export`,
+    # and when that unrelated bug was fixed the step failed and revealed that
+    # the guardrail it names had not been exercised in a long time.
+    if responses and not verdicts:
+        err.print(
+            f"[red]error:[/red] {len(responses)} response(s) supplied but this corpus"
+            " has no section awaiting prose — nothing was reviewed and nothing was"
+            " committed.\n[dim]Every section already carries prose. Run `worldloom"
+            " status` to see where this corpus actually is.[/dim]"
+        )
+        raise typer.Exit(code=2)
+
     if as_json:
         import json as json_module
 
@@ -639,237 +1356,395 @@ def narrate_accept(
         raise typer.Exit(code=1)
 
 
-@narrate_app.command("auto")
-def narrate_auto(
-    corpus: str = typer.Argument(..., help="Corpus path to narrate."),
-    model: str = typer.Option(
-        None, "--model",
-        help="Model id. A `gemini-*` id routes to the Gemini provider"
-        " (`worldloom[gemini]`, GEMINI_API_KEY); anything else — and the"
-        " default — routes to Anthropic (`worldloom[llm]`, ANTHROPIC_API_KEY)."
-        " Defaults: `worldloom.narrative.ANTHROPIC_DEFAULT_MODEL` /"
-        " `GEMINI_DEFAULT_MODEL`.",
+@compose_app.command("requests")
+def compose_requests(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the request an agent needs to author this company's estate.
+
+    One request, not one per document: an estate is a graph, and asking for it
+    a node at a time would mean no proposal could ever be checked for the
+    property that matters — whether the whole thing is coherent.
+
+    The request is self-contained. It carries the company and its units, every
+    system and service that already exists (including what each depends on),
+    the people who could own something, the closed constraint vocabulary lore
+    may use, and the grammar in plain sentences. An agent should not need to
+    read this repository to answer, and a rule it cannot see is a rejection it
+    could not have predicted.
+    """
+    import json as json_module
+
+    from . import compose as compose_module
+
+    world = _load(corpus)
+    document = compose_module.requests_document(world)
+    payload = json_module.dumps(document, indent=2)
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(
+            f"[green]✓[/green] estate request written to [bold]{out}[/bold]"
+            f"\n[dim]{len(document['existing_services'])} service(s) and"
+            f" {len(document['existing_systems'])} system(s) already exist; up to"
+            f" {document['budget']['max_services']} more may be proposed.[/dim]"
+        )
+
+
+@compose_app.command("accept")
+def compose_accept(
+    corpus: str = typer.Argument(..., help="Corpus path to record the estate into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Response JSON from the agent."),
+    model_id: str = typer.Option(
+        "agent", "--model-id",
+        help="Who composed it. Recorded in the ledger and part of the replay key.",
     ),
-    retries: int = typer.Option(
-        2, "--retries",
-        help="Rejections the compiler will absorb per section before giving up.",
-    ),
-    harness: str = typer.Option(
-        None, "--harness",
-        help="Answer each request with an agent harness instead of a bare model:"
-        " `claude-code` (the claude CLI in headless mode, its own auth) or"
-        " `antigravity` (a Google Antigravity Agent; `worldloom[antigravity]`,"
-        " GEMINI_API_KEY). `--model` passes through to the harness.",
-    ),
-    concurrency: int = typer.Option(
-        1, "--concurrency",
-        help="Live generation calls to run at once, across a thread pool. 1 (the"
-        " default) opens no thread pool at all — today's behaviour, byte for"
-        " byte. Raising it only changes when calls happen: the recorded ledger"
-        " is identical at any concurrency, because completion order never"
-        " reaches it (see narrative/compiler.py's module docstring).",
-    ),
-    yes: bool = typer.Option(
-        False, "--yes", "-y",
-        help="Skip the confirmation prompt after the preflight summary. Always"
-        " skipped when stdin is not a terminal (CI, a script) — the summary is"
-        " still printed either way.",
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the verdict as JSON — an agent fixing rejections should read data, not parse a table.",
     ),
 ) -> None:
-    """Run requests -> generate -> validate -> accept in-process, against a live model.
+    """Validate an agent-authored estate against the graph, and commit it or refuse all of it.
 
-    Same loop `narrate requests` / write / `narrate accept` drives by hand, minus the
-    human round trip: the compiler's own retry loop (`compiler._generate`) calls the
-    model directly and feeds a rejection's violations back as the next attempt's
-    prompt, so this is the existing retry mechanism with a live model behind it, not
-    a second one. Every call still lands in the generation ledger keyed on
-    (seed, call site, fact digest, model id, prompt version) exactly like the
-    deterministic and hand-written paths, which is what makes a later
-    `--replay` build reproduce this corpus byte-for-byte with no model, key, or
-    network involved — `test_a_world_replays_with_the_provider_unreachable` and
-    `test_an_exported_corpus_replays_byte_for_byte` in tests/test_narrative.py prove
-    that property already, generically over any `Provider`; they just happen to have
-    only ever been exercised against deterministic ones.
-    `test_anthropic_narrate_auto_ledger_replays_offline` in
-    tests/test_anthropic_provider.py closes that gap for this specific,
-    non-deterministic provider.
+    The grammar is `worldloom.graphs`: the same reading `validate` and
+    `topology` do. A cycle through any number of hops, a dependency that
+    resolves to nothing, an owner who does not work here, a tier the graph
+    contradicts, or an estate in which nothing is a single point of failure —
+    each is refused with the rule it broke, and every violation is reported at
+    once rather than one per round.
 
-    Before a single call, a preflight prints how many sections are total,
-    already in the ledger, already checkpointed, and left to call live, plus
-    the provider id and a rough token estimate — see `tests/test_narrate_concurrency.py`.
-    Accepted sections persist incrementally to `narration-checkpoint.jsonl`
-    inside *corpus* as they land, so a crash or an interrupted run loses no
-    paid model output: rerunning this exact command resumes, replaying every
-    checkpointed section instead of calling for it again. A section that
-    exhausts its retry budget still aborts the run — `NarrationError`, exit
-    code 2 — but everything accepted before that point is already safe on
-    disk, and the error says how many sections and that rerunning resumes.
-    The sidecar is deleted once a run completes successfully; a corpus that
-    finished without ever crashing is byte-identical to one narrated with no
-    checkpointing at all.
+    All-or-nothing. A partial commit would leave a corpus half-composed with no
+    record of which half, and the half that landed is the half nobody reviewed.
     """
-    import os
-    import sys
+    import json as json_module
 
-    from .narrative import (
-        ANTHROPIC_DEFAULT_MODEL,
-        AnthropicProvider,
-        AntigravityProvider,
-        ClaudeCodeProvider,
-        GeminiProvider,
-        NarrationError,
-        ProviderError,
-        checkpoint,
-        compiler,
-    )
+    from . import compose as compose_module
 
-    if concurrency < 1:
-        err.print(f"[red]error:[/red] --concurrency must be at least 1, not {concurrency}")
-        raise typer.Exit(code=2)
-
-    # `--harness` names an agent runtime and overrides the model-prefix
-    # routing below — a harness picks (or is told) its model itself, so the
-    # prefix stops being the routing signal the moment one is named.
-    if harness is not None:
-        if harness == "claude-code":
-            # Preflight here, not just in the provider, so the failure comes
-            # before a corpus is loaded — same shape as the key checks below.
-            import shutil as _shutil
-
-            if _shutil.which("claude") is None:
-                err.print(
-                    "[red]error:[/red] --harness claude-code needs the `claude`"
-                    " CLI on PATH. Install it from https://claude.com/claude-code"
-                    " and run it once to authenticate."
-                )
-                raise typer.Exit(code=2)
-            make_provider = lambda: ClaudeCodeProvider(model=model)  # noqa: E731
-        elif harness == "antigravity":
-            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-            if not api_key:
-                err.print(
-                    "[red]error:[/red] --harness antigravity needs GEMINI_API_KEY"
-                    " (GOOGLE_API_KEY also works). Export one before running"
-                    " `worldloom narrate auto`."
-                )
-                raise typer.Exit(code=2)
-            make_provider = lambda: AntigravityProvider(model=model, api_key=api_key)  # noqa: E731
-        else:
-            err.print(
-                f"[red]error:[/red] --harness takes claude-code or antigravity, not {harness!r}"
-            )
-            raise typer.Exit(code=2)
-    # Routed by model-id prefix rather than a separate --provider flag: every
-    # Gemini id starts with "gemini-" and no Anthropic id does, so the prefix
-    # is unambiguous, and one flag that means one thing beats two flags that
-    # can contradict each other.
-    elif model and model.startswith("gemini"):
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            err.print(
-                "[red]error:[/red] GEMINI_API_KEY is not set (GOOGLE_API_KEY also"
-                " works). Export one before running `worldloom narrate auto`."
-            )
-            raise typer.Exit(code=2)
-        make_provider = lambda: GeminiProvider(model=model, api_key=api_key)  # noqa: E731
-    else:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            err.print(
-                "[red]error:[/red] ANTHROPIC_API_KEY is not set."
-                " Export it before running `worldloom narrate auto`."
-            )
-            raise typer.Exit(code=2)
-        make_provider = lambda: AnthropicProvider(  # noqa: E731
-            model=model or ANTHROPIC_DEFAULT_MODEL, api_key=api_key
-        )
-
-    world = _compiled(_load(corpus), corpus)
-
-    # A crash-and-resume sidecar, not a corpus file — see narrative/checkpoint.py.
-    # Loaded before the provider is even asked anything, so a rerun after a
-    # crash sees exactly what the interrupted run already paid for.
-    checkpoint_path = Path(corpus) / checkpoint.FILENAME
-    checkpointed = checkpoint.load(checkpoint_path)
-    checkpoint_keys = frozenset(entry.key for entry in checkpointed)
-    ledger = tuple(world._ledger) + checkpointed
-
+    world = _load(corpus)
     try:
-        provider = make_provider()
-        plan = compiler.preflight(world, provider, ledger=ledger)
-    except (ProviderError, NarrationError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        proposal = compose_module.Composition.model_validate(
+            json.loads(source.read_text(encoding="utf-8"))
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
-    # `preflight`'s `replay_keys` doesn't know which ledger a hit came from —
-    # split it here by intersecting with the checkpoint's own keys, so the
-    # summary can tell "already in this corpus's ledger" apart from
-    # "recovered from an interrupted run", which are different facts about
-    # the corpus even though `narrate()` treats both as an ordinary replay.
-    from_checkpoint = len(plan.replay_keys & checkpoint_keys)
-    from_ledger = len(plan.replay_keys) - from_checkpoint
-    # `~4 chars/token` is the standard rough-English heuristic — the count it
-    # is applied to (`live_prompt_chars`) is exact, not guessed: the sum of
-    # what `Prompt.render()` will actually send for every live call.
-    token_estimate = plan.live_prompt_chars // 4
+    result = compose_module.accept(world, proposal, model_id=model_id)
 
-    console.print(f"[bold]narrate auto[/bold] preflight — [bold]{corpus}[/bold]")
-    console.print(f"  sections total             {plan.total_sections:,}")
-    console.print(f"  replayed from ledger        {from_ledger:,}")
-    console.print(f"  replayed from checkpoint    {from_checkpoint:,}")
-    console.print(f"  live calls to make          {plan.live_count:,}")
-    console.print(f"  provider                    {provider.id}")
-    console.print(
-        f"  prompt size                 {plan.live_prompt_chars:,} chars"
-        f" (~{token_estimate:,} tokens, rough)\n"
-    )
+    if as_json:
+        typer.echo(json_module.dumps({
+            "accepted": result.accepted,
+            "services_added": result.services_added,
+            "systems_added": result.systems_added,
+            "lore_added": result.lore_added,
+            "rejections": [
+                {"subject": r.subject, "rule": r.rule, "detail": r.detail}
+                for r in result.rejections
+            ],
+        }, indent=2))
+        if not result.accepted:
+            raise typer.Exit(code=1)
 
-    if plan.live_count and not yes and sys.stdin.isatty():
-        if not typer.confirm("Proceed?", default=False):
-            console.print("[yellow]aborted[/yellow] — no call was made.")
-            raise typer.Exit(code=0)
-
-    writer = checkpoint.Writer(checkpoint_path)
-    try:
-        narrated = world.narrate(
-            provider, ledger=ledger, retries=retries,
-            concurrency=concurrency, on_accepted=writer,
+    if not result.accepted:
+        err.print(
+            f"[red]✗[/red] {len(result.rejections)} violation(s). Nothing was committed."
         )
-    except (ProviderError, NarrationError) as exc:
-        writer.close()
-        safe = len(checkpoint.load(checkpoint_path))
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        if safe:
-            err.print(
-                f"[yellow]{safe} section(s)[/yellow] accepted before this failure"
-                f" are safe in [bold]{checkpoint_path}[/bold]. Rerunning this exact"
-                " command resumes from there instead of paying for them again."
-            )
-        raise typer.Exit(code=2) from exc
-    writer.close()
-
-    written = narrated.export(corpus, overwrite=True)
-    # Only reached after a full success — an aborted run above never calls
-    # this, so its checkpoint stays on disk for the next attempt to find.
-    checkpoint.consume(checkpoint_path)
-
-    calls, replayed, rejected = narrated._narration
-    # `calls` counts every attempt including rejected ones (`1 + attempts` per new
-    # section, see compiler.narrate); subtracting `rejected` back out leaves exactly
-    # the count of sections that were newly generated this run, so the two together
-    # give the sections-narrated total the summary promises without the compiler
-    # needing to expose a fourth number for it.
-    generated = calls - rejected
-    console.print(
-        f"[green]✓[/green] {generated + replayed} section(s) narrated with [bold]{provider.id}[/bold]"
-    )
-    console.print(
-        f"[dim]narration:[/dim] {calls} provider call(s), {replayed} replayed from"
-        f" the ledger, {rejected} rejected attempt(s)\n"
-    )
-    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
-    if not _report(narrated):
+        for rejection in result.rejections:
+            err.print(f"  [yellow]{rejection.rule}[/yellow] {rejection.subject}: {rejection.detail}")
         raise typer.Exit(code=1)
+
+    assert result.world is not None
+    written = result.world.export(corpus, overwrite=True)
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] estate accepted: {result.services_added} service(s),"
+            f" {result.systems_added} system(s), {result.lore_added} lore commitment(s)"
+            f"\n[dim]recorded in the generation ledger and on the recipe, so"
+            f" `--replay` rebuilds it with no provider. Written to {written}."
+            f"\nRead it with `worldloom topology {corpus}`.[/dim]"
+        )
+
+
+# ---------------------------------------------------------------------------
+# probe — physics a model derives, rather than physics an engineer typed
+# ---------------------------------------------------------------------------
+
+
+def _probe_session(path: Path):  # type: ignore[no-untyped-def]
+    from . import probe as probe_module
+
+    try:
+        return probe_module.Session.from_document(
+            json.loads(path.read_text(encoding="utf-8"))
+        )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {path}: {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+
+def _write_probe(session, path: Path) -> None:  # type: ignore[no-untyped-def]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # `allow_nan=False` on purpose. An unbounded end must have been encoded as
+    # null before it reaches here; if one slipped through as an infinity this
+    # raises rather than writing `Infinity`, which Python reads back and no
+    # other JSON parser does.
+    path.write_text(json.dumps(session.document(), indent=2, allow_nan=False) + "\n",
+                    encoding="utf-8")
+
+
+@probe_app.command("open")
+def probe_open(
+    premise: str = typer.Option(..., "--premise", "-p",
+                                help="What this business is, in a sentence or two."),
+    out: Path = typer.Option(Path("probe.json"), "--out", "-o", help="Where to keep the probe."),
+    depth: int = typer.Option(
+        None, "--depth",
+        help="How many levels of sub-question to allow. Two is a sketch; five is a business plan.",
+    ),
+) -> None:
+    """Start a probe from a premise.
+
+    Creates one question — the premise's own — and nothing else. Every quantity
+    the world ends up with is raised by a model answering that, and then by
+    answering what its own answers raised.
+    """
+    from . import probe as probe_module
+
+    session = probe_module.Session(
+        premise, probe_module.DEFAULT_MAX_DEPTH if depth is None else depth
+    )
+    _write_probe(session, out)
+    console.print(
+        f"[green]✓[/green] probe opened at [bold]{out}[/bold]"
+        f"\n[dim]depth limit {session.max_depth}. Ask the first question with"
+        f" `worldloom probe next {out}`.[/dim]"
+    )
+
+
+@probe_app.command("next")
+def probe_next(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to read."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the next question, with the bounds earlier answers have left it.
+
+    The bounds are the *propagated* ones, not the question's own declared
+    range. That is the whole mechanism by which context shapes what a model may
+    say: by the time margin is asked, sell-through and markdown have already
+    squeezed it, and the model answers inside a box that earlier answers built.
+
+    Exits 3 when the graph is settled, so a driving loop can tell "nothing left
+    to ask" from "something went wrong" without parsing prose.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    graph = session.graph
+    brief = probe_module.frontier(graph)
+    payload = json.dumps(
+        probe_module.brief_document(brief, premise=session.premise), indent=2, allow_nan=False
+    )
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(f"[green]✓[/green] question written to [bold]{out}[/bold]")
+    if brief is None:
+        raise typer.Exit(code=3)
+
+
+@probe_app.command("accept")
+def probe_accept(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to record into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Answer JSON from the agent."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the verdict as JSON — an agent fixing rejections should read data, not parse a table.",
+    ),
+) -> None:
+    """Check one answer against the graph, and commit it or refuse all of it.
+
+    Refused for widening a question it was meant to narrow, for raising a
+    sub-question with no reasoning under it, for binding a terminal twice — and,
+    once it is well-formed, for being unable to hold alongside everything
+    already accepted. That last one is the interesting rejection: nobody wrote
+    down which combinations are illegal, they fall out of propagating the
+    relations the model itself supplied.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    try:
+        answer = probe_module.Answer.model_validate(
+            json.loads(source.read_text(encoding="utf-8"))
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    result = probe_module.accept(session.graph, answer)
+
+    if as_json:
+        typer.echo(json.dumps({
+            "accepted": result.accepted,
+            "raised": result.raised,
+            "rejections": [
+                {"subject": r.subject, "rule": r.rule, "detail": r.detail}
+                for r in result.rejections
+            ],
+        }, indent=2))
+
+    if not result.accepted:
+        if not as_json:
+            err.print(f"[red]✗[/red] {len(result.rejections)} violation(s). Nothing was committed.")
+            for rejection in result.rejections:
+                err.print(
+                    f"  [yellow]{rejection.rule}[/yellow] {rejection.subject}:"
+                    f" {escape(rejection.detail)}"
+                )
+        raise typer.Exit(code=1)
+
+    _write_probe(session.committed(answer), path)
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] {answer.question} answered"
+            + (f", raising {result.raised} sub-question(s)" if result.raised else "")
+        )
+
+
+@probe_app.command("show")
+def probe_show(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to read."),
+) -> None:
+    """The graph as it stands: what is settled, what it implies, what is missing."""
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    graph = session.graph
+    state = probe_module.propagate(graph)
+    resolution = probe_module.resolve(graph)
+
+    console.print(f"[bold]{escape(session.premise)}[/bold]\n")
+    for node in graph.ordered:
+        if node.key == probe_module.ROOT:
+            continue
+        bounds = state.domains.get(node.key, node.domain)
+        mark = "[green]✓[/green]" if node.answered else "[yellow]?[/yellow]"
+        bound = f" [dim]→ {node.binds}[/dim]" if node.binds else ""
+        console.print(
+            f"{'  ' * node.depth}{mark} [bold]{escape(node.key)}[/bold]"
+            f" {bounds} {escape(node.unit)}{bound}"
+        )
+        if node.because:
+            console.print(f"{'  ' * node.depth}  [dim]{escape(node.because)}[/dim]")
+
+    for contradiction in resolution.contradictions:
+        err.print(f"[red]✗[/red] {escape(str(contradiction))}")
+    for missing in resolution.unbound:
+        # Not a warning. A leaf the world needed and the engine cannot read is
+        # the only honest evidence for growing the terminal registry, and it
+        # only counts as evidence if it survives to be read.
+        console.print(f"[magenta]unbound[/magenta] {escape(str(missing))}")
+    if resolution.unanswered:
+        console.print(f"\n[dim]{len(resolution.unanswered)} question(s) still open.[/dim]")
+
+
+@probe_app.command("worlds")
+def probe_worlds(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to read."),
+    count: int = typer.Option(5, "--count", "-n", help="How many worlds."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """The worlds this probe allows, as unlike each other as possible.
+
+    A settled probe does not describe one world. It describes a space — every
+    assignment inside the narrowed ranges that also respects the relations —
+    and taking the midpoint of each range, which is what resolving does,
+    produces the single most average member of it.
+
+    This covers the space with a low-discrepancy sequence rather than random
+    draws, keeps the assignments that satisfy every relation, and returns the
+    ones furthest apart by farthest-point traversal. Deterministic: the same
+    graph gives the same mosaic every time.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    try:
+        found = probe_module.worlds(session.graph, count=count)
+    except ValueError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+
+    document = {
+        "premise": session.premise,
+        "worlds": [world.as_dict() for world in found],
+    }
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(document, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        console.print(f"[green]✓[/green] {len(found)} world(s) written to [bold]{out}[/bold]")
+        return
+
+    keys = sorted({key for world in found for key in world.values})
+    for index, world in enumerate(found, start=1):
+        values = world.as_dict()
+        console.print(f"[bold]world {index}[/bold] " + "  ".join(
+            f"[dim]{escape(key)}[/dim] {values[key]:.4g}" for key in keys if key in values
+        ))
+
+
+@probe_app.command("resolve")
+def probe_resolve(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to resolve."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write the overrides here."),
+) -> None:
+    """Turn a settled graph into overrides for the terminal parameter registry.
+
+    Refuses while anything is unanswered or contradictory: physics derived from
+    a graph that does not yet hold would be a build calibrated against
+    reasoning nobody finished.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    resolution = probe_module.resolve(session.graph)
+
+    if not resolution.usable:
+        err.print("[red]✗[/red] this probe cannot produce physics yet.")
+        for contradiction in resolution.contradictions:
+            err.print(f"  [red]contradiction[/red] {escape(str(contradiction))}")
+        for key in resolution.unanswered:
+            err.print(f"  [yellow]unanswered[/yellow] {key}")
+        raise typer.Exit(code=1)
+
+    document = {
+        "premise": session.premise,
+        "overrides": {
+            name: span.as_dict() for name, span in sorted(resolution.overrides.items())
+        },
+        "unbound": [
+            {"key": u.key, "asks": u.asks, "claim": u.claim, "unit": u.unit,
+             "low": u.bounds.low, "high": u.bounds.high}
+            for u in resolution.unbound
+        ],
+    }
+    payload = json.dumps(document, indent=2, allow_nan=False)
+    if out is None:
+        typer.echo(payload, nl=False)
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(payload + "\n", encoding="utf-8")
+    console.print(
+        f"[green]✓[/green] {len(resolution.overrides)} parameter(s) written to [bold]{out}[/bold]"
+        + (f"\n[magenta]{len(resolution.unbound)} leaf/leaves bound to nothing[/magenta]"
+           " [dim]— parameters this world wanted and the engine cannot read.[/dim]"
+           if resolution.unbound else "")
+    )
 
 
 @plan_app.command("requests")
@@ -1169,8 +2044,310 @@ def render(
 
     written = rendered.export(out or Path(corpus), overwrite=True)
     console.print(f"[green]✓[/green] {len(rendered._rendered)} file(s) written to [bold]{written}[/bold]")
-    if not _report(rendered):
+    # Reloaded from where the files actually landed, not validated in memory.
+    # The in-memory world still resolves artifact paths against the *source*
+    # corpus, so rendering to a `--out` directory reported every file it had
+    # just written as missing — a false failure, and the loudest possible one,
+    # since anyone running this in a pipeline reads it as rendering being
+    # broken. Reloading also makes the check mean what it says: the artifact on
+    # disk is the thing a reader will open.
+    if not _report(_load(str(written))):
         raise typer.Exit(code=1)
+
+
+@app.command()
+def mosaic(
+    count: int = typer.Option(5, "--count", "-n", help="How many worlds."),
+    seed: int = typer.Option(8128, "--seed", "-s", help="Base seed. World N uses seed+N-1."),
+    engine: str = typer.Option(
+        "retail", "--engine", "-e",
+        help="Which vertical to build: retail, banking or insurance. Each varies"
+             " its own physics — a bank's capital headroom, an insurer's tail"
+             " length — because a mosaic that moved a retailer's margin through a"
+             " bank would report varying something it had not.",
+    ),
+    out: Path = typer.Option(None, "--out", "-o", help="Directory to write the worlds into."),
+    period: str = typer.Option("2026-03", "--period", "-p", help="Reporting period, YYYY-MM."),
+    periods: int = typer.Option(1, "--periods", help="Consecutive periods per world."),
+    incident: bool = typer.Option(
+        None, "--incident/--no-incident",
+        help="Force the operational incident. Omit to let each world's seed and lore decide.",
+    ),
+    narrate: bool = typer.Option(
+        True, "--narrate/--no-narrate",
+        help=(
+            "Write the prose every section is waiting for, with the built-in "
+            "deterministic provider — no network, no key, no spend. On by "
+            "default, unlike `build --narrate`: an un-narrated world compiles "
+            "fifteen artifacts of which three carry a retrievable passage, so "
+            "a third of its evaluation cases cite evidence that is in no "
+            "passage at all and every score read off them is about the ranker "
+            "when the sentence belongs to the corpus. `--no-narrate` writes "
+            "the plan-only corpora this command used to write, for a caller "
+            "who wants the shapes and will narrate them another way."
+        ),
+    ),
+    formats: list[str] = typer.Option(
+        None, "--format", "-f",
+        help=(
+            "Render every world to these formats. Repeatable. Separate from "
+            "--narrate on purpose: prose is what makes a corpus measurable and "
+            "files are what make it readable, and only the first is a "
+            "correctness question. Omit to leave the corpora as IR."
+        ),
+    ),
+    probe_file: Path = typer.Option(
+        None, "--probe",
+        help=(
+            "Take the axes from a settled probe instead of this engine's defaults. "
+            "The probe decides what varies and between which bounds; the algorithm "
+            "still decides which N. Every parameter the probe bound becomes an axis "
+            "over the interval it argued for, and axes it said nothing about keep "
+            "their defaults."
+        ),
+    ),
+    describe: bool = typer.Option(
+        False, "--describe", help="Print what a mosaic varies, and build nothing.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Emit the plan as data."),
+) -> None:
+    """Build several companies at once, as unlike each other as the rules allow.
+
+    Varying the seed does not do this. A seed decides names, figures, and which
+    month the incident lands in; it does not decide headcount, span of control,
+    reporting depth, trading calendar, or how fast an organisation finds the
+    cause of an outage. Five seeds produce one company with different names on
+    the same twenty-three people — which is a fine corpus and a poor dataset,
+    because a model evaluated against it has seen one enterprise five times.
+
+    Candidates are covered with a low-discrepancy sequence rather than drawn at
+    random (random points clump, and a clump is a company shape the tool never
+    produces), filtered to the ones that can actually be built, and then the
+    furthest apart are chosen by farthest-point traversal. Deterministic: the
+    same request gives the same mosaic, and each world carries a recipe that
+    rebuilds it on its own.
+
+    Every world is narrated as it is built, so what lands on disk is a corpus
+    rather than a plan. `--no-narrate` gives back the plans.
+
+    `--describe` prints the axes without building anything, which is the right
+    first call — deciding whether five worlds are worth the wait should not
+    require generating five worlds.
+    """
+    from . import mosaic as mosaic_module
+
+    if describe:
+        try:
+            document = mosaic_module.describe(engine)
+        except KeyError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        if as_json:
+            typer.echo(json.dumps(document, indent=2))
+            return
+        console.print(f"[bold]What a {engine} mosaic varies[/bold]"
+                      f" [dim]— engines: {', '.join(document['engines'])}[/dim]\n")
+        for axis in document["axes"]:
+            bound = f"{axis['low']:g}–{axis['high']:g}"
+            console.print(f"[bold]{escape(axis['name'])}[/bold] [cyan]{bound}[/cyan]"
+                          + (f" [dim]→ {axis['parameter']}[/dim]" if axis["parameter"] else ""))
+            console.print(f"  [dim]{escape(axis['about'])}[/dim]")
+        console.print(f"\n[dim]estates: {', '.join(document['estates'])}[/dim]")
+        if document.get("calendars"):
+            console.print(f"[dim]calendars: {', '.join(document['calendars'])}[/dim]")
+        return
+
+    try:
+        if probe_file is not None:
+            from . import probe as probe_module
+
+            session = probe_module.Session.from_document(
+                json.loads(probe_file.read_text(encoding="utf-8"))
+            )
+            variants = mosaic_module.from_probe(session, count, seed=seed, engine=engine)
+        else:
+            variants = mosaic_module.field(count, seed=seed, engine=engine)
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    spread = mosaic_module.spread(variants)
+    if as_json:
+        typer.echo(json.dumps(
+            {"spread": spread, "worlds": [v.as_dict() for v in variants]}, indent=2))
+        if out is None:
+            return
+
+    if out is None:
+        console.print("[bold]The mosaic[/bold] [dim]— nothing written; pass --out to build[/dim]\n")
+        for variant in variants:
+            console.print(f"  [bold]{variant.index}[/bold] seed {variant.seed}"
+                          f"  {escape(variant.summary())}")
+        console.print(
+            f"\n[dim]{spread['distinct_shapes']} distinct shape(s),"
+            f" headcounts {spread['headcounts']}, spans {spread['spans']},"
+            f" estates {spread['estates']}.[/dim]"
+        )
+        return
+
+    from dataclasses import replace as _replace_spec
+
+    from . import archetypes, domains
+    from .narrative import DeterministicProvider, ProviderError
+    from .render import RenderError
+    from .scenarios import MonthEndClose
+
+    # The domain names its own archetype. Core may not hold a map from a
+    # vertical's name to one of its archetype keys — the thin-waist ratchet
+    # forbids engine vocabulary here, and it caught exactly that map when this
+    # was first written.
+    registered = domains.by_name(engine)
+    if registered is None or not registered.default_archetype:
+        err.print(f"[red]error:[/red] no domain named {engine!r} is registered;"
+                  f" known: {', '.join(domains.names())}")
+        raise typer.Exit(code=2)
+    domain = registered
+    shape = archetypes.get(domain.default_archetype)
+
+    # One provider for the whole mosaic, and that is not a shared-state hazard:
+    # `DeterministicProvider` reads a request and a fact table and holds nothing
+    # between calls but a counter, so five worlds through one instance and five
+    # worlds through five instances write the same bytes. The test asserts that
+    # rather than trusting it — a provider that *did* carry state would make
+    # world 5 depend on world 1 having been built, which is the one thing a
+    # mosaic must never do (world N is reproducible without worlds 1..N-1).
+    provider = DeterministicProvider()
+
+    written: list[str] = []
+    narrated_sections = 0
+    unhealthy = 0
+    for variant in variants:
+        # `speaks` gives the variant its own division, category and site-format
+        # names (`worldloom.vocabulary`) without touching a share, a margin or a
+        # site count, and returns `shape` unchanged for any engine whose unit
+        # kinds nothing names — so this line varies what the five worlds are
+        # *called* and cannot vary what they are.
+        spec = domain.world(seed=variant.seed, archetype=variant.speaks(shape))
+        changes: dict[str, Any] = {
+            "physics": variant.physics,
+            "role_table": variant.role_table(),
+        }
+        if variant.estate is not None:
+            changes["estate"] = variant.estate
+        # Only the retail engine reads a trading year, and only its mosaic
+        # varies one — handing a bank's world a `seasonality` it has no field
+        # for would fail on a keyword rather than on a decision.
+        if any(axis.name == "calendar" for axis in mosaic_module.ENGINES[engine]):
+            changes["seasonality"] = variant.seasonality
+        world = _replace_spec(spec, **changes).build()
+
+        for index in range(max(1, periods)):
+            stamp = _step_period(period, index, domain.period_step_months)
+            if domain.single_episode is not None:
+                episode = _replace_spec(domain.single_episode(stamp),
+                                        physics=variant.physics)
+            else:
+                episode = MonthEndClose(
+                    period=stamp,
+                    include_operational_incident=incident,
+                    physics=variant.physics,
+                    seasonality=variant.seasonality,
+                )
+            world = world.run(episode)
+
+        # Narrate before export, so what lands on disk is a corpus rather than
+        # a plan. Until this line a mosaic world reached disk as artifact
+        # *intents* — the sections were never compiled, let alone written — and
+        # a directory of those is indistinguishable from a finished one to
+        # anything except the measurement: `evaluate.score` grades a case whose
+        # evidence lives in unwritten prose as a failure, and five worlds of
+        # them read as a hard benchmark.
+        sections = 0
+        if narrate:
+            try:
+                world = world.narrate(provider)
+            except ProviderError as exc:
+                err.print(f"[red]error:[/red] world {variant.index}: {escape(str(exc))}")
+                raise typer.Exit(code=2) from exc
+            sections = world._narration[0]
+            narrated_sections += sections
+
+        # After narration, never before: `render` compiles if it must, and a
+        # render that ran first would freeze the empty sections into the IR the
+        # narration then had to be threaded back into.
+        if formats:
+            try:
+                world = world.render(*formats)
+            except RenderError as exc:
+                err.print(f"[red]error:[/red] world {variant.index}: {escape(str(exc))}")
+                raise typer.Exit(code=2) from exc
+
+        target = out / f"world-{variant.index:02d}"
+        written.append(str(world.export(target, overwrite=True)))
+        report = world.validate()
+        mark = "[green]✓[/green]" if report.ok else "[red]✗[/red]"
+        unhealthy += 0 if report.ok else 1
+        console.print(f"{mark} [bold]world {variant.index}[/bold] {escape(variant.summary())}"
+                      f" [dim]— {report.checks_run} checks,"
+                      f" {len(report.violations)} violation(s)"
+                      + (f", {sections} section(s) written" if narrate else "")
+                      + "[/dim]")
+        if not report.ok:
+            for violation in report.violations[:3]:
+                err.print(f"    [yellow]{violation.code}[/yellow] {escape(violation.detail)}")
+
+    # `narrated` and `formats` ride in the plan because a reader of the
+    # directory — `evaluate.across.load` above all — otherwise has to infer
+    # from a passage count whether a thin corpus is an easy one or an
+    # unfinished one, and those are the two readings this whole change exists
+    # to stop being confusable.
+    (out / "mosaic.json").write_text(
+        json.dumps({"seed": seed, "spread": spread, "narrated": narrate,
+                    "formats": sorted(formats or ()),
+                    "worlds": [v.as_dict() for v in variants]}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    console.print(
+        f"\n[green]✓[/green] {len(written)} world(s) written under [bold]{out}[/bold]"
+        f"\n[dim]{spread['distinct_shapes']} distinct organisation shape(s);"
+        f" headcounts {spread['headcounts']}; estates {spread['estates']}."
+        + (f" {narrated_sections} section(s) of prose written." if narrate else "")
+        + f" The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
+    )
+    # Said at the end, where a reader stops, and said as a warning rather than
+    # as a count. `--no-narrate` is a legitimate request and this does not
+    # refuse it; what it refuses is letting the resulting directory be scored
+    # by somebody who did not type the flag. A survey over these corpora
+    # reports missing prose as failed retrieval, and the two print the same
+    # digit.
+    if not narrate:
+        console.print(
+            "[yellow]![/yellow] nothing was narrated: these are plans, and most"
+            " of each world's sections are still awaiting prose."
+            "\n[dim]`worldloom evaluate` and `worldloom.evaluate.across.survey`"
+            " over this directory measure the missing prose, not the"
+            " difficulty. Drop --no-narrate to finish them.[/dim]"
+        )
+    elif unhealthy:
+        # Newly reachable rather than newly broken, and the distinction is
+        # worth the line: `validate` runs the author/audience and manifest
+        # checks over *compiled* artifacts, a plan-only mosaic had none, and so
+        # this whole family of checks scored zero out of zero for as long as
+        # the command stopped at `build`.
+        #
+        # What they find today is one defect, in every world of every engine:
+        # `author_cannot_see_own_artifact`. `roles.from_shape` deals functions
+        # round-robin by position in the reporting tree, so a synthesised
+        # organisation puts the engine's `controller` in Merchandising while
+        # the access policy the planner picks for a finance document names
+        # Finance — the author of the variance memo cannot read it. The corpora
+        # were always like that; compiling them is what made it sayable.
+        console.print(
+            f"[yellow]![/yellow] {unhealthy} of {len(written)} world(s) report"
+            " violations. These are checks a plan-only mosaic never ran, not"
+            " new defects: narrating compiles the artifacts, and the compiled"
+            " artifacts are what the author/audience checks read."
+        )
 
 
 @app.command()
@@ -1552,6 +2729,15 @@ def diversity(
             "monotonous over time."
         ),
     ),
+    near_duplicates: bool = typer.Option(
+        False, "--near-duplicates",
+        help=(
+            "Also group passages whose prose is near-identical, and name which "
+            "artifacts they belong to. Structural sameness and prose sameness are "
+            "different failures — a batch can carry twenty distinct shapes and still "
+            "say the same sentences in all of them."
+        ),
+    ),
 ) -> None:
     """Fingerprint every compilable artifact and report how structurally varied the batch is.
 
@@ -1563,10 +2749,10 @@ def diversity(
     whole corpus at once, the same way `evaluate` always scores the whole
     evaluation set at once.
     """
-    from .compiler.compose import compose, plan_from_ir
-    from .compiler.diversity import Fingerprint, Quotas, check, fingerprint, report
-    from .render.docx import HANDLES as DOCX_ARTIFACT_TYPES
-    from .render.xlsx import HANDLES as XLSX_ARTIFACT_TYPES
+    from .compiler.diversity import Fingerprint, Quotas, check, report
+    from .compiler.diversity import collisions as diversity_collisions
+    from .evaluate.index import passages
+    from .stats import census
 
     world = _load(corpus)
     if not world.artifact_irs:
@@ -1582,24 +2768,32 @@ def diversity(
             # not two different tracebacks for two ways of having nothing.
             pass
 
-    fingerprints: list[Fingerprint] = []
-    for ir in world.artifact_irs:
-        intent = world.artifact_intents.by_id(ir.intent_id)
-        # A workbook composes with fmt="xlsx" — its lineage sheet is xlsx-only, so
-        # composing it as "docx" raises `ValueError` about a component that does
-        # not fit. Every other handled type composes with fmt="docx". Anything
-        # neither renderer claims (a Jira, Confluence, or ServiceNow bundle) is a
-        # record projection rather than a component composition (see
-        # `docs/artifact-compiler.md` §9.5) and has no shape to fingerprint — the
-        # same split `tests/test_diversity.py`'s own regression fixture draws.
-        if intent.artifact_type in XLSX_ARTIFACT_TYPES:
-            fmt = "xlsx"
-        elif intent.artifact_type in DOCX_ARTIFACT_TYPES:
-            fmt = "docx"
-        else:
-            continue
-        plan = plan_from_ir(ir, artifact_type=intent.artifact_type, size_class=intent.size_profile)
-        fingerprints.append(fingerprint(compose(plan, fmt=fmt)))
+    # One walk, shared with `stats.measure` (and so with the `measure_corpus`
+    # MCP tool), rather than the near-copy this command used to hold. Every
+    # reader of the census has to agree on which artifacts are in it, and
+    # holding the walk twice was how this command came to crash on a corpus
+    # another reader could still measure, and vice versa.
+    shapes = census(world)
+    fingerprints: list[Fingerprint] = list(shapes.fingerprints)
+    fingerprint_ids: list[str] = list(shapes.artifact_ids)
+
+    if shapes.uncomposable:
+        # Printed before the report, not after, and outside the `if
+        # fingerprints` branch: this is the denominator. A reader who sees
+        # "8 distinct shape(s)" without first being told the census skipped
+        # three artifacts has been given a number over a subset and no way to
+        # know it. Printed to stderr and *not* an exit code — nothing here is a
+        # failure of this command, and a corpus with an unsatisfiable plan is
+        # still a corpus worth reporting on.
+        err.print(
+            f"[yellow]![/yellow] {len(shapes.uncomposable)} artifact(s) have no"
+            " composable shape and are not in the census below"
+        )
+        for artifact_id, artifact_type, code, detail in shapes.uncomposable[:10]:
+            err.print(f"  [yellow]{code}[/yellow] {artifact_id} ({artifact_type}): {escape(detail)}")
+        if len(shapes.uncomposable) > 10:
+            err.print(f"  [dim]+{len(shapes.uncomposable) - 10} more[/dim]")
+        err.print("")
 
     if not fingerprints:
         console.print("[green]✓[/green] nothing compilable to fingerprint")
@@ -1622,6 +2816,33 @@ def diversity(
                     shape = " → ".join(fp.components) if fp.components else "(no components)"
                     console.print(f"  [dim]{digest[:12]}[/dim]  {shape}")
 
+        # Which artifacts share a shape, not merely how many shapes there were.
+        # A count is a metric; a list of the fourteen documents that are one
+        # template is somewhere to go and look.
+        repeated = diversity_collisions(fingerprints)
+        if repeated:
+            console.print("")
+            console.print(f"[bold]shapes used by more than one artifact[/bold] ({len(repeated)})")
+            for digest, members in repeated[:10]:
+                names = ", ".join(fingerprint_ids[i] for i in members[:8])
+                more = f" +{len(members) - 8}" if len(members) > 8 else ""
+                console.print(f"  [dim]{digest[:12]}[/dim]  ×{len(members)}  {names}{more}")
+
+    if near_duplicates:
+        from .stats import near_duplicate_clusters
+
+        pool = list(passages(world))
+        groups = near_duplicate_clusters(pool)
+        console.print("")
+        if not groups:
+            console.print("[green]✓[/green] no near-duplicate passages")
+        else:
+            console.print(f"[bold]near-duplicate passage groups[/bold] ({len(groups)})")
+            for group in groups[:10]:
+                where = ", ".join(sorted({pool[i].artifact_id for i in group}))
+                console.print(f"  ×{len(group)}  {where}")
+                console.print(f"      [dim]{pool[group[0]].text[:110]}…[/dim]")
+
     # Checked even when `fingerprints` is empty: an empty batch trivially meets
     # every quota (nothing to be repetitive or concentrated about yet — see
     # `check`'s own docstring), so `--check-quotas` must not fail a corpus that
@@ -1633,6 +2854,294 @@ def diversity(
             for violation in violations:
                 err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
             raise typer.Exit(code=1)
+
+
+@app.command()
+def topology(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    limit: int = typer.Option(
+        12, "--limit", "-n", help="How many services to list, most load-bearing first.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the reading as JSON — stable keys and ordering, safe to diff in CI.",
+    ),
+) -> None:
+    """Read the corpus's graphs: what depends on what, and what nothing routes around.
+
+    The estate has always been a graph — `depends_on`, `manager_id`,
+    `derived_from`, a fact's `supersedes` — and nothing read it. This does.
+    Services are ranked by *blast radius*, the number of things that fall over
+    transitively when one does, and separately by *gates*, the number of things
+    that have no second path to what it serves. Those are different questions:
+    a well-replicated shared platform has a large blast radius and gates
+    nothing, and a small unloved mapping job can gate the whole close.
+
+    Two readings this is for. As an author: an archetype whose service
+    catalogue is a flat list of unrelated names shows up here as zero
+    dependency hops, and a world with no provenance depth is one whose
+    documents never build on each other. As a corpus buyer: the ranking is
+    *derived from the graph*, so it can disagree with the hand-declared
+    `criticality_tier` — and a tier-4 service that seventeen things depend on
+    is a finding, not a rounding error.
+
+    Every number here is an exact count with ties broken on id. There is no
+    centrality score anywhere in it, deliberately: see `graphs.py`'s module
+    docstring on why a float from an iterative solver has no business
+    deciding a rank in a corpus that must regenerate byte-for-byte.
+    """
+    import json as json_module
+
+    from . import graphs as graphs_module
+
+    world = _load(corpus)
+    reading = graphs_module.analyse(world)
+
+    if as_json:
+        typer.echo(json_module.dumps({"corpus": corpus, **reading.as_dict()}, indent=2))
+        return
+
+    console.print(str(reading))
+
+    if reading.services:
+        console.print("")
+        table = Table(title="Services and systems, by blast radius", box=None)
+        table.add_column("id", style="dim")
+        table.add_column("name")
+        table.add_column("kind")
+        table.add_column("tier", justify="right")
+        table.add_column("depends on it", justify="right")
+        table.add_column("blast", justify="right")
+        table.add_column("gates", justify="right")
+        for rank in reading.services[: max(1, limit)]:
+            table.add_row(
+                rank.id, rank.name, rank.kind,
+                str(rank.tier) if rank.kind == "service" else "[dim]—[/dim]",
+                str(rank.fan_in), str(rank.blast_radius),
+                f"[yellow]{rank.gates}[/yellow]" if rank.gates else "0",
+            )
+        console.print(table)
+
+    # Structural defects are printed rather than merely counted, because this
+    # command is where someone looks when `validate` has already told them a
+    # cycle exists and they need to see it. `validate` owns the pass/fail —
+    # this stays a reading, and exits zero either way.
+    for label, found in (
+        ("dependency cycle", reading.dependency_cycles),
+        ("reporting cycle", reading.reporting_cycles),
+        ("provenance cycle", reading.provenance_cycles),
+    ):
+        for cycle in found:
+            console.print(f"[red]✗[/red] {label}: {' → '.join(cycle)} → {cycle[0]}")
+    for fact_id, superseding in reading.forked_supersessions:
+        console.print(
+            f"[red]✗[/red] forked supersession: {fact_id} superseded by {', '.join(superseding)}"
+        )
+
+
+#: Units that mean "this is a ratio, not a level". Listed rather than pattern-
+#: matched because the three engines spell them differently ("percent", "pct",
+#: "bps") and a substring test on "pct" would miss two of them — which is how
+#: the default series pick landed on a margin percentage in the first place.
+_RATIO_UNITS = frozenset({"percent", "pct", "bps", "ratio", "x"})
+
+
+@app.command()
+def series(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    kind: str = typer.Option(
+        None, "--kind", help="Fact kind to read. Default: the longest series in the corpus.",
+    ),
+    subject: str = typer.Option(
+        None, "--subject", help="Entity id the series is about. Default: whichever has the most periods.",
+    ),
+    cycle: int = typer.Option(
+        None, "--cycle", help="Positions in the seasonal cycle. Default: 12 if the data reaches it, else half the series.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the decomposition as JSON — stable keys and ordering.",
+    ),
+) -> None:
+    """Decompose a period-keyed fact series into trend, season, and what is left.
+
+    A multi-period corpus carries a column of monthly figures and, until now,
+    no way to ask what shape they have. This separates them: how fast the level
+    is moving, how much of the movement is the calendar, and which periods are
+    left over — the ones the trend and the season together do not explain.
+
+    That last set is the interesting one. An incident month should sit outside
+    the pattern, and if it does not, the corpus is claiming a disruption its own
+    numbers do not show. Outliers are scored on **median absolute deviation**
+    rather than a z-score, because an outlier inflates the standard deviation it
+    would be measured against — a detector that hides its largest findings.
+
+    Build a history worth decomposing with `--comparatives`, and give it a
+    direction with `--trend`: without one the level is flat by construction and
+    every seasonally-adjusted month looks like every other.
+    """
+    import json as json_module
+
+    from . import series as series_module
+
+    world = _load(corpus)
+
+    # The longest series in the corpus, unless the caller named one. Grouped
+    # on (kind, subject) because those two together are what a series *is*
+    # here: one measure, about one entity, across periods.
+    grouped: dict[tuple[str, str], dict[str, float]] = {}
+    units: dict[tuple[str, str], str] = {}
+    for fact in world.facts:
+        if fact.period is None or fact.value is None or fact.is_superseded:
+            continue
+        if kind and fact.kind != kind:
+            continue
+        if subject and fact.subject != subject:
+            continue
+        grouped.setdefault((fact.kind, fact.subject), {})[fact.period] = fact.value.amount
+        units.setdefault((fact.kind, fact.subject), fact.value.unit)
+
+    if not grouped:
+        err.print("[red]error:[/red] no period-keyed numeric facts match that kind/subject")
+        raise typer.Exit(code=2)
+
+    # Longest wins, and the ties are the interesting part: a retail close mints
+    # a dozen kinds over the same twelve months, so length alone would pick
+    # whichever sorted last — a business unit's margin *percentage* rather than
+    # the group's revenue. Three tie-breaks, in order: company-level before a
+    # unit's, an amount before a ratio, then the kind name. The middle one is
+    # not cosmetic — decomposing a percentage multiplicatively asks how a ratio
+    # grew, which is a question about two series at once and not the one the
+    # output claims to answer. The result is still a pure function of the
+    # corpus.
+    (chosen_kind, chosen_subject), points = min(
+        grouped.items(),
+        key=lambda row: (
+            -len(row[1]),
+            row[0][1] != world.company.id,
+            units.get(row[0], "") in _RATIO_UNITS,
+            row[0][0],
+            row[0][1],
+        ),
+    )
+    periods = sorted(points)
+    values = [points[p] for p in periods]
+
+    span = cycle or (12 if len(values) >= 24 else max(2, len(values) // 2))
+    try:
+        decomposition = series_module.decompose(values, period=span)
+    except ValueError as exc:
+        err.print(
+            f"[red]error:[/red] {escape(str(exc))}\n"
+            "[dim]Build a longer history with --comparatives, or name a shorter "
+            "--cycle.[/dim]"
+        )
+        raise typer.Exit(code=2) from exc
+
+    outliers = series_module.anomalies(decomposition)
+    expected = decomposition.extend(1)
+
+    if as_json:
+        typer.echo(json_module.dumps({
+            "corpus": corpus,
+            "kind": chosen_kind,
+            "subject": chosen_subject,
+            "cycle": span,
+            "periods": periods,
+            "values": list(decomposition.values),
+            "trend": list(decomposition.trend),
+            "seasonal": list(decomposition.seasonal),
+            "residual": list(decomposition.residual),
+            "seasonal_indices": list(decomposition.seasonal_indices),
+            "growth_per_period": decomposition.growth_per_period,
+            "anomalies": [
+                {"period": periods[index], "score": score} for index, score in outliers
+            ],
+            "next_expected": list(expected),
+        }, indent=2))
+        return
+
+    growth = decomposition.growth_per_period
+    console.print(
+        f"[bold]{chosen_kind}[/bold] for {chosen_subject} — {len(values)} period(s),"
+        f" cycle of {span}"
+    )
+    console.print(f"  trend                 {decomposition.trend[0]:,.0f} → {decomposition.trend[-1]:,.0f}"
+                  f"  ({growth * 100:+.2f}% per period)")
+    console.print(f"  seasonal amplitude    {decomposition.seasonal_amplitude:.3f}"
+                  f"  (peak-to-trough, as a multiple of normal)")
+    console.print(f"  next period expected  {expected[0]:,.0f}" if expected else "")
+    if cycle is None and span != 12:
+        # Said out loud rather than left in the header, because a fallback
+        # cycle on monthly data aliases: a December spike folded into a
+        # six-position cycle reappears as a mirrored dip in June, and the
+        # outlier column will faithfully flag both. A monthly series needs 24
+        # observations before a 12-cycle has more than one number per index.
+        console.print(
+            f"  [dim]cycle of {span} is a fallback: {len(values)} observations cannot"
+            " support the 12 a monthly series wants (24 are needed). Positions alias"
+            " onto each other, so read the outliers as pairs. Build with"
+            " --comparatives 23, or name a --cycle.[/dim]"
+        )
+
+    table = Table(box=None)
+    table.add_column("period")
+    table.add_column("actual", justify="right")
+    table.add_column("trend", justify="right")
+    table.add_column("season", justify="right")
+    table.add_column("residual", justify="right")
+    table.add_column("")
+    flagged = dict(outliers)
+    for index, period in enumerate(periods):
+        table.add_row(
+            period,
+            f"{decomposition.values[index]:,.0f}",
+            f"{decomposition.trend[index]:,.0f}",
+            f"{decomposition.seasonal[index]:.3f}",
+            f"{decomposition.residual[index]:.3f}",
+            f"[yellow]outlier {flagged[index]:+.1f}[/yellow]" if index in flagged else "",
+        )
+    console.print(table)
+
+    if not outliers:
+        console.print(
+            "[dim]No period departs from the fitted trend and season. On a corpus "
+            "with an incident in it, that is a finding: the disruption the "
+            "documents describe is not visible in the figures.[/dim]"
+        )
+
+
+@app.command()
+def mcp(
+    tools: bool = typer.Option(
+        False, "--tools", help="List the tools and exit, without starting a server.",
+    ),
+) -> None:
+    """Serve Worldloom's readings and gates as MCP tools, over stdio.
+
+    Read-only over corpora, by design: every corpus write path stays behind the
+    CLI handshakes, which validate a whole response document and commit
+    all-or-nothing. What the tools add is the ability to ask the same question —
+    what repeats, what depends on what, does it still validate — again and again
+    from inside a session, as data rather than a table. The probe tools also
+    serve here because a probe is dozens of question/answer turns, and a session
+    that holds that loop itself beats being invoked once per question.
+
+    `.mcp.json` at the repository root wires this into Claude Code.
+    """
+    from . import mcp as mcp_module
+
+    if tools:
+        for tool in mcp_module.TOOLS:
+            console.print(f"[bold]{tool['name']}[/bold]")
+            console.print(f"  [dim]{tool['description']}[/dim]")
+            required = tool["schema"].get("required", [])
+            console.print(f"  [dim]required: {', '.join(required) or '(none)'}[/dim]\n")
+        return
+
+    try:
+        mcp_module.serve()
+    except RuntimeError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
 
 
 def _for_stats(name: str) -> World:
@@ -1837,6 +3346,311 @@ def pack_check(
         console.print("[dim]no lint findings — every commitment is load-bearing[/dim]")
 
 
+@pack_app.command("profiles")
+def pack_profiles(as_json: bool = typer.Option(False, "--json", help="Emit as data.")) -> None:
+    """The trading years a pack may choose by name.
+
+    `base` may only be `retail` or `banking`, so any industry that is neither
+    runs on the retail engine — and until these had names it inherited that
+    engine's calendar. This repository's own general-insurer pack shipped a
+    written-premium book peaking 21% at Christmas because of it. `flat` is the
+    right answer for any business whose revenue is a book rather than a till.
+
+    A pack may also supply twelve months of its own. They must average one: the
+    index multiplies each month's budget, so a year averaging 1.05 does not
+    make a business more seasonal, it makes it five per cent bigger.
+    """
+    from . import profiles as profiles_module
+
+    published = profiles_module.publish()
+    if as_json:
+        typer.echo(json.dumps(published, indent=2))
+        return
+    for name, entry in published.items():
+        console.print(f"[bold]{escape(name)}[/bold] [cyan]amplitude {entry['amplitude']}[/cyan]")
+        console.print("  " + "  ".join(
+            f"[dim]{month:>2}[/dim] {entry['index'][str(month)]:.2f}"
+            for month in profiles_module.MONTHS))
+        if entry.get("about"):
+            console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+
+
+@pack_app.command("params")
+def pack_params(
+    prefix: str = typer.Argument(None, help="Only parameters under this prefix, e.g. `retail`."),
+    as_json: bool = typer.Option(False, "--json", help="Emit the registry as data."),
+) -> None:
+    """Every world-physics range a pack may override, and what each one decides.
+
+    These are the ranges the engine draws from — the ones a pack could not
+    reach until they had names. Gross margin came out of `[0.20, 0.34]`
+    whatever a pack said the company sold, which is why every world this tool
+    built was a grocer with the labels changed.
+
+    An author cannot override what they cannot see, and reading the source is
+    not a reasonable ask for thirty-seven of them. Set them with
+    `worldloom build --physics`, or derive them with `worldloom probe` rather
+    than filling in a list — they are not independent, and setting margin
+    without moving markdown cadence builds a grocer with one figure edited.
+    """
+    from .parameters import publish
+
+    registry = {
+        name: entry for name, entry in publish().items()
+        if prefix is None or name.startswith(prefix)
+    }
+    if not registry:
+        err.print(f"[red]error:[/red] no parameter starts with {prefix!r}")
+        raise typer.Exit(code=2)
+
+    if as_json:
+        typer.echo(json.dumps(registry, indent=2))
+        return
+
+    for name, entry in registry.items():
+        span = f"[{entry['low']}, {entry['high']}]" if entry["kind"] != "chance" else str(entry["low"])
+        console.print(f"[bold]{escape(name)}[/bold] [cyan]{span}[/cyan] [dim]{entry['kind']}[/dim]")
+        if entry.get("about"):
+            console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+        if entry.get("source"):
+            console.print(f"  [dim]source: {escape(entry['source'])}[/dim]")
+    console.print(f"\n[dim]{len(registry)} parameter(s).[/dim]")
+
+
+@pack_app.command("facets")
+def pack_facets(
+    name: str = typer.Argument(None, help="One facet by name; omit for the whole registry."),
+    as_json: bool = typer.Option(False, "--json", help="Emit the registry as data."),
+) -> None:
+    """Every dimension of what a company *is*, and what claiming it commits to.
+
+    A `Pack` is a closed schema of twenty fields, each threaded by hand into the
+    generators that read it, so every new attribute a company might have —
+    listed or unlisted, founder-led or fund-owned — was another field and another
+    generator edit. That does not reach "any kind of company"; it reaches the
+    twenty things somebody already thought of.
+
+    A facet is the other shape. It is a claim that emits *consequences* into the
+    vocabularies this project already reads — parameter ranges, lore, roles, a
+    trading year, an estate size — so a new kind of company is data rather than
+    code. What each option implies is printed here precisely so it can be
+    disagreed with: `listed` mints an audit committee chair because that is what
+    listing means operationally, and if you think it should not, that is an
+    argument about the registry rather than about the engine.
+
+    `wants` is the honest half. A consequence a claim really has that nothing
+    here implements is listed rather than dropped — a facet that looked
+    load-bearing while changing nothing would be the defect `pack check` exists
+    to catch one layer down. Set them with `worldloom build --facet name=value`.
+    """
+    from . import facets as facets_module
+
+    try:
+        registry = facets_module.describe(name)
+    except KeyError as exc:
+        err.print(
+            f"[red]error:[/red] no facet named {name!r}; known:"
+            f" {', '.join(sorted(facets_module.FACETS))}"
+        )
+        raise typer.Exit(code=2) from exc
+
+    if as_json:
+        typer.echo(json.dumps(registry, indent=2))
+        return
+
+    for facet_name, entry in registry.items():
+        console.print(f"[bold]{escape(facet_name)}[/bold]"
+                      f" [dim]default {entry['default'] or '—'}[/dim]")
+        console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+        for option in entry["options"]:
+            implies = option["implies"]
+            marks = []
+            if implies["physics"]:
+                marks.append(f"{len(implies['physics'])} range(s)")
+            if implies["roles"]:
+                marks.append(f"roles {', '.join(implies['roles'])}")
+            if implies["lore"]:
+                marks.append(f"{implies['lore']} lore")
+            if implies["calendar"]:
+                marks.append(f"calendar {implies['calendar']}")
+            if implies["estate"]:
+                marks.append(f"estate {implies['estate']}")
+            console.print(f"  [cyan]{escape(option['value'])}[/cyan]"
+                          + (f" [dim]→ {escape(', '.join(marks))}[/dim]" if marks else ""))
+            console.print(f"    [dim]{escape(option['about'])}[/dim]")
+            if option["excludes"]:
+                console.print(f"    [yellow]excludes[/yellow] {', '.join(option['excludes'])}")
+            for want in implies["wants"]:
+                console.print(f"    [yellow]wants[/yellow] {escape(want)}")
+    console.print(f"\n[dim]{len(registry)} facet(s)."
+                  " Set them with `worldloom build --facet name=value`.[/dim]")
+
+
+@pack_app.command("messiness")
+def pack_messiness(as_json: bool = typer.Option(False, "--json", help="Emit as data.")) -> None:
+    """How well the archive is kept, as named profiles `build --messiness` takes.
+
+    Two halves of a corpus's coherence, and only one of them is load-bearing: no
+    document may contradict the ledger, ever. That every document is also
+    *current*, correctly quoted, and owned by somebody still employed was never
+    promised and is not realistic — a real enterprise archive is full of pages
+    nobody updated, and a retriever that has only ever been shown a tidy one has
+    not been tested against anything.
+
+    Each imperfection is recorded, which is what keeps this a corpus rather than
+    noise: a reader holding only the corpus can establish mechanically that the
+    stale page is stale and what the current position is. `staleness` is a
+    document written after a correction that still carries the old figure;
+    `disagreement` is two live documents and a ledger that says which is right;
+    `orphaning` is an author who has left with nobody named in their place —
+    which the world already produced and nothing recorded until now.
+
+    Counts are a budget, not a quota: a small world has fewer corrections to be
+    stale about and the pass takes what it can support. `pristine` is the
+    default and touches neither the documents nor the recipe.
+    """
+    from . import messiness as messiness_module
+
+    published = messiness_module.publish()
+    if as_json:
+        typer.echo(json.dumps(published, indent=2))
+        return
+    for profile_name, entry in published.items():
+        budget = ", ".join(f"{kind} {count}" for kind, count in entry["budget"].items() if count)
+        console.print(f"[bold]{escape(profile_name)}[/bold]"
+                      f" [cyan]{budget or 'nothing decays'}[/cyan]"
+                      f" [dim]degree {entry['degree']}[/dim]")
+        if entry.get("about"):
+            console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+
+
+@pack_app.command("landscapes")
+def pack_landscapes(
+    name: str = typer.Argument(None, help="One vertical's vocabulary; omit to list all."),
+    as_json: bool = typer.Option(False, "--json", help="Emit the pools as data."),
+) -> None:
+    """The technology-estate vocabularies `--estate` grows a landscape out of.
+
+    The estate's *construction* — five layers, an edge only ever pointing at a
+    strictly lower depth, a chokepoint given a private backing store — is engine
+    physics and has nothing to do with retail. Only the words were retail's, and
+    that is why `--estate` was once refused for every other vertical: a bank
+    called `click-collect-api` is worse than a bank with no estate.
+
+    So these are the words, per engine, and the generator keeps the physics. A
+    vocabulary is validated against the fixed layers rather than free to rename
+    them — the generator derives `criticality_tier` from the layer and places
+    the gate at a named depth, so a pool that forgot a layer would produce an
+    estate with a silently empty tier.
+
+    You do not pass one of these to `build`; the engine picks its own, and
+    `--estate small|medium|large` decides how much of it to grow. This is the
+    lookup for what a corpus will end up being called.
+    """
+    from . import landscape as landscape_module
+
+    published = landscape_module.publish()
+    if name is not None:
+        if name not in published:
+            err.print(f"[red]error:[/red] no landscape named {name!r};"
+                      f" known: {', '.join(sorted(published))}")
+            raise typer.Exit(code=2)
+        published = {name: published[name]}
+
+    if as_json:
+        typer.echo(json.dumps(published, indent=2))
+        return
+
+    for vertical, entry in published.items():
+        services = entry["services"]
+        systems = entry["systems"]
+        console.print(f"[bold]{escape(vertical)}[/bold]"
+                      f" [cyan]{sum(len(v) for v in services.values())} service name(s),"
+                      f" {len(systems)} system name(s),"
+                      f" {entry['chokepoints']} chokepoint(s)[/cyan]")
+        console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+        for layer, pool in services.items():
+            console.print(f"  [dim]{layer:>9}[/dim] {escape(', '.join(pool[:4]))}"
+                          + (f" [dim]… +{len(pool) - 4}[/dim]" if len(pool) > 4 else ""))
+        console.print("  [dim]    sizes[/dim] "
+                      + ", ".join(f"{size} {count}" for size, count in entry["profiles"].items()))
+
+
+@pack_app.command("locales")
+def pack_locales(
+    name: str = typer.Argument(None, help="One locale by name; omit to list all."),
+    as_json: bool = typer.Option(False, "--json", help="Emit the conventions as data."),
+) -> None:
+    """Jurisdictions, as the conventions a corpus gives itself away by.
+
+    Every world this tool has built is Australian, and in more places than the
+    two the schema admits to. `Pack.regions` and `Pack.headquarters` are the only
+    places a corpus prints bare geography *if* geography means place names. It is
+    not: a corpus also says where it is by whose names its people have, what a
+    company's second word is, which days it does not work, and how a figure is
+    spelled. A German subsidiary's variance memo printing `(1,234)` where every
+    German report prints `-1.234` tells a reader the document is synthetic, and
+    tells them from the punctuation.
+
+    `worldloom build --locale <name>` sets one, and it reaches most of what is
+    printed below. The figure grammar is corpus-wide and rides the recipe, so
+    every renderer and the retrieval index spell one number one way; the region
+    labels, the name pools, the headquarters city, the currency and the fiscal
+    year reach the generators at build time, so the staff, the sites and the
+    units are the jurisdiction's too. A pack's own `name_pools`, `regions`,
+    `headquarters` and currency are the narrower claim and still win.
+
+    One column below does not move yet, and it is the `week`: the close calendar
+    counts business days on the engine's Monday-to-Friday wherever the corpus is
+    set, because no world spec carries a calendar into the episode generators.
+    Claim Dubai and the close is still due on a Sydney Friday.
+
+    Dates in facts stay ISO 8601 deliberately, and are not a field here: a
+    locale that made one renderer print `03/04/2026` while the fact said
+    `2026-04-03` is the divergence `render/values` exists to prevent.
+    """
+    from . import locales as locales_module
+
+    published = locales_module.publish()
+    if name is not None:
+        if name not in published:
+            err.print(f"[red]error:[/red] no locale named {name!r};"
+                      f" known: {', '.join(published)}")
+            raise typer.Exit(code=2)
+        published = {name: published[name]}
+
+    if as_json:
+        typer.echo(json.dumps(published, indent=2))
+        return
+
+    days = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    for locale_name, entry in published.items():
+        sample = locales_module.named(locale_name)
+        console.print(f"[bold]{escape(locale_name)}[/bold]"
+                      f" [cyan]{entry['currency']}[/cyan]"
+                      f" [dim]{escape(entry['cities'][0][1])}[/dim]")
+        console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+        console.print(
+            f"  [dim]  figures[/dim] {escape(sample.spell(1234.5, 2))}"
+            f"  {escape(sample.negate(sample.spell(1234, 0)))}"
+            f"  {escape(sample.percent('4.2'))}"
+        )
+        console.print(
+            f"  [dim]     week[/dim] {', '.join(days[d] for d in entry['working_week'])}"
+            f"  [dim]{len(entry['holidays'])} fixed holiday(s)[/dim]"
+        )
+        console.print(
+            f"  [dim]   fiscal[/dim] year starts month {entry['fiscal_year_start_month']}"
+            f"  [dim]regions {', '.join(entry['regions'][:4])}…[/dim]"
+        )
+    console.print(
+        "\n[dim]`worldloom build --locale <name>` sets one. It reaches the figure"
+        " grammar corpus-wide and the regions, names, headquarters, currency and"
+        " fiscal year at build time; the working week above does not reach the"
+        " close calendar yet — see this command's help.[/dim]"
+    )
+
+
 @pack_app.command("targets")
 def pack_targets(
     engine: str = typer.Argument(None, help="Engine name; omit to list every engine."),
@@ -1909,6 +3723,186 @@ def pack_texts(
     console.print("[underline]evaluation_text[/underline]")
     for key, default in domain.evaluation_text:
         console.print(f"[bold]{key}[/bold]\n  [dim]{escape(default)}[/dim]")
+
+
+@pack_app.command("export")
+def pack_export_command(
+    out: Path = typer.Argument(..., help="Directory to write the bundle into."),
+    world: int = typer.Option(
+        None, "--world", "-w",
+        help="Keep this mosaic world, by its index. Needs --count, --seed and"
+             " --engine to match the mosaic it came from — the field is"
+             " re-derived deterministically rather than read back from disk, so"
+             " the same arguments give the same world without a build.",
+    ),
+    count: int = typer.Option(5, "--count", "-n", help="Size of the mosaic the world came from."),
+    seed: int = typer.Option(8128, "--seed", "-s", help="Base seed of that mosaic."),
+    engine: str = typer.Option("retail", "--engine", "-e", help="Engine that mosaic ran on."),
+    probe_file: Path = typer.Option(
+        None, "--probe", help="Keep a settled probe's physics instead of a mosaic world.",
+    ),
+    onto: Path = typer.Option(
+        None, "--onto",
+        help="Apply the derivation to an existing pack rather than minting a"
+             " skeleton. What an author who already has a pack and has just"
+             " probed its physics wants; without it the identity fields are"
+             " placeheld and `pack check` names every one.",
+    ),
+    name: str = typer.Option("", "--name", help="Name for a minted skeleton pack."),
+    as_json: bool = typer.Option(False, "--json", help="Emit the bundle as data instead of writing files."),
+) -> None:
+    """Keep a derived world: a mosaic variant or a settled probe, as a pack.
+
+    `mosaic` and `probe` both answer "what kind of company is this?" — one by
+    covering a space, one by asking — and neither answer survives the command
+    that produced it. An author who reads world 3 and wants *that one*, named,
+    edited and handed to a colleague, has had nothing to hand over.
+
+    What comes out is a **bundle, not a pack**, and the split is the interesting
+    part. A pack is texture: a name, units, books, lore, voices. A variant and a
+    probe are physics and shape: parameter ranges, an org chart, an estate. The
+    overlap is one field. So this writes `pack.json` plus the sidecars a pack is
+    not allowed to hold — `physics.json` for `build --physics`, `shape.json` for
+    the org table and estate that have no pack field and no build flag at all —
+    rather than widening `Pack` with a physics block, which would give a pack two
+    ways to say one thing and make a build decide which wins.
+
+    The third file is the list of what nobody could fill in, and it is a contract
+    rather than a warning. Neither source knows what the company is called or
+    what it sells; a name invented here would be signed with the author's. Those
+    fields come out `TODO`-marked and `worldloom pack check` names every one.
+    """
+    from . import pack_export as export_module
+
+    if (world is None) == (probe_file is None):
+        err.print("[red]error:[/red] pass exactly one of --world (a mosaic index) or --probe")
+        raise typer.Exit(code=2)
+
+    base = None
+    if onto is not None:
+        from . import packs as packs_module
+
+        try:
+            base = packs_module.load(onto)
+        except Exception as exc:
+            err.print(f"[red]error:[/red] {onto}: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+
+    try:
+        if world is not None:
+            from . import mosaic as mosaic_module
+
+            variants = mosaic_module.field(count, seed=seed, engine=engine)
+            found = [v for v in variants if v.index == world]
+            if not found:
+                err.print(
+                    f"[red]error:[/red] this mosaic has no world {world};"
+                    f" its indices are {[v.index for v in variants]}"
+                )
+                raise typer.Exit(code=2)
+            derived = export_module.from_variant(found[0], name=name, onto=base)
+        else:
+            from . import probe as probe_module
+
+            session = _probe_session(probe_file)
+            derived = export_module.from_probe(
+                probe_module.resolve(session.graph),
+                engine="" if base is not None else engine,
+                name=name or "probe", onto=base, premise=session.premise,
+            )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    if as_json:
+        typer.echo(json.dumps(derived.as_dict(), indent=2))
+        return
+
+    written = derived.write(out)
+    for kind, path in written.items():
+        console.print(f"[green]✓[/green] {kind} → [bold]{path}[/bold]")
+    for note in derived.notes:
+        console.print(f"[dim]note:[/dim] {escape(note)}")
+    for gap in derived.unfilled:
+        console.print(f"[yellow]unfilled:[/yellow] {escape(gap)}")
+    console.print(
+        f"\n[dim]Lint it with `worldloom pack check {written['pack']}`, then build it"
+        f" with `worldloom build --pack {written['pack']}"
+        + (f" --physics {written['physics']}" if "physics" in written else "")
+        + "`.[/dim]"
+    )
+
+
+@pack_app.command("spec")
+def pack_spec(
+    template: bool = typer.Option(
+        False, "--template",
+        help="Emit a starter specification instead of the schema.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Emit the schema as data."),
+) -> None:
+    """The one document that says what kind of company this is.
+
+    Nine surfaces answer that question today — an archetype key, `--employees`,
+    a `--facet`, `--locale`, `--estate`, a `--physics` file, a `--pack`, a
+    vocabulary qualifier, and revenue, which can only be said by writing a
+    pack. Somebody describing a business has to know which of the nine each
+    clause belongs to, and two of them interact in a way nobody predicts:
+    naming *any* facet settles *every* facet at its registry default, so
+    `--facet listing=listed` alone also asserts a flat trading year.
+
+    A specification is one document instead, and it is a composer rather than
+    an engine: every field resolves into a seam that is already load-bearing,
+    so it adds no capability the flags lack. What it adds is that the pieces
+    are resolved together. A description saying 40bn of revenue across twelve
+    employees is refused with both numbers and the registered shapes that bound
+    them; one saying premium margins in a fragmented market is refused with the
+    arithmetic; one claiming a trading year on an engine whose builder has no
+    field for one is reported rather than dropped.
+
+    It is not a pack, and the difference is worth knowing before choosing.
+    A pack is *identity* — a company's name, its divisions, their books, its
+    voices — embedded verbatim in the corpus recipe. A specification is a
+    *description*, naming no company at all, and is embedded not at all: it
+    resolves to consequences and the recipe records those, so the corpus
+    replays after the facet registry, the archetype table or the locale presets
+    move underneath it. A specification that carries an `identity` composes
+    into a pack, which is the only way its `geo` reaches the people and the
+    sites rather than only the figure grammar; a specification that names a
+    `pack` uses it whole, and the pack wins over everything derived.
+
+    Build one with `worldloom build --spec company.json`.
+    """
+    from . import company as company_module
+
+    if template:
+        typer.echo(json.dumps(company_module.template(), indent=2))
+        return
+
+    published = company_module.describe()
+    if as_json:
+        typer.echo(json.dumps(published, indent=2))
+        return
+
+    for entry in published["fields"]:
+        mark = {"value": "one value", "range": "a range",
+                "open": "free text"}[entry["kind"]]
+        console.print(f"[bold]{escape(entry['field'])}[/bold] [cyan]{mark}[/cyan]"
+                      + (f" [dim]← {escape(entry['registry'])}[/dim]"
+                         if entry["registry"] else ""))
+        console.print(f"  [dim]{escape(entry['about'])}[/dim]")
+    console.print(
+        f"\n[dim]engines: {', '.join(published['engines'])}"
+        f"\narchetypes: {', '.join(published['archetypes'])}"
+        f"\nlocales: {', '.join(published['locales'])}"
+        f"\ncalendars: {', '.join(published['calendars'])}"
+        f"\nestates: {', '.join(published['estates'])}"
+        f"\n{len(published['parameters'])} physics parameter(s) —"
+        " `worldloom pack params`."
+        "\n\nA value may only be one the registry holds; a range may only"
+        " narrow one the engine draws inside. Start from"
+        " `worldloom pack spec --template`.[/dim]"
+    )
 
 
 @pack_app.command("template")

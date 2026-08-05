@@ -11,6 +11,7 @@ against, so their shape matters more than their current implementation.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -179,58 +180,97 @@ class World:
             _generator_version=header.get("worldloom"),
         )
 
+    #: One `Collection` wrapper per accessor, minted on first read.
+    #:
+    #: `Collection.by_id` builds a lazy id index and caches it *on the
+    #: collection* — which bought nothing at all while every accessor below was
+    #: a property minting a fresh wrapper per read. `world.facts.by_id(x)` in a
+    #: loop rebuilt the whole index every iteration, and the pattern is
+    #: everywhere: `documents.py`, the two vertical document modules,
+    #: `generators/communications.py`, `stats.py`, `cli.py`,
+    #: `generators/distractors.py`. Profiling a 24-period build, `by_id` was
+    #: 13.1s of 30s across 49M `getattr` calls; a 256-period bank took 99s to
+    #: build and 36s to validate.
+    #:
+    #: A field with an explicit default rather than `functools.cached_property`
+    #: or a bare `__dict__` write, and that is not taste: `tests/test_corpus.py`,
+    #: `test_dimensions.py`, `test_episodes.py`, `test_narrate_concurrency.py`
+    #: and `test_narrative.py` all reconstruct a world with
+    #: `World(**{**world.__dict__, ...})`, so a cache living outside the field
+    #: list is passed to `__init__` as an unexpected keyword. Nine tests fail on
+    #: the obvious version. `compare=False` because two worlds with the same
+    #: contents are the same world whether or not either has been read from, and
+    #: `repr=False` because a repr is for a reader.
+    _collections: dict[str, Any] = field(
+        default_factory=dict, compare=False, repr=False
+    )
+
+    def __post_init__(self) -> None:
+        # `object.__setattr__` because the dataclass is frozen. Reset rather
+        # than trusted: a world reconstructed from another's `__dict__` would
+        # otherwise inherit wrappers built over the *donor's* tuples, and every
+        # id lookup would answer for the wrong world.
+        object.__setattr__(self, "_collections", {})
+
+    def _collection(self, name: str, build: Any) -> Any:
+        cached = self._collections.get(name)
+        if cached is None:
+            cached = build()
+            self._collections[name] = cached
+        return cached
+
     # -- accessors ---------------------------------------------------------
     # Everything the world knows is readable. Internal state is never hidden.
 
     @property
     def business_units(self) -> Collection[BusinessUnit]:
-        return Collection(self._business_units, label="BusinessUnitCollection")
+        return self._collection("business_units", lambda: Collection(self._business_units, label="BusinessUnitCollection"))
 
     @property
     def people(self) -> EmployeeCollection:
-        return EmployeeCollection(self._people, label="EmployeeCollection")
+        return self._collection("people", lambda: EmployeeCollection(self._people, label="EmployeeCollection"))
 
     @property
     def systems(self) -> Collection[System]:
-        return Collection(self._systems, label="SystemCollection")
+        return self._collection("systems", lambda: Collection(self._systems, label="SystemCollection"))
 
     @property
     def services(self) -> Collection[Service]:
-        return Collection(self._services, label="ServiceCollection")
+        return self._collection("services", lambda: Collection(self._services, label="ServiceCollection"))
 
     @property
     def cost_centres(self) -> Collection[CostCentre]:
-        return Collection(self._cost_centres, label="CostCentreCollection")
+        return self._collection("cost_centres", lambda: Collection(self._cost_centres, label="CostCentreCollection"))
 
     @property
     def categories(self) -> Collection[Category]:
         """Merchandise categories — the level a retailer reports margin at."""
-        return Collection(self._categories, label="CategoryCollection")
+        return self._collection("categories", lambda: Collection(self._categories, label="CategoryCollection"))
 
     @property
     def sites(self) -> Collection[Site]:
         """Stores, distribution centres, and fulfilment sites."""
-        return Collection(self._sites, label="SiteCollection")
+        return self._collection("sites", lambda: Collection(self._sites, label="SiteCollection"))
 
     @property
     def personas(self) -> Collection[Persona]:
-        return Collection(self._personas, label="PersonaCollection")
+        return self._collection("personas", lambda: Collection(self._personas, label="PersonaCollection"))
 
     @property
     def access_policies(self) -> Collection[AccessPolicy]:
-        return Collection(self._access_policies, label="AccessPolicyCollection")
+        return self._collection("access_policies", lambda: Collection(self._access_policies, label="AccessPolicyCollection"))
 
     @property
     def lore(self) -> Collection[LoreCommitment]:
-        return Collection(self._lore, label="LoreCollection")
+        return self._collection("lore", lambda: Collection(self._lore, label="LoreCollection"))
 
     @property
     def facts(self) -> FactCollection:
-        return FactCollection(self._facts, label="FactCollection")
+        return self._collection("facts", lambda: FactCollection(self._facts, label="FactCollection"))
 
     @property
     def events(self) -> EventCollection:
-        return EventCollection(self._events, label="EventCollection")
+        return self._collection("events", lambda: EventCollection(self._events, label="EventCollection"))
 
     @property
     def artifact_intents(self) -> Collection[ArtifactIntent]:
@@ -240,7 +280,7 @@ class World:
         with the renderers at step 5, prose with the constrained compiler at
         step 6. An intent is the decision that a document should exist.
         """
-        return Collection(self._artifact_intents, label="ArtifactIntentCollection")
+        return self._collection("artifact_intents", lambda: Collection(self._artifact_intents, label="ArtifactIntentCollection"))
 
     @property
     def artifact_irs(self) -> Collection[ArtifactIR]:
@@ -249,24 +289,24 @@ class World:
         Populated by ``render()``. A renderer reads these and nothing else, which
         is what keeps two formats of one artifact in agreement.
         """
-        return Collection(self._artifact_irs, label="ArtifactIRCollection")
+        return self._collection("artifact_irs", lambda: Collection(self._artifact_irs, label="ArtifactIRCollection"))
 
     @property
     def artifacts(self) -> ArtifactCollection:
-        return ArtifactCollection(self._artifacts, label="ArtifactCollection")
+        return self._collection("artifacts", lambda: ArtifactCollection(self._artifacts, label="ArtifactCollection"))
 
     @property
     def intentional_errors(self) -> Collection[IntentionalError]:
-        return Collection(self._intentional_errors, label="IntentionalErrorCollection")
+        return self._collection("intentional_errors", lambda: Collection(self._intentional_errors, label="IntentionalErrorCollection"))
 
     @property
     def evaluations(self) -> EvaluationCollection:
-        return EvaluationCollection(self._evaluations, label="EvaluationCollection")
+        return self._collection("evaluations", lambda: EvaluationCollection(self._evaluations, label="EvaluationCollection"))
 
     @property
     def ledger(self) -> Collection[GenerationLedgerEntry]:
         """The generation ledger. Empty at Gate A — no generative calls yet."""
-        return Collection(self._ledger, label="GenerationLedgerCollection")
+        return self._collection("ledger", lambda: Collection(self._ledger, label="GenerationLedgerCollection"))
 
     @property
     def observations(self) -> Collection[Observation]:
@@ -276,17 +316,17 @@ class World:
         not thereby known to anyone at 08:15, and a corpus that cannot tell those
         apart cannot pose an information-asymmetry question.
         """
-        return Collection(self._observations, label="ObservationCollection")
+        return self._collection("observations", lambda: Collection(self._observations, label="ObservationCollection"))
 
     @property
     def messages(self) -> Collection[ActorMessage]:
         """What one employee told another, and which facts it carried."""
-        return Collection(self._messages, label="ActorMessageCollection")
+        return self._collection("messages", lambda: Collection(self._messages, label="ActorMessageCollection"))
 
     @property
     def tasks(self) -> Collection[ActorTask]:
         """Obligations created by accepted tool calls, and who owns them."""
-        return Collection(self._tasks, label="ActorTaskCollection")
+        return self._collection("tasks", lambda: Collection(self._tasks, label="ActorTaskCollection"))
 
     @property
     def actor_ledger(self) -> Collection[ActorLedgerEntry]:
@@ -296,7 +336,7 @@ class World:
         answers "what happened" and loses "what was attempted and refused",
         which is the half that proves the policy layer is load-bearing.
         """
-        return Collection(self._actor_ledger, label="ActorLedgerCollection")
+        return self._collection("actor_ledger", lambda: Collection(self._actor_ledger, label="ActorLedgerCollection"))
 
     @property
     def recipe(self) -> dict[str, Any]:
@@ -563,8 +603,9 @@ class World:
 
         ``concurrency`` and ``on_accepted`` pass straight through to
         ``compiler.narrate`` — see its docstring for the determinism argument
-        (why a thread pool here never changes a byte of output) and for what
-        ``on_accepted`` is for (`narrate auto --concurrency`'s checkpoint hook).
+        (why a thread pool here never changes a byte of output) and for
+        ``on_accepted``, the per-section acceptance seam a long-running caller
+        can use to persist paid work incrementally.
         """
         from .narrative import compiler
 
@@ -721,6 +762,11 @@ class World:
 
         Falls back to the most restrictive policy rather than the most permissive:
         an unrecognised audience should not accidentally publish to all staff.
+        That sentence was true of the intent and false of the code, which took
+        ``self._access_policies[-1]`` — *last in the tuple*, which for retail is
+        "Technology and service operations" and locks a CFO out of a document
+        they wrote. It is now the most restrictive by construction; see
+        ``_narrowest``.
         """
         if not self._access_policies:
             return None
@@ -739,10 +785,42 @@ class World:
             "group_cfo": "finance and audit only",
             "executive_committee": "executive committee only",
             "technology": "technology and service operations",
+            # The readers a facet's filings are addressed to. None of them has a
+            # policy of its own — an audit committee, a fund, a members' body and
+            # a minister are all *outside* the org chart, so no `allow_functions`
+            # describes them — and minting four policies to say so would add four
+            # rows to `world.json` for every corpus ever built. So each maps to
+            # the access class that governs the document *inside* the company,
+            # which is what the policy layer is actually deciding: who here may
+            # open it. Who receives it is the filing's own business, stated in
+            # its rationale and in its outline's purposes.
+            "audit_committee": "finance and audit only",
+            "sponsor": "executive committee only",
+            "members": "executive committee only",
+            "minister": "executive committee only",
         }.get(audience)
         if wanted and wanted in by_label:
             return by_label[wanted]
-        return self._access_policies[-1].id
+        return self._narrowest().id
+
+    def _narrowest(self) -> AccessPolicy:
+        """The policy that admits the fewest people.
+
+        A policy naming no people, no functions and no units admits *everyone*
+        (`AccessPolicy.permits` ends `return not (...)`), so it sorts last here
+        however short its lists are — the count of names is a proxy for reach
+        only once there is at least one, and treating "unconstrained" as
+        "narrow" is exactly backwards.
+
+        Ties break on id, lowest first, because a fallback that depended on
+        tuple order is the defect this replaced.
+        """
+        def reach(policy: AccessPolicy) -> tuple[int, int, str]:
+            names = (len(policy.allow_people) + len(policy.allow_functions)
+                     + len(policy.allow_business_units))
+            return (1 if names == 0 else 0, names, policy.id)
+
+        return min(self._access_policies, key=reach)
 
     # -- operations --------------------------------------------------------
 
@@ -847,8 +925,22 @@ class World:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(item.payload)
 
-        # Or copied through, when it was loaded from a corpus on disk.
-        if self.root is not None and not self._rendered:
+        # Or copied through, when it was loaded from a corpus on disk — unless
+        # the in-place staging above already restored them.
+        #
+        # `not in_place` is load-bearing rather than defensive. An in-place
+        # export of a corpus that *has* rendered artifacts stages them, deletes
+        # the directory, and copies the staged tree back in; without this guard
+        # the line below then copies the same tree to the same place a second
+        # time and `copytree` raises FileExistsError on a corpus that was
+        # perfectly intact. It never fired before because the two in-place
+        # callers — `narrate accept` and `plan accept` — run on corpora that
+        # have not been rendered yet, so `in_place` was always False for them.
+        # The first caller to write back over a corpus with an `artifacts/`
+        # directory in it — the refine loop's since-deleted `submit_section`
+        # MCP tool — found this immediately, and the guard outlives it because
+        # any future in-place writer of a rendered corpus hits the same path.
+        if self.root is not None and not self._rendered and not in_place:
             source_dir = self.root / corpus.ARTIFACTS_DIR
             if source_dir.is_dir():
                 shutil.copytree(source_dir, target / corpus.ARTIFACTS_DIR)
@@ -867,6 +959,62 @@ class World:
             f"{' planned' if not self._artifacts and self._artifact_intents else ''}, "
             f"evals={len(self._evaluations)})"
         )
+
+
+def extend_lore(
+    base: tuple[LoreCommitment, ...],
+    claims: Sequence[Any],
+    minter: Minter,
+    recipe: dict[str, Any],
+) -> tuple[tuple[LoreCommitment, ...], dict[str, Any]]:
+    """A domain's own lore, plus whatever a set of facet claims commits it to.
+
+    **Why the seam is here and not on the pack.** A pack already carries lore
+    and already replays, which makes it the obvious host — and it is the wrong
+    one. A pack is *identity*: a company name, its units, their books, its
+    voices. ``pack_export`` cannot derive any of that and marks it
+    ``PLACEHOLDER`` for a human to fill in. Routing facet lore through a pack
+    would therefore mean either inventing a company to hang two commitments off,
+    or building the archetype's world as a placeholder-named pack — and a facet
+    claims nothing whatever about what the company is *called*. The claims are
+    also derived rather than authored, so mixing them into ``Pack.lore`` would
+    put prose nobody wrote in front of ``packs.lint``, which exists to hold an
+    author to what they wrote.
+
+    So the seam is where the two lore sources already meet: the three lines in
+    each domain's ``build`` that pick between ``packs.lore_of`` and the domain's
+    own ``lore()``. Facet lore composes with *either*, which a pack-shaped path
+    could not have done.
+
+    **Appended, never interleaved.** ``LoreCommitment`` ids come off the shared
+    "LORE" sequence and ``founding_milestones`` walks the lore in order minting
+    an "EV" and an "MFACT" per dated commitment — so lore ordering decides id
+    ordering for three sequences at once. Appending means every id a domain's
+    own lore already had is the id it still has, and with no claims the tuple is
+    the identical object's contents and nothing moves at all. That is what makes
+    a no-facet build byte-identical rather than merely usually-identical.
+
+    **The recipe records the claims, not the commitments they became.** The
+    commitments are the *output* of this function and every id and date in them
+    is a property of the world they landed in; a rebuild that re-attached them
+    would paste two commitments onto a world built without them, colliding with
+    ids the minter had already issued and dating the organisation by lore it was
+    not built from. The claim is what the build was given, so replaying it
+    re-runs this same construction — the posture ``physics``, ``role_table`` and
+    ``seasonality`` already take. ``recipe.rebuild`` reads the key back through
+    ``facets.claims_from_document``.
+    """
+    if not claims:
+        return base, recipe
+    from . import facets as facets_module
+
+    from .recipe import LORE_CLAIMS_KEY
+
+    implied = facets_module.commit(claims, minter, alongside=base)
+    return (*base, *implied), {
+        **recipe,
+        LORE_CLAIMS_KEY: [claim.as_dict() for claim in claims],
+    }
 
 
 def _moment(moment: datetime | str) -> datetime:

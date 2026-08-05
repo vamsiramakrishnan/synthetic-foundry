@@ -69,9 +69,10 @@ from .models import (
     LoreConstraint,
     LoreKind,
 )
+from .parameters import DEFAULT, Parameters
 from .rng import Rng
 from .validate import RECONCILIATION_TOLERANCE, Violation
-from .world import World
+from .world import World, extend_lore
 
 # Imported for its side effect: registering insurance's artifact types with
 # the document compiler. Kept at module scope so that importing
@@ -91,6 +92,9 @@ INSURANCE_ARCHETYPES = frozenset({MIDSIZE_GENERAL_INSURER.key})
 #: target ahead of its reader is how a pack author sees the full contract on
 #: day one rather than being surprised by it later.
 CONSULTED_TARGETS: tuple[tuple[str, str], ...] = (
+    ("<role_key>/<fact_kind>",
+     "an accountability: mints the fact saying this role answers for that measure"
+     " (org_builder.accountability_facts)"),
     ("triangle_distortion/long_tail",
      "tags the diagonal, the emergence assessment, and the attribution split (generators.reserving.generate)"),
     ("finance/partial_booking",
@@ -247,6 +251,59 @@ class InsuranceWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    estate: str | None = None
+    """Grow a technology landscape: ``"small"``, ``"medium"`` or ``"large"``
+    (``landscape.INSURANCE.profiles``).
+
+    Insurance is where this matters most and where it was most out of reach.
+    ``insurance_org.generate`` returns ``services=()``, so a reserving corpus
+    has had no technology graph whatsoever — blast radius, "who gets paged" and
+    "what does nothing route around" were not thin questions here, they were
+    unanswerable ones. ``None`` still mints nothing, which is what keeps every
+    insurer built before this field existed byte-identical."""
+    role_table: tuple[tuple[str, str, str, str | None], ...] | None = None
+    """Who exists in this organisation (``worldloom.roles``).
+
+    ``None`` is the engine's own table, which is what every world built before
+    this field existed used. A supplied one must have passed ``roles.check``:
+    several of its keys are looked up by name in generator code, and a table
+    missing one raises ``KeyError`` part-way through an episode rather than
+    building a different company.
+
+    Carried on the recipe as a whole table rather than as the shape it came
+    from, for the reason the pack is embedded whole: a corpus that could only
+    be rebuilt by whoever still had the probe that derived it would fail the
+    reason recipes exist."""
+
+    physics: Parameters = DEFAULT
+    """The world physics the organisation is drawn under. Separate from
+    ``pack`` even though a pack is what will normally supply one: a pack says
+    what this insurer *is* — its units, its lore, its brands — and the physics
+    says what ranges its figures live in. Keeping them one field would make
+    a caller who only wants to move a range author a whole pack to do it."""
+
+    lore_claims: tuple[Any, ...] = ()
+    """Lore a set of facet claims commits this insurer to
+    (``facets.LoreClaim``). See ``RetailWorld.lore_claims`` — same contract, and
+    ``world.extend_lore`` argues where the seam lives and why ``()`` keeps an
+    existing insurer byte-identical."""
+
+    locale: Any = None
+    """Where this insurer is (``worldloom.locales``). See ``RetailWorld.locale``
+    — same contract, same precedence.
+
+    This vertical had the furthest to travel. ``insurance_org.generate`` grew
+    ``name_pools``, ``headquarters``, ``regions`` and ``locale`` to match its
+    two siblings, and ``build`` below still passed none of the four — so an
+    insurer was Australian whatever any pack or locale said, and *no argument
+    would move it*. The pack half of that is fixed here alongside the locale,
+    because the two are one precedence rule and forwarding half of it would
+    leave a pack's own geography still dropped.
+
+    The insurer's *name* is the one thing still unmoved:
+    ``insurance_org._INSURER_SUFFIX`` is a module pool rather than
+    ``Locale.suffixes_for("insurance")``. Same gap as banking's, stated on
+    ``BankingWorld.locale``."""
 
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> InsuranceWorld:
@@ -272,11 +329,17 @@ class InsuranceWorld:
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
+        from . import locales as locales_module
         from . import recipe as recipe_module
         from .generators import insurance_org
 
         rng = Rng(self.seed)
         minter = Minter()
+
+        # Resolved before anything is minted, and refused here rather than
+        # defaulted. See `RetailWorld.build`.
+        locale = locales_module.resolve(self.locale)
+        archetype = locale.applied_to(self.archetype)
 
         if self.pack is not None:
             from . import packs as packs_module
@@ -284,20 +347,73 @@ class InsuranceWorld:
             commitments = packs_module.lore_of(self.pack, minter)
         else:
             commitments = lore(minter)
+        # Before `generate`: lore is an input to the organisation, not a
+        # decoration on it. See `world.extend_lore`.
+        recipe = recipe_module.build_recipe(
+            archetype=self.archetype.key,
+            seed=self.seed,
+            employees=self.employees,
+            annual_revenue=self.annual_revenue,
+            pack=self.pack,
+            estate=self.estate,
+            physics=self.physics,
+            role_table=self.role_table,
+            # What it was given, not what it resolved to — `RetailWorld.build`.
+            locale=self.locale,
+        )
+        commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = insurance_org.generate(
             rng.derive("organisation"), minter,
-            archetype=self.archetype, lore=commitments,
+            archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
             voices=dict(self.pack.voices) if self.pack is not None else None,
+            # The three the siblings have always forwarded and this one never
+            # did. Their absence read as a decision and was an omission: the
+            # generator has taken all three since it was written, so a pack
+            # naming its own regions, people or head office had them accepted,
+            # validated, embedded in the recipe — and dropped here.
+            name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
+            headquarters=self.pack.headquarters if self.pack is not None else None,
+            regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
+            locale=locale,
+            physics=self.physics,
+            role_table=self.role_table,
         )
+
+        systems, services = org.systems, org.services
+        if self.estate is not None:
+            from .generators import estate as estate_module
+            from .landscape import INSURANCE
+
+            grown = estate_module.generate(
+                rng.derive("estate"), minter,
+                profile=self.estate,
+                landscape=INSURANCE,
+                # Empty, and legitimately so: this is the one vertical whose
+                # core services are `()`, which makes every generated node's
+                # layer come out of the systems alone. `core_layers` handles it
+                # — there is simply nothing to infer a layer for.
+                core_services=org.services,
+                core_systems=org.systems,
+                # An insurer's role table has no technology roles at all, so
+                # ownership goes to the three people who already own its
+                # systems of record. That is the honest answer rather than a
+                # placeholder: in an organisation with no CIO, the claims
+                # director really does own the claims feed.
+                owner_ids=estate_module.owners(
+                    org.roles, "chief_actuary", "claims_director", "financial_controller",
+                ),
+            )
+            systems = (*systems, *grown.systems)
+            services = (*services, *grown.services)
 
         return World(
             company=org.company,
             _business_units=org.business_units,
             _people=org.people,
-            _systems=org.systems,
-            _services=org.services,
+            _systems=systems,
+            _services=services,
             _cost_centres=org.cost_centres,
             _categories=org.categories,
             _sites=org.sites,
@@ -309,16 +425,10 @@ class InsuranceWorld:
             seed=self.seed,
             _roles=org.roles,
             _minter=minter,
-            _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
-            _archetype=self.archetype,
+            _annual_revenue=self.annual_revenue or archetype.annual_revenue,
+            _archetype=archetype,
             _generator_version=worldloom_version,
-            _recipe=recipe_module.build_recipe(
-                archetype=self.archetype.key,
-                seed=self.seed,
-                employees=self.employees,
-                annual_revenue=self.annual_revenue,
-                pack=self.pack,
-            ),
+            _recipe=recipe,
         )
 
 
@@ -527,6 +637,7 @@ from .generators.reserving import TEXT as _INSURANCE_TEXT  # noqa: E402
 register_domain(Domain(
     name="insurance",
     archetype_keys=INSURANCE_ARCHETYPES,
+    default_archetype="midsize_general_insurer",
     world=InsuranceWorld,
     single_episode=QuarterlyReserving,
     # A period is always the valuation quarter-end month, exactly as

@@ -43,6 +43,24 @@ class Archetype:
     employees: int = 80_000
     units: tuple[UnitSpec, ...] = ()
 
+    vocabulary: str = ""
+    """Which ``worldloom.vocabulary`` preset supplied these units' *words*.
+
+    Empty means the archetype's own, written below — which is what every build
+    that does not ask for a vocabulary gets, and the reason adding this field
+    changed no corpus by a byte. A non-empty value is always accompanied by a
+    ``key`` qualified with it (``"omnichannel_retailer+wholesale_club"``), so a
+    recipe that stores the key alone rebuilds the words as well as the figures."""
+
+    authored: bool = False
+    """These words were written by a pack author, not by this registry.
+
+    Set only by ``packs.archetype_of``. ``vocabulary.spoken`` returns an
+    authored archetype untouched: ``Pack.units`` names every division, category
+    and site format explicitly, and a generated vocabulary overriding that would
+    invert the specificity rule the rest of the pack surface follows — a pack's
+    ``regions`` already beat a locale's pool for the same reason."""
+
     @property
     def site_count(self) -> int:
         return sum(fmt.count for unit in self.units for fmt in unit.site_formats)
@@ -332,11 +350,113 @@ MIDSIZE_GENERAL_INSURER = Archetype(
 )
 
 
+def _transport_spend() -> tuple[CategorySpec, ...]:
+    """Third-party spend categories, share of the unit's addressable spend.
+
+    The fourth reading of these two fields, and the one that finally makes the
+    ``share``/``margin`` pair mean what a procurement function means by them:
+    ``share`` is the category's share of what this division *buys in*, and
+    ``margin`` is the margin the division earns on the work that spend goes
+    into. That is the same arithmetic slot a retail category uses and a bank's
+    product book borrows — deliberately, because ``hierarchy.generate`` is the
+    one dimension machine all four verticals run through.
+
+    ``Subcontract Labour`` is the category the procure-to-pay cycle's contested
+    order sits on: labour is bought by the crew-day against a rate card, which
+    is what makes a quantity and a rate two separately contestable numbers. A
+    tonne of aggregate delivered short is a quantity dispute and nothing else;
+    a crew-day billed at the wrong rate is the price half of a three-way match,
+    and this vertical needs a category that can carry both.
+    """
+    return (
+        CategorySpec("Subcontract Labour", 0.42, 0.096),
+        CategorySpec("Civil Materials", 0.31, 0.134),
+        CategorySpec("Plant Hire", 0.27, 0.118),
+    )
+
+
+def _utilities_spend() -> tuple[CategorySpec, ...]:
+    return (
+        CategorySpec("Specialist Subcontract", 0.40, 0.088),
+        CategorySpec("Cable and Conductor", 0.38, 0.141),
+        CategorySpec("Traffic Management", 0.22, 0.126),
+    )
+
+
+def _facilities_spend() -> tuple[CategorySpec, ...]:
+    return (
+        CategorySpec("Hard Services and Maintenance", 0.55, 0.152),
+        CategorySpec("Cleaning and Soft Services", 0.45, 0.109),
+    )
+
+
+#: A mid-size Australian infrastructure services group — the procure-to-pay
+#: vertical's shape. Shape only, like the three above it: the scale is the
+#: sector's, the spend categories are generic construction and utilities
+#: contracting, and every figure is generated from a seed.
+#:
+#: Why this kind of business rather than a manufacturer or a hospital group,
+#: both of which also buy heavily. A services contractor's cost base is
+#: *bought in* — subcontractors, plant, materials — so the purchase order is
+#: not a back-office artifact, it is where the money is committed, and the
+#: month-end accrual for what has been received and not yet invoiced is a
+#: material number rather than a rounding. That is what makes the composition
+#: this vertical exists to demonstrate — a goods receipt deciding a general
+#: ledger figure — a real dependency and not a contrivance.
+#:
+#: Revenue per head sits inside the envelope the registry already spans (see
+#: ``company.productivity_envelope``), which is a constraint a fifth archetype
+#: has to respect rather than a coincidence: an archetype outside it would
+#: widen the envelope and quietly stop the scale check refusing the figures it
+#: was written to refuse.
+MIDSIZE_INFRASTRUCTURE_SERVICES = Archetype(
+    key="midsize_infrastructure_services",
+    label="Mid-size Australian infrastructure services group",
+    industry="Infrastructure services and contracting",
+    currency="AUD",
+    currency_unit="thousands",
+    fiscal_year_start_month=7,
+    # ~3.2bn in thousands. Rounded to the scale of the sector, not to any filing.
+    annual_revenue=3_200_000,
+    employees=9_500,
+    units=(
+        UnitSpec(
+            key="transport", name="Transport Infrastructure", kind="transport_infrastructure",
+            share=0.46,
+            categories=_transport_spend(),
+            site_formats=(
+                SiteFormat("Depot", 34, 1.00),
+                SiteFormat("Project Office", 12, 0.42),
+            ),
+        ),
+        UnitSpec(
+            key="utilities", name="Utilities and Energy", kind="utilities_services",
+            share=0.34,
+            categories=_utilities_spend(),
+            site_formats=(
+                SiteFormat("Network Depot", 21, 1.00),
+                # A materials yard holds stock, not turnover — the same
+                # zero-revenue-weight shape `hierarchy.py` documents for a
+                # distribution centre and banking reuses for an operations centre.
+                SiteFormat("Materials Yard", 5, 0.0),
+            ),
+        ),
+        UnitSpec(
+            key="facilities", name="Facilities Management", kind="facilities_management",
+            share=0.20,
+            categories=_facilities_spend(),
+            site_formats=(SiteFormat("Facilities Hub", 9, 1.60),),
+        ),
+    ),
+)
+
+
 _REGISTRY: dict[str, Archetype] = {
     AUSTRALIAN_GROCERY.key: AUSTRALIAN_GROCERY,
     OMNICHANNEL_RETAILER.key: OMNICHANNEL_RETAILER,
     MIDSIZE_ADI.key: MIDSIZE_ADI,
     MIDSIZE_GENERAL_INSURER.key: MIDSIZE_GENERAL_INSURER,
+    MIDSIZE_INFRASTRUCTURE_SERVICES.key: MIDSIZE_INFRASTRUCTURE_SERVICES,
 }
 
 #: What `inspired_by` accepts, and the archetype each phrase resolves to.
@@ -367,17 +487,44 @@ _INSPIRATION: dict[str, str] = {
     "general insurer": "midsize_general_insurer",
     "australian insurer": "midsize_general_insurer",
     "general insurance": "midsize_general_insurer",
+    # Deliberately no bare "services" or "contractor": both occur inside
+    # descriptions of businesses that are nothing like this one ("financial
+    # services", "a contractor to the grocery trade"), and the longest-phrase
+    # rule below would not save them — it only breaks ties between phrases that
+    # all matched.
+    "infrastructure services": "midsize_infrastructure_services",
+    "civil contractor": "midsize_infrastructure_services",
+    "construction services": "midsize_infrastructure_services",
+    "engineering services": "midsize_infrastructure_services",
+    "utilities contractor": "midsize_infrastructure_services",
 }
 
 
 def get(key: str) -> Archetype:
-    """Look up an archetype by key."""
+    """Look up an archetype by key, optionally qualified with a vocabulary.
+
+    ``"omnichannel_retailer"`` is the shape with its own words.
+    ``"omnichannel_retailer+wholesale_club"`` is the same shape — identical
+    shares, margins, site counts and unit keys — spoken as a membership
+    warehouse club (``worldloom.vocabulary``).
+
+    Resolved *here*, in the one function every caller already goes through,
+    rather than by adding a parameter to each of them. That is what makes the
+    qualified form work from ``build --archetype``, from ``Blueprint.archetype``
+    and, load-bearing, from ``recipe.rebuild`` — which reads back the single
+    ``archetype`` string a world stored and would otherwise rebuild a mosaic
+    world with its figures intact and every division renamed back.
+    """
+    from .vocabulary import QUALIFIER, spoken
+
+    base, _, dialect = key.partition(QUALIFIER)
     try:
-        return _REGISTRY[key]
+        shape = _REGISTRY[base]
     except KeyError:
         raise KeyError(
-            f"unknown archetype {key!r}. Registered: {', '.join(sorted(_REGISTRY))}"
+            f"unknown archetype {base!r}. Registered: {', '.join(sorted(_REGISTRY))}"
         ) from None
+    return spoken(shape, dialect) if dialect else shape
 
 
 def inspired_by(description: str) -> Archetype:

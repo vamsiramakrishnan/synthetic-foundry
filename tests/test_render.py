@@ -523,3 +523,28 @@ def test_rendering_nothing_is_an_error() -> None:
     world = RetailWorld(seed=8128).build()
     with pytest.raises(ValueError, match="run a scenario first"):
         world.render("markdown")
+
+
+def test_rendering_to_an_out_directory_validates_what_it_wrote(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The check has to look where the files landed, not where they came from.
+
+    The in-memory world resolves artifact paths against the *source* corpus, so
+    rendering to a `--out` directory reported every file it had just written as
+    missing. A false failure, and the loudest kind: anyone running this in a
+    pipeline reads it as rendering being broken.
+    """
+    from typer.testing import CliRunner
+
+    from worldloom.cli import app
+
+    runner = CliRunner()
+    source = tmp_path / "corpus"
+    built = runner.invoke(app, ["build", "--seed", "8128", "--incident",
+                                "--out", str(source)])
+    assert built.exit_code == 0, built.output
+
+    out = tmp_path / "rendered"
+    result = runner.invoke(app, ["render", str(source), "-f", "xlsx", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "coherent" in result.output
+    assert list((out / "artifacts").glob("*.xlsx")), "nothing was written"

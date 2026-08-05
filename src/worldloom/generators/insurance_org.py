@@ -19,10 +19,13 @@ rather than two authorities that are structurally allowed to differ.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from dataclasses import dataclass
 from typing import Any
 
 from ..ids import Minter
+from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import (
     AccessPolicy,
     BusinessUnit,
@@ -37,10 +40,12 @@ from ..models import (
     Site,
     System,
 )
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import hierarchy, names
 from .org_builder import (
     apply_traits,
+    accountability_facts,
     form_units,
     founding_milestones,
     mint_people,
@@ -100,6 +105,10 @@ _PERSONAS: tuple[tuple[str, str, str, str, str, float, float, float, tuple[str, 
      ("control objective", "we uphold the finding")),
 )
 
+#: Which persona each role writes with. Exhaustive over ``_ROLES``, and
+#: ``tests/test_personas.py`` holds it that way — the ``.get(role, default)``
+#: this replaced could not tell a role deliberately left to the default from
+#: one nobody had got round to mapping.
 _ROLE_PERSONA = {
     "ceo": "PERSONA-INS-EXEC",
     "cfo": "PERSONA-INS-CFO",
@@ -110,9 +119,60 @@ _ROLE_PERSONA = {
     "audit": "PERSONA-INS-AUDIT",
 }
 
+#: The per-unit roles ``generate`` appends, by suffix — unit MDs only, as in
+#: banking. Named rather than left to the catch-all below for the same reason.
+_UNIT_ROLE_PERSONA = {"_md": "PERSONA-INS-EXEC"}
+
+#: By function, for a role neither table above names. This engine's table is
+#: the thinnest of the three and consults all of it (``roles.SPINE``), so an
+#: authored insurer table is mostly roles this module has never seen — which
+#: makes the function layer here load-bearing rather than theoretical.
+_FUNCTION_PERSONA = {
+    "Executive": "PERSONA-INS-EXEC",
+    "Finance": "PERSONA-INS-CONTROLLER",
+    "Actuarial": "PERSONA-RESERVING-ACTUARY",
+    "Claims": "PERSONA-CLAIMS",
+    "Audit": "PERSONA-INS-AUDIT",
+}
+
+#: Last resort: an authored role in a function this engine has never heard of.
+#: The engine's long-standing default, now named and reached only from here.
+_DEFAULT_PERSONA = "PERSONA-INS-EXEC"
+
+
+def _persona_for(role: str, function: str = "") -> str:
+    """The persona a role writes with — see ``organisation._persona_for`` for
+    the layering and for why an unmapped role is resolved rather than refused."""
+    if role in _ROLE_PERSONA:
+        return _ROLE_PERSONA[role]
+    for suffix, persona in _UNIT_ROLE_PERSONA.items():
+        if role.endswith(suffix):
+            return persona
+    return _FUNCTION_PERSONA.get(function, _DEFAULT_PERSONA)
+
+
+def _check_persona_ids(voiced: dict[str, Any], minted: dict[str, str]) -> None:
+    """Refuse a pack ``persona`` naming an id this world does not have — see
+    ``organisation._check_persona_ids``."""
+    engine = frozenset(persona[0] for persona in _PERSONAS)
+    for role, spec in voiced.items():
+        if not spec.persona:
+            continue
+        allowed = engine if role in minted else engine | frozenset(minted.values())
+        if spec.persona not in allowed:
+            raise ValueError(
+                f"voices[{role!r}].persona names {spec.persona!r}, which is not a"
+                f" persona this world has: {', '.join(sorted(allowed))}"
+            )
+
+
 #: Name pools for what a general insurer runs. Module-owned, like the role
 #: table — see ``banking_org``'s identical comment for why these do not move
 #: to ``generators/names.py``.
+#: What an insurer is called in the jurisdiction this engine was written for.
+#: Kept as the fallback for the reason ``banking_org._BANK_SUFFIX`` is, and
+#: identical to ``locales.AUSTRALIA.suffixes_for("insurance")``, which is what
+#: keeps the draw below byte-neutral.
 _INSURER_SUFFIX = ("Insurance Group", "General Insurance", "Assurance", "Mutual Insurance")
 _POLICY_ADMIN = ("PolicyCore", "Underwrite Direct", "Coverline Admin")
 _CLAIMS = ("ClaimsFirst", "Resolve Claims Platform", "Claimsline")
@@ -130,11 +190,45 @@ def generate(
     company_name: str | None = None,
     system_brands: dict[str, str] | None = None,
     voices: dict[str, Any] | None = None,
+    # The three overrides this generator was missing, and the locale they fall
+    # back to. Their absence was not a decision: `organisation.generate` and
+    # `banking_org.generate` have taken all three since packs learned to say
+    # where a company is, and this signature simply never caught up — which
+    # made every insurer this tool has ever built unconditionally Australian,
+    # with `Pack.base` accepting only `retail` and `banking` so no pack could
+    # route round it either. Same names, same order and same meanings as the
+    # siblings, so a caller cannot need to remember which vertical it is
+    # addressing.
+    name_pools: dict[str, list[str]] | None = None,
+    headquarters: str | None = None,
+    regions: tuple[str, ...] | None = None,
+    locale: Locale = DEFAULT_LOCALE,
+    # This module's own `_ROLES`, replaced. `None` means use them, so an
+    # unpassed table is byte-identical to before this argument existed.
+    #
+    # A supplied table still has the per-unit roles appended below — those are
+    # derived from the archetype's units rather than authored — and must have
+    # gone through `roles.review` first. Several of these keys are looked up by
+    # name in generator code, and a table missing one raises `KeyError`
+    # part-way through an episode rather than building a different company.
+    role_table: Sequence[tuple[str, str, str, str | None]] | None = None,
+    physics: Parameters = DEFAULT,
 ) -> InsurerOrganisation:
     """Build the insurer for an archetype. Same seed, same graph, same ids.
 
-    ``company_name``, ``system_brands`` and ``voices`` are the pack override
-    trio — see ``organisation.generate``.
+    ``company_name``, ``system_brands``, ``voices``, ``name_pools``,
+    ``headquarters``, ``regions`` and ``locale`` are the pack override set —
+    see ``organisation.generate`` for what each means and for why the narrower
+    claims beat the locale. Every value is drawn whether or not it is
+    overridden, so none of them reshuffles a downstream stream.
+
+    The locale reaches the company's name here too, through
+    ``suffixes_for("insurance")`` rather than ``company_suffixes`` — the latter
+    is a retail pool by construction, so drawing from it would name a Frankfurt
+    insurer a Handelsgruppe. The distinction earns its keep immediately: a
+    German mutual insurer is a ``Versicherungsverein a.G.`` and never an
+    ``eG``, because cooperatives are barred from insurance business, and the
+    two engines therefore need different words from one jurisdiction.
     """
     company_rng = rng.derive("company")
     brands = system_brands or {}
@@ -142,7 +236,7 @@ def generate(
     units = archetype.units
     unit_ids = {unit.key: minter.next("BU") for unit in units}
 
-    role_table = list(_ROLES)
+    role_table = list(_ROLES if role_table is None else role_table)
     for unit in units:
         role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))
     role_table, depth_of = sorted_roles(role_table)
@@ -150,10 +244,18 @@ def generate(
     finance_cc = minter.next("CC")
     actuarial_cc = minter.next("CC")
 
+    # See organisation.py: a voiced role writes with a clone of its base, a
+    # remap points its role at a persona that already exists.
+    function_of = {row[0]: row[2] for row in role_table}
+    voiced: dict[str, Any] = {
+        role: spec for role, spec in sorted((voices or {}).items()) if role in function_of
+    }
     pack_voice_ids = {
         role: f"PERSONA-PACK-{role.upper().replace('_', '-')}"
-        for role in (voices or {})
+        for role, spec in voiced.items() if not spec.is_remap()
     }
+    persona_remap = {role: spec.persona for role, spec in voiced.items() if spec.is_remap()}
+    _check_persona_ids(voiced, pack_voice_ids)
 
     def assign(role: str, title: str, function: str):  # type: ignore[no-untyped-def]
         """One decision per person: MDs sit in their unit; cost centres split
@@ -167,10 +269,20 @@ def generate(
             else actuarial_cc if function in ("Actuarial", "Claims")
             else None
         )
-        persona = pack_voice_ids.get(role) or _ROLE_PERSONA.get(role, "PERSONA-INS-EXEC")
+        persona = (
+            pack_voice_ids.get(role)
+            or persona_remap.get(role)
+            or _persona_for(role, function)
+        )
         return business_unit, cost_centre, persona
 
-    role_ids, people = mint_people(rng, minter, role_table, depth_of, assign=assign)
+    pools = name_pools or {}
+    role_ids, people = mint_people(
+        rng, minter, role_table, depth_of, assign=assign,
+        given=pools.get("given") or None, family=pools.get("family") or None,
+        locale=locale,
+        physics=physics,
+    )
     people = wire_managers(people, role_table, role_ids)
     business_units = form_units(units, unit_ids, role_ids, people, company_id, lore)
 
@@ -183,6 +295,13 @@ def generate(
         units=units,
         unit_ids=unit_ids,
         buyers={},
+        # Forwarded rather than defaulted — and unlike the siblings there was
+        # nothing here to forward at all, so an insurer's branch estate was
+        # labelled with Australian state abbreviations no matter what its pack
+        # or its locale said.
+        regions=regions,
+        locale=locale,
+        physics=physics,
     )
 
     policy_admin = minter.next("SYS")
@@ -228,17 +347,18 @@ def generate(
         )
         for persona_id, label, voice, complexity, depth, optimism, risk, political, phrases in _PERSONAS
     )
-    if voices:
+    if pack_voice_ids:
         by_id = {p.id: p for p in personas}
         clones = []
-        for role, spec in sorted(voices.items()):
-            if role not in role_ids:
-                continue
-            base = by_id[_ROLE_PERSONA.get(role, "PERSONA-INS-EXEC")]
+        for role, persona_id in pack_voice_ids.items():
+            spec = voiced[role]
+            base = by_id[spec.persona or _persona_for(role, function_of[role])]
             clones.append(base.model_copy(update={
-                "id": pack_voice_ids[role],
+                "id": persona_id,
                 "label": f"{base.label} ({role})",
                 "voice": spec.voice or base.voice,
+                "sentence_complexity": spec.sentence_complexity or base.sentence_complexity,
+                "technical_depth": spec.technical_depth or base.technical_depth,
                 "favourite_phrases": list(spec.phrases) or list(base.favourite_phrases),
             }))
         personas += tuple(clones)
@@ -272,12 +392,17 @@ def generate(
         ),
     )
 
-    generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(_INSURER_SUFFIX)}"
+    # Drawn before either override is applied — the pack override rule: naming
+    # the company or its headquarters must not change what any other stream
+    # draws.
+    suffixes = locale.suffixes_for("insurance") or _INSURER_SUFFIX
+    generated_name = f"{company_rng.choice(names.COMPANY_FIRST)} {company_rng.choice(suffixes)}"
+    generated_hq = names.headquarters(company_rng.derive("hq"), locale=locale)
     company = Company(
         id=company_id,
         name=company_name or generated_name,
         industry=archetype.industry,
-        headquarters=names.headquarters(company_rng.derive("hq")),
+        headquarters=headquarters or generated_hq,
         fiscal_year_start_month=archetype.fiscal_year_start_month,
         currency=archetype.currency,
         currency_unit=archetype.currency_unit,
@@ -285,6 +410,13 @@ def generate(
     )
 
     milestones, founding_facts = founding_milestones(minter, lore, company_id)
+
+    # Appended to the founding facts rather than given a field of their own:
+    # they are canonical facts about people and every consumer already reads
+    # `founding_facts` as "the facts this organisation carries before any
+    # episode runs". Empty unless lore names an accountability, so no shipped
+    # world mints one and every existing corpus is byte-identical.
+    founding_facts = founding_facts + accountability_facts(minter, lore, role_ids)
 
     # The affected book gets a named handle because the episode's error is
     # scoped to it — the role handle the reserving episode refuses to run

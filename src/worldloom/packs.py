@@ -34,6 +34,8 @@ names every commitment whose constraints all miss.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import json
 from pathlib import Path
 from typing import Any, Literal
@@ -41,9 +43,26 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .archetypes import Archetype
+from .doctypes import DocumentType
 from .generators.hierarchy import CategorySpec, SiteFormat, UnitSpec
 from .ids import Minter
 from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
+
+
+#: The marker a *derived* pack leaves where it refused to invent something.
+#:
+#: ``pack_export`` turns a mosaic variant or a probe resolution into a pack, and
+#: neither source knows what the company is called or what it sells. The
+#: alternative to a marker is a plausible noun, which is worse in the one way
+#: that matters: a pack whose company name reads like a company name gets
+#: shipped, and nobody ever learns the tool made it up. A reserved prefix makes
+#: the blank *findable* — ``lint`` names every field still carrying one — so an
+#: unfinished pack is loud rather than merely wrong.
+#:
+#: A prefix rather than an exact sentinel because the marker has to say *what*
+#: is missing ("TODO industry"), and a bare token in six fields tells an author
+#: nothing about which six.
+PLACEHOLDER = "TODO"
 
 
 class PackModel(BaseModel):
@@ -106,14 +125,66 @@ class PackCommitment(PackModel):
 class PackVoice(PackModel):
     """How one role writes: an override of that role's default persona.
 
-    Voice and favourite phrases only — the persona's numeric temperament
-    (optimism, risk tolerance, political awareness) stays the engine's,
-    because those knobs interact with the deliberate-imperfection machinery
-    in ways a pack author cannot see from outside.
+    The persona's numeric temperament (optimism, risk tolerance, political
+    awareness) stays the engine's, because those knobs interact with the
+    deliberate-imperfection machinery in ways a pack author cannot see from
+    outside. Everything else about how a role sounds is authorable here.
+
+    Two shapes, and which one you wrote decides what the build does:
+
+    * **A voice.** Any of ``voice``, ``phrases``, ``sentence_complexity`` or
+      ``technical_depth`` set: the role writes with a *new* persona, cloned
+      from a base with those fields swapped. A clone per role rather than an
+      edit of the shared persona, so voicing the CFO never re-voices everyone
+      who shares the CFO's register. Its id is ``PERSONA-PACK-<ROLE>``
+      (``persona_id_for``) — derivable, and therefore nameable by another role.
+      ``persona`` names the base; omitted, the base is whatever persona the
+      engine gives that role.
+    * **A remap.** ``persona`` alone: the role writes with a persona that
+      already exists — one of the engine's, or the one another role in this
+      pack defined. No clone is minted, because a role that writes in an
+      existing register does not need a second copy of it under a new id.
+
+    Which is how a pack reaches the two things it could not before: *which*
+    persona a role writes with, and a persona of its own that more than one
+    role can share.
+
+    A clone's base must be an engine persona. Temperament is inherited and a
+    pack may not author it, so a clone of a clone would take an engine
+    persona's numbers by a longer route while reading as though it had its
+    own — the build refuses that, and refuses a ``persona`` naming an id no
+    persona has.
     """
 
     voice: str | None = None
     phrases: list[str] = Field(default_factory=list, max_length=4)
+    sentence_complexity: Literal["low", "medium", "high"] | None = None
+    technical_depth: Literal["low", "medium", "high"] | None = None
+    persona: str = Field(default="", pattern=r"^$|^PERSONA-[A-Z0-9-]+$")
+
+    def is_remap(self) -> bool:
+        """Whether this spec only points at a persona that already exists.
+
+        The rule lives here rather than in each org generator because all three
+        read it, and a fourth engine copying a *derived* rule is how the two
+        halves of an override discipline drift apart.
+        """
+        return bool(self.persona) and not (
+            self.voice or self.phrases or self.sentence_complexity or self.technical_depth
+        )
+
+
+def persona_id_for(role: str) -> str:
+    """The id the clone of a voiced *role*'s persona is minted under.
+
+    Published because a remap has to name it: two roles share one authored
+    voice by the second one setting ``persona`` to ``persona_id_for(first)``.
+    The org generators derive the same string; they do not import this module
+    (a generator that imported the pack surface would make packs a dependency
+    of every build, pack or not), so this is the documented half of a shared
+    convention rather than its only definition.
+    """
+    return f"PERSONA-PACK-{role.upper().replace('_', '-')}"
 
 
 class PackNamePools(PackModel):
@@ -169,7 +240,9 @@ class Pack(PackModel):
     override renames the product without relabelling the concept."""
     voices: dict[str, PackVoice] = Field(default_factory=dict)
     """Per-role persona overrides, keyed by the engine's role keys. The
-    highest-leverage texture a pack owns: prose is written in these voices."""
+    highest-leverage texture a pack owns: prose is written in these voices,
+    and — see ``PackVoice`` — an entry either authors a persona for its role
+    or points that role at one that already exists."""
     episode_text: dict[str, str] = Field(default_factory=dict)
     """Overrides of the engine's surface-text templates, keyed by the keys
     ``worldloom pack texts`` lists. This is where a pack re-voices the
@@ -197,6 +270,48 @@ class Pack(PackModel):
     other stream ever reshuffles depending on whether it did. A pool would be
     the wrong shape here; a company has exactly one headquarters, never a
     choice of several."""
+    seasonality: str | dict[str, float] | None = None
+    """The trading year: a profile name, or twelve months of your own.
+
+    ``None`` keeps the engine's general-retail year — a 21% December. Name one
+    of ``worldloom profiles`` (``flat``, ``fiscal_year_end``,
+    ``southern_summer``, ``harvest``, ``retail_christmas``), or supply a
+    ``{"1": 0.9, ... "12": 1.2}`` mapping.
+
+    This is the field that stops a pack quietly being a grocer. ``base`` may
+    only be ``retail`` or ``banking``, so every industry that is neither runs
+    on the retail engine and, until this existed, inherited its trading
+    calendar — which is why this repository's own ``regional-insurer.json``
+    shipped a general insurer whose written premium peaked at Christmas.
+    ``flat`` is the right answer for any business whose revenue is a book
+    rather than a till.
+
+    Twelve months of your own must average one. The index multiplies each
+    month's budget, so a profile averaging 1.05 does not make the year more
+    seasonal — it makes the company five per cent bigger, silently. The
+    validator refuses that rather than letting it through as a plausible
+    revenue line.
+    """
+
+    artifact_types: list[DocumentType] = Field(default_factory=list)
+    """Document types this company files that the engine does not have.
+
+    The fifth thing a pack authors, and the one that was missing for the same
+    reason lore was before packs existed: an artifact type is
+    ``(Authority, Lifecycle)``, a ``timedelta`` and a tuple of ``SectionPlan``,
+    which is data in three tables out of four — but there was no loader, so a
+    model could give a company a name, divisions, books, voices and backstory
+    and could not give it a single document of its own.
+
+    They ride the pack rather than a file of their own, and that is the
+    determinism argument in one line: a pack embeds in the recipe verbatim, so
+    a corpus carrying an authored type rebuilds with the type, in any process,
+    with no file on hand. A ``--doctypes`` flag would be a second thing to
+    remember and a corpus that replays into a different document set when you
+    forget it. See ``worldloom.doctypes`` for the schema, the lint, and why the
+    compiler stays code.
+    """
+
     regions: list[str] = Field(default_factory=list)
     """Region labels for the site estate (``generators/hierarchy.py``'s
     ``region`` field and the site names built from it — e.g. a site named
@@ -231,15 +346,48 @@ def load(source: str | Path | dict[str, Any]) -> Pack:
     return Pack.model_validate(json.loads(text))
 
 
+def seasonality_of(pack: Pack) -> Any:
+    """The pack's trading year, or ``None`` for the engine's own.
+
+    Resolved here rather than in the world constructor so that a bad profile
+    name is a *pack* error, reported by ``worldloom pack check`` alongside
+    every other one, instead of a traceback part-way through a build.
+    """
+    from . import profiles
+
+    if pack.seasonality is None:
+        return None
+    return profiles.from_document(pack.seasonality)
+
+
 def archetype_of(pack: Pack) -> Archetype:
     """The pack's company shape, as the engine's own archetype type.
 
     The key is derived from the pack name so recipes and registries stay
     string-keyed; pack archetypes are not registered globally — a pack travels
     with its corpus rather than living in the process.
+
+    ``authored=True`` is the line that keeps a pack winning. ``Pack.units``
+    names every division, category and site format, and ``vocabulary.spoken``
+    returns an authored archetype untouched — so a corpus built from a pack
+    keeps the author's words whatever else asks for a vocabulary, the same
+    precedence ``Pack.regions`` already has over a locale's region pool.
+
+    **This is also where the pack's authored artifact types are installed**, and
+    the placement is deliberate rather than convenient. It is the one function
+    on the path from any ``Pack`` — loaded from a file, rebuilt from a recipe,
+    or constructed in Python through the SDK — to a world built from it, so a
+    corpus can never be compiled with the types its own pack declared missing.
+    ``load`` would be the obvious home and is the wrong one: ``worldloom pack
+    check`` loads a pack it is only inspecting, and linting a document must not
+    change the process that lints it.
     """
+    from . import doctypes
+
+    doctypes.install(pack.artifact_types)
     return Archetype(
         key=f"pack:{pack.name}",
+        authored=True,
         label=pack.description or pack.name,
         industry=pack.industry,
         currency=pack.currency,
@@ -287,6 +435,35 @@ def lore_of(pack: Pack, minter: Minter) -> tuple[LoreCommitment, ...]:
     )
 
 
+def placeholders(pack: Pack) -> list[str]:
+    """Every field still carrying a ``PLACEHOLDER`` marker, as a JSON path.
+
+    Walks the dumped document rather than naming the fields a derived pack
+    happens to leave blank today: the set of things ``pack_export`` cannot fill
+    in will grow with the schema, and a hand-maintained list of them would go
+    stale silently — which is the failure mode the marker exists to prevent.
+    """
+    found: list[str] = []
+
+    def walk(value: Any, path: str) -> None:
+        if isinstance(value, str):
+            # Case-insensitive because a unit *key* is `^[a-z][a-z0-9_]*$` and
+            # cannot carry the marker in the form every other field does. A key
+            # is as much an author's to name as a label — it becomes role keys
+            # and lore targets — so it has to be findable too.
+            if value.upper().startswith(PLACEHOLDER):
+                found.append(path)
+        elif isinstance(value, Mapping):
+            for key in sorted(value):
+                walk(value[key], f"{path}.{key}" if path else str(key))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                walk(item, f"{path}[{index}]")
+
+    walk(pack.model_dump(), "")
+    return found
+
+
 def lint(pack: Pack) -> list[str]:
     """Advisory findings an author should read before building.
 
@@ -298,6 +475,18 @@ def lint(pack: Pack) -> list[str]:
     from . import domains
 
     findings: list[str] = []
+    # First, and before the engine is even resolved, because an unfinished pack
+    # is a different complaint from a wrong one: an author who reads "lore
+    # target not consulted" on a pack whose company is still called
+    # `TODO name this company` is being told about the second-most-important
+    # thing wrong with it.
+    for path in placeholders(pack):
+        findings.append(
+            f"{path} is still {PLACEHOLDER}-marked — a derived pack fills in what"
+            " its source honestly supplies and marks the rest rather than"
+            " inventing it (`worldloom.pack_export`). This is one of the rest,"
+            " and it will be printed into the corpus verbatim if built as is."
+        )
     domain = domains.by_name(pack.base)
     if domain is None:
         findings.append(
@@ -313,7 +502,13 @@ def lint(pack: Pack) -> list[str]:
                 f"system_brands[{slot!r}] names no {pack.base} system slot —"
                 f" slots: {', '.join(sorted(slots))}"
             )
+    # Only the roles whose specs author a voice mint a persona id; a remap
+    # naming any other `PERSONA-PACK-` id is pointing at nothing.
+    minted = {
+        persona_id_for(role) for role, spec in pack.voices.items() if not spec.is_remap()
+    }
     for role in sorted(pack.voices):
+        spec = pack.voices[role]
         known = role in domain.role_keys or any(
             role.endswith(suffix) for suffix in domain.unit_role_suffixes
         )
@@ -323,6 +518,25 @@ def lint(pack: Pack) -> list[str]:
                 f" {', '.join(domain.role_keys)}; per-unit roles end in"
                 f" {', '.join(domain.unit_role_suffixes)} (e.g."
                 f" {pack.units[0].key}{domain.unit_role_suffixes[0]})"
+            )
+        # Whether a `persona` names one of the *engine's* ids cannot be decided
+        # here — no domain publishes its persona ids, and the build refuses an
+        # unknown one by name. What is decidable here is the pack's own
+        # internal consistency, and both of these are fatal at build time, so
+        # naming them in the lint is the difference between an author reading
+        # their mistake and hitting it.
+        if spec.persona in minted and not spec.is_remap():
+            findings.append(
+                f"voices[{role!r}] authors a voice over base {spec.persona!r}, which is"
+                " another role's pack persona — a clone takes its numeric temperament"
+                " from an engine persona, so its base must be one. Name an engine"
+                " persona, or drop the voice fields to make this a plain remap."
+            )
+        elif spec.persona.startswith("PERSONA-PACK-") and spec.persona not in minted:
+            findings.append(
+                f"voices[{role!r}].persona names {spec.persona!r}, which no role in this"
+                " pack defines — a PERSONA-PACK- id exists only for a role whose own"
+                " entry sets voice, phrases, sentence_complexity or technical_depth"
             )
 
     # A pool narrower than the engine's own headcount for this pack recycles a
@@ -356,6 +570,15 @@ def lint(pack: Pack) -> list[str]:
         dict(domain.evaluation_text), pack.evaluation_text, field="evaluation_text"
     ))
 
+    # The pack's own document types, before its lore is read — because the lore
+    # rule below asks whether a `filing/<type>` target names a type that exists,
+    # and "exists" includes the ones this pack is declaring.
+    from . import doctypes
+    from .facets import FILING_PREFIX as _FILING_PREFIX
+
+    findings.extend(doctypes.lint(pack.artifact_types, base=pack.base))
+    authored = {spec.key for spec in pack.artifact_types}
+
     consulted: dict[str, str] = dict(domain.consulted_targets)
     for index, commitment in enumerate(pack.lore):
         hits = 0
@@ -370,10 +593,63 @@ def lint(pack: Pack) -> list[str]:
                         f"lore[{index}]: persona_trait target {constraint.target!r}"
                         " is not ROLE/trait shaped"
                     )
+            elif constraint.kind is ConstraintKind.ACCOUNTABILITY:
+                # Same shape as a persona trait — "role/measure" — and the same
+                # reasoning: whether the role exists is a build-time property of
+                # the engine's role table, so only the shape is checked here.
+                hits += 1 if "/" in constraint.target else 0
+                if "/" not in constraint.target:
+                    findings.append(
+                        f"lore[{index}]: accountability target {constraint.target!r}"
+                        " is not ROLE/measure shaped"
+                    )
             elif constraint.kind is ConstraintKind.TERMINOLOGY:
                 hits += 1  # terminology reaches prose, not a generator switch
-            elif constraint.target in consulted:
+            elif constraint.target.startswith(_FILING_PREFIX):
+                # A filing ask. It is an `artifact_density` constraint at a
+                # `filing/<type>` target (`facets.FILING_PREFIX`), and it is
+                # consulted by every engine — `scenarios.filings` sums it and
+                # `generators.planning` gates on it — but no engine publishes
+                # it in `consulted_targets`, because the target is a namespace
+                # rather than a name and the set of legal keys is the artifact
+                # registry rather than the engine's. Without this branch a pack
+                # that gives its company a document of its own is told the
+                # claim will be "carried, cited, and change nothing", which is
+                # both false and the exact opposite of what happens.
+                #
+                # What *is* checkable is the type. A positive ask for a type
+                # neither the engine declares nor this pack authors plans
+                # nothing; the same claim as `facets.unmet` makes, said where a
+                # pack author will read it. A negative one is left alone for
+                # the reason `facets.unmet` leaves it alone: "this company
+                # files fewer of X" is satisfied by X not existing.
                 hits += 1
+                artifact_type = constraint.target[len(_FILING_PREFIX):]
+                from . import documents
+
+                if (constraint.magnitude or 0.0) > 0.0 and not (
+                    artifact_type in authored or artifact_type in documents.declared_types()
+                ):
+                    findings.append(
+                        f"lore[{index}]: filing target {artifact_type!r} names no"
+                        " artifact type — nothing declares it and this pack does not"
+                        " author it, so the claim resolves, plans nothing, and"
+                        " reports success. Declare it under `artifact_types`, or name"
+                        " one of the engine's."
+                    )
+            elif _consults(constraint.target, consulted):
+                hits += 1
+            else:
+                # Reported per constraint, not only when the whole commitment
+                # misses. The `hits == 0` test below is the weaker claim and was
+                # the only one: a commitment with one persona trait beside three
+                # nonsense targets linted clean, so the three inert ones were
+                # never mentioned to the author who wrote them.
+                findings.append(
+                    f"lore[{index}]: {constraint.kind.value} target"
+                    f" {constraint.target!r} is not consulted by the {pack.base}"
+                    " engine — it will be carried, cited, and change nothing"
+                )
         if hits == 0:
             findings.append(
                 f"lore[{index}] ({commitment.kind.value}: {commitment.assertion[:60]!r}…)"
@@ -390,6 +666,26 @@ def lint(pack: Pack) -> list[str]:
     return findings
 
 
+def _consults(target: str, consulted: Mapping[str, str]) -> bool:
+    """Whether *target* is one the engine reads, allowing for templated keys.
+
+    An engine may publish a target with a placeholder — retail's
+    ``forecast_miss/<unit_key>`` — because the real key is only known once the
+    units are. Exact string equality therefore reported a pack writing
+    ``forecast_miss/grocery`` as inert when ``finance.generate`` genuinely reads
+    it: a false negative in the one tool whose entire job is telling authors
+    what will not work. Matching the prefix before the placeholder is what the
+    corresponding test in `tests/test_packs.py` had been doing all along.
+    """
+    if target in consulted:
+        return True
+    return any(
+        published.index("<") > 0 and target.startswith(published[:published.index("<")])
+        for published in consulted
+        if "<" in published
+    )
+
+
 def to_recipe(pack: Pack) -> dict[str, Any]:
     """The pack as its recipe embedding — plain JSON, carried by the corpus so
     a pack-built world rebuilds with no pack file on hand."""
@@ -397,5 +693,6 @@ def to_recipe(pack: Pack) -> dict[str, Any]:
 
 
 __all__ = [
-    "Pack", "PackCommitment", "PackNamePools", "archetype_of", "lint", "load", "lore_of", "to_recipe",
+    "PLACEHOLDER", "Pack", "PackCommitment", "PackNamePools", "PackVoice", "archetype_of",
+    "lint", "load", "lore_of", "persona_id_for", "placeholders", "to_recipe",
 ]

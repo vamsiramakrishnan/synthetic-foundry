@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .parameters import DEFAULT, Parameters
+from .recipe import locale_of
 from .rng import Rng
 from .scenarios import lore_index
 
@@ -46,6 +48,13 @@ class QuarterlyReserving:
     """
 
     period: str
+    physics: Parameters = DEFAULT
+    """The world physics this quarter's figures are drawn under. A field with
+    a default rather than a ``run`` argument, so it reaches the generators the
+    same way ``period`` does and a caller that has one states it once. How a
+    non-default one arrives from outside — a pack's overrides, carried on the
+    recipe so a replay needs no pack file — is the build's business, not this
+    scenario's."""
 
     def run(self, world: World) -> World:
         from . import insurance_documents
@@ -113,6 +122,7 @@ class QuarterlyReserving:
             rng.derive("triangle"),
             accident_periods=accident_periods,
             risk_margin_policy_pct=risk_margin_policy_pct,
+            physics=self.physics,
         )
         episode = reserving.generate(
             rng.derive("reserving"), minter,
@@ -127,6 +137,12 @@ class QuarterlyReserving:
             text=(world._recipe.get("pack") or {}).get("episode_text") or None,
             existing_philosophy=existing_philosophy,
             existing_margin_policy=existing_margin_policy,
+            # This corpus's own working week — see `MonthEndClose.run`. Every
+            # date the reserving cycle places is the quarter end plus a count of
+            # working days, so without this a Gulf insurer signs off its
+            # triangle on a Friday.
+            calendar=locale_of(world.recipe),
+            physics=self.physics,
         )
 
         intents, errors = insurance_documents.artifact_intents(

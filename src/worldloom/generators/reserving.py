@@ -48,10 +48,11 @@ from collections.abc import Mapping
 
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
+from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import episode_text
 from .finance import previous_periods
-from .operations import _at, business_days_after, period_end
+from .operations import CALENDAR, Calendar, _at, business_days_after, period_end
 from .triangles import TrianglePosition
 
 MONEY = "AUD_millions"
@@ -147,6 +148,8 @@ def generate(
     text: Mapping[str, str] | None = None,
     existing_philosophy: CanonicalFact | None = None,
     existing_margin_policy: CanonicalFact | None = None,
+    calendar: Calendar = CALENDAR,
+    physics: Parameters = DEFAULT,
 ) -> ReservingEpisode:
     """Generate the phase-1 reserving cycle for the quarter ending *period*.
 
@@ -154,6 +157,13 @@ def generate(
     passed in rather than drawn here, the same separation ``regulatory.py``
     keeps from ``capital.py``: this function decides *when* a number enters
     the world and at what authority, never what the number is.
+
+    Which is why ``rng`` and ``physics`` are both accepted and neither is
+    spent: every figure this episode places was drawn in ``triangles``. They
+    are on the signature so a caller forwards to every episode generator
+    identically and a phase-2 draw that does belong here — the next quarter's
+    diagonal deciding whether the split was right — needs no call-site change
+    to reach one.
 
     ``existing_philosophy``/``existing_margin_policy`` are the standing
     facts already on the world's record, if a prior quarter minted them —
@@ -168,8 +178,13 @@ def generate(
     ends = period_end(period)
     prior_period = previous_periods(period, 3)[0]
     prior_ends = period_end(prior_period)
-    bd = lambda n: business_days_after(ends, n)  # noqa: E731 — read as arithmetic
-    prior_bd = lambda n: business_days_after(prior_ends, n)  # noqa: E731
+    # Every date this episode places is `ends` plus a count of *working* days,
+    # so the calendar is the difference between a quarter that closes on a
+    # Thursday and one that closes on a day the company does not work. Defaulted
+    # to the engine's, which is `locales.DEFAULT` by identity, so an insurer
+    # built before a locale could reach here is the bytes it was.
+    bd = lambda n: business_days_after(ends, n, calendar)  # noqa: E731 — read as arithmetic
+    prior_bd = lambda n: business_days_after(prior_ends, n, calendar)  # noqa: E731
 
     lt = roles["cat_lt_liability"]
     claims_sys, actuarial_sys = roles["sys_claims"], roles["sys_actuarial"]

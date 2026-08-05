@@ -49,19 +49,20 @@ from typing import Any
 from . import archetypes as archetype_registry
 from . import validate as validate_module
 from .archetypes import MIDSIZE_ADI, Archetype
-from .generators.operations import business_days_after
 from .ids import Minter
 from .models import (
     Authority,
+    CanonicalFact,
     ConstraintKind,
     Lifecycle,
     LoreCommitment,
     LoreConstraint,
     LoreKind,
 )
+from .parameters import DEFAULT, Parameters
 from .rng import Rng
 from .validate import RECONCILIATION_TOLERANCE, Violation
-from .world import World
+from .world import World, extend_lore
 
 # Imported for its side effect: registering banking's artifact types with the
 # document compiler. Kept at module scope so that importing `worldloom.banking`
@@ -83,6 +84,9 @@ FILING_TYPES = frozenset({"capital_return"})
 #: The lore targets this engine's generators consult — the pack author's
 #: contract, same as ``retail.CONSULTED_TARGETS``. Each entry names its reader.
 CONSULTED_TARGETS: tuple[tuple[str, str], ...] = (
+    ("<role_key>/<fact_kind>",
+     "an accountability: mints the fact saying this role answers for that measure"
+     " (org_builder.accountability_facts)"),
     ("data_quality_incident/collateral",
      "tags the reconciliation break and the confirmed cause (regulatory.generate)"),
     ("collateral_mapping_change",
@@ -250,6 +254,59 @@ class BankingWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    estate: str | None = None
+    """Grow a technology landscape around the capital-return episode's own four
+    services: ``"small"``, ``"medium"`` or ``"large"``
+    (``landscape.BANKING.profiles``).
+
+    ``None`` mints nothing, which is what keeps every bank built before this
+    field existed byte-identical — the estate appends ids after the core's, and
+    ``Minter`` counts per prefix, so no other entity moves either.
+
+    The vocabulary is not a knob here: a bank gets banking's, resolved in
+    ``build``. What varies between corpora is how *large* the landscape is,
+    which is what this field says; what the services are called is a property of
+    being a bank."""
+    role_table: tuple[tuple[str, str, str, str | None], ...] | None = None
+    """Who exists in this organisation (``worldloom.roles``).
+
+    ``None`` is the engine's own table, which is what every world built before
+    this field existed used. A supplied one must have passed ``roles.check``:
+    several of its keys are looked up by name in generator code, and a table
+    missing one raises ``KeyError`` part-way through an episode rather than
+    building a different company.
+
+    Carried on the recipe as a whole table rather than as the shape it came
+    from, for the reason the pack is embedded whole: a corpus that could only
+    be rebuilt by whoever still had the probe that derived it would fail the
+    reason recipes exist."""
+
+    physics: Parameters = DEFAULT
+    """The world physics ``build`` draws the organisation from.
+
+    Separate from ``pack`` even though a pack is what will eventually supply it:
+    the ranges are the engine's, a pack states values, and keeping the two
+    fields apart is what lets a world be built at non-default physics with no
+    pack at all. Defaulted, so a world constructed as it always was is the same
+    bytes."""
+
+    lore_claims: tuple[Any, ...] = ()
+    """Lore a set of facet claims commits this bank to (``facets.LoreClaim``).
+    See ``RetailWorld.lore_claims`` — same contract, and ``world.extend_lore``
+    argues where the seam lives and why ``()`` keeps an existing bank
+    byte-identical."""
+
+    locale: Any = None
+    """Where this bank is (``worldloom.locales``). See ``RetailWorld.locale`` —
+    same contract, same precedence, and ``None`` is the Australian default every
+    bank built before this field existed was made of.
+
+    One thing it does not yet reach here, and it is this vertical's alone: the
+    bank's own name. ``banking_org`` draws its second word from
+    ``_BANK_SUFFIX``, a module pool, rather than from
+    ``Locale.suffixes_for("banking")`` — which now exists precisely so it can.
+    Until that draw moves, a Frankfurt bank is named in English rather than
+    misnamed as a Handelsgruppe, which is the honest of the two failures."""
 
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> BankingWorld:
@@ -274,11 +331,18 @@ class BankingWorld:
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
+        from . import locales as locales_module
         from . import recipe as recipe_module
         from .generators import banking_org
 
         rng = Rng(self.seed)
         minter = Minter()
+
+        # Resolved before anything is minted, and refused here rather than
+        # defaulted. See `RetailWorld.build` for the argument; it is the same
+        # one three times because the failure is the same three times.
+        locale = locales_module.resolve(self.locale)
+        archetype = locale.applied_to(self.archetype)
 
         if self.pack is not None:
             from . import packs as packs_module
@@ -286,23 +350,71 @@ class BankingWorld:
             commitments = packs_module.lore_of(self.pack, minter)
         else:
             commitments = lore(minter)
+        # Before `generate`: lore is an input to the organisation, not a
+        # decoration on it. See `world.extend_lore`.
+        recipe = recipe_module.build_recipe(
+            archetype=self.archetype.key,
+            seed=self.seed,
+            employees=self.employees,
+            annual_revenue=self.annual_revenue,
+            pack=self.pack,
+            estate=self.estate,
+            physics=self.physics,
+            role_table=self.role_table,
+            # What it was given, not what it resolved to — `RetailWorld.build`.
+            locale=self.locale,
+        )
+        commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = banking_org.generate(
             rng.derive("organisation"), minter,
-            archetype=self.archetype, lore=commitments,
+            archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
             voices=dict(self.pack.voices) if self.pack is not None else None,
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
+            locale=locale,
+            physics=self.physics,
+            role_table=self.role_table,
         )
+
+        systems, services = org.systems, org.services
+        if self.estate is not None:
+            from .generators import estate as estate_module
+            from .landscape import BANKING
+
+            # Appended after the core, never mixed into it. The capital-return
+            # episode's causality runs through `collateral-valuation-sync` and
+            # `rwa-capital-engine` — a generated service may depend on either,
+            # neither's own `depends_on` is ever edited. See
+            # `generators/estate.py`; `generators/organisation.py` does the same
+            # thing for retail, and the two would be one call if this module
+            # could reach inside `banking_org`.
+            grown = estate_module.generate(
+                rng.derive("estate"), minter,
+                profile=self.estate,
+                landscape=BANKING,
+                core_services=org.services,
+                core_systems=org.systems,
+                # The two roles that already own this bank's own services. A
+                # bank has no "platform engineer" the way retail does, and
+                # handing service ownership to the regulatory reporting manager
+                # or the treasurer is the kind of detail that makes a corpus
+                # read as generated.
+                owner_ids=estate_module.owners(
+                    org.roles, "platform_lead", "platform_senior",
+                ),
+            )
+            systems = (*systems, *grown.systems)
+            services = (*services, *grown.services)
 
         return World(
             company=org.company,
             _business_units=org.business_units,
             _people=org.people,
-            _systems=org.systems,
-            _services=org.services,
+            _systems=systems,
+            _services=services,
             _cost_centres=org.cost_centres,
             _categories=org.categories,
             _sites=org.sites,
@@ -314,16 +426,10 @@ class BankingWorld:
             seed=self.seed,
             _roles=org.roles,
             _minter=minter,
-            _annual_revenue=self.annual_revenue or self.archetype.annual_revenue,
-            _archetype=self.archetype,
+            _annual_revenue=self.annual_revenue or archetype.annual_revenue,
+            _archetype=archetype,
             _generator_version=worldloom_version,
-            _recipe=recipe_module.build_recipe(
-                archetype=self.archetype.key,
-                seed=self.seed,
-                employees=self.employees,
-                annual_revenue=self.annual_revenue,
-                pack=self.pack,
-            ),
+            _recipe=recipe,
         )
 
 
@@ -377,6 +483,24 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # Citing only the corrected figures would make the correction unverifiable
     # from the document: the pair (superseded, superseding) is what says which
     # figures moved.
+    #
+    # These three read `facts` and nothing about the entry, so they are computed
+    # once instead of once per restatement. Not a tidy-up: at 11,264 artifacts
+    # this module was 94% of `validate`'s whole runtime, and this loop's two
+    # full-collection scans were 33 seconds of it. `Collection` is immutable and
+    # `facts` is a snapshot list, so hoisting cannot change an answer — the same
+    # argument `_Validator.__init__`'s binding rests on.
+    earliest_confirmed_cause = min(
+        (f.valid_from for f in facts
+         if f.kind == "ops.cause" and f.authority is Authority.CONFIRMED),
+        default=None,
+    )
+    # The books that genuinely moved: the ones whose corrected fact supersedes
+    # a filed one. A property of the world, not of any one restatement.
+    moved_books = {
+        f.subject for f in facts
+        if f.kind == "capital.rwa_by_book" and f.supersedes
+    }
     for entry in world.artifacts:
         if not entry.restates or entry.artifact_type not in FILING_TYPES:
             continue
@@ -402,12 +526,10 @@ def _checks(world: World) -> tuple[list[Violation], int]:
 
         # -- (c) corrections follow confirmation ---------------------------
         checks += 1
-        confirmed = [
-            f for f in facts
-            if f.kind == "ops.cause" and f.authority is Authority.CONFIRMED
-            and f.valid_from <= entry.created_at
-        ]
-        if not confirmed:
+        # "some confirmed cause existed by then" is a question about the
+        # *earliest* one, so the list this used to build was thrown away except
+        # for its emptiness.
+        if earliest_confirmed_cause is None or earliest_confirmed_cause > entry.created_at:
             fail("correction_before_confirmation", entry.id,
                  "was created before any confirmed cause existed — a restatement"
                  " lodged ahead of its own root cause is a correction guessing")
@@ -424,13 +546,10 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                  f" covered {sorted(periods(originally))}")
 
         # -- (e) the correction is scoped to the error ----------------------
-        # Books that genuinely moved are the ones whose corrected fact
-        # supersedes a filed one. A restatement citing a *new* figure for any
-        # other book would be a second, unexplained correction.
-        moved_books = {
-            f.subject for f in facts
-            if f.kind == "capital.rwa_by_book" and f.supersedes
-        }
+        # `moved_books` is hoisted above: a restatement citing a *new* figure
+        # for a book that never moved would be a second, unexplained correction,
+        # and which books moved is a fact about the world rather than about this
+        # restatement.
         for new_id in sorted(cited - originally):
             fact = by_id.get(new_id)
             if fact is None or fact.kind != "capital.rwa_by_book":
@@ -493,6 +612,28 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # observation supersedes nothing (`generators/regulatory.generate`) — so
     # gaplessness is demanded inside a chain and never expected between
     # chains, which is where the corpus actually has no observations at all.
+    #
+    # And "the next business day" is asked of *this corpus's* calendar rather
+    # than of the engine's. It was `business_days_after`'s two-argument form,
+    # which is Monday-to-Friday with no holiday table — so this check computed
+    # an Australian answer for a bank wherever it was, and a Gulf treasury's
+    # correct Sunday-to-Thursday series would have been failed for a gap that is
+    # its weekend. A validator that fails a correct world is worse than one that
+    # misses a bad one: it teaches the author to distrust the gate.
+    #
+    # The consequence today runs the other way and is worth knowing before
+    # reading a failure. `regulatory.generate` still calls `liquidity.generate`
+    # on the default calendar (`generators/liquidity.py` names that gap), so a
+    # bank built with `locale="gulf"` produces observations on Fridays and none
+    # on Sundays, and this check now says so instead of agreeing with it. That
+    # failure is true — the series really is on the wrong days — and it is the
+    # only thing in the corpus that reports the locale never reached the
+    # episode generator. It goes away when that one argument is passed, not
+    # when this check is loosened.
+    from . import recipe as recipe_module
+
+    calendar = recipe_module.locale_of(world.recipe)
+
     lcr_by_id = {f.id: f for f in facts if f.kind == "liquidity.lcr"}
     next_in_chain = {f.supersedes: f for f in lcr_by_id.values() if f.supersedes}
     chain_starts = sorted(
@@ -503,7 +644,7 @@ def _checks(world: World) -> tuple[list[Violation], int]:
         while earlier.id in next_in_chain:
             later = next_in_chain[earlier.id]
             checks += 1
-            expected = business_days_after(earlier.valid_from.date(), 1)
+            expected = calendar.business_days_after(earlier.valid_from.date(), 1)
             if later.valid_from.date() != expected:
                 fail("liquidity_cadence_gap", later.id,
                      f"follows {earlier.valid_from.date().isoformat()} but is dated"
@@ -525,13 +666,22 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # them), so with two quarters they stay open simultaneously — matching
     # `holds_at` alone without the period filter double-counts them against
     # a total that only ever meant its own quarter's books.
+    # Bucketed by period in one pass rather than re-scanned per total. With Q
+    # quarters there are Q totals and Q x B books, so the old shape was O(Q x N)
+    # and this loop alone was 38 seconds of an 82-second validate at 1,024
+    # periods. `holds_at` still runs per candidate, because *that* filter is
+    # genuinely about the total's own instant; only the period filter is a
+    # property the fact carries and can therefore be indexed.
+    books_by_period: dict[str | None, list[CanonicalFact]] = {}
+    for fact in facts:
+        if fact.kind == "capital.rwa_by_book" and fact.value:
+            books_by_period.setdefault(fact.period, []).append(fact)
+
     for total in (f for f in facts if f.kind == "capital.rwa_total"
                   and f.authority is Authority.SYSTEM_OF_RECORD and f.value):
         books = [
-            f for f in facts
-            if f.kind == "capital.rwa_by_book" and f.value
-            and f.period == total.period
-            and f.holds_at(total.valid_from)
+            f for f in books_by_period.get(total.period, ())
+            if f.holds_at(total.valid_from)
         ]
         if not books:
             continue
@@ -547,17 +697,27 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # above applies to the capital and RWA amounts a ratio is derived from,
     # once a second quarter's own (also never-superseded, for the same
     # reason) amounts can otherwise be picked up alongside the first's.
-    capital_amounts = [f for f in facts if f.kind == "capital.cet1_capital" and f.value]
-    rwa_totals = [f for f in facts if f.kind == "capital.rwa_total"
-                  and f.authority is Authority.SYSTEM_OF_RECORD and f.value]
+    # Same bucketing, same reason: a ratio is checked against the amounts in its
+    # *own* period, so period is an index key and only `holds_at` needs a scan.
+    capital_by_period: dict[str | None, list[CanonicalFact]] = {}
+    rwa_by_period: dict[str | None, list[CanonicalFact]] = {}
+    for fact in facts:
+        if fact.kind == "capital.cet1_capital" and fact.value:
+            capital_by_period.setdefault(fact.period, []).append(fact)
+        elif (fact.kind == "capital.rwa_total" and fact.value
+              and fact.authority is Authority.SYSTEM_OF_RECORD):
+            rwa_by_period.setdefault(fact.period, []).append(fact)
+
     for ratio in (f for f in facts
                   if f.kind in ("capital.cet1_ratio", "capital.cet1_ratio_as_filed")
                   and f.authority is Authority.SYSTEM_OF_RECORD and f.value):
         capital_at = [
-            f for f in capital_amounts if f.period == ratio.period and f.holds_at(ratio.valid_from)
+            f for f in capital_by_period.get(ratio.period, ())
+            if f.holds_at(ratio.valid_from)
         ]
         rwa_at = [
-            f for f in rwa_totals if f.period == ratio.period and f.holds_at(ratio.valid_from)
+            f for f in rwa_by_period.get(ratio.period, ())
+            if f.holds_at(ratio.valid_from)
         ]
         if not capital_at or not rwa_at:
             continue
@@ -615,6 +775,7 @@ from .generators.regulatory import TEXT as _BANKING_TEXT  # noqa: E402
 register_domain(Domain(
     name="banking",
     archetype_keys=BANKING_ARCHETYPES,
+    default_archetype="midsize_adi",
     world=BankingWorld,
     single_episode=QuarterlyCapitalReturn,
     # A period is always the quarter-end month: three consecutive `--periods`

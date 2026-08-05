@@ -88,6 +88,19 @@ class Outcome:
     evaluation_type: EvaluationType
     passed: bool
     detail: str
+    reachable: bool = True
+    """Whether *any* passage in the pool carries the facts this case expects.
+
+    Not a grade — a statement about the corpus. A case whose evidence is in an
+    artifact nobody has written yet cannot be passed by any retriever, so
+    reporting it as a failure describes the ranker when the sentence belongs to
+    the corpus. It went unnoticed for as long as it did because both readings
+    print the same digit: `citation_required 0/3` in five worlds looked like a
+    difficult family and was three cases citing prose that did not exist.
+
+    Abstention cases are always reachable: they expect no evidence, so there is
+    none to be missing.
+    """
 
 
 @dataclass
@@ -110,6 +123,24 @@ class Scorecard:
             entry[1] += 1
         return {kind: (passed, total) for kind, (passed, total) in tally.items()}
 
+    def unreachable_by_type(self) -> dict[EvaluationType, int]:
+        """``{type: cases whose evidence is in no passage at all}``.
+
+        Reported beside `by_type` rather than deducted from it, because the two
+        are different claims and a reader deserves both: the score is what a
+        retriever achieved on this corpus, and this is how much of the corpus
+        it was possible to achieve anything on.
+        """
+        tally: dict[EvaluationType, int] = {}
+        for outcome in self.outcomes:
+            if not outcome.reachable:
+                tally[outcome.evaluation_type] = tally.get(outcome.evaluation_type, 0) + 1
+        return tally
+
+    @property
+    def unreachable(self) -> int:
+        return sum(1 for outcome in self.outcomes if not outcome.reachable)
+
     @property
     def passed(self) -> int:
         return sum(1 for outcome in self.outcomes if outcome.passed)
@@ -120,10 +151,19 @@ class Scorecard:
     def __str__(self) -> str:
         label = "Baseline" if self.retriever == "bm25" else self.retriever.upper()
         lines = [f"{label} retrieval @{self.k}", "─" * 52]
+        blocked = self.unreachable_by_type()
         for kind, (passed, total) in sorted(self.by_type().items(), key=lambda i: i[0].value):
             bar = "█" * round(10 * passed / total) if total else ""
-            lines.append(f"  {kind.value:<24} {passed:>2}/{total:<3} {bar}")
+            note = f"  ← {blocked[kind]} unanswerable here" if kind in blocked else ""
+            lines.append(f"  {kind.value:<24} {passed:>2}/{total:<3} {bar}{note}")
         lines += ["─" * 52, f"  {'overall':<24} {self.passed:>2}/{len(self):<3}"]
+        if self.unreachable:
+            # Said once, loudly, at the bottom: a score computed over cases that
+            # cannot be passed is not a harder score, it is a smaller one.
+            lines.append(
+                f"  {self.unreachable} case(s) cite evidence no passage carries —"
+                " narrate the corpus before reading these numbers as difficulty"
+            )
         return "\n".join(lines)
 
     def __repr__(self) -> str:
@@ -161,22 +201,55 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
     index = index_cls([passage.text for passage in pool])
     cases = list(world.evaluations)
 
+    # Rank every case once. This used to happen twice — `rank(question,
+    # limit=1)` in the calibration pass below and `rank(question, limit=k)` in
+    # the grading loop — which is the same accumulation over the same postings
+    # for the same query, done again to read one number off the front of it. On
+    # a 96-period corpus that was half of the command's whole cost.
+    #
+    # The calibration is unchanged, not approximated: `rank` returns
+    # best-score-first, and a top-1 call agrees with a top-k call on the top
+    # element for every k >= 1 — including when the top score is zero, where
+    # both return an empty list because the `> 0.0` filter is applied per pair.
+    ranked_by_case = [index.rank(case.question, limit=k) for case in cases]
+
     # Calibrate the abstention threshold on the answerable questions, so it
     # reflects this corpus rather than a number chosen in advance.
     tops = []
-    for case in cases:
+    for case, ranked in zip(cases, ranked_by_case):
         if case.expects_abstention:
             continue
-        ranked = index.rank(case.question, limit=1)
         if ranked:
             tops.append(ranked[0][1])
     tops.sort()
     median = tops[len(tops) // 2] if tops else 0.0
     floor = median * ABSTENTION_FRACTION
 
+    # Which passages carry which fact. Computed once, before the loop, because
+    # it is a property of the corpus rather than of a case — and because asking
+    # it per case over the whole pool is the quadratic shape `similarity.py`
+    # exists to avoid. The authority branch below asked exactly that question,
+    # `[p for p in pool if set(case.expected_fact_ids) & p.fact_ids]`, once per
+    # case — and rebuilt the expected-fact set once per *passage*, since the
+    # `set(...)` sits inside the comprehension's condition.
+    #
+    # Each fact's positions come out ascending without a sort because the loop
+    # walks the pool in order; the inner iteration is over a frozenset and its
+    # order reaches nothing, which is the property that matters here — the only
+    # readings taken below are a maximum and an emptiness test, neither of which
+    # can see the order it was given.
+    passages_by_fact: dict[str, list[int]] = {}
+    for position, passage in enumerate(pool):
+        for fact_id in passage.fact_ids:
+            passages_by_fact.setdefault(fact_id, []).append(position)
+
+    # Every fact any passage carries — the key set of the index above, which is
+    # the same set the previous comprehension built and one fewer pass over the
+    # pool to build it.
+    carried_anywhere = set(passages_by_fact)
+
     card = Scorecard(k=k, retriever=retriever)
-    for case in cases:
-        ranked = index.rank(case.question, limit=k)
+    for case, ranked in zip(cases, ranked_by_case):
         found = [pool[position] for position, _ in ranked]
         best = ranked[0][1] if ranked else 0.0
 
@@ -207,7 +280,18 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
                 detail = "top hit predates the cut-off and carries the fact"
 
         elif case.evaluation_type is EvaluationType.AUTHORITY_RESOLUTION:
-            carrying = [p for p in pool if set(case.expected_fact_ids) & p.fact_ids]
+            # The authority ranks of every passage carrying any expected fact,
+            # read off the index instead of re-scanning the pool. A passage
+            # carrying two of the expected facts appears twice here where the
+            # old list held it once; that is invisible to both readings taken
+            # from it — `max` of a multiset is the `max` of its set, and a
+            # multiset is empty exactly when its set is — and deduplicating
+            # would cost a pass to produce an identical answer.
+            carrying = [
+                pool[position].authority_rank
+                for fact_id in case.expected_fact_ids
+                for position in passages_by_fact.get(fact_id, ())
+            ]
             if not carrying or not found:
                 passed, detail = False, "no passage carries the expected fact"
             else:
@@ -219,7 +303,7 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
                 # scored as authority resolution while carrying none of the
                 # answer. Resolving authority means surfacing the document the
                 # answer actually rests on, at the standing the answer needs.
-                best_rank = max(p.authority_rank for p in carrying)
+                best_rank = max(carrying)
                 top = found[0]
                 answers = bool(set(case.expected_fact_ids) & top.fact_ids)
                 passed = top.authority_rank >= best_rank and answers
@@ -233,7 +317,16 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
             missing = sorted(set(case.expected_fact_ids) - {f for p in found for f in p.fact_ids})
             detail = "covered" if passed else f"missed {missing[:3]}"
 
-        card.outcomes.append(Outcome(case.id, case.evaluation_type, passed, detail))
+        # `passed or ...`, and the first clause is not redundant: the authority
+        # branch grades on *intersection* with the expected facts while this
+        # tests *containment*, so a case can be graded passed while some
+        # expected fact is carried nowhere. Passing is proof enough that the
+        # case was answerable, and reporting it as both would be a scorecard
+        # arguing with itself.
+        reachable = (passed or case.expects_abstention
+                     or set(case.expected_fact_ids) <= carried_anywhere)
+        card.outcomes.append(
+            Outcome(case.id, case.evaluation_type, passed, detail, reachable))
 
     return card
 

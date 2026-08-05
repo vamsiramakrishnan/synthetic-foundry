@@ -230,6 +230,78 @@ def _check_impossible_density(registry: tuple[ComponentSpec, ...]) -> list[Audit
     return findings
 
 
+#: How many rows of evidence a beat is checked for coverage at. Zero is the
+#: whole reason this check exists — every hole a real corpus has actually hit
+#: was at zero, because `compose.plan_from_ir` derives a beat's row count from
+#: `ArtifactSection.fact_ids`, and a workbook sheet's facts live on the table
+#: *cells* rather than the section, so a fully-populated sheet arrives as a beat
+#: with no rows at all (see `xlsx.report_sheet`'s note in `components.py`). One
+#: and two catch the components that floor at three without pretending to
+#: enumerate every count: this check reports a hole, and a hole at 0-2 rows is
+#: already something to go and look at.
+_COVERAGE_ROW_POINTS = (0, 1, 2)
+
+
+def _check_role_row_coverage_gap(registry: tuple[ComponentSpec, ...]) -> list[AuditFinding]:
+    """A role a format offers, with no component able to fill it at some row count.
+
+    What breaks, concretely and measured: **every banking corpus and every
+    insurance corpus** this repository could build crashed `worldloom diversity`
+    outright, because `capital_return`'s "Capital position" sheet is a
+    `position` beat carrying zero rows and the only xlsx-capable `position`
+    component floored at eight. The registry declared a role reachable in a
+    format and then could not spell it. Nothing was checking, and the first
+    thing to notice was a `ValueError` from `compose` naming a beat, three
+    layers away from the declaration that caused it — the same "the real defect
+    is upstream and static" shape this whole module exists for.
+
+    Reported only for a ``(role, format)`` pair some component in *registry*
+    already claims. A role simply not offered in a format is not a gap: nothing
+    says `decision` has to be spellable in a workbook, and reporting every
+    absent combination would emit hundreds of findings about a vocabulary
+    nobody asked to be total.
+
+    A **warning**, on the module docstring's own line. The gap is provable, but
+    "unsatisfiable" would require knowing that some plan will ask for this
+    exact ``(role, format, density, rows)`` — and static analysis of the
+    registry has no view of what a future plan names, which is precisely the
+    argument `unreachable_component` records. What is provable is the weaker,
+    still-actionable fact: if a plan does ask, this is where it will fail.
+    """
+    findings = []
+    # Sorted rather than walked in registry order: a finding is emitted per
+    # (role, format) pair, and both come out of `frozenset`s, so anything but an
+    # explicit sort would let set iteration order into the output — which the
+    # `audit()` docstring promises it never does.
+    pairs = sorted(
+        {(role, fmt) for spec in registry for role in spec.semantic_roles for fmt in spec.supported_formats}
+    )
+    for role, fmt in pairs:
+        candidates = [
+            spec for spec in registry
+            if role in spec.semantic_roles and fmt in spec.supported_formats
+        ]
+        for profile, density in sorted(_PROFILE_POINTS.items()):
+            gaps = [
+                rows for rows in _COVERAGE_ROW_POINTS
+                if not any(spec.fits(fmt=fmt, density=density, rows=rows) for spec in candidates)
+            ]
+            if gaps:
+                findings.append(
+                    AuditFinding(
+                        code="role_row_coverage_gap",
+                        subject=f"{role}/{fmt}",
+                        detail=(
+                            f"{len(candidates)} component(s) declare role {role!r} in format"
+                            f" {fmt!r}, but none fits at density {density} ({profile}) with"
+                            f" {gaps} row(s) — a plan whose beat lands there cannot be composed"
+                        ),
+                        severity=WARNING,
+                    )
+                )
+    return findings
+
+
 def _check_contradictory_rows(registry: tuple[ComponentSpec, ...]) -> list[AuditFinding]:
     """min_rows > max_rows.
 
@@ -588,6 +660,7 @@ def audit(
         *_check_unsatisfiable_precondition(active_registry),
         *_check_unreachable_component(active_registry, active_grammars),
         *_check_impossible_density(active_registry),
+        *_check_role_row_coverage_gap(active_registry),
         *_check_contradictory_rows(active_registry),
         *_check_asymmetric_incompatibility(active_registry),
         *_check_duplicate_component_id(active_registry),
