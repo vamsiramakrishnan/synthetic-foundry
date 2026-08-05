@@ -2307,6 +2307,29 @@ def mosaic(
         None, "--incident/--no-incident",
         help="Force the operational incident. Omit to let each world's seed and lore decide.",
     ),
+    narrate: bool = typer.Option(
+        True, "--narrate/--no-narrate",
+        help=(
+            "Write the prose every section is waiting for, with the built-in "
+            "deterministic provider — no network, no key, no spend. On by "
+            "default, unlike `build --narrate`: an un-narrated world compiles "
+            "fifteen artifacts of which three carry a retrievable passage, so "
+            "a third of its evaluation cases cite evidence that is in no "
+            "passage at all and every score read off them is about the ranker "
+            "when the sentence belongs to the corpus. `--no-narrate` writes "
+            "the plan-only corpora this command used to write, for a caller "
+            "who wants the shapes and will narrate them another way."
+        ),
+    ),
+    formats: list[str] = typer.Option(
+        None, "--format", "-f",
+        help=(
+            "Render every world to these formats. Repeatable. Separate from "
+            "--narrate on purpose: prose is what makes a corpus measurable and "
+            "files are what make it readable, and only the first is a "
+            "correctness question. Omit to leave the corpora as IR."
+        ),
+    ),
     probe_file: Path = typer.Option(
         None, "--probe",
         help=(
@@ -2337,6 +2360,9 @@ def mosaic(
     furthest apart are chosen by farthest-point traversal. Deterministic: the
     same request gives the same mosaic, and each world carries a recipe that
     rebuilds it on its own.
+
+    Every world is narrated as it is built, so what lands on disk is a corpus
+    rather than a plan. `--no-narrate` gives back the plans.
 
     `--describe` prints the axes without building anything, which is the right
     first call — deciding whether five worlds are worth the wait should not
@@ -2401,6 +2427,8 @@ def mosaic(
     from dataclasses import replace as _replace_spec
 
     from . import archetypes, domains
+    from .narrative import DeterministicProvider, ProviderError
+    from .render import RenderError
     from .scenarios import MonthEndClose
 
     # The domain names its own archetype. Core may not hold a map from a
@@ -2415,7 +2443,18 @@ def mosaic(
     domain = registered
     shape = archetypes.get(domain.default_archetype)
 
+    # One provider for the whole mosaic, and that is not a shared-state hazard:
+    # `DeterministicProvider` reads a request and a fact table and holds nothing
+    # between calls but a counter, so five worlds through one instance and five
+    # worlds through five instances write the same bytes. The test asserts that
+    # rather than trusting it — a provider that *did* carry state would make
+    # world 5 depend on world 1 having been built, which is the one thing a
+    # mosaic must never do (world N is reproducible without worlds 1..N-1).
+    provider = DeterministicProvider()
+
     written: list[str] = []
+    narrated_sections = 0
+    unhealthy = 0
     for variant in variants:
         # `speaks` gives the variant its own division, category and site-format
         # names (`worldloom.vocabulary`) without touching a share, a margin or a
@@ -2449,19 +2488,56 @@ def mosaic(
                     seasonality=variant.seasonality,
                 )
             world = world.run(episode)
+
+        # Narrate before export, so what lands on disk is a corpus rather than
+        # a plan. Until this line a mosaic world reached disk as artifact
+        # *intents* — the sections were never compiled, let alone written — and
+        # a directory of those is indistinguishable from a finished one to
+        # anything except the measurement: `evaluate.score` grades a case whose
+        # evidence lives in unwritten prose as a failure, and five worlds of
+        # them read as a hard benchmark.
+        sections = 0
+        if narrate:
+            try:
+                world = world.narrate(provider)
+            except ProviderError as exc:
+                err.print(f"[red]error:[/red] world {variant.index}: {escape(str(exc))}")
+                raise typer.Exit(code=2) from exc
+            sections = world._narration[0]
+            narrated_sections += sections
+
+        # After narration, never before: `render` compiles if it must, and a
+        # render that ran first would freeze the empty sections into the IR the
+        # narration then had to be threaded back into.
+        if formats:
+            try:
+                world = world.render(*formats)
+            except RenderError as exc:
+                err.print(f"[red]error:[/red] world {variant.index}: {escape(str(exc))}")
+                raise typer.Exit(code=2) from exc
+
         target = out / f"world-{variant.index:02d}"
         written.append(str(world.export(target, overwrite=True)))
         report = world.validate()
         mark = "[green]✓[/green]" if report.ok else "[red]✗[/red]"
+        unhealthy += 0 if report.ok else 1
         console.print(f"{mark} [bold]world {variant.index}[/bold] {escape(variant.summary())}"
                       f" [dim]— {report.checks_run} checks,"
-                      f" {len(report.violations)} violation(s)[/dim]")
+                      f" {len(report.violations)} violation(s)"
+                      + (f", {sections} section(s) written" if narrate else "")
+                      + "[/dim]")
         if not report.ok:
             for violation in report.violations[:3]:
                 err.print(f"    [yellow]{violation.code}[/yellow] {escape(violation.detail)}")
 
+    # `narrated` and `formats` ride in the plan because a reader of the
+    # directory — `evaluate.across.load` above all — otherwise has to infer
+    # from a passage count whether a thin corpus is an easy one or an
+    # unfinished one, and those are the two readings this whole change exists
+    # to stop being confusable.
     (out / "mosaic.json").write_text(
-        json.dumps({"seed": seed, "spread": spread,
+        json.dumps({"seed": seed, "spread": spread, "narrated": narrate,
+                    "formats": sorted(formats or ()),
                     "worlds": [v.as_dict() for v in variants]}, indent=2) + "\n",
         encoding="utf-8",
     )
@@ -2469,8 +2545,43 @@ def mosaic(
         f"\n[green]✓[/green] {len(written)} world(s) written under [bold]{out}[/bold]"
         f"\n[dim]{spread['distinct_shapes']} distinct organisation shape(s);"
         f" headcounts {spread['headcounts']}; estates {spread['estates']}."
-        f" The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
+        + (f" {narrated_sections} section(s) of prose written." if narrate else "")
+        + f" The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
     )
+    # Said at the end, where a reader stops, and said as a warning rather than
+    # as a count. `--no-narrate` is a legitimate request and this does not
+    # refuse it; what it refuses is letting the resulting directory be scored
+    # by somebody who did not type the flag. A survey over these corpora
+    # reports missing prose as failed retrieval, and the two print the same
+    # digit.
+    if not narrate:
+        console.print(
+            "[yellow]![/yellow] nothing was narrated: these are plans, and most"
+            " of each world's sections are still awaiting prose."
+            "\n[dim]`worldloom evaluate` and `worldloom.evaluate.across.survey`"
+            " over this directory measure the missing prose, not the"
+            " difficulty. Drop --no-narrate to finish them.[/dim]"
+        )
+    elif unhealthy:
+        # Newly reachable rather than newly broken, and the distinction is
+        # worth the line: `validate` runs the author/audience and manifest
+        # checks over *compiled* artifacts, a plan-only mosaic had none, and so
+        # this whole family of checks scored zero out of zero for as long as
+        # the command stopped at `build`.
+        #
+        # What they find today is one defect, in every world of every engine:
+        # `author_cannot_see_own_artifact`. `roles.from_shape` deals functions
+        # round-robin by position in the reporting tree, so a synthesised
+        # organisation puts the engine's `controller` in Merchandising while
+        # the access policy the planner picks for a finance document names
+        # Finance — the author of the variance memo cannot read it. The corpora
+        # were always like that; compiling them is what made it sayable.
+        console.print(
+            f"[yellow]![/yellow] {unhealthy} of {len(written)} world(s) report"
+            " violations. These are checks a plan-only mosaic never ran, not"
+            " new defects: narrating compiles the artifacts, and the compiled"
+            " artifacts are what the author/audience checks read."
+        )
 
 
 @app.command()

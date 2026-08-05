@@ -221,8 +221,10 @@ Build several companies at once, as unlike each other as the rules allow.
 | `--count`, `-n` | How many worlds. |
 | `--describe` | Print what a mosaic varies, and build nothing. |
 | `--engine`, `-e` | Which vertical to build: retail, banking or insurance. Each varies its own physics — a bank's capital headroom, an insurer's tail length — because a mosaic that moved a retailer's margin through a bank would report varying something it had not. |
+| `--format`, `-f` | Render every world to these formats. Repeatable. Separate from --narrate on purpose: prose is what makes a corpus measurable and files are what make it readable, and only the first is a correctness question. Omit to leave the corpora as IR. |
 | `--incident` | Force the operational incident. Omit to let each world's seed and lore decide. |
 | `--json` | Emit the plan as data. |
+| `--narrate` | Write the prose every section is waiting for, with the built-in deterministic provider — no network, no key, no spend. On by default, unlike `build --narrate`: an un-narrated world compiles fifteen artifacts of which three carry a retrievable passage, so a third of its evaluation cases cite evidence that is in no passage at all and every score read off them is about the ranker when the sentence belongs to the corpus. `--no-narrate` writes the plan-only corpora this command used to write, for a caller who wants the shapes and will narrate them another way. |
 | `--out`, `-o` | Directory to write the worlds into. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Consecutive periods per world. |
