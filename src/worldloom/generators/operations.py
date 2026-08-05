@@ -16,9 +16,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from typing import Protocol
 
+from .. import locales
 from ..ids import Minter
-from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
+from ..models import Authority, CanonicalFact, EnterpriseEvent, FiscalPeriod, Quantity, fiscal_period
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import episode_text
@@ -92,6 +94,40 @@ TEXT: dict[str, str] = {
 }
 
 
+class Calendar(Protocol):
+    """What the close asks of a working calendar.
+
+    A protocol rather than a class of this module's own, because
+    ``locales.Locale`` already answers all three and answering them is most of
+    what a locale *is*. Structural typing here means a caller writes
+    ``generate(..., calendar=locales.GULF)`` with nothing in between — no
+    adapter, no conversion, and no second place where a working week is
+    written down and could disagree with the first.
+
+    Only three members, deliberately. A calendar decides which days exist and
+    where a period sits in the year; it does not decide when the close is due
+    (that is this module's policy, four business days), nor how a date is
+    spelled (ISO, see the locales module on why that stays closed).
+    """
+
+    fiscal_year_start_month: int
+
+    def is_business_day(self, day: date) -> bool: ...
+
+    def business_days_after(self, start: date, count: int) -> date: ...
+
+
+#: The calendar every corpus built before this parameter existed was made on,
+#: and the one every call that does not name a calendar still gets: Monday to
+#: Friday, no public holiday, a July financial year. It is the default *locale*
+#: rather than a constant of this module, so that "the engine's calendar" and
+#: "Australia's calendar" cannot drift apart — they were the same thing by
+#: accident for the whole life of this project and are now the same thing on
+#: purpose. `tests/test_locales.py` pins the equality across 2024-2028 × 1-12
+#: business days, which is what makes swapping the arithmetic byte-neutral.
+CALENDAR: Calendar = locales.DEFAULT
+
+
 @dataclass(frozen=True)
 class CloseEpisode:
     """The events and facts of one month-end close."""
@@ -105,19 +141,40 @@ class CloseEpisode:
     keys: dict[str, str] = field(default_factory=dict)
     """Named handles for facts and events a planner or evaluation needs to cite."""
 
+    fiscal: FiscalPeriod | None = None
+    """Where this close's period sits in the company's financial year.
 
-def business_days_after(start: date, count: int) -> date:
-    """The date *count* business days after *start*, excluding weekends."""
-    current, remaining = start, count
-    while remaining > 0:
-        current += timedelta(days=1)
-        if current.weekday() < 5:
-            remaining -= 1
-    return current
+    Derived, not stored, and carried on the episode rather than minted as a
+    fact: a new fact would take an id from the minter and shift every id after
+    it, which is exactly the byte-for-byte diff CI regenerates a corpus to
+    catch. Optional only so that an episode built by a test that predates the
+    field still constructs; ``generate`` always sets it.
+    """
+
+
+def business_days_after(start: date, count: int, calendar: Calendar = CALENDAR) -> date:
+    """The date *count* business days after *start*, on *calendar*.
+
+    Kept as a module function with its original two-argument call intact,
+    because five other modules import it (``scenarios``, ``banking_scenarios``,
+    ``banking``, ``regulatory``, ``reserving``) and each of them is a
+    single-word change away from taking a calendar of its own. What it no
+    longer is, is the *definition* of a business day: that lived here as
+    ``weekday() < 5`` in three places — here, the escalation below, and
+    ``liquidity.generate`` — with no holiday table anywhere, so a corpus could
+    not have a public holiday even if its pack said which country it was in.
+    """
+    return calendar.business_days_after(start, count)
 
 
 def period_end(period: str) -> date:
-    """The last calendar day of a ``YYYY-MM`` period."""
+    """The last calendar day of a ``YYYY-MM`` period.
+
+    Calendar, and staying calendar, at every fiscal year start. A period's
+    *identity* is its calendar month — see ``models.FiscalPeriod`` for the
+    argument — and the fiscal year decides what that month counts as, not when
+    it ends.
+    """
     year, month = (int(part) for part in period.split("-"))
     first_next = date(year + (month == 12), 1 if month == 12 else month + 1, 1)
     return first_next - timedelta(days=1)
@@ -160,6 +217,7 @@ def generate(
     prior_incident_periods: tuple[str, ...] = (),
     text: Mapping[str, str] | None = None,
     money_unit: str = MONEY,
+    calendar: Calendar = CALENDAR,
     physics: Parameters = DEFAULT,
 ) -> CloseEpisode:
     """Generate the close, and an incident if lore and the seed conspire.
@@ -169,6 +227,15 @@ def generate(
     currency (``f"{currency}_{currency_unit}"``); it defaults to the stock
     retail unit so a caller that never sets it reproduces every corpus this
     engine has ever built.
+
+    ``calendar`` is which days this company works and when its year opens
+    (``worldloom.locales``). It decides *dates*, not policy: the close is due
+    four business days after month end everywhere, and "four business days"
+    resolves to 4 September in Sydney and 6 September in Dubai for the August
+    2026 close — the same commitment, a different Tuesday-through-Friday. The
+    default is the Monday-to-Friday, no-holiday calendar every corpus this
+    engine has built was made on, so an un-named calendar reproduces them byte
+    for byte.
     """
     t = episode_text.merged(TEXT, text)
     events: list[EnterpriseEvent] = []
@@ -176,8 +243,8 @@ def generate(
     keys: dict[str, str] = {}
 
     ends = period_end(period)
-    day1 = business_days_after(ends, 1)
-    due = business_days_after(ends, 4)
+    day1 = calendar.business_days_after(ends, 1)
+    due = calendar.business_days_after(ends, 4)
 
     incident_lore = lore_by_target.get("data_quality_incident/inventory", [])
     calendar_lore = lore_by_target.get("close_cycle_time", [])
@@ -210,12 +277,12 @@ def generate(
                                incident_lore=incident_lore, calendar_lore=calendar_lore,
                                ownership_lore=ownership_lore, previous_event=start,
                                prior_incident_periods=prior_incident_periods, t=t,
-                               money_unit=money_unit, physics=physics)
+                               money_unit=money_unit, calendar=calendar, physics=physics)
         events.extend(chain["events"])
         facts.extend(chain["facts"])
         keys.update(chain["keys"])
         delay_days = 1
-        finalised_day = business_days_after(ends, 5)
+        finalised_day = calendar.business_days_after(ends, 5)
 
     finalised_at = _at(finalised_day, 16, 40)
     finalised = EnterpriseEvent(
@@ -255,6 +322,7 @@ def generate(
     return CloseEpisode(
         events=tuple(events), facts=tuple(facts), finalised_at=finalised_at,
         close_event_id=finalised.id, had_incident=had_incident, delay_days=delay_days, keys=keys,
+        fiscal=fiscal_period(period, calendar.fiscal_year_start_month),
     )
 
 
@@ -279,6 +347,7 @@ def _incident_chain(
     incident_lore: list[str], calendar_lore: list[str], ownership_lore: list[str],
     previous_event: EnterpriseEvent, prior_incident_periods: tuple[str, ...] = (),
     t: Mapping[str, str] = TEXT, money_unit: str = MONEY,
+    calendar: Calendar = CALENDAR,
     physics: Parameters = DEFAULT,
 ) -> dict:
     """The eight-step incident: detect, triage, be wrong, be corrected, work around, escalate."""
@@ -293,9 +362,16 @@ def _incident_chain(
     confirmed = ruled_out + timedelta(minutes=physics.integer("ops.incident.confirm_minutes", rng))
     worked_around = confirmed + timedelta(minutes=physics.integer("ops.incident.workaround_minutes", rng))
     available = worked_around + timedelta(minutes=physics.integer("ops.incident.recovery_minutes", rng))
-    escalated = _at(day + timedelta(days=1 if (day + timedelta(days=1)).weekday() < 5 else 3), 9, 0)
-    reviewed = _at(business_days_after(day, 2), 11, 0)
-    remediated = _at(business_days_after(day, 2), 14, 0)
+    # Was `day + 1 day, or +3 if that lands on a Saturday` — the third and last
+    # hand-rolled weekend rule in the engine, and the one that hid its
+    # assumption best: `day` is always a business day, so "+1 unless Saturday"
+    # is only ever *next business day* spelled out, and it silently could not
+    # skip a public holiday or a Friday weekend. Identical on the default
+    # calendar; on the Gulf's, a Thursday close escalates on the Sunday, where
+    # the literal put the Group CFO's escalation on a Friday the office is shut.
+    escalated = _at(calendar.business_days_after(day, 1), 9, 0)
+    reviewed = _at(calendar.business_days_after(day, 2), 11, 0)
+    remediated = _at(calendar.business_days_after(day, 2), 14, 0)
 
     affected = physics.integer("ops.incident.affected_records", rng)
     # Left a literal beside the converted draw above: a reference number's
@@ -416,7 +492,7 @@ def _incident_chain(
                            authority=Authority.SYSTEM_OF_RECORD, event=delayed.id, source=erp,
                            period=period, lore=calendar_lore)
     revised = _text(minter, "close.revised_date", company_id,
-                    business_days_after(period_end(period), 5).isoformat(), at=escalated,
+                    calendar.business_days_after(period_end(period), 5).isoformat(), at=escalated,
                     authority=Authority.SYSTEM_OF_RECORD, event=delayed.id, source=erp, period=period)
     classification = _text(minter, "ops.root_cause_classification", hierarchy,
                            t["fact.classification"],
@@ -432,7 +508,7 @@ def _incident_chain(
     impact = CanonicalFact(
         id=minter.next("FACT"), kind="financial.incident_pl_impact", subject=company_id, period=period,
         value=Quantity(amount=0, unit=money_unit),
-        valid_from=_at(business_days_after(period_end(period), 5), 16, 40),
+        valid_from=_at(calendar.business_days_after(period_end(period), 5), 16, 40),
         authority=Authority.SYSTEM_OF_RECORD, source_system=erp, event_id=None,
     )
 

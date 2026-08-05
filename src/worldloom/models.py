@@ -153,6 +153,92 @@ class ErrorType(StrEnum):
 
 
 # ---------------------------------------------------------------------------
+# The fiscal calendar
+# ---------------------------------------------------------------------------
+
+
+class FiscalPeriod(Model):
+    """Where a ``YYYY-MM`` reporting period sits inside a company's own year.
+
+    A period keeps its calendar identity — ``2026-03`` is March 2026 in every
+    world this tool builds, because every renderer prints that string and every
+    narrated sentence says "March". What a fiscal year decides is not what a
+    period *is* but what it *counts as*: which reporting year it falls in, how
+    far into that year it is, and whether it closes a quarter or the year.
+
+    That split is the whole of the fiscal-year design, and it was chosen against
+    the alternative — periods becoming fiscal throughout, so that ``2026-03``
+    would name the ninth month of FY2026 rather than March — for two reasons.
+    The first is that the alternative cannot be made byte-neutral: relabelling
+    periods changes the ``{period}`` in every event summary, every artifact
+    title, and every evaluation question, at *every* fiscal year start including
+    the shipped July. The second is sharper. Under Australia's July year the
+    insurer archetype's shipped valuation period is ``2026-06`` — which is the
+    fiscal **year end**. So any rule that made a year-end period behave
+    differently (a longer hard close, an extra approval, a different due date)
+    would have moved a shipped corpus the day it landed, at the default value,
+    with no locale involved at all. The fiscal year is a frame, not a clock.
+    """
+
+    year: int
+    """The year the fiscal year *ends* in — FY2026 is July 2025 to June 2026
+    under a July start, and the calendar year under a January one. One
+    convention rather than a choice, because the two conventions disagree only
+    for a non-January start and picking per-jurisdiction would mean a corpus
+    could not compare two subsidiaries' FY labels."""
+
+    quarter: int = Field(ge=1, le=4)
+    month: int = Field(ge=1, le=12)
+    """The period's ordinal position in the fiscal year: 1 is the first month of
+    the year, not January. This is the field that makes "quarter" stop being a
+    label a caller typed — ``banking_scenarios`` documents that "the label 'Q1'
+    exists only inside prose" and nothing derives it, which was true because
+    nothing could."""
+
+    @property
+    def is_quarter_end(self) -> bool:
+        return self.month % 3 == 0
+
+    @property
+    def is_year_end(self) -> bool:
+        return self.month == 12
+
+    @property
+    def label(self) -> str:
+        """``FY2026 Q3 P9`` — the coordinates, spelled the way a finance
+        function writes them. Not minted into any fact: a fact carrying this
+        would be a new fact, and a new fact shifts every id the minter hands
+        out after it. Callers that want it can ask."""
+        return f"FY{self.year} Q{self.quarter} P{self.month}"
+
+
+def fiscal_period(period: str, start_month: int) -> FiscalPeriod:
+    """Where ``YYYY-MM`` *period* sits in a fiscal year starting *start_month*.
+
+    Pure arithmetic on the period string, no clock — the rule
+    ``generators.operations.period_end`` and ``finance.previous_periods``
+    already keep, and the reason replay stays byte-identical.
+    """
+    year, month = (int(part) for part in period.split("-"))
+    if not 1 <= month <= 12:
+        raise ValueError(f"{period!r} is not a YYYY-MM period; month {month} does not exist")
+    if not 1 <= start_month <= 12:
+        raise ValueError(f"fiscal_year_start_month {start_month} is not a month")
+    # Months since the fiscal year opened, 0-11. The modulo is what makes a
+    # December start work without a branch: month 1 of a year that opens in
+    # December is December, and January is month 2.
+    offset = (month - start_month) % 12
+    return FiscalPeriod(
+        # `start_month > 1` rather than a bare comparison: under a January start
+        # every month satisfies `month >= start_month`, and without the guard
+        # every calendar year would be labelled as the next one.
+        year=year + (1 if start_month > 1 and month >= start_month else 0),
+        quarter=offset // 3 + 1,
+        month=offset + 1,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Entities
 # ---------------------------------------------------------------------------
 
@@ -168,9 +254,30 @@ class Company(Entity):
     industry: str
     headquarters: str
     fiscal_year_start_month: int = Field(ge=1, le=12)
+    """When this company's financial year opens, 1-12.
+
+    Stored here since the model existed and read by nothing until now — a pack
+    could set it, three org generators copied it, it was written into
+    ``world.json``, and no date, label or comparison anywhere depended on it.
+    ``fiscal`` below is what makes it answerable: the field states the
+    convention, the method applies it."""
+
     currency: str = "AUD"
     currency_unit: str = "thousands"
     employees_total: int = Field(ge=0)
+
+    def fiscal(self, period: str) -> FiscalPeriod:
+        """This company's fiscal coordinates for ``YYYY-MM`` *period*.
+
+        On the company rather than on the locale because a company is the
+        authority on its own year: a German subsidiary of an Australian group
+        keeps the group's July year while working a German week and printing
+        German figures, and a locale that decided the fiscal year would make
+        that world unbuildable. The locale supplies the *default* — see
+        ``locales.Locale.fiscal_year_start_month`` — and the company carries
+        the answer.
+        """
+        return fiscal_period(period, self.fiscal_year_start_month)
 
 
 class BusinessUnit(Entity):
