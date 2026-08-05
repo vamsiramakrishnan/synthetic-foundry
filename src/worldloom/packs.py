@@ -48,6 +48,22 @@ from .ids import Minter
 from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
 
 
+#: The marker a *derived* pack leaves where it refused to invent something.
+#:
+#: ``pack_export`` turns a mosaic variant or a probe resolution into a pack, and
+#: neither source knows what the company is called or what it sells. The
+#: alternative to a marker is a plausible noun, which is worse in the one way
+#: that matters: a pack whose company name reads like a company name gets
+#: shipped, and nobody ever learns the tool made it up. A reserved prefix makes
+#: the blank *findable* — ``lint`` names every field still carrying one — so an
+#: unfinished pack is loud rather than merely wrong.
+#:
+#: A prefix rather than an exact sentinel because the marker has to say *what*
+#: is missing ("TODO industry"), and a bare token in six fields tells an author
+#: nothing about which six.
+PLACEHOLDER = "TODO"
+
+
 class PackModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -380,6 +396,35 @@ def lore_of(pack: Pack, minter: Minter) -> tuple[LoreCommitment, ...]:
     )
 
 
+def placeholders(pack: Pack) -> list[str]:
+    """Every field still carrying a ``PLACEHOLDER`` marker, as a JSON path.
+
+    Walks the dumped document rather than naming the fields a derived pack
+    happens to leave blank today: the set of things ``pack_export`` cannot fill
+    in will grow with the schema, and a hand-maintained list of them would go
+    stale silently — which is the failure mode the marker exists to prevent.
+    """
+    found: list[str] = []
+
+    def walk(value: Any, path: str) -> None:
+        if isinstance(value, str):
+            # Case-insensitive because a unit *key* is `^[a-z][a-z0-9_]*$` and
+            # cannot carry the marker in the form every other field does. A key
+            # is as much an author's to name as a label — it becomes role keys
+            # and lore targets — so it has to be findable too.
+            if value.upper().startswith(PLACEHOLDER):
+                found.append(path)
+        elif isinstance(value, Mapping):
+            for key in sorted(value):
+                walk(value[key], f"{path}.{key}" if path else str(key))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                walk(item, f"{path}[{index}]")
+
+    walk(pack.model_dump(), "")
+    return found
+
+
 def lint(pack: Pack) -> list[str]:
     """Advisory findings an author should read before building.
 
@@ -391,6 +436,18 @@ def lint(pack: Pack) -> list[str]:
     from . import domains
 
     findings: list[str] = []
+    # First, and before the engine is even resolved, because an unfinished pack
+    # is a different complaint from a wrong one: an author who reads "lore
+    # target not consulted" on a pack whose company is still called
+    # `TODO name this company` is being told about the second-most-important
+    # thing wrong with it.
+    for path in placeholders(pack):
+        findings.append(
+            f"{path} is still {PLACEHOLDER}-marked — a derived pack fills in what"
+            " its source honestly supplies and marks the rest rather than"
+            " inventing it (`worldloom.pack_export`). This is one of the rest,"
+            " and it will be printed into the corpus verbatim if built as is."
+        )
     domain = domains.by_name(pack.base)
     if domain is None:
         findings.append(
@@ -556,6 +613,6 @@ def to_recipe(pack: Pack) -> dict[str, Any]:
 
 
 __all__ = [
-    "Pack", "PackCommitment", "PackNamePools", "PackVoice", "archetype_of", "lint", "load",
-    "lore_of", "persona_id_for", "to_recipe",
+    "PLACEHOLDER", "Pack", "PackCommitment", "PackNamePools", "PackVoice", "archetype_of",
+    "lint", "load", "lore_of", "persona_id_for", "placeholders", "to_recipe",
 ]
