@@ -56,9 +56,57 @@ from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
 from .parameters import DEFAULT, Parameters, Span
 
 __all__ = [
-    "Choice", "Facet", "FACETS", "Implication", "LoreClaim", "Resolved", "choices",
-    "claims_from_document", "commit", "describe", "publish", "resolve",
+    "Choice", "Facet", "FACETS", "FILING_PREFIX", "Implication", "LoreClaim",
+    "Resolved", "choices", "claims_from_document", "commit", "describe",
+    "filings_from", "publish", "resolve",
 ]
+
+
+#: The target namespace under which lore names an artifact type rather than a
+#: reporting theme: ``filing/audit_committee_pack``.
+#:
+#: **Why this is an ``ARTIFACT_DENSITY`` constraint and not a new kind.** Which
+#: documents a company files is the same quantity as how much of a theme it
+#: writes, read at a different target. The planner already treats density as an
+#: existence gate at zero — ``if density > 0.0`` is what decides whether a
+#: knowledge article and the per-unit commentaries exist at all — so a filing is
+#: not a new sort of consequence, it is the existing one aimed at something the
+#: planner can name. ``scenarios.density_adjustment`` sums magnitudes per exact
+#: target, which is the right algebra here too: a claim that files a document
+#: and a claim that refuses to (``governance:founder_led`` minutes nothing) net
+#: against each other rather than one of them winning by being read last. A
+#: listed founder-led company loses its minutes and keeps its audit committee
+#: pack, because those are two targets and only one of them is argued about.
+#:
+#: A ``ConstraintKind.FILING_OBLIGATION`` would have been a second spelling of a
+#: quantity ``density_adjustment`` already sums, and would have needed an
+#: addition to a closed enum in ``models.py`` to say nothing the existing kind
+#: cannot. The cost of this choice is that the namespace is a convention rather
+#: than a type: ``filings_from`` below and ``scenarios.filings`` are the two
+#: places that know it, and ``unmet`` is what stops a typo in it from becoming a
+#: silently-dropped claim.
+FILING_PREFIX = "filing/"
+
+
+def filings_from(constraints: Iterable[LoreConstraint]) -> tuple[tuple[str, float], ...]:
+    """Every artifact type *constraints* asks for or refuses, and by how much.
+
+    Order follows the constraints, not a sort: this is read for its content and
+    a caller that needs a stable presentation order can impose one. Magnitudes
+    are *not* summed here — that is ``scenarios.filings``' job, because summing
+    is only meaningful once every commitment a world carries is in scope, and
+    a single facet's constraints are a fragment of that.
+    """
+    return tuple(
+        (constraint.target[len(FILING_PREFIX):], constraint.magnitude or 0.0)
+        for constraint in constraints
+        # `.value ==` rather than `is`, because `scenarios.density_adjustment`
+        # spells the same test that way and these two are the only readers of
+        # this vocabulary. Two readers that disagree about what counts as a
+        # density constraint is a filing that resolves and never gets planned.
+        if constraint.kind.value == ConstraintKind.ARTIFACT_DENSITY.value
+        and constraint.target.startswith(FILING_PREFIX)
+    )
 
 
 #: The lore kinds ``org_builder._MILESTONE_KIND`` can turn into a founding
@@ -298,13 +346,23 @@ FACETS: Mapping[str, Facet] = {
                                  "regulatory_filing_signoff",
                                  "The audit committee reviews before the market"
                                  " sees anything", 1.0),
+                           # The document the sentence above describes. The
+                           # approval chain said the committee reviews; until
+                           # this line nothing said what it reviews *from*, so
+                           # a listed corpus minted an audit chair with an
+                           # empty in-tray.
+                           _lore(ConstraintKind.ARTIFACT_DENSITY,
+                                 FILING_PREFIX + "audit_committee_pack",
+                                 "The Audit and Risk Committee reads a pack"
+                                 " before the market sees the numbers", 1.0),
                        ),
                        wants=("an analyst consensus the company misses or beats",
                               "a continuous-disclosure obligation with a deadline"
                               " the close can breach"),
                        about="Adds the two roles a listed company cannot be"
-                             " without, and the reporting density that follows"
-                             " from a clock it does not control.")),
+                             " without, the pack the committee reads, and the"
+                             " reporting density that follows from a clock it"
+                             " does not control.")),
             Choice("unlisted",
                    about="Privately held. Reports to its owners on a timetable"
                          " it largely sets. The engine's own assumption, so"
@@ -329,9 +387,17 @@ FACETS: Mapping[str, Facet] = {
                        lore=(_lore(ConstraintKind.RISK_APPETITE,
                                    "finance/manual_workarounds",
                                    "A mutual answers to members, so prudence"
-                                   " outranks pace", -0.4),),
+                                   " outranks pace", -0.4),
+                             # "Answers to members" is a reporting line, and a
+                             # reporting line with no report on it is a claim
+                             # the corpus cannot be asked about.
+                             _lore(ConstraintKind.ARTIFACT_DENSITY,
+                                   FILING_PREFIX + "member_report",
+                                   "The people the company reports to are the"
+                                   " people who own it", 1.0)),
                        about="Capital held well above a listed peer's, margin"
-                             " correspondingly thinner.")),
+                             " correspondingly thinner, and a report addressed"
+                             " to the owners rather than to a market.")),
             Choice("state_owned",
                    about="Owned by government. Reports to a minister, and its"
                          " constraints are political before they are"
@@ -349,9 +415,23 @@ FACETS: Mapping[str, Facet] = {
                        lore=(_lore(ConstraintKind.ARTIFACT_DENSITY,
                                    "finance/status_reports",
                                    "Everything is minuted, because everything is"
-                                   " discoverable", 0.4),),
-                       wants=("a parliamentary or ministerial reporting"
-                              " obligation with its own artifact type",))),
+                                   " discoverable", 0.4),
+                             # This was a `wants` entry — "a ministerial
+                             # reporting obligation with its own artifact
+                             # type" — for as long as no seam existed to carry
+                             # one. It exists now, so the entry is removed
+                             # rather than left: `unmet` reporting a
+                             # capability that works is the same
+                             # carried-and-inert failure in reverse, and the
+                             # one thing a reader of `unmet` must be able to
+                             # trust is that everything in it is genuinely
+                             # missing.
+                             _lore(ConstraintKind.ARTIFACT_DENSITY,
+                                   FILING_PREFIX + "ministerial_brief",
+                                   "The minister is briefed on the period, and"
+                                   " the brief is itself discoverable", 1.0)),
+                       about="A public accountability lead, everything minuted,"
+                             " and a brief the minister can be asked about.")),
         ),
     ),
     "scale": Facet(
@@ -507,9 +587,25 @@ FACETS: Mapping[str, Facet] = {
                                    " approver is a formality", 0.0),
                              _lore(ConstraintKind.PERSONA_TRAIT,
                                    "ceo/decisive_and_impatient",
-                                   "Answers are short and arrive quickly", 0.6)),
+                                   "Answers are short and arrive quickly", 0.6),
+                             # The only *negative* filing in the registry, and
+                             # the reason the vocabulary had to be a signed
+                             # magnitude rather than a set of names. A decision
+                             # this company takes in a corridor leaves no
+                             # minutes, and the absence is the evidence: the
+                             # close still moved, the meeting still happened,
+                             # and there is no document that says who was in
+                             # the room. That is a harder corpus than one
+                             # missing the meeting entirely, and it is only
+                             # expressible as "this company files less of
+                             # this", not as "this company files these".
+                             _lore(ConstraintKind.ARTIFACT_DENSITY,
+                                   FILING_PREFIX + "meeting_minutes",
+                                   "The founder decides in the room and nobody"
+                                   " writes it down", -1.0)),
                        about="Approvals that exist on paper and not in"
-                             " practice.")),
+                             " practice, and decisions with no minutes"
+                             " behind them.")),
             Choice("professional",
                    about="A management team with a board above it. The engine's"
                          " own assumption.", implies=Implication()),
@@ -535,9 +631,23 @@ FACETS: Mapping[str, Facet] = {
                              _lore(ConstraintKind.RISK_APPETITE,
                                    "finance/manual_workarounds",
                                    "Pace outranks tidiness while the hold"
-                                   " period runs", 0.7)),
-                       wants=("a sponsor reporting pack with its own audience"
-                              " and cadence",))),
+                                   " period runs", 0.7),
+                             # Was `wants=("a sponsor reporting pack with its
+                             # own audience and cadence",)`. The density above
+                             # already said the sponsor reads a pack every
+                             # month; what it could not say was that the pack
+                             # is a *document*, addressed to somebody who works
+                             # for neither the company nor its board. Removed
+                             # from `wants` for the reason stated on
+                             # `listing:state_owned`.
+                             _lore(ConstraintKind.ARTIFACT_DENSITY,
+                                   FILING_PREFIX + "sponsor_pack",
+                                   "The sponsor reads a pack every month, and"
+                                   " it is a document rather than a meeting",
+                                   1.0)),
+                       about="A value-creation director, relentless reporting,"
+                             " and a monthly pack addressed outside the"
+                             " company.")),
         ),
     ),
     "maturity": Facet(
@@ -904,8 +1014,41 @@ def combinations(*facets: str) -> tuple[dict[str, str], ...]:
 def unmet(resolved: Resolved) -> tuple[str, ...]:
     """Consequences the chosen facets have that nothing here implements.
 
-    An alias for ``resolved.wants`` with a name that says what it is *for*: it
-    is the same evidence ``probe``'s unbound leaves are, and it is the only
-    honest pressure for building the behaviour a claim implies.
+    Mostly ``resolved.wants`` — the same evidence ``probe``'s unbound leaves
+    are, and the only honest pressure for building the behaviour a claim
+    implies.
+
+    Plus one thing a facet author cannot state by hand: a filing naming an
+    artifact type no module has declared. ``wants`` is written when the claim
+    is written, so it can only record what its author *knew* was missing; a
+    filing's target is checked against the compiler's own registry at the
+    moment the claim is resolved, so it also catches the type that was declared
+    when the facet was written and has since been renamed or removed. A plan
+    entry for an undeclared type would compile — that is the problem — into a
+    one-section stub carrying an authority nobody chose, which is exactly the
+    carried-and-inert failure this module's docstring is about.
+
+    The import is local rather than at module scope: ``documents`` pulls in the
+    generic compiler and the communications generators, and nothing else in
+    this module needs any of it. Paying for that on every ``import worldloom``
+    to answer one question at resolution time is the wrong trade.
     """
-    return resolved.wants
+    from . import documents
+
+    declared = documents.declared_types()
+    missing = sorted({
+        artifact_type
+        for artifact_type, magnitude in filings_from(resolved.lore)
+        # Only a claim that a document *exists* can be unmet. A negative
+        # magnitude says this company files fewer of something, and a company
+        # can honestly file none of a type that does not exist here — the
+        # suppression is satisfied by the type's absence rather than defeated
+        # by it.
+        if magnitude > 0.0 and artifact_type not in declared
+    })
+    return tuple(sorted({
+        *resolved.wants,
+        *(f"a {artifact_type!r} filing — the claim names it and no domain"
+          f" module has declared it, so nothing would compile it"
+          for artifact_type in missing),
+    }))

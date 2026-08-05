@@ -81,6 +81,42 @@ def standing(artifact_type: str) -> tuple[Authority, Lifecycle]:
     return _STANDING.get(artifact_type, (Authority.WORKING_DOCUMENT, Lifecycle.DRAFT))
 
 
+def declared_types() -> frozenset[str]:
+    """Every artifact type some module has actually declared.
+
+    Membership is keyed on ``_STANDING`` alone, and that is the load-bearing
+    choice rather than an arbitrary one. Three of the four tables have honest
+    fallbacks — ``compile_intent`` falls through to ``outline``, ``outline``
+    falls through to ``_DEFAULT_OUTLINE``, ``written_at`` falls through to an
+    hour — so a type missing from any of them still produces a document. A
+    missing *standing* also falls through, to ``(WORKING_DOCUMENT, DRAFT)``,
+    but that is a modelling claim about the document's authority, and it is the
+    one nothing downstream can distinguish from a decision: an artifact type
+    somebody forgot to register looks exactly like an artifact type somebody
+    decided was an unreviewed draft. ``distractors.py`` states the same rule
+    from the other side when it registers ``routine_notice``'s standing rather
+    than letting it fall through.
+
+    So this is the set a *plan* may name. It exists because a facet can now
+    imply a filing (``facets.FILING_PREFIX``), and a filing naming a type no
+    module has declared would be an intent minted for a document that compiles
+    into a one-section stub with an authority nobody chose — carried, cited,
+    and inert, which is the failure this repository keeps finding. ``facets.
+    unmet`` reports that case rather than letting the plan grow an entry for
+    it.
+
+    It is not yet exhaustive over what the engine plans, and the gap it exposes
+    is worth stating: ``scenarios._personnel_notice`` mints
+    ``personnel_notice`` intents and nothing has ever declared that type, so a
+    succession announcement is silently an unreviewed draft. Declaring it here
+    is the wrong fix — ``tests/test_thin_waist.py`` counts that name as retail
+    vocabulary and this is a core module, correctly — so it wants a
+    registration from whichever module owns the scenario, which is a change of
+    its own.
+    """
+    return frozenset(_STANDING)
+
+
 def register_artifact_types(
     *,
     standing: dict[str, tuple[Authority, Lifecycle]] | None = None,
@@ -980,6 +1016,172 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "register — this is read by people looking up a rule.",
         ),
     ),
+
+    # ------------------------------------------------------------------
+    # Conditional filings. Every type below this line is planned only when
+    # something about *this* company asks for it — a claim it makes about who
+    # it answers to, the size of the estate the incident ran through, or where
+    # the period sits in its own trading year. See
+    # `generators/planning.py`'s filing block for the gates and their
+    # arguments; what belongs here is only what each document is *for*.
+    #
+    # They are outlines rather than dedicated compilers because none of them
+    # needs a table the generic path cannot resolve: each is prose over facts
+    # that already exist, partitioned by what its reader is actually there
+    # for. The four owner reports below are the clearest case for keeping them
+    # four types rather than one parameterised by audience — an audit
+    # committee reads for *control*, a sponsor for *plan*, a member for
+    # *prudence*, a minister for *the record*, and those are four different
+    # partitions of the same month, not four covers on one document.
+    # ------------------------------------------------------------------
+    "service_impact_assessment": (
+        SectionPlan(
+            "What failed", ("ops.feed_status", "ops.affected_records"), "any",
+            "The failure and its size, for a reader who has to decide what to do about "
+            "it in the next hour. No history, no cause — this document exists because "
+            "the estate is too large for anyone to hold the answer in their head, so "
+            "state what is known and be precise about the scale.",
+        ),
+        SectionPlan(
+            "What it reaches", ("ops.valuation_status",), "any",
+            "What downstream is affected and what is not. The whole point of the "
+            "assessment: a reader must be able to tell whether their own service is in "
+            "scope without asking anybody. Say plainly where the boundary is.",
+        ),
+        SectionPlan(
+            "Holding position", ("ops.workaround", "ops.cause"), "any",
+            "What is being run in the meantime and on what basis. Provisional register — "
+            "this is written while the incident is open and will be read by people "
+            "deciding whether to wait.",
+        ),
+    ),
+    "remediation_scope_review": (
+        SectionPlan(
+            "What the fix has to cover", ("ops.cause", "ops.affected_records"), "any",
+            "The cause, and the extent of what depends on the thing that has to change. "
+            "This is the section that justifies the review existing: state the reach "
+            "rather than gesturing at it.",
+        ),
+        SectionPlan(
+            "Who owns it", ("ops.mapping_table_owner",), "any",
+            "Ownership of the component being changed. An unassigned owner is the "
+            "finding, not a gap in the paperwork — write it as the finding, and say what "
+            "follows from a change to something nobody owns.",
+        ),
+        SectionPlan(
+            "Scope of the remediation", ("ops.remediation",), "any",
+            "What the proposed work does and does not cover. Be explicit about which "
+            "action addresses the control and which addresses detection; a reader who "
+            "cannot tell them apart will approve the cheaper one.",
+        ),
+        SectionPlan(
+            "Whether it has held before", ("ops.previous_similar_incident",), "any",
+            "Precedent, and what it says about whether this scope is enough. If there "
+            "is a prior occurrence, lead with it — a fix that did not hold is the "
+            "strongest argument available for widening the scope.",
+        ),
+    ),
+    "peak_trading_review": (
+        SectionPlan(
+            "The month in the year",
+            ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."),
+            "group",
+            "This is a month the year is planned around, so judge it as such. Against "
+            "plan is the wrong frame on its own — the plan already contains the season. "
+            "Say whether the peak delivered what a peak has to deliver.",
+        ),
+        SectionPlan(
+            "Where the peak landed",
+            ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."),
+            "unit",
+            "Which divisions carried the peak and which did not trade through it. A "
+            "commercial register, not a finance one; this is read by people who will "
+            "buy differently next year because of it.",
+        ),
+        SectionPlan(
+            "What it says about the plan", ("metric.",), "any",
+            "What the peak's own measures imply for the rest of the year. Forward-"
+            "looking and short; skip gracefully if the measures given say nothing.",
+        ),
+    ),
+    "audit_committee_pack": (
+        SectionPlan(
+            "Result",
+            ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."),
+            "group",
+            "The group position, stated once and without commentary. The committee is "
+            "not the management meeting; it needs the number to hold the rest of the "
+            "pack against, not an argument about it.",
+        ),
+        SectionPlan(
+            "Close control", ("close.",), "any",
+            "Whether the close met its committed date and, if not, what moved it. This "
+            "is the committee's actual business — the integrity of the reporting "
+            "process, not the performance it reports.",
+        ),
+        SectionPlan(
+            "Matters for the committee",
+            ("ops.root_cause_classification", "ops.mapping_table_owner"), "any",
+            "Control failures and unowned components, stated plainly and without "
+            "mitigation. A pack that softens these is the document the committee exists "
+            "to not receive.",
+        ),
+    ),
+    "sponsor_pack": (
+        SectionPlan(
+            "Against the plan",
+            ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."),
+            "group",
+            "The month against the plan the sponsor holds. Lead with the variance, not "
+            "the actual — the fund knows what it underwrote and is reading for the gap.",
+        ),
+        SectionPlan(
+            "By division",
+            ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."),
+            "unit",
+            "Where the gap sits. Every line gets asked about, so attribute it rather "
+            "than summarising it, and do not give equal space to divisions that did what "
+            "they said they would.",
+        ),
+        SectionPlan(
+            "Drivers and actions", ("metric.", "close."), "any",
+            "What moved the number and what is being done. Cost discipline is the "
+            "standing theme and the register is brisk; this is a monthly document read "
+            "by someone with a hold period.",
+        ),
+    ),
+    "member_report": (
+        SectionPlan(
+            "Result",
+            ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."),
+            "group",
+            "The result, written for the people who own the company and are not "
+            "investors. Plain register, no market framing, no growth story — a mutual "
+            "reports stewardship, and the reader is being told what was done with their "
+            "money.",
+        ),
+        SectionPlan(
+            "What it means for members", ("metric.", "close."), "any",
+            "What follows for members from the figures given. Prudence outranks pace "
+            "here; where a measure implies caution, say so rather than reframing it.",
+        ),
+    ),
+    "ministerial_brief": (
+        SectionPlan(
+            "Position",
+            ("financial.revenue.", "financial.gross_profit.", "financial.gross_margin_pct."),
+            "group",
+            "The position, briefly, for a reader who has thirty seconds and may be asked "
+            "about it publicly. No jargon and no hedging that would read badly quoted "
+            "back.",
+        ),
+        SectionPlan(
+            "On the record", ("close.", "ops."), "any",
+            "Everything the period put on the record, including what went wrong. This "
+            "company minutes everything because everything is discoverable, so a brief "
+            "that omits an operational failure is the omission somebody later finds.",
+        ),
+    ),
 }
 
 _DEFAULT_OUTLINE: tuple[SectionPlan, ...] = (
@@ -1255,6 +1457,29 @@ _STANDING.update({
     "meeting_minutes": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
     "email_thread": (Authority.UNOFFICIAL_NOTE, Lifecycle.PUBLISHED),
     "unit_close_commentary": (Authority.WORKING_DOCUMENT, Lifecycle.PUBLISHED),
+
+    # The conditional filings. Their outlines are above; these are the two
+    # claims an outline cannot make — how much weight the document carries,
+    # and how long after the facts it is written.
+    #
+    # Every lag below is at or under the executive summary's day-and-fifteen-
+    # hours, and that ceiling is load-bearing rather than tidy:
+    # `scenarios._period_boundary` places a departure eight business days after
+    # period end, and it chose eight by brute force against the *slowest
+    # artifact any episode plans*. A filing written later than that would put
+    # its author's own departure before their signature and trip
+    # `author_already_departed` in any world with a timeline — silently, and
+    # only in some months.
+    "service_impact_assessment": (Authority.WORKING_DOCUMENT, Lifecycle.PUBLISHED),
+    "remediation_scope_review": (Authority.APPROVED_REPORT, Lifecycle.REVIEWED),
+    "peak_trading_review": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
+    # Reviewed rather than merely published, and it is the one filing where
+    # that is the whole point: a pack the committee has not read is not an
+    # audit committee pack, it is a draft addressed to one.
+    "audit_committee_pack": (Authority.APPROVED_REPORT, Lifecycle.REVIEWED),
+    "sponsor_pack": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
+    "member_report": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
+    "ministerial_brief": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
 })
 _LAG.update({
     # The same constants the communications compilers stamp into their IR
@@ -1262,6 +1487,15 @@ _LAG.update({
     "meeting_minutes": MINUTES_LAG,
     "email_thread": MESSAGE_LAG,
     "unit_close_commentary": timedelta(hours=20),
+    # Written while the incident is still open — it is an input to the
+    # decision, not a record of one.
+    "service_impact_assessment": timedelta(minutes=90),
+    "remediation_scope_review": timedelta(hours=6),
+    "peak_trading_review": timedelta(days=1),
+    "sponsor_pack": timedelta(days=1, hours=4),
+    "ministerial_brief": timedelta(days=1, hours=8),
+    "audit_committee_pack": timedelta(days=1, hours=10),
+    "member_report": timedelta(days=1, hours=12),
 })
 
 

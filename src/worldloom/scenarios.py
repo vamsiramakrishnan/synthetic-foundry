@@ -22,6 +22,8 @@ from .recipe import locale_of
 from .rng import Rng
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .generators.operations import CloseEpisode
+    from .generators.planning import EstateReading
     from .world import World
 
 
@@ -82,6 +84,86 @@ def density_adjustment(world: World, target: str) -> float:
             if constraint.kind.value == "artifact_density" and constraint.target == target:
                 total += constraint.magnitude or 0.0
     return total
+
+
+def filings(world: World) -> dict[str, float]:
+    """Every artifact type this world's lore asks for or refuses, and by how much.
+
+    The same quantity ``density_adjustment`` reads, at the targets that name an
+    *artifact type* rather than a reporting theme (``facets.FILING_PREFIX``).
+    Summed across commitments for the same reason density is: two claims about
+    one target are two things a company is, and the world is what they come to
+    together. A founder-led listed company keeps its audit committee pack —
+    nothing suppresses that target — and loses its minutes, because one claim
+    aims at that target and nothing outweighs it.
+
+    Read by ``generators.planning``, which supplies the *base* each type starts
+    from: a summed adjustment of zero means "the lore said nothing", which for
+    ``meeting_minutes`` means it is still filed and for ``sponsor_pack`` means
+    it is not. That split belongs to the planner, because which documents a
+    company files by default is a statement about the episode rather than about
+    the lore.
+
+    Lore order decides nothing — the result is read by key — but the iteration
+    is over ordered collections regardless, so two processes agree on the float
+    even where addition does not commute in the last bit.
+    """
+    from .facets import FILING_PREFIX
+
+    out: dict[str, float] = {}
+    for commitment in world.lore:
+        for constraint in commitment.constrains:
+            if constraint.kind.value != "artifact_density":
+                continue
+            if not constraint.target.startswith(FILING_PREFIX):
+                continue
+            artifact_type = constraint.target[len(FILING_PREFIX):]
+            out[artifact_type] = out.get(artifact_type, 0.0) + (constraint.magnitude or 0.0)
+    return out
+
+
+def _estate_reading(world: World, episode: CloseEpisode) -> EstateReading | None:
+    """What the technology landscape says about the paperwork this incident makes.
+
+    Three integers, and no graph: ``generators.planning`` takes readings rather
+    than the estate itself, for the same reason ``evaluation_cases`` takes a
+    graph rather than the world — a plan that could reach into a `DiGraph`
+    would sooner or later start deciding something on a field nobody meant it
+    to see.
+
+    The two anchors are derived from the episode's own facts rather than from
+    role keys, exactly as ``generators/evaluation._EstateReading`` derives
+    them: the failed feed is whatever ``ops.feed_status`` is about, and the
+    system holding the unowned mapping table is whatever ``ops.
+    mapping_table_owner`` is about. A composed or re-voiced estate moves those
+    ids; it does not move what they mean. An anchor that is not in the graph at
+    all — a vertical whose episode names no service, an estate that renamed
+    everything — reads zero, so the filings it gates simply do not happen,
+    which is the honest answer rather than a guess.
+
+    ``None`` without an incident: every reading here is about an incident's
+    reach, and a clean close has none.
+    """
+    if not episode.had_incident:
+        return None
+
+    from . import graphs
+    from .generators.planning import EstateReading
+
+    graph = graphs.dependency_graph(world)
+    by_id = {fact.id: fact for fact in episode.facts}
+
+    def reach(key: str) -> int:
+        fact = by_id.get(episode.keys.get(key, ""))
+        if fact is None or fact.subject not in graph:
+            return 0
+        return len(graphs.blast_radius(graph, fact.subject))
+
+    return EstateReading(
+        scale=graph.number_of_nodes(),
+        incident_reach=reach("fact_feed_status"),
+        unowned_reach=reach("fact_owner"),
+    )
 
 
 @dataclass(frozen=True)
@@ -302,6 +384,18 @@ class MonthEndClose:
             categories_by_unit=categories_by_unit,
             eval_density=self.eval_density,
             accountability_facts=accountability_facts,
+            # What kind of company this is, in the three shapes the plan can
+            # read it. Each is a *reading* rather than the thing itself: the
+            # planner takes no world, and handing it one so it could compute
+            # these would give it the whole ledger to reach into.
+            filings=filings(world),
+            estate=_estate_reading(world, episode),
+            # The trading year, at this period. `self.seasonality or DEFAULT`
+            # is the same fallback `finance.generate` is given above, and it
+            # has to be: the plan must judge the month against the same year
+            # the figures were drawn under, or a corpus would review a peak its
+            # own budget never had.
+            seasonal_index=(self.seasonality or _profiles.DEFAULT).of(self.period),
         )
 
         # The world has to carry this period's events, facts, and standing
@@ -725,4 +819,5 @@ __all__ = [
     "lore_index",
     "likelihood_multiplier",
     "density_adjustment",
+    "filings",
 ]
