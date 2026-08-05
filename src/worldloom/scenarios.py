@@ -487,6 +487,25 @@ class Hire:
         roles = dict(world._roles)
         at = _period_boundary(self.period)
 
+        # The role table is a mixed index — people, but also systems, services,
+        # access policies and cost centres — and `world.extend` merges the
+        # `roles` returned below over it. So a hire into a key that is already
+        # bound does not add a post, it *replaces* whatever that key meant, with
+        # no event and no fact recording that it changed: the incumbent stays
+        # employed and unreachable, or `roles["sys_erp"]` starts resolving to an
+        # employee. Refused here rather than left to the validator because
+        # nothing downstream can tell the difference between a rebind and a key
+        # that always meant this. `timeline.review` states the same rule up
+        # front, where a whole history can be refused before any of it runs;
+        # this is the last line, for a caller running the scenario directly.
+        if self.role_key in roles:
+            raise ValueError(
+                f"{self.role_key!r} is already bound in this world (to"
+                f" {roles[self.role_key]}); hiring into it would silently"
+                " replace what that key resolves to. Use a new role key, or"
+                " run a Departure first if somebody is leaving the post."
+            )
+
         # A pack's own name pools, if any — so a person hired mid-corpus
         # reads as the same locale as everyone the world minted at the
         # beginning, rather than falling back to the engine's defaults the
