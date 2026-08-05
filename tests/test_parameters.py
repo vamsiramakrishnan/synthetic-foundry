@@ -241,6 +241,25 @@ def test_overrides_round_trip_through_json() -> None:
     assert "sector prior" in restored.span("retail.margin.erosion").source
 
 
+def test_an_integer_span_survives_the_round_trip_it_is_recorded_by() -> None:
+    """A mosaic axis hands `Span` Python ints, so `as_dict` wrote `"high": 34`
+    while `overrides_from`'s `float(...)` read it back as `34.0` — and a mosaic
+    world therefore did not rebuild byte-for-byte from its own recipe. Only
+    `world.json` differed, which is exactly the kind of divergence that looks
+    like nothing and means the recipe is not the world.
+
+    Through `with_overrides`, because that is the path a rebuild takes and the
+    only one where `kind` is meaningful: `overrides_from` deliberately drops it
+    and the engine's own is put back. What has to survive is the *pair of
+    bounds*.
+    """
+    physics = DEFAULT.with_overrides({"ops.incident.hypothesis_minutes": Span(10, 34)})
+    document = json.loads(json.dumps(overrides_document(physics), allow_nan=False))
+    replayed = DEFAULT.with_overrides(overrides_from(document))
+    assert (replayed.span("ops.incident.hypothesis_minutes").as_dict()
+            == physics.span("ops.incident.hypothesis_minutes").as_dict())
+
+
 def test_a_malformed_override_names_the_parameter() -> None:
     with pytest.raises(ValueError, match="retail.margin.erosion"):
         overrides_from({"retail.margin.erosion": {"low": 0.1}})

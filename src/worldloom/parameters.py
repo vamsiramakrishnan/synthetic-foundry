@@ -87,6 +87,16 @@ class Span:
     make one plausible episode work, not calibrated against anything."""
 
     def __post_init__(self) -> None:
+        # Bounds are floats whoever wrote them, because `as_dict` is what a
+        # recipe stores and `overrides_from` is what reads it back — and that
+        # round trip is not symmetric on an int. `Span(10, 34, "integer")`
+        # recorded `"high": 34`, the rebuild's `float(...)` recorded `34.0`, and
+        # a mosaic world therefore did not replay byte-for-byte from its own
+        # recipe. Coerced at the type rather than at either end so there is one
+        # representation and no third caller can reintroduce the asymmetry.
+        # `Rng.integer` rounds, so an integer draw is unaffected.
+        object.__setattr__(self, "low", float(self.low))
+        object.__setattr__(self, "high", float(self.high))
         if self.kind == "chance":
             if not 0.0 <= self.low <= 1.0 or self.low != self.high:
                 raise ValueError(
