@@ -288,6 +288,28 @@ class Blueprint:
             )
         return replace(self, pack_source=loaded, domain_name=loaded.base)
 
+    def lob(self, spec: Any) -> Blueprint:
+        """Append roles from a LOB spec to this blueprint's role table.
+
+        A LOB (Line of Business) spec declares roles and responsibilities.
+        This method appends the LOB's roles to the implicit role list so they
+        are included in the final organisation. Appended after facet roles.
+
+        Args:
+            spec: A ``lob.Lob`` or dict matching its shape.
+
+        Returns:
+            A new Blueprint with the LOB's roles added to implied_roles.
+        """
+        from . import lob as lob_module
+
+        loaded = spec if hasattr(spec, "roles") else lob_module.Lob.model_validate(spec)
+        # Convert LOB roles to tuple format
+        lob_rows = tuple(role.as_row() for role in loaded.roles)
+        # Append LOB roles after implied roles
+        combined = list(self.implied_roles) + list(lob_rows)
+        return replace(self, implied_roles=tuple(combined))
+
     # -- realisation -------------------------------------------------------
 
     @property
