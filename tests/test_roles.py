@@ -351,3 +351,40 @@ def test_rows_round_trip() -> None:
 
     rows = organisation._ROLES
     assert roles_module.to_rows(roles_module.from_rows(rows)) == tuple(rows)
+
+
+def test_a_synthesised_spine_key_sits_where_its_engine_files_it() -> None:
+    """Which function a spine key sits in is read by the engine, so it is closed
+    for the reason the key itself is.
+
+    `organisation.generate` builds an access policy from
+    `allow_functions=["Finance", "Audit"]` and `world._policy_for("finance")`
+    hands it to the workbook and the variance memo. Round-robin by position put
+    `audit` in Finance, `cfo` in Technology and `controller` in Merchandising —
+    so the author of the variance memo could not read it, and every mosaic world
+    of every engine failed `author_cannot_see_own_artifact`. It stayed invisible
+    because the check reads *compiled* artifacts and a plan-only mosaic has none.
+    """
+    from worldloom import roles as roles_module
+
+    for engine in ("retail", "banking", "insurance"):
+        shipped = {role.key: role.function for role in roles_module._shipped(engine)}
+        table = roles_module.from_shape(
+            # Deliberately a function list that shares almost nothing with the
+            # engine's own — the caller's set decides where *synthesised* roles
+            # go and must not decide where the spine goes.
+            functions=["Executive", "Operations", "Commercial"],
+            headcount=40, span=5, levels=3, engine=engine,
+        )
+        for role in table:
+            if role.key in shipped:
+                assert role.function == shipped[role.key], f"{engine}:{role.key}"
+
+    # And a per-unit key, which is in no shipped table, still takes the
+    # caller's rotation rather than raising.
+    unit_table = roles_module.from_shape(
+        functions=["Executive", "Operations"], headcount=40, span=5, levels=3,
+        engine="retail", unit_keys=["gm"],
+    )
+    placed = {role.key: role.function for role in unit_table}
+    assert placed["gm_md"] in {"Executive", "Operations"}

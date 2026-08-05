@@ -267,6 +267,24 @@ def from_shape(
     ordered_functions = tuple(functions)
     spine_keys = [key for key in required(engine, unit_keys) if key != ROOT]
 
+    # Which function a spine key sits in is *read by the engine*, so it is
+    # closed for exactly the reason the key itself is. `organisation.generate`
+    # builds an access policy "Finance and audit only" out of
+    # `allow_functions=["Finance", "Audit"]`, and `world._policy_for("finance")`
+    # hands it to the workbook and the variance memo — so a `controller` placed
+    # in Merchandising is an author who cannot read what they wrote.
+    # Round-robin by position did exactly that: it put `audit` in Finance,
+    # `cfo` in Technology and `controller` in Merchandising, and every mosaic
+    # world of every engine failed `author_cannot_see_own_artifact` (retail 2-6,
+    # banking 9, insurance 2-4). Invisible until a mosaic was narrated, because
+    # the check reads compiled artifacts and a plan-only corpus has none.
+    #
+    # The caller's `functions` still decides where every *synthesised* role
+    # goes, which is the freedom this function exists to offer. It does not
+    # decide where the spine goes, any more than it decides which keys the
+    # spine contains.
+    engine_functions = {role.key: role.function for role in _shipped(engine)}
+
     # How many people sit at each level, root downwards.
     #
     # Filled greedily — each level takes as many as its parents' span allows —
@@ -313,7 +331,16 @@ def from_shape(
             # iteration order or by a seed, and this runs inside a build whose
             # output must be byte-identical on replay.
             manager = parents[index % len(parents)]
-            function = ordered_functions[len(roles) % len(ordered_functions)]
+            # `.get`, not `[]`: a per-unit key (`{unit}_md`) is required for
+            # whatever units this world declares and is in no shipped table, so
+            # it takes the caller's rotation like any synthesised role. Falling
+            # back rather than raising because a unit role has no function the
+            # engine reads it by — `assign` finds it by parsing the suffix off
+            # the key, which is why renaming a unit key breaks and re-filing it
+            # does not.
+            function = engine_functions.get(
+                key, ordered_functions[len(roles) % len(ordered_functions)]
+            )
             roles.append(Role(key, _title(key, function, depth), function, manager))
             level.append(key)
         parents = level
