@@ -42,6 +42,34 @@ intents linked to events → evaluation cases → checks*, plus period arithmeti
 fact derived from last month's, hand-coded). Deliverable: a written grammar
 that expresses all four episodes, and a list of what genuinely cannot be data.
 
+## The unit of authorship is the line of business
+
+The grammar's root object is not the episode — it is the **LOB**. A harness
+authors a line of business, standard (finance, HR, procurement — the same in
+every industry, shipped as a data library) or vertical-specific (underwriting,
+merchandising, claims — authored per world), and one LOB spec declares the
+whole causal chain:
+
+- **its people**: roles and titles (the role-table seam exists; the per-unit
+  role minting in `organisation.py`/`roles.UNIT_ROLES` is still hardcoded and
+  must open),
+- **their responsibilities**: declared edges from a role to the fact kinds it
+  answers for and the artifact types it authors or approves. Responsibility is
+  the cohesion primitive: from one declared edge the engine derives authorship
+  (planning), access (policies), accountability (`ConstraintKind.
+  ACCOUNTABILITY`), the who-signs check, and the "who is accountable for this
+  miss" evaluation cases. Never five hand-written tables that can disagree,
+- **its episodes**: which it participates in and what it contributes — facts
+  minted, events raised, carry-forward held,
+- **its artifacts**: the doctypes it files (seam exists),
+- **its lore hooks**: what its history makes likelier, denser, or forbidden.
+
+Employees are then *triggered per LOB*: headcount and spans come from the
+physics, titles from the LOB's roles, and every person exists because some
+declared responsibility needs an owner — not because a generator had a loop.
+The chain the corpus must keep whole: LOB → roles → responsibilities →
+episodes → events → artifacts → lore, every link declared, every link checked.
+
 ## Phase 2 — `worldloom.episodes` (the build)
 
 An episode spec the harness authors, pack-carried like doctypes so it rides
