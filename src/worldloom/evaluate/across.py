@@ -592,7 +592,20 @@ def render(reading: Survey) -> str:
                 f"{scores.get(name, (0, 0))[0]}/{scores.get(name, (0, 0))[1]}".rjust(5)
                 for name in names
             )
-            flag = "" if moved.spread()[family] else "  ← no spread"
+            # "unanswerable" beats "no spread" when both are true, because they
+            # are not two readings of one fact: a family every world fails
+            # *because the evidence is missing* has no spread by construction,
+            # and printing only the spread flag invites the conclusion that the
+            # family is hard. Three families read `0/3 ← no spread` in five
+            # worlds for exactly as long as nobody checked.
+            blocked = sum(card.unreachable_by_type().get(family, 0)
+                          for card in moved.cards.values())
+            if blocked:
+                flag = f"  ← {blocked} case(s) cite evidence no passage carries"
+            elif not moved.spread()[family]:
+                flag = "  ← no spread"
+            else:
+                flag = ""
             lines.append(f"  {family.value.ljust(width)}  {cells}{flag}")
         totals = "  ".join(f"{moved.cards[n].passed}/{len(moved.cards[n])}".rjust(5) for n in names)
         lines.append(f"  {'overall'.ljust(width)}  {totals}")

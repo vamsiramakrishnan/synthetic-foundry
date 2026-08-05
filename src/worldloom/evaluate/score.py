@@ -88,6 +88,19 @@ class Outcome:
     evaluation_type: EvaluationType
     passed: bool
     detail: str
+    reachable: bool = True
+    """Whether *any* passage in the pool carries the facts this case expects.
+
+    Not a grade — a statement about the corpus. A case whose evidence is in an
+    artifact nobody has written yet cannot be passed by any retriever, so
+    reporting it as a failure describes the ranker when the sentence belongs to
+    the corpus. It went unnoticed for as long as it did because both readings
+    print the same digit: `citation_required 0/3` in five worlds looked like a
+    difficult family and was three cases citing prose that did not exist.
+
+    Abstention cases are always reachable: they expect no evidence, so there is
+    none to be missing.
+    """
 
 
 @dataclass
@@ -110,6 +123,24 @@ class Scorecard:
             entry[1] += 1
         return {kind: (passed, total) for kind, (passed, total) in tally.items()}
 
+    def unreachable_by_type(self) -> dict[EvaluationType, int]:
+        """``{type: cases whose evidence is in no passage at all}``.
+
+        Reported beside `by_type` rather than deducted from it, because the two
+        are different claims and a reader deserves both: the score is what a
+        retriever achieved on this corpus, and this is how much of the corpus
+        it was possible to achieve anything on.
+        """
+        tally: dict[EvaluationType, int] = {}
+        for outcome in self.outcomes:
+            if not outcome.reachable:
+                tally[outcome.evaluation_type] = tally.get(outcome.evaluation_type, 0) + 1
+        return tally
+
+    @property
+    def unreachable(self) -> int:
+        return sum(1 for outcome in self.outcomes if not outcome.reachable)
+
     @property
     def passed(self) -> int:
         return sum(1 for outcome in self.outcomes if outcome.passed)
@@ -120,10 +151,19 @@ class Scorecard:
     def __str__(self) -> str:
         label = "Baseline" if self.retriever == "bm25" else self.retriever.upper()
         lines = [f"{label} retrieval @{self.k}", "─" * 52]
+        blocked = self.unreachable_by_type()
         for kind, (passed, total) in sorted(self.by_type().items(), key=lambda i: i[0].value):
             bar = "█" * round(10 * passed / total) if total else ""
-            lines.append(f"  {kind.value:<24} {passed:>2}/{total:<3} {bar}")
+            note = f"  ← {blocked[kind]} unanswerable here" if kind in blocked else ""
+            lines.append(f"  {kind.value:<24} {passed:>2}/{total:<3} {bar}{note}")
         lines += ["─" * 52, f"  {'overall':<24} {self.passed:>2}/{len(self):<3}"]
+        if self.unreachable:
+            # Said once, loudly, at the bottom: a score computed over cases that
+            # cannot be passed is not a harder score, it is a smaller one.
+            lines.append(
+                f"  {self.unreachable} case(s) cite evidence no passage carries —"
+                " narrate the corpus before reading these numbers as difficulty"
+            )
         return "\n".join(lines)
 
     def __repr__(self) -> str:
@@ -173,6 +213,12 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
     tops.sort()
     median = tops[len(tops) // 2] if tops else 0.0
     floor = median * ABSTENTION_FRACTION
+
+    # Every fact any passage carries. Computed once, before the loop, because
+    # it is a property of the corpus rather than of a case — and because asking
+    # it per case over the whole pool is the quadratic shape `similarity.py`
+    # exists to avoid.
+    carried_anywhere = {fact for passage in pool for fact in passage.fact_ids}
 
     card = Scorecard(k=k, retriever=retriever)
     for case in cases:
@@ -233,7 +279,16 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
             missing = sorted(set(case.expected_fact_ids) - {f for p in found for f in p.fact_ids})
             detail = "covered" if passed else f"missed {missing[:3]}"
 
-        card.outcomes.append(Outcome(case.id, case.evaluation_type, passed, detail))
+        # `passed or ...`, and the first clause is not redundant: the authority
+        # branch grades on *intersection* with the expected facts while this
+        # tests *containment*, so a case can be graded passed while some
+        # expected fact is carried nowhere. Passing is proof enough that the
+        # case was answerable, and reporting it as both would be a scorecard
+        # arguing with itself.
+        reachable = (passed or case.expects_abstention
+                     or set(case.expected_fact_ids) <= carried_anywhere)
+        card.outcomes.append(
+            Outcome(case.id, case.evaluation_type, passed, detail, reachable))
 
     return card
 

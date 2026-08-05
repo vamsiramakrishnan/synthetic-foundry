@@ -139,3 +139,38 @@ def test_the_reading_is_deterministic(worlds) -> None:
     half of a measure-then-iterate loop, and a number that moves on its own
     cannot be iterated against."""
     assert across.survey(worlds).as_dict() == across.survey(worlds).as_dict()
+
+
+def test_a_family_that_fails_for_want_of_prose_says_so() -> None:
+    """The reading that went unnoticed for five worlds and eight commits.
+
+    `citation_required 0/3 ← no spread` in every world of a mosaic looked like
+    a hard family and was three cases citing an incident RCA nobody had
+    written: an un-narrated corpus compiles fifteen artifacts and only three of
+    them carry a retrievable passage, so eleven of forty-two cases could not be
+    passed by any retriever at all. Both readings print the same digit, which
+    is why this has to be asserted rather than looked at.
+    """
+    from worldloom import archetypes
+    from worldloom.evaluate.score import score
+    from worldloom.retail import RetailWorld
+    from worldloom.scenarios import MonthEndClose
+
+    world = (RetailWorld(seed=8128, archetype=archetypes.get("omnichannel_retailer"))
+             .build()
+             .run(MonthEndClose(period="2026-03", include_operational_incident=True))
+             .compile())
+    card = score(world)
+    assert card.unreachable, "an un-narrated corpus has evidence nothing carries"
+    blocked = card.unreachable_by_type()
+    # The families whose cases rest on prose rather than on a table.
+    assert any(kind.value == "citation_required" for kind in blocked)
+    # And it is said where a reader is looking at the number, not only in a
+    # field they would have to know to ask for.
+    assert "no passage carries" in str(card)
+
+    # An abstention case expects no evidence, so none of it can be missing —
+    # otherwise every corpus would report its whole abstention family as
+    # unanswerable, which is both true and useless.
+    assert all(outcome.reachable for outcome in card.outcomes
+               if outcome.evaluation_type.value == "expected_abstention")
