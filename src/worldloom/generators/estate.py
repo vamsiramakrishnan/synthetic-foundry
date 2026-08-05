@@ -73,6 +73,7 @@ close to them.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -150,6 +151,24 @@ def core_layers(services: tuple[Service, ...], systems: tuple[System, ...]) -> d
     return layers
 
 
+def owners(roles: Mapping[str, str], *keys: str) -> tuple[str, ...]:
+    """The people from *roles* who may own a generated service.
+
+    A caller passes the role keys whose holders plausibly own infrastructure —
+    engineering and platform roles, or in a vertical that has none, whoever
+    already owns its systems of record. Keys the organisation does not have are
+    skipped rather than raising: a pack-authored role table is free not to
+    include one, and refusing to build an estate over a missing key would make
+    the flag depend on a table the author may never have seen.
+
+    Sorted and de-duplicated. The estate draws one owner per service out of this
+    tuple, so its order decides every assignment; deriving that order from the
+    order a role table happens to be written in would mean an editorial
+    reshuffle of the table silently reassigned the whole landscape.
+    """
+    return tuple(sorted({roles[key] for key in keys if key in roles}))
+
+
 def generate(
     rng: Rng,
     minter: Minter,
@@ -158,26 +177,31 @@ def generate(
     core_services: tuple[Service, ...],
     core_systems: tuple[System, ...],
     owner_ids: tuple[str, ...],
+    landscape: Landscape = DEFAULT_LANDSCAPE,
 ) -> Estate:
     """Generate the estate around an organisation's own services and systems.
 
     ``owner_ids`` are the people who may own a service — engineering and
     platform roles, passed in rather than resolved here so this module never
     learns a role key and stays as vertical-agnostic as `org_builder`.
+
+    ``landscape`` is the vocabulary: what the services are called, what systems
+    the organisation keeps, and how big each named size is
+    (``worldloom.landscape``). Defaulted to the retail pools this module used to
+    hold, so a caller that does not pass one builds exactly what it always did.
     """
-    if profile not in PROFILES:
-        raise ValueError(f"unknown estate profile {profile!r}; expected one of {sorted(PROFILES)}")
+    counts = landscape.profile(profile)
     if not owner_ids:
         raise ValueError("an estate needs at least one person who can own a service")
 
-    counts = PROFILES[profile]
+    chokepoint_count = landscape.chokepoints
     layers = core_layers(core_services, core_systems)
 
     # Systems first: everything else may depend on them, and nothing depends
     # in the other direction.
     systems: list[System] = []
-    for index in range(min(counts["system"], len(_SYSTEMS))):
-        name, purpose, record = _SYSTEMS[index]
+    for index in range(min(counts["system"], len(landscape.systems))):
+        name, purpose, record = landscape.systems[index]
         made = System(
             id=minter.next("SYS"), name=name, purpose=purpose,
             owner_id=rng.derive(f"system/{index}/owner").choice(owner_ids),
@@ -195,7 +219,10 @@ def generate(
     # it can reach is what puts it on the single path — and it is how a real
     # identity provider works, since the credential store is not something the
     # rest of the estate is allowed to query directly.
-    reserved = [s.id for s in systems[-CHOKEPOINTS:]] if len(systems) > CHOKEPOINTS else []
+    reserved = (
+        [s.id for s in systems[-chokepoint_count:]]
+        if len(systems) > chokepoint_count else []
+    )
     shared_systems = [s.id for s in all_systems if s.id not in reserved]
     by_layer: dict[str, list[str]] = {name: [] for name in DEPTH}
     for node_id, layer in layers.items():
@@ -227,9 +254,6 @@ def generate(
 
     # Built bottom-up so a layer's dependencies already exist when it is
     # reached. `data` before `platform` before `domain` before `edge`.
-    pools: dict[str, tuple[str, ...]] = {
-        "data": _DATA, "platform": _PLATFORM, "domain": _DOMAIN, "edge": _EDGE,
-    }
     for layer in ("data", "platform", "domain", "edge"):
         # Two candidate sets, not one. Drawing uniformly from *everything*
         # lower makes an edge service as likely to depend directly on a system
@@ -247,19 +271,19 @@ def generate(
             node for node, node_layer in layers.items()
             if DEPTH[node_layer] < DEPTH[layer] and node not in reserved
         )
-        pool = pools[layer]
+        pool = landscape.services[layer]
         for index in range(min(counts[layer], len(pool))):
             name = pool[index]
             draw = rng.derive(f"{layer}/{name}")
 
-            if layer == "platform" and len(chosen_chokepoints) < CHOKEPOINTS and reserved:
+            if layer == "platform" and len(chosen_chokepoints) < chokepoint_count and reserved:
                 # A single-provider platform service, backed by a store only it
                 # may reach. Everything above routes through it, so it is on
                 # the single path to that store and `graphs.chokepoints`
                 # reports it — which is the whole point of placing them rather
                 # than hoping a uniform draw produces one.
                 private = reserved[len(chosen_chokepoints)]
-                made = mint(layer, name, _PURPOSE[layer].format(name=name),
+                made = mint(layer, name, landscape.purpose[layer].format(name=name),
                             [private], private)
                 chosen_chokepoints.append(made.id)
                 continue
@@ -298,7 +322,7 @@ def generate(
             )
             if peers and draw.derive("peer").chance(0.45):
                 targets.add(draw.derive("peer_target").choice(peers))
-            mint(layer, name, _PURPOSE[layer].format(name=name), sorted(targets), system_id)
+            mint(layer, name, landscape.purpose[layer].format(name=name), sorted(targets), system_id)
 
         # Candidate sets are recomputed per layer rather than once, and never
         # include the layer being built: a domain service may depend on another
@@ -316,16 +340,7 @@ def generate(
     )
 
 
-#: One purpose sentence per layer. Terse on purpose: a service catalogue in a
-#: real estate is terse, and inventing a paragraph per node would put three
-#: hundred sentences of unreviewed prose into a corpus whose whole claim is
-#: that its prose is checked.
-_PURPOSE: dict[str, str] = {
-    "edge": "Customer- or colleague-facing surface: {name}",
-    "domain": "Business capability service: {name}",
-    "platform": "Shared platform capability used across the estate: {name}",
-    "data": "Data pipeline publishing to downstream consumers: {name}",
-}
-
-
-__all__ = ["CHOKEPOINTS", "DEPTH", "PROFILES", "Estate", "core_layers", "generate"]
+__all__ = [
+    "CHOKEPOINTS", "DEPTH", "PROFILES", "Estate", "Landscape", "core_layers",
+    "generate", "owners",
+]
