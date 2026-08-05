@@ -761,6 +761,11 @@ class World:
 
         Falls back to the most restrictive policy rather than the most permissive:
         an unrecognised audience should not accidentally publish to all staff.
+        That sentence was true of the intent and false of the code, which took
+        ``self._access_policies[-1]`` — *last in the tuple*, which for retail is
+        "Technology and service operations" and locks a CFO out of a document
+        they wrote. It is now the most restrictive by construction; see
+        ``_narrowest``.
         """
         if not self._access_policies:
             return None
@@ -779,10 +784,42 @@ class World:
             "group_cfo": "finance and audit only",
             "executive_committee": "executive committee only",
             "technology": "technology and service operations",
+            # The readers a facet's filings are addressed to. None of them has a
+            # policy of its own — an audit committee, a fund, a members' body and
+            # a minister are all *outside* the org chart, so no `allow_functions`
+            # describes them — and minting four policies to say so would add four
+            # rows to `world.json` for every corpus ever built. So each maps to
+            # the access class that governs the document *inside* the company,
+            # which is what the policy layer is actually deciding: who here may
+            # open it. Who receives it is the filing's own business, stated in
+            # its rationale and in its outline's purposes.
+            "audit_committee": "finance and audit only",
+            "sponsor": "executive committee only",
+            "members": "executive committee only",
+            "minister": "executive committee only",
         }.get(audience)
         if wanted and wanted in by_label:
             return by_label[wanted]
-        return self._access_policies[-1].id
+        return self._narrowest().id
+
+    def _narrowest(self) -> AccessPolicy:
+        """The policy that admits the fewest people.
+
+        A policy naming no people, no functions and no units admits *everyone*
+        (`AccessPolicy.permits` ends `return not (...)`), so it sorts last here
+        however short its lists are — the count of names is a proxy for reach
+        only once there is at least one, and treating "unconstrained" as
+        "narrow" is exactly backwards.
+
+        Ties break on id, lowest first, because a fallback that depended on
+        tuple order is the defect this replaced.
+        """
+        def reach(policy: AccessPolicy) -> tuple[int, int, str]:
+            names = (len(policy.allow_people) + len(policy.allow_functions)
+                     + len(policy.allow_business_units))
+            return (1 if names == 0 else 0, names, policy.id)
+
+        return min(self._access_policies, key=reach)
 
     # -- operations --------------------------------------------------------
 
