@@ -28,18 +28,24 @@ registry already documents what the validator enforces for them, and
 ``accept`` fills the declaration from it — restating the rules by hand is how
 a spec and the registry drift apart, which is the drift ``episodes.lint``'s
 registry check exists to name.
+
+The handshake is an instance of the shared protocol (``cascade.py``), whose
+docstring states the invariants once. Iteration and resumption work as they do
+for a LOB: a refused answer leaves the frozen ``Session`` unchanged, so a
+stage may be revised and resubmitted any number of times, and a session is
+resumed by replaying its accepted answers through ``open``/``accept``.
 """
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field as _field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import Field, ValidationError
 
-from . import episodes
+from . import cascade, episodes
+from .cascade import Brief, CascadeModel
 from .episodes import (
     ArtifactIntentSpec,
     EpisodeSpec,
@@ -60,10 +66,9 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-class ProcessModel(BaseModel):
-    """Base for all process-cascade schema objects."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
+class ProcessModel(CascadeModel):
+    """Base for all process-cascade schema objects — frozen and closed, per
+    the protocol."""
 
 
 class ProcessSeed(ProcessModel):
@@ -114,17 +119,9 @@ class Session:
     slots: tuple[RoleSlotSpec, ...] | None = None
 
 
-@dataclass(frozen=True)
-class Brief:
-    """The next question in process authoring."""
-
-    stage: str
-    """Which stage: 'steps', 'slots', or 'resolve'."""
-    asks: str
-    """The question being asked."""
-    context: dict[str, Any] = _field(default_factory=dict)
-    """Company context needed to answer well: engine, facets, the owning
-    LOB's roles and responsibilities when that LOB is installed."""
+# The next question in process authoring is the protocol's own `Brief` —
+# stage ('steps', 'slots', or 'resolve'), question, and the company context:
+# engine, facets, the owning LOB's roles and responsibilities when installed.
 
 
 class Answer(ProcessModel):
@@ -242,10 +239,7 @@ def accept(session: Session, answer: Answer | dict[str, Any]) -> Session:
     if answer.stage == "steps":
         findings = lint_steps(session, answer.steps, answer.kinds)
         if findings:
-            raise ValueError(
-                f"steps rejected: {'; '.join(findings[:3])}"
-                + (f"; and {len(findings) - 3} more" if len(findings) > 3 else "")
-            )
+            cascade.refuse("steps", findings)
         return replace(
             session,
             steps=tuple(answer.steps),
@@ -255,10 +249,7 @@ def accept(session: Session, answer: Answer | dict[str, Any]) -> Session:
     if answer.stage == "slots":
         findings = lint_slots(answer.slots)
         if findings:
-            raise ValueError(
-                f"slots rejected: {'; '.join(findings[:3])}"
-                + (f"; and {len(findings) - 3} more" if len(findings) > 3 else "")
-            )
+            cascade.refuse("slots", findings)
         return replace(session, slots=tuple(answer.slots))
 
     raise ValueError(f"unknown stage: {answer.stage!r}")
@@ -294,10 +285,7 @@ def resolve(
     )
     findings = episodes.lint([spec])
     if findings:
-        raise ValueError(
-            f"resolved spec rejected: {'; '.join(findings[:3])}"
-            + (f"; and {len(findings) - 3} more" if len(findings) > 3 else "")
-        )
+        cascade.refuse("resolved spec", findings)
     return spec
 
 
@@ -308,11 +296,7 @@ def resolve(
 
 def load_seed(source: str | Path | dict[str, Any]) -> ProcessSeed:
     """Load a process seed from a path, JSON text, or parsed data."""
-    if isinstance(source, (str, Path)) and Path(str(source)).exists():
-        source = json.loads(Path(source).read_text(encoding="utf-8"))
-    elif isinstance(source, str):
-        source = json.loads(source)
-    return ProcessSeed.model_validate(source)
+    return cascade.load(source, ProcessSeed)
 
 
 # ---------------------------------------------------------------------------

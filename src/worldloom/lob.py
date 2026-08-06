@@ -22,18 +22,29 @@ authorship hints, and accountability mapping from accepted responsibilities.
 
 **Determinism.** The final accepted spec is deterministic and replays from
 the ledger. Entries are ordered by key; no draw, no clock, no set iteration.
+
+**The cascade is an instance of the shared protocol** (``cascade.py``), which
+states the invariants once: a refusal carries findings a reviser can act on
+and commits nothing, stages are ordered, context rides every brief, and only
+the resolved spec replays — never this conversation. Iteration and resumption
+follow from the ``Session`` being a frozen value of accepted stages: a refused
+answer leaves the session unchanged, so a stage may be revised and resubmitted
+any number of times, and a session is resumed by replaying its accepted
+answers through ``open``/``accept`` — the same way a probe's ledger rebuilds
+its graph.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field as _field, replace
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
+from . import cascade
+from .cascade import Brief, CascadeModel
 from .models import ConstraintKind, LoreConstraint
 from .roles import Role, to_rows
 
@@ -50,10 +61,8 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-class LobModel(BaseModel):
-    """Base for all LOB schema objects."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
+class LobModel(CascadeModel):
+    """Base for all LOB schema objects — frozen and closed, per the protocol."""
 
 
 class RoleSpec(LobModel):
@@ -177,16 +186,9 @@ class Session:
         return tuple(Role(*spec.as_row()) for spec in self.roles.values())
 
 
-@dataclass(frozen=True)
-class Brief:
-    """The next question in LOB authoring."""
-
-    stage: str
-    """Which stage: 'roles' or 'responsibilities'."""
-    asks: str
-    """The question being asked."""
-    context: dict[str, Any] = _field(default_factory=dict)
-    """Context needed to answer (e.g., list of existing roles)."""
+# The next question in LOB authoring is the protocol's own `Brief` — stage
+# ('roles' or 'responsibilities'), question, context. Imported, not redefined:
+# an identical dataclass per cascade is how the shapes drift apart.
 
 
 class Answer(LobModel):
@@ -283,10 +285,7 @@ def accept(
     if answer.stage == "roles":
         findings = lint_roles(answer.roles, engine=session.engine)
         if findings:
-            raise ValueError(
-                f"roles rejected: {'; '.join(findings[:3])}"
-                + (f"; and {len(findings) - 3} more" if len(findings) > 3 else "")
-            )
+            cascade.refuse("roles", findings)
         roles = {r.key: r for r in answer.roles}
         return replace(session, roles=roles)
 
@@ -296,14 +295,7 @@ def accept(
             roles=[r.key for r in session.roles.values()],
         )
         if findings:
-            raise ValueError(
-                f"responsibilities rejected: {'; '.join(findings[:3])}"
-                + (
-                    f"; and {len(findings) - 3} more"
-                    if len(findings) > 3
-                    else ""
-                )
-            )
+            cascade.refuse("responsibilities", findings)
         return replace(session, responsibilities=tuple(answer.responsibilities))
 
     raise ValueError(f"unknown stage: {answer.stage!r}")
@@ -344,11 +336,7 @@ def resolve(
 
 def load_seed(source: str | Path | dict[str, Any]) -> LobSeed:
     """Load a LOB seed from a path, JSON text, or parsed data."""
-    if isinstance(source, (str, Path)) and Path(str(source)).exists():
-        source = json.loads(Path(source).read_text(encoding="utf-8"))
-    elif isinstance(source, str):
-        source = json.loads(source)
-    return LobSeed.model_validate(source)
+    return cascade.load(source, LobSeed)
 
 
 # ---------------------------------------------------------------------------
@@ -433,6 +421,8 @@ def install(lobs: Sequence[Lob]) -> None:
 
 def lint_seed(seed: LobSeed | dict[str, Any]) -> list[str]:
     """Findings for a LOB seed before opening."""
+    from . import domains
+
     if isinstance(seed, dict):
         try:
             seed = LobSeed.model_validate(seed)
@@ -442,8 +432,15 @@ def lint_seed(seed: LobSeed | dict[str, Any]) -> list[str]:
     findings: list[str] = []
     if not seed.name or not seed.name.replace("_", "").isalnum():
         findings.append("name must be lowercase alphanumerics and underscores")
-    if not seed.engine or seed.engine not in {"retail", "banking", "insurance"}:
-        findings.append(f"engine must be one of: retail, banking, insurance")
+    # The domain registry, not a literal: this check used to type out
+    # retail/banking/insurance, and the day procurement registered as the
+    # fourth domain it started refusing a real engine — the exact closed-list
+    # drift `domains.py` exists to end. Same check `process.lint_seed` runs.
+    if domains.by_name(seed.engine) is None:
+        findings.append(
+            f"engine {seed.engine!r} is not a registered domain; known:"
+            f" {domains.names()}"
+        )
     return findings
 
 
