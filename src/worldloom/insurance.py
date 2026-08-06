@@ -305,6 +305,10 @@ class InsuranceWorld:
     ``Locale.suffixes_for("insurance")``. Same gap as banking's, stated on
     ``BankingWorld.locale``."""
 
+    master_data: Any = None
+    """Reference tables at scale — `RetailWorld.master_data`, verbatim: the
+    same knob, the same no-op default, the same counts-on-the-recipe replay."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> InsuranceWorld:
         """A world shaped like the insurer *description* names. Shape only."""
@@ -360,6 +364,7 @@ class InsuranceWorld:
             role_table=self.role_table,
             # What it was given, not what it resolved to — `RetailWorld.build`.
             locale=self.locale,
+            master_data=self.master_data,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = insurance_org.generate(
@@ -408,7 +413,7 @@ class InsuranceWorld:
             systems = (*systems, *grown.systems)
             services = (*services, *grown.services)
 
-        return World(
+        world = World(
             company=org.company,
             _business_units=org.business_units,
             _people=org.people,
@@ -430,6 +435,12 @@ class InsuranceWorld:
             _generator_version=worldloom_version,
             _recipe=recipe,
         )
+        # A strict no-op when nothing was asked for — see the field. After the
+        # organisation so the register buckets vendors in this world's own
+        # category names, under a stream root of its own so it moves nothing.
+        from .generators import masterdata as masterdata_module
+
+        return masterdata_module.applied(world, self.master_data, locale=locale)
 
 
 # ---------------------------------------------------------------------------

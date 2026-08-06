@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from . import detail as detail_module
 from . import validate as validate_module
 from .models import Authority, CanonicalFact, EnterpriseEvent, Quantity
 from .models import ArtifactIntent as ArtifactIntentModel
@@ -391,6 +392,16 @@ class EpisodeSpec(Model):
     (``lob.SlotBinding``), never declared here — a process spec that named a
     company's role keys would only run at one company."""
 
+    detail_tables: list[detail_module.TableSpec] = Field(default_factory=list)
+    """Transaction-level tables generated under the facts this process mints
+    (``detail.py`` — the recipe model and the sum-to-fact rule). On the spec
+    because a detail table is a claim about this process's own facts, so it is
+    declared, linted and pack-carried beside them; *generated* by the runner
+    hook after the facts mint, because rows are allocated from fact values
+    that do not exist until then. Empty — the default — changes nothing.
+    Named ``detail_tables`` because ``detail`` is already this spec's notes
+    field, as it is on every other model in the grammar."""
+
     detail: str = Field(default="", min_length=0)
     """General notes about the episode."""
 
@@ -669,6 +680,18 @@ def lint(specs: Iterable[EpisodeSpec], *, base: str = "") -> list[str]:
                     f"{art_where}: triggered_by_events {unknown_triggers} — not"
                     " declared in this episode's events."
                 )
+
+        # -- detail tables ------------------------------------------------
+        # The detail lint runs with this episode's declared kinds and planned
+        # artifacts in hand, so "registry-known" and "minted here" are both
+        # enforced — a recipe naming a fact nothing generates is refused with
+        # the reason, never generated around.
+        findings.extend(detail_module.lint(
+            spec.detail_tables,
+            declared_kinds={fk.kind for fk in spec.fact_kinds},
+            declared_artifacts={a.artifact_type for a in spec.artifacts},
+            where=f"{where}.detail",
+        ))
 
         # -- carry-forward ------------------------------------------------
         for cf_index, cf in enumerate(spec.carry_forward):
@@ -1464,6 +1487,27 @@ class AuthoredEpisode:
         result = run(spec, world, rng, world._minter, period=self.period)
         install_checks(spec)
 
+        # Detail rows are generated *after* the facts mint, because every
+        # fact-backed column is allocated from a minted value — and on a
+        # derived stream, so a spec without detail draws nothing and replays
+        # byte-identically. The recipe step is unchanged: the spec carries the
+        # declaration, so replaying the step regenerates the same rows.
+        detail_tables: tuple = ()
+        if spec.detail_tables:
+            from .recipe import locale_of
+
+            detail_tables = detail_module.generate(
+                spec.detail_tables,
+                episode=spec.name,
+                period=self.period,
+                cadence=spec.period,
+                facts=result.facts,
+                intents=result.intents,
+                rng=rng.derive("detail"),
+                minter=world._minter,
+                calendar=locale_of(world._recipe),
+            )
+
         known_fact_ids = set(world.facts.ids())
         new_facts = tuple(f for f in result.facts if f.id not in known_fact_ids)
 
@@ -1471,6 +1515,7 @@ class AuthoredEpisode:
             events=result.events,
             facts=new_facts,
             artifact_intents=result.intents,
+            detail_tables=detail_tables,
             period=self.period,
             recipe=with_step(world._recipe, "AuthoredEpisode",
                              episode=self.episode, period=self.period),

@@ -133,6 +133,7 @@ def build_recipe(
     role_table: Any = None,
     seasonality: Any = None,
     locale: Any = None,
+    master_data: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The recipe for a freshly built world, before any scenario has run.
 
@@ -168,8 +169,21 @@ def build_recipe(
         # before locales existed *was*, and the default build's byte diff is
         # what proves it.
         **_locale_payload(locale),
+        # Same conditional rule again. The *counts*, never the rows: the rows
+        # are what the counts became in the world they landed in, and replay
+        # re-runs the same construction — `lore_claims`' argument. Validated
+        # here so a recipe can never record a request a rebuild would refuse.
+        **({} if not master_data else {
+            "master_data": _master_data_payload(master_data)
+        }),
         "steps": [],
     }
+
+
+def _master_data_payload(master_data: Mapping[str, Any]) -> dict[str, int]:
+    from .generators.masterdata import check_request
+
+    return check_request(master_data)
 
 
 def _locale_payload(locale: Any) -> dict[str, Any]:
@@ -417,6 +431,27 @@ def _with_locale(spec: Any, locale: Any) -> tuple[Any, bool]:
         return spec, False
 
 
+def _with_master_data(spec: Any, master_data: Any) -> Any:
+    """*spec* rebound to a recorded master-data request, or untouched.
+
+    ``_with_roles``'s posture: a recipe that never recorded one keeps
+    rebuilding exactly as it did, and one that did and meets a spec that
+    cannot carry it is an error — the corpus shipped with a vendor register,
+    and rebuilding without one would be a smaller world reported as the same.
+    """
+    if not master_data:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, master_data=dict(master_data))
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records a master-data request, but"
+            f" {type(spec).__name__} does not accept one: {exc}"
+        ) from exc
+
+
 def _with_roles(spec: Any, role_table: Any) -> Any:
     """*spec* rebound to an authored role table, or untouched when there is none.
 
@@ -539,6 +574,7 @@ def rebuild(
         spec = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT)
         spec = _with_estate(spec, recipe.get("estate"))
         spec = _with_lore_claims(spec, lore_claims)
+        spec = _with_master_data(spec, recipe.get("master_data"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
     else:
@@ -571,6 +607,7 @@ def rebuild(
         # one into a stated error instead of a `TypeError` from a constructor.
         spec = _with_estate(spec, recipe.get("estate"))
         spec = _with_lore_claims(spec, lore_claims)
+        spec = _with_master_data(spec, recipe.get("master_data"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
 

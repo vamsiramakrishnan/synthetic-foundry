@@ -91,9 +91,11 @@ other would give one corpus two accounts of its own financial year.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any, Literal
 
 #: How a negative figure is spelled in a rendered table. A closed vocabulary
@@ -136,6 +138,34 @@ _MINIMUM_BUSINESS_DAYS = 52
 
 #: Days in each month of a common year, for validating a fixed-date holiday.
 _DAYS_IN_MONTH = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+#: Where the vocabulary packs live: versioned data files committed with the
+#: package, one per shipped locale. Data files rather than 500-line tuples in
+#: this module, because a pool that size is corpus material, not prose — and
+#: data files rather than a runtime dependency on a name-generation library,
+#: because the determinism boundary is absolute: a build must never draw from
+#: anything a pip upgrade can move. The files were produced offline (a
+#: scratchpad script over a generator tool); the tool is not a dependency and
+#: never becomes one.
+_VOCAB_DIR = Path(__file__).parent / "data" / "vocab"
+
+
+def _vocabulary_pack(name: str) -> dict[str, tuple[str, ...]]:
+    """The extended name pools for a shipped locale, from its data file.
+
+    Read eagerly at import, not lazily per build: the file is package data, a
+    missing or unparsable one is a packaging defect, and the right moment for a
+    packaging defect to surface is import — the posture ``archetypes.py`` takes
+    on its own tables. Each pool's head is the shipped base pool verbatim;
+    ``Locale.__post_init__`` refuses the file if that prefix ever drifts,
+    because the prefix is the byte-identity contract: every draw that fits the
+    base pool must keep landing on the same names it always did.
+    """
+    payload = json.loads((_VOCAB_DIR / f"{name}.json").read_text(encoding="utf-8"))
+    return {
+        "given": tuple(str(entry) for entry in payload["given"]),
+        "family": tuple(str(entry) for entry in payload["family"]),
+    }
 
 
 @dataclass(frozen=True)
@@ -197,6 +227,26 @@ class Locale:
     selecting ``germany`` gets EUR without the author having to remember to say
     so twice, and that a locale whose figures are spelled ``1.234,56`` cannot
     be paired with AUD by accident."""
+
+    given_extended: tuple[str, ...] = ()
+    family_extended: tuple[str, ...] = ()
+    """The deep name pools, loaded from ``data/vocab/<locale>.json`` for every
+    shipped preset and empty for a hand-composed locale that supplies none.
+
+    **The base pool is a verbatim prefix of the extended one, and that is the
+    whole contract.** ``names.people_names`` draws from the *base* pool
+    whenever the headcount fits it — so every world ever built keeps drawing
+    the identical names from the identical stream, because ``Rng.sample`` over
+    a longer pool lands differently even for the same count — and reaches for
+    the extended pool only when the ask outruns the base, which is a build
+    that could never have succeeded before and therefore has no bytes to
+    preserve. ``__post_init__`` refuses an extended pool whose head is not the
+    base pool, because the failure otherwise is the quiet kind: a reordered
+    data file would rename every employee in every freshly-built world while
+    every figure stayed plausible. Defaulted empty so every existing
+    ``Locale(...)`` call and JSON document stays valid — an empty extension
+    means only that a headcount past the base pool is refused, exactly as it
+    always was."""
 
     industry_suffixes: tuple[tuple[str, tuple[str, ...]], ...] = ()
     """Company suffixes for a vertical that is not retail, as ``(engine, pool)``.
@@ -305,6 +355,35 @@ class Locale:
             if len(set(pool)) != len(pool):
                 repeated = sorted({e for e in pool if list(pool).count(e) > 1})
                 raise ValueError(f"{label} repeats {repeated}")
+
+        # The extended pools, held to the base pools' discipline plus one rule
+        # of their own: the base pool is a verbatim prefix. That prefix is the
+        # byte-identity contract — `names.people_names` switches pools only
+        # when a headcount outruns the base, so any draw that ever succeeded
+        # keeps sampling the same tuple — and it is checked here rather than
+        # trusted to the data files because a data file is exactly the kind of
+        # thing a well-meaning edit reorders ("sorted the names") without
+        # anything else in the corpus to notice the rename by.
+        for label, base, extended in (
+            ("given", self.given, self.given_extended),
+            ("family", self.family, self.family_extended),
+        ):
+            if not extended:
+                continue
+            if any(not str(entry).strip() for entry in extended):
+                raise ValueError(f"{label}_extended contains a blank entry")
+            if len(set(extended)) != len(extended):
+                repeated = sorted({e for e in extended if extended.count(e) > 1})
+                raise ValueError(f"{label}_extended repeats {repeated}")
+            if tuple(extended[: len(base)]) != tuple(base):
+                raise ValueError(
+                    f"{label}_extended does not begin with the {label} pool"
+                    " verbatim. The prefix is the byte-identity contract: a"
+                    " build whose headcount fits the base pool must keep"
+                    " drawing the names it always drew, and an extended pool"
+                    " that reorders or edits the head would rename every"
+                    " employee in every freshly-built world."
+                )
 
         # Same pool discipline as the four above, applied per vertical. Reached
         # through the same loop deliberately: a bank's suffix pool that repeats
@@ -459,6 +538,27 @@ class Locale:
             f" `locales.register` before building."
         )
 
+    def name_pool(self, kind: str, count: int) -> tuple[str, ...]:
+        """The ``given`` or ``family`` pool sized for *count* distinct draws.
+
+        The switch is the prefix contract made operative: the base pool
+        whenever it is deep enough — which is every draw any existing corpus
+        ever made, so those keep sampling the identical tuple — and the
+        extended pool only past it, where there are no existing bytes to keep.
+        A count that outruns both still comes back as the extended pool, so
+        the caller's own "asked for more than the pool holds" refusal fires
+        exactly as it did before extended pools existed — naming the real
+        ceiling, which is now the extended pool's depth rather than the
+        base's.
+        """
+        if kind not in ("given", "family"):
+            raise KeyError(f"no name pool of kind {kind!r}; given or family")
+        base = self.given if kind == "given" else self.family
+        extended = self.given_extended if kind == "given" else self.family_extended
+        if count <= len(base) or not extended:
+            return base
+        return extended
+
     # -- the calendar ------------------------------------------------------
 
     def is_business_day(self, day: date) -> bool:
@@ -537,6 +637,17 @@ class Locale:
         # `recipe.build_recipe` follows: a key that appears unconditionally puts
         # an empty object into every locale document ever written for a value
         # that changes nothing.
+        #
+        # The extended pools ride along under the same rule so that
+        # `from_document(as_dict(x)) == x` stays true of every preset — the
+        # equality `industry_suffixes` keeps its entries sorted for. A recipe
+        # that embeds a Locale *object* therefore embeds the deep pools too,
+        # which is correct: that recipe's corpus drew from them, and a replay
+        # against a later, longer data file would rename its people.
+        if self.given_extended:
+            payload["given_extended"] = list(self.given_extended)
+        if self.family_extended:
+            payload["family_extended"] = list(self.family_extended)
         if self.industry_suffixes:
             payload["industry_suffixes"] = {
                 engine: list(pool) for engine, pool in self.industry_suffixes
@@ -637,6 +748,13 @@ class Locale:
 #: dates this table could hold; putting them in would move the close calendar in
 #: every corpus this tool has ever built, and the point of an extracted default
 #: is that it changes nothing. A pack that wants the real calendar can say so.
+#: The vocabulary packs, read once at import. Loaded before the presets so a
+#: bad file fails the import rather than the first deep build; each preset's
+#: in-code 40-name pools stay the literal source of truth for the prefix, and
+#: `__post_init__` proves file and code agree.
+_PACKS = {name: _vocabulary_pack(name)
+          for name in ("australia", "germany", "gulf", "united_kingdom")}
+
 AUSTRALIA = Locale(
     regions=("NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"),
     cities=(
@@ -661,6 +779,8 @@ AUSTRALIA = Locale(
         "Lindegaard", "Rasmussen", "Adeyemi", "Kowalczyk", "Fitzmaurice",
         "Sarkisian", "Vuković", "Anand-Pereira", "Halvorsen", "Ntuli",
     ),
+    given_extended=_PACKS["australia"]["given"],
+    family_extended=_PACKS["australia"]["family"],
     company_suffixes=(
         "Retail Group", "Group", "Holdings", "Retail", "Commerce Group",
         "Trading Group", "Retail Holdings",
@@ -733,6 +853,8 @@ UNITED_KINGDOM = Locale(
         "Sowerby", "Tremayne", "Ushakov", "Vaisey", "Wentworth",
         "Yeardsley", "Zielinski", "Aldington", "Brocklehurst", "Chidgey",
     ),
+    given_extended=_PACKS["united_kingdom"]["given"],
+    family_extended=_PACKS["united_kingdom"]["family"],
     company_suffixes=(
         "Group plc", "Holdings plc", "Retail Group", "Group", "Holdings Limited",
         "Trading Limited", "Retail Holdings",
@@ -819,6 +941,8 @@ GERMANY = Locale(
         "Engelhardt", "Fürstenberg", "Grzeskowiak", "Hohenester", "Illgner",
         "Jessen", "Kowalczyk-Meier", "Lindhorst", "Mütze", "Nowotny",
     ),
+    given_extended=_PACKS["germany"]["given"],
+    family_extended=_PACKS["germany"]["family"],
     company_suffixes=(
         "Handelsgruppe", "Gruppe", "Holding", "Handel GmbH", "Handelsholding",
         "Gruppe AG", "Handel",
@@ -920,6 +1044,8 @@ GULF = Locale(
         "Toufic", "Ravindran", "Al Qassimi", "Barakat", "Sundaram",
         "Al Ameri", "Jaber", "Devadas", "Al Kaabi", "Nassif",
     ),
+    given_extended=_PACKS["gulf"]["given"],
+    family_extended=_PACKS["gulf"]["family"],
     company_suffixes=(
         "Trading Group", "Holding", "Group Holding", "Trading L.L.C.",
         "Group", "Commercial Group", "Retail Group",
@@ -1045,6 +1171,8 @@ def from_document(payload: Mapping[str, Any] | str) -> Locale:
     return Locale(
         regions=regions, cities=cities, given=given, family=family,
         company_suffixes=suffixes, currency=currency,
+        given_extended=tuple(str(entry) for entry in payload.get("given_extended", ())),
+        family_extended=tuple(str(entry) for entry in payload.get("family_extended", ())),
         group_separator=str(payload.get("group_separator", ",")),
         decimal_separator=str(payload.get("decimal_separator", ".")),
         negative=str(payload.get("negative", "parenthesised")),  # type: ignore[arg-type]

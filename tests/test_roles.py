@@ -300,29 +300,45 @@ def test_a_synthesised_organisation_actually_builds_a_world(
     assert len(world.people) > headcount
 
 
-def test_the_default_name_pools_cap_how_large_an_organisation_can_be() -> None:
-    """A ceiling worth stating rather than discovering.
+def test_the_extended_name_pools_cap_how_large_an_organisation_can_be() -> None:
+    """A ceiling worth stating rather than discovering — moved, not gone.
 
-    `from_shape` will happily synthesise nine hundred people and `review` will
-    pass it, because neither knows the engine draws distinct names from a pool
-    of forty. The build then fails — clearly, which is why this is a documented
-    limit rather than a defect — but an author reading `from_shape`'s docstring
-    has no way to anticipate it. A pack raises the ceiling through
-    `Pack.name_pools`; nothing else does.
+    This test used to pin the ceiling at the 40-name base pools and assert
+    that `base + 20` failed to build. The hospital run measured that bound as
+    the binding constraint on headcount, and the vocabulary packs
+    (`data/vocab/*.json`, loaded by `locales.py`) removed it: a headcount past
+    the base pool now draws from the locale's extended pool, whose head is the
+    base pool verbatim so every smaller build keeps its bytes. The *new*
+    ceiling is the extended pool's depth (500+ per shipped locale), and it is
+    still a documented limit rather than a defect: past it, the same clear
+    refusal fires, now naming the deep pool's size. A pack's own
+    `Pack.name_pools` still caps a pack build at whatever the pack wrote —
+    deliberately never topped up from the locale.
     """
     from worldloom.generators.names import FAMILY, GIVEN
+    from worldloom.locales import AUSTRALIA
     from worldloom.retail import RetailWorld
 
-    ceiling = min(len(GIVEN), len(FAMILY))
-    assert ceiling == 40, "if this moved, the guidance below moved with it"
+    base_ceiling = min(len(GIVEN), len(FAMILY))
+    assert base_ceiling == 40, "if this moved, the guidance below moved with it"
 
+    # The old failing shape now builds, with every person distinctly named.
     table = roles_module.to_rows(from_shape(
-        functions=("Executive", "Finance"), headcount=ceiling + 20, span=6,
+        functions=("Executive", "Finance"), headcount=base_ceiling + 20, span=6,
         levels=3, engine="retail",
     ))
     assert review(list(roles_module.from_rows(table)), engine="retail") == []
+    world = RetailWorld(seed=8128, role_table=table).build()
+    assert len({person.name for person in world.people}) == len(world.people)
+
+    # The bound that remains: the extended pool's own depth.
+    ceiling = min(len(AUSTRALIA.given_extended), len(AUSTRALIA.family_extended))
+    assert ceiling >= 500
+    from worldloom.generators import names as names_module
+    from worldloom.rng import Rng
+
     with pytest.raises(ValueError, match="name pools hold"):
-        RetailWorld(seed=8128, role_table=table).build()
+        names_module.people_names(Rng(8128), ceiling + 1, locale=AUSTRALIA)
 
 
 def test_an_authored_organisation_rebuilds_from_its_recipe() -> None:

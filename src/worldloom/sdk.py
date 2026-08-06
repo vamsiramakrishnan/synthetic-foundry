@@ -110,6 +110,11 @@ class Blueprint:
     lives — ``recipe.locale_of`` argues out why — and no world spec accepts
     one."""
 
+    master_data_counts: Mapping[str, int] | None = None
+    """Reference tables to mint at build — ``{"vendors": 2000, "skus": 500}``.
+    ``None`` mints nothing; see ``RetailWorld.master_data`` for the contract
+    (opt-in, own stream, counts on the recipe, rows on ``masterdata.json``)."""
+
     facet_choices: Mapping[str, str] = _field(default_factory=dict)
     role_rows: tuple[tuple[str, str, str, str | None], ...] = ()
     """A finished organisation, when something upstream already built one — a
@@ -256,6 +261,21 @@ class Blueprint:
         which sets the bands the engine *draws inside*.
         """
         return replace(self, annual_revenue=annual)
+
+    def master_data(self, **counts: int) -> Blueprint:
+        """Mint relational reference tables at build — vendors, customers, SKUs.
+
+            sdk.company("procurement").master_data(vendors=2000, skus=500)
+
+        Counts, validated here rather than at build (``sweep`` over forty
+        worlds should fail on the typo, not forty builds later), and recorded
+        on the recipe so a replay re-mints the same rows. The engines that ship
+        here all accept the knob; a domain registered outside this repository
+        that does not will refuse it at ``build()`` by field name.
+        """
+        from .generators.masterdata import check_request
+
+        return replace(self, master_data_counts=check_request(counts))
 
     def located(self, locale: str) -> Blueprint:
         """The jurisdiction. Refuses an unknown one here rather than at render.
@@ -463,6 +483,8 @@ class Blueprint:
             "pack": None if self.pack_source is None else self.pack_source.name,
             "physics": {name: span.as_dict()
                         for name, span in sorted(self.physics_overrides.items())},
+            "master_data": (dict(self.master_data_counts)
+                            if self.master_data_counts else None),
             "facets": dict(sorted(self.facet_choices.items())),
             # Which claims will put lore in the corpus, by source rather than by
             # count: "2 commitments" tells a reader deciding whether to build
@@ -495,6 +517,9 @@ class Blueprint:
             # be built at all — the same reason `estate` and `seasonality` above
             # are conditional.
             changes["lore_claims"] = self.implied_lore
+        if self.master_data_counts:
+            # Conditional for the same out-of-tree-domain reason as the rest.
+            changes["master_data"] = dict(self.master_data_counts)
 
         if self.pack_source is not None:
             # A different constructor, not a different argument: `from_pack`
@@ -753,6 +778,8 @@ def from_resolution(resolution: Any, *, seed: int = 8128) -> Blueprint:
         locale_name=resolution.locale,
         facet_choices=dict(resolution.facet_choices),
         implied_lore=tuple(resolution.lore_claims),
+        master_data_counts=(dict(resolution.master_data)
+                            if resolution.master_data else None),
         unmet=tuple(resolution.unmet),
     )
     if resolution.pack is not None:

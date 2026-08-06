@@ -280,6 +280,16 @@ class RetailWorld:
     financial year: a pack is a claim about *this company*, a locale about the
     country it is in."""
 
+    master_data: Any = None
+    """Reference tables at scale (``generators/masterdata.py``): a mapping of
+    ``vendors``/``customers``/``skus`` to row counts, e.g.
+    ``{"vendors": 2000}``. ``None`` mints nothing and writes nothing, which is
+    what keeps every corpus built before the knob existed byte-identical —
+    the same guarantee ``estate`` makes, by the same mechanism (a stream of
+    its own under the world seed, a corpus file written only when populated).
+    The recipe records the counts, never the rows, so a replay re-runs the
+    same construction — ``lore_claims``' posture."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int,
                     physics: Parameters = DEFAULT) -> RetailWorld:
@@ -362,6 +372,7 @@ class RetailWorld:
             # picks up any correction the registry later makes; storing the
             # resolved dict would freeze a copy of the registry into it.
             locale=self.locale,
+            master_data=self.master_data,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = organisation.generate(
@@ -379,7 +390,7 @@ class RetailWorld:
             role_table=self.role_table,
         )
 
-        return World(
+        world = World(
             company=org.company,
             _business_units=org.business_units,
             _people=org.people,
@@ -401,6 +412,12 @@ class RetailWorld:
             _generator_version=worldloom_version,
             _recipe=recipe,
         )
+        # A strict no-op when nothing was asked for — see the field. After the
+        # organisation so the register buckets vendors in this world's own
+        # category names, under a stream root of its own so it moves nothing.
+        from .generators import masterdata as masterdata_module
+
+        return masterdata_module.applied(world, self.master_data, locale=locale)
 
 
 # Retail owns its archetypes in the domain registry, like every vertical. No

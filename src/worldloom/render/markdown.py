@@ -64,11 +64,37 @@ def _caption(chart: Chart, table: Table | None) -> str:
     return "\n\n".join(lines)
 
 
+#: How many detail rows Markdown shows before switching to a count. A workbook
+#: carries the full table because a sheet is where a thousand rows belong; a
+#: memo-shaped format that pasted them all would bury the document under its
+#: own appendix, so it shows the head and states the size — both read from the
+#: same rows, so they cannot disagree with the sheet.
+_DETAIL_HEAD = 10
+
+
+def _detail_head(table, locale: Locale) -> str:  # type: ignore[no-untyped-def]
+    header = [column.label for column in table.columns]
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join("---" for _ in header) + " |",
+    ]
+    for row in table.rows[:_DETAIL_HEAD]:
+        lines.append("| " + " | ".join(
+            format_value(row.get(column.name), column.number_format, locale=locale)
+            for column in table.columns
+        ) + " |")
+    shown = min(_DETAIL_HEAD, len(table.rows))
+    lines += ["", f"*First {shown} of {len(table.rows):,} lines; the full table"
+                  " is in the workbook sheet and `detail.jsonl`.*"]
+    return "\n".join(lines)
+
+
 def render(
     ir: ArtifactIR,
     facts: dict[str, CanonicalFact] | None = None,
     *,
     locale: Locale = DEFAULT_LOCALE,
+    detail=(),
 ) -> bytes:
     """Render one IR to Markdown bytes.
 
@@ -124,6 +150,10 @@ def render(
         for chart in section.charts:
             parts.append(_caption(chart, section.table))
 
+    for table in detail:
+        parts.append(f"## {table.title}")
+        parts.append(_detail_head(table, locale))
+
     if ir.metadata.get("voice"):
         parts.append(
             f"---\n\n*Author voice: {ir.metadata['voice']}. "
@@ -149,6 +179,10 @@ def own_elsewhere(*artifact_types: str) -> None:
 def render_all(world: World) -> list[Rendered]:
     """Render every artifact that has no more specific format."""
     locale = corpus_locale(world)
+    by_intent: dict[str, list] = {}
+    for table in world.detail_tables:
+        if table.artifact_id:
+            by_intent.setdefault(table.artifact_id, []).append(table)
     out: list[Rendered] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
@@ -159,7 +193,8 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.md",
                 media_type="text/markdown",
-                payload=render(ir, {fact.id: fact for fact in world.facts}, locale=locale),
+                payload=render(ir, {fact.id: fact for fact in world.facts}, locale=locale,
+                               detail=by_intent.get(ir.intent_id, ())),
             )
         )
     return out

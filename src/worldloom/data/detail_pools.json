@@ -1,0 +1,68 @@
+{
+  "//": "Vocabulary pools for detail tables (src/worldloom/detail.py). Vendored, versioned data: a pool is part of what a seed means, so editing a list in place changes every corpus that drew from it — add a new pool instead. Names are neutral trade vocabulary, no real company or person.",
+  "plant_hire_items": [
+    "Excavator 20t — wet hire, day",
+    "Excavator 5t — dry hire, day",
+    "Grader 140M — wet hire, day",
+    "Watercart 15kL — day",
+    "Roller — smooth drum 12t, day",
+    "Roller — padfoot 12t, day",
+    "Skid steer with broom, day",
+    "Backhoe loader, day",
+    "Tipper truck 10m3 — hourly",
+    "Semi water tanker — hourly",
+    "Dozer D6 — wet hire, day",
+    "Compactor plate — minor plant, week",
+    "Lighting tower — week",
+    "Generator 60kVA — week",
+    "Traffic management crew — shift",
+    "Concrete agitator 6m3 — load",
+    "Crushed rock 20mm — tonne delivered",
+    "Road base class 2 — tonne delivered",
+    "Sand — bedding, tonne delivered",
+    "Geofabric roll — each",
+    "Survey set-out — visit",
+    "Hydro excavation truck — hourly",
+    "Street sweeper — shift",
+    "Labour — general civil, hour"
+  ],
+  "civil_cost_codes": [
+    "CIV-EARTH-010",
+    "CIV-EARTH-020",
+    "CIV-DRAIN-110",
+    "CIV-DRAIN-130",
+    "CIV-PAVE-210",
+    "CIV-PAVE-230",
+    "CIV-CONC-310",
+    "CIV-TRAF-410",
+    "CIV-SURV-510",
+    "CIV-PLANT-610",
+    "CIV-PLANT-620",
+    "CIV-LAB-710"
+  ],
+  "delivery_dockets": [
+    "Gate 1 — laydown north",
+    "Gate 1 — laydown south",
+    "Gate 2 — stores",
+    "Gate 3 — heavy vehicle",
+    "Direct to work front"
+  ],
+  "unit_of_measure": [
+    "day",
+    "hour",
+    "week",
+    "tonne",
+    "each",
+    "load",
+    "shift",
+    "visit"
+  ],
+  "edge_unicode": [
+    "Excavator 20t — wet hire, día",
+    "Grader 140M — lame 14′, jour",
+    "Watercart 15kL — “dust suppression”",
+    "Labour — general civil, Stück",
+    "Røller — smooth drum 12t",
+    "Concrete agitator 6m³ — load"
+  ]
+}
