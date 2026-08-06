@@ -61,7 +61,7 @@ from .roles import from_shape, to_rows
 
 __all__ = [
     "Blueprint", "Built", "banking", "built", "companies", "cross", "described",
-    "dispersed", "engine", "insurance", "mosaic_of", "probe_of", "retail",
+    "dispersed", "company", "engine", "insurance", "mosaic_of", "probe_of", "retail",
     "sweep",
 ]
 
@@ -603,11 +603,24 @@ def _step(period: str, index: int, months: int) -> str:
 # ---------------------------------------------------------------------------
 
 
+def company(engine: str, *, seed: int = 8128) -> Blueprint:
+    """A blueprint for any registered industry, by engine name.
+
+    THE front door, and industry-neutral on purpose. The named conveniences
+    below (`retail()`, `banking()`, ...) predate the fourth vertical and were
+    never extended to it — `procurement` had no named entry at all, which is
+    the tell: a per-industry function is a list somebody has to remember to
+    grow, and the registry already knows every engine including ones authored
+    outside this repository. Name the industry as data, not as an import.
+    """
+    if domains.by_name(engine) is None:
+        raise KeyError(f"no domain named {engine!r}; known: {domains.names()}")
+    return Blueprint(domain_name=engine, seed=seed)
+
+
 def engine(name: str, *, seed: int = 8128) -> Blueprint:
-    """A blueprint for any registered domain by name."""
-    if domains.by_name(name) is None:
-        raise KeyError(f"no domain named {name!r}; known: {domains.names()}")
-    return Blueprint(domain_name=name, seed=seed)
+    """A blueprint for any registered domain by name. Alias of `company`."""
+    return company(name, seed=seed)
 
 
 def described(
@@ -684,8 +697,11 @@ def from_resolution(resolution: Any, *, seed: int = 8128) -> Blueprint:
     )
 
 
+# Kept as conveniences for existing callers and docs; `company()` is the
+# canonical, industry-neutral path and the only one a new engine appears in
+# automatically.
 def retail(*, seed: int = 8128) -> Blueprint:
-    return engine("retail", seed=seed)
+    return company("retail", seed=seed)
 
 
 def banking(*, seed: int = 8128) -> Blueprint:
