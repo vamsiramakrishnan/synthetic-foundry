@@ -21,6 +21,7 @@ a scenario DSL early.
 
 from __future__ import annotations
 
+from ..roles import parse_unit_role
 from .models import ActorPolicy, DecisionRight
 
 #: Fact-kind prefix to the domain that owns it.
@@ -227,6 +228,10 @@ _BY_ROLE: dict[str, ActorPolicy] = {policy.role_key: policy for policy in _POLIC
 #: Business-unit finance partners share one policy. The organisation generator
 #: mints a role key per unit (``food_bp``, ``digital_bp``), and every one of them
 #: is the same job — writing a policy per unit would be five copies that drift.
+#: Keyed by the same suffix vocabulary the generator mints under
+#: (``roles.UNIT_ROLE_SUFFIXES``), matched through ``roles.parse_unit_role``
+#: rather than a local ``endswith`` — so a change to the key format cannot
+#: silently strip every business partner of their policy.
 _ROLE_ALIASES: tuple[tuple[str, str], ...] = (
     ("_bp", "finance_business_partner"),
 )
@@ -237,7 +242,7 @@ def policy_role(role_key: str) -> str:
     if role_key in _BY_ROLE:
         return role_key
     for suffix, target in _ROLE_ALIASES:
-        if role_key.endswith(suffix):
+        if parse_unit_role(role_key, (suffix,)) is not None:
             return target
     return role_key
 

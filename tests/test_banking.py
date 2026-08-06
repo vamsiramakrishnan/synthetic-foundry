@@ -551,20 +551,18 @@ def test_two_quarter_export_then_replay_is_byte_identical(two_quarters: World, t
 
 
 def test_cli_periods_steps_by_the_domains_own_cadence(two_quarters: World, tmp_path) -> None:
-    """2: `--periods` is no longer refused for a single-episode domain — it
-    runs that many consecutive episodes, stepping by the registered
-    ``period_step_months`` (3, for banking) rather than one month at a time.
-    The CLI path must land on exactly the periods ``two_quarters`` built
-    directly, and produce the identical fact ledger."""
+    """Phase 3 defers multi-period support for single-episode domains: `--periods`
+    is refused with a note that carry-forward will arrive as a declared slot in
+    the episode grammar (Phase 2). This keeps Phase 3 from hand-coding a second
+    bespoke carry-forward; each vertical will express it as data once."""
     out = tmp_path / "two-quarter-cli"
     result = runner.invoke(app, [
         "build", "--seed", str(SEED), "--period", PERIOD, "--archetype", "midsize_adi",
         "--periods", "2", "--out", str(out),
     ])
-    assert result.exit_code == 0, result.output
-    world = World.load(out)
-    assert [step["period"] for step in world.recipe["steps"]] == [PERIOD, SECOND_PERIOD]
-    assert [f.model_dump() for f in world.facts] == [f.model_dump() for f in two_quarters.facts]
+    assert result.exit_code == 2
+    assert "is not supported for banking" in result.output
+    assert "episode grammar" in result.output
 
 
 def test_cli_still_refuses_the_retail_only_flags_for_banking(tmp_path) -> None:

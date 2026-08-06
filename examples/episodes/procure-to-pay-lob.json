@@ -1,0 +1,35 @@
+{
+  "name": "procurement",
+  "title": "Procurement",
+  "purpose": "Procurement, purchasing, and accounts payable.",
+  "engine": "retail",
+  "roles": [
+    {"key": "chief_procurement", "title": "Chief Procurement Officer",
+     "function": "Procurement", "reports_to": "ceo"},
+    {"key": "category_manager", "title": "Category Manager, Subcontract and Plant",
+     "function": "Procurement", "reports_to": "chief_procurement"},
+    {"key": "site_receiving_lead", "title": "Site Receiving Lead",
+     "function": "Operations", "reports_to": "chief_procurement"},
+    {"key": "financial_controller", "title": "Financial Controller, Procure-to-Pay",
+     "function": "Finance", "reports_to": "cfo"},
+    {"key": "accounts_payable_lead", "title": "Accounts Payable Lead",
+     "function": "Finance", "reports_to": "financial_controller"}
+  ],
+  "responsibilities": [
+    {"role_key": "chief_procurement", "fact_kinds": ["p2p"],
+     "artifact_types": ["purchase_order"]},
+    {"role_key": "accounts_payable_lead",
+     "fact_kinds": ["p2p.invoiced_value", "p2p.match_total_variance"],
+     "artifact_types": ["supplier_invoice", "match_exception_report"]},
+    {"role_key": "financial_controller",
+     "fact_kinds": ["financial.accrual.grni", "p2p.approved_payment_value"],
+     "artifact_types": ["payment_approval_memo"]}
+  ],
+  "artifact_filings": ["purchase_order", "match_exception_report", "payment_approval_memo"],
+  "episode_contributions": ["ProcureToPay"],
+  "slot_bindings": [
+    {"process": "ProcureToPay", "slot": "preparer", "role_key": "category_manager"},
+    {"process": "ProcureToPay", "slot": "matcher", "role_key": "accounts_payable_lead"},
+    {"process": "ProcureToPay", "slot": "approver", "role_key": "financial_controller"}
+  ]
+}

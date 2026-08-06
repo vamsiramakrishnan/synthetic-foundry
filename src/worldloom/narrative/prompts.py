@@ -84,7 +84,13 @@ SECTION_PROSE = Prompt(
     # handshake's rules text is not itself a ledger-key component, but the
     # brief a writer answers under changed on both paths, and this version is
     # the one key component that records which brief that was.
-    version="4",
+    #
+    # v5 adds three sentences: the claim-coverage converse (every reference must
+    # be cited by some claim), clarification that job titles and background-only
+    # names are not entities, and explanation that a reference substitutes the
+    # fact's rendered statement verbatim so prose must write grammar around it.
+    # The handshake.RULES changed, so the ledger key must.
+    version="5",
     template="""\
 Write the "{section}" section of a {artifact_type} for {audience}.
 

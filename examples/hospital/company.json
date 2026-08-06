@@ -1,0 +1,35 @@
+{
+  "about": "A mid-size private hospital group in Australia, providing acute care across multiple campuses with emergency, surgical, and pathology services. Multi-site operation with mixed public and private patient streams.",
+  "industry": "Private healthcare and hospital services",
+  "geo": "australia",
+  "archetype": "midsize_general_insurer",
+  "facets": {
+    "listing": "unlisted",
+    "competition": "fragmented",
+    "maturity": "established",
+    "trading_pattern": "steady"
+  },
+  "organisation": {
+    "headcount": 32,
+    "span": 4,
+    "levels": 3
+  },
+  "leadership": [
+    {
+      "key": "chief_medical",
+      "title": "Chief Medical Officer",
+      "function": "Executive",
+      "reports_to": "ceo"
+    },
+    {
+      "key": "chief_operations",
+      "title": "Chief Operations Officer",
+      "function": "Executive",
+      "reports_to": "ceo"
+    }
+  ],
+  "identity": {
+    "company_name": "Healwell Healthcare Group",
+    "headquarters": "Melbourne, Australia"
+  }
+}

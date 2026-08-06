@@ -85,12 +85,16 @@ from .rng import Rng
 from .validate import RECONCILIATION_TOLERANCE, Violation
 from .world import World, extend_lore
 
-# Imported for its side effect: registering procurement's artifact types with
-# the document compiler. Kept at module scope so that importing
-# `worldloom.procurement` — which `worldloom/__init__` always does — is
-# sufficient for a corpus loaded in a fresh process to compile and validate
-# identically everywhere.
+# Imported for its side effects: registering procurement's artifact types with
+# the document compiler, and registering its physics parameters. Kept at module
+# scope so that importing `worldloom.procurement` — which `worldloom/__init__`
+# always does — is sufficient for a corpus loaded in a fresh process to compile,
+# validate, and access procurement's parameters identically everywhere.
 from . import procurement_documents  # noqa: F401  (registration)
+from .generators.procurement_match import SPANS as _PROCUREMENT_SPANS
+from . import parameters as _parameters_module
+
+_parameters_module.register(_PROCUREMENT_SPANS)
 
 #: Archetype keys that build a ``ProcureToPayWorld``. The recipe rebuilder and
 #: the CLI dispatch on this.
@@ -822,6 +826,96 @@ register_domain(Domain(
     episode_text=tuple(_PROCUREMENT_TEXT.items()),
     evaluation_text=tuple(_PROCUREMENT_EVAL_TEXT.items()),
 ))
+
+# Procurement's own fact kinds, in the process-global registry. This vertical
+# carries the project's only period-keyed carry-forward (`p2p.open_shortfall_*`),
+# so it is where `carries-forward-as(derive)` is a measured fact rather than a
+# design intention. `financial.accrual.grni` is registered here, not by retail,
+# despite the prefix: the procurement cycle mints it and answers for it.
+from .factkinds import FactKind, register as _register_kinds  # noqa: E402
+
+_register_kinds([
+    FactKind(kind="p2p.contract_rate", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at", "standing"), about="The contracted unit rate."),
+    FactKind(kind="p2p.contract_counterparty", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at", "standing"), about="Who the contract is with."),
+    FactKind(kind="p2p.approval_tolerance_pct", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at", "standing"), about="The match tolerance, in per cent."),
+    FactKind(kind="p2p.approval_tolerance", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at",), about="The tolerance in currency at this order's size."),
+    FactKind(kind="p2p.ordered_quantity", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at",), about="What was committed."),
+    FactKind(kind="p2p.ordered_value", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at", "reconciles-against(p2p.ordered_quantity, p2p.contract_rate)"),
+             about="Quantity times rate, exactly."),
+    FactKind(kind="p2p.received_quantity", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at",), about="What arrived."),
+    FactKind(kind="p2p.received_value", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at",), about="What arrived, valued at contract."),
+    FactKind(kind="p2p.invoiced_quantity", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at",), about="What was billed."),
+    FactKind(kind="p2p.invoiced_unit_price", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at",), about="The billed unit price the match disputes."),
+    FactKind(kind="p2p.invoiced_value", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at", "reconciles-against(p2p.invoiced_quantity, p2p.invoiced_unit_price)"),
+             about="Billed quantity times billed price."),
+    FactKind(kind="p2p.match_price_variance", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at",), about="The price leg of the failed match."),
+    FactKind(kind="p2p.match_quantity_variance", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at",), about="The quantity leg of the failed match."),
+    FactKind(kind="p2p.match_total_variance", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at", "reconciles-against(p2p.match_price_variance, p2p.match_quantity_variance)"),
+             about="The two legs, summed — `_checks` recomputes the accrual arithmetic."),
+    FactKind(kind="p2p.exception_status", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at", "supersedes-prior"),
+             about="The exception's state chain; exactly one status is open at a time."),
+    FactKind(kind="p2p.exception_approved_by", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at",), about="Who approved paying over the tolerance."),
+    FactKind(kind="p2p.approved_payment_value", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at",), about="What was actually paid."),
+    FactKind(kind="p2p.credit_note_value", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at",), about="The credit note that settles the price leg."),
+    FactKind(kind="p2p.vendor_change_status", domain="procurement",
+             generated_by="generators/procurement_match.py",
+             invariants=("holds-at", "supersedes-prior"),
+             about="The vendor-master change request's state chain."),
+    FactKind(kind="p2p.open_shortfall_quantity", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at", "carries-forward-as(derive)"),
+             about="Undelivered quantity at close; next month's is derived from it."),
+    FactKind(kind="p2p.open_shortfall_value", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at", "carries-forward-as(derive)"),
+             about="Undelivered value at close — the balance the accrual carries."),
+    FactKind(kind="p2p.shortfall_released_quantity", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at",), about="Prior shortfall cleared by this month's receipts."),
+    FactKind(kind="p2p.shortfall_released_value", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at",), about="The released balance, valued."),
+    FactKind(kind="financial.accrual.grni", domain="procurement",
+             generated_by="generators/procurement_cycle.py",
+             invariants=("holds-at", "reconciles-against(p2p.open_shortfall_value, p2p.match_total_variance)"),
+             about="Goods-received-not-invoiced accrual the close books."),
+])
 
 
 __all__ = [

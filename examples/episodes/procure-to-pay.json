@@ -1,0 +1,410 @@
+{
+  "episodes": [
+    {
+      "name": "ProcureToPay",
+      "domain": "procurement",
+      "period": "month",
+      "detail": "One monthly purchase cycle: order, receipt, invoice, a failed three-way match, an escalation past the approval tolerance, and the accrual the close carries.",
+      "fact_kinds": [
+        {
+          "kind": "p2p.contract_counterparty",
+          "value_type": "text",
+          "authority": "approved_report",
+          "period_scope": "standing",
+          "text": "Kerrigan Civil Services, under the standing subcontract and plant rate card",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "standing", "detail": "Who the standing agreement is with belongs to no month. The engine draws the name from a world-keyed stream; a spec commits one as fiction — a name is mechanism, not physics."}
+          ]
+        },
+        {
+          "kind": "p2p.contract_rate",
+          "value_type": "money",
+          "authority": "approved_report",
+          "period_scope": "standing",
+          "parameter": "procurement.contract.contested_rate",
+          "unit": "AUD_per_unit",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "standing", "detail": "Agreed once, priced against every later month — the reuse carry-forward below is what stops month two renegotiating it."}
+          ]
+        },
+        {
+          "kind": "p2p.approval_tolerance_pct",
+          "value_type": "percent",
+          "period_scope": "standing",
+          "parameter": "procurement.tolerance.pct",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "standing", "detail": "The delegation of authority, as the group states it: a percentage of committed order value. The engine also carries the policy's prose on this fact; the grammar mints an amount or a text, not both — a named divergence."}
+          ]
+        },
+        {
+          "kind": "p2p.ordered_quantity",
+          "value_type": "measure",
+          "authority": "approved_report",
+          "parameter": "procurement.order.contested_quantity",
+          "unit": "units",
+          "invariants": [{"kind": "holds-at", "detail": "What was committed. The engine's order has two lines (a contested and a clean one, per spend category); the runner mints one subject per kind, so the port carries the cycle at group scope and the clean-line control stays engine-only."}]
+        },
+        {
+          "kind": "p2p.ordered_value",
+          "value_type": "money",
+          "authority": "approved_report",
+          "derive": "at_rate(p2p.ordered_quantity, p2p.contract_rate)",
+          "invariants": [{"kind": "holds-at", "detail": "Quantity at the contracted rate, exactly — the registry also records the product identity as reconciles-against; the derived-check vocabulary reads reconciles-against as a ratio, so the identity is held here by construction instead."}]
+        },
+        {
+          "kind": "p2p.approval_tolerance",
+          "value_type": "money",
+          "derive": "percent_of(p2p.ordered_value, p2p.approval_tolerance_pct)",
+          "invariants": [{"kind": "holds-at", "detail": "The standing percentage applied to this order's committed value — two facts because they are two claims (how the group delegates; what that comes to on this order)."}]
+        },
+        {
+          "kind": "p2p.match_total_variance",
+          "value_type": "money",
+          "authority": "confirmed",
+          "derive": "multiple_of(p2p.approval_tolerance)",
+          "parameter": "procurement.tolerance.breach_multiple",
+          "invariants": [{"kind": "holds-at", "detail": "Sized as a multiple of the tolerance, drawn strictly above 1.0 — the escalation is guaranteed by the same span the engine draws, not hoped for."}]
+        },
+        {
+          "kind": "p2p.match_price_variance",
+          "value_type": "money",
+          "authority": "confirmed",
+          "derive": "multiple_of(p2p.match_total_variance)",
+          "parameter": "procurement.variance.price_fraction",
+          "invariants": [{"kind": "holds-at", "detail": "The rate-uplift half of the failed match."}]
+        },
+        {
+          "kind": "p2p.match_quantity_variance",
+          "value_type": "money",
+          "authority": "confirmed",
+          "derive": "minus(p2p.match_total_variance, p2p.match_price_variance)",
+          "invariants": [{"kind": "holds-at", "detail": "The short-delivery half: total less price, so the two halves sum by construction — check (f) recomputes it. The engine sizes these top-down too, then backs integer units out with outward rounding and republishes the variances from the integers; that bottom-up back-out stays generator logic."}]
+        },
+        {
+          "kind": "p2p.open_shortfall_quantity",
+          "value_type": "measure",
+          "derive": "units_of(p2p.match_quantity_variance, p2p.contract_rate)",
+          "unit": "units",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "carries-forward-as", "operands": ["derive"], "detail": "Undelivered units at this close; next month's receipt releases them."}
+          ]
+        },
+        {
+          "kind": "p2p.received_quantity",
+          "value_type": "measure",
+          "derive": "minus(p2p.ordered_quantity, p2p.open_shortfall_quantity)",
+          "unit": "units",
+          "invariants": [{"kind": "holds-at", "detail": "What site signed for — never more than was ordered, by construction here and by check (b) in the engine."}]
+        },
+        {
+          "kind": "p2p.received_value",
+          "value_type": "money",
+          "derive": "minus(p2p.ordered_value, p2p.match_quantity_variance)",
+          "invariants": [{"kind": "holds-at", "detail": "The received quantity valued at the contracted rate — the figure the accrual is built from, which is what makes a site receipting note decide a general-ledger number."}]
+        },
+        {
+          "kind": "p2p.invoiced_value",
+          "value_type": "money",
+          "derive": "plus(p2p.received_value, p2p.match_total_variance)",
+          "invariants": [{"kind": "holds-at", "detail": "What the supplier billed: the received value plus everything the match disputes. The engine also mints the billed quantity and unit price; the unit price is the back-out mechanism's product, so the port carries the invoice at value level."}]
+        },
+        {
+          "kind": "p2p.credit_note_value",
+          "value_type": "money",
+          "derive": "minus(p2p.invoiced_value, p2p.received_value)",
+          "invariants": [{"kind": "holds-at", "detail": "The supplier concedes the whole variance — check (g) recomputes exactly this."}]
+        },
+        {
+          "kind": "p2p.approved_payment_value",
+          "value_type": "money",
+          "derive": "minus(p2p.invoiced_value, p2p.credit_note_value)",
+          "invariants": [{"kind": "holds-at", "detail": "Invoiced less credit note — which is the received value at the contracted rate, the pay-to-contract norm as arithmetic."}]
+        },
+        {
+          "kind": "p2p.shortfall_released_quantity",
+          "value_type": "measure",
+          "derive": "prior(p2p.open_shortfall_quantity)",
+          "unit": "units",
+          "invariants": [{"kind": "holds-at", "detail": "Last month's undelivered balance, arriving as an ordinary receipt. Zero in the first period — stated, not omitted."}]
+        },
+        {
+          "kind": "p2p.shortfall_released_value",
+          "value_type": "money",
+          "derive": "prior(p2p.open_shortfall_value)",
+          "invariants": [{"kind": "holds-at", "detail": "The released balance, valued — check (k) requires it to equal, exactly, what the previous close left outstanding."}]
+        },
+        {
+          "kind": "p2p.open_shortfall_value",
+          "value_type": "money",
+          "derive": "minus(p2p.match_total_variance, p2p.match_price_variance)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "The undelivered balance at this close: a commitment, not an accrual — nothing has been received, so nothing is owed for it, which is why it is a separate fact from the accrual and check (j) holds it to the quantity variance."},
+            {"kind": "carries-forward-as", "operands": ["derive"]}
+          ]
+        },
+        {
+          "kind": "financial.accrual.grni",
+          "value_type": "money",
+          "derive": "plus(p2p.received_value, p2p.shortfall_released_value)",
+          "invariants": [{"kind": "holds-at", "detail": "The composition, in one fact: the receipt plus the released balance, in the shared financial vocabulary a month-end close already reads. The invoice — higher-ranked and larger — contributes nothing to it, and check (i) holds that."}]
+        },
+        {
+          "kind": "p2p.exception_status",
+          "value_type": "text",
+          "authority": "confirmed",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "supersedes-prior", "detail": "Raised, escalated, resolved: a three-link chain, each superseded link closing exactly where its successor opens. Three correct statements about three moments — none is marked wrong, and check (m) walks the chain."}
+          ]
+        },
+        {
+          "kind": "p2p.exception_approved_by",
+          "value_type": "text",
+          "authority": "approved_report",
+          "subject_type": "person",
+          "subject_role": "financial_controller",
+          "text": "Approved settlement of the {period} three-way match exception at the contracted rate, under the standing delegation of authority",
+          "invariants": [{"kind": "holds-at", "detail": "A fact whose subject is a person — who carried the delegation, not who typed the memo. The segregation-of-duties check reads exactly this against the order's author."}]
+        },
+        {
+          "kind": "p2p.vendor_change_status",
+          "value_type": "text",
+          "authority": "working_document",
+          "period_scope": "standing",
+          "text": "Remittance detail change requested by the supplier and held pending a second Finance approver; the payment run continues to use the details on file",
+          "invariants": [{"kind": "holds-at", "detail": "The one fact below APPROVED_REPORT: a change nobody has countersigned is not yet a record of anything. Standing and reused — the engine also skips the requesting *event* after the first month, which the grammar cannot conditionalise; the repeated event is a named divergence."}]
+        },
+        {
+          "kind": "close.due_date",
+          "value_type": "date",
+          "text": "{bd:4}",
+          "invariants": [{"kind": "holds-at", "detail": "The committed close date."}]
+        },
+        {
+          "kind": "close.status",
+          "value_type": "text",
+          "text": "final",
+          "invariants": [{"kind": "holds-at"}]
+        },
+        {
+          "kind": "close.delay",
+          "value_type": "measure",
+          "amount": 0,
+          "unit": "days",
+          "invariants": [{"kind": "holds-at", "detail": "Zero, honestly recorded — the disruption in this episode is commercial, not calendrical."}]
+        }
+      ],
+      "events": [
+        {
+          "kind": "order_raised", "when": "start",
+          "anchor": "prior_period_end", "business_day": 3, "hour": 9, "minute": 0,
+          "summary": "A purchase order was raised against the standing rate card and approved under delegated authority: two lines, committed quantity and contracted rate on each.",
+          "actors": ["category_manager"],
+          "fact_keys": ["p2p.contract_counterparty", "p2p.contract_rate",
+                        "p2p.approval_tolerance_pct", "p2p.ordered_quantity",
+                        "p2p.ordered_value", "p2p.approval_tolerance"]
+        },
+        {
+          "kind": "vendor_change_requested", "when": "start",
+          "anchor": "prior_period_end", "business_day": 8, "hour": 10, "minute": 0,
+          "summary": "The supplier requested a change to its remittance details. The change was logged against the vendor master and held: the standing norm requires two Finance approvers, and only one has signed.",
+          "actors": ["chief_procurement"],
+          "fact_keys": ["p2p.vendor_change_status"]
+        },
+        {
+          "kind": "goods_received", "when": "before_incident",
+          "anchor": "prior_period_end", "business_day": 15, "hour": 15, "minute": 0,
+          "summary": "Site receipted the delivery. One line arrived in full; the other was signed for short, and the receipt records the quantity that actually arrived rather than the quantity ordered.",
+          "actors": ["site_receiving_lead"], "caused_by": "order_raised",
+          "fact_keys": ["p2p.received_quantity", "p2p.received_value",
+                        "p2p.shortfall_released_quantity", "p2p.shortfall_released_value"]
+        },
+        {
+          "kind": "close_started", "when": "incident",
+          "business_day": 1, "hour": 6, "minute": 0,
+          "summary": "{period} month-end close commenced; the overnight ledger sequence began.",
+          "actors": ["financial_controller"],
+          "fact_keys": ["close.due_date"]
+        },
+        {
+          "kind": "invoice_received", "when": "incident",
+          "business_day": 1, "hour": 9, "minute": 0,
+          "summary": "The supplier's invoice was received and posted to the accounts payable subledger. It bills the full ordered quantity, at a rate above the one on the order.",
+          "actors": ["accounts_payable_lead"], "caused_by": "goods_received",
+          "fact_keys": ["p2p.invoiced_value"]
+        },
+        {
+          "kind": "match_run", "when": "incident",
+          "business_day": 2, "hour": 10, "minute": 30,
+          "summary": "The three-way match was run: order against receipt against invoice. It failed on both counts — a quantity billed that was not received, and a rate billed that was not agreed.",
+          "actors": ["accounts_payable_lead"], "caused_by": "invoice_received",
+          "fact_keys": ["p2p.match_quantity_variance", "p2p.match_price_variance",
+                        "p2p.match_total_variance", "p2p.exception_status"],
+          "fact_texts": {"p2p.exception_status": "Three-way match failed: the invoice does not agree with the order or the receipt"}
+        },
+        {
+          "kind": "exception_escalated", "when": "after_incident",
+          "business_day": 3, "hour": 14, "minute": 0,
+          "summary": "The match variance exceeded the approval tolerance, so the exception left the buyer's hands and went to Finance. Under the standing delegation the person who raised the order may not clear it.",
+          "actors": ["accounts_payable_lead", "category_manager", "chief_procurement"],
+          "caused_by": "match_run",
+          "fact_keys": ["p2p.exception_status"],
+          "fact_texts": {"p2p.exception_status": "Escalated to Finance: the total match variance exceeds the standing approval tolerance for this order"}
+        },
+        {
+          "kind": "settlement_approved", "when": "after_incident",
+          "business_day": 4, "hour": 11, "minute": 0,
+          "summary": "Finance approved settlement at the contracted rate for the quantity actually received. The supplier issued a credit note for the difference and will re-invoice the undelivered balance when it ships.",
+          "actors": ["financial_controller", "chief_procurement"],
+          "caused_by": "exception_escalated",
+          "fact_keys": ["p2p.exception_status", "p2p.exception_approved_by",
+                        "p2p.credit_note_value", "p2p.approved_payment_value"],
+          "fact_texts": {"p2p.exception_status": "Resolved by credit note: settled at the contracted rate for the quantity received, with the undelivered balance to be re-invoiced on delivery"}
+        },
+        {
+          "kind": "close_finalised", "when": "end",
+          "business_day": 4, "hour": 16, "minute": 40,
+          "summary": "{period} close finalised and the ledger locked on the committed date. The accrual for goods received and not invoiced was posted from the receipt, not the invoice.",
+          "actors": ["financial_controller"], "caused_by": "settlement_approved",
+          "detail": "The engine records two causes here (the close starting, and the settlement); EventSpec.caused_by is a single earlier event, so the settlement — the cause the accrual actually depends on — is the one declared. A named divergence.",
+          "fact_keys": ["close.status", "close.delay", "financial.accrual.grni",
+                        "p2p.open_shortfall_quantity", "p2p.open_shortfall_value"]
+        }
+      ],
+      "artifacts": [
+        {
+          "artifact_type": "purchase_order",
+          "author_role": "category_manager",
+          "audience": "procurement_and_finance",
+          "required_facts": ["p2p.contract_counterparty", "p2p.contract_rate",
+                             "p2p.ordered_quantity", "p2p.ordered_value",
+                             "p2p.approval_tolerance", "p2p.approval_tolerance_pct"],
+          "size": "medium",
+          "structured": true,
+          "unstructured": false,
+          "triggered_by_events": ["order_raised"],
+          "rationale": "The commitment: what was agreed, and at what rate. The only document in the corpus that states what the group agreed to pay per unit."
+        },
+        {
+          "artifact_type": "goods_receipt_note",
+          "author_role": "site_receiving_lead",
+          "audience": "procurement_and_finance",
+          "required_facts": ["p2p.received_quantity", "p2p.received_value",
+                             "p2p.contract_rate", "p2p.shortfall_released_quantity",
+                             "p2p.shortfall_released_value"],
+          "size": "medium",
+          "structured": true,
+          "unstructured": false,
+          "triggered_by_events": ["goods_received"],
+          "rationale": "What site signed for, at the contracted rate — including the balance of last month's short delivery, arriving as an ordinary receipt. The month-end accrual is built from this document."
+        },
+        {
+          "artifact_type": "supplier_invoice",
+          "author_role": "accounts_payable_lead",
+          "audience": "procurement_and_finance",
+          "required_facts": ["p2p.invoiced_value"],
+          "size": "medium",
+          "structured": true,
+          "unstructured": false,
+          "triggered_by_events": ["invoice_received"],
+          "rationale": "What was billed, as posted. Immutable from this moment: a wrong invoice is not edited and not superseded — a credit note is posted beside it."
+        },
+        {
+          "artifact_type": "match_exception_report",
+          "author_role": "accounts_payable_lead",
+          "audience": "commercial_review",
+          "required_facts": ["p2p.match_quantity_variance", "p2p.match_price_variance",
+                             "p2p.match_total_variance", "p2p.approval_tolerance",
+                             "p2p.exception_status"],
+          "size": "medium",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": ["match_run"],
+          "rationale": "The failed match, both halves quantified against the tolerance the delegation sets."
+        },
+        {
+          "artifact_type": "payment_approval_memo",
+          "author_role": "financial_controller",
+          "audience": "commercial_review",
+          "required_facts": ["p2p.approved_payment_value", "p2p.credit_note_value",
+                             "p2p.exception_approved_by", "p2p.approval_tolerance"],
+          "size": "medium",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": ["settlement_approved"],
+          "rationale": "Who approved paying over the tolerance, and why the figure paid is the contract's and not the invoice's."
+        },
+        {
+          "artifact_type": "vendor_master_change",
+          "author_role": "chief_procurement",
+          "audience": "vendor_master",
+          "required_facts": ["p2p.vendor_change_status"],
+          "size": "small",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": ["vendor_change_requested"],
+          "rationale": "The held remittance change: one Finance signature short of actionable, and staying that way for as long as the corpus runs. The engine plans this once per corpus; the grammar plans every declared artifact every period — a named divergence."
+        }
+      ],
+      "carry_forward": [
+        {
+          "from_kind": "p2p.contract_rate",
+          "to_kind": "p2p.contract_rate",
+          "rule": "reuse",
+          "detail": "The rate card is agreed once: month N prices its order at month 1's rate, or the corpus carries a rate card that silently renegotiates itself every close."
+        },
+        {
+          "from_kind": "p2p.contract_counterparty",
+          "to_kind": "p2p.contract_counterparty",
+          "rule": "reuse",
+          "detail": "Who the standing agreement is with does not change monthly."
+        },
+        {
+          "from_kind": "p2p.approval_tolerance_pct",
+          "to_kind": "p2p.approval_tolerance_pct",
+          "rule": "reuse",
+          "detail": "The delegation of authority holds across months; each month's tolerance amount is this percentage of that month's committed value."
+        },
+        {
+          "from_kind": "p2p.vendor_change_status",
+          "to_kind": "p2p.vendor_change_status",
+          "rule": "reuse",
+          "detail": "Raised once and still held — a supplier that re-requested its remittance details every close would turn a control finding into wallpaper."
+        },
+        {
+          "from_kind": "p2p.open_shortfall_value",
+          "to_kind": "p2p.shortfall_released_value",
+          "rule": "derive",
+          "detail": "Each month releases exactly what the month before left outstanding — check (k) holds this, first month included."
+        },
+        {
+          "from_kind": "p2p.open_shortfall_quantity",
+          "to_kind": "p2p.shortfall_released_quantity",
+          "rule": "derive",
+          "detail": "The released units, matching the released value."
+        }
+      ],
+      "role_slots": [
+        {
+          "slot": "preparer",
+          "required": true,
+          "purpose": "raise the order against the standing rate card, under delegated authority"
+        },
+        {
+          "slot": "matcher",
+          "required": true,
+          "purpose": "post the invoice and run the three-way match — order against receipt against invoice"
+        },
+        {
+          "slot": "approver",
+          "required": true,
+          "purpose": "clear the above-tolerance exception; must not be whoever raised the order"
+        }
+      ]
+    }
+  ]
+}

@@ -63,7 +63,7 @@ from typing import TYPE_CHECKING, Any
 
 from .dispersion import farthest_first, halton
 from .rng import Rng
-from .roles import Rejection
+from .roles import Rejection, unit_role_key
 
 if TYPE_CHECKING:  # pragma: no cover
     from .world import World
@@ -469,7 +469,7 @@ def review(timeline: Timeline, roster: Roster) -> list[Rejection]:
             # `Hire.run`), so that role now has a direct report and can be
             # departed. Nothing else is assumed: a hire also creates a peer in
             # its own function, and under-claiming there is the safe direction.
-            succeedable.add(f"{unit_key}_md")
+            succeedable.add(unit_role_key(unit_key, "_md"))
             changed.setdefault(period, position)
 
         elif name == "Departure":
@@ -491,7 +491,7 @@ def review(timeline: Timeline, roster: Roster) -> list[Rejection]:
 
         elif name == "Reorganisation":
             unit_key, leader = step.unit_key, step.new_leader_role
-            incumbent = f"{unit_key}_md"
+            incumbent = unit_role_key(unit_key, "_md")
             if unit_key not in units:
                 refuse(subject, "unknown_unit",
                        f"there is no unit {unit_key!r} to reorganise. Units"
@@ -878,7 +878,7 @@ def sample(
         (unit_key, candidate)
         for unit_key in roster.unit_keys
         for candidate in roster.roles_in(unit_key)
-        if candidate != f"{unit_key}_md" and candidate not in leaving
+        if candidate != unit_role_key(unit_key, "_md") and candidate not in leaving
     ]
     wanted = min(wants["reorganisations"], len(seats))
     if wanted:

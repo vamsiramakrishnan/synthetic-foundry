@@ -48,13 +48,93 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-#: Per-unit roles, minted for every business unit the archetype declares.
-#: Templated rather than listed because the unit set is a pack's to choose, and
-#: `organisation.assign` reads these suffixes to decide which unit a person
-#: belongs to — `_md`, `_bp` and `_buyer` are parsed off the key, so they are
-#: load-bearing in the same way a spine key is, and renaming one silently
-#: detaches everybody in that unit from their business unit.
-UNIT_ROLES: tuple[str, ...] = ("{unit}_md", "{unit}_bp", "{unit}_buyer")
+#: The suffixes of the roles minted per business unit. Spelled *with* the
+#: leading underscore, deliberately: ``domains.Domain.unit_role_suffixes``
+#: publishes exactly these strings (``("_md",)`` for banking and insurance,
+#: all three for retail), so a second spelling without the underscore would
+#: put the separator in two vocabularies and every bridge between them would
+#: be an ``lstrip`` — the string surgery this module exists to retire.
+UNIT_ROLE_SUFFIXES: tuple[str, ...] = ("_md", "_bp", "_buyer")
+
+
+def unit_role_key(unit_key: str, suffix: str) -> str:
+    """The role key minted for *unit_key*'s post with *suffix* (``"gm"``,
+    ``"_md"`` → ``"gm_md"``).
+
+    This function and ``parse_unit_role`` are the whole of the per-unit key
+    format. Before they existed the format lived in ~10 call sites as
+    f-strings and ``role[:-3]`` / ``role[:-6]`` slices, which meant renaming a
+    suffix silently detached everybody in a unit from their business unit —
+    the parse sites kept slicing three characters off keys the mint sites no
+    longer produced. Minting and parsing now share one definition, so the two
+    cannot disagree.
+    """
+    return unit_key + suffix
+
+
+def parse_unit_role(
+    key: str, suffixes: Sequence[str] = UNIT_ROLE_SUFFIXES
+) -> tuple[str, str] | None:
+    """The inverse of ``unit_role_key``: ``(unit_key, suffix)``, or ``None``
+    for a key that is not a per-unit role.
+
+    *suffixes* defaults to the retail triple; engines that mint fewer pass
+    their own (``domains.Domain.unit_role_suffixes`` plugs in directly) so a
+    banking role that happens to end in ``_bp`` is not mistaken for a unit
+    post the banking generator never minted. First match wins, in the order
+    given — the same order the ``endswith`` chains this replaces checked in.
+    A bare suffix with no unit key in front of it is not a unit role.
+    """
+    for suffix in suffixes:
+        if key.endswith(suffix) and len(key) > len(suffix):
+            return key[: -len(suffix)], suffix
+    return None
+
+
+#: Per-unit role key templates, one per suffix, minted for every business unit
+#: the archetype declares. Derived through ``unit_role_key`` rather than typed,
+#: so the template and the accessor cannot drift. These keys are load-bearing
+#: the same way a spine key is: generator code parses the suffix back off (via
+#: ``parse_unit_role``) to decide which unit a person belongs to.
+UNIT_ROLES: tuple[str, ...] = tuple(
+    unit_role_key("{unit}", suffix) for suffix in UNIT_ROLE_SUFFIXES
+)
+
+
+@dataclass(frozen=True)
+class UnitRole:
+    """One per-unit row an organisation generator mints for every business
+    unit — the authorable form of the literals that used to sit inline in
+    ``generators/organisation.py``.
+
+    ``title`` is a template; ``{unit}`` is replaced with the unit's display
+    name (by ``str.replace``, not ``str.format``, so a unit name containing a
+    brace can never raise from inside a build). The manager is either a fixed
+    role key (``manager="ceo"``) or a sibling post in the same unit
+    (``manager_suffix="_md"`` — retail's buyer reports to their own unit's
+    MD); exactly one of the two should be set, and ``manager_suffix`` wins
+    because a same-unit reference is the narrower claim.
+    """
+
+    suffix: str
+    title: str
+    function: str
+    manager: str | None = None
+    manager_suffix: str | None = None
+
+    def row(self, unit_key: str, unit_name: str) -> tuple[str, str, str, str | None]:
+        """The role-table row this spec mints for one unit."""
+        manager = (
+            unit_role_key(unit_key, self.manager_suffix)
+            if self.manager_suffix is not None
+            else self.manager
+        )
+        return (
+            unit_role_key(unit_key, self.suffix),
+            self.title.replace("{unit}", unit_name),
+            self.function,
+            manager,
+        )
 
 #: The role keys each engine's own code looks up by name. Verified against a
 #: scan of this package — see the module docstring. Ordered as frozensets
@@ -126,7 +206,9 @@ def required(engine: str, unit_keys: Sequence[str] = ()) -> tuple[str, ...]:
             " you what belongs in it."
         ) from None
     return tuple(sorted(spine)) + tuple(
-        template.format(unit=unit) for unit in unit_keys for template in UNIT_ROLES
+        unit_role_key(unit, suffix)
+        for unit in unit_keys
+        for suffix in UNIT_ROLE_SUFFIXES
     )
 
 
@@ -511,6 +593,8 @@ def to_rows(table: Sequence[Role]) -> tuple[tuple[str, str, str, str | None], ..
 
 
 __all__ = [
-    "ROOT", "RULES", "Rejection", "Role", "SPINE", "Shape", "UNIT_ROLES", "check",
-    "from_rows", "from_shape", "measure", "request", "required", "review", "to_rows",
+    "ROOT", "RULES", "Rejection", "Role", "SPINE", "Shape", "UNIT_ROLES",
+    "UNIT_ROLE_SUFFIXES", "UnitRole", "check", "from_rows", "from_shape",
+    "measure", "parse_unit_role", "request", "required", "review", "to_rows",
+    "unit_role_key",
 ]

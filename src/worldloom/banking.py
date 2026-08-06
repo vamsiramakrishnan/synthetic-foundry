@@ -795,6 +795,83 @@ register_domain(Domain(
     evaluation_text=tuple(_BANKING_EVAL_TEXT.items()),
 ))
 
+# Banking's own fact kinds, in the process-global registry. Only what this
+# vertical alone mints: the `close.*` and incident-chain `ops.*` kinds the
+# regulatory episode reuses verbatim are declared once, by retail, and a second
+# declaration here would be refused. The invariants restate what `_checks`
+# above already enforces — the registry is the index of those rules, and the
+# episode grammar derives checks from the same strings.
+from .factkinds import FactKind, register as _register_kinds  # noqa: E402
+
+_register_kinds([
+    FactKind(kind="capital.rwa_total", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at", "sums-to(capital.rwa_by_book)", "supersedes-prior"),
+             about="Risk-weighted assets; the books holding at any moment sum to it"
+                   " exactly, and the corrected total supersedes the filed one."),
+    FactKind(kind="capital.rwa_by_book", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at", "supersedes-prior"),
+             about="One book's RWA; only the affected book's figure is ever corrected."),
+    FactKind(kind="capital.cet1_capital", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",),
+             about="CET1 capital, unchanged by the restatement — the error was in RWA."),
+    FactKind(kind="capital.cet1_ratio", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at", "supersedes-prior",
+                         "reconciles-against(capital.cet1_capital, capital.rwa_total)"),
+             about="The stated ratio; `_checks` recomputes the division it states."),
+    FactKind(kind="capital.cet1_ratio_as_filed", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at", "never-superseded",
+                         "reconciles-against(capital.cet1_capital, capital.rwa_total)"),
+             about="What the filing reported, permanently — closing it would erase"
+                   " what the bank believed and when (`as_filed_touched`)."),
+    FactKind(kind="capital.minimum_cet1_requirement", domain="banking",
+             generated_by="generators/regulatory.py",
+             invariants=("holds-at", "standing", "carries-forward-as(reuse)"),
+             about="The standard's floor. No period, minted once, reused by every"
+                   " later quarter — a duplicate is what `contested_at_equal_authority` catches."),
+    FactKind(kind="capital.rwa_understatement", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="How much the filed RWA understated the truth."),
+    FactKind(kind="capital.cet1_delta", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="The ratio movement of the correction, in bps."),
+    FactKind(kind="capital.collateral_treatment", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at", "supersedes-prior"),
+             about="The contested treatment: working paper and review coexist at"
+                   " different authority; the confirmed statement supersedes only the working one."),
+    FactKind(kind="capital.return_due_date", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="The lodgement due date."),
+    FactKind(kind="capital.return_approval", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="The CFO's approval over the open challenge."),
+    FactKind(kind="capital.return_filed_at", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="When the return was lodged."),
+    FactKind(kind="capital.return_status", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at", "supersedes-prior"),
+             about="filed, then restated — the restated status supersedes the filed one."),
+    FactKind(kind="capital.error_materiality", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="Whether the error forces a restatement."),
+    FactKind(kind="capital.affected_book", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="Which book the error sat in."),
+    FactKind(kind="capital.restatement_reason", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="Why the figures moved."),
+    FactKind(kind="review.challenge", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="The second line's on-the-record challenge."),
+    FactKind(kind="review.challenge_status", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at", "supersedes-prior"),
+             about="open, then upheld — the ruling supersedes the open status."),
+    FactKind(kind="regulatory.notification", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at",), about="The material-error notification to the regulator."),
+    FactKind(kind="liquidity.lcr", domain="banking", generated_by="generators/regulatory.py",
+             invariants=("holds-at", "supersedes-prior"),
+             about="A daily observation in a gapless supersession chain; each quarter's"
+                   " chain starts fresh (`liquidity_cadence_gap` walks the chains)."),
+    FactKind(kind="liquidity.reconciliation_break", domain="banking",
+             generated_by="generators/regulatory.py",
+             invariants=("holds-at", "precedes-event"),
+             about="The daily path's flag against the collateral register."),
+    FactKind(kind="ops.collateral_mapping_owner", domain="banking",
+             generated_by="generators/regulatory.py",
+             invariants=("holds-at",),
+             about="Who owns the revaluation schedule — 'unassigned' is the control failure."),
+])
+
 
 __all__ = [
     "BANKING_ARCHETYPES",

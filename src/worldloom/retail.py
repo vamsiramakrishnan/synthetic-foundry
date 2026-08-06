@@ -432,6 +432,98 @@ register_domain(Domain(
     evaluation_text=tuple(_RETAIL_EVAL_TEXT.items()),
 ))
 
+# The fact kinds this vertical answers for, in the process-global registry
+# (`worldloom.factkinds`) — the fifth registration seam, and the one
+# `lob.lint_responsibilities` and the episode grammar's lint consult. Retail
+# registers the shared vocabularies too: `close.*` and the incident-chain
+# `ops.*` kinds are minted verbatim by banking's and procurement's episodes
+# ("reuses retail's close.* kinds verbatim" — `generators/regulatory.py`), and
+# a kind has *one* declaration whoever's episode mints it — the other verticals
+# register only what is theirs alone.
+from .factkinds import FactKind, register as _register_kinds  # noqa: E402
+
+_register_kinds([
+    FactKind(kind="close.due_date", domain="retail", generated_by="generators/operations.py",
+             invariants=("holds-at",), about="The committed close date for the period."),
+    FactKind(kind="close.revised_date", domain="retail", generated_by="generators/operations.py",
+             invariants=("holds-at",), about="The moved close date, when an incident moves it."),
+    FactKind(kind="close.status", domain="retail", generated_by="generators/operations.py",
+             invariants=("holds-at", "supersedes-prior"),
+             about="Where the close stands; a delayed status is superseded, never edited."),
+    FactKind(kind="close.delay", domain="retail", generated_by="generators/operations.py",
+             invariants=("holds-at",), about="Business days the close slipped."),
+    FactKind(kind="financial.revenue.actual", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at", "sums-to(financial.revenue.actual)"),
+             about="Actual revenue; child subjects sum to their parent's figure exactly."),
+    FactKind(kind="financial.revenue.budget", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at", "sums-to(financial.revenue.budget)"),
+             about="Budgeted revenue, rolled up the same way."),
+    FactKind(kind="financial.revenue.variance", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at", "reconciles-against(financial.revenue.actual, financial.revenue.budget)"),
+             about="Actual less budget, exactly — validate.financial() recomputes it."),
+    FactKind(kind="financial.gross_profit.actual", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at", "sums-to(financial.gross_profit.actual)"),
+             about="Actual gross profit."),
+    FactKind(kind="financial.gross_profit.budget", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at", "sums-to(financial.gross_profit.budget)"),
+             about="Budgeted gross profit."),
+    FactKind(kind="financial.gross_profit.variance", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at", "reconciles-against(financial.gross_profit.actual, financial.gross_profit.budget)"),
+             about="Actual less budget on gross profit."),
+    FactKind(kind="financial.gross_margin_pct.actual", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at", "reconciles-against(financial.gross_profit.actual, financial.revenue.actual)"),
+             about="The stated margin, derived from the amounts beside it."),
+    FactKind(kind="financial.gross_margin_pct.budget", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at", "reconciles-against(financial.gross_profit.budget, financial.revenue.budget)"),
+             about="The budgeted margin, same derivation."),
+    FactKind(kind="financial.incident_pl_impact", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at",), about="The P&L cost the incident is assessed at."),
+    FactKind(kind="metric.gross_margin_variance", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at",), about="Margin variance in points, for the memo."),
+    FactKind(kind="metric.online_conversion_rate.actual", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at",), about="Online conversion as landed."),
+    FactKind(kind="metric.online_conversion_rate.forecast", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at",), about="Online conversion as forecast."),
+    FactKind(kind="metric.promotional_depth_margin_impact", domain="retail", generated_by="generators/finance.py",
+             invariants=("holds-at",), about="What promotional depth took off margin."),
+    # The incident chain. Shared vocabulary: banking's regulatory episode mints
+    # most of these kinds too, against its own incident, under this declaration.
+    FactKind(kind="ops.incident_opened", domain="retail",
+             generated_by="generators/operations.py (reused by banking's regulatory.py)",
+             invariants=("holds-at", "precedes-event"), about="The raised ticket."),
+    FactKind(kind="ops.cause", domain="retail",
+             generated_by="generators/operations.py (reused by banking's regulatory.py)",
+             invariants=("holds-at", "supersedes-prior"),
+             about="What broke. The confirmed cause supersedes the initial hypothesis;"
+                   " the hypothesis stays on the record as a past belief."),
+    FactKind(kind="ops.cause_ruled_out", domain="retail",
+             generated_by="generators/operations.py (reused by banking's regulatory.py)",
+             invariants=("holds-at",), about="The evidence that dismissed the hypothesis."),
+    FactKind(kind="ops.feed_status", domain="retail", generated_by="generators/operations.py",
+             invariants=("holds-at",), about="The failed feed's state."),
+    FactKind(kind="ops.valuation_status", domain="retail", generated_by="generators/operations.py",
+             invariants=("holds-at",), about="Whether inventory valuation completed."),
+    FactKind(kind="ops.workaround", domain="retail", generated_by="generators/operations.py",
+             invariants=("holds-at",), about="The applied workaround."),
+    FactKind(kind="ops.mapping_table_owner", domain="retail", generated_by="generators/operations.py",
+             invariants=("holds-at",), about="Who owns the mapping table — 'unassigned' is the finding."),
+    FactKind(kind="ops.previous_similar_incident", domain="retail", generated_by="generators/operations.py",
+             invariants=("holds-at",),
+             about="The named earlier period a comparable failure occurred in."),
+    FactKind(kind="ops.root_cause_classification", domain="retail",
+             generated_by="generators/operations.py (reused by banking's regulatory.py)",
+             invariants=("holds-at",), about="The audit classification of the failure."),
+    FactKind(kind="ops.remediation", domain="retail",
+             generated_by="generators/operations.py (reused by banking's regulatory.py)",
+             invariants=("holds-at",), about="The tickets raised to fix it."),
+    FactKind(kind="ops.remediation_addresses", domain="retail",
+             generated_by="generators/operations.py (reused by banking's regulatory.py)",
+             invariants=("holds-at",), about="Which remediation addresses the control failure."),
+    FactKind(kind="ops.affected_records", domain="retail",
+             generated_by="generators/operations.py (reused by banking's regulatory.py)",
+             invariants=("holds-at",), about="The blast radius the ticket quotes."),
+])
+
 
 __all__ = [
     "RetailWorld",

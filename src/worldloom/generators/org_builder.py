@@ -51,6 +51,7 @@ from ..models import (
 )
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
+from ..roles import unit_role_key
 from . import names
 
 #: A role-table row: (role key, title, function, manager role key).
@@ -269,9 +270,9 @@ def form_units(
             id=unit_ids[unit.key],
             name=unit.name,
             company_id=company_id,
-            leader_id=role_ids[f"{unit.key}_md"],
+            leader_id=role_ids[unit_role_key(unit.key, "_md")],
             kind=unit.kind,
-            formed=max(lore_anchor, joined_by_person[role_ids[f"{unit.key}_md"]]),
+            formed=max(lore_anchor, joined_by_person[role_ids[unit_role_key(unit.key, "_md")]]),
         )
         for unit in units
     )

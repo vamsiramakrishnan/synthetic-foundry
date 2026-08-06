@@ -89,6 +89,13 @@ document that legitimately had nothing to say.
 Every rule below is either something the compiler assumes silently or something
 a downstream check refuses far from where the mistake was made. Read ``lint``'s
 own comments for which is which.
+
+In the shared authoring protocol (``cascade.py``) this module is the
+degenerate instance: a document type is small enough to propose whole, so
+there is a ``load``, a ``lint`` that refuses with findings, an ``install`` and
+a pack-carried replay — but no ``Session`` and no stages, because a cascade
+with one stage is a lint wearing a state machine. The loop still applies:
+propose, read the findings, revise, resubmit until ``lint`` is empty.
 """
 
 from __future__ import annotations
@@ -104,6 +111,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from . import documents
 from .documents import FilingPlan, SectionPlan
 from .models import Authority, Lifecycle
+from .roles import parse_unit_role
 
 #: Headings ``outline()`` appends itself, after the authored sections.
 #:
@@ -631,7 +639,7 @@ def _lint_filing(where: str, spec: DocumentType, domain: Any, base: str) -> list
             # as `packs.lint` treats a voice override: whether `grocery_md`
             # exists is a build-time property of the role table, so only the
             # suffix is checkable here.
-            if role in roles or any(role.endswith(s) for s in domain.unit_role_suffixes):
+            if role in roles or parse_unit_role(role, domain.unit_role_suffixes) is not None:
                 continue
             findings.append(
                 f"{where}.filing.{label}: {role!r} names no {base} role — roles:"

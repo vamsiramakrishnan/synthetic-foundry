@@ -439,23 +439,25 @@ class Locale:
         ``company_suffixes``, which is the one pool this locale has always had
         and is retail's by construction.
 
-        **An engine this locale says nothing about falls back to the retail
-        pool rather than raising**, which is the opposite of ``named``'s posture
-        on an unknown locale, and deliberately. An unknown locale *name* is a
-        typo with no other reading; an unknown engine is a vertical that landed
-        after this locale was authored, and refusing it would make that
-        vertical unbuildable in this jurisdiction — an engine outage caused by
-        a naming table. The fallback is stated rather than silent: every preset
-        in this module answers for all three shipped engines, so it is never
-        taken by a shipped build, and ``publish`` prints what each locale
-        actually states so an author can see the gap before hitting it.
+        An unknown engine is refused with a stated reason, which is the same
+        posture as ``named``'s: an unknown engine name is a configuration error
+        rather than a typo, and a silent fallback would make that vertical
+        unbuildable in this jurisdiction without anywhere to report why. Every
+        shipped locale answers for all three shipped engines, so this is never
+        raised by a shipped build. A new vertical registering itself in
+        ``locales.register`` must ensure every preset carries an entry for it.
         """
         if industry == "retail":
             return self.company_suffixes
         for engine, pool in self.industry_suffixes:
             if engine == industry:
                 return pool
-        return self.company_suffixes
+        raise KeyError(
+            f"locale {self!r} has no company-name suffixes for engine {industry!r}."
+            f" A locale must answer for every registered engine, or the engine is"
+            f" unbuildable in that jurisdiction. Register the suffixes via"
+            f" `locales.register` before building."
+        )
 
     # -- the calendar ------------------------------------------------------
 
@@ -663,11 +665,11 @@ AUSTRALIA = Locale(
         "Retail Group", "Group", "Holdings", "Retail", "Commerce Group",
         "Trading Group", "Retail Holdings",
     ),
-    # Extracted verbatim, in order, from `banking_org._BANK_SUFFIX` and
-    # `insurance_org._INSURER_SUFFIX` — the same discipline as the four pools
-    # above and load-bearing for the same reason. Those two generators draw
-    # `rng.choice` from their module constants today; the day they ask the
-    # locale instead, `midsize_adi` and `midsize_general_insurer` at any seed
+    # Extracted verbatim, in order, from `banking_org._BANK_SUFFIX`,
+    # `insurance_org._INSURER_SUFFIX`, and `procurement_org._CONTRACTOR_SUFFIX`
+    # — the same discipline as the four pools above and load-bearing for the same
+    # reason. Those generators draw `rng.choice` from their module constants
+    # today; the day they ask the locale instead, every archetype at any seed
     # must produce the identical company name, and only a verbatim extraction
     # makes that a fact rather than a hope. `tests/test_locale_build.py` pins
     # the equality against the constants themselves.
@@ -675,6 +677,8 @@ AUSTRALIA = Locale(
         ("banking", ("Banking Group", "Bank", "Banking Corporation", "Mutual Bank")),
         ("insurance",
          ("Insurance Group", "General Insurance", "Assurance", "Mutual Insurance")),
+        ("procurement",
+         ("Infrastructure", "Group Services", "Contracting", "Infrastructure Group")),
     ),
     currency="AUD",
     fiscal_year_start_month=7,
@@ -750,6 +754,8 @@ UNITED_KINGDOM = Locale(
         ("banking", ("Bank plc", "Banking Group plc", "Bank Limited", "Building Society")),
         ("insurance",
          ("Insurance plc", "Insurance Limited", "Assurance plc", "Mutual Insurance")),
+        ("procurement",
+         ("Infrastructure", "Group Services", "Contracting", "Infrastructure Group")),
     ),
     currency="GBP",
     # Same as Australia's, and stated rather than defaulted so the sameness is
@@ -840,6 +846,8 @@ GERMANY = Locale(
         ("insurance",
          ("Versicherung AG", "Versicherungsgruppe", "Versicherung a.G.",
           "Assekuranz AG", "Versicherung SE")),
+        ("procurement",
+         ("Infrastructure", "Group Services", "Contracting", "Infrastructure Group")),
     ),
     currency="EUR",
     group_separator=".",
@@ -933,6 +941,8 @@ GULF = Locale(
         ("insurance",
          ("Insurance P.J.S.C.", "Insurance Company", "Takaful P.J.S.C.",
           "General Insurance")),
+        ("procurement",
+         ("Infrastructure", "Group Services", "Contracting", "Infrastructure Group")),
     ),
     currency="AED",
     # The digit grammar is Australia's. Western digits, comma groups, full-stop
@@ -1061,8 +1071,30 @@ def publish() -> dict[str, Any]:
     return {name: value.as_dict() for name, value in sorted(LOCALES.items())}
 
 
+def register(name: str, locale: Locale) -> None:
+    """Register a locale for a jurisdiction.
+
+    Called by domain modules (future verticals with new jurisdictions) to add
+    their own locales to the global registry. Redefinition is refused — every
+    name may appear only once. A locale is named only once per jurisdiction, so
+    a name collision is a wiring error rather than a legitimate override.
+
+    Raised rather than silently absorbed if a name is already known, because a
+    duplicate in the registration chain is a wiring error: either the module was
+    imported twice, or two verticals collided on the same locale name. Neither
+    is silent-and-plausible.
+    """
+    if name in LOCALES:
+        raise KeyError(
+            f"locale {name!r} is already registered. Each locale name may appear"
+            f" only once; a collision is a wiring error in one of the modules"
+            f" calling register."
+        )
+    LOCALES[name] = locale
+
+
 __all__ = [
     "AUSTRALIA", "DEFAULT", "GERMANY", "GULF", "LOCALES", "MONDAY_TO_FRIDAY",
     "SUNDAY_TO_THURSDAY", "UNITED_KINGDOM", "Locale", "Negative",
-    "from_document", "named", "publish", "resolve",
+    "from_document", "named", "publish", "register", "resolve",
 ]

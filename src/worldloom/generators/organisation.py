@@ -41,6 +41,7 @@ from ..models import (
 )
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
+from ..roles import UnitRole, parse_unit_role, unit_role_key
 from . import hierarchy, names
 from .org_builder import (
     apply_traits,
@@ -148,7 +149,20 @@ _ROLE_PERSONA = {
     "merch_analyst": "PERSONA-MERCH",
 }
 
-#: The per-unit roles ``generate`` appends (``roles.UNIT_ROLES``), by suffix.
+#: The rows ``generate`` mints for every business unit the archetype declares,
+#: as data rather than as three inline appends. All three suffixes are
+#: load-bearing for this engine — `hierarchy.generate` is handed each unit's
+#: `_buyer`, the POS system is owned by the first unit's `_md`, `planning`
+#: authors unit commentary as the `_bp` — so an authored replacement must keep
+#: them (checked in ``generate``, the same argument as ``roles.SPINE``) and is
+#: free to add rows around them.
+_UNIT_ROLES: tuple[UnitRole, ...] = (
+    UnitRole("_md", "Managing Director, {unit}", "Executive", manager="ceo"),
+    UnitRole("_bp", "Finance Business Partner, {unit}", "Finance", manager="controller"),
+    UnitRole("_buyer", "Head of Buying, {unit}", "Merchandising", manager_suffix="_md"),
+)
+
+#: The per-unit roles ``generate`` appends (``_UNIT_ROLES``), by suffix.
 #: ``_buyer`` is named here now; it used to be reached through the catch-all
 #: default below, which is exactly what disguised that default as load-bearing
 #: when it was an accident.
@@ -193,9 +207,9 @@ def _persona_for(role: str, function: str = "") -> str:
     """
     if role in _ROLE_PERSONA:
         return _ROLE_PERSONA[role]
-    for suffix, persona in _UNIT_ROLE_PERSONA.items():
-        if role.endswith(suffix):
-            return persona
+    parsed = parse_unit_role(role, tuple(_UNIT_ROLE_PERSONA))
+    if parsed is not None:
+        return _UNIT_ROLE_PERSONA[parsed[1]]
     return _FUNCTION_PERSONA.get(function, _DEFAULT_PERSONA)
 
 
@@ -263,6 +277,25 @@ def generate(
     # name in generator code, and a table missing one raises `KeyError`
     # part-way through an episode rather than building a different company.
     role_table: Sequence[tuple[str, str, str, str | None]] | None = None,
+    # The per-unit rows minted for every business unit, replaced — the seam a
+    # LOB spec's roles arrive through (`lob.RoleSpec` rows convert to
+    # `roles.UnitRole` at the call site that owns the LOB). A *parameter*
+    # rather than a registry, and the choice is determinism, not taste: a
+    # process-global registry is mutable state that `lob.install` (or anything
+    # else) could reorder between two builds in one process, so the same seed
+    # could produce two different organisations depending on import order —
+    # exactly the failure `--replay` exists to make impossible. A parameter
+    # rides the call, is recorded by whatever recorded the call (the recipe),
+    # and defaulted to `None` means "this module's own `_UNIT_ROLES`", so
+    # every corpus built before it existed is byte-identical rather than close.
+    #
+    # A supplied set must still contain the engine's own suffixes (`_md`,
+    # `_bp`, `_buyer`) — generator code looks those per-unit keys up by name,
+    # the same argument as `roles.SPINE` — and extra rows are the freedom.
+    # Beware suffixes that collide with spine keys (a `_lead` row would claim
+    # `merch_lead` for a unit named "merch"): `assign` parses whichever
+    # suffixes are actually minted, in declaration order.
+    unit_roles: Sequence[UnitRole] | None = None,
     physics: Parameters = DEFAULT,
 ) -> Organisation:
     """Build the organisation for an archetype. Same seed, same graph, same IDs.
@@ -293,15 +326,29 @@ def generate(
     # resolved here through `_merch_unit`, because an archetype without a "gm"
     # unit (the first insurer pack) otherwise leaves merch_lead managerless and
     # the org tree with two roots.
-    merch_md = f"{_merch_unit(unit_ids)}_md"
+    merch_md = unit_role_key(_merch_unit(unit_ids), "_md")
     role_table = [
         (role, title, function, merch_md if manager == "gm_md" else manager)
         for role, title, function, manager in (_ROLES if role_table is None else role_table)
     ]
+    unit_role_specs = _UNIT_ROLES if unit_roles is None else tuple(unit_roles)
+    # Membership only, so the set is safe; iteration stays over `_UNIT_ROLES`,
+    # whose order is fixed.
+    supplied_suffixes = {spec.suffix for spec in unit_role_specs}
+    missing = [spec.suffix for spec in _UNIT_ROLES if spec.suffix not in supplied_suffixes]
+    if missing:
+        raise ValueError(
+            f"unit_roles must mint the retail engine's own per-unit posts —"
+            f" missing suffix(es): {', '.join(missing)}. The engine looks"
+            " `{unit}_md`, `{unit}_bp` and `{unit}_buyer` up by name (POS"
+            " ownership, unit commentary authorship, category buyers), so a"
+            " set without them raises KeyError part-way through a build"
+            " rather than building a different company. Add rows around"
+            " them instead."
+        )
     for unit in units:
-        role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))
-        role_table.append((f"{unit.key}_bp", f"Finance Business Partner, {unit.name}", "Finance", "controller"))
-        role_table.append((f"{unit.key}_buyer", f"Head of Buying, {unit.name}", "Merchandising", f"{unit.key}_md"))
+        for spec in unit_role_specs:
+            role_table.append(spec.row(unit.key, unit.name))
     role_table, depth_of = sorted_roles(role_table)
 
     finance_cc = minter.next("CC")
@@ -328,15 +375,21 @@ def generate(
     persona_remap = {role: spec.persona for role, spec in voiced.items() if spec.is_remap()}
     _check_persona_ids(voiced, pack_voice_ids)
 
+    # The suffixes `assign` parses are exactly the ones this build mints —
+    # authored per-unit rows attach their people to the unit the same way the
+    # shipped three always have, through the one accessor that also minted
+    # their keys. This replaces two hand-kept slices (`role[:-3]`,
+    # `role[:-6]`) that encoded the suffix *lengths* a second time.
+    minted_suffixes = tuple(spec.suffix for spec in unit_role_specs)
+
     def assign(role: str, title: str, function: str):  # type: ignore[no-untyped-def]
         """Retail's one decision per person: unit by role-key convention, cost
         centre by function, persona by ``_persona_for`` — which reads the
         function too, so the pair are decided from the same fact."""
         business_unit = None
-        if role.endswith(("_md", "_bp")):
-            business_unit = unit_ids[role[:-3]]
-        elif role.endswith("_buyer"):
-            business_unit = unit_ids[role[:-6]]
+        parsed = parse_unit_role(role, minted_suffixes)
+        if parsed is not None:
+            business_unit = unit_ids[parsed[0]]
         elif role.startswith("merch_"):
             business_unit = unit_ids[_merch_unit(unit_ids)]
         cost_centre = (
@@ -364,7 +417,7 @@ def generate(
         rng.derive("hierarchy"), minter,
         units=units,
         unit_ids=unit_ids,
-        buyers={unit.key: role_ids[f"{unit.key}_buyer"] for unit in units},
+        buyers={unit.key: role_ids[unit_role_key(unit.key, "_buyer")] for unit in units},
         # Forwarded as-is, both of them. This used to read
         # `regions if regions else hierarchy.REGIONS`, which looked like a
         # harmless restatement of the callee's own default and was not: it
@@ -393,7 +446,8 @@ def generate(
         System(id=commerce, name=system_names["commerce"], purpose="Online storefront, basket, and checkout",
                owner_id=role_ids["platform_engineer"], is_system_of_record_for=["online_orders"]),
         System(id=pos, name=system_names["pos"], purpose="In-store point of sale and transaction capture",
-               owner_id=role_ids[f"{next(iter(unit_ids))}_md"], is_system_of_record_for=["store_transactions"]),
+               owner_id=role_ids[unit_role_key(next(iter(unit_ids)), "_md")],
+               is_system_of_record_for=["store_transactions"]),
     )
 
     # Not named `hierarchy`: that is the dimensions module imported above, and

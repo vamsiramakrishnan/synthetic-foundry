@@ -320,11 +320,17 @@ def test_retail_resolves_to_the_one_pool_and_may_not_be_stated_twice() -> None:
 
 
 def test_an_engine_no_locale_was_written_for_falls_back_rather_than_raising() -> None:
-    """The opposite posture from `locales.named`, and deliberately: an unknown
-    locale name is a typo with no other reading; an unknown engine is a
-    vertical that landed later, and refusing it would make that vertical
-    unbuildable in this jurisdiction — an outage caused by a naming table."""
-    assert locales.GULF.suffixes_for("telco") == locales.GULF.company_suffixes
+    """Phase 3 refactored this to refuse rather than fall back: an unknown
+    engine is a configuration error (missing locale registration), not a
+    vertical that landed later. A silent fallback would mask that the vertical
+    is unbuildable in this jurisdiction without anywhere to report why. Every
+    shipped locale answers for all registered engines; a new vertical must
+    ensure every preset carries an entry for it via `locales.register`."""
+    with pytest.raises(
+        KeyError,
+        match="has no company-name suffixes for engine 'telco'",
+    ):
+        locales.GULF.suffixes_for("telco")
 
 
 def test_industry_suffixes_must_be_sorted_so_a_document_round_trips() -> None:

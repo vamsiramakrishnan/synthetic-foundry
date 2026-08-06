@@ -20,6 +20,7 @@ from . import documents, profiles as _profiles
 from .parameters import DEFAULT, Parameters
 from .recipe import locale_of
 from .rng import Rng
+from .roles import unit_role_key
 
 if TYPE_CHECKING:  # pragma: no cover
     from .generators.operations import CloseEpisode
@@ -668,7 +669,7 @@ class Hire:
             # no way to say so yet — this verb does not expose one — which is
             # fine for the shapes this corpus needs so far and a real gap the
             # day it does not.
-            manager_id=roles[f"{self.unit_key}_md"],
+            manager_id=roles[unit_role_key(self.unit_key, "_md")],
             # Neither cost centres nor personas are per-unit in this world
             # (only Finance and the data platform have one; see
             # `organisation.generate`), so there is no sensible non-null
@@ -830,7 +831,7 @@ class Reorganisation:
             rng, minter,
             person=new_leader,
             title=f"Managing Director, {unit.name}",
-            role_key=f"{self.unit_key}_md",
+            role_key=unit_role_key(self.unit_key, "_md"),
             units=(unit,),
             at=at,
             period=self.period,

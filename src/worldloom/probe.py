@@ -78,6 +78,15 @@ answers accepted into it, the propagation worklist is ordered by key, and
 acceptance appends to a ledger that rebuilds the graph exactly — the same
 handshake ``compose`` uses, for the same reason: a model is in the loop and a
 corpus still has to replay byte-for-byte from what it recorded.
+
+This is the shared authoring protocol (``cascade.py``) in its richest form,
+conforming structurally rather than by import: the premise is the seed,
+``Session`` holds only accepted answers, ``frontier``'s ``Brief`` is the brief
+(its context is the propagated bounds and the ancestry), ``review``/``accept``
+is the lint that refuses with findings (typed ``Rejection``s, richer than the
+shared strings), ``resolve`` resolves, and the ledger replays. It stays its
+own types because flattening bounds and rejections onto the shared shapes
+would lose exactly the information a reviser here acts on.
 """
 
 from __future__ import annotations

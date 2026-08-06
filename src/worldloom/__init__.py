@@ -84,6 +84,12 @@ from .generators import distractors as _distractors  # noqa: F401
 # refuses to replay, which is the exact failure lazy registration always is.
 from . import messiness  # noqa: F401
 
+# And once more for the episode grammar: importing this registers the
+# `AuthoredEpisode` recipe verb. The verb resolves the episode *name* against
+# the process's installed specs at run time — so a rebuild without the spec
+# fails loudly in `AuthoredEpisode.run`, not with `unknown scenario` here.
+from . import episodes as _episodes  # noqa: F401
+
 __version__ = "0.1.0"
 
 __all__ = [

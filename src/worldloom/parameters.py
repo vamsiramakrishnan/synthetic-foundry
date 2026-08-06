@@ -474,7 +474,32 @@ def publish() -> dict[str, Any]:
     return {name: span.as_dict() for name, span in sorted(DEFAULTS.items())}
 
 
+def register(spans: Mapping[str, Span]) -> None:
+    """Register additional physics parameters for a vertical.
+
+    Called by domain modules (procurement, future verticals) to add their own
+    parameters to the global registry. Redefinition is refused — every name may
+    appear only once, same as the rule a domain_check sees. Domain physics are
+    layered under user overrides (see `Parameters.with_overrides`), so a pack
+    cannot tune a vertical's physics until its parameters are registered and
+    named.
+
+    Raised rather than silently absorbed if a name is already known, because a
+    duplicate in the registration chain is a wiring error: either the module was
+    imported twice, or two domains collided on the same parameter name. Neither
+    is silent-and-plausible.
+    """
+    for name in spans:
+        if name in DEFAULTS:
+            raise KeyError(
+                f"parameter {name!r} is already registered. Each domain's parameters"
+                f" must have unique names; a collision is a wiring error in one of"
+                f" the modules calling register."
+            )
+    DEFAULTS.update(spans)
+
+
 __all__ = [
     "DEFAULT", "DEFAULTS", "Kind", "Parameters", "Span", "overrides_document",
-    "overrides_from", "publish",
+    "overrides_from", "publish", "register",
 ]

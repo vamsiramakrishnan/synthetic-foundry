@@ -1,0 +1,78 @@
+{
+  "name": "MonthlyCodeClose",
+  "domain": "insurance",
+  "period": "month",
+  "events": [
+    {
+      "kind": "coding.cycle_started",
+      "when": "start",
+      "summary": "Monthly clinical coding cycle commenced.",
+      "fact_keys": [
+        "close.status"
+      ]
+    },
+    {
+      "kind": "coding.records_submitted",
+      "when": "before_incident",
+      "summary": "Patient records submitted for coding review.",
+      "fact_keys": [
+        "ops.affected_records"
+      ]
+    },
+    {
+      "kind": "coding.completed",
+      "when": "incident",
+      "summary": "Clinical coding completed for all submitted records.",
+      "fact_keys": [
+        "financial.revenue.actual"
+      ]
+    },
+    {
+      "kind": "coding.billing_verified",
+      "when": "after_incident",
+      "summary": "Billing verified against coded records.",
+      "fact_keys": [
+        "financial.revenue.actual"
+      ]
+    },
+    {
+      "kind": "coding.close_approved",
+      "when": "end",
+      "summary": "Clinical coding close approved by director.",
+      "fact_keys": [
+        "close.status"
+      ]
+    }
+  ],
+  "role_slots": [
+    {
+      "slot": "coder",
+      "purpose": "Clinical coders who perform the coding",
+      "required": true
+    },
+    {
+      "slot": "reviewer",
+      "purpose": "Lead coder who reviews coding accuracy",
+      "required": true
+    },
+    {
+      "slot": "director",
+      "purpose": "Director of Clinical Services who approves close",
+      "required": true
+    }
+  ],
+  "fact_kinds": [
+    {
+      "kind": "financial.revenue.actual",
+      "value_type": "money"
+    },
+    {
+      "kind": "ops.affected_records",
+      "value_type": "measure"
+    },
+    {
+      "kind": "close.status",
+      "value_type": "text"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "name": "clinical_operations",
+  "title": "Clinical Operations",
+  "purpose": "Clinical service delivery, patient care coordination, and medical coding and documentation.",
+  "roles": [
+    {
+      "key": "ceo",
+      "title": "Chief Executive Officer",
+      "function": "Executive",
+      "reports_to": null
+    },
+    {
+      "key": "clinical_director",
+      "title": "Director of Clinical Services",
+      "function": "Clinical",
+      "reports_to": "ceo"
+    },
+    {
+      "key": "ward_manager",
+      "title": "Ward Manager",
+      "function": "Clinical",
+      "reports_to": "clinical_director"
+    },
+    {
+      "key": "clinical_coder",
+      "title": "Clinical Coder",
+      "function": "Clinical",
+      "reports_to": "clinical_director"
+    },
+    {
+      "key": "lead_coder",
+      "title": "Lead Clinical Coder",
+      "function": "Clinical",
+      "reports_to": "clinical_director"
+    }
+  ],
+  "responsibilities": [
+    {
+      "role_key": "clinical_director",
+      "fact_kinds": [
+        "close.status",
+        "ops.incident_opened"
+      ],
+      "artifact_types": []
+    },
+    {
+      "role_key": "ward_manager",
+      "fact_kinds": [
+        "ops.incident_opened",
+        "ops.affected_records"
+      ],
+      "artifact_types": []
+    },
+    {
+      "role_key": "clinical_coder",
+      "fact_kinds": [
+        "financial.revenue.actual",
+        "ops.affected_records"
+      ],
+      "artifact_types": []
+    },
+    {
+      "role_key": "lead_coder",
+      "fact_kinds": [
+        "financial.revenue.actual",
+        "ops.affected_records",
+        "close.status"
+      ],
+      "artifact_types": []
+    }
+  ]
+}
