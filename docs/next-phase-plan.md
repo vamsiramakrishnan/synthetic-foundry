@@ -97,6 +97,20 @@ cannot tune a new vertical's physics at all), `landscape.LANDSCAPES`,
 silently), and the package-import registration. Each is a closed literal with
 its consequence already visible in the procurement modules' comments.
 
+## The ontology, settled (owner's terms)
+
+**Process** — the recurring type, declared once: P2P, O2C, month-end close, a
+recruitment drive, the annual performance survey. What `episodes.py`'s spec
+actually declares; a LOB *has processes*. **Episode** — one bounded run of a
+process, start to end, over a period; history "until now" is the ordered
+episodes, carry-forward linking them. **Events** — points in time inside an
+episode. Events mint **facts** (system-of-record standing is a fact's
+authority) and make **artifacts** necessary — including people talking:
+threads, minutes, working notes are artifacts, and the dormant actor layer
+(observations, messages, who-knew-what-when) is the deeper form waiting for a
+consumer. Code naming should converge on this: the spec is a process, a run
+is an episode.
+
 ## Engine vs LOB — the distinction, settled
 
 An **engine is an industry frame**: what the company sells, its physics
