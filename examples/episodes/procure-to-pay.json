@@ -388,6 +388,51 @@
           "detail": "The released units, matching the released value."
         }
       ],
+      "detail_tables": [
+        {
+          "name": "order_lines",
+          "title": "Order line detail",
+          "artifact_type": "purchase_order",
+          "count_from_fact": "p2p.ordered_quantity",
+          "note": "One line per ordered unit, priced off the plant rate card. Quantities and values are allocated from the order's own facts, so the lines sum to the committed quantity and value exactly — the detail layer's one rule.",
+          "columns": [
+            {"name": "line", "kind": "sequence", "prefix": "POL-", "label": "Line"},
+            {"name": "item", "kind": "choice", "pool": "plant_hire_items", "weighting": "zipf", "label": "Item"},
+            {"name": "cost_code", "kind": "choice", "pool": "civil_cost_codes", "label": "Cost code"},
+            {"name": "need_date", "kind": "date_in_period", "label": "Required on site"},
+            {"name": "quantity", "kind": "from_fact", "fact_kind": "p2p.ordered_quantity", "decimals": 0, "label": "Qty"},
+            {"name": "value", "kind": "from_fact", "fact_kind": "p2p.ordered_value", "decimals": 2, "label": "Committed value (AUD thousands)"}
+          ]
+        },
+        {
+          "name": "receipt_lines",
+          "title": "Receipt line detail",
+          "artifact_type": "goods_receipt_note",
+          "count_from_fact": "p2p.received_quantity",
+          "note": "One line per unit signed for at the gate, each naming the order line it receipts. The receipt is short of the order by exactly the open shortfall: the missing tail of order lines IS the undelivered balance, and the values sum to the received value at the contracted rate to the cent.",
+          "columns": [
+            {"name": "line", "kind": "sequence", "prefix": "GRN-", "label": "Line"},
+            {"name": "order_line", "kind": "ref", "table": "order_lines", "column": "line", "align": true, "label": "Order line"},
+            {"name": "docket", "kind": "choice", "pool": "delivery_dockets", "label": "Delivery point"},
+            {"name": "received", "kind": "date_in_period", "with_time": true, "label": "Received"},
+            {"name": "quantity", "kind": "from_fact", "fact_kind": "p2p.received_quantity", "decimals": 0, "label": "Qty"},
+            {"name": "value", "kind": "from_fact", "fact_kind": "p2p.received_value", "decimals": 2, "label": "Value at contracted rate (AUD thousands)"}
+          ]
+        },
+        {
+          "name": "invoice_lines",
+          "title": "Invoice line detail",
+          "artifact_type": "supplier_invoice",
+          "count_from_fact": "p2p.ordered_quantity",
+          "note": "The supplier bills the full ordered quantity — including the units never received — at the contested rate: each line carries the billed value evenly, so the per-line figure is the uplifted unit rate the match will refuse, and the lines sum to the invoiced value exactly.",
+          "columns": [
+            {"name": "line", "kind": "sequence", "prefix": "INV-", "label": "Line"},
+            {"name": "order_line", "kind": "ref", "table": "order_lines", "column": "line", "align": true, "label": "Order line"},
+            {"name": "quantity", "kind": "from_fact", "fact_kind": "p2p.ordered_quantity", "decimals": 0, "label": "Qty billed"},
+            {"name": "billed_value", "kind": "from_fact", "fact_kind": "p2p.invoiced_value", "decimals": 2, "label": "Billed value (AUD thousands)"}
+          ]
+        }
+      ],
       "role_slots": [
         {
           "slot": "preparer",

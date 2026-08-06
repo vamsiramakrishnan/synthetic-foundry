@@ -49,6 +49,7 @@ CORE_PREFIXES = frozenset(
         "POLICY",
         "ERR",  # intentional error
         "GEN",  # generation ledger entry
+        "DET",  # detail table — transaction rows under ledger facts
         # The actor layer. Separate prefixes rather than reusing "EV"/"FACT"
         # because these are records *about* the world's records — who knew a
         # fact, who was told one — and an id that cannot be told apart from the

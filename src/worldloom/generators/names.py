@@ -96,9 +96,20 @@ def people_names(
     Given and family names are drawn from independent shuffles so a seed cannot
     produce two identical people, which the uniqueness check would otherwise
     catch as a coherence failure.
+
+    A locale pool is sized to the ask (``Locale.name_pool``): the 40-name base
+    pool whenever the count fits it — every existing world's draws land on the
+    identical tuple, because ``Rng.sample`` over a longer pool would land
+    differently even for the same count — and the locale's extended pool
+    (``data/vocab/*.json``, base pool as verbatim prefix) only past it, where
+    no build ever succeeded before and so no bytes exist to preserve. A pack's
+    ``given``/``family`` overrides are never extended from the locale: the pack
+    is the narrower claim, and topping up an author's twelve names with a
+    jurisdiction's five hundred would bury the authoring error this refusal
+    exists to surface.
     """
-    given_pool = given if given else locale.given
-    family_pool = family if family else locale.family
+    given_pool = given if given else locale.name_pool("given", count)
+    family_pool = family if family else locale.name_pool("family", count)
     if count > len(given_pool) or count > len(family_pool):
         raise ValueError(
             f"name pools hold {min(len(given_pool), len(family_pool))} people, asked for {count}"

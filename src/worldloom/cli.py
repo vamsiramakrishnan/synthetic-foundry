@@ -744,14 +744,20 @@ def build(
         this claim honestly has that nothing here implements is evidence, and
         the only failure would be letting it pass unsaid.
         """
+        spec_master_data = resolution.master_data if resolution is not None else None
         if (not facet_roles and facet_calendar is None and not facet_lore
-                and spec_role_table is None):
+                and spec_role_table is None and not spec_master_data):
             return builder
         from dataclasses import replace as _replace_claimed
 
         changes: dict[str, Any] = {}
         if facet_lore:
             changes["lore_claims"] = facet_lore
+        if spec_master_data:
+            # The reference-table counts a specification asked for. Validated
+            # by `company.resolve` (a bad request is a Conflict there, before
+            # anything builds), recorded on the recipe by the builder itself.
+            changes["master_data"] = dict(spec_master_data)
         if spec_role_table is not None:
             # Substituted, not appended — see `spec_role_table`'s note. The
             # engine's spine is already inside it, placed by `roles.from_shape`
@@ -796,6 +802,12 @@ def build(
                             else f"{len(facet_roles)} role(s)"
                         ),
                         "lore_claims": f"{len(facet_lore)} lore commitment(s)",
+                        "master_data": (
+                            "reference tables ("
+                            + ", ".join(f"{k}={v}" for k, v in
+                                        sorted((spec_master_data or {}).items()))
+                            + ")"
+                        ),
                     }[name]
                     + f" and {type(builder).__name__} has no `{name}` field, so"
                     " nothing carries them"

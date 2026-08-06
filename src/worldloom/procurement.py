@@ -333,6 +333,10 @@ class ProcureToPayWorld:
     embarrassing one, unlike an insurer named ``Handelsgruppe``. The engine's
     own pool is stated in ``procurement_org`` regardless."""
 
+    master_data: Any = None
+    """Reference tables at scale — `RetailWorld.master_data`, verbatim: the
+    same knob, the same no-op default, the same counts-on-the-recipe replay."""
+
     @classmethod
     def inspired_by(cls, description: str, *, seed: int) -> ProcureToPayWorld:
         """A world shaped like the contractor *description* names. Shape only."""
@@ -396,6 +400,7 @@ class ProcureToPayWorld:
             role_table=self.role_table,
             # What it was given, not what it resolved to — `RetailWorld.build`.
             locale=self.locale,
+            master_data=self.master_data,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = procurement_org.generate(
@@ -412,7 +417,7 @@ class ProcureToPayWorld:
             role_table=self.role_table,
         )
 
-        return World(
+        world = World(
             company=org.company,
             _business_units=org.business_units,
             _people=org.people,
@@ -434,6 +439,12 @@ class ProcureToPayWorld:
             _generator_version=worldloom_version,
             _recipe=recipe,
         )
+        # A strict no-op when nothing was asked for — see the field. After the
+        # organisation so the register buckets vendors in this world's own
+        # category names, under a stream root of its own so it moves nothing.
+        from .generators import masterdata as masterdata_module
+
+        return masterdata_module.applied(world, self.master_data, locale=locale)
 
 
 # ---------------------------------------------------------------------------

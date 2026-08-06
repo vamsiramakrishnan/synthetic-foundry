@@ -127,8 +127,21 @@ class PurchaseToPayCycle:
         # different supplier while month one's counterparty fact — resolved
         # above and reused — still named the first, and the corpus would carry
         # two answers to "who is this order with".
-        supplier = Rng(world.seed).derive("procurement/supplier").choice(
-            procurement_cycle._SUPPLIERS)
+        #
+        # A world that opted into master data resolves the counterparty
+        # against its own vendor register instead of the module's six-name
+        # pool, so the standing agreement is with a supplier the corpus can
+        # actually look up — same stream label either way, so the only worlds
+        # whose supplier moves are the ones that asked for a register, which
+        # no corpus had before the knob existed. The register outlives the
+        # build (`masterdata.json`), so replay resolves the same name; the
+        # month-two path above still reuses month one's counterparty fact
+        # rather than redrawing.
+        supplier_pool: tuple[str, ...] = procurement_cycle._SUPPLIERS
+        table = world.masterdata
+        if table is not None and table.vendors:
+            supplier_pool = tuple(vendor.name for vendor in table.vendors)
+        supplier = Rng(world.seed).derive("procurement/supplier").choice(supplier_pool)
 
         position = procurement_match.generate(
             rng.derive("match"),

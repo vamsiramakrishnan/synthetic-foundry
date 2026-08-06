@@ -32,6 +32,7 @@ from .collections import (
     EventCollection,
     FactCollection,
 )
+from .detail import DetailTable
 from .ids import Minter
 from .models import (
     AccessPolicy,
@@ -86,7 +87,16 @@ class World:
     _artifacts: tuple[ArtifactManifestEntry, ...] = ()
     _intentional_errors: tuple[IntentionalError, ...] = ()
     _evaluations: tuple[EvaluationCase, ...] = ()
+    _detail_tables: tuple[DetailTable, ...] = ()
     _ledger: tuple[GenerationLedgerEntry, ...] = ()
+    # Reference tables (generators/masterdata.py), or None for the world that
+    # never opted in — which is every corpus built before the knob existed, so
+    # the file is written only when there is a table and nothing else moves.
+    # `Any` rather than the concrete type for the thin-waist reason `_archetype`
+    # is: `models.py` stays the vocabulary every subsystem speaks, and a
+    # reference register is generator data a corpus carries, not an entity the
+    # validator's referential checks traverse.
+    _masterdata: Any = None
     # The actor layer. Empty on every world that never ran an episode, which is
     # every corpus built before this existed — the files are written only when
     # there is something in them, so an actorless corpus is byte-identical to
@@ -167,7 +177,9 @@ class World:
             _artifacts=tuple(corpus.load_models(root / corpus.MANIFEST_FILE, ArtifactManifestEntry)),
             _intentional_errors=tuple(corpus.load_models(root / corpus.ERRORS_FILE, IntentionalError)),
             _evaluations=tuple(corpus.load_models(root / corpus.EVALS_FILE, EvaluationCase)),
+            _detail_tables=tuple(corpus.load_models(root / corpus.DETAIL_FILE, DetailTable)),
             _ledger=tuple(corpus.load_models(root / corpus.LEDGER_FILE, GenerationLedgerEntry)),
+            _masterdata=_masterdata_from(root),
             _observations=tuple(corpus.load_models(root / corpus.OBSERVATIONS_FILE, Observation)),
             _messages=tuple(corpus.load_models(root / corpus.MESSAGES_FILE, ActorMessage)),
             _tasks=tuple(corpus.load_models(root / corpus.TASKS_FILE, ActorTask)),
@@ -304,9 +316,33 @@ class World:
         return self._collection("evaluations", lambda: EvaluationCollection(self._evaluations, label="EvaluationCollection"))
 
     @property
+    def detail_tables(self) -> Collection[DetailTable]:
+        """Transaction-level rows generated under ledger facts.
+
+        Every fact-backed column in here sums to its fact exactly — the
+        ``detail`` check group recomputes that, so a loaded corpus is held to
+        the same rule the generator constructed. Empty on every world whose
+        episode declared no detail recipe.
+        """
+        return self._collection("detail_tables", lambda: Collection(self._detail_tables, label="DetailTableCollection"))
+
+    @property
     def ledger(self) -> Collection[GenerationLedgerEntry]:
         """The generation ledger. Empty at Gate A — no generative calls yet."""
         return self._collection("ledger", lambda: Collection(self._ledger, label="GenerationLedgerCollection"))
+
+    @property
+    def masterdata(self) -> Any:
+        """The reference tables this build opted into, or ``None``.
+
+        A ``generators.masterdata.MasterData`` — vendors, customers, SKUs and
+        the shared contact pool — minted only when the build asked
+        (``master_data`` on a spec, ``Blueprint.master_data`` in the SDK) and
+        carried on the corpus as ``masterdata.json``. ``None`` on every world
+        that never opted in, which is every corpus built before the knob
+        existed.
+        """
+        return self._masterdata
 
     @property
     def observations(self) -> Collection[Observation]:
@@ -480,6 +516,7 @@ class World:
         artifacts: tuple[ArtifactManifestEntry, ...] = (),
         evaluations: tuple[EvaluationCase, ...] = (),
         intentional_errors: tuple[IntentionalError, ...] = (),
+        detail_tables: tuple[DetailTable, ...] = (),
         ledger: tuple[GenerationLedgerEntry, ...] = (),
         observations: tuple[Observation, ...] = (),
         messages: tuple[ActorMessage, ...] = (),
@@ -541,7 +578,9 @@ class World:
             _artifacts=self._artifacts + artifacts,
             _intentional_errors=self._intentional_errors + intentional_errors,
             _evaluations=self._evaluations + evaluations,
+            _detail_tables=self._detail_tables + detail_tables,
             _ledger=self._ledger + ledger,
+            _masterdata=self._masterdata,
             _observations=self._observations + observations,
             _messages=self._messages + messages,
             # Tasks merge by id for the same reason people do: an assignment
@@ -906,8 +945,17 @@ class World:
             corpus.write_jsonl(target / corpus.MANIFEST_FILE, list(self._artifacts))
         corpus.write_jsonl(target / corpus.ERRORS_FILE, list(self._intentional_errors))
         corpus.write_jsonl(target / corpus.EVALS_FILE, list(self._evaluations))
+        # Written only when a detail recipe produced rows — every corpus built
+        # without one keeps its exact byte layout, and CI diffs directories.
+        if self._detail_tables:
+            corpus.write_jsonl(target / corpus.DETAIL_FILE, list(self._detail_tables))
         if self._ledger:
             corpus.write_jsonl(target / corpus.LEDGER_FILE, list(self._ledger))
+        # Written only when a build opted in, so an un-opted corpus grows no
+        # file. `write_json` sorts keys, so the register round-trips
+        # byte-identically: export, load, export again is the same file.
+        if self._masterdata:
+            corpus.write_json(target / corpus.MASTERDATA_FILE, self._masterdata.as_dict())
         # Written only when populated. A corpus with no actor episode should not
         # grow four empty files, and CI diffs whole directories.
         if self._observations:
@@ -1015,6 +1063,24 @@ def extend_lore(
         **recipe,
         LORE_CLAIMS_KEY: [claim.as_dict() for claim in claims],
     }
+
+
+def _masterdata_from(root: Path) -> Any:
+    """The reference tables a corpus on disk carries, or ``None``.
+
+    A missing file is the ordinary case — every corpus built before the knob
+    existed — and returns ``None`` rather than an empty table, so a loaded
+    world re-exports without minting a file its source never had. A present
+    file that fails integrity raises through ``MasterData.__post_init__``: a
+    register whose SKUs name absent vendors is a defect wherever the rows came
+    from, hand edits included.
+    """
+    path = root / corpus.MASTERDATA_FILE
+    if not path.is_file():
+        return None
+    from .generators import masterdata as masterdata_module
+
+    return masterdata_module.from_document(corpus.read_json(path))
 
 
 def _moment(moment: datetime | str) -> datetime:

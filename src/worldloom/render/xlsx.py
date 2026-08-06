@@ -187,8 +187,17 @@ def _formula(
     return None
 
 
-def render(ir: ArtifactIR) -> bytes:
-    """Render one workbook IR to XLSX bytes."""
+def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
+    """Render one workbook IR to XLSX bytes.
+
+    *detail* is the sequence of ``detail.DetailTable`` rows bound to this
+    artifact — each becomes a real sheet after the IR's own sections, which is
+    what turns a workbook of fifteen load-bearing rows into something shaped
+    like a system export. Passed in rather than read from a world because this
+    function renders one IR in isolation (the determinism tests call it that
+    way), and defaulted empty so every workbook without a detail recipe keeps
+    its exact bytes.
+    """
     openpyxl = _require_openpyxl()
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.workbook.defined_name import DefinedName
@@ -266,6 +275,10 @@ def render(ir: ArtifactIR) -> bytes:
 
         sheet.freeze_panes = sheet.cell(row=rows_of[table.key], column=2)
 
+    for table in detail:
+        _detail_sheet(workbook, ir, table, bold=bold, header_fill=header_fill,
+                      Alignment=Alignment, Font=Font)
+
     # Named ranges, so a consumer can address the numbers that matter without
     # depending on where they happen to sit.
     pnl = next((t for t in ir.tables() if t.key == "pnl"), None)
@@ -311,8 +324,65 @@ def render(ir: ArtifactIR) -> bytes:
     return ooxml.normalise(buffer.getvalue(), created=stamp)
 
 
+def _detail_sheet(workbook, ir, table, *, bold, header_fill, Alignment, Font):  # type: ignore[no-untyped-def]
+    """One detail table as a sheet of literal rows plus a computed total.
+
+    Values are literals — a thousand generated lines are the data, not a
+    projection of other cells — but the **total row is a formula**, exactly as
+    every other sheet keeps its totals: the workbook's claim is that a reader
+    can recompute it, and for a fact-backed column the sum the formula shows
+    is the ledger's own figure, because the rows were allocated from it.
+    """
+    sheet = workbook.create_sheet(title=table.title[:31])
+    sheet.cell(row=1, column=1, value=ir.title).font = Font(bold=True, size=13)
+    sheet.cell(row=2, column=1, value=f"{table.title} · {len(table.rows):,} lines").font = Font(
+        italic=True, color="666666"
+    )
+
+    for index, column in enumerate(table.columns, start=1):
+        header = sheet.cell(row=_HEADER_ROW, column=index, value=column.label)
+        header.font = bold
+        header.fill = header_fill
+        if column.number_format:
+            header.alignment = Alignment(horizontal="right")
+
+    first = _HEADER_ROW + 1
+    for offset, row in enumerate(table.rows):
+        for index, column in enumerate(table.columns, start=1):
+            cell = sheet.cell(row=first + offset, column=index, value=row.get(column.name))
+            if column.number_format:
+                cell.number_format = column.number_format
+
+    total_row = first + len(table.rows)
+    sheet.cell(row=total_row, column=1, value="Total").font = bold
+    for index, column in enumerate(table.columns, start=1):
+        if not column.fact_id:
+            continue
+        letter = _column_letter(index)
+        cell = sheet.cell(row=total_row, column=index)
+        cell.value = f"=SUM({letter}{first}:{letter}{total_row - 1})"
+        cell.font = bold
+        if column.number_format:
+            cell.number_format = column.number_format
+
+    if table.note:
+        sheet.cell(row=total_row + 2, column=1, value=table.note).font = Font(
+            italic=True, color="666666"
+        )
+
+    widths = [max(12, len(c.label) + 2) for c in table.columns]
+    for index, width in enumerate(widths, start=1):
+        sheet.column_dimensions[_column_letter(index)].width = width
+    sheet.freeze_panes = sheet.cell(row=first, column=1)
+
+
 def render_all(world: World) -> list[Rendered]:
-    """Render every workbook in *world*."""
+    """Render every workbook in *world*, with its detail sheets attached."""
+    by_intent: dict[str, list] = {}
+    for table in world.detail_tables:
+        if table.artifact_id:
+            by_intent.setdefault(table.artifact_id, []).append(table)
+
     out: list[Rendered] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
@@ -323,7 +393,7 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.xlsx",
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                payload=render(ir),
+                payload=render(ir, detail=by_intent.get(ir.intent_id, ())),
             )
         )
     return out

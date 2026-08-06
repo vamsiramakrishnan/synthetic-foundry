@@ -295,6 +295,15 @@ class CompanySpec:
     function, who they report to. Appended, never substituted — the engine
     looks several keys up by name."""
 
+    # -- what its systems hold ----------------------------------------------
+    master_data: Mapping[str, int] = _field(default_factory=dict)
+    """Reference tables to mint at build: ``{"vendors": 2000, "skus": 500}``.
+    Counts of ``vendors``/``customers``/``skus`` — a real ERP's registers run
+    to thousands of rows where a described company would otherwise carry none.
+    Opt-in and recorded on the recipe as counts (the rows are what the counts
+    become in the world they land in); an empty mapping mints nothing, which
+    keeps every earlier description building byte-identically."""
+
     # -- identity, or the pack that already holds it ------------------------
     identity: Identity | None = None
     pack: str = ""
@@ -338,6 +347,8 @@ class CompanySpec:
             }
         if self.organisation:
             payload["organisation"] = dict(self.organisation)
+        if self.master_data:
+            payload["master_data"] = {k: int(v) for k, v in sorted(self.master_data.items())}
         if self.leadership:
             payload["leadership"] = [
                 {"key": key, "title": title, "function": function,
@@ -365,7 +376,7 @@ class CompanySpec:
 _FIELDS: frozenset[str] = frozenset({
     "industry", "engine", "archetype", "vocabulary", "revenue", "employees",
     "geo", "facets", "physics", "calendar", "estate", "organisation",
-    "leadership", "identity", "pack", "about", "rivals",
+    "leadership", "identity", "pack", "about", "rivals", "master_data",
 })
 
 _IDENTITY_FIELDS: frozenset[str] = frozenset({
@@ -438,6 +449,7 @@ def from_document(payload: Mapping[str, Any] | str | Path) -> CompanySpec:
         calendar=str(payload.get("calendar", "")),
         estate=str(payload.get("estate", "")),
         organisation=organisation,
+        master_data=dict(payload.get("master_data") or {}),
         leadership=_leadership(payload.get("leadership") or ()),
         identity=identity,
         pack=str(payload.get("pack", "")),
@@ -665,6 +677,10 @@ class Resolution:
     ``spec.identity``, or ``None``. When present it is the shape, the lore, the
     name and the geography, and everything derived yields to it."""
 
+    master_data: Mapping[str, int] | None = None
+    """Validated reference-table counts, or ``None`` when the description asked
+    for none. Passed through to the builder's own ``master_data`` knob."""
+
     unmet: tuple[str, ...] = ()
     conflicts: tuple[Conflict, ...] = ()
 
@@ -686,6 +702,7 @@ class Resolution:
             "employees": self.employees,
             "annual_revenue": self.annual_revenue,
             "facets": dict(sorted(self.facet_choices.items())),
+            "master_data": dict(self.master_data) if self.master_data else None,
             "pack": None if self.pack is None else self.pack.name,
             "company_name": None if self.pack is None else self.pack.company_name,
             "unmet": list(self.unmet),
@@ -865,11 +882,26 @@ def resolve(spec: CompanySpec) -> Resolution:
             found.append(Conflict("geo", "unknown_locale", str(exc)))
             locale = None
 
+    # -- what its systems hold ----------------------------------------------
+    master_data: dict[str, int] | None = None
+    if spec.master_data:
+        from .generators.masterdata import check_request
+
+        try:
+            master_data = check_request(spec.master_data)
+        except (TypeError, ValueError) as exc:
+            found.append(Conflict("master_data", "bad_request", str(exc)))
+
     # -- identity, and the geography only an identity can carry -------------
     if pack is None and spec.identity is not None and spec.identity.company_name:
         if shape is not None and domain is not None:
             try:
-                pack = pack_of(spec, shape, engine, locale=locale, calendar=calendar)
+                pack = pack_of(
+                    spec, shape, engine, locale=locale, calendar=calendar,
+                    # How many people the generator will actually mint for
+                    # this description — the pool-sizing input; see `pack_of`.
+                    people=_people_needed(role_table, domain, shape),
+                )
             except Exception as exc:        # noqa: BLE001 - reported, not swallowed
                 found.append(Conflict("identity", "does_not_compose", str(exc)))
     elif spec.identity is not None and not spec.identity.company_name and pack is None:
@@ -985,6 +1017,7 @@ def resolve(spec: CompanySpec) -> Resolution:
         annual_revenue=spec.revenue,
         facet_choices=dict(resolved_facets.chosen),
         pack=pack,
+        master_data=master_data,
         # Sorted and de-duplicated: two facets can want the same missing
         # behaviour, and a describer reading the same sentence twice learns
         # nothing the second time. `facets.resolve` already sorts its own.
@@ -1210,6 +1243,26 @@ def _organisation_of(
 # ---------------------------------------------------------------------------
 
 
+def _people_needed(
+    role_table: tuple[tuple[str, str, str, str | None], ...] | None,
+    domain: Any,
+    shape: Any,
+) -> int:
+    """How many people the generator will mint for this description, exactly.
+
+    The arithmetic ``packs.lint`` already uses (its ``required_people``),
+    generalised to a described organisation: the description's own table when
+    it wrote one, the engine's fixed roles when it did not, plus one row per
+    unit per unit-role suffix — which is precisely what
+    ``org_builder.sorted_roles`` will assemble. Exact rather than padded,
+    because this number decides which name pool a composed pack carries and an
+    over-estimate would move a borderline description onto the deep pools,
+    renaming its people for no reason the describer stated.
+    """
+    base = len(role_table) if role_table is not None else len(domain.role_keys)
+    return base + len(shape.units) * len(domain.unit_role_suffixes)
+
+
 def pack_of(
     spec: CompanySpec,
     shape: Any,
@@ -1217,6 +1270,7 @@ def pack_of(
     *,
     locale: str | None = None,
     calendar: str | None = None,
+    people: int | None = None,
 ) -> Any:
     """The pack a description with an identity composes into.
 
@@ -1290,7 +1344,19 @@ def pack_of(
         ],
         **({} if place is None else {
             "regions": regions,
-            "name_pools": {"given": list(place.given), "family": list(place.family)},
+            # Sized to the organisation this description mints (`people`, the
+            # exact `org_builder` row count): the 40-name base pool whenever it
+            # fits — every existing description keeps composing the identical
+            # pack, bytes and all — and the locale's extended pool
+            # (`data/vocab/*.json`, base pool as verbatim prefix) only when the
+            # headcount outruns it, which is a description that could never
+            # have built before. This is the one door the deep pools have into
+            # a described company: `organisation.generate` reads `name_pools`
+            # off the pack and nothing else.
+            "name_pools": {
+                "given": list(place.name_pool("given", people or 0)),
+                "family": list(place.name_pool("family", people or 0)),
+            },
         }),
         **({} if not headquarters else {"headquarters": headquarters}),
         # The trading year goes on the pack as well as on the builder, because
@@ -1359,6 +1425,9 @@ _SCHEMA: tuple[tuple[str, str, str, str], ...] = (
     ("leadership", "value", "worldloom.roles",
      "Roles this company has that the engine's table does not. Appended, never"
      " substituted."),
+    ("master_data", "value", "generators/masterdata.py",
+     "Reference tables to mint at build: counts for vendors, customers, skus."
+     " Opt-in; the recipe records the counts and replay re-mints the rows."),
     ("identity", "value", "worldloom.packs",
      "company_name, name, headquarters, regions. The half only a person can"
      " supply, and what turns a description into a pack."),

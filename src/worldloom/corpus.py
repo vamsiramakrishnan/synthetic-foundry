@@ -16,6 +16,8 @@ Layout::
     ├── artifact-manifest.jsonl   rendered artifacts, with provenance
     ├── intentional-errors.jsonl
     ├── evals.jsonl
+    ├── detail.jsonl              transaction-level rows under the facts
+
     ├── actor-observations.jsonl  who knew what, when, and how
     ├── actor-messages.jsonl      what one employee told another
     ├── actor-tasks.jsonl         obligations, and who owns them
@@ -43,11 +45,23 @@ IR_FILE = "artifact-ir.jsonl"
 MANIFEST_FILE = "artifact-manifest.jsonl"
 ERRORS_FILE = "intentional-errors.jsonl"
 EVALS_FILE = "evals.jsonl"
+# Detail tables: transaction-level rows generated under ledger facts by a
+# declared recipe (see `detail.py`). One file, one model per line — a table is
+# one generated thing with one provenance; its rows mean nothing individually.
+# Written only when a recipe produced any, so a corpus without one is
+# byte-identical to what it was.
+DETAIL_FILE = "detail.jsonl"
 LEDGER_FILE = "generation-ledger.jsonl"
 # The actor layer, written only when an episode ran. Four files rather than one
 # because they answer four different questions — who knew what, who was told
 # what, who owes what, and who did what — and folding them together would make
 # every one of those a filter over a mixed stream.
+# Reference tables (generators/masterdata.py), written only when a build opted
+# in — an un-opted corpus grows no file, and CI diffs whole directories. One
+# JSON document rather than three JSONL ledgers because the table is a single
+# immutable value with cross-collection integrity (a SKU names its vendor), and
+# a reader should get the whole consistent register or none of it.
+MASTERDATA_FILE = "masterdata.json"
 OBSERVATIONS_FILE = "actor-observations.jsonl"
 MESSAGES_FILE = "actor-messages.jsonl"
 TASKS_FILE = "actor-tasks.jsonl"
