@@ -389,6 +389,185 @@ identifiers, the three-way contest, working-paper pre-figures, and the
 artifact/evaluation planners. Each is either mechanism (correctly not data)
 or a named next seam — not a vague gap.
 
+## The Grammar Proof II: PurchaseToPayCycle
+
+The second port, and the one the settled Engine-vs-LOB distinction was waiting
+for: the procurement engine's monthly cycle, re-expressed as a process
+**contributed by the procurement LOB** and run as an `AuthoredEpisode` inside
+any engine's world. The spec is `examples/episodes/procure-to-pay.json`
+(process `ProcureToPay`, monthly); the LOB with its slot bindings is
+`examples/episodes/procure-to-pay-lob.json`; `tests/test_p2p_port.py` pins
+every claim below.
+
+**What the port needed, and what it deliberately did not.** The known gap —
+a three-way authority contest exceeding the supersession pair — resolves
+*without* a `contested_triple` primitive, because P2P's contest is not a
+supersession at all: the purchase order (APPROVED_REPORT), the goods receipt
+(SYSTEM_OF_RECORD) and the invoice (SYSTEM_OF_RECORD) are three *kinds*, all
+current forever (check (l) holds them immutable), each the only correct answer
+to its own question. The port declares three facts with explicit authorities;
+a primitive that encoded the disagreement as one fact's history would assert a
+succession that never happens. `generators/primitives.py` is unchanged. What
+the runner did need, and got (`episodes.py`):
+
+* **`EventSpec.anchor`** — `prior_period_end` counts an event's business day
+  from the previous period's end, which is how the order (bd 3) and the
+  receipt (bd 15) land *inside* the month. Defaulted so every earlier spec
+  replays byte-identically.
+* **The chain, generalised from the pair**: every superseded occurrence now
+  closes exactly where its successor opens. The exception status walks three
+  links (raised → escalated → resolved); the pair-only shape left the middle
+  link open, which is precisely the torn window the engine's own check (m)
+  refuses. Pairs are unchanged byte-for-byte.
+* **`prior(K)` and the sum/derive carry-forward, actually resolved**: the
+  runner now scopes the lookup to the genuinely prior period (the old code
+  passed the current one — unexercised until this port) and hands the value
+  to a `prior(K)` derivation, zero in a first period because "nothing was
+  outstanding" is a claim, not an absence. A `prior` derive with no declared
+  carry-forward slot is lint-refused rather than silently zero.
+* **Seven arithmetic derivations** (`at_rate`, `percent_of`, `multiple_of`,
+  `plus`, `minus`, `units_of`, `prior`) — each a pure function the validator
+  can recompute, rounded exactly as `procurement_match._money` publishes
+  figures, so the identities the engine's check group recomputes hold by
+  construction.
+
+**The byte-diff verdict, measured** (seed 8128, both corpora exported
+uncompiled from the same `ProcureToPayWorld.build()`; one period 2026-03, and
+`2026-03..05` for the carry-forward). `lore.jsonl` is byte-identical; every
+other file differs, and every difference is attributable:
+
+* **Events are the port's win outright**: 14 of 14 events with the same
+  kinds, same order, same `EV` ids, same timestamps, same summaries, and same
+  actors — the `anchor` field is what made the in-month timestamps exact.
+  What differs on every event: `systems` (the port declares none — a portable
+  process cannot presume a host engine's system catalogue, the LOB-owned-
+  systems seam being unbuilt) and `lore_ids` (the grammar has no lore linkage
+  on events or facts; the engine tags the receipt, the escalation and the
+  settlement with the commitments that explain them). One event differs in
+  `caused_by`: the engine's close records two causes (close started, and the
+  settlement), `EventSpec.caused_by` holds one, and the port declares the
+  settlement — the cause the accrual depends on.
+* **Facts: 52 vs 32 in one period, 134 vs 78 over three; first id divergence
+  at FACT-0003.** Every missing fact is the *line* structure: the engine's
+  order has two lines — a contested and a clean one, per spend category, plus
+  group totals — and the runner mints one subject per kind, so the port
+  carries the cycle at company scope and drops per-category
+  quantities/values/variances (2–3 facts per kind), `p2p.invoiced_quantity`
+  and `p2p.invoiced_unit_price` (the billed unit rate is the back-out
+  mechanism's product), and the policy prose the engine carries beside the
+  tolerance percentage (the grammar mints an amount or a text, not both).
+  The clean line is not an accounting detail: it is the anti-shortcut control
+  that stops the corpus being solvable by distrusting invoices, and it stays
+  engine-only.
+* **Every drawn figure differs, structurally on purpose** — stream identity,
+  exactly as the first proof: the engine draws under
+  `scenario/PurchaseToPayCycle/<period>/match/...`, the port under
+  `scenario/ProcureToPay/<period>/kind/...`. Ordered value 3,539.20 vs
+  1,921.75; accrual 3,511.87 vs 1,902.51. The *relationships* hold
+  identically on both sides: the variance halves sum, the credit note covers
+  the variance, the settlement is the contracted rate, the accrual is the
+  receipt plus the released balance, and each month releases exactly what
+  the month before left outstanding — 45 procurement-group checks over three
+  periods, zero violations, on facts the engine never minted.
+* **Construction direction is a named divergence, not a hidden one**: both
+  size the breach top-down (tolerance × drawn multiple, split by a drawn
+  fraction — the same three spans), but the engine then backs *integer*
+  units and a unit-price uplift out with outward rounding and republishes the
+  variances from the integers, so its published integers are the truth and
+  its variances are their products. The port derives its quantities from its
+  values (`units_of`), so its integers are roundings. The outward-rounded
+  integer-first back-out stays generator logic.
+* **Standing facts and the carry-forward match exactly in structure**: rate
+  card, counterparty, delegation and the held vendor-master change each
+  minted once across three months and reused by declaration; released value
+  equals the prior close's shortfall to the cent in both corpora, first
+  month zero in both. Two divergences: the supplier's name is drawn from a
+  world-keyed stream by the engine and committed as fiction by the spec, and
+  the engine mints the vendor-change *event* only in the first month where
+  the grammar cannot conditionalise an event — 30 vs 32 events over three
+  periods, the two extras being repeated `vendor_change_requested`.
+
+**The artifact story.** 6 vs 6 intents in one period — same types, same
+order, same `ART` ids, same authors, same audiences, same sizes: the port
+plans `purchase_order`, `goods_receipt_note`, `supplier_invoice`,
+`match_exception_report`, `payment_approval_memo`, `vendor_master_change`,
+all six doctypes the engine registers. What the planner layer still cannot
+say: **required facts** are thinner (11 vs 6 on the order — the per-line
+facts, plus the engine's habit of handing a document cross-referenced facts);
+**`derived_from` edges** (the exception report derives from all three source
+documents, the memo from the report — the relationship graph, the same gap
+the first proof named); **per-intent domain labels** (the engine files the
+receipt under `operations` and the invoice under `finance`; a spec has one
+domain); **conditional planning** (vendor_master_change once per corpus vs
+once per period — 16 vs 18 intents over three); **evaluation cases: 11 vs 0
+per period, 35 vs 0 over three**, across nine types including the
+authority-resolution questions that are this vertical's whole reason to
+exist; and **intentional errors: 1 vs 0 per period** — the payment memo's
+labelled political understatement. The artifact/eval planner gap is now
+measured twice and is the grammar's largest.
+
+**Cross-engine attachment, proven** — the point of the migration. The
+procurement LOB's five roles enter a **retail** world through the roles seam
+(`RetailWorld(role_table=retail spine + lob roles)`), the authored process
+runs inside it, and `financial.accrual.grni` lands at company scope, in
+`AUD_thousands`, in the shared `financial.*` vocabulary retail's close reads
+— 1,902.51 for seed 8128, **the same figure the procurement world gets**,
+because the stream is named for the spec and the period, never for the host
+engine: the process carries its figures with it. The procurement check group
+polices the p2p facts inside the retail world (15 checks, zero violations —
+it polices `p2p.*` whoever minted it, the exact argument banking's group
+made for the first proof), the whole world validates, and retail's own
+`MonthEndClose` runs on top — the following month, or even the same one —
+and still validates. Two honest residues: the port still mints `close.*`
+facts of its own (the engine-conflation it was extracted from; when a
+finance LOB owns the close, the process should shed its close phase and the
+accrual should feed that close instead), and the LOB's
+`financial_controller` seats a second controller beside retail's own
+`controller`, because the runner resolves actor keys directly against
+`world._roles` rather than through the slot bindings — binding-aware actor
+resolution is the seam that would let one spec run at companies whose role
+keys differ.
+
+**Slot bindings, attached and measured.** The process declares its seats in
+its own vocabulary — `preparer` (raise the order), `matcher` (run the
+match), `approver` (clear the exception, never whoever raised the order) —
+and the LOB binds `category_manager`, `accounts_payable_lead` and
+`financial_controller` into them; `lob.lint_bindings` is clean and
+`lob.participation` derives the room: the preparer sits in the process
+through the binding alone (no responsibility edge names an ordering kind),
+the CPO sits in it through the `p2p` responsibility family alone (21 kinds,
+no seat), and the matcher and approver arrive by both routes — the two
+halves of the settled design each doing exactly its own job.
+
+**Retirement: not yet, and here is the evidence.** The port covers the
+causal spine (14/14 events with exact timestamps), the fact vocabulary at
+company scope (26 of the engine's 28 kinds), all six doctypes' intents, the
+three-authority contest, the status chain, and the only period-keyed
+carry-forward in the project — running in two engines. The engine alone
+still does: the two-line order and every per-category fact; 6 of its 13
+check families on real subjects ((a) per-document value reconciliation, (b)
+over-receipt, (c)/(d) the per-line match legs and identity, (e) group
+roll-ups, (h) the artifact-gated approval and segregation-of-duties checks —
+the port exercises (f), (g), (i), (j), (k), (l), (m), 15 of the engine's 47
+checks per period); the evaluation taxonomy (11 cases/period, 9 types); the
+labelled intentional error; the `derived_from` graph; lore linkage; system
+stamps; and — not episode logic at all — the world itself: the archetype,
+the three-reporting-lines organisation, the physics registration, the check
+group, and the fact-kind registrations all live in `procurement.py` and
+`procurement_org.py` and are what the port *runs inside*. Before
+`PurchaseToPayCycle`/`procurement_cycle`/`procurement_match` could be
+deleted: (1) evaluation cases and intentional errors as grammar, (2) the
+artifact relationship graph and conditional planning, (3) multi-subject
+(line-level) minting or an order-line axis — the "a purchase order is not an
+entity" misfit, resolved rather than inherited, (4) lore linkage on authored
+events and facts, (5) LOB-owned systems entering a host world, and (6) a
+carry-forward stage in the process cascade — today `process.py` cannot
+author the two `prior()` slots, and the lint refuses them with the reason
+(measured in `test_the_cascade_refuses_what_its_missing_stage_cannot_hold`).
+The engine does not retire; it shrinks in *scope*: its episode is now also a
+portable process, and its remaining monopoly is enumerated above rather than
+assumed.
+
 ## What the Grammar Declares and Cannot
 
 ### Declares (Data)
@@ -477,4 +656,4 @@ These are tractable in phase 3, after the first three episodes are ported. The s
 
 **The proof** is QuarterlyCapitalReturn (banking's smallest episode), which the grammar can express byte-for-byte — with the caveat that specific failure modes and approval chains live in episode_text overrides or generator code, not data. That boundary is intentional: prose and causality are harder than invariants and structure.
 
-**Ports remain**: MonthEndClose (retail), QuarterlyReserving (insurance), and PurchaseToPayCycle (procurement). The carry-forward declarations for insurance multi-period (lifting the phase-1 cap) are the next milestone, followed by extraction of evaluation cases as declared templates.
+**Ports done**: QuarterlyCapitalReturn (banking) and PurchaseToPayCycle (procurement, as the LOB-owned `ProcureToPay` process — the first to run cross-engine, with the project's only period-keyed carry-forward). **Ports remain**: MonthEndClose (retail) and QuarterlyReserving (insurance). The carry-forward declarations for insurance multi-period (lifting the phase-1 cap) are the next milestone, followed by extraction of evaluation cases as declared templates — now the largest gap, measured twice.

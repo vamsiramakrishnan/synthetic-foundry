@@ -150,7 +150,22 @@ class FactKindSpec(Model):
     ``ratio_pct(A, B)`` (A over B as a percentage, two decimals, pair-aware),
     ``initial(K)`` (the pre-correction half of K's supersession pair),
     ``supersession_delta(K)`` (corrected minus initial),
-    ``bps_delta(K)`` (initial minus corrected, in basis points).
+    ``bps_delta(K)`` (initial minus corrected, in basis points),
+    ``at_rate(Q, R)`` (quantity Q priced at per-unit rate R, published in the
+    money unit's thousands to two decimals — the three-way match's one line of
+    arithmetic, ``procurement_match._money``'s rounding exactly),
+    ``percent_of(A, P)`` (amount A at the already-minted percentage kind P —
+    unlike ``pct_of``, nothing is drawn: a delegation of authority is a stated
+    policy applied to a stated order value),
+    ``multiple_of(K)`` (K times a factor drawn from this kind's ``parameter`` —
+    how a variance is sized as a multiple of a tolerance, or split by a drawn
+    fraction),
+    ``plus(A, B)`` / ``minus(A, B)`` (two decimals — the reconciliation
+    identities the procurement check group recomputes),
+    ``units_of(V, R)`` (the whole units a value V represents at rate R),
+    ``prior(K)`` (the prior period's value of K, resolved by a declared
+    ``sum``/``derive`` carry-forward; zero in a world's first period, because
+    "nothing was outstanding" is a claim, not an absence).
     Closed for the invariant vocabulary's reason: a derivation the validator
     cannot recompute is a figure nothing checks."""
 
@@ -210,7 +225,21 @@ class EventSpec(Model):
     # a silent one).
 
     business_day: int = 1
-    """Which business day after period end this event occurs on."""
+    """Which business day after the anchor this event occurs on."""
+
+    anchor: Literal["period_end", "prior_period_end"] = "period_end"
+    """Which period end ``business_day`` counts from.
+
+    ``period_end`` is the end of the episode's own period — where a close, a
+    filing, or anything after the books shut belongs. ``prior_period_end`` is
+    the end of the period *before*, which is how an event lands **inside** the
+    month: the procurement cycle raises its order on the 3rd working day of the
+    month and receipts the delivery on the 15th, and counting those from the
+    month's own end would push the whole operational half of the cycle into the
+    next month. The step honours the spec's cadence (one month, three, twelve),
+    so a quarterly episode's in-period events count from the previous quarter's
+    end. Defaulted to ``period_end`` so every spec authored before this field
+    existed replays byte-identically."""
 
     hour: int = 9
     minute: int = 0
@@ -528,7 +557,9 @@ def lint(specs: Iterable[EpisodeSpec], *, base: str = "") -> list[str]:
                 head, _, rest = fk.derive.partition("(")
                 operand_kinds = [p.strip() for p in rest.rstrip(")").split(",") if p.strip()]
                 if head not in ("pct_of", "ratio_pct", "initial",
-                                "supersession_delta", "bps_delta"):
+                                "supersession_delta", "bps_delta",
+                                "at_rate", "percent_of", "multiple_of",
+                                "plus", "minus", "units_of", "prior"):
                     findings.append(
                         f"{fk_where}: derive {fk.derive!r} is not in the closed"
                         " derivation vocabulary."
@@ -539,6 +570,22 @@ def lint(specs: Iterable[EpisodeSpec], *, base: str = "") -> list[str]:
                             f"{fk_where}: derive operand {operand!r} is not a"
                             " declared fact kind of this episode."
                         )
+                if head in ("pct_of", "multiple_of") and not fk.parameter:
+                    findings.append(
+                        f"{fk_where}: derive {head} draws its factor from this"
+                        " kind's `parameter`, and none is declared — the draw"
+                        " would have no span."
+                    )
+                if head == "prior" and operand_kinds and not any(
+                    cf.rule in ("sum", "derive") and cf.from_kind == operand_kinds[0]
+                    for cf in spec.carry_forward
+                ):
+                    findings.append(
+                        f"{fk_where}: derive prior({operand_kinds[0]}) reads a"
+                        " prior period's value, and no sum/derive carry-forward"
+                        " declares that slot — the runner only resolves what a"
+                        " declaration asks it to."
+                    )
 
             if not fk.invariants:
                 findings.append(
@@ -766,29 +813,45 @@ def run(
             return "pct"
         return money_unit
 
+    # The cadence in months — how far back "the prior period" is, and where
+    # the previous period's end sits for `anchor="prior_period_end"` events.
+    from .generators.finance import previous_periods
+
+    step = {"month": 1, "quarter": 3, "year": 12}[spec.period]
+    prior_period = previous_periods(period, step)[0]
+    prior_ends = period_end(prior_period)
+
     # -- carry-forward, resolved before anything mints -----------------------
     # Reuse means: the world's standing fact is listed in this episode's facts
     # (so intents and keys resolve identically whichever period this is) and
     # reported in `reused_fact_ids` for the caller to filter out of `extend`.
+    # Sum/derive means: the *prior* period's value is resolved and handed to
+    # the `prior(K)` derivation — scoped to that period explicitly, because a
+    # period-keyed snapshot stays open forever and an unscoped lookup would
+    # find whichever one sorted last (`PurchaseToPayCycle.run`'s own comment).
     reused: dict[str, CanonicalFact] = {}
+    prior_values: dict[str, float] = {}
     for cf in spec.carry_forward:
         fk = by_kind.get(cf.from_kind)
         if fk is None:
             continue
         prior = primitives.carried_forward(
             world, kind=cf.from_kind, subject=subject_of(fk), rule=cf.rule,
-            prior_period=None if fk.period_scope == "standing" else period,
+            prior_period=None if fk.period_scope == "standing" else prior_period,
         )
         if prior is not None and cf.rule == "reuse":
             reused[cf.to_kind] = prior
+        elif cf.rule in ("sum", "derive") and prior is not None and prior.value is not None:
+            prior_values[cf.from_kind] = prior.value.amount
 
     # -- event times first, because a supersession pair's first fact must
     # close exactly where its successor opens, and that moment is the second
     # event's — unknowable while minting the first unless times precede facts.
     times: dict[str, datetime] = {}
     for event_spec in spec.events:
+        anchored = ends if event_spec.anchor == "period_end" else prior_ends
         times[event_spec.kind] = _at(
-            business_days_after(ends, event_spec.business_day),
+            business_days_after(anchored, event_spec.business_day),
             event_spec.hour, event_spec.minute,
         )
 
@@ -863,6 +926,37 @@ def run(
             elif head == "bps_delta":
                 initial, corrected = pair_of(operands[0])
                 values[kind] = round((initial - corrected) * 100)
+            # -- the procure-to-pay arithmetic. Each is a pure function of
+            # already-valued kinds (plus at most one drawn factor), rounded the
+            # way `procurement_match._money` publishes figures — two decimals of
+            # the reporting unit — so the identities the procurement check group
+            # recomputes ((f) the halves sum, (g) the settlement, (i) the
+            # accrual, (j)/(k) the carry) hold exactly by construction.
+            elif head == "at_rate":
+                q, r = operands
+                values[kind] = round(scalar_of(q) * scalar_of(r) / 1000, 2)
+            elif head == "percent_of":
+                a, p = operands
+                values[kind] = round(scalar_of(a) * scalar_of(p) / 100, 2)
+            elif head == "multiple_of":
+                factor = primitives.level(physics, fk.parameter, rng.derive(f"kind/{kind}"))
+                values[kind] = round(scalar_of(operands[0]) * float(factor), 2)
+            elif head == "plus":
+                a, b = operands
+                values[kind] = round(scalar_of(a) + scalar_of(b), 2)
+            elif head == "minus":
+                a, b = operands
+                values[kind] = round(scalar_of(a) - scalar_of(b), 2)
+            elif head == "units_of":
+                v, r = operands
+                values[kind] = int(round(scalar_of(v) * 1000 / scalar_of(r)))
+            elif head == "prior":
+                # Zero when no prior period holds the slot — minted, not
+                # omitted, because the accrual reconciliation adds this term
+                # unconditionally and a missing fact would make "nothing was
+                # outstanding" indistinguishable from "nobody checked"
+                # (`procurement_cycle.generate`'s own reasoning, kept).
+                values[kind] = prior_values.get(operands[0], 0)
             else:
                 raise ValueError(f"{kind}: unknown derivation {fk.derive!r}")
             return
@@ -1000,6 +1094,11 @@ def run(
                 continue
             if kind in reused:
                 facts.append(reused[kind])
+                # Into `minted` as well as `facts`: an artifact requiring a
+                # standing kind must cite the same fact id in every period, and
+                # a reused fact left out of `minted` would drop off the second
+                # period's required_fact_ids while staying in its keys.
+                minted.setdefault(kind, []).append(reused[kind])
                 keys[f"fact_{kind}"] = reused[kind].id
                 continue
 
@@ -1082,10 +1181,15 @@ def run(
             until = None
             supersedes_id = None
             if paired:
-                if index == 0:
-                    close_at = next_occurrence_at(kind, index)
-                    until = close_at
-                else:
+                # Every occurrence but the last closes exactly where its
+                # successor opens — the *chain*, of which the pair is the
+                # two-link case. Procurement's exception status walks three
+                # links (raised → escalated → resolved), and the original
+                # pair-only shape left the middle link open forever, which is
+                # precisely the torn window the engine's own check (m)
+                # (`exception_status_torn` / `not_singular`) exists to refuse.
+                until = next_occurrence_at(kind, index)
+                if index > 0:
                     predecessor = minted[kind][index - 1]
                     supersedes_id = predecessor.id
             never = _invariant(fk, "never-superseded") is not None
