@@ -34,12 +34,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .models import ConstraintKind, LoreConstraint
 from .roles import Role, to_rows
 
 __all__ = [
     "LobSeed", "Lob", "RoleSpec", "Responsibility", "load_seed", "open",
     "resolve", "publish", "installed", "describe", "lint_seed", "lint_roles",
-    "lint_responsibilities",
+    "lint_responsibilities", "accountability_constraints",
 ]
 
 
@@ -452,7 +453,19 @@ def lint_responsibilities(
     *,
     roles: Sequence[str],
 ) -> list[str]:
-    """Findings for proposed responsibilities before accepting."""
+    """Findings for proposed responsibilities before accepting.
+
+    Fact kinds are checked against the process-global registry
+    (``worldloom.factkinds``) — the arm this module deferred until that
+    registry existed. A responsibility naming a kind nothing generates is an
+    accountability edge that can never fire: no fact of that kind will ever be
+    minted, so the person it makes answerable is answerable for nothing, and
+    the corpus reports the edge as if it were load-bearing. Prefix semantics
+    are the registry's (``financial.revenue`` covers ``financial.revenue.actual``
+    at a dot boundary), because one edge honestly covers a fact family.
+    """
+    from . import factkinds
+
     findings: list[str] = []
 
     if not responsibilities:
@@ -483,7 +496,55 @@ def lint_responsibilities(
                 " one fact kind or artifact type"
             )
 
+        for kind in resp.fact_kinds:
+            if not factkinds.resolvable(kind):
+                findings.append(
+                    f"responsibilities[{i}] ({resp.role_key}): fact kind"
+                    f" '{kind}' is not in the fact-kind registry — nothing in"
+                    " any registered vertical generates it, so this edge would"
+                    " make someone answerable for facts that never exist."
+                    " See worldloom.factkinds.names() for what is real."
+                )
+
     return findings
+
+
+def accountability_constraints(
+    lob: Lob, *, tolerance_pct: float = 5.0
+) -> tuple[LoreConstraint, ...]:
+    """The accountability mapping, derived from responsibility edges.
+
+    The second arm this module deferred: a ``Responsibility`` already says who
+    answers for which fact kinds, and ``ConstraintKind.ACCOUNTABILITY`` lore is
+    the engine's one way of saying the same thing (target ``role_key/fact_kind``,
+    magnitude the tolerance band — consumed by
+    ``generators.org_builder.accountability_facts``, which mints the
+    person-subject fact). Deriving one from the other, rather than authoring
+    both, is the whole cohesion argument in this module's docstring: five
+    hand-written tables can disagree; one declared edge cannot.
+
+    ``tolerance_pct`` mirrors ``org_builder.DEFAULT_TOLERANCE_PCT`` — the band
+    a variance memo in this corpus treats as worth explaining. Order is the
+    declaration order of the responsibilities and their kinds, so a LOB
+    resolves to the same constraints in every process.
+
+    The result is constraints, not commitments: a ``LoreCommitment`` needs a
+    minted id and an ``effective_from``, and a LOB knows what the organisation
+    *is*, not when it started being that — the same boundary
+    ``probe.Finding.constraint`` states.
+    """
+    constraints: list[LoreConstraint] = []
+    titles = {role.key: role.title for role in lob.roles}
+    for resp in lob.responsibilities:
+        title = titles.get(resp.role_key, resp.role_key)
+        for kind in resp.fact_kinds:
+            constraints.append(LoreConstraint(
+                kind=ConstraintKind.ACCOUNTABILITY,
+                target=f"{resp.role_key}/{kind}",
+                effect=f"The {title} answers for {kind}",
+                magnitude=tolerance_pct,
+            ))
+    return tuple(constraints)
 
 
 # ---------------------------------------------------------------------------
@@ -525,14 +586,19 @@ _FINANCE = Lob(
         ),
     ],
     responsibilities=[
+        # `financial.revenue` and `financial.gross_profit` are registry
+        # prefixes covering the actual/budget/variance family. The library
+        # used to say `financial.cost`, which nothing in any vertical
+        # generates — exactly the never-fires edge `lint_responsibilities`
+        # now refuses, found the day the registry existed to ask.
         Responsibility(
             role_key="cfo",
-            fact_kinds=["financial.revenue", "financial.cost"],
+            fact_kinds=["financial.revenue", "financial.gross_profit"],
             artifact_types=["executive_summary"],
         ),
         Responsibility(
             role_key="controller",
-            fact_kinds=["financial.revenue", "financial.cost"],
+            fact_kinds=["financial.revenue", "financial.gross_profit"],
             artifact_types=["cfo_variance_memo"],
         ),
     ],
@@ -561,9 +627,12 @@ _PROCUREMENT = Lob(
         ),
     ],
     responsibilities=[
+        # `p2p` covers the whole procure-to-pay family the vertical mints.
+        # The library used to say `procurement.order`, a kind that does not
+        # exist — the registry's vocabulary is `p2p.*`.
         Responsibility(
             role_key="chief_procurement",
-            fact_kinds=["procurement.order"],
+            fact_kinds=["p2p"],
             artifact_types=["purchase_order"],
         ),
     ],
@@ -592,14 +661,17 @@ _HR = Lob(
         ),
     ],
     responsibilities=[
+        # The org-change scenarios mint `org.joined` / `org.departed`; the
+        # library used to say `employee.headcount` and `employee.hire`, a
+        # vocabulary nothing generates.
         Responsibility(
             role_key="head_of_people",
-            fact_kinds=["employee.headcount"],
+            fact_kinds=["org.joined", "org.departed"],
             artifact_types=["org_announcement"],
         ),
         Responsibility(
             role_key="recruiter",
-            fact_kinds=["employee.hire"],
+            fact_kinds=["org.joined"],
             artifact_types=["hire_announcement"],
         ),
     ],

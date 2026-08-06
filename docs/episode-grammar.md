@@ -333,17 +333,61 @@ Banking's QuarterlyCapitalReturn is the smallest episode (15–25 facts, 5 event
 3. **Events**: preparation, challenge, lodgement, reconciliation break, restatement
 4. **Artifacts**: workbook (structured), challenge memo, incident RCA
 
-A `QuarterlyCapitalReturn.run()` implemented from the grammar would:
+The port exists and is measured: the spec is
+`examples/episodes/quarterly-capital-return.json`, the runner is
+`episodes.run` (executed through `episodes.AuthoredEpisode`, an ordinary
+recipe step), and `tests/test_episode_runner.py` pins that it lints clean
+against the fact-kind registry, validates clean under the full validator —
+banking's own check group polices `capital.*` whoever minted it, plus the
+checks derived from the spec's invariants — and replays byte-identically from
+its own recipe.
 
-1. Resolve `existing_minimum = world.authoritative("capital.minimum_cet1_requirement", ...)`
-2. Call domain-specific generators (`capital.generate`, `liquidity.generate`, `regulatory.generate`)
-3. Register checks via `validate.register_domain_checks("banking", _checks)` where `_checks` is derived from the kind invariants
-4. Extend the world with new facts, events, intents, evaluation cases
-5. Produce the same deterministic byte-for-byte corpus as the hand-written scenario
+**The byte-diff verdict, measured** (seed 8128, period 2026-03, both corpora
+exported uncompiled from the same `BankingWorld.build()`; `lore.jsonl` is
+byte-identical, every other file differs):
 
-**The byte-diff verdict**: The grammar can express the facts, carry-forward, events, and artifacts. What it *cannot* express (yet) is precisely where the reconciliation break *occurs* (which observation date, which part of the position). That mechanics lives in `regulatory.generate`'s deterministic rule and lore hooks, not authored as data. The grammar declares that a break *can* happen; the generator decides *where*.
+* **Events are nearly the port's win**: 29 events in each corpus, same kinds,
+  same order, same `EV` ids; 23 of 28 shared timestamps and 26 of 28
+  summaries byte-identical. The five differing timestamps are the incident
+  chain, whose tempo the generator *draws* from five physics spans on a
+  per-day stream and the spec states as literals; the two differing summaries
+  interpolate the drawn `INC0xxxxx` reference and the drawn affected-count,
+  which the grammar deliberately does not mint (an identifier's format is
+  mechanism, not physics).
+* **Facts: 58 vs 55, first id divergence at FACT-0006.** The three missing
+  facts are the working paper's WORKING_DOCUMENT pre-figures for
+  `capital.cet1_ratio`/`capital.rwa_total` and the second line's `unverified`
+  half of the collateral treatment — the three-way contest (working paper,
+  review, confirmed resolution, at three authorities, with selective
+  supersession) exceeds the supersession-pair primitive and stays generator
+  logic.
+* **Every drawn value differs, structurally on purpose**: filed RWA 15,500 vs
+  20,000; ratio 13.4 vs 13.1; understatement 600 vs 782 (the generator also
+  rounds to the nearest ten — call-site arithmetic, not a curve); every LCR
+  observation. The reason is stream identity: `capital.generate` draws on
+  `…/capital/rwa`, the runner on `…/kind/capital.rwa_total`. Making stream
+  labels data would let a spec silently re-key every figure a seed ever
+  meant, so they stay generator-private and the values honestly diverge. The
+  *relationships* hold identically on both sides — books sum to totals,
+  ratios equal their divisions, the corrected figures supersede the filed
+  ones — which is what the invariants declare and the validator checks.
+* **The standing minimum matches exactly** (10.25, no period, reused by
+  carry-forward declaration), as do the close facts, the liquidity cadence
+  (same six business days, exact window handover), and 28 of 31 text facts.
+* **Artifacts: 11 intents vs 4, evaluations 16 vs 0, intentional errors 2 vs
+  0.** The artifact relationship graph — the restatement's `restates` edge,
+  the working paper's `revises`, the board summary's labelled omission, the
+  communications — and the evaluation taxonomy are planner logic
+  (`banking_documents.py`, `banking_evaluation.py`), not yet grammar.
 
-Similarly, which artifact *approves* or *challenges* the return is a role decision baked into the regulatory generator and lore constraints. The grammar names the roles; the generator composes them into chains.
+So: the grammar expresses the causal spine — phases, events, fact kinds with
+invariants, carry-forward, the supersession structure — and the runner
+executes it into a corpus that satisfies every invariant the hand-built one
+does. It does not and cannot reproduce the hand-built corpus's bytes, and the
+reasons are enumerable: generator-private stream labels, drawn tempo and
+identifiers, the three-way contest, working-paper pre-figures, and the
+artifact/evaluation planners. Each is either mechanism (correctly not data)
+or a named next seam — not a vague gap.
 
 ## What the Grammar Declares and Cannot
 

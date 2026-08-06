@@ -658,6 +658,60 @@ register_domain(Domain(
     evaluation_text=tuple(_INSURANCE_EVAL_TEXT.items()),
 ))
 
+# Insurance's own fact kinds, in the process-global registry — the `close.*`
+# kinds the reserving episode reuses are declared once, by retail. The
+# invariants restate what `_checks` above enforces.
+from .factkinds import FactKind, register as _register_kinds  # noqa: E402
+
+_register_kinds([
+    FactKind(kind="reserves.philosophy", domain="insurance", generated_by="generators/reserving.py",
+             invariants=("holds-at", "standing"),
+             about="The reserving philosophy; set once, reused every quarter."),
+    FactKind(kind="reserves.risk_margin_policy_pct", domain="insurance",
+             generated_by="generators/reserving.py",
+             invariants=("holds-at", "standing"),
+             about="The board's margin policy, standing beside the philosophy."),
+    FactKind(kind="reserves.ultimate", domain="insurance", generated_by="generators/reserving.py",
+             invariants=("holds-at",), about="A cohort's ultimate claims cost."),
+    FactKind(kind="reserves.ibnr", domain="insurance", generated_by="generators/reserving.py",
+             invariants=("holds-at",), about="Incurred-but-not-reported for a cohort."),
+    FactKind(kind="reserves.central_estimate_total", domain="insurance",
+             generated_by="generators/reserving.py",
+             invariants=("holds-at",), about="The actuary's central estimate."),
+    FactKind(kind="reserves.margin_released", domain="insurance", generated_by="generators/reserving.py",
+             invariants=("holds-at",), about="The margin release the quarter booked."),
+    FactKind(kind="reserves.risk_margin_remaining", domain="insurance",
+             generated_by="generators/reserving.py",
+             invariants=("holds-at",), about="What margin stands after the release."),
+    FactKind(kind="reserves.committee_recommendation", domain="insurance",
+             generated_by="generators/reserving.py",
+             invariants=("holds-at",), about="What the reserving committee recommended."),
+    FactKind(kind="reserves.booked_strengthening", domain="insurance",
+             generated_by="generators/reserving.py",
+             invariants=("holds-at",), about="The strengthening actually booked."),
+    FactKind(kind="reserves.booked_total", domain="insurance", generated_by="generators/reserving.py",
+             invariants=("holds-at", "never-superseded"),
+             about="What was carried at the valuation, permanently — closing or"
+                   " superseding it is `booked_total_touched`."),
+    FactKind(kind="reserves.held_vs_central_gap", domain="insurance",
+             generated_by="generators/reserving.py",
+             invariants=("holds-at", "standing", "carries-forward-as(reuse)"),
+             about="The standing gap phase 1 opens; a later quarter reuses it"
+                   " rather than minting a second."),
+    FactKind(kind="reserves.attribution_deterioration", domain="insurance",
+             generated_by="generators/reserving.py",
+             invariants=("holds-at",), about="The genuine-deterioration share of the movement."),
+    FactKind(kind="reserves.attribution_pattern_change", domain="insurance",
+             generated_by="generators/reserving.py",
+             invariants=("holds-at",), about="The benign pattern-change share."),
+    FactKind(kind="claims.incurred_to_date", domain="insurance", generated_by="generators/triangles.py",
+             invariants=("holds-at",), about="A cohort's incurred position."),
+    FactKind(kind="claims.paid_to_date", domain="insurance", generated_by="generators/triangles.py",
+             invariants=("holds-at",), about="A cohort's paid position."),
+    FactKind(kind="claims.actual_vs_expected", domain="insurance", generated_by="generators/triangles.py",
+             invariants=("holds-at",), about="The quarter's development against the calibrated pattern."),
+])
+
 
 __all__ = [
     "INSURANCE_ARCHETYPES",

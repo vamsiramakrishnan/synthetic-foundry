@@ -1,0 +1,560 @@
+{
+  "episodes": [
+    {
+      "name": "QuarterlyCapitalReturn",
+      "domain": "banking",
+      "period": "quarter",
+      "detail": "The challenged return, ported to the episode grammar as its proof obligation. Every fact kind below is declared in the process-global fact-kind registry by the banking vertical; every value is a primitive (a span draw, a roll-up, a supersession pair, a series, a derivation the validator can recompute) or an authored constant of the fiction. What the grammar cannot express is documented in docs/episode-grammar.md and measured in the byte-diff: generator-private stream labels, the drawn incident tempo (authored here as literals), the drawn INC identifier, the working-paper pre-figures, the three-way contested treatment, and the artifact relationship graph.",
+      "fact_kinds": [
+        {
+          "kind": "close.due_date",
+          "value_type": "date",
+          "text": "{bd:4}",
+          "source_role": "sys_core_banking",
+          "invariants": [{"kind": "holds-at", "detail": "The committed close date."}]
+        },
+        {
+          "kind": "close.status",
+          "value_type": "text",
+          "text": "final",
+          "source_role": "sys_core_banking",
+          "invariants": [{"kind": "holds-at", "detail": "An uneventful close, on purpose: the disruption belongs to the quarterly cadence."}]
+        },
+        {
+          "kind": "close.delay",
+          "value_type": "measure",
+          "amount": 0,
+          "unit": "business_days",
+          "source_role": "sys_core_banking",
+          "invariants": [{"kind": "holds-at", "detail": "Zero, honestly recorded."}]
+        },
+        {
+          "kind": "capital.return_due_date",
+          "value_type": "date",
+          "text": "{bd:18}",
+          "source_role": "sys_reg_portal",
+          "invariants": [{"kind": "holds-at", "detail": "Returns file on the due date; the lodgement norm the episode turns on."}]
+        },
+        {
+          "kind": "capital.minimum_cet1_requirement",
+          "value_type": "percent",
+          "amount": 10.25,
+          "period_scope": "standing",
+          "source_role": "sys_reg_portal",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "standing", "detail": "The standard's floor belongs to no quarter; a second quarter reuses this fact rather than minting a duplicate."},
+            {"kind": "carries-forward-as", "operands": ["reuse"]}
+          ]
+        },
+        {
+          "kind": "capital.rwa_total",
+          "value_type": "money",
+          "parameter": "capital.rwa.filed_hundreds",
+          "scale": 100,
+          "source_role": "sys_reg_portal",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "sums-to", "operands": ["capital.rwa_by_book"], "detail": "Books are allocated from the total by largest remainder, so they reconcile exactly by construction."},
+            {"kind": "supersedes-prior", "operands": ["capital.error.understatement_pct"], "detail": "The corrected total supersedes the filed one; the error span sizes the correction."}
+          ]
+        },
+        {
+          "kind": "capital.rwa_by_book",
+          "value_type": "money",
+          "subject_type": "category",
+          "subject_role": "cat_sme_secured",
+          "source_role": "sys_risk_platform",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "supersedes-prior", "detail": "Only the affected book's figure moves; every other book's stands."}
+          ]
+        },
+        {
+          "kind": "capital.cet1_capital",
+          "value_type": "money",
+          "parameter": "capital.ratio.target_pct",
+          "derive": "pct_of(capital.rwa_total)",
+          "source_role": "sys_reg_portal",
+          "invariants": [{"kind": "holds-at", "detail": "Unchanged by the restatement; the error was in RWA."}]
+        },
+        {
+          "kind": "capital.cet1_ratio",
+          "value_type": "percent",
+          "derive": "ratio_pct(capital.cet1_capital, capital.rwa_total)",
+          "source_role": "sys_reg_portal",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "supersedes-prior", "detail": "The corrected ratio supersedes the filed one."},
+            {"kind": "reconciles-against", "operands": ["capital.cet1_capital", "capital.rwa_total"], "detail": "A stated ratio is the division of the amounts holding beside it."}
+          ]
+        },
+        {
+          "kind": "capital.cet1_ratio_as_filed",
+          "value_type": "percent",
+          "derive": "initial(capital.cet1_ratio)",
+          "source_role": "sys_reg_portal",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "never-superseded", "detail": "The permanent record of what the filing reported, after the truth has moved."},
+            {"kind": "reconciles-against", "operands": ["capital.cet1_capital", "capital.rwa_total"]}
+          ]
+        },
+        {
+          "kind": "capital.return_filed_at",
+          "value_type": "date",
+          "text": "{at}",
+          "source_role": "sys_reg_portal",
+          "invariants": [{"kind": "holds-at"}]
+        },
+        {
+          "kind": "capital.return_status",
+          "value_type": "text",
+          "source_role": "sys_reg_portal",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "supersedes-prior", "detail": "filed, then restated; the text of each occurrence is the minting event's."}
+          ]
+        },
+        {
+          "kind": "review.challenge",
+          "value_type": "text",
+          "authority": "approved_report",
+          "subject_role": "cat_sme_secured",
+          "source_role": "sys_collateral",
+          "text": "Sampled collateral revaluations for the SME Secured Lending book appear stale; the fully-secured treatment cannot be confirmed from the register",
+          "invariants": [{"kind": "holds-at", "detail": "On the record, at review authority, never withdrawn."}]
+        },
+        {
+          "kind": "review.challenge_status",
+          "value_type": "text",
+          "authority": "approved_report",
+          "subject_role": "cat_sme_secured",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "supersedes-prior", "detail": "open until the third line rules; upheld supersedes open."}
+          ]
+        },
+        {
+          "kind": "capital.collateral_treatment",
+          "value_type": "text",
+          "subject_role": "cat_sme_secured",
+          "source_role": "sys_collateral",
+          "authorities": ["working_document", "confirmed"],
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "supersedes-prior", "detail": "The working paper's fully_secured is closed by the confirmed statement of what the collateral actually was. The hand-built episode also keeps the second line's own 'unverified' open beside both — a three-way contest at three authorities the pair primitive cannot express; that shape stays generator logic."}
+          ]
+        },
+        {
+          "kind": "capital.return_approval",
+          "value_type": "text",
+          "authority": "confirmed",
+          "text": "The CFO approved the return for lodgement while the second-line challenge on the SME Secured collateral treatment remained open",
+          "invariants": [{"kind": "holds-at", "detail": "The norm files over the challenge; the decision is on the record."}]
+        },
+        {
+          "kind": "liquidity.lcr",
+          "value_type": "percent",
+          "parameter": "capital.liquidity.lcr_pct",
+          "series_days": 6,
+          "series_start_bd": 20,
+          "source_role": "sys_risk_platform",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "supersedes-prior", "detail": "A gapless chain within the quarter: each observation's window hands over exactly at the next, which is what the cadence check walks."}
+          ]
+        },
+        {
+          "kind": "liquidity.reconciliation_break",
+          "value_type": "text",
+          "subject_role": "svc_lcr_daily",
+          "source_role": "sys_risk_platform",
+          "text": "Collateral positions consumed by the daily liquidity calculation failed reconciliation against the collateral register",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "precedes-event", "detail": "The break exists before the incident that cites it."}
+          ]
+        },
+        {
+          "kind": "ops.incident_opened",
+          "value_type": "text",
+          "subject_role": "svc_collateral_sync",
+          "source_role": "sys_risk_platform",
+          "text": "Incident opened at priority P2 against collateral-valuation-sync",
+          "invariants": [{"kind": "holds-at", "detail": "The hand-built episode draws an INC reference number here; an identifier's format is mechanism, not physics, so the grammar does not mint one."}]
+        },
+        {
+          "kind": "ops.cause",
+          "value_type": "text",
+          "subject_role": "svc_collateral_sync",
+          "authorities": ["initial_hypothesis", "confirmed"],
+          "source_role": "sys_collateral",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "supersedes-prior", "detail": "The confirmed cause supersedes the hypothesis; the hypothesis stays as a past belief. The hand-built episode closes the hypothesis at the rule-out, hours before confirmation — an intermediate close the pair primitive states at the successor instead."}
+          ]
+        },
+        {
+          "kind": "ops.cause_ruled_out",
+          "value_type": "text",
+          "authority": "confirmed",
+          "subject_role": "svc_collateral_sync",
+          "source_role": "sys_market_data",
+          "text": "The FX rate log shows a single end-of-day application in the window",
+          "invariants": [{"kind": "holds-at"}]
+        },
+        {
+          "kind": "ops.affected_records",
+          "value_type": "measure",
+          "parameter": "capital.incident.affected_records",
+          "unit": "loan_facilities",
+          "authority": "confirmed",
+          "subject_role": "svc_collateral_sync",
+          "source_role": "sys_collateral",
+          "invariants": [{"kind": "holds-at", "detail": "The blast radius the ticket quotes."}]
+        },
+        {
+          "kind": "capital.rwa_understatement",
+          "value_type": "money",
+          "derive": "supersession_delta(capital.rwa_total)",
+          "authority": "confirmed",
+          "source_role": "sys_risk_platform",
+          "invariants": [{"kind": "holds-at", "detail": "Exactly corrected minus filed — a derivation, so no reader ever does the subtraction."}]
+        },
+        {
+          "kind": "capital.cet1_delta",
+          "value_type": "measure",
+          "unit": "bps",
+          "derive": "bps_delta(capital.cet1_ratio)",
+          "authority": "confirmed",
+          "source_role": "sys_risk_platform",
+          "invariants": [{"kind": "holds-at"}]
+        },
+        {
+          "kind": "capital.error_materiality",
+          "value_type": "text",
+          "authority": "confirmed",
+          "text": "material: restatement required under PSA 110",
+          "invariants": [{"kind": "holds-at"}]
+        },
+        {
+          "kind": "capital.affected_book",
+          "value_type": "text",
+          "authority": "confirmed",
+          "text": "SME Secured Lending",
+          "invariants": [{"kind": "holds-at", "detail": "The hand-built episode names the book's id beside its name; the grammar has no id-interpolation and says the name alone."}]
+        },
+        {
+          "kind": "regulatory.notification",
+          "value_type": "text",
+          "source_role": "sys_reg_portal",
+          "text": "The bank notified the Prudential Standards Authority of a material error in the quarterly capital return within the PSA 110 notification window",
+          "invariants": [{"kind": "holds-at"}]
+        },
+        {
+          "kind": "capital.restatement_reason",
+          "value_type": "text",
+          "source_role": "sys_reg_portal",
+          "text": "Risk-weighted assets for the SME Secured Lending book were understated in the filed return: a stale collateral-valuation mapping from the 2023 migration left revaluations lapsed, so collateral was treated as fully secured when it was not",
+          "invariants": [{"kind": "holds-at"}]
+        },
+        {
+          "kind": "ops.root_cause_classification",
+          "value_type": "text",
+          "authority": "confirmed",
+          "subject_role": "svc_rwa_engine",
+          "text": "control_failure: the revaluation schedule has no registered owner and the quarterly capital path has no reconciliation control",
+          "invariants": [{"kind": "holds-at"}]
+        },
+        {
+          "kind": "ops.collateral_mapping_owner",
+          "value_type": "text",
+          "authority": "confirmed",
+          "subject_role": "sys_collateral",
+          "source_role": "sys_collateral",
+          "text": "unassigned",
+          "invariants": [{"kind": "holds-at", "detail": "The control failure, stated as the one word audit found."}]
+        },
+        {
+          "kind": "ops.remediation",
+          "value_type": "text",
+          "subject_role": "svc_collateral_sync",
+          "source_role": "sys_collateral",
+          "text": "One ticket assigns revaluation-schedule ownership with a mandatory second-line reviewer; one automates revaluation-lapse detection on the quarterly path",
+          "invariants": [{"kind": "holds-at"}]
+        },
+        {
+          "kind": "ops.remediation_addresses",
+          "value_type": "text",
+          "authority": "confirmed",
+          "subject_role": "svc_collateral_sync",
+          "text": "The ownership ticket addresses the control failure; the detection ticket addresses only the detection gap",
+          "invariants": [{"kind": "holds-at"}]
+        }
+      ],
+      "events": [
+        {
+          "kind": "close_started", "when": "start", "business_day": 1, "hour": 6, "minute": 0,
+          "summary": "{period} month-end close commenced; the overnight ledger sequence began.",
+          "actors": ["controller"], "systems": ["sys_core_banking"],
+          "fact_keys": ["close.due_date"]
+        },
+        {
+          "kind": "close_finalised", "when": "start", "business_day": 4, "hour": 16, "minute": 40,
+          "summary": "{period} close finalised and the ledger locked on the committed date.",
+          "actors": ["controller"], "systems": ["sys_core_banking"], "caused_by": "close_started",
+          "fact_keys": ["close.status", "close.delay"]
+        },
+        {
+          "kind": "capital_return_preparation_started", "when": "start", "business_day": 7, "hour": 9, "minute": 0,
+          "summary": "Preparation of the capital adequacy return for the quarter ended {period} began from the locked ledger.",
+          "actors": ["reg_reporting_manager", "reg_analyst"], "services": ["svc_rwa_engine"],
+          "systems": ["sys_risk_platform"], "caused_by": "close_finalised",
+          "fact_keys": ["capital.return_due_date", "capital.minimum_cet1_requirement"]
+        },
+        {
+          "kind": "working_paper_issued", "when": "before_incident", "business_day": 10, "hour": 17, "minute": 20,
+          "summary": "The RWA working paper was issued, treating the SME Secured Lending book's collateral as fully secured.",
+          "actors": ["reg_analyst"], "services": ["svc_rwa_engine"], "systems": ["sys_risk_platform"],
+          "caused_by": "capital_return_preparation_started",
+          "fact_keys": ["capital.collateral_treatment"],
+          "fact_texts": {"capital.collateral_treatment": "fully_secured"}
+        },
+        {
+          "kind": "second_line_review_started", "when": "before_incident", "business_day": 12, "hour": 10, "minute": 0,
+          "summary": "Prudential Risk began its pre-lodgement review of the draft return.",
+          "actors": ["prudential_risk_head"], "caused_by": "working_paper_issued",
+          "fact_keys": []
+        },
+        {
+          "kind": "challenge_raised", "when": "before_incident", "business_day": 14, "hour": 14, "minute": 30,
+          "summary": "Prudential Risk challenged the SME Secured collateral treatment on the record: sampled revaluations looked stale and the fully-secured treatment could not be confirmed. The challenge was logged with status open.",
+          "actors": ["prudential_risk_head"], "systems": ["sys_collateral"], "units": ["unit_business"],
+          "caused_by": "second_line_review_started",
+          "fact_keys": ["review.challenge", "review.challenge_status"],
+          "fact_texts": {"review.challenge_status": "open"}
+        },
+        {
+          "kind": "return_approved", "when": "before_incident", "business_day": 16, "hour": 11, "minute": 0,
+          "summary": "The CFO approved the return for lodgement at the preparer's figure. The second-line challenge remained open: returns file on the due date, and open challenges are logged, not blocking.",
+          "actors": ["cfo", "reg_reporting_manager"], "caused_by": "challenge_raised",
+          "fact_keys": ["capital.return_approval"]
+        },
+        {
+          "kind": "capital_return_filed", "when": "before_incident", "business_day": 18, "hour": 10, "minute": 15,
+          "summary": "The capital adequacy return for the quarter ended {period} was lodged with the Prudential Standards Authority via the filing portal.",
+          "actors": ["reg_reporting_manager"], "services": ["svc_filing_gateway"], "systems": ["sys_reg_portal"],
+          "caused_by": "return_approved",
+          "fact_keys": ["capital.cet1_capital", "capital.rwa_total", "capital.cet1_ratio",
+                        "capital.cet1_ratio_as_filed", "capital.rwa_by_book",
+                        "capital.return_filed_at", "capital.return_status"],
+          "fact_texts": {"capital.return_status": "filed"}
+        },
+        {
+          "kind": "liquidity_report_submitted", "when": "incident", "business_day": 20, "hour": 8, "minute": 30,
+          "summary": "The daily liquidity coverage report was produced and submitted — the daily cadence running as usual after the quarterly lodgement.",
+          "actors": ["liquidity_analyst"], "services": ["svc_lcr_daily"], "systems": ["sys_risk_platform"],
+          "caused_by": "capital_return_filed",
+          "fact_keys": ["liquidity.lcr"]
+        },
+        {
+          "kind": "liquidity_cadence_continued", "when": "incident", "business_day": 23, "hour": 8, "minute": 30,
+          "summary": "The daily liquidity cadence continued between the lodgement and the detection that follows — the two clocks genuinely overlap.",
+          "actors": ["liquidity_analyst"], "services": ["svc_lcr_daily"], "systems": ["sys_risk_platform"],
+          "caused_by": "liquidity_report_submitted",
+          "fact_keys": []
+        },
+        {
+          "kind": "reconciliation_break_detected", "when": "incident", "business_day": 24, "hour": 8, "minute": 20,
+          "summary": "The daily liquidity calculator's reconciliation of collateral positions against the collateral register flagged a break. The quarterly capital path carries no such control.",
+          "actors": ["liquidity_analyst"], "services": ["svc_lcr_daily", "svc_collateral_sync"],
+          "systems": ["sys_collateral", "sys_risk_platform"], "caused_by": "liquidity_report_submitted",
+          "fact_keys": ["liquidity.reconciliation_break"],
+          "detail": "The hand-built episode draws this chain's clock from five physics spans on a per-day stream; the grammar states literals. Authored tempo, not drawn tempo — a named divergence."
+        },
+        {
+          "kind": "incident_opened", "when": "incident", "business_day": 24, "hour": 8, "minute": 40,
+          "summary": "Service operations opened a P2 incident against collateral-valuation-sync.",
+          "actors": ["svc_desk", "svc_incident"], "services": ["svc_collateral_sync"],
+          "systems": ["sys_collateral"], "caused_by": "reconciliation_break_detected",
+          "fact_keys": ["ops.incident_opened"]
+        },
+        {
+          "kind": "hypothesis_recorded", "when": "incident", "business_day": 24, "hour": 9, "minute": 55,
+          "summary": "Initial triage attributed the break to the market data service applying the end-of-day FX revaluation twice to foreign-currency collateral.",
+          "actors": ["svc_desk"], "services": ["svc_collateral_sync"], "systems": ["sys_market_data"],
+          "caused_by": "incident_opened",
+          "fact_keys": ["ops.cause"],
+          "fact_texts": {"ops.cause": "The market data service applied the end-of-day FX revaluation twice to foreign-currency collateral"}
+        },
+        {
+          "kind": "hypothesis_superseded", "when": "incident", "business_day": 24, "hour": 13, "minute": 0,
+          "summary": "The FX double-application hypothesis was ruled out: the rate log shows a single end-of-day application in the window.",
+          "actors": ["platform_senior"], "services": ["svc_collateral_sync"], "systems": ["sys_market_data"],
+          "caused_by": "hypothesis_recorded",
+          "fact_keys": ["ops.cause_ruled_out"]
+        },
+        {
+          "kind": "root_cause_confirmed", "when": "incident", "business_day": 24, "hour": 14, "minute": 50,
+          "summary": "Root cause confirmed: a stale collateral-valuation mapping left over from the 2023 collateral-system migration. Revaluations had lapsed for the SME Secured Lending book, leaving loan facilities carried at stale collateral values.",
+          "actors": ["platform_senior", "credit_risk_lead"], "services": ["svc_collateral_sync"],
+          "systems": ["sys_collateral"], "units": ["unit_business"], "caused_by": "hypothesis_superseded",
+          "fact_keys": ["ops.cause", "ops.affected_records"],
+          "fact_texts": {"ops.cause": "Stale collateral-valuation mapping left over from the 2023 collateral-system migration; revaluations lapsed for the SME Secured Lending book"}
+        },
+        {
+          "kind": "capital_impact_assessed", "when": "after_incident", "business_day": 25, "hour": 12, "minute": 0,
+          "summary": "Credit risk analytics quantified the impact: risk-weighted assets for the SME Secured book were understated in the filed return, and the corrected CET1 ratio remains above the PSA 110 minimum. A restatement is required.",
+          "actors": ["credit_risk_lead", "reg_reporting_manager"], "services": ["svc_rwa_engine"],
+          "systems": ["sys_risk_platform"], "caused_by": "root_cause_confirmed",
+          "fact_keys": ["capital.rwa_understatement", "capital.cet1_delta", "capital.error_materiality",
+                        "capital.affected_book", "capital.collateral_treatment"],
+          "fact_texts": {"capital.collateral_treatment": "revaluations lapsed; not fully secured"}
+        },
+        {
+          "kind": "regulator_notified", "when": "after_incident", "business_day": 26, "hour": 9, "minute": 30,
+          "summary": "The CFO notified the Prudential Standards Authority of a material error in the filed return, within the PSA 110 notification window. The regulator's response is not recorded in this corpus.",
+          "actors": ["cfo"], "systems": ["sys_reg_portal"], "caused_by": "capital_impact_assessed",
+          "fact_keys": ["regulatory.notification"]
+        },
+        {
+          "kind": "restatement_prepared", "when": "after_incident", "business_day": 27, "hour": 10, "minute": 0,
+          "summary": "First-line regulatory reporting prepared the restatement of the filed return.",
+          "actors": ["reg_reporting_manager", "reg_analyst"], "services": ["svc_rwa_engine"],
+          "caused_by": "regulator_notified",
+          "fact_keys": []
+        },
+        {
+          "kind": "working_paper_revised", "when": "after_incident", "business_day": 27, "hour": 15, "minute": 0,
+          "summary": "The RWA working paper was revised to version 2 with the corrected treatment — a working note may be revised, because it is not a filing.",
+          "actors": ["reg_analyst"], "caused_by": "restatement_prepared",
+          "fact_keys": []
+        },
+        {
+          "kind": "restatement_reviewed", "when": "after_incident", "business_day": 28, "hour": 11, "minute": 30,
+          "summary": "Prudential Risk reviewed the restatement and, this time, signed off.",
+          "actors": ["prudential_risk_head"], "caused_by": "restatement_prepared",
+          "fact_keys": []
+        },
+        {
+          "kind": "restatement_approved", "when": "after_incident", "business_day": 28, "hour": 16, "minute": 0,
+          "summary": "The CFO and CRO countersigned the restatement for lodgement.",
+          "actors": ["cfo", "cro"], "caused_by": "restatement_reviewed",
+          "fact_keys": []
+        },
+        {
+          "kind": "return_restated", "when": "after_incident", "business_day": 29, "hour": 10, "minute": 15,
+          "summary": "The restatement was lodged. The original return stays on the record unchanged; the restatement states which figures moved and why.",
+          "actors": ["reg_reporting_manager"], "services": ["svc_filing_gateway"], "systems": ["sys_reg_portal"],
+          "caused_by": "restatement_approved",
+          "fact_keys": ["capital.rwa_total", "capital.cet1_ratio", "capital.rwa_by_book",
+                        "capital.return_status", "capital.restatement_reason"],
+          "fact_texts": {"capital.return_status": "restated"}
+        },
+        {
+          "kind": "control_failure_identified", "when": "end", "business_day": 30, "hour": 11, "minute": 0,
+          "summary": "Internal audit upheld the second-line challenge and classified the underlying failure: the revaluation schedule has no registered owner, and the quarterly capital path carries no reconciliation control.",
+          "actors": ["audit", "audit_manager"], "services": ["svc_rwa_engine", "svc_collateral_sync"],
+          "systems": ["sys_collateral"], "caused_by": "root_cause_confirmed",
+          "fact_keys": ["review.challenge_status", "ops.root_cause_classification", "ops.collateral_mapping_owner"],
+          "fact_texts": {"review.challenge_status": "upheld"}
+        },
+        {
+          "kind": "remediation_created", "when": "end", "business_day": 30, "hour": 14, "minute": 0,
+          "summary": "Two remediation tickets raised: assign revaluation-schedule ownership with a mandatory second-line reviewer, and automate revaluation-lapse detection on the quarterly path.",
+          "actors": ["platform_lead"], "services": ["svc_collateral_sync", "svc_rwa_engine"],
+          "systems": ["sys_collateral"], "caused_by": "control_failure_identified",
+          "fact_keys": ["ops.remediation", "ops.remediation_addresses"]
+        }
+      ],
+      "artifacts": [
+        {
+          "artifact_type": "rwa_working_paper",
+          "author_role": "reg_analyst",
+          "audience": "finance",
+          "required_facts": ["capital.collateral_treatment", "capital.cet1_ratio", "capital.rwa_total"],
+          "size": "medium",
+          "structured": true,
+          "unstructured": true,
+          "triggered_by_events": ["working_paper_issued"],
+          "rationale": "The paper whose treatment the second line will dispute; it does not know that yet."
+        },
+        {
+          "artifact_type": "second_line_challenge_memo",
+          "author_role": "prudential_risk_head",
+          "audience": "finance",
+          "required_facts": ["review.challenge", "review.challenge_status", "capital.collateral_treatment"],
+          "size": "medium",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": ["challenge_raised"],
+          "rationale": "The disagreement, on the record, at review authority — the live contest the corpus poses."
+        },
+        {
+          "artifact_type": "capital_return",
+          "author_role": "reg_reporting_manager",
+          "audience": "executive_committee",
+          "required_facts": ["capital.cet1_capital", "capital.rwa_total", "capital.cet1_ratio",
+                             "capital.rwa_by_book", "capital.minimum_cet1_requirement",
+                             "capital.return_filed_at", "capital.return_status"],
+          "size": "long",
+          "structured": true,
+          "unstructured": false,
+          "triggered_by_events": ["capital_return_filed"],
+          "rationale": "The lodged return. The hand-built episode also plans its restatement, the revised working paper, the incident record, the RCA, the audit review and the board summary, joined by restates/revises/derived_from edges with a labelled omission — a relationship graph the grammar does not yet declare, documented as the artifact layer's honest gap."
+        },
+        {
+          "artifact_type": "internal_audit_review",
+          "author_role": "audit",
+          "audience": "executive_committee",
+          "required_facts": ["review.challenge_status", "ops.root_cause_classification",
+                             "ops.collateral_mapping_owner", "ops.remediation_addresses"],
+          "size": "medium",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": ["control_failure_identified"],
+          "rationale": "The third line's ruling: the challenge upheld, the control failure classified."
+        }
+      ],
+      "carry_forward": [
+        {
+          "from_kind": "capital.minimum_cet1_requirement",
+          "to_kind": "capital.minimum_cet1_requirement",
+          "rule": "reuse",
+          "detail": "The standard's floor is standing: a second consecutive quarter reuses the fact the world already carries rather than minting a duplicate — the exact pattern QuarterlyCapitalReturn.run resolves by hand."
+        }
+      ],
+      "phases": [
+        {"name": "close", "events": ["close_started", "close_finalised"],
+         "fact_kinds": ["close.due_date", "close.status", "close.delay"]},
+        {"name": "preparation",
+         "events": ["capital_return_preparation_started", "working_paper_issued"],
+         "fact_kinds": ["capital.return_due_date", "capital.minimum_cet1_requirement", "capital.collateral_treatment"]},
+        {"name": "challenge",
+         "events": ["second_line_review_started", "challenge_raised", "return_approved"],
+         "fact_kinds": ["review.challenge", "review.challenge_status", "capital.return_approval"]},
+        {"name": "filing", "events": ["capital_return_filed"],
+         "fact_kinds": ["capital.cet1_capital", "capital.rwa_total", "capital.cet1_ratio",
+                        "capital.cet1_ratio_as_filed", "capital.rwa_by_book",
+                        "capital.return_filed_at", "capital.return_status"]},
+        {"name": "detection",
+         "events": ["liquidity_report_submitted", "liquidity_cadence_continued",
+                    "reconciliation_break_detected", "incident_opened", "hypothesis_recorded",
+                    "hypothesis_superseded", "root_cause_confirmed"],
+         "fact_kinds": ["liquidity.lcr", "liquidity.reconciliation_break", "ops.incident_opened",
+                        "ops.cause", "ops.cause_ruled_out", "ops.affected_records"]},
+        {"name": "control",
+         "events": ["capital_impact_assessed", "regulator_notified"],
+         "fact_kinds": ["capital.rwa_understatement", "capital.cet1_delta", "capital.error_materiality",
+                        "capital.affected_book", "regulatory.notification"]},
+        {"name": "resolution",
+         "events": ["restatement_prepared", "working_paper_revised", "restatement_reviewed",
+                    "restatement_approved", "return_restated", "control_failure_identified",
+                    "remediation_created"],
+         "fact_kinds": ["capital.restatement_reason", "ops.root_cause_classification",
+                        "ops.collateral_mapping_owner", "ops.remediation", "ops.remediation_addresses"]}
+      ]
+    }
+  ]
+}

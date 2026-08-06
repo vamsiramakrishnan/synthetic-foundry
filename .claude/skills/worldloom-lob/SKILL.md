@@ -84,12 +84,12 @@ answer = lob.Answer(
     responsibilities=[
         lob.Responsibility(
             role_key="cfo",
-            fact_kinds=["financial.revenue", "financial.cost"],
+            fact_kinds=["financial.revenue", "financial.gross_profit"],
             artifact_types=["executive_summary"],
         ),
         lob.Responsibility(
             role_key="controller",
-            fact_kinds=["financial.revenue", "financial.cost"],
+            fact_kinds=["financial.revenue", "financial.gross_profit"],
             artifact_types=["cfo_variance_memo"],
         ),
     ],
@@ -97,9 +97,11 @@ answer = lob.Answer(
 session = lob.accept(session, answer)
 ```
 
-The engine refuses responsibilities whose role_key does not exist, and (in a
-future stage) would refuse fact kinds and artifact types the corpus does not
-declare.
+The engine refuses responsibilities whose role_key does not exist, and fact
+kinds the fact-kind registry (`worldloom.factkinds`) does not hold — a kind
+nothing generates is an accountability edge that never fires. A named kind may
+be a dot-prefix of a registered family (`financial.revenue` covers
+`financial.revenue.actual`); `factkinds.names()` lists what is real.
 
 ### Stage 4: Resolve
 
