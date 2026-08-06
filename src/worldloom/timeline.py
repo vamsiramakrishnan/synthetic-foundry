@@ -192,6 +192,12 @@ class Roster:
     """Employed headcount per function when this roster was taken. With
     ``function_by_role``, what lets the sampler bound a family it can exhaust."""
 
+    employees_total: int = 0
+    """The company's stated workforce, including people not materialised."""
+
+    modelled_headcount: int = 0
+    """Named employees active when this roster was taken."""
+
     def __hash__(self) -> int:
         """Hashable despite the Mapping, the same fix ``Parameters`` made and
         for the same reason: a frozen dataclass wrapping a Mapping gets a
@@ -200,7 +206,8 @@ class Roster:
         return hash((self.engine, self.role_keys, self.unit_keys, self.bound_keys,
                      tuple(sorted(self.unit_by_role.items())), self.succeedable,
                      tuple(sorted(self.function_by_role.items())),
-                     tuple(sorted(self.function_size.items()))))
+                     tuple(sorted(self.function_size.items())),
+                     self.employees_total, self.modelled_headcount))
 
     @classmethod
     def of(cls, world: World) -> Roster:
@@ -256,6 +263,8 @@ class Roster:
             succeedable=frozenset(succeedable),
             function_by_role=function_by_role,
             function_size=dict(by_function),
+            employees_total=world.company.employees_total,
+            modelled_headcount=sum(1 for person in world.people if person.left is None),
         )
 
     def reserved(self) -> frozenset[str]:
@@ -288,7 +297,9 @@ class Roster:
 #: arguments with rules of its own, and a step whose name is not here is treated
 #: as an episode — which is right for a registered vertical's own scenario, all
 #: of which take nothing but a period and are checked for exactly that.
-ORG_VERBS: frozenset[str] = frozenset({"Hire", "Departure", "Reorganisation"})
+ORG_VERBS: frozenset[str] = frozenset({
+    "Hire", "Departure", "Reorganisation", "WorkforceChange",
+})
 
 
 @dataclass(frozen=True)
@@ -396,6 +407,8 @@ def review(timeline: Timeline, roster: Roster) -> list[Rejection]:
     unit_by_role = dict(roster.unit_by_role)
     succeedable = set(roster.succeedable)
     reserved = roster.reserved()
+    headcount = roster.employees_total
+    modelled_headcount = roster.modelled_headcount
 
     closed: set[str] = set()
     changed: dict[str, int] = {}  # period -> position of the first org change in it
@@ -464,6 +477,7 @@ def review(timeline: Timeline, roster: Roster) -> list[Rejection]:
                        " and persona are all decided from it.")
             bound.add(key)
             held.add(key)
+            modelled_headcount += 1
             unit_by_role[key] = unit_key
             # The new post reports to the unit's MD by construction (see
             # `Hire.run`), so that role now has a direct report and can be
@@ -487,6 +501,8 @@ def review(timeline: Timeline, roster: Roster) -> list[Rejection]:
                        " this history has given it one. `Departure` picks a"
                        " successor from the org rather than inventing a person,"
                        " so it would raise rather than mint one.")
+            elif key in held:
+                modelled_headcount = max(0, modelled_headcount - 1)
             changed.setdefault(period, position)
 
         elif name == "Reorganisation":
@@ -515,6 +531,24 @@ def review(timeline: Timeline, roster: Roster) -> list[Rejection]:
             if unit_key in units:
                 unit_by_role[incumbent] = unit_key
                 unit_by_role[leader] = unit_key
+            changed.setdefault(period, position)
+
+        elif name == "WorkforceChange":
+            target = step.headcount
+            if not isinstance(target, int) or isinstance(target, bool) or target < 0:
+                refuse(subject, "bad_headcount",
+                       f"headcount must be a non-negative integer; got {target!r}.")
+            elif target < modelled_headcount:
+                refuse(subject, "headcount_below_named_roster",
+                       f"{target:,} is smaller than the {modelled_headcount:,}"
+                       " named employees active at this point. Aggregate scale"
+                       " may exceed the roster; it cannot contradict it.")
+            elif target == headcount:
+                refuse(subject, "headcount_did_not_change",
+                       f"the stated workforce is already {target:,}. A no-op"
+                       " workforce episode would create a false audit trail.")
+            else:
+                headcount = target
             changed.setdefault(period, position)
 
         else:
@@ -660,6 +694,29 @@ class Density:
             "hires": _events(self.hires, periods),
         }
 
+    def scaled_for(self, headcount: int) -> Density:
+        """Event density adjusted by workforce order of magnitude.
+
+        The multiplier is logarithmic and capped: an 80,000-person company has
+        more simultaneous organisational change than an 800-person company,
+        not one hundred times as much.  Integer digit bands avoid a floating
+        logarithm deciding whether a half-up count crosses an event boundary,
+        preserving replay across Python and platform versions.
+
+        This method is only applied when a caller explicitly supplies a
+        ``Workforce`` trajectory. Existing timeline builds remain byte-identical.
+        """
+        if headcount < 0:
+            raise ValueError(f"headcount must be non-negative, got {headcount}")
+        digits = len(str(max(1, headcount)))
+        multiplier = min(3.0, max(0.5, (digits - 2) * 0.5))
+        return Density(
+            incidents=self.incidents * multiplier,
+            departures=self.departures * multiplier,
+            reorganisations=self.reorganisations * multiplier,
+            hires=self.hires * multiplier,
+        )
+
 
 def _events(rate: float, periods: int) -> int:
     """*rate* per period over *periods* periods, rounded half-up.
@@ -686,6 +743,55 @@ STEADY = Density(incidents=1 / 6, departures=1 / 6, reorganisations=1 / 12)
 
 #: A year that went badly: a crisis a quarter and leadership moving under it.
 TURBULENT = Density(incidents=1 / 3, departures=1 / 4, reorganisations=1 / 6, hires=1 / 6)
+
+
+@dataclass(frozen=True)
+class Workforce:
+    """Exact stated headcount from the first to the final period.
+
+    Values between the anchors are linearly interpolated with integer half-up
+    rounding. A target for period N is applied after period N-1 closes, matching
+    every other organisation change: the new workforce is therefore in force
+    when period N's episode begins.
+    """
+
+    initial: int
+    final: int
+
+    def __post_init__(self) -> None:
+        if self.initial < 0 or self.final < 0:
+            raise ValueError(
+                f"workforce anchors must be non-negative; got"
+                f" {self.initial:,} and {self.final:,}"
+            )
+
+    def headcounts(self, periods: int) -> tuple[int, ...]:
+        if periods < 1:
+            raise ValueError(f"a workforce trajectory needs at least one period, got {periods}")
+        if periods == 1:
+            if self.initial != self.final:
+                raise ValueError(
+                    "a one-period trajectory cannot move headcount; use at least"
+                    " two periods or make --headcount-end equal --employees"
+                )
+            return (self.initial,)
+
+        denominator = periods - 1
+        delta = self.final - self.initial
+        values: list[int] = []
+        for index in range(periods):
+            numerator = delta * index
+            if numerator >= 0:
+                offset = (numerator + denominator // 2) // denominator
+            else:
+                offset = -((-numerator + denominator // 2) // denominator)
+            values.append(self.initial + offset)
+        return tuple(values)
+
+    @property
+    def typical(self) -> int:
+        """The exact integer midpoint used to scale event density."""
+        return (self.initial + self.final) // 2
 
 
 @dataclass(frozen=True)
@@ -775,13 +881,14 @@ def sample(
     periods: int,
     seed: int,
     density: Density = QUIET,
+    workforce: Workforce | None = None,
     openings: Sequence[Opening] = (),
     months: int = 1,
     episode: Callable[[str, bool | None], Any] = _close,
 ) -> Timeline:
     """A reproducible history: *periods* episodes with *density*'s events in them.
 
-    Deterministic from ``(seed, roster, density, openings, periods)`` and
+    Deterministic from ``(seed, roster, density, workforce, openings, periods)`` and
     nothing else — no clock, no ``random``, no iteration over a set. Sampling
     the same arguments twice gives the same timeline, and running that timeline
     gives the same corpus, which is what makes a sampled history rebuildable
@@ -804,10 +911,19 @@ def sample(
     """
     if periods < 1:
         raise ValueError(f"a history needs at least one period, got {periods}")
+    if workforce is not None and workforce.initial != roster.employees_total:
+        raise ValueError(
+            f"workforce starts at {workforce.initial:,}, but the world states"
+            f" {roster.employees_total:,}; a trajectory must begin at the"
+            " organisation it is sampled against"
+        )
 
     stamps = periods_from(start, periods, months=months)
     rng = Rng(seed, "timeline")
-    wants = density.over(periods)
+    effective_density = (
+        density if workforce is None else density.scaled_for(workforce.typical)
+    )
+    wants = effective_density.over(periods)
 
     incident_at = set(_spread(periods, wants["incidents"], skip=_PHASE["incidents"]))
     state_incidents = bool(incident_at)
@@ -822,7 +938,16 @@ def sample(
         changes.setdefault(index, []).append(step)
 
     from .roles import ROOT
-    from .scenarios import Departure, Hire, Reorganisation
+    from .scenarios import Departure, Hire, Reorganisation, WorkforceChange
+
+    # Aggregate workforce first within each period's boundary. The path's
+    # second value becomes effective after the first close, so the second close
+    # sees it; this is the same temporal rule departures and reorganisations use.
+    if workforce is not None:
+        path = workforce.headcounts(periods)
+        for index, target in enumerate(path[1:]):
+            if target != path[index]:
+                at(index, WorkforceChange(period=stamps[index], headcount=target))
 
     # Departures first, because they are the family with a candidate set that
     # can be exhausted: a role is departed at most once per sampled history
@@ -917,6 +1042,7 @@ def sample(
 
 __all__ = [
     "Density", "Opening", "ORG_VERBS", "QUIET", "Roster", "STEADY", "TURBULENT",
+    "Workforce",
     "Timeline", "TimelineError", "ensure", "monthly", "of", "period_after",
     "periods_from", "review", "sample",
 ]

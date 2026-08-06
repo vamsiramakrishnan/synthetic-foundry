@@ -193,6 +193,15 @@ def build(
         help="Force the operational incident on or off. Omit to let the seed and lore decide.",
     ),
     employees: int = typer.Option(None, "--employees", help="Override the archetype's stated headcount."),
+    headcount_end: int = typer.Option(
+        None,
+        "--headcount-end",
+        help=(
+            "Exact stated workforce in the final period. Intermediate periods"
+            " are interpolated deterministically; may be above or below"
+            " --employees. Requires a multi-period retail build."
+        ),
+    ),
     archetype: str = typer.Option(
         "omnichannel_retailer", "--archetype", "-a",
         help="Company shape to build. See `worldloom archetypes` for the list.",
@@ -334,8 +343,8 @@ def build(
             "both rather than merged — there is no listed mutual. Consequences a "
             "facet has that nothing here implements are printed rather than "
             "dropped. Costs, and the second one is the surprising one: the implied "
-            "roles are appended to the organisation, so headcount exceeds what "
-            "--employees stated; and naming any facet settles *every* facet at its "
+            "roles are appended to the organisation, so --employees must be large "
+            "enough to contain them; and naming any facet settles *every* facet at its "
             "registry default, which is what makes the claims composable but means "
             "`--facet listing=listed` alone also asserts trading_pattern=steady — a "
             "flat year, replacing the engine's 21% December. Say "
@@ -422,6 +431,12 @@ def build(
     eval_density_value = _EVAL_DENSITY_LEVELS[eval_density]
     if distractors < 0:
         err.print("[red]error:[/red] --distractors takes a non-negative count")
+        raise typer.Exit(code=2)
+    if employees is not None and employees < 0:
+        err.print("[red]error:[/red] --employees takes a non-negative headcount")
+        raise typer.Exit(code=2)
+    if headcount_end is not None and headcount_end < 0:
+        err.print("[red]error:[/red] --headcount-end takes a non-negative headcount")
         raise typer.Exit(code=2)
     if messiness is not None:
         from . import messiness as messiness_module
@@ -727,9 +742,10 @@ def build(
         Roles are appended to the engine's own table rather than replacing it:
         an audit committee chair is what "listed" *means* operationally, and a
         build that recorded the claim without minting the role would be the
-        carried-and-inert failure again. That does mean headcount exceeds what
-        `--employees` stated; the alternative is dropping a role the claim
-        requires, which is worse and quieter.
+        carried-and-inert failure again. An explicit ``--employees`` remains
+        authoritative aggregate headcount; organisation synthesis refuses it
+        when it is smaller than the role graph rather than dropping a role the
+        claim requires.
 
         A trading year yields to one the builder already has — a pack's, which
         is an authored claim about the business — for the same reason
@@ -882,15 +898,6 @@ def build(
             )
             raise typer.Exit(code=2) from exc
 
-    if employees is not None:
-        err.print(
-            f"[red]error:[/red] --employees is not yet threaded into organisation synthesis."
-            f" Specifying headcount is deferred to the episode grammar (Phase 2, `docs/next-phase-plan.md`),"
-            f" where declared slots for carry-forward will let a builder state it once for a"
-            f" multi-period episode rather than per-period. Use the archetype's own headcount for now."
-        )
-        raise typer.Exit(code=2)
-
     if single_episode is not None:
         refused = [
             flag for flag, given in (
@@ -917,6 +924,7 @@ def build(
                 # what makes this worth revisiting when a vertical's episode can
                 # be told a month went wrong.
                 ("--timeline", timeline is not None),
+                ("--headcount-end", headcount_end is not None),
             ) if given
         ]
         if refused:
@@ -980,6 +988,31 @@ def build(
                 claimed_calendar.append(carried_year)
         world = _localised_recipe(_localised(builder).build())
 
+    workforce = None
+    workforce_path: tuple[int, ...] | None = None
+    if single_episode is None and (employees is not None or headcount_end is not None):
+        from .timeline import Workforce
+
+        workforce = Workforce(
+            initial=world.company.employees_total,
+            final=(
+                world.company.employees_total
+                if headcount_end is None
+                else headcount_end
+            ),
+        )
+        try:
+            workforce_path = workforce.headcounts(max(1, periods))
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        if workforce.initial != workforce.final:
+            console.print(
+                "[dim]workforce:[/dim] "
+                + " → ".join(f"{value:,}" for value in workforce_path)
+                + "\n"
+            )
+
     # The actor provider is resolved before the loop, and a replay makes it
     # unreachable for the same reason a replayed narration does: a fallback that
     # quietly generated instead would not be a replay.
@@ -1020,6 +1053,13 @@ def build(
             "[red]error:[/red] --timeline and --actors cannot be combined; an "
             "episode resumed from the ledger is driven one decision at a time and "
             "a sampled history is decided before the first one is taken"
+        )
+        raise typer.Exit(code=2)
+    if headcount_end is not None and actors is not None:
+        err.print(
+            "[red]error:[/red] --headcount-end and --actors cannot be combined;"
+            " actor resumption records close decisions one at a time, while a"
+            " workforce trajectory is fixed before the first period"
         )
         raise typer.Exit(code=2)
 
@@ -1126,6 +1166,7 @@ def build(
             periods=max(1, periods),
             seed=seed,
             density=density,
+            workforce=workforce,
             # The sampler decides *when* something happens; what a close is
             # remains this command's business, so the episode it schedules is
             # built here with the same arguments the plain loop uses. `stated`
@@ -1150,7 +1191,18 @@ def build(
             stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
             try:
                 world = world.run(_close(stamp, incident, index))
-            except ActorProviderError as exc:
+                if (
+                    workforce_path is not None
+                    and index + 1 < len(workforce_path)
+                    and workforce_path[index + 1] != workforce_path[index]
+                ):
+                    from .scenarios import WorkforceChange
+
+                    world = world.run(WorkforceChange(
+                        period=stamp,
+                        headcount=workforce_path[index + 1],
+                    ))
+            except (ActorProviderError, ValueError) as exc:
                 err.print(f"[red]error:[/red] {escape(str(exc))}")
                 raise typer.Exit(code=2) from exc
 

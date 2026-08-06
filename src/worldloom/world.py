@@ -510,6 +510,7 @@ class World:
     def extend(
         self,
         *,
+        company: Company | None = None,
         events: tuple[EnterpriseEvent, ...] = (),
         facts: tuple[CanonicalFact, ...] = (),
         artifact_intents: tuple[ArtifactIntent, ...] = (),
@@ -558,9 +559,15 @@ class World:
         corpus at all: the next episode plans its artifacts against ``roles``, so
         the March memo is signed by the person who actually held the post in
         March, without any planner knowing a succession happened.
+
+        ``company`` replaces the single company row for the same narrow reason:
+        an aggregate workforce change updates current headcount without
+        materialising thousands of employees. The scenario that uses it also
+        appends the event and facts that preserve how the value changed, so the
+        current row is mutable state while the audit trail stays append-only.
         """
         return World(
-            company=self.company,
+            company=self.company if company is None else company,
             _business_units=_merged(self._business_units, business_units),
             _people=_merged(self._people, people),
             _systems=self._systems,

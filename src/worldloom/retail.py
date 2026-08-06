@@ -388,6 +388,7 @@ class RetailWorld:
             locale=locale,
             physics=self.physics,
             role_table=self.role_table,
+            employees_total=self.employees,
         )
 
         world = World(

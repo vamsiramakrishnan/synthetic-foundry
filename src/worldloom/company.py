@@ -938,22 +938,6 @@ def resolve(spec: CompanySpec) -> Resolution:
             " the archetype's own scale."
         )
 
-    if spec.employees is not None and pack is None:
-        # Stated because it is invisible otherwise, and it is genuinely
-        # surprising: `RetailWorld.employees` exists, rides the recipe, and
-        # reaches no generator — `organisation.generate` reads
-        # `archetype.employees` for `Company.employees_total` and takes no
-        # employees argument at all. Routed through a pack it *is* load-bearing
-        # (`packs.archetype_of` copies it onto the archetype), which is why this
-        # is reported only on the pack-less path.
-        unmet.append(
-            f"a stated headcount of {spec.employees:,} on a pack-less build:"
-            " the world builder carries it onto the recipe and"
-            " `organisation.generate` takes the archetype's own figure for"
-            " `Company.employees_total`. Add an `identity` — a composed pack"
-            " sets it on the archetype, where it is read."
-        )
-
     # A range this build carries and its engine never draws from. Derived, not
     # tabulated: `parameters.py` names every parameter `<domain>.<subject>.
     # <measure>` precisely so a domain's physics is legible as a block, so a
@@ -1404,8 +1388,8 @@ _SCHEMA: tuple[tuple[str, str, str, str], ...] = (
      "Annual revenue in the archetype's currency unit. Reaches the world"
      " builder's `annual_revenue`, which every money fact is derived from."),
     ("employees", "value", "",
-     "The company's stated headcount. Load-bearing only through a pack — see"
-     " the `unmet` line a pack-less build prints."),
+     "The company's stated headcount. Reaches every world builder directly;"
+     " named employees remain the bounded decision-making graph."),
     ("geo", "value", "worldloom pack locales",
      "The jurisdiction. Reaches the figure grammar always; reaches the people,"
      " the regions and the head office only with an `identity`."),

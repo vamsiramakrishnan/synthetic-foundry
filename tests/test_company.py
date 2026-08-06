@@ -457,13 +457,8 @@ def test_a_described_world_builds_and_validates() -> None:
     assert "Chair, Audit and Risk Committee" in titles
 
 
-def test_scale_reaches_the_corpus_through_a_composed_pack() -> None:
-    """The asymmetry worth knowing: `annual_revenue` is load-bearing on every
-    path, and a *stated headcount* only through a pack —
-    `organisation.generate` reads `archetype.employees` and takes no employees
-    argument at all, so on a pack-less build the figure rides the recipe and
-    reaches nothing. `packs.archetype_of` copies it onto the archetype, which is
-    where it is read."""
+def test_scale_reaches_the_corpus_with_or_without_a_composed_pack() -> None:
+    """Revenue and total workforce are load-bearing on both construction paths."""
     document = {"engine": "insurance", "revenue": 2_400, "employees": 4_200,
                 "identity": {"company_name": "Rheinmark Versicherung"}}
     world = sdk.described(document).build().world
@@ -471,8 +466,8 @@ def test_scale_reaches_the_corpus_through_a_composed_pack() -> None:
     assert world.company.employees_total == 4_200
 
     pack_less = sdk.described({"engine": "insurance", "employees": 4_200})
-    assert any("stated headcount" in want for want in pack_less.unmet)
-    assert pack_less.build().world.company.employees_total != 4_200
+    assert not any("stated headcount" in want for want in pack_less.unmet)
+    assert pack_less.build().world.company.employees_total == 4_200
 
 
 def test_revenue_reaches_the_money_facts() -> None:

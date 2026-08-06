@@ -343,11 +343,30 @@ rather than recurring structure. Four ship today:
 
 ```python
 from worldloom import MonthEndClose
-from worldloom.scenarios import Hire, Departure, Reorganisation
+from worldloom.scenarios import Departure, Hire, Reorganisation, WorkforceChange
 
 world = world.run(MonthEndClose(period="2026-03", include_operational_incident=True))
 world = world.run(Departure(period="2026-04", role_key="controller"))
+world = world.run(WorkforceChange(period="2026-04", headcount=84_500))
 ```
+
+Total workforce and named employees are separate by design. `--employees`
+sets authoritative company headcount; Worldloom still materialises the bounded
+decision-making graph rather than one `Employee` row per payroll record. Over a
+history, `--headcount-end` creates exact aggregate workforce episodes between
+the two anchors, and explicit workforce scale raises sampled incident,
+succession, and reorganisation density logarithmically rather than linearly:
+
+```bash
+worldloom build --employees 80000 --headcount-end 92000 --periods 6 \
+  --timeline steady --out ./growing-enterprise
+```
+
+The recipe records every intermediate target, each movement emits numeric
+headcount and delta facts plus a personnel notice, and replay reconstructs the
+same final organisation. A million-person company therefore creates more
+organisational activity without creating a million in-memory identities or a
+million copies of month-end close.
 
 The artifact plan follows the episode, not a template: a close without an incident
 gets no RCA, and a departure produces the personnel notice that makes the

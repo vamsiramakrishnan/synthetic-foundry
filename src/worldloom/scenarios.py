@@ -604,6 +604,113 @@ def _personnel_notice(minter, change, successor, period: str) -> tuple:
 
 
 @dataclass(frozen=True)
+class WorkforceChange:
+    """An aggregate workforce target effective after *period* closes.
+
+    The company row carries the current total; the two facts preserve the
+    snapshot and signed delta that produced it.  This deliberately does not
+    mint or retire one ``Employee`` per head: named employees are the bounded
+    decision-making graph, while payroll-scale population remains structured
+    aggregate data.  That separation is what lets a million-person world stay
+    buildable without making workforce size inert.
+    """
+
+    period: str
+    headcount: int
+
+    def run(self, world: World) -> World:
+        from .models import ArtifactIntent, Authority, CanonicalFact, EnterpriseEvent, Quantity
+        from .recipe import with_step
+
+        if world._minter is None:
+            raise ValueError(
+                "this world was loaded from disk and cannot be advanced; build one from a seed"
+            )
+
+        at = _period_boundary(self.period)
+        modelled = len(world.org_at(at))
+        if self.headcount < modelled:
+            raise ValueError(
+                f"headcount {self.headcount:,} is smaller than the {modelled:,}"
+                " named employees active at the workforce boundary"
+            )
+
+        previous = world.company.employees_total
+        if self.headcount == previous:
+            raise ValueError(
+                f"headcount is already {self.headcount:,}; a workforce episode"
+                " that changes nothing would mint a false audit trail"
+            )
+
+        delta = self.headcount - previous
+        direction = "expanded" if delta > 0 else "reduced"
+        author_id = world._roles.get("head_of_people", world._roles["ceo"])
+        event = EnterpriseEvent(
+            id=world._minter.next("EV"),
+            kind=f"workforce_{direction}",
+            occurred_at=at,
+            summary=(
+                f"The workforce {direction} from {previous:,} to"
+                f" {self.headcount:,} employees."
+            ),
+            actors=[author_id],
+        )
+        facts = (
+            CanonicalFact(
+                id=world._minter.next("FACT"),
+                kind="org.headcount",
+                subject=world.company.id,
+                period=self.period,
+                value=Quantity(amount=float(self.headcount), unit="employees"),
+                valid_from=at,
+                authority=Authority.SYSTEM_OF_RECORD,
+                event_id=event.id,
+            ),
+            CanonicalFact(
+                id=world._minter.next("FACT"),
+                kind="org.headcount.delta",
+                subject=world.company.id,
+                period=self.period,
+                value=Quantity(amount=float(delta), unit="employees"),
+                valid_from=at,
+                authority=Authority.SYSTEM_OF_RECORD,
+                event_id=event.id,
+            ),
+        )
+        notice = ArtifactIntent(
+            id=world._minter.next("ART"),
+            artifact_type="personnel_notice",
+            domain="people",
+            audience="all_staff",
+            author_id=author_id,
+            triggered_by=[event.id],
+            required_fact_ids=[fact.id for fact in facts],
+            size_profile="small",
+            rationale=(
+                "An aggregate workforce movement is announced with both the"
+                " new total and the signed change, so organisation scale is"
+                " visible in the document corpus rather than only in metadata."
+            ),
+        )
+
+        return world.extend(
+            company=world.company.model_copy(
+                update={"employees_total": self.headcount}
+            ),
+            events=(event,),
+            facts=facts,
+            artifact_intents=(notice,),
+            period=self.period,
+            recipe=with_step(
+                world._recipe,
+                "WorkforceChange",
+                period=self.period,
+                headcount=self.headcount,
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class Hire:
     """A new person joins the company, effective at the boundary of *period*.
 
@@ -750,13 +857,12 @@ class Departure:
             # the budget was struck. The remedy is in the message rather than in
             # a guess here, because only the caller knows which they want.
             #
-            # The message deliberately does *not* suggest a bigger organisation,
-            # obvious as that reads: `--employees` is inert. `RetailWorld
-            # .employees` rides the recipe and reaches no generator —
-            # `organisation.generate` reads `archetype.employees` and takes no
-            # employees argument — so `--employees 60` builds the same
-            # twenty-three people and fails in the same period. Advice that does
-            # not work is worse than none, because it costs a build to find out.
+            # The message deliberately does *not* suggest a larger *stated*
+            # workforce. ``--employees`` now controls aggregate headcount, but
+            # aggregate employees are not invented candidates for a named role;
+            # succession capacity comes from the authored/modelled role table.
+            # Advice that conflates those two populations would still cost a
+            # failed build to discover.
             remaining = sorted(
                 {person.function for person in employed if person.id != leaver.id}
             )
@@ -859,6 +965,7 @@ __all__ = [
     "Hire",
     "Departure",
     "Reorganisation",
+    "WorkforceChange",
     "lore_index",
     "likelihood_multiplier",
     "density_adjustment",

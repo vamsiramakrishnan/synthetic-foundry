@@ -72,6 +72,7 @@ STEPS: dict[str, tuple[str, ...]] = {
     "Hire": ("period", "role_key", "title", "function", "unit_key"),
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
+    "WorkforceChange": ("period", "headcount"),
     # Not a scenario in the sense the others are — it mints no event and no
     # fact, only documents over what already happened — but it rides the same
     # step list for the same reason `--incident`/`--comparatives` do: a corpus
@@ -499,7 +500,13 @@ def rebuild(
     from .generators import distractors
     from . import profiles as _profiles
     from .parameters import DEFAULT, overrides_from
-    from .scenarios import Departure, Hire, MonthEndClose, Reorganisation
+    from .scenarios import (
+        Departure,
+        Hire,
+        MonthEndClose,
+        Reorganisation,
+        WorkforceChange,
+    )
 
     missing = [key for key in ("archetype", "seed") if recipe.get(key) is None]
     if missing:
@@ -673,6 +680,10 @@ def rebuild(
                     unit_key=step["unit_key"],
                     new_leader_role=step["new_leader_role"],
                 )
+            )
+        elif name == "WorkforceChange":
+            world = world.run(
+                WorkforceChange(period=step["period"], headcount=step["headcount"])
             )
         elif name == "Distractors":
             world = distractors.apply(world, count=step["count"])
