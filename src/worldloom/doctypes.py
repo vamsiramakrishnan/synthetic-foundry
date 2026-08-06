@@ -104,6 +104,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from . import documents
 from .documents import FilingPlan, SectionPlan
 from .models import Authority, Lifecycle
+from .roles import parse_unit_role
 
 #: Headings ``outline()`` appends itself, after the authored sections.
 #:
@@ -631,7 +632,7 @@ def _lint_filing(where: str, spec: DocumentType, domain: Any, base: str) -> list
             # as `packs.lint` treats a voice override: whether `grocery_md`
             # exists is a build-time property of the role table, so only the
             # suffix is checkable here.
-            if role in roles or any(role.endswith(s) for s in domain.unit_role_suffixes):
+            if role in roles or parse_unit_role(role, domain.unit_role_suffixes) is not None:
                 continue
             findings.append(
                 f"{where}.filing.{label}: {role!r} names no {base} role — roles:"

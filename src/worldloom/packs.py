@@ -47,6 +47,7 @@ from .doctypes import DocumentType
 from .generators.hierarchy import CategorySpec, SiteFormat, UnitSpec
 from .ids import Minter
 from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
+from .roles import parse_unit_role
 
 
 #: The marker a *derived* pack leaves where it refused to invent something.
@@ -509,8 +510,9 @@ def lint(pack: Pack) -> list[str]:
     }
     for role in sorted(pack.voices):
         spec = pack.voices[role]
-        known = role in domain.role_keys or any(
-            role.endswith(suffix) for suffix in domain.unit_role_suffixes
+        known = (
+            role in domain.role_keys
+            or parse_unit_role(role, domain.unit_role_suffixes) is not None
         )
         if not known:
             findings.append(

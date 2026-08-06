@@ -53,6 +53,7 @@ from ..models import (
 )
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
+from ..roles import UnitRole, parse_unit_role
 from . import hierarchy, names
 from .org_builder import (
     accountability_facts,
@@ -143,6 +144,13 @@ _ROLE_PERSONA = {
     "audit": "PERSONA-P2P-AUDIT",
 }
 
+#: The rows ``generate`` mints per business unit — MDs only, as in banking and
+#: insurance. Shares ``roles.UnitRole``/``unit_role_key`` with the siblings so
+#: the key format exists in exactly one place.
+_UNIT_ROLES: tuple[UnitRole, ...] = (
+    UnitRole("_md", "Managing Director, {unit}", "Executive", manager="ceo"),
+)
+
 #: The per-unit roles ``generate`` appends, by suffix — unit MDs only, as in
 #: banking and insurance.
 _UNIT_ROLE_PERSONA = {"_md": "PERSONA-P2P-EXEC"}
@@ -167,9 +175,9 @@ def _persona_for(role: str, function: str = "") -> str:
     the layering and for why an unmapped role is resolved rather than refused."""
     if role in _ROLE_PERSONA:
         return _ROLE_PERSONA[role]
-    for suffix, persona in _UNIT_ROLE_PERSONA.items():
-        if role.endswith(suffix):
-            return persona
+    parsed = parse_unit_role(role, tuple(_UNIT_ROLE_PERSONA))
+    if parsed is not None:
+        return _UNIT_ROLE_PERSONA[parsed[1]]
     return _FUNCTION_PERSONA.get(function, _DEFAULT_PERSONA)
 
 
@@ -258,7 +266,8 @@ def generate(
 
     role_table = list(_ROLES if role_table is None else role_table)
     for unit in units:
-        role_table.append((f"{unit.key}_md", f"Managing Director, {unit.name}", "Executive", "ceo"))
+        for spec in _UNIT_ROLES:
+            role_table.append(spec.row(unit.key, unit.name))
     role_table, depth_of = sorted_roles(role_table)
 
     finance_cc = minter.next("CC")
@@ -289,8 +298,9 @@ def generate(
         reporting line would have put Operations with the CEO and said nothing.
         """
         business_unit = None
-        if role.endswith("_md"):
-            business_unit = unit_ids[role[:-3]]
+        parsed = parse_unit_role(role, tuple(spec.suffix for spec in _UNIT_ROLES))
+        if parsed is not None:
+            business_unit = unit_ids[parsed[0]]
         cost_centre = (
             finance_cc if function in ("Finance", "Audit")
             else commercial_cc if function in ("Procurement", "Operations")

@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact
+from ..roles import unit_role_key
 from .operations import CloseEpisode
 
 
@@ -375,7 +376,8 @@ def artifact_intents(
             unit_facts = [f.id for f in financial_facts if f.subject == unit_id]
             if not unit_facts:
                 continue
-            intent("unit_close_commentary", "finance", "finance", roles[f"{unit_key}_bp"],
+            intent("unit_close_commentary", "finance", "finance",
+                   roles[unit_role_key(unit_key, "_bp")],
                    unit_facts, [episode.close_event_id], "small",
                    "Each division's close is argued by the person who partners it, "
                    "not only summed by the centre.")
@@ -413,7 +415,8 @@ def artifact_intents(
                 ]
                 if not category_facts:
                     continue
-                intent("unit_close_commentary", "finance", "finance", roles[f"{unit_key}_bp"],
+                intent("unit_close_commentary", "finance", "finance",
+                       roles[unit_role_key(unit_key, "_bp")],
                        category_facts, [episode.close_event_id], "small",
                        "At high density the same business partner also argues the "
                        "categories that moved the unit, not only its total.")

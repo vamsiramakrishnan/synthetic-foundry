@@ -353,6 +353,121 @@ def test_rows_round_trip() -> None:
     assert roles_module.to_rows(roles_module.from_rows(rows)) == tuple(rows)
 
 
+def test_the_unit_role_key_format_round_trips() -> None:
+    """Minting and parsing share one definition, so they cannot disagree."""
+    for suffix in roles_module.UNIT_ROLE_SUFFIXES:
+        key = roles_module.unit_role_key("north", suffix)
+        assert roles_module.parse_unit_role(key) == ("north", suffix)
+
+
+def test_a_key_that_is_not_a_unit_role_parses_to_none() -> None:
+    # `merch_lead` ends in no unit suffix; a bare suffix has no unit key in
+    # front of it; and an engine that mints only `_md` must not claim a `_bp`
+    # key it never minted — the suffix list is the caller's, which is what
+    # lets `domains.Domain.unit_role_suffixes` plug in directly.
+    assert roles_module.parse_unit_role("merch_lead") is None
+    assert roles_module.parse_unit_role("_md") is None
+    assert roles_module.parse_unit_role("personal_bp", ("_md",)) is None
+    assert roles_module.parse_unit_role("personal_bp", ("_md", "_bp")) == ("personal", "_bp")
+
+
+def test_the_unit_role_templates_are_derived_from_the_accessor() -> None:
+    """`UNIT_ROLES` is what `required` used to format keys from; deriving it
+    through `unit_role_key` is what stops the template and the accessor from
+    ever spelling the format differently."""
+    assert roles_module.UNIT_ROLES == tuple(
+        roles_module.unit_role_key("{unit}", suffix)
+        for suffix in roles_module.UNIT_ROLE_SUFFIXES
+    )
+
+
+def test_a_unit_role_spec_mints_the_row_the_generator_used_to_inline() -> None:
+    spec = roles_module.UnitRole(
+        "_buyer", "Head of Buying, {unit}", "Merchandising", manager_suffix="_md",
+    )
+    assert spec.row("gm", "General Merchandise") == (
+        "gm_buyer", "Head of Buying, General Merchandise", "Merchandising", "gm_md",
+    )
+
+
+def test_the_minted_unit_rows_match_what_the_engines_publish() -> None:
+    """`Domain.unit_role_suffixes` is the published claim and `_UNIT_ROLES` is
+    what actually gets minted; the same drift-closing comparison
+    `test_personas` makes for the persona suffix table."""
+    from worldloom import domains
+    from worldloom.generators import banking_org, insurance_org, organisation
+
+    for name, module in (
+        ("retail", organisation),
+        ("banking", banking_org),
+        ("insurance", insurance_org),
+    ):
+        assert tuple(spec.suffix for spec in module._UNIT_ROLES) == \
+            domains.by_name(name).unit_role_suffixes, name
+
+
+def test_authored_unit_roles_flow_through_the_same_accessor() -> None:
+    """The seam itself: an extra per-unit row is minted, attached to its unit,
+    and managed by its own unit's MD — through `unit_role_key`/`parse_unit_role`,
+    with no new string surgery anywhere."""
+    from worldloom import archetypes
+    from worldloom.generators import organisation
+    from worldloom.ids import Minter
+    from worldloom.rng import Rng
+
+    org = organisation.generate(
+        Rng(8128, "organisation"), Minter(),
+        archetype=archetypes.get("omnichannel_retailer"),
+        unit_roles=(
+            *organisation._UNIT_ROLES,
+            roles_module.UnitRole(
+                "_ops", "Operations Manager, {unit}", "ServiceOperations",
+                manager_suffix="_md",
+            ),
+        ),
+    )
+    ops_id = org.roles["gm_ops"]
+    person = next(p for p in org.people if p.id == ops_id)
+    assert person.business_unit_id == org.roles["unit_gm"]
+    assert person.manager_id == org.roles["gm_md"]
+    assert person.title == "Operations Manager, General Merchandise"
+
+
+def test_unit_roles_missing_an_engine_suffix_are_refused_by_name() -> None:
+    """The same argument as the spine: the engine looks `{unit}_buyer` up by
+    name (`hierarchy.generate`'s buyers), so a set without it must be refused
+    up front rather than raise KeyError from inside the build."""
+    from worldloom import archetypes
+    from worldloom.generators import organisation
+    from worldloom.ids import Minter
+    from worldloom.rng import Rng
+
+    with pytest.raises(ValueError, match="_buyer"):
+        organisation.generate(
+            Rng(8128, "organisation"), Minter(),
+            archetype=archetypes.get("omnichannel_retailer"),
+            unit_roles=organisation._UNIT_ROLES[:2],
+        )
+
+
+def test_passing_the_default_unit_roles_changes_nothing() -> None:
+    """`None` means the module's own rows, and passing those rows explicitly
+    is the same build — the byte-identity claim, stated at the object level."""
+    from worldloom import archetypes
+    from worldloom.generators import organisation
+    from worldloom.ids import Minter
+    from worldloom.rng import Rng
+
+    def build(unit_roles):  # type: ignore[no-untyped-def]
+        return organisation.generate(
+            Rng(8128, "organisation"), Minter(),
+            archetype=archetypes.get("omnichannel_retailer"),
+            unit_roles=unit_roles,
+        )
+
+    assert build(None) == build(organisation._UNIT_ROLES)
+
+
 def test_a_synthesised_spine_key_sits_where_its_engine_files_it() -> None:
     """Which function a spine key sits in is read by the engine, so it is closed
     for the reason the key itself is.
