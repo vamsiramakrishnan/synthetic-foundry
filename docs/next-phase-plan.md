@@ -111,6 +111,20 @@ threads, minutes, working notes are artifacts, and the dormant actor layer
 consumer. Code naming should converge on this: the spec is a process, a run
 is an episode.
 
+## Who authors a process, and how it binds — settled
+
+Processes are **harness-authored per company**, through the same seed cascade
+as LOBs, with the company's context (engine, facets, lore) in the brief so
+proposals are contextual; every stage is refusable by the grammar's lint. A
+standard library (close, P2P, recruitment) ships as data like standard LOBs.
+**Participation derives** — a process's steps declare the fact kinds they
+mint, a responsibility edge declares the kinds a role answers for, and who
+participates in a process is the join, never a second table that can
+disagree. **Ordering is declared**, because it cannot be derived: a process
+declares role slots (preparer, challenger, approver) and the LOB binds its
+roles to the slots — the slots are the process's vocabulary, the binding is
+the company's.
+
 ## Engine vs LOB — the distinction, settled
 
 An **engine is an industry frame**: what the company sells, its physics
