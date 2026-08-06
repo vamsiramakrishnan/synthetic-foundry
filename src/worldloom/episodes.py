@@ -302,6 +302,32 @@ class PhaseSpec(Model):
     """Which event kinds fire in this phase."""
 
 
+class RoleSlotSpec(Model):
+    """One ordered role slot a process declares.
+
+    Ordering is the one thing participation cannot derive (docs/next-phase-plan.md,
+    "Who authors a process"): the join says *who is in* a process, but not who
+    prepares before who challenges before who approves. So a process declares
+    slots — its own vocabulary, in its own order — and a LOB binds its role keys
+    to them (``lob.SlotBinding``). The slot names are spec-defined on purpose:
+    ``preparer``/``challenger``/``approver`` is the shape the settled design
+    names, but a recruitment drive's ``screener``/``interviewer``/``signer`` is
+    just as much a process, and a hardcoded vocabulary here would make every
+    new process a core edit.
+    """
+
+    slot: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    """The slot's name — the process's own word for the seat."""
+
+    required: bool = True
+    """Whether a company running this process must bind a role to this slot.
+    ``lob.lint_bindings`` refuses an unbound required slot; an optional slot
+    (an observer, a second challenger in larger firms) may stay empty."""
+
+    purpose: str = Field(default="", min_length=0)
+    """What the seat does, in a sentence — documentation for the binder."""
+
+
 class EpisodeSpec(Model):
     """Complete declaration of an episode."""
 
@@ -329,6 +355,13 @@ class EpisodeSpec(Model):
     phases: list[PhaseSpec] = Field(default_factory=list)
     """The phases this episode goes through."""
 
+    role_slots: list[RoleSlotSpec] = Field(default_factory=list)
+    """The ordered seats this process needs filled — the process's vocabulary.
+    Declaration order is the order the work moves: preparer before challenger
+    before approver. Binding a company's roles to these is the LOB's half
+    (``lob.SlotBinding``), never declared here — a process spec that named a
+    company's role keys would only run at one company."""
+
     detail: str = Field(default="", min_length=0)
     """General notes about the episode."""
 
@@ -351,6 +384,19 @@ class EpisodeSpec(Model):
                 raise ValueError(f"duplicate event kind: {event.kind}")
             seen.add(event.kind)
         return events
+
+    @field_validator("role_slots")
+    @classmethod
+    def _no_duplicate_slots(cls, slots: list[RoleSlotSpec]) -> list[RoleSlotSpec]:
+        # Declaration order *is* the ordering, so a duplicate is not merely
+        # redundant — it makes "where in the sequence does this seat sit"
+        # ambiguous, which is the one question slots exist to answer.
+        seen = set()
+        for slot in slots:
+            if slot.slot in seen:
+                raise ValueError(f"duplicate role slot: {slot.slot}")
+            seen.add(slot.slot)
+        return slots
 
 
 class Episodes(Model):
@@ -1341,6 +1387,7 @@ __all__ = [
     "ArtifactIntentSpec",
     "CarryForwardSpec",
     "PhaseSpec",
+    "RoleSlotSpec",
     "EpisodeSpec",
     "Episodes",
     "load",

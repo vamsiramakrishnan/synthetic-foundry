@@ -119,6 +119,15 @@ class Blueprint:
     thing than the shape it came from, and re-synthesising it here would throw
     away the leadership rows a describer wrote by hand."""
 
+    lob_specs: tuple[Any, ...] = ()
+    """The ``lob.Lob`` specs attached by ``.lob()``, kept whole rather than
+    flattened into ``implied_roles``, because a LOB is more than its rows:
+    its responsibility edges are what ``participation`` joins against a
+    process's minted kinds, and its slot bindings are the company's half of a
+    process's ordering. The rows still land in ``implied_roles`` — the build
+    reads only those — so keeping the spec adds derivation, not a second
+    account of the organisation."""
+
     implied_roles: tuple[tuple[str, str, str, str | None], ...] = ()
     implied_lore: tuple[Any, ...] = ()
     """The ``facets.LoreClaim``s the chosen facets commit this world to, minted
@@ -288,27 +297,92 @@ class Blueprint:
             )
         return replace(self, pack_source=loaded, domain_name=loaded.base)
 
-    def lob(self, spec: Any) -> Blueprint:
-        """Append roles from a LOB spec to this blueprint's role table.
+    def lob(
+        self,
+        spec: Any,
+        *,
+        bind: Mapping[str, Mapping[str, str]] | None = None,
+    ) -> Blueprint:
+        """Attach a LOB: its roles join the organisation, its spec is kept.
 
         A LOB (Line of Business) spec declares roles and responsibilities.
-        This method appends the LOB's roles to the implicit role list so they
-        are included in the final organisation. Appended after facet roles.
+        The roles are appended to the implicit role list (after facet roles)
+        so they are included in the final organisation; the spec itself is
+        kept on ``lob_specs`` so ``participation`` can derive who is in a
+        process from the responsibility edges.
+
+        ``bind`` is the blueprint's way of seating this LOB's roles into a
+        process's declared slots without editing the LOB —
+        ``bind={"QuarterlyCapitalReturn": {"preparer": "controller"}}`` adds
+        ``lob.SlotBinding`` rows to the attached copy. A binding naming a role
+        the LOB lacks is refused here, at the call that made the claim, rather
+        than surfacing later as a seat filled by nobody; the other half of the
+        lint — a required slot left unbound — needs the process spec and lives
+        in ``lob.lint_bindings``.
 
         Args:
             spec: A ``lob.Lob`` or dict matching its shape.
+            bind: Optional ``{process: {slot: role_key}}`` bindings to add.
 
         Returns:
-            A new Blueprint with the LOB's roles added to implied_roles.
+            A new Blueprint with the LOB attached.
         """
         from . import lob as lob_module
 
         loaded = spec if hasattr(spec, "roles") else lob_module.Lob.model_validate(spec)
-        # Convert LOB roles to tuple format
+        if bind:
+            added = [
+                lob_module.SlotBinding(process=process, slot=slot, role_key=role_key)
+                for process, seats in bind.items()
+                for slot, role_key in seats.items()
+            ]
+            loaded = loaded.model_copy(
+                update={"slot_bindings": list(loaded.slot_bindings) + added}
+            )
+        role_keys = {role.key for role in loaded.roles}
+        orphaned = sorted(
+            {b.role_key for b in loaded.slot_bindings if b.role_key not in role_keys}
+        )
+        if orphaned:
+            raise ValueError(
+                f"LOB {loaded.name!r} binds roles it does not declare:"
+                f" {orphaned}. A slot binding seats one of the LOB's own roles;"
+                f" its roles are {sorted(role_keys)}."
+            )
         lob_rows = tuple(role.as_row() for role in loaded.roles)
-        # Append LOB roles after implied roles
         combined = list(self.implied_roles) + list(lob_rows)
-        return replace(self, implied_roles=tuple(combined))
+        return replace(self, implied_roles=tuple(combined),
+                       lob_specs=self.lob_specs + (loaded,))
+
+    def participation(self, process: Any) -> dict[str, tuple[Any, ...]]:
+        """Who is in *process*, per attached LOB — derived, never stored.
+
+        *process* is an ``episodes.EpisodeSpec`` or the name of one already
+        installed in this Python process. The result maps each attached LOB's
+        name to its ``lob.Participant`` rows: the join of the LOB's
+        responsibility edges against the kinds the process's steps mint, plus
+        whoever the slot bindings seat. LOBs with nobody in the process are
+        omitted rather than reported empty, so the dict reads as the answer to
+        "who shows up", not as a roster of everyone asked.
+        """
+        from . import episodes, lob as lob_module
+
+        if hasattr(process, "fact_kinds"):
+            spec = process
+        else:
+            spec = episodes.loaded().get(process)
+            if spec is None:
+                raise KeyError(
+                    f"no process named {process!r} is installed —"
+                    " call episodes.install(episodes.load(...)) first, or pass"
+                    " the EpisodeSpec itself"
+                )
+        joined: dict[str, tuple[Any, ...]] = {}
+        for attached in self.lob_specs:
+            participants = lob_module.participation(attached, spec)
+            if participants:
+                joined[attached.name] = participants
+        return joined
 
     # -- realisation -------------------------------------------------------
 

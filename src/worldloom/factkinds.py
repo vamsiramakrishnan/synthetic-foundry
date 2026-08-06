@@ -175,6 +175,19 @@ def resolvable(name: str) -> bool:
     return any(kind.startswith(prefix) for kind in _KINDS)
 
 
+def covers(name: str, kind: str) -> bool:
+    """Whether *name* claims *kind*: exact, or a dot-boundary prefix.
+
+    The same boundary rule ``resolvable`` applies against the registry, made
+    pairwise so a join can use it — ``lob.participation`` matches a
+    responsibility's declared family (``financial.revenue``) against the kinds
+    a process's steps actually mint (``financial.revenue.actual``). One
+    predicate, shared, so the lint that admits an edge and the join that
+    derives who participates cannot disagree about what a prefix means.
+    """
+    return kind == name or kind.startswith(name + ".")
+
+
 # ---------------------------------------------------------------------------
 # The core kinds: minted by the shared generators before any scenario runs.
 # Registered here rather than from a vertical because no vertical owns them —
@@ -224,6 +237,7 @@ register([
 __all__ = [
     "FactKind",
     "INVARIANT_HEADS",
+    "covers",
     "get",
     "known",
     "names",
