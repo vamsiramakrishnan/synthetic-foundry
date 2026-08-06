@@ -1,0 +1,1497 @@
+{
+  "access_policies": [
+    {
+      "allow_business_units": [],
+      "allow_functions": [],
+      "allow_people": [],
+      "deny_people": [],
+      "id": "POLICY-0001",
+      "label": "All staff"
+    },
+    {
+      "allow_business_units": [],
+      "allow_functions": [
+        "Claims",
+        "Actuarial",
+        "Finance"
+      ],
+      "allow_people": [
+        "PERSON-0001"
+      ],
+      "deny_people": [],
+      "id": "POLICY-0002",
+      "label": "Claims and actuarial"
+    },
+    {
+      "allow_business_units": [],
+      "allow_functions": [
+        "Finance",
+        "Actuarial",
+        "Audit"
+      ],
+      "allow_people": [
+        "PERSON-0001"
+      ],
+      "deny_people": [],
+      "id": "POLICY-0003",
+      "label": "Finance and actuarial"
+    },
+    {
+      "allow_business_units": [],
+      "allow_functions": [
+        "Executive",
+        "Finance",
+        "Actuarial",
+        "Claims",
+        "Audit"
+      ],
+      "allow_people": [],
+      "deny_people": [],
+      "id": "POLICY-0004",
+      "label": "Reserving committee"
+    }
+  ],
+  "business_units": [
+    {
+      "company_id": "CO-0001",
+      "dissolved": null,
+      "formed": "2025-06-01T00:00:00Z",
+      "id": "BU-0001",
+      "kind": "personal_lines",
+      "leader_id": "PERSON-0008",
+      "name": "Personal Lines"
+    },
+    {
+      "company_id": "CO-0001",
+      "dissolved": null,
+      "formed": "2025-06-01T00:00:00Z",
+      "id": "BU-0002",
+      "kind": "commercial_lines",
+      "leader_id": "PERSON-0009",
+      "name": "Commercial Lines"
+    },
+    {
+      "company_id": "CO-0001",
+      "dissolved": null,
+      "formed": "2025-06-01T00:00:00Z",
+      "id": "BU-0003",
+      "kind": "investments",
+      "leader_id": "PERSON-0010",
+      "name": "Group Investments"
+    }
+  ],
+  "categories": [
+    {
+      "business_unit_id": "BU-0001",
+      "buyer_id": null,
+      "id": "CAT-0001",
+      "margin_profile": 0.08,
+      "name": "Motor",
+      "revenue_share": 0.55
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "buyer_id": null,
+      "id": "CAT-0002",
+      "margin_profile": 0.1,
+      "name": "Home",
+      "revenue_share": 0.35
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "buyer_id": null,
+      "id": "CAT-0003",
+      "margin_profile": 0.05,
+      "name": "Travel",
+      "revenue_share": 0.1
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "buyer_id": null,
+      "id": "CAT-0004",
+      "margin_profile": 0.03,
+      "name": "Public and Products Liability",
+      "revenue_share": 0.3
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "buyer_id": null,
+      "id": "CAT-0005",
+      "margin_profile": 0.09,
+      "name": "Commercial Property",
+      "revenue_share": 0.45
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "buyer_id": null,
+      "id": "CAT-0006",
+      "margin_profile": 0.04,
+      "name": "Professional Indemnity",
+      "revenue_share": 0.25
+    }
+  ],
+  "company": {
+    "currency": "AUD",
+    "currency_unit": "millions",
+    "employees_total": 3500,
+    "fiscal_year_start_month": 7,
+    "headquarters": "Melbourne, Australia",
+    "id": "CO-0001",
+    "industry": "Private healthcare and hospital services",
+    "name": "Healwell Healthcare Group"
+  },
+  "cost_centres": [
+    {
+      "business_unit_id": null,
+      "id": "CC-0001",
+      "name": "Finance Shared Services",
+      "owner_id": "PERSON-0011"
+    },
+    {
+      "business_unit_id": null,
+      "id": "CC-0002",
+      "name": "Actuarial and Claims",
+      "owner_id": "PERSON-0004"
+    }
+  ],
+  "people": [
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0001",
+      "joined": "2016-03-22T13:09:31.943141Z",
+      "left": null,
+      "manager_id": null,
+      "name": "Tarquin Ramaswamy",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Group Chief Executive Officer",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Audit",
+      "id": "PERSON-0002",
+      "joined": "2015-09-09T10:50:06.800098Z",
+      "left": null,
+      "manager_id": "PERSON-0001",
+      "name": "Takoda Fitzmaurice",
+      "persona_id": "PERSONA-INS-AUDIT",
+      "title": "Chief Internal Auditor",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Finance",
+      "id": "PERSON-0003",
+      "joined": "2016-09-12T07:09:55.011167Z",
+      "left": null,
+      "manager_id": "PERSON-0001",
+      "name": "Annelies Bhattacharya",
+      "persona_id": "PERSONA-INS-CFO",
+      "title": "Group Chief Financial Officer",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Actuarial",
+      "id": "PERSON-0004",
+      "joined": "2020-04-24T07:45:26.939326Z",
+      "left": null,
+      "manager_id": "PERSON-0001",
+      "name": "Sunniva Kaczmarek",
+      "persona_id": "PERSONA-CHIEF-ACTUARY",
+      "title": "Chief Actuary",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Claims",
+      "id": "PERSON-0005",
+      "joined": "2020-04-05T22:41:02.959876Z",
+      "left": null,
+      "manager_id": "PERSON-0001",
+      "name": "Kwabena Nwachukwu-Hall",
+      "persona_id": "PERSONA-CLAIMS",
+      "title": "Claims Director",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0006",
+      "joined": "2018-09-28T17:39:54.435839Z",
+      "left": null,
+      "manager_id": "PERSON-0001",
+      "name": "Oleksandra Petrosyan",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Chief Medical Officer",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0007",
+      "joined": "2017-07-10T17:12:29.278319Z",
+      "left": null,
+      "manager_id": "PERSON-0001",
+      "name": "Ezekiel Mbatha",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Chief Operations Officer",
+      "traits": {}
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0008",
+      "joined": "2016-02-09T15:09:03.964916Z",
+      "left": null,
+      "manager_id": "PERSON-0001",
+      "name": "Isaura Trbojevic",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Managing Director, Personal Lines",
+      "traits": {}
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0009",
+      "joined": "2017-12-03T05:08:07.402069Z",
+      "left": null,
+      "manager_id": "PERSON-0001",
+      "name": "Osman Vukovi\u0107",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Managing Director, Commercial Lines",
+      "traits": {}
+    },
+    {
+      "business_unit_id": "BU-0003",
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0010",
+      "joined": "2016-09-09T16:44:32.160229Z",
+      "left": null,
+      "manager_id": "PERSON-0001",
+      "name": "Naledi Delacroix",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Managing Director, Group Investments",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Finance",
+      "id": "PERSON-0011",
+      "joined": "2018-03-26T10:24:50.452690Z",
+      "left": null,
+      "manager_id": "PERSON-0002",
+      "name": "Emeka Demirsoy",
+      "persona_id": "PERSONA-INS-CONTROLLER",
+      "title": "Group Financial Controller",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Actuarial",
+      "id": "PERSON-0012",
+      "joined": "2018-12-18T19:36:07.894805Z",
+      "left": null,
+      "manager_id": "PERSON-0003",
+      "name": "Tobias Ojukwu",
+      "persona_id": "PERSONA-RESERVING-ACTUARY",
+      "title": "Reserving Actuary",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Actuarial",
+      "id": "PERSON-0013",
+      "joined": "2017-06-02T17:28:07.793894Z",
+      "left": null,
+      "manager_id": "PERSON-0004",
+      "name": "Brigid Faulkner-Reyes",
+      "persona_id": "PERSONA-RESERVING-ACTUARY",
+      "title": "Head of Actuarial",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Claims",
+      "id": "PERSON-0014",
+      "joined": "2021-07-31T01:44:44.185050Z",
+      "left": null,
+      "manager_id": "PERSON-0005",
+      "name": "Havva Okonkwo",
+      "persona_id": "PERSONA-CLAIMS",
+      "title": "Head of Claims",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Audit",
+      "id": "PERSON-0015",
+      "joined": "2021-06-20T04:40:04.111593Z",
+      "left": null,
+      "manager_id": "PERSON-0002",
+      "name": "Signe Ferreira-Osei",
+      "persona_id": "PERSONA-INS-AUDIT",
+      "title": "Head of Audit",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0016",
+      "joined": "2020-12-30T15:47:07.924458Z",
+      "left": null,
+      "manager_id": "PERSON-0003",
+      "name": "Bartholomew Ntuli",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Head of Executive",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Finance",
+      "id": "PERSON-0017",
+      "joined": "2022-01-11T07:48:05.280642Z",
+      "left": null,
+      "manager_id": "PERSON-0004",
+      "name": "Perpetua Venkataraghavan",
+      "persona_id": "PERSONA-INS-CONTROLLER",
+      "title": "Head of Finance",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Actuarial",
+      "id": "PERSON-0018",
+      "joined": "2021-03-31T07:09:20.812968Z",
+      "left": null,
+      "manager_id": "PERSON-0005",
+      "name": "Grethe Mwangi-Turner",
+      "persona_id": "PERSONA-RESERVING-ACTUARY",
+      "title": "Head of Actuarial",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Claims",
+      "id": "PERSON-0019",
+      "joined": "2018-03-01T18:26:34.197722Z",
+      "left": null,
+      "manager_id": "PERSON-0002",
+      "name": "Nikolai Nakamura-Wells",
+      "persona_id": "PERSONA-CLAIMS",
+      "title": "Head of Claims",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Audit",
+      "id": "PERSON-0020",
+      "joined": "2017-10-12T04:33:47.314343Z",
+      "left": null,
+      "manager_id": "PERSON-0003",
+      "name": "Adaeze Haverkamp",
+      "persona_id": "PERSONA-INS-AUDIT",
+      "title": "Head of Audit",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0021",
+      "joined": "2020-10-04T03:04:33.197902Z",
+      "left": null,
+      "manager_id": "PERSON-0004",
+      "name": "Solveig Rasmussen",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Head of Executive",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Finance",
+      "id": "PERSON-0022",
+      "joined": "2017-11-29T13:31:37.077793Z",
+      "left": null,
+      "manager_id": "PERSON-0005",
+      "name": "Rosalind Vandermolen",
+      "persona_id": "PERSONA-INS-CONTROLLER",
+      "title": "Head of Finance",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Actuarial",
+      "id": "PERSON-0023",
+      "joined": "2020-07-04T02:13:07.413842Z",
+      "left": null,
+      "manager_id": "PERSON-0002",
+      "name": "Anselm Oyelaran",
+      "persona_id": "PERSONA-RESERVING-ACTUARY",
+      "title": "Head of Actuarial",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Claims",
+      "id": "PERSON-0024",
+      "joined": "2019-07-10T10:12:20.952634Z",
+      "left": null,
+      "manager_id": "PERSON-0003",
+      "name": "Ilse Bergqvist",
+      "persona_id": "PERSONA-CLAIMS",
+      "title": "Head of Claims",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Audit",
+      "id": "PERSON-0025",
+      "joined": "2017-07-22T17:50:12.955563Z",
+      "left": null,
+      "manager_id": "PERSON-0004",
+      "name": "Rafferty Adeyemi",
+      "persona_id": "PERSONA-INS-AUDIT",
+      "title": "Head of Audit",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0026",
+      "joined": "2020-12-24T18:34:50.569704Z",
+      "left": null,
+      "manager_id": "PERSON-0005",
+      "name": "Dmitri Aasland",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Head of Executive",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Finance",
+      "id": "PERSON-0027",
+      "joined": "2018-12-13T06:23:05.298302Z",
+      "left": null,
+      "manager_id": "PERSON-0011",
+      "name": "Beatriz Szczepanski",
+      "persona_id": "PERSONA-INS-CONTROLLER",
+      "title": "Manager, Finance",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Actuarial",
+      "id": "PERSON-0028",
+      "joined": "2023-10-10T08:25:13.521588Z",
+      "left": null,
+      "manager_id": "PERSON-0012",
+      "name": "Lachlan Sandoval-Klein",
+      "persona_id": "PERSONA-RESERVING-ACTUARY",
+      "title": "Manager, Actuarial",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Claims",
+      "id": "PERSON-0029",
+      "joined": "2023-10-18T23:41:17.044806Z",
+      "left": null,
+      "manager_id": "PERSON-0013",
+      "name": "Desmond Eze-Whitfield",
+      "persona_id": "PERSONA-CLAIMS",
+      "title": "Manager, Claims",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Audit",
+      "id": "PERSON-0030",
+      "joined": "2021-05-09T20:31:55.696170Z",
+      "left": null,
+      "manager_id": "PERSON-0014",
+      "name": "Wilhelmina Lindqvist",
+      "persona_id": "PERSONA-INS-AUDIT",
+      "title": "Manager, Audit",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0031",
+      "joined": "2024-10-15T06:54:59.634295Z",
+      "left": null,
+      "manager_id": "PERSON-0015",
+      "name": "Yerlan Kowalczyk",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Manager, Executive",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Finance",
+      "id": "PERSON-0032",
+      "joined": "2020-12-29T19:33:33.839705Z",
+      "left": null,
+      "manager_id": "PERSON-0016",
+      "name": "Callum Lindegaard",
+      "persona_id": "PERSONA-INS-CONTROLLER",
+      "title": "Manager, Finance",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Actuarial",
+      "id": "PERSON-0033",
+      "joined": "2019-12-22T02:39:22.507287Z",
+      "left": null,
+      "manager_id": "PERSON-0017",
+      "name": "Rustam Achterberg",
+      "persona_id": "PERSONA-RESERVING-ACTUARY",
+      "title": "Manager, Actuarial",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0002",
+      "function": "Claims",
+      "id": "PERSON-0034",
+      "joined": "2023-11-25T21:54:33.948248Z",
+      "left": null,
+      "manager_id": "PERSON-0018",
+      "name": "Mireille Costa-Braithwaite",
+      "persona_id": "PERSONA-CLAIMS",
+      "title": "Manager, Claims",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Audit",
+      "id": "PERSON-0035",
+      "joined": "2022-02-04T09:29:57.657051Z",
+      "left": null,
+      "manager_id": "PERSON-0019",
+      "name": "Fionnuala Abenov",
+      "persona_id": "PERSONA-INS-AUDIT",
+      "title": "Manager, Audit",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": null,
+      "function": "Executive",
+      "id": "PERSON-0036",
+      "joined": "2022-08-17T04:19:14.582826Z",
+      "left": null,
+      "manager_id": "PERSON-0020",
+      "name": "Marguerite Halvorsen",
+      "persona_id": "PERSONA-INS-EXEC",
+      "title": "Manager, Executive",
+      "traits": {}
+    },
+    {
+      "business_unit_id": null,
+      "cost_centre_id": "CC-0001",
+      "function": "Finance",
+      "id": "PERSON-0037",
+      "joined": "2021-09-12T16:45:08.550338Z",
+      "left": null,
+      "manager_id": "PERSON-0021",
+      "name": "Zerlina Anand-Pereira",
+      "persona_id": "PERSONA-INS-CONTROLLER",
+      "title": "Manager, Finance",
+      "traits": {}
+    }
+  ],
+  "period": "2026-01",
+  "personas": [
+    {
+      "favourite_phrases": [
+        "well capitalised",
+        "within appetite"
+      ],
+      "id": "PERSONA-INS-EXEC",
+      "label": "Executive",
+      "optimism": 0.3,
+      "political_awareness": 0.9,
+      "risk_tolerance": 0.1,
+      "sentence_complexity": "low",
+      "technical_depth": "low",
+      "traits": {},
+      "voice": "brief, confident, outcome-focused"
+    },
+    {
+      "favourite_phrases": [
+        "on a normalised basis",
+        "within the combined-ratio target"
+      ],
+      "id": "PERSONA-INS-CFO",
+      "label": "Group CFO",
+      "optimism": -0.1,
+      "political_awareness": 0.8,
+      "risk_tolerance": -0.3,
+      "sentence_complexity": "medium",
+      "technical_depth": "low",
+      "traits": {},
+      "voice": "measured, numeric, protective of the combined ratio"
+    },
+    {
+      "favourite_phrases": [
+        "the central estimate",
+        "on an undiscounted basis"
+      ],
+      "id": "PERSONA-CHIEF-ACTUARY",
+      "label": "Chief Actuary",
+      "optimism": -0.2,
+      "political_awareness": 0.3,
+      "risk_tolerance": -0.6,
+      "sentence_complexity": "high",
+      "technical_depth": "high",
+      "traits": {},
+      "voice": "formal, insistent on the full central estimate"
+    },
+    {
+      "favourite_phrases": [
+        "actual versus expected",
+        "development pattern"
+      ],
+      "id": "PERSONA-RESERVING-ACTUARY",
+      "label": "Reserving actuary",
+      "optimism": -0.2,
+      "political_awareness": 0.2,
+      "risk_tolerance": -0.5,
+      "sentence_complexity": "high",
+      "technical_depth": "high",
+      "traits": {},
+      "voice": "precise, methodology-first, cautious"
+    },
+    {
+      "favourite_phrases": [
+        "case reserve",
+        "claims closed"
+      ],
+      "id": "PERSONA-CLAIMS",
+      "label": "Claims director",
+      "optimism": 0.0,
+      "political_awareness": 0.2,
+      "risk_tolerance": 0.0,
+      "sentence_complexity": "medium",
+      "technical_depth": "medium",
+      "traits": {},
+      "voice": "operational, case-level, terse"
+    },
+    {
+      "favourite_phrases": [
+        "as booked",
+        "per policy"
+      ],
+      "id": "PERSONA-INS-CONTROLLER",
+      "label": "Group Financial Controller",
+      "optimism": -0.2,
+      "political_awareness": 0.4,
+      "risk_tolerance": -0.4,
+      "sentence_complexity": "high",
+      "technical_depth": "low",
+      "traits": {},
+      "voice": "precise, procedural, deadline-driven"
+    },
+    {
+      "favourite_phrases": [
+        "control objective",
+        "we uphold the finding"
+      ],
+      "id": "PERSONA-INS-AUDIT",
+      "label": "Internal audit",
+      "optimism": -0.3,
+      "political_awareness": 0.5,
+      "risk_tolerance": -0.8,
+      "sentence_complexity": "high",
+      "technical_depth": "low",
+      "traits": {},
+      "voice": "formal, control-oriented, conclusive"
+    }
+  ],
+  "recipe": {
+    "annual_revenue": null,
+    "archetype": "pack:healwell-healthcare-group",
+    "employees": null,
+    "locale": "australia",
+    "lore_claims": [
+      {
+        "assertion": "The market is fragmented and no rival holds price discipline. Promotional activity is continuous, so margin erosion is the normal state rather than an event to be explained.",
+        "constrains": [
+          {
+            "effect": "Promotional depth is a standing board metric, not an exception report",
+            "kind": "metric_emphasis",
+            "magnitude": 1.0,
+            "target": "promotional_depth"
+          }
+        ],
+        "kind": "constraint",
+        "source": "competition:fragmented"
+      }
+    ],
+    "pack": {
+      "annual_revenue": 1800,
+      "artifact_types": [],
+      "base": "insurance",
+      "company_name": "Healwell Healthcare Group",
+      "currency": "AUD",
+      "currency_unit": "millions",
+      "description": "A mid-size private hospital group in Australia, providing acute care across multiple campuses with emergency, surgical, and pathology services. Multi-site operation with mixed public and private patient streams.",
+      "employees": 3500,
+      "episode_text": {},
+      "evaluation_text": {},
+      "fiscal_year_start_month": 7,
+      "headquarters": "Melbourne, Australia",
+      "industry": "Private healthcare and hospital services",
+      "lore": [],
+      "name": "healwell-healthcare-group",
+      "name_pools": {
+        "family": [
+          "Achterberg",
+          "Faulkner-Reyes",
+          "Venkataraghavan",
+          "Oyelaran",
+          "Draeger",
+          "Bergqvist",
+          "Nwachukwu-Hall",
+          "Lindqvist",
+          "Abenov",
+          "Vandermolen",
+          "Mbatha",
+          "Demirsoy",
+          "Okonkwo",
+          "Sandoval-Klein",
+          "Ferreira-Osei",
+          "Costa-Braithwaite",
+          "Aasland",
+          "Eze-Whitfield",
+          "Ramaswamy",
+          "Trbojevic",
+          "Kaczmarek",
+          "Olubunmi",
+          "Haverkamp",
+          "Szczepanski",
+          "Mwangi-Turner",
+          "Delacroix",
+          "Bhattacharya",
+          "Nakamura-Wells",
+          "Petrosyan",
+          "Ojukwu",
+          "Lindegaard",
+          "Rasmussen",
+          "Adeyemi",
+          "Kowalczyk",
+          "Fitzmaurice",
+          "Sarkisian",
+          "Vukovi\u0107",
+          "Anand-Pereira",
+          "Halvorsen",
+          "Ntuli"
+        ],
+        "given": [
+          "Rosalind",
+          "Desmond",
+          "Priya",
+          "Marguerite",
+          "Callum",
+          "Sunniva",
+          "Adaeze",
+          "Tobias",
+          "Yerlan",
+          "Ilse",
+          "Ezekiel",
+          "Havva",
+          "Rafferty",
+          "Beatriz",
+          "Nikolai",
+          "Wilhelmina",
+          "Grethe",
+          "Chidubem",
+          "Solveig",
+          "Anselm",
+          "Mireille",
+          "Tarquin",
+          "Oleksandra",
+          "Bartholomew",
+          "Naledi",
+          "Fionnuala",
+          "Kwabena",
+          "Isaura",
+          "Dmitri",
+          "Yolanda",
+          "Emeka",
+          "Signe",
+          "Rustam",
+          "Perpetua",
+          "Lachlan",
+          "Zerlina",
+          "Osman",
+          "Brigid",
+          "Takoda",
+          "Annelies"
+        ]
+      },
+      "regions": [
+        "NSW",
+        "VIC",
+        "QLD",
+        "WA",
+        "SA",
+        "TAS",
+        "ACT",
+        "NT"
+      ],
+      "seasonality": null,
+      "system_brands": {},
+      "units": [
+        {
+          "categories": [
+            {
+              "margin": 0.08,
+              "name": "Motor",
+              "share": 0.55
+            },
+            {
+              "margin": 0.1,
+              "name": "Home",
+              "share": 0.35
+            },
+            {
+              "margin": 0.05,
+              "name": "Travel",
+              "share": 0.1
+            }
+          ],
+          "key": "personal",
+          "kind": "personal_lines",
+          "name": "Personal Lines",
+          "share": 0.55,
+          "site_formats": [
+            {
+              "count": 20,
+              "name": "Branch",
+              "revenue_weight": 1.0
+            },
+            {
+              "count": 3,
+              "name": "Claims Centre",
+              "revenue_weight": 0.0
+            }
+          ]
+        },
+        {
+          "categories": [
+            {
+              "margin": 0.03,
+              "name": "Public and Products Liability",
+              "share": 0.3
+            },
+            {
+              "margin": 0.09,
+              "name": "Commercial Property",
+              "share": 0.45
+            },
+            {
+              "margin": 0.04,
+              "name": "Professional Indemnity",
+              "share": 0.25
+            }
+          ],
+          "key": "commercial",
+          "kind": "commercial_lines",
+          "name": "Commercial Lines",
+          "share": 0.35,
+          "site_formats": [
+            {
+              "count": 6,
+              "name": "Underwriting Office",
+              "revenue_weight": 2.0
+            }
+          ]
+        },
+        {
+          "categories": [],
+          "key": "investments",
+          "kind": "investments",
+          "name": "Group Investments",
+          "share": 0.1,
+          "site_formats": []
+        }
+      ],
+      "voices": {}
+    },
+    "physics": {
+      "retail.margin.erosion": {
+        "high": 0.065,
+        "kind": "number",
+        "low": 0.02,
+        "places": 4
+      }
+    },
+    "role_table": [
+      [
+        "ceo",
+        "Group Chief Executive Officer",
+        "Executive",
+        null
+      ],
+      [
+        "audit",
+        "Chief Internal Auditor",
+        "Audit",
+        "ceo"
+      ],
+      [
+        "cfo",
+        "Group Chief Financial Officer",
+        "Finance",
+        "ceo"
+      ],
+      [
+        "chief_actuary",
+        "Chief Actuary",
+        "Actuarial",
+        "ceo"
+      ],
+      [
+        "claims_director",
+        "Claims Director",
+        "Claims",
+        "ceo"
+      ],
+      [
+        "financial_controller",
+        "Group Financial Controller",
+        "Finance",
+        "audit"
+      ],
+      [
+        "reserving_actuary",
+        "Reserving Actuary",
+        "Actuarial",
+        "cfo"
+      ],
+      [
+        "role_001",
+        "Head of Actuarial",
+        "Actuarial",
+        "chief_actuary"
+      ],
+      [
+        "role_002",
+        "Head of Claims",
+        "Claims",
+        "claims_director"
+      ],
+      [
+        "role_003",
+        "Head of Audit",
+        "Audit",
+        "audit"
+      ],
+      [
+        "role_004",
+        "Head of Executive",
+        "Executive",
+        "cfo"
+      ],
+      [
+        "role_005",
+        "Head of Finance",
+        "Finance",
+        "chief_actuary"
+      ],
+      [
+        "role_006",
+        "Head of Actuarial",
+        "Actuarial",
+        "claims_director"
+      ],
+      [
+        "role_007",
+        "Head of Claims",
+        "Claims",
+        "audit"
+      ],
+      [
+        "role_008",
+        "Head of Audit",
+        "Audit",
+        "cfo"
+      ],
+      [
+        "role_009",
+        "Head of Executive",
+        "Executive",
+        "chief_actuary"
+      ],
+      [
+        "role_010",
+        "Head of Finance",
+        "Finance",
+        "claims_director"
+      ],
+      [
+        "role_011",
+        "Head of Actuarial",
+        "Actuarial",
+        "audit"
+      ],
+      [
+        "role_012",
+        "Head of Claims",
+        "Claims",
+        "cfo"
+      ],
+      [
+        "role_013",
+        "Head of Audit",
+        "Audit",
+        "chief_actuary"
+      ],
+      [
+        "role_014",
+        "Head of Executive",
+        "Executive",
+        "claims_director"
+      ],
+      [
+        "role_015",
+        "Manager, Finance",
+        "Finance",
+        "financial_controller"
+      ],
+      [
+        "role_016",
+        "Manager, Actuarial",
+        "Actuarial",
+        "reserving_actuary"
+      ],
+      [
+        "role_017",
+        "Manager, Claims",
+        "Claims",
+        "role_001"
+      ],
+      [
+        "role_018",
+        "Manager, Audit",
+        "Audit",
+        "role_002"
+      ],
+      [
+        "role_019",
+        "Manager, Executive",
+        "Executive",
+        "role_003"
+      ],
+      [
+        "role_020",
+        "Manager, Finance",
+        "Finance",
+        "role_004"
+      ],
+      [
+        "role_021",
+        "Manager, Actuarial",
+        "Actuarial",
+        "role_005"
+      ],
+      [
+        "role_022",
+        "Manager, Claims",
+        "Claims",
+        "role_006"
+      ],
+      [
+        "role_023",
+        "Manager, Audit",
+        "Audit",
+        "role_007"
+      ],
+      [
+        "role_024",
+        "Manager, Executive",
+        "Executive",
+        "role_008"
+      ],
+      [
+        "role_025",
+        "Manager, Finance",
+        "Finance",
+        "role_009"
+      ],
+      [
+        "chief_medical",
+        "Chief Medical Officer",
+        "Executive",
+        "ceo"
+      ],
+      [
+        "chief_operations",
+        "Chief Operations Officer",
+        "Executive",
+        "ceo"
+      ]
+    ],
+    "seed": 8128,
+    "steps": [
+      {
+        "period": "2026-01",
+        "scenario": "QuarterlyReserving"
+      }
+    ]
+  },
+  "schema_version": 1,
+  "seed": 8128,
+  "services": [],
+  "sites": [
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0001",
+      "name": "Branch NSW 001",
+      "opened": "2013",
+      "region": "NSW",
+      "revenue_weight": 0.6587
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0002",
+      "name": "Branch VIC 002",
+      "opened": "2007",
+      "region": "VIC",
+      "revenue_weight": 0.7815
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0003",
+      "name": "Branch QLD 003",
+      "opened": "2005",
+      "region": "QLD",
+      "revenue_weight": 0.8881
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0004",
+      "name": "Branch WA 004",
+      "opened": "2017",
+      "region": "WA",
+      "revenue_weight": 1.3599
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0005",
+      "name": "Branch SA 005",
+      "opened": "2024",
+      "region": "SA",
+      "revenue_weight": 1.0364
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0006",
+      "name": "Branch TAS 006",
+      "opened": "1999",
+      "region": "TAS",
+      "revenue_weight": 1.3752
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0007",
+      "name": "Branch ACT 007",
+      "opened": "2010",
+      "region": "ACT",
+      "revenue_weight": 0.6771
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0008",
+      "name": "Branch NT 008",
+      "opened": "2003",
+      "region": "NT",
+      "revenue_weight": 0.9382
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0009",
+      "name": "Branch NSW 009",
+      "opened": "2004",
+      "region": "NSW",
+      "revenue_weight": 1.2297
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0010",
+      "name": "Branch VIC 010",
+      "opened": "2019",
+      "region": "VIC",
+      "revenue_weight": 0.6904
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0011",
+      "name": "Branch QLD 011",
+      "opened": "2015",
+      "region": "QLD",
+      "revenue_weight": 0.8453
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0012",
+      "name": "Branch WA 012",
+      "opened": "2021",
+      "region": "WA",
+      "revenue_weight": 1.167
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0013",
+      "name": "Branch SA 013",
+      "opened": "2024",
+      "region": "SA",
+      "revenue_weight": 0.9953
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0014",
+      "name": "Branch TAS 014",
+      "opened": "2009",
+      "region": "TAS",
+      "revenue_weight": 0.7063
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0015",
+      "name": "Branch ACT 015",
+      "opened": "2013",
+      "region": "ACT",
+      "revenue_weight": 1.0425
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0016",
+      "name": "Branch NT 016",
+      "opened": "2019",
+      "region": "NT",
+      "revenue_weight": 1.3741
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0017",
+      "name": "Branch NSW 017",
+      "opened": "1999",
+      "region": "NSW",
+      "revenue_weight": 1.3192
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0018",
+      "name": "Branch VIC 018",
+      "opened": "2013",
+      "region": "VIC",
+      "revenue_weight": 1.0208
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0019",
+      "name": "Branch QLD 019",
+      "opened": "2011",
+      "region": "QLD",
+      "revenue_weight": 0.6571
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Branch",
+      "id": "SITE-0020",
+      "name": "Branch WA 020",
+      "opened": "2000",
+      "region": "WA",
+      "revenue_weight": 1.3605
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Claims Centre",
+      "id": "SITE-0021",
+      "name": "Claims Centre NSW 001",
+      "opened": "2006",
+      "region": "NSW",
+      "revenue_weight": 0.0
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Claims Centre",
+      "id": "SITE-0022",
+      "name": "Claims Centre VIC 002",
+      "opened": "2008",
+      "region": "VIC",
+      "revenue_weight": 0.0
+    },
+    {
+      "business_unit_id": "BU-0001",
+      "format": "Claims Centre",
+      "id": "SITE-0023",
+      "name": "Claims Centre QLD 003",
+      "opened": "2016",
+      "region": "QLD",
+      "revenue_weight": 0.0
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "format": "Underwriting Office",
+      "id": "SITE-0024",
+      "name": "Underwriting Office NSW 001",
+      "opened": "2009",
+      "region": "NSW",
+      "revenue_weight": 2.4647
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "format": "Underwriting Office",
+      "id": "SITE-0025",
+      "name": "Underwriting Office VIC 002",
+      "opened": "2009",
+      "region": "VIC",
+      "revenue_weight": 2.4659
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "format": "Underwriting Office",
+      "id": "SITE-0026",
+      "name": "Underwriting Office QLD 003",
+      "opened": "2001",
+      "region": "QLD",
+      "revenue_weight": 1.4404
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "format": "Underwriting Office",
+      "id": "SITE-0027",
+      "name": "Underwriting Office WA 004",
+      "opened": "2004",
+      "region": "WA",
+      "revenue_weight": 1.3787
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "format": "Underwriting Office",
+      "id": "SITE-0028",
+      "name": "Underwriting Office SA 005",
+      "opened": "2003",
+      "region": "SA",
+      "revenue_weight": 1.9588
+    },
+    {
+      "business_unit_id": "BU-0002",
+      "format": "Underwriting Office",
+      "id": "SITE-0029",
+      "name": "Underwriting Office TAS 006",
+      "opened": "2019",
+      "region": "TAS",
+      "revenue_weight": 1.4029
+    }
+  ],
+  "systems": [
+    {
+      "id": "SYS-0001",
+      "is_system_of_record_for": [
+        "policies"
+      ],
+      "name": "Underwrite Direct",
+      "owner_id": "PERSON-0011",
+      "purpose": "Policy administration: quotes, binds, and renews cover"
+    },
+    {
+      "id": "SYS-0002",
+      "is_system_of_record_for": [
+        "claims_paid",
+        "claims_incurred"
+      ],
+      "name": "Resolve Claims Platform",
+      "owner_id": "PERSON-0005",
+      "purpose": "Claims management: notification through to settlement"
+    },
+    {
+      "id": "SYS-0003",
+      "is_system_of_record_for": [
+        "reserve_estimates"
+      ],
+      "name": "Provision Analytics",
+      "owner_id": "PERSON-0004",
+      "purpose": "Actuarial reserving platform: cohort triangles and estimates"
+    },
+    {
+      "id": "SYS-0004",
+      "is_system_of_record_for": [
+        "general_ledger",
+        "financial_reporting"
+      ],
+      "name": "Ledgerbase",
+      "owner_id": "PERSON-0011",
+      "purpose": "General ledger: booked reserves and the close"
+    },
+    {
+      "id": "SYS-0005",
+      "is_system_of_record_for": [
+        "reinsurance_treaties"
+      ],
+      "name": "Treaty Ledger",
+      "owner_id": "PERSON-0005",
+      "purpose": "Reinsurance register: treaties and cessions"
+    }
+  ],
+  "worldloom": "0.1.0"
+}
