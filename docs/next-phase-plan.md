@@ -97,6 +97,25 @@ cannot tune a new vertical's physics at all), `landscape.LANDSCAPES`,
 silently), and the package-import registration. Each is a closed literal with
 its consequence already visible in the procurement modules' comments.
 
+## Engine vs LOB — the distinction, settled
+
+An **engine is an industry frame**: what the company sells, its physics
+ranges, its regulatory episodes, its evaluation families. A **LOB is a
+function** — roles, responsibilities, episodes — attachable to *any* engine.
+Finance, HR and procurement are standard LOBs every industry has; claims and
+underwriting are vertical LOBs an insurer's engine ships.
+
+Procurement is today both an engine and a standard-library LOB, which is the
+conflation made visible. The engine was the right vehicle for proving the
+registration seams and the three-way match; the destination is different:
+once the EpisodeRunner lands, procurement's cycle (PO → GRN → invoice →
+match → accrual) becomes an *episode contributed by the procurement LOB*,
+running inside any engine's world, its GRNI accrual feeding that engine's
+own close — which is what "composes with finance" always meant. The
+procurement engine then either retires or shrinks to a demo. No new
+business function should ever be built as an engine again: engines are for
+industries, LOBs are for functions, and a LOB's episodes ride the grammar.
+
 ## Phase 4 — the proof
 
 A harness authors an industry this repo has never modelled — a hospital, an
