@@ -21,7 +21,7 @@ import pytest
 
 from worldloom import BankingWorld, RetailWorld, World, graphs
 from worldloom.banking_scenarios import QuarterlyCapitalReturn
-from worldloom.scenarios import MonthEndClose
+from worldloom.scenarios import MonthEndClose, StructuralChange
 
 SEED = 8128
 
@@ -157,6 +157,44 @@ def test_the_reading_is_stable_across_runs(world: World) -> None:
         MonthEndClose(period="2026-03", include_operational_incident=True)
     )
     assert graphs.analyse(again).as_dict() == graphs.analyse(world).as_dict()
+
+
+def test_topology_defaults_to_the_current_estate_and_keeps_history_queryable() -> None:
+    base = RetailWorld(seed=SEED).build()
+    initial_systems, initial_services = len(base.systems), len(base.services)
+    changed = base.run(MonthEndClose("2026-01", include_operational_incident=False))
+    changed = changed.run(StructuralChange(
+        "2026-01",
+        len(base.business_units), len(base.sites),
+        initial_systems + 2, initial_services + 3,
+    ))
+    growth_at = [
+        event.occurred_at for event in changed.events
+        if event.kind == "structural_estate_changed"
+    ][0]
+    changed = changed.run(MonthEndClose("2026-02", include_operational_incident=False))
+    changed = changed.run(StructuralChange(
+        "2026-02",
+        len(base.business_units), len(base.sites),
+        initial_systems, initial_services,
+    ))
+
+    current = graphs.analyse(changed)
+    historical = graphs.analyse(changed, at=growth_at)
+    all_time = graphs.analyse(changed, at=None)
+
+    assert len(current.services) == initial_systems + initial_services
+    assert len(historical.services) == initial_systems + initial_services + 5
+    assert len(all_time.services) == len(changed.systems) + len(changed.services)
+    expected_current = {
+        entity.id
+        for collection in (
+            changed.systems_at("2100-01-01"),
+            changed.services_at("2100-01-01"),
+        )
+        for entity in collection
+    }
+    assert {rank.id for rank in current.services} == expected_current
 
 
 def test_a_provenance_graph_falls_back_to_intents(world: World) -> None:

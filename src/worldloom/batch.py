@@ -85,35 +85,71 @@ class Checkpoint:
         self.path = out / ".worldloom" / "checkpoints" / f"world-{world_index:06d}.jsonl"
         self._lock = threading.Lock()
 
+    def _complete_prefix(self) -> bytes:
+        """Return complete newline-framed records and discard a torn tail.
+
+        Every successful append ends in ``\n``.  Its absence is therefore an
+        unambiguous interrupted write, not a malformed committed record.  The
+        tail is truncated before another append can join onto it; terminated
+        malformed rows remain untouched and are rejected by :meth:`load`.
+        The checkpoint consequently has WAL semantics: a crash may lose the
+        record being written, never an earlier durable acceptance.
+        """
+        if not self.path.exists():
+            return b""
+        payload = self.path.read_bytes()
+        if not payload or payload.endswith(b"\n"):
+            return payload
+        complete = payload.rfind(b"\n") + 1
+        with self.path.open("r+b") as handle:
+            handle.truncate(complete)
+            handle.flush()
+            os.fsync(handle.fileno())
+        return payload[:complete]
+
     def load(self) -> tuple[GenerationLedgerEntry, ...]:
         if not self.path.exists():
             return ()
-        by_key: dict[str, GenerationLedgerEntry] = {}
-        for number, line in enumerate(self.path.read_text(encoding="utf-8").splitlines(), start=1):
-            if not line.strip():
-                continue
-            try:
-                entry = GenerationLedgerEntry.model_validate_json(line)
-            except Exception as exc:
-                raise ValueError(
-                    f"invalid narration checkpoint {self.path}:{number}: {exc}"
-                ) from exc
-            existing = by_key.get(entry.key)
-            if existing is not None and existing != entry:
-                raise ValueError(
-                    f"checkpoint {self.path} contains conflicting rows for {entry.key}"
-                )
-            by_key[entry.key] = entry
+        with self._lock:
+            records = self._complete_prefix().splitlines()
+            by_key: dict[str, GenerationLedgerEntry] = {}
+            for number, record in enumerate(records, start=1):
+                if not record.strip():
+                    continue
+                try:
+                    entry = GenerationLedgerEntry.model_validate_json(record)
+                except Exception as exc:
+                    raise ValueError(
+                        f"invalid narration checkpoint {self.path}:{number}: {exc}"
+                    ) from exc
+                existing = by_key.get(entry.key)
+                if existing is not None and existing != entry:
+                    raise ValueError(
+                        f"checkpoint {self.path} contains conflicting rows for {entry.key}"
+                    )
+                by_key[entry.key] = entry
         return tuple(by_key.values())
 
     def append(self, entry: GenerationLedgerEntry) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = entry.model_dump_json() + "\n"
+        payload = (entry.model_dump_json() + "\n").encode("utf-8")
         with self._lock:
-            with self.path.open("a", encoding="utf-8") as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
+            # Repair a prior interrupted append even when a caller resumes by
+            # appending directly rather than calling ``load`` first.
+            self._complete_prefix()
+            descriptor = os.open(
+                self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644
+            )
+            try:
+                written = 0
+                while written < len(payload):
+                    count = os.write(descriptor, payload[written:])
+                    if count == 0:  # defensive: a regular file must progress
+                        raise OSError("checkpoint append wrote zero bytes")
+                    written += count
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
 
 
 class ShardState:

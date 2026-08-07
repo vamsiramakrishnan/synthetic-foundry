@@ -1031,6 +1031,14 @@ class Hire:
         roles = dict(world._roles)
         at = _period_boundary(self.period)
 
+        active = len(world.org_at(at))
+        if active >= world.company.employees_total:
+            raise ValueError(
+                f"cannot hire into a workforce of {world.company.employees_total:,}:"
+                f" all {active:,} employee places are already occupied by named"
+                " people. Increase aggregate headcount or depart somebody first."
+            )
+
         # The role table is a mixed index — people, but also systems, services,
         # access policies and cost centres — and `world.extend` merges the
         # `roles` returned below over it. So a hire into a key that is already

@@ -68,6 +68,12 @@ if TYPE_CHECKING:  # pragma: no cover
 #: there were more.
 CYCLE_LIMIT = 16
 
+#: Omitted ``at`` means the estate operating now.  ``None`` remains the
+#: explicit all-time row set used by corpus-wide validation.  A sentinel is
+#: required because those are different questions and ``None`` was the old
+#: spelling of the latter.
+_CURRENT = object()
+
 
 # ---------------------------------------------------------------------------
 # Building the graphs
@@ -97,7 +103,7 @@ def _ordered(nodes: list[tuple[str, dict[str, Any]]],
     return graph
 
 
-def dependency_graph(world: World, at: Any = None) -> nx.DiGraph:
+def dependency_graph(world: World, at: Any = _CURRENT) -> nx.DiGraph:
     """Services and the systems they run on, as a dependency graph.
 
     **Edge direction is ``dependent -> dependency``**, which reads the way the
@@ -112,8 +118,15 @@ def dependency_graph(world: World, at: Any = None) -> nx.DiGraph:
     that matters most: two services whose only relationship is that they read
     the same system of record.
     """
-    systems = world.systems if at is None else world.systems_at(at)
-    services = world.services if at is None else world.services_at(at)
+    if at is _CURRENT:
+        systems = tuple(system for system in world.systems if system.retired is None)
+        services = tuple(service for service in world.services if service.retired is None)
+    elif at is None:
+        systems = world.systems
+        services = world.services
+    else:
+        systems = world.systems_at(at)
+        services = world.services_at(at)
     nodes: list[tuple[str, dict[str, Any]]] = []
     edges: list[tuple[str, str]] = []
 
@@ -382,7 +395,7 @@ class ServiceRank:
         return (-self.blast_radius, -self.fan_in, self.tier, self.id)
 
 
-def criticality(world: World) -> tuple[ServiceRank, ...]:
+def criticality(world: World, at: Any = _CURRENT) -> tuple[ServiceRank, ...]:
     """Every service and system, ranked by how much of the estate it carries.
 
     The ranking is *derived*, and that is the point of having it: an archetype
@@ -391,7 +404,7 @@ def criticality(world: World) -> tuple[ServiceRank, ...]:
     on is either a mis-declared tier or an architecture nobody has looked at,
     and both are findings.
     """
-    graph = dependency_graph(world)
+    graph = dependency_graph(world, at=at)
     ranks: list[ServiceRank] = []
     gated = dict(chokepoints(graph))
     for node in sorted(graph):
@@ -497,9 +510,13 @@ def _hops(chain: tuple[str, ...]) -> int:
     return max(0, len(chain) - 1)
 
 
-def analyse(world: World) -> Topology:
-    """Read every graph in *world* once."""
-    dependencies = dependency_graph(world)
+def analyse(world: World, at: Any = _CURRENT) -> Topology:
+    """Read every graph in *world* once, using the current operating estate.
+
+    Pass a timestamp for a historical cut or ``None`` for every lifecycle row.
+    Provenance and supersession remain historical ledgers by definition.
+    """
+    dependencies = dependency_graph(world, at=at)
     reporting = reporting_graph(world)
     provenance = provenance_graph(world)
     supersession = supersession_graph(world)
@@ -517,7 +534,7 @@ def analyse(world: World) -> Topology:
 
     provenance_chain = longest_chain(provenance)
     return Topology(
-        services=criticality(world),
+        services=criticality(world, at=at),
         chokepoints=chokepoints(dependencies),
         longest_dependency_chain=longest_chain(dependencies),
         dependency_cycles=cycles(dependencies),

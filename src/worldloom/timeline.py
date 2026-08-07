@@ -475,9 +475,16 @@ def review(timeline: Timeline, roster: Roster) -> list[Rejection]:
                 refuse(subject, "no_function",
                        "a new post needs a function; succession, cost centre"
                        " and persona are all decided from it.")
+            if modelled_headcount >= headcount:
+                refuse(subject, "hire_exceeds_headcount",
+                       f"the company states {headcount:,} employees and all"
+                       f" {modelled_headcount:,} places are already occupied by"
+                       " named employees. A hire may fill aggregate capacity;"
+                       " it may not make the roster larger than the workforce.")
+            else:
+                modelled_headcount += 1
             bound.add(key)
             held.add(key)
-            modelled_headcount += 1
             unit_by_role[key] = unit_key
             # The new post reports to the unit's MD by construction (see
             # `Hire.run`), so that role now has a direct report and can be
@@ -1104,7 +1111,21 @@ def sample(
     if wanted:
         unit_rng = rng.derive("openings")
         placed = _spread(periods, wanted, skip=_PHASE["hires"])
-        for index, opening in zip(placed, openings[:wanted], strict=True):
+        proposed = dict(zip(placed, openings[:wanted], strict=True))
+        aggregate = roster.employees_total
+        active = roster.modelled_headcount
+        for index in range(periods):
+            # Apply the changes already scheduled at this boundary in their
+            # execution order. Departures create named-roster capacity;
+            # WorkforceChange changes the authoritative ceiling.
+            for step in changes.get(index, ()):
+                if isinstance(step, WorkforceChange):
+                    aggregate = step.headcount
+                elif isinstance(step, Departure):
+                    active = max(0, active - 1)
+            opening = proposed.get(index)
+            if opening is None or active >= aggregate:
+                continue
             unit_key = opening.unit_key
             if unit_key is None:
                 if not roster.unit_keys:
@@ -1117,6 +1138,7 @@ def sample(
                 period=stamps[index], role_key=opening.role_key, title=opening.title,
                 function=opening.function, unit_key=unit_key,
             ))
+            active += 1
 
     steps: list[Any] = []
     for index, stamp in enumerate(stamps):
