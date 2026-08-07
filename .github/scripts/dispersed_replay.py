@@ -125,6 +125,19 @@ def _candidates() -> tuple[Configuration, ...]:
         # ``estate=None`` rather than silently serving another vertical's names.
         if candidate.estate is not None and candidate.engine not in landscape.LANDSCAPES:
             continue
+        # ``worldloom build`` currently accepts multi-period histories only for
+        # the retail close.  Registered single-episode verticals deliberately
+        # refuse ``--periods > 1`` until their carry-forward grammar exists.
+        # Sampling commands the CLI promises to reject tests argument
+        # validation, not replay determinism, and can fail before a corpus is
+        # available to compare.
+        registered = domains.by_name(candidate.engine)
+        if (
+            registered is not None
+            and registered.single_episode is not None
+            and candidate.periods > 1
+        ):
+            continue
         if candidate not in seen:
             seen.add(candidate)
             candidates.append(candidate)
