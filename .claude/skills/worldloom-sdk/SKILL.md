@@ -29,8 +29,10 @@ field = [base.org(headcount=n, span=s) for n, s in ((18, 4), (31, 8), (25, 6))]
 worlds = [b.build().episodes("2026-01", periods=3) for b in field]
 ```
 
-`sdk.retail()`, `sdk.banking()`, `sdk.insurance()`, or `sdk.engine(name)` for
-anything registered. Then:
+`sdk.company(name)` is the registry-driven front door (`retail`, `banking`,
+`insurance`, `procurement`, or anything installed). `sdk.retail()`,
+`sdk.banking()`, and `sdk.insurance()` remain conveniences for existing callers.
+Then:
 
 | method | what it sets |
 |---|---|
@@ -40,6 +42,12 @@ anything registered. Then:
 | `.estate(size, vocabulary=)` | technology landscape: `small`/`medium`/`large` |
 | `.physics(retail_margin_erosion=(0.10, 0.15))` | any registry range; underscores stand for dots |
 | `.staff(n)` | the company's stated headcount, which is not the same claim as how many people the corpus names |
+| `.revenue(n)` | annual revenue in the archetype's own currency unit |
+| `.located(locale)` | the jurisdiction and corpus-wide figure grammar |
+| `.facets(listing="listed", maturity="legacy")` | operational company claims and their implemented consequences |
+| `.master_data(vendors=, customers=, skus=)` | deterministic relational reference tables |
+| `.pack(source)` | authored identity, shape, lore, voices and geography |
+| `.lob(spec, bind=...)` | an authored line of business and process-slot bindings |
 | `.archetype(key)` | a specific archetype rather than the domain's default |
 
 `.describe()` returns what a blueprint says without building it. Use it to

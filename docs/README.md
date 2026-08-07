@@ -1,25 +1,104 @@
-# Worldloom design documents
+# Worldloom documentation
 
-Worldloom is being implemented as a deterministic, library-first harness. These documents are the architectural contracts for what has landed and what comes next.
+Worldloom is a deterministic, library-first compiler for synthetic enterprise
+corpora. The documentation is organized by the job being done, not by the source
+tree.
+
+## Choose a path
+
+| Goal | Start here | Then read |
+| --- | --- | --- |
+| Build one corpus | [README quickstart](../README.md#quickstart-one-coherent-enterprise) | [Architecture and invariants](architecture.md) |
+| Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
+| Use Worldloom from Python | [Python SDK](sdk.md) | [Episode grammar](episode-grammar.md) |
+| Drive Worldloom with a coding agent | [Agent skills](skills.md) | [AGENTS.md](../AGENTS.md) |
+| Add a company-specific vocabulary | [Lore](lore.md) | [Generation model](generation-model.md) |
+| Add an artifact type | [Artifact compiler](artifact-compiler.md) | [Episode grammar](episode-grammar.md) |
+| Add a process or vertical | [Episode grammar](episode-grammar.md) | [Build order](build-order.md) and [Actor simulation](actor-simulation.md) |
+| Look up an exact CLI flag | [Generated command reference](../.claude/skills/worldloom/references/commands.md) | The relevant workflow guide above |
+
+## System map
+
+```text
+                         AUTHORING TIME
+        +------------------------------------------------+
+        | company spec | pack | facets | lore | process |
+        +------------------------+-----------------------+
+                                 |
+                                 v
+                         DETERMINISTIC CORE
+        +------------------------------------------------+
+        | world | graph | events | facts | access | evals|
+        +------------------------+-----------------------+
+                                 |
+                       intents + bounded requests
+                                 |
+                                 v
+                         AGENT HANDSHAKES
+        +------------------------------------------------+
+        | plan | act | narrate | compose | probe         |
+        +------------------------+-----------------------+
+                                 |
+                           accepted ledger
+                                 |
+                                 v
+                         ARTIFACT COMPILER
+        +------------------------------------------------+
+        | ArtifactIR | cohesion | style | components     |
+        +------------------------+-----------------------+
+                                 |
+                                 v
+        +---------+---------+---------+---------+--------+
+        | XLSX    | DOCX    | PPTX    | PDF     | JSONL  |
+        | Markdown| Jira    | Confluence       | SNOW    |
+        +---------+---------+---------+---------+--------+
+```
+
+The deterministic core owns correctness. Agent handshakes own judgement under a
+bounded contract. Renderers own presentation. No layer is allowed to re-decide a
+fact owned by an earlier layer.
+
+## Operator guides
+
+- [Architecture and invariants](architecture.md) explains the thin waist, fact
+  ownership, artifact cohesion, temporal semantics, replay, and independent
+  validation.
+- [Enterprise corpus generation](enterprise-corpus.md) is the production
+  runbook for histories, structured and unstructured projections, mosaics,
+  deterministic sharding, checkpoints, resume, and acceptance gates.
+- [Python SDK](sdk.md) documents immutable blueprints, combinators, measurements,
+  scenarios, queries, rendering, and the CLI/SDK boundary.
+- [Agent skills](skills.md) explains the stage commands and specialist skills
+  shipped in `.claude/`, including how another terminal-capable harness uses the
+  same protocols.
+
+## Architecture references
+
+These documents preserve design rationale and extension contracts:
 
 | Document | Answers |
 | --- | --- |
-| [build-order.md](build-order.md) | What gets built, in what order, what has landed, and what gate each step must pass |
-| [generation-model.md](generation-model.md) | Which engine owns what, across all twenty generation areas |
-| [lore.md](lore.md) | What lore is as a data structure, and how lore generators are authored |
-| [artifact-compiler.md](artifact-compiler.md) | How one resolved ArtifactIR becomes diverse PPTX, DOCX, XLSX, and PDF outputs through components, grammars, constraints, validation, and bounded repair |
-| [actor-simulation.md](actor-simulation.md) | How role-scoped LLM employees use typed tools to produce events, facts, tasks, and artifact intents without owning canonical truth |
+| [generation-model.md](generation-model.md) | Which engine owns each decision, and why |
+| [lore.md](lore.md) | How historical priors constrain generated state |
+| [artifact-compiler.md](artifact-compiler.md) | How one resolved IR becomes diverse native artifacts without semantic drift |
+| [episode-grammar.md](episode-grammar.md) | How processes declare phases, facts, slots, carry-forward, and lints |
+| [actor-simulation.md](actor-simulation.md) | How employees act on scoped observations through typed tools |
+| [build-order.md](build-order.md) | Why subsystems landed in this order and which gate each must pass |
+| [next-phase-plan.md](next-phase-plan.md) | The process/LOB authoring plan and remaining seams |
+| [design/insurance-reserving.md](design/insurance-reserving.md) | The decision record for the insurance vertical |
 
-Read the build order first. The generation model is the ownership contract. Lore supplies the priors from which a world is derived. The artifact compiler extends the existing renderer boundary without allowing formats or models to invent truth. The actor roadmap comes after the second vertical and executable world-state work; it adds role-driven behaviour without turning Worldloom into an unconstrained multi-agent framework.
+## Documentation reliability
 
-## The five load-bearing decisions
+The exact CLI reference is generated from Typer by `worldloom docs`; it is not
+maintained by hand. CI also parses every command and option in the agent-facing
+documents and verifies that it exists. The documentation index and every new
+operator guide are link-checked locally.
 
-**The generation boundary.** The deterministic engine owns everything that must be *correct* — arithmetic, identity, referential integrity, the graph, the timeline, permissions. The generative engine owns everything that must be *plausible*. Nothing is owned by both. → [generation-model.md](generation-model.md)
+```bash
+worldloom docs --check
+pytest -q tests/test_harness_docs.py
+```
 
-**Determinism survives the LLM.** Every generative call is content-addressed into a generation ledger keyed by seed, call site, input facts, model, and prompt version. `from_seed()` replays the ledger instead of re-prompting, so regeneration is offline and byte-identical. → [generation-model.md](generation-model.md#2-every-generative-call-is-recorded-so-worlds-replay)
-
-**One coherent episode before any subsystem.** The first executable is `worldloom demo retail-close`, producing a bounded corpus whose truth, lineage, evaluations, and cross-format projections can be falsified. → [build-order.md](build-order.md)
-
-**One resolved structure, many native artifacts.** PPTX, DOCX, XLSX, and PDF are compiled from the same `ArtifactIR`. Atomic components, format grammars, layout constraints, and diversity search may change presentation; they may never change facts, tables, formulas, or provenance. → [artifact-compiler.md](artifact-compiler.md)
-
-**Actors change the world only through tools.** LLM employees receive role-scoped observations and may propose typed actions. Policy, permissions, preconditions, and deterministic execution decide whether an action commits an event, fact, task, or artifact intent. Prose alone never mutates state. → [actor-simulation.md](actor-simulation.md)
+When prose and implementation disagree, implementation is not silently treated
+as truth. Either the documentation is stale or the public surface regressed; the
+failing check forces that decision into the change that caused it.
