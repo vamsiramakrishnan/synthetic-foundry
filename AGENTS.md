@@ -816,3 +816,32 @@ requires every command to be documented somewhere.
 Read `docs/build-order.md` before adding a subsystem. It sequences the work and
 states an exit gate for each step, and the ordering is deliberate — several steps
 exist specifically to stop a later one from being built on guesses.
+
+### Checking determinism somewhere other than seed 8128
+
+CI proves byte-identity on four builds at one seed, on every push. That is one
+point of a ten-dimensional configuration space, sampled repeatedly — and this
+repository owns the algorithm for not doing that. `tools/sweep.py` points it at
+our own QA: it enumerates engine × archetype × facets × locale × estate ×
+trading year × periods × messiness × master-data *from the registries*, covers
+the space with `dispersion.halton`, takes the furthest apart with
+`dispersion.farthest_first`, and builds each one twice.
+
+```bash
+python3 tools/sweep.py --describe                    # the axes, building nothing
+python3 tools/sweep.py -n 12                         # twice per config, in separate processes
+python3 tools/sweep.py -n 12 --mode archive          # working tree vs `git archive HEAD`
+python3 tools/sweep.py --seed 8128 -n 12 --only <id> # replay one row exactly
+```
+
+Two processes and not a loop: a second build in the same interpreter inherits
+every module-level registry and cache the first one left behind, which is
+exactly the leakage worth catching and the one thing a single-process
+comparison cannot see. `--mode archive` is the local gate — in a clean CI
+checkout the working tree *is* `HEAD` — and `.github/workflows/determinism-sweep.yml`
+runs the process mode nightly on a rotating seed, so the corners covered move
+over time instead of being the same eight forever. Every run prints its seed and
+each selected configuration, so any failure replays exactly.
+
+It is a tool, not library code: nothing under `src/` imports it and it adds no
+dependency.
