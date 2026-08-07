@@ -9,3 +9,9 @@ venv/
 # Agent worktrees are live workspaces, not content — committing one would land
 # in-progress, unverified work alongside a nested git checkout.
 .claude/worktrees/
+# Hypothesis's example database (tests/test_properties.py). Deliberately not
+# committed: CI must *derive* its counterexamples from the properties, not
+# replay a file somebody's laptop wrote — a checked-in database would make a
+# green run depend on which examples happened to be cached, which is the same
+# reproducibility claim `--replay` makes about a corpus.
+.hypothesis/

@@ -431,7 +431,31 @@ def allocate_scaled(total: float, weights: list[float], *, decimals: int) -> lis
     parts = allocate(units, weights)
     if decimals == 0:
         return [float(part) for part in parts]
-    return [part / scale for part in parts]
+    scaled = [part / scale for part in parts]
+
+    # The exactness above is the *integers*'; this is the return trip. A part
+    # divided by 10^decimals is a decimal fraction, which binary floating point
+    # cannot hold, and `validate` recovers the integer with the inverse
+    # `round(value * scale)` — a recovery that is only lossless while one unit
+    # at `decimals` places is still wider than the float's spacing at that
+    # magnitude. Past roughly 2^51 scaled units it is not, and the parts then
+    # sum exactly as integers and *no longer* as the floats this hands back.
+    #
+    # Refused here, naming the total, rather than left to surface as
+    # `rows_do_not_sum` against a rendered document — a whole pipeline away
+    # from the total that caused it, and phrased as if the rows were at fault.
+    # Found by `tests/test_properties.py`, whose minimal example is
+    # `allocate_scaled(42_413_116_570.0, [1.0, 42.0], decimals=5)`: the second
+    # part lands on 4_142_676_502_186_047 scaled units and comes back one high.
+    if any(round(value * scale) != part for value, part in zip(scaled, parts, strict=True)):
+        raise ValueError(
+            f"total {total!r} at {decimals} decimal places needs {units} scaled"
+            " units, which is past the precision a float can carry back — the"
+            " parts would sum exactly as integers and not as the figures the"
+            " rows print. Declare fewer decimals, or state the total in a"
+            " coarser unit."
+        )
+    return scaled
 
 
 # ---------------------------------------------------------------------------

@@ -85,6 +85,12 @@ all = [
 dev = [
     "pytest>=8.0", "openpyxl>=3.1", "python-docx>=1.1", "reportlab>=4.0",
     "python-pptx>=1.0", "mcp>=1.2",
+    # `tests/test_properties.py`. Dev-only and never imported from `src/`: the
+    # rest of this project's determinism rests on nothing under `src/` drawing
+    # randomness, and Hypothesis draws plenty — seeded, test-side, and
+    # reproducible from its own database, which `.gitignore` keeps out of the
+    # repo so CI derives counterexamples rather than replaying a cached file.
+    "hypothesis>=6.100",
 ]
 
 [project.scripts]
