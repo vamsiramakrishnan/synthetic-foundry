@@ -143,6 +143,7 @@ class QuarterlyCapitalReturn:
             # The archetype's own currency — every RWA and CET1-capital fact
             # used to say "AUD_millions" regardless of what a pack named.
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            calendar=calendar,
             physics=self.physics,
         )
 

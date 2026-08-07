@@ -59,6 +59,7 @@ from .org_builder import (
     founding_milestones,
     mint_people,
     sorted_roles,
+    stated_headcount,
     wire_managers,
 )
 
@@ -251,6 +252,7 @@ def generate(
     # defaulted to Australia so an un-passed locale is byte-identical to before
     # this argument existed. See `organisation.generate`.
     locale: Locale = DEFAULT_LOCALE,
+    employees_total: int | None = None,
     # This module's own `_ROLES`, replaced. `None` means use them, so an
     # unpassed table is byte-identical to before this argument existed.
     #
@@ -510,7 +512,11 @@ def generate(
         fiscal_year_start_month=archetype.fiscal_year_start_month,
         currency=archetype.currency,
         currency_unit=archetype.currency_unit,
-        employees_total=archetype.employees,
+        employees_total=stated_headcount(
+            employees_total,
+            archetype_headcount=archetype.employees,
+            modelled_headcount=len(people),
+        ),
     )
 
     milestones, founding_facts = founding_milestones(minter, lore, company_id)

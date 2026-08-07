@@ -659,6 +659,36 @@ class _Validator:
 
         self.structure()
 
+    def workforce(self) -> None:
+        """Named employees are a subset of the authoritative workforce.
+
+        The company row is the current aggregate; ``org.headcount`` facts are
+        its audited historical snapshots.  Checking both closes the invariant
+        for direct scenario calls, loaded/tampered corpora, and histories where
+        a later departure would otherwise hide a transient over-allocation.
+        """
+        current = sum(person.left is None for person in self._people)
+        self.checks += 1
+        if current > self.world.company.employees_total:
+            self.fail(
+                "organisation", "named_roster_exceeds_headcount", self.world.company.id,
+                f"{current:,} named employees are active but the company states"
+                f" {self.world.company.employees_total:,} total employees",
+            )
+
+        for fact in self._facts.where(kind="org.headcount"):
+            if fact.value is None or fact.value.unit != "employees":
+                continue
+            named = len(self.world.org_at(fact.valid_from))
+            self.checks += 1
+            if fact.value.amount < named:
+                self.fail(
+                    "organisation", "named_roster_exceeds_headcount", fact.id,
+                    f"the workforce snapshot states {fact.value.amount:g} employees"
+                    f" while {named:,} named employees are active at"
+                    f" {fact.valid_from.isoformat()}",
+                )
+
     def structure(self) -> None:
         """The invariants only a graph can see.
 
@@ -690,7 +720,10 @@ class _Validator:
         from . import graphs
 
         for label, graph in (
-            ("service_cycle", graphs.dependency_graph(self.world)),
+            # Validation covers every historical row. User-facing topology
+            # defaults to the active estate, but retirement cannot launder a
+            # cycle that existed in the corpus.
+            ("service_cycle", graphs.dependency_graph(self.world, at=None)),
             ("reporting_cycle", graphs.reporting_graph(self.world)),
             ("provenance_cycle", graphs.provenance_graph(self.world)),
         ):
@@ -1528,6 +1561,7 @@ class _Validator:
 
     def run(self) -> ValidationReport:
         self.referential()
+        self.workforce()
         self.access()
         self.artifact_files()
         self.charts()

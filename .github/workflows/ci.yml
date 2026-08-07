@@ -14,6 +14,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dispersed-replay:
+    # One interpreter, one small rotating sample.  This is deliberately not in
+    # the three-version pytest matrix: byte identity is the property under test,
+    # not compatibility with each supported Python minor.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Dispersed byte-identity replay
+        run: >-
+          python .github/scripts/dispersed_replay.py
+          --run-number "${{ github.run_number }}"
+          --sample-size 3
+          --root "${{ runner.temp }}/dispersed-replay"
+
   test:
     runs-on: ubuntu-latest
     strategy:

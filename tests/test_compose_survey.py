@@ -6,7 +6,7 @@ reader of the shape census) down with a traceback, at *any* size — a
 
 * any banking corpus, on `capital_return`'s "Capital position" sheet;
 * any insurance corpus, on `reserve_triangle_workbook`'s "Book position" sheet;
-* anything built with ``--distractors``, on a stale draft of an `incident_rca`.
+* a malformed stale draft of an `incident_rca`.
 
 Two different defects wearing one symptom, and they are fixed differently, which
 is most of what this file exists to pin.
@@ -18,13 +18,15 @@ That is fixed — the roles now resolve — and `compiler/audit.py` grew a stati
 check so the next such hole is a warning off the declarations rather than a
 traceback three layers downstream.
 
-The third is **not** a hole and is deliberately not "fixed": an `incident_rca`
-labelled ``size_profile="small"`` resolves to six required sections against a
-size-class cap of four, and every available repair is worse than the report.
-Widening the cap deletes the distinction between `small` and `long`; dropping a
-required beat ships a document missing part of its argument. So the composer
-still refuses, and the *commands* carry on and say which artifact refused and
-why — which is the invariant this file spends most of its assertions on.
+The third is **not** a hole: an `incident_rca` labelled
+``size_profile="small"`` resolves to six required sections against a size-class
+cap of four, and every available repair is worse than the report. Widening the
+cap deletes the distinction between `small` and `long`; dropping a required
+beat ships a document missing part of its argument. Real stale drafts now keep
+their final document's size profile, so the fixture below deliberately injects
+the malformed label. The composer still refuses, and the *commands* carry on
+and say which artifact refused and why — which is the invariant this file
+spends most of its assertions on.
 """
 
 from __future__ import annotations
@@ -239,7 +241,7 @@ def test_try_compose_does_not_swallow_an_unrelated_failure(
 
 @pytest.fixture(scope="module")
 def distractor_corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """The 35-artifact build from the bug report, verbatim.
+    """The 35-artifact build from the bug report, with its old defect injected.
 
     ``--distractors`` is by far the cheapest way to grow a corpus — thousands of
     artifacts with the fact count unchanged — so it being the axis that crashed
@@ -250,6 +252,14 @@ def distractor_corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
         app, ["build", "--seed", "8128", "--incident", "--distractors", "20", "-o", str(out)]
     )
     assert result.exit_code == 0, result.output
+
+    # Stale drafts now preserve the final's document grammar. Keep the survey
+    # refusal exercised without making every real distractor corpus malformed:
+    # reproduce the historical bad label explicitly in this one fixture.
+    world = World.load(str(out))
+    rca = next(intent for intent in world.artifact_intents if intent.artifact_type == "incident_rca")
+    malformed = rca.model_copy(update={"size_profile": "small"})
+    world.extend(artifact_intents=(malformed,)).export(out, overwrite=True)
     return out
 
 

@@ -179,7 +179,12 @@ def _superseded_draft(
         audience=final.audience,
         author_id=final.author_id,
         required_fact_ids=ordered_subset,
-        size_profile="small",
+        # A draft has fewer facts, not a different document grammar. Keeping
+        # the final's size class is load-bearing for long forms such as an RCA:
+        # its five required components do not fit the small-class cap of four,
+        # however early the draft is. The compiler must never drop a required
+        # section merely because this generator relabelled the same type.
+        size_profile=final.size_profile,
         rationale=(
             f"An earlier draft of {final.id}, circulated before the period's "
             "closing figures were final. Same author, same document type, a "

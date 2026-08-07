@@ -24,8 +24,10 @@ vertical shows which parts repeat" — there are now four verticals.
    say whether job titles and background-only names count as entities in the
    capitalised-run rule; say what a reference renders as (writers guess the
    suffix and write grammar around it). Bump the prompt version.
-2. `--employees` is inert — thread it into `roles.from_shape` or refuse it
-   with a reason. A silently inert flag is worse than an error.
+2. **Completed:** `--employees` reaches every engine's authoritative company
+   headcount, and `--headcount-end` produces recipe-backed workforce changes
+   over a retail timeline. Named employees remain the bounded role graph;
+   aggregate size scales sampled episode density logarithmically.
 3. Insurance is capped at one period (`insurance_scenarios.py`); the cap is
    what makes its quadratic checks unmeasurable. Lift it before Phase 2 makes
    episodes cheap, or its grammar port will inherit the cap.

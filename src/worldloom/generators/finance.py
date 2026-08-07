@@ -20,7 +20,6 @@ add to the integer whole exactly — no residual line, no rounding note.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -71,13 +70,28 @@ def allocate(total: int, weights: Sequence[float]) -> list[int]:
     Ties break on index so the result depends on the data and not on sort
     stability.
     """
-    pool = sum(weights)
+    # Compare remainders as exact ratios of the binary floats we were handed.
+    # Sorting the rounded float shares is not stable at mathematical ties:
+    # allocating 10 across (1, 1, 4) made 4/6 look one ulp larger than 1/6 and
+    # awarded the residual to index 2, despite the documented index tie-break.
+    # Float denominators are powers of two, so lifting them to one common
+    # denominator is exact and materially cheaper than Fraction per row.
+    ratios = [float(weight).as_integer_ratio() for weight in weights]
+    denominator = max((denominator for _, denominator in ratios), default=1)
+    exact_weights = [
+        numerator * (denominator // weight_denominator)
+        for numerator, weight_denominator in ratios
+    ]
+    pool = sum(exact_weights)
     if pool <= 0:
         raise ValueError("cannot allocate across weights that sum to zero or less")
-    raw = [total * weight / pool for weight in weights]
-    parts = [math.floor(value) for value in raw]
+    numerators = [total * weight for weight in exact_weights]
+    parts = [numerator // pool for numerator in numerators]
     remainder = total - sum(parts)
-    order = sorted(range(len(raw)), key=lambda i: (-(raw[i] - parts[i]), i))
+    order = sorted(
+        range(len(numerators)),
+        key=lambda i: (-(numerators[i] % pool), i),
+    )
     for index in order[:remainder]:
         parts[index] += 1
     return parts

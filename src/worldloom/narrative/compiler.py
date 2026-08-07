@@ -514,7 +514,19 @@ def narrate(
                 assert slot.existing is not None
                 narrative = GeneratedNarrative.model_validate(slot.existing.output)
                 replayed += 1
-                recorded.append(slot.existing)
+                # A checkpoint callback cannot know this section's sequential
+                # id until every prior section has assembled, so it persists a
+                # content-addressed GEN-CKPT id. On replay we *do* have the
+                # canonical section order: replace only that provisional id and
+                # advance the same sequence an uninterrupted run uses. This is
+                # what makes resume byte-identical, not merely prose-equivalent.
+                if slot.existing.id.startswith("GEN-CKPT-"):
+                    recorded.append(slot.existing.model_copy(
+                        update={"id": format_id("GEN", next_gen)}
+                    ))
+                    next_gen += 1
+                else:
+                    recorded.append(slot.existing)
             else:
                 assert slot.result is not None
                 narrative, attempts = slot.result

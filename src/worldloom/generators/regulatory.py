@@ -49,7 +49,7 @@ from ..rng import Rng
 from . import episode_text
 from .capital import CapitalPosition
 from .liquidity import LiquiditySeries
-from .operations import _at, _text, business_days_after, period_end
+from .operations import CALENDAR, Calendar, _at, _text, business_days_after, period_end
 
 MONEY = "AUD_millions"
 PCT = "pct"
@@ -170,6 +170,7 @@ def generate(
     text: Mapping[str, str] | None = None,
     existing_minimum: CanonicalFact | None = None,
     money_unit: str = MONEY,
+    calendar: Calendar = CALENDAR,
     physics: Parameters = DEFAULT,
 ) -> ReturnEpisode:
     """Generate the challenged return for the quarter ending *period*.
@@ -195,7 +196,11 @@ def generate(
     keys: dict[str, str] = {}
 
     ends = period_end(period)
-    bd = lambda n: business_days_after(ends, n)  # noqa: E731 — read as arithmetic
+    # The liquidity cadence and the capital-return milestones must count the
+    # same working days.  If only liquidity observes a locale holiday, its
+    # root-cause confirmation can move after the fixed-calendar impact event
+    # that declares it as a cause.
+    bd = lambda n: business_days_after(ends, n, calendar)  # noqa: E731 — read as arithmetic
 
     sme = roles["cat_sme_secured"]
     core, collateral_sys = roles["sys_core_banking"], roles["sys_collateral"]

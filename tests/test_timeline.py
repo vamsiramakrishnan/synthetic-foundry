@@ -9,6 +9,8 @@ corpus from its ledger and diffs it.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from worldloom import MonthEndClose, RetailWorld, World, timeline
@@ -153,6 +155,43 @@ def test_hiring_over_a_bound_key_is_refused_by_the_scenario_too(world: World) ->
     with pytest.raises(ValueError, match="already bound"):
         world.run(Hire(period="2026-01", role_key="sys_erp", title="Analyst",
                        function="Finance", unit_key="food"))
+
+
+def test_a_hire_cannot_make_the_named_roster_exceed_total_workforce() -> None:
+    exact = RetailWorld(seed=8128, employees=23).build()
+    opening = Hire(
+        period="2026-01", role_key="digital_analyst", title="Digital Analyst",
+        function="Merchandising", unit_key="digital",
+    )
+
+    assert "hire_exceeds_headcount" in {
+        rejection.rule for rejection in timeline.review(
+            timeline.of(MonthEndClose("2026-01"), opening), timeline.Roster.of(exact)
+        )
+    }
+    with pytest.raises(ValueError, match="all 23 employee places"):
+        exact.run(opening)
+
+    # The sampler owns placement, so it drops an opening when no aggregate
+    # capacity exists instead of emitting a history its own review refuses.
+    sampled = timeline.sample(
+        roster=timeline.Roster.of(exact), start="2026-01", periods=1, seed=8128,
+        density=timeline.Density(hires=1.0),
+        openings=[timeline.Opening(
+            "digital_analyst", "Digital Analyst", "Merchandising", "digital"
+        )],
+    )
+    assert not any(isinstance(step, Hire) for step in sampled)
+
+    # The corpus gate independently catches loaded or tampered worlds that
+    # bypass both scenario and timeline guards.
+    contradicted = replace(
+        exact,
+        company=exact.company.model_copy(update={"employees_total": 22}),
+    )
+    assert "named_roster_exceeds_headcount" in {
+        violation.code for violation in contradicted.validate().violations
+    }
 
 
 # ---------------------------------------------------------------------------

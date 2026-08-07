@@ -54,6 +54,34 @@ from ..rng import Rng
 from ..roles import unit_role_key
 from . import names
 
+
+def stated_headcount(
+    requested: int | None,
+    *,
+    archetype_headcount: int,
+    modelled_headcount: int,
+) -> int:
+    """Resolve the company's stated workforce without pretending it is the roster.
+
+    Worldloom materialises the decision-making graph, not one row per employee.
+    ``modelled_headcount`` is therefore the hard lower bound: every named person
+    is an employee, while the remainder may stay aggregate.  Keeping this rule
+    beside the shared people builder gives every vertical the same refusal and
+    stops ``--employees 5`` producing a company whose own file names twenty
+    employed people.
+
+    ``None`` is the byte-stable path: the archetype's historical value is used
+    exactly as before this seam existed.
+    """
+    total = archetype_headcount if requested is None else requested
+    if total < modelled_headcount:
+        raise ValueError(
+            f"stated headcount {total:,} is smaller than the {modelled_headcount:,}"
+            " people the organisation must model; increase --employees or use a"
+            " smaller authored role table"
+        )
+    return total
+
 #: A role-table row: (role key, title, function, manager role key).
 RoleRow = tuple[str, str, str, str | None]
 

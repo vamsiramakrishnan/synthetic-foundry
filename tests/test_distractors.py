@@ -142,6 +142,11 @@ def test_every_distractor_fact_is_a_subset_of_a_real_document(before: World, aft
             assert len(revising) == 1, f"{distractor_id} should be revised by exactly one real document"
             final = revising[0]
             assert set(distractor.required_fact_ids) < set(final.required_fact_ids)
+            assert distractor.size_profile == final.size_profile, (
+                "a draft has fewer facts, not a smaller document grammar;"
+                " relabelling a long RCA as small makes its required sections"
+                " impossible to compose"
+            )
 
 
 # ---------------------------------------------------------------------------

@@ -77,6 +77,21 @@ def test_the_episode_is_coherent(compiled: World) -> None:
     assert report.ok, "\n".join(str(v) for v in report.violations)
 
 
+def test_locale_holidays_cannot_move_a_cause_after_its_effect() -> None:
+    world = BankingWorld(
+        seed=81_281, locale="germany", estate="large"
+    ).build().run(QuarterlyCapitalReturn(period=PERIOD))
+
+    events = {event.id: event for event in world.events}
+    assert all(
+        events[cause].occurred_at <= event.occurred_at
+        for event in world.events
+        for cause in event.caused_by
+    )
+    report = world.validate()
+    assert report.ok, "\n".join(str(v) for v in report.violations)
+
+
 def test_the_shape_of_the_episode(world: World) -> None:
     """Eleven artifacts — the nine records plus the approval minutes and the
     pre-lodgement thread — two labelled omissions, and the three cadences'
