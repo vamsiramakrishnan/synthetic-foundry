@@ -44,6 +44,7 @@ property's name. Every claim below is reachable at the unit level.
 from __future__ import annotations
 
 import math
+from fractions import Fraction
 
 import pytest
 
@@ -77,13 +78,26 @@ from worldloom.generators.finance import allocate  # noqa: E402
 #: The house profile. `deadline` is per example and is the only thing standing
 #: between a slow-convergence bug and a suite that appears to hang — it is what
 #: caught `propagate`'s divergent cycle, so it is set rather than disabled.
-_FAST = settings(max_examples=400, deadline=1000)
+#:
+#: `derandomize` and `database=None` are the CI contract, and they are set for
+#: a reason this file learned the hard way: without them Hypothesis explores a
+#: fresh random sample every run *and* replays a local `.hypothesis` cache, so
+#: a suite that is green on a laptop can fail on a runner that has neither —
+#: which is exactly what happened, on all three Python versions at once, with a
+#: counterexample the local run had never drawn. A gate that passes or fails on
+#: which machine ran it is not a gate. The cost is that CI stops discovering
+#: new counterexamples on its own; the dispersed sweep is where fresh
+#: exploration belongs, because a nightly job may legitimately fail and a
+#: per-PR gate may not.
+_FAST = settings(max_examples=400, deadline=1000, derandomize=True, database=None)
 
 #: For properties whose single example is genuinely expensive (building specs,
 #: running a lint that imports the registries). Fewer draws, more room each.
 _SLOW = settings(
     max_examples=120,
     deadline=4000,
+    derandomize=True,
+    database=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
 
@@ -178,8 +192,19 @@ def test_the_remainder_goes_to_the_largest_remainders_and_nowhere_else(total, we
     """
     assume(sum(weights) > 0)
     parts = allocate(total, weights)
-    pool = sum(weights)
-    raw = [total * weight / pool for weight in weights]
+    # Exact rationals, not floats. This model recomputed the shares as
+    # `total * weight / pool` in binary floating point, which is precisely the
+    # arithmetic `allocate`'s own comment rejects: at a mathematical tie the
+    # float quotients differ by an ulp and the "largest remainder" is decided by
+    # rounding noise rather than by the documented index tie-break. CI found it
+    # at total=287, weights=[0.055, 0.015] — exact shares 225.5 and 61.5, a true
+    # tie that floats render as 225.49999999999997 and 61.49999999999999, so the
+    # model demanded the unit go to index 1 while the implementation correctly
+    # gave it to index 0. `Fraction` is exact and an independent implementation
+    # of the claim, where copying `allocate`'s own integer-ratio trick would
+    # make this property vacuous.
+    pool = sum(Fraction(weight) for weight in weights)
+    raw = [Fraction(total) * Fraction(weight) / pool for weight in weights]
     floors = [math.floor(value) for value in raw]
 
     assert [part - floor for part, floor in zip(parts, floors, strict=True)] == [
