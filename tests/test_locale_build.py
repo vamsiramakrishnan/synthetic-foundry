@@ -423,3 +423,60 @@ def test_the_liquidity_cadence_check_asks_this_corpus_own_calendar() -> None:
     # one. Asserted against the days rather than the count: a series that
     # simply had fewer points would pass a gap check and still be wrong.
     assert all(locales.GULF.is_business_day(day) for day in observed)
+
+
+def test_the_capital_return_reads_the_same_calendar_its_own_detection_does() -> None:
+    """The half of that pairing which stayed behind, and what it cost.
+
+    `liquidity.generate` was handed the corpus's calendar; `regulatory.generate`
+    was not, so its `bd()` walked Monday to Friday whatever the recipe said. One
+    episode, two working weeks — and they drift, because the reconciliation
+    break is detected on a *liquidity* observation while the impact assessment
+    that follows it is scheduled on a *business-day offset*. Under Germany's
+    calendar (1 May is a holiday) the two crossed: the root cause was confirmed
+    at 14:24 on the day the impact assessment was already fixed at 12:00, so a
+    German bank's corpus failed `cause_after_effect` and `worldloom build
+    --archetype midsize_adi --locale germany` produced nothing at all.
+
+    Three assertions, and the middle one is the actual invariant. The default
+    build must not move (it does not: `CALENDAR` is `locales.DEFAULT`). Every
+    locale must build a corpus that validates. And the return's own dates must
+    land on days the company works — asserted against the days rather than
+    against `validate().ok` alone, because a timeline that merely avoided
+    inverting would satisfy the validator while still filing on a Sunday.
+
+    Found by `tools/sweep.py`, which builds dispersed configurations rather than
+    one; no gate before it had ever built this vertical outside Australia.
+    """
+    from worldloom.banking_scenarios import QuarterlyCapitalReturn
+
+    period, kinds = "2026-03", ("capital_return_filed", "capital_impact_assessed")
+
+    plain = build(BankingWorld, "midsize_adi").run(QuarterlyCapitalReturn(period=period))
+    australian = build(BankingWorld, "midsize_adi", locale="australia").run(
+        QuarterlyCapitalReturn(period=period))
+    for kind in kinds:
+        assert (next(e.occurred_at for e in plain.events if e.kind == kind)
+                == next(e.occurred_at for e in australian.events if e.kind == kind))
+
+    for name in sorted(locales.LOCALES):
+        world = build(BankingWorld, "midsize_adi", locale=name).run(
+            QuarterlyCapitalReturn(period=period))
+        verdict = world.validate()
+        assert verdict.ok, f"{name}: {[str(v) for v in verdict.violations][:3]}"
+
+        calendar = locales.named(name)
+        for event in world.events:
+            # The daily cadence starts before dawn on days the series chose and
+            # the lore events are dated to whole months in the past, so this
+            # asks only about the return's own scheduled steps.
+            if event.kind in {"capital_return_preparation_started", "working_paper_issued",
+                              "second_line_review_started", "challenge_raised",
+                              "return_approved", "capital_return_filed",
+                              "capital_impact_assessed", "regulator_notified",
+                              "restatement_prepared", "restatement_reviewed",
+                              "restatement_approved", "restatement_lodged"}:
+                assert calendar.is_business_day(event.occurred_at.date()), (
+                    f"{name}: {event.kind} on {event.occurred_at.date()},"
+                    " which is not a working day there"
+                )

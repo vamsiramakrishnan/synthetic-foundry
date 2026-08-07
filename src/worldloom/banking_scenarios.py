@@ -144,6 +144,13 @@ class QuarterlyCapitalReturn:
             # used to say "AUD_millions" regardless of what a pack named.
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
             physics=self.physics,
+            # The same working week the liquidity series above walks on, and for
+            # the same reason one line further: the return's dates and the daily
+            # observations that catch its error are one timeline. Passing the
+            # calendar to one and not the other is what made the German build
+            # schedule its impact assessment before the cause it follows —
+            # `regulatory.generate`'s own note has the arithmetic.
+            calendar=calendar,
         )
 
         intents, errors = banking_documents.artifact_intents(

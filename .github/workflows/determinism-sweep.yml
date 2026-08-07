@@ -1,0 +1,141 @@
+name: determinism sweep
+
+# The byte-identity gate, pointed at the configuration space instead of one
+# corner of it. `ci.yml` proves that four builds at seed 8128 replay
+# byte-for-byte, on every push, forever — one point of a ten-dimensional space,
+# sampled repeatedly. This job covers that space with the repository's own
+# dispersion machinery (`tools/sweep.py`, which is `dispersion.halton` plus
+# `dispersion.farthest_first`, the same pair `mosaic` uses) and builds each
+# selected configuration twice in separate processes.
+#
+# **Not on every PR, deliberately.** Eight configurations built twice is several
+# minutes of work that the existing gates already cover for the default build,
+# and a slow gate on every push is a gate people learn to ignore. Nightly plus
+# `workflow_dispatch` is the right cadence for a sweep whose value is *breadth
+# over time* rather than per-commit signal.
+on:
+  schedule:
+    # 04:17 UTC — off the hour, because everything else in the world runs at :00
+    # and a shared runner pool is measurably slower there.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Sweep seed. Blank rotates it from the run number. Set it to replay an earlier run exactly."
+        required: false
+        type: string
+      count:
+        description: "How many configurations to select."
+        required: false
+        default: "8"
+        type: string
+
+concurrency:
+  group: sweep-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev,polars,xlsx,docx,pdf,pptx]"
+
+      # The rotation, and why it is safe here specifically.
+      #
+      # A determinism sweep checks a corpus against *itself* — two builds of one
+      # configuration, required to be byte-identical. There is no expected
+      # output to drift from, so the sample being different each night costs
+      # nothing and buys everything: a fixed sample is the same eight
+      # configurations forever, which is the exact defect this job exists to
+      # fix. Rotation makes the gate cover the space over weeks instead of
+      # covering one slice of it in perpetuity.
+      #
+      # What rotation must not cost is replayability, and it does not, because
+      # the seed is the *whole* state. `tools/sweep.py` derives its Halton
+      # window and every world seed from it, prints it, and prints each selected
+      # configuration as a JSON line with a content-addressed id. So a failure
+      # here replays exactly with `--seed <the printed seed>` — and consecutive
+      # run numbers take *disjoint* blocks of the sequence, so consecutive
+      # nights genuinely cover new ground rather than jittering around one spot.
+      #
+      # `github.run_number` rather than the date: it is an integer that only
+      # ever increases, it is visible in the run's own URL, and it does not
+      # collide when a nightly run and a manual dispatch land on the same day.
+      - name: Choose and announce the seed
+        id: seed
+        run: |
+          SEED="${{ inputs.seed }}"
+          if [ -z "$SEED" ]; then SEED="${{ github.run_number }}"; fi
+          COUNT="${{ inputs.count }}"
+          if [ -z "$COUNT" ]; then COUNT=8; fi
+          echo "seed=$SEED" >> "$GITHUB_OUTPUT"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Determinism sweep"
+            echo ""
+            echo "Seed \`$SEED\`, $COUNT configurations."
+            echo ""
+            echo "Replay this exact run locally:"
+            echo ""
+            echo '```'
+            echo "python3 tools/sweep.py --seed $SEED -n $COUNT --mode process"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # `--mode process` and not `--mode archive`. Archive mode diffs the
+      # working tree against `git archive HEAD`, which in a clean CI checkout
+      # are the same tree — it is the gate for a developer with uncommitted
+      # changes, and it would prove nothing here. What is worth proving here is
+      # that two *processes* agree, because that is where in-process state
+      # leakage — a module-level registry, an `lru_cache`, an installed episode
+      # spec surviving from build one into build two — would show up, and a
+      # single-process comparison structurally cannot see it.
+      - name: The sweep
+        run: |
+          # `pipefail` and an explicit status, because the default shell is
+          # `bash -e` without it: `sweep.py | tee` would take *tee's* exit code,
+          # the step would pass on a difference, and this whole job would be a
+          # gate that can never fail. Held rather than propagated immediately so
+          # the table still reaches the run summary on the runs where it matters
+          # most.
+          set -o pipefail
+          status=0
+          python3 tools/sweep.py \
+            --seed "${{ steps.seed.outputs.seed }}" \
+            -n "${{ steps.seed.outputs.count }}" \
+            --mode process \
+            --formats markdown,xlsx \
+            --json sweep-report.json \
+            | tee sweep-report.txt || status=$?
+          # The table, in the run summary, whether it passed or failed: the
+          # selected configurations are the interesting output even on a green
+          # run, because "which corners has this covered lately" is the question
+          # a rotating sample exists to answer.
+          {
+            echo ""
+            echo '```'
+            cat sweep-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # Kept on failure *and* on success. The JSON carries every configuration
+      # and the first differing file and line, which is what a reader needs
+      # before they can decide whether a difference is a renderer leaking a
+      # clock or an engine leaking state.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-${{ steps.seed.outputs.seed }}
+          path: |
+            sweep-report.json
+            sweep-report.txt

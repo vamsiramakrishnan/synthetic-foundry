@@ -49,7 +49,7 @@ from ..rng import Rng
 from . import episode_text
 from .capital import CapitalPosition
 from .liquidity import LiquiditySeries
-from .operations import _at, _text, business_days_after, period_end
+from .operations import CALENDAR, Calendar, _at, _text, business_days_after, period_end
 
 MONEY = "AUD_millions"
 PCT = "pct"
@@ -171,6 +171,7 @@ def generate(
     existing_minimum: CanonicalFact | None = None,
     money_unit: str = MONEY,
     physics: Parameters = DEFAULT,
+    calendar: Calendar = CALENDAR,
 ) -> ReturnEpisode:
     """Generate the challenged return for the quarter ending *period*.
 
@@ -188,6 +189,26 @@ def generate(
     so the one registered banking archetype (AUD, millions) is unaffected —
     every RWA and CET1-capital fact used to say "AUD_millions" regardless of
     what a pack's ``currency``/``currency_unit`` actually named.
+
+    ``calendar`` is this corpus's own working week, and this episode is the last
+    one that did not take it. ``reserving`` and ``procurement_cycle`` both do;
+    ``liquidity.generate`` is handed it by ``banking_scenarios`` with a note
+    saying the start date and the walk must agree. This function's ``bd`` was
+    the odd one out, on the *default* calendar always — so a German bank filed
+    its return on the Australian working week while its own daily liquidity
+    series stepped on the German one, and the two drifted. Under Germany's
+    calendar that put ``capital_impact_assessed`` (a fixed 12:00 on the 25th
+    business day) *before* the root cause it is caused by, which
+    ``validate``'s ``cause_after_effect`` correctly refused: `worldloom build
+    --archetype midsize_adi --locale germany` did not produce a corpus at all.
+    Found by ``tools/sweep.py``, which is the only gate that has ever built
+    this vertical outside Australia.
+
+    Defaulted to ``CALENDAR`` rather than made required so the byte-identity of
+    every corpus already built holds by construction: ``CALENDAR`` *is*
+    ``locales.DEFAULT``, ``recipe.locale_of`` returns it for a corpus that
+    named no locale, and ``tests/test_locales.py`` pins Australia's arithmetic
+    equal to it across 2024-2028.
     """
     t = episode_text.merged(TEXT, text)
     events: list[EnterpriseEvent] = []
@@ -195,7 +216,7 @@ def generate(
     keys: dict[str, str] = {}
 
     ends = period_end(period)
-    bd = lambda n: business_days_after(ends, n)  # noqa: E731 — read as arithmetic
+    bd = lambda n: business_days_after(ends, n, calendar)  # noqa: E731 — read as arithmetic
 
     sme = roles["cat_sme_secured"]
     core, collateral_sys = roles["sys_core_banking"], roles["sys_collateral"]
