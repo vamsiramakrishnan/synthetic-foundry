@@ -62,6 +62,7 @@ from .org_builder import (
     founding_milestones,
     mint_people,
     sorted_roles,
+    stated_headcount,
     wire_managers,
 )
 
@@ -240,6 +241,7 @@ def generate(
     headquarters: str | None = None,
     regions: tuple[str, ...] | None = None,
     locale: Locale = DEFAULT_LOCALE,
+    employees_total: int | None = None,
     # This module's own `_ROLES`, replaced. `None` means use them. A supplied
     # table still has the per-unit roles appended below and must have gone
     # through `roles.review` first: several of these keys are looked up by name
@@ -454,7 +456,11 @@ def generate(
         fiscal_year_start_month=archetype.fiscal_year_start_month,
         currency=archetype.currency,
         currency_unit=archetype.currency_unit,
-        employees_total=archetype.employees,
+        employees_total=stated_headcount(
+            employees_total,
+            archetype_headcount=archetype.employees,
+            modelled_headcount=len(people),
+        ),
     )
 
     milestones, founding_facts = founding_milestones(minter, lore, company_id)

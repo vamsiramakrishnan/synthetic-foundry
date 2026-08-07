@@ -440,6 +440,46 @@ class World:
             label="EmployeeCollection",
         )
 
+    def business_units_at(self, moment: datetime | str) -> Collection[BusinessUnit]:
+        """Business units operating at *moment*, retaining dissolved units in history."""
+        when = _moment(moment)
+        return Collection(
+            (unit for unit in self._business_units
+             if (unit.formed is None or unit.formed <= when)
+             and (unit.dissolved is None or unit.dissolved > when)),
+            label="BusinessUnitCollection",
+        )
+
+    def sites_at(self, moment: datetime | str) -> Collection[Site]:
+        """Sites operating at *moment*."""
+        when = _moment(moment)
+        return Collection(
+            (site for site in self._sites
+             if (site.activated_at is None or site.activated_at <= when)
+             and (site.closed_at is None or site.closed_at > when)),
+            label="SiteCollection",
+        )
+
+    def systems_at(self, moment: datetime | str) -> Collection[System]:
+        """Systems operating at *moment*."""
+        when = _moment(moment)
+        return Collection(
+            (system for system in self._systems
+             if (system.introduced is None or system.introduced <= when)
+             and (system.retired is None or system.retired > when)),
+            label="SystemCollection",
+        )
+
+    def services_at(self, moment: datetime | str) -> Collection[Service]:
+        """Services operating at *moment*."""
+        when = _moment(moment)
+        return Collection(
+            (service for service in self._services
+             if (service.introduced is None or service.introduced <= when)
+             and (service.retired is None or service.retired > when)),
+            label="ServiceCollection",
+        )
+
     def visible_to(self, employee_id: str) -> ArtifactCollection:
         """Artifacts *employee_id* is permitted to see. Deny beats allow."""
         employee = self.people.by_id(employee_id)
@@ -510,6 +550,7 @@ class World:
     def extend(
         self,
         *,
+        company: Company | None = None,
         events: tuple[EnterpriseEvent, ...] = (),
         facts: tuple[CanonicalFact, ...] = (),
         artifact_intents: tuple[ArtifactIntent, ...] = (),
@@ -524,6 +565,9 @@ class World:
         actor_ledger: tuple[ActorLedgerEntry, ...] = (),
         people: tuple[Employee, ...] = (),
         business_units: tuple[BusinessUnit, ...] = (),
+        systems: tuple[System, ...] = (),
+        services: tuple[Service, ...] = (),
+        sites: tuple[Site, ...] = (),
         roles: dict[str, str] | None = None,
         period: str | None = None,
         recipe: dict[str, Any] | None = None,
@@ -539,7 +583,8 @@ class World:
         same name — so ``people`` and ``business_units`` merge by id: a row whose
         id is already known *replaces* the record in place, anything new is
         appended. What makes that safe is that the replacement only ever closes a
-        validity window (sets ``left``, sets ``dissolved``), and the change is
+        validity window (sets ``left``, ``dissolved``, ``retired`` or
+        ``closed_at``), and the change is
         still witnessed by an event and a fact like every other change. The roster
         holds who is here now; the timeline holds how it got that way.
 
@@ -558,16 +603,22 @@ class World:
         corpus at all: the next episode plans its artifacts against ``roles``, so
         the March memo is signed by the person who actually held the post in
         March, without any planner knowing a succession happened.
+
+        ``company`` replaces the single company row for the same narrow reason:
+        an aggregate workforce change updates current headcount without
+        materialising thousands of employees. The scenario that uses it also
+        appends the event and facts that preserve how the value changed, so the
+        current row is mutable state while the audit trail stays append-only.
         """
         return World(
-            company=self.company,
+            company=self.company if company is None else company,
             _business_units=_merged(self._business_units, business_units),
             _people=_merged(self._people, people),
-            _systems=self._systems,
-            _services=self._services,
+            _systems=_merged(self._systems, systems),
+            _services=_merged(self._services, services),
             _cost_centres=self._cost_centres,
             _categories=self._categories,
-            _sites=self._sites,
+            _sites=_merged(self._sites, sites),
             _personas=self._personas,
             _access_policies=self._access_policies,
             _lore=self._lore,

@@ -54,7 +54,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/vamsiramakrishnan/synthetic-foundry"
-Documentation = "https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/AGENTS.md"
+Documentation = "https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/README.md"
 Changelog = "https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/CHANGELOG.md"
 Issues = "https://github.com/vamsiramakrishnan/synthetic-foundry/issues"
 

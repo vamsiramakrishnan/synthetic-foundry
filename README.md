@@ -1,731 +1,447 @@
 # Worldloom
 
-**Worldloom is to enterprise corpora what SQLite is to databases.**
+**A deterministic compiler for coherent synthetic enterprise corpora.**
 
-A small, deterministic harness that generates coherent synthetic enterprise worlds
-— organisations, people, projects, finances, systems, incidents, years of history —
-and materialises them into realistic documents, business system records, and
-knowledge artifacts for AI evaluation, retrieval, and agent testing.
+Worldloom generates the enterprise before it generates the files: companies,
+people, reporting lines, systems, services, financial facts, events, permissions,
+document intents, and evaluation cases. It then projects that state into native
+XLSX, DOCX, PPTX, PDF, Markdown, Jira, Confluence, and ServiceNow artifacts.
 
-No service to run. No API key. No model behind an SDK.
+The result is a corpus in which a memo, workbook, incident, ticket, board summary,
+and retrieval answer can be checked against the same fact ledger.
 
-**Your coding agent is the model. Worldloom is the harness.**
+No service to operate. No API key in the library. No hidden model call.
+
+> Your agent supplies judgement and language. Worldloom supplies truth,
+> structure, lineage, and refusal.
 
 ```bash
-pip install "worldloom[all]"     # or, from a checkout: pip install -e ".[dev]"
+pip install "worldloom[all]"
 
-worldloom build --seed 8128 --incident --out ./corpus   # deterministic: the world
-worldloom narrate requests ./corpus -o requests.json    # what prose is needed
-#   the agent writes responses.json
-worldloom narrate accept ./corpus --from responses.json # checked against the facts
-worldloom render ./corpus -f xlsx -f docx -f jira -f confluence
-worldloom validate ./corpus                             # 1,100+ coherence checks
+worldloom build --seed 8128 --incident --narrate --out ./corpus
+worldloom render ./corpus -f xlsx -f docx -f pptx -f pdf -f markdown
+worldloom validate ./corpus
+worldloom evaluate ./corpus --retriever both
 ```
 
-Worldloom builds the enterprise, works out which documents it would have, resolves
-every table and figure, and then hands the agent a bounded request per section. What
-comes back is **checked against the fact ledger**. Restate a number, cite something
-you were not given, or mention an entity that does not exist, and the prose is
-rejected with the reason.
+The built-in deterministic narrator is useful for tests, replay, and inspecting a
+complete corpus without a model. For production prose, let a coding agent drive the
+validated `narrate requests` / `narrate accept` handshake described below.
 
-There is no API-caller path, deliberately: this package never calls a language
-model. The writer is the coding harness driving it — Claude Code through the
-`/worldloom` skills, Antigravity, or any agent that can run a terminal — and
-the loop above is the whole contract: the harness reads `requests.json`,
-writes `responses.json`, and submits until accepted. Everything in this
-repository, including every test, runs with no key at all.
+## The design in one diagram
 
-That division is the design. The agent supplies judgement and language. The harness
-supplies truth, and refuses anything that contradicts it.
-
-Agents start at **[AGENTS.md](AGENTS.md)**. Claude Code has a skill: `/worldloom`.
-
-> **Status: Gates A and B complete.** Deterministic generation, all seven
-> renderers, the evaluation set with its in-repo baseline retriever, three agent
-> handshakes (`plan`, `narrate`, `act`), and the first actor episode — employees
-> producing the incident's records from role-scoped observations. Still ahead:
-> the second industry, the interview, mess as a mode, and scale. The
-> [roadmap](#roadmap) marks each box; [`docs/build-order.md`](docs/build-order.md)
-> is the sequence and the exit gate for each step.
->
-> ```bash
-> worldloom build --seed 8128 --incident --replay ./corpus -f xlsx --out ./again
-> diff -r ./corpus ./again        # identical, and no model was called
-> ```
->
-> A world regenerates byte-for-byte from its seed, its recipe, and its generation
-> ledger, under the worldloom version stamped into its `world.json`. CI enforces
-> that diff on every push.
-
----
-
-## Why Worldloom?
-
-Most synthetic data generators produce isolated documents.
-
-- A Jira ticket is created independently from a Confluence page.
-- A PowerPoint references projects that don't exist.
-- A PDF reports financial numbers that cannot be reconciled.
-- An incident has three different root causes depending on which document you read.
-
-Real enterprises don't work this way. Every document, spreadsheet, presentation, ticket, approval, financial report, architecture decision, and postmortem is a consequence of people making decisions over time.
-
-Worldloom generates the enterprise first. Documents are projections of that evolving world.
-
----
-
-## Generate reality first. Render artifacts second.
-
-Instead of prompting an LLM to write documents, Worldloom builds a coherent enterprise simulation and then renders it.
-
-```
-                  Enterprise World
-                          │
-                          ▼
-                   Canonical Facts
-                          │
-                          ▼
-                 Historical Events
-                          │
-                          ▼
-                 Artifact Planning
-                          │
-      ┌───────────────────┼───────────────────┐
-      │                   │                   │
-      ▼                   ▼                   ▼
-  Documents         Business Systems       Reports
-      │                   │                   │
-      ▼                   ▼                   ▼
-DOCX PPTX PDF      Jira ServiceNow     XLSX Confluence
+```text
+Authoring inputs                         Deterministic world
++----------------------+                 +---------------------------+
+| spec / pack / facets |----+            | company + people + estate |
+| seed / locale / lore |    |            | events + facts + access   |
+| physics / org shape  |    +----------->| recipe + eval ground truth|
++----------------------+                 +-------------+-------------+
+                                                        |
+                                                        v
+                                              +---------------------+
+                                              | artifact intents    |
+                                              | author / audience   |
+                                              | type / facts / time |
+                                              +----------+----------+
+                                                         |
+                              propose -> validate -> accept
+                                                         |
+                                                         v
+                                              +---------------------+
+                                              | ArtifactIR          |
+                                              | tables + sections   |
+                                              | claims + lineage    |
+                                              +----------+----------+
+                                                         |
+                         +---------------+---------------+---------------+
+                         |               |               |               |
+                         v               v               v               v
+                       XLSX          DOCX/PDF         PPTX/MD       Jira/Confluence/
+                                                                      ServiceNow
 ```
 
-Three rules follow from this, and they are not negotiable:
+The renderers never decide what is true. They receive one resolved `ArtifactIR`
+and project it into different file grammars. That is why the PDF and DOCX can
+share the same title, author, period, evidence, and numbers without coordinating
+with each other.
 
-**Facts before prose.** LLMs write language. They do not invent truth. Every number, date, entity, and claim in a document is resolved from the fact ledger before a word is written.
+## Why this exists
 
-This is a rule about *prose*, not about *priors*. What the company is — its industry, history, culture, the scar tissue that still shapes its decisions — is generated first, because no org graph, service catalogue, or financial model is decidable without it. Those priors are then frozen, and every later phase reads them and none may contradict them. Coherence comes from that single frozen source, not from constraining prose at the end. See [lore](docs/lore.md) and the [pipeline order](docs/generation-model.md#when-generation-happens).
+Most synthetic-data systems generate files independently. That produces documents
+that look plausible in isolation and fail as a corpus:
 
-**Simulation before rendering.** Events create facts. Facts create artifacts. Artifacts create files. Never the other way around.
+- a PDF reports a total the workbook cannot reconcile;
+- an RCA names a cause that the incident record never established;
+- a ticket is assigned to an employee who does not exist;
+- a board paper cites information discovered after it was signed;
+- five seeded companies are the same organisation with different names;
+- a retriever is evaluated against questions whose evidence is absent.
 
-**Lineage everywhere.** Every artifact knows its source world, scenario, events, supporting facts, author, audience, permissions, recipe, and version. Nothing is anonymous.
+Worldloom reverses the order:
 
----
+```text
+world state --> events --> canonical facts --> artifact plan --> prose --> files
+```
 
-## The generation boundary
+Facts precede prose. Simulation precedes rendering. Evaluation ground truth is
+derived from the same state as the evidence. Every generated claim remains
+traceable to the facts and events that support it.
 
-Worldloom has two engines, and the split between them is the most important design decision in the project.
+## What ships today
 
-The **deterministic engine** owns everything that must be *correct*. The **generative engine** owns everything that must be *plausible*. Nothing is owned by both.
+### Four verticals
 
-| Deterministic | Generative |
+| Vertical | Episode | What makes it useful |
+| --- | --- | --- |
+| Retail | `MonthEndClose` | Financial reconciliation, operational incidents, multi-period histories, workforce and estate trajectories |
+| Banking | `QuarterlyCapitalReturn` | Second-line challenge, equal-authority conflict, filing and restatement |
+| Insurance | `QuarterlyReserving` | Triangle development, emergence, held versus central estimates, authority-sensitive answers |
+| Procurement | `PurchaseToPayCycle` | Purchase-to-pay controls, three-way matching, exceptions, and carried shortfalls |
+
+The vertical owns the causal episode, its fact kinds, documents, invariants, and
+benchmark. A pack changes the company using an existing episode. A new vertical
+changes what happens.
+
+### Structured and unstructured outputs
+
+| Layer | Outputs |
 | --- | --- |
-| Entity identity and IDs | Names, brands, terminology |
-| Referential integrity | Culture, politics, tone |
-| The org graph and reporting lines | Team purpose and collaboration patterns |
-| Arithmetic, aggregation, reconciliation | Financial commentary and explanation |
-| The timeline and event ordering | Causes, consequences, lessons learned |
-| Permissions and visibility | Audience and register |
-| Which facts exist | What those facts mean |
-| Which artifacts exist, and their provenance | Which artifacts would plausibly exist |
-| Seeded randomness | Judgment |
+| Canonical structured state | `world.json`; facts, events, lore, artifact intents, IR, manifests, evaluation cases, detail tables, actor ledgers, and generation ledgers as JSON/JSONL |
+| Business-system records | Portable Jira issues/changelog/links, Confluence pages/comments, ServiceNow incidents and CMDB relationships |
+| Analytical artifacts | Formula-bearing XLSX workbooks with lineage and reconciliation sheets |
+| Narrative artifacts | DOCX, PDF, PPTX, and Markdown generated from the same resolved IR |
+| Evaluation assets | Questions, expected fact IDs, required evidence, distractors, temporal cutoffs, and abstention labels |
 
-Three rules enforce it:
+The corpus directory is plain files. Worldloom is needed to build and validate it,
+not to read it.
 
-**The LLM never does arithmetic.** It may reference a number; it may never restate one. Generated prose carries fact references, and the renderer substitutes values from the ledger at render time. This is the single rule that stops a board deck from disagreeing with the workbook it came from — both read the same entry, and neither holds a copy.
+## Quickstart: one coherent enterprise
 
-**Every generative call is recorded, so worlds replay.** Model calls aren't reproducible, so Worldloom doesn't depend on them being reproducible. Each call is content-addressed into the world's generation ledger, keyed by seed, call site, input facts, model, and prompt version. `from_seed()` replays the ledger instead of re-prompting — regeneration touches no model at all.
+```bash
+# Build deterministic state and a complete test narration.
+worldloom build \
+  --seed 8128 \
+  --incident \
+  --comparatives 11 \
+  --estate large \
+  --eval-density high \
+  --narrate \
+  --out ./corpus
 
-**The LLM never writes to the graph.** It proposes; the deterministic layer validates and commits, or rejects and retries with the violation fed back.
+# Materialise every supported artifact family.
+worldloom render ./corpus \
+  -f xlsx -f docx -f pptx -f pdf -f markdown \
+  -f jira -f confluence -f servicenow
 
-The full division — twenty areas of generation, what the model owns in each, and what stays behind the wall — is in **[docs/generation-model.md](docs/generation-model.md)**.
-
----
-
-## The Python engine
-
-The harness is the product; this is the engine underneath it, and every CLI command
-is a thin wrapper over it. Reach for it when you are extending Worldloom rather than
-using it — a new renderer, scenario, or industry is written here.
-
-The design goal is a single sentence:
-
-> A senior engineer should be able to discover and use Worldloom from autocomplete alone, without reading the documentation.
-
-Everything below exists to serve that.
-
-### One entry point
-
-```python
-from worldloom import World, RetailWorld, MonthEndClose
+# Run independent readings of the corpus.
+worldloom validate ./corpus
+worldloom topology ./corpus
+worldloom series ./corpus
+worldloom diversity ./corpus --near-duplicates
+worldloom evaluate ./corpus --retriever both
 ```
 
-Two ways to get a world, and only two:
+Use `worldloom status ./corpus` at any point. It reports the current stage and
+the exact next command instead of requiring an orchestrator to infer state from
+the directory.
 
-```python
-World.load("retail-close")          # a corpus that already exists, by name or path
-RetailWorld(seed=8128).build()      # a new one, deterministically, from a seed
+## Production prose: a checked agent handshake
+
+Worldloom deliberately does not import an LLM SDK. Any agent that can execute a
+terminal and exchange JSON can narrate a corpus.
+
+```bash
+worldloom narrate requests ./corpus -o requests.json
+# The agent writes responses.json.
+worldloom narrate accept ./corpus \
+  --from responses.json \
+  --model-id enterprise-writer-v1
 ```
 
-A loaded corpus is a result: readable, queryable, renderable, but not advanceable.
-A built world can additionally `run` scenarios, because it carries its generator
-state. The distinction is deliberate — a corpus you were handed is evidence, and
-evidence does not get quietly extended.
+Each request carries the artifact type, section, author, author voice, audience,
+knowledge cutoff, target length, allowed facts, required facts, and claims that
+must not be made. Each response carries prose plus explicit supporting fact IDs.
 
-### Immutable
+Acceptance is transactional: all applicable rules are checked, violations are
+returned as data, and invalid prose is not committed. The loop repeats until the
+section is accepted.
 
-Every operation returns a new `World`. Nothing mutates in place.
-
-```python
-base = RetailWorld(seed=8128).build()
-
-march = base.run(MonthEndClose(period="2026-03"))
-april = march.run(MonthEndClose(period="2026-04"))
-
-# base is untouched, and march does not contain april
+```text
+request
+  |
+  +--> author worked here at this time?
+  +--> author allowed to own this department's artifact?
+  +--> audience permits the author and intended readers?
+  +--> title cohesive with the artifact type?
+  +--> every cited fact inside the declared scope?
+  +--> fact existed before the document's knowledge cutoff?
+  +--> every numeric claim expressed as a fact reference?
+  |
+  +--> accept and ledger it, or refuse with every finding
 ```
 
-This is what makes worlds safe to fork, cache, compare, and pass around — the same
-property that makes Polars pleasant.
+See [Architecture and invariants](docs/architecture.md) for the complete boundary.
 
-### Lazy
+## Enterprise-scale history
 
-Constructing a builder is free. Nothing expensive happens until you ask for the world.
+Workforce size is authoritative aggregate scale; named employees are the bounded
+decision-making graph. This permits a large-company corpus without minting one
+Python object per payroll record.
 
-```python
-world = RetailWorld(seed=8128, employees=80_000)   # instant, does no work
-world = world.build()                              # this is the expensive call
+The same principle applies to the structural estate. Business units, sites,
+systems, and services have half-open lifecycles and can grow or contract across
+a timeline while historical artifacts retain their original referents.
+
+```bash
+worldloom build \
+  --seed 8128 \
+  --employees 80000 \
+  --headcount-end 92000 \
+  --periods 6 \
+  --timeline steady \
+  --estate large \
+  --business-units-end 8 \
+  --sites-end 240 \
+  --systems-end 24 \
+  --services-end 60 \
+  --eval-density high \
+  --narrate \
+  --out ./enterprise
+
+worldloom render ./enterprise -f xlsx -f docx -f pptx -f pdf -f markdown
+worldloom validate ./enterprise
 ```
 
-### Build, then query
+Every intermediate target is deterministic. Each movement emits count and delta
+facts, an enterprise notice, and a replayable recipe step. Contraction closes a
+lifecycle window instead of deleting the entity. Targets below dependency-safe,
+role-safe, or category-safe floors are refused.
 
-Interrogation is a fluent query over typed collections, in the Polars idiom.
+Current CLI scope is explicit: time-varying workforce and structural trajectories
+are multi-period retail capabilities. Banking, insurance, and procurement are
+single-episode CLI verticals today; no flag is silently ignored to simulate a
+history they do not implement.
 
-```python
-world.facts.where(kind="ops.cause")
-world.events.where(kind="incident_opened")
-world.people.where(function="Finance")
+For the operational runbook, see [Generating an enterprise corpus](docs/enterprise-corpus.md).
+
+## Many companies: dispersed, sharded, resumable
+
+Changing a seed changes names and figures; it does not guarantee a different
+company shape. `mosaic` starts from a low-discrepancy candidate field and uses
+farthest-first selection so the chosen worlds cover configuration space instead
+of clumping in it.
+
+```bash
+worldloom mosaic --describe
+worldloom mosaic -n 20 --incident --out ./mosaic
 ```
 
-`.where()` is the primitive. The temporal and authority questions the corpus is
-built to pose are first-class operations, not joins you write yourself:
+For large runs, every worker receives the same global plan and owns a deterministic
+subset of world indices:
 
-```python
-world.as_of("2026-04-01T10:00:00")     # the facts that held at that moment
-world.org_at("2026-04-01T10:00:00")    # who worked here then
-world.visible_to("PERSON-0007")        # what the controller may read
-world.authoritative("ops.cause", "SVC-0001")   # which account of the cause wins
-world.provenance("ART-0003")           # where a document came from, both directions
+```bash
+worldloom mosaic -n 1000 \
+  --shard-count 20 --shard-index 0 \
+  --out ./enterprise-corpus
+
+worldloom mosaic -n 1000 \
+  --shard-count 20 --shard-index 0 \
+  --out ./enterprise-corpus --resume
 ```
 
-### Everything is inspectable
+`mosaic.json` stores a digest of the complete plan. Argument drift on resume is
+refused. Completed worlds are revalidated before being skipped. Each accepted
+narrative section is fsync'd to a newline-framed checkpoint, and a torn final
+append is recoverable without accepting malformed committed records.
+
+## Artifact cohesion is a compiler contract
+
+Every `ArtifactIntent` states:
+
+- artifact type and business domain;
+- real employee author and author function;
+- audience and access policy;
+- creation time and knowledge boundary;
+- required facts and triggering events;
+- lifecycle, authority, revision, derivation, and restatement relationships.
+
+Compilation refuses an undeclared artifact type, an impossible departmental
+author, an empty audience or title, a title unrelated to its artifact family, or
+content escaping the declared fact scope. It stamps the accepted IR with a
+machine-readable `artifact-contract@1` cohesion scope. Every renderer consumes
+that same IR.
+
+This is stronger than prompting a model to "keep documents consistent". A prompt
+is advisory. The contract is executable and renderer-independent.
+
+## Python SDK
+
+The CLI is a collection of fixed pipelines. Use the SDK when the required shape
+is a Python loop: cross calendars and organisation shapes, sweep a parameter,
+select the least-alike candidates, or keep only worlds whose measured topology is
+interesting.
 
 ```python
-world.people
-world.facts
-world.events
-world.artifacts
-world.evaluations
-world.timeline()
-world.incidents()
-world.observations      # who knew what, when, and through which channel
-world.actor_ledger      # every actor tool call, accepted and refused
+from worldloom import sdk
+
+base = (
+    sdk.company("retail", seed=8128)
+    .staff(80_000)
+    .located("australia")
+    .estate("large")
+)
+
+candidates = sdk.cross(
+    base,
+    calendar=["flat", "harvest", "retail_christmas"],
+    org=[
+        {"headcount": 24, "span": 4, "levels": 3},
+        {"headcount": 45, "span": 6, "levels": 4},
+    ],
+)
+
+field = sdk.dispersed(candidates, 4)
+worlds = [blueprint.build().episodes("2026-01", periods=3) for blueprint in field]
+
+selected = [world for world in worlds if world.ok and world.measure()["chokepoints"] > 0]
+for index, world in enumerate(selected, start=1):
+    world.render("xlsx", "docx", "pdf", out=f"./sdk-corpus/world-{index:02d}")
 ```
 
-Internal state is never hidden. If Worldloom knows it, you can read it.
+Blueprints are immutable values. `build()` is the only operation that mints a
+world. `cross`, `sweep`, `companies`, and `dispersed` arrange blueprints without
+relaxing any invariant.
 
-### Every noun is a first-class object
+See the [Python SDK guide](docs/sdk.md) for the complete public surface.
 
-Not `dict`. Not `Any`. Real typed models:
+## Agent skills
 
-`Company` · `Employee` · `Persona` · `System` · `Service` · `Category` · `Site` ·
-`EnterpriseEvent` · `CanonicalFact` · `LoreCommitment` · `ArtifactIntent` ·
-`ArtifactIR` · `EvaluationCase` · `GenerationLedgerEntry`
+The repository ships a progressively disclosed agent interface under `.claude/`:
 
-Every accessor returns one of them, or a typed collection of them. Never an
-anonymous dictionary.
-
-### Dataframe interop
-
-Collections convert without ceremony, so analysis happens in the tool you already use:
-
-```python
-world.people.to_polars()
-world.facts.to_pandas()
-world.events.to_arrow()
-```
-
-### Readable in a notebook
-
-`repr()` is part of the API, not an afterthought. `world.summary()` prints the
-counted overview — entities, facts, artifacts, evaluation cases, ledger entries,
-the reporting period, the seed, and the worldloom version that generated it.
-
-### One obvious way
-
-Each verb means exactly one thing, and each returns a new `World` except the last two:
-
-| Verb | Does |
+| Entry point | Use it for |
 | --- | --- |
-| `.run(scenario)` | Advances the world: events, facts, artifact plan, evaluations |
-| `.compile()` | Resolves artifact intents into IR — structure and tables before prose |
-| `.narrate(provider)` | Fills sections with prose, replaying the ledger where possible |
-| `.render(*formats)` | Turns compiled artifacts into files, held until export |
-| `.validate()` | Checks coherence → `ValidationReport` |
-| `.export(path)` | Writes the corpus to disk → `Path` |
+| `/worldloom-design` | Take an open-ended corpus ask from design through measurement and delivery |
+| `/worldloom-build` | Build a decided world and report what landed |
+| `/worldloom-narrate` | Write fact-scoped prose until every section is accepted |
+| `/worldloom-render` | Render native files and validate the result |
+| `/worldloom-evaluate` | Measure retrieval hardness, diversity, topology, and corpus statistics |
+| `/worldloom-act` | Drive an actor episode one employee decision at a time |
 
-### The CLI is the surface
+Specialist skills cover company specifications, probes, the SDK, whole-world
+authoring, document types, lines of business, processes, and new verticals. They
+all use the same cascade: propose, receive all findings, revise, accept, resolve,
+install, replay.
 
-The CLI adds no capability the engine lacks, and nothing the engine can do is
-unreachable from the CLI. It is what an agent drives, so it is the surface that
-matters most:
+Claude Code discovers these files directly when opened at the repository root.
+Other coding harnesses start with [AGENTS.md](AGENTS.md); every workflow is shell
+plus JSON and does not depend on a Claude-specific runtime.
 
-```bash
-worldloom build       # generate a world from a seed
-worldloom act         # requests / accept — be the employees, one decision at a time
-worldloom plan        # requests / accept — propose each document's shape
-worldloom narrate     # requests / accept — write the prose, under fact constraints
-worldloom render      # materialise into files
-worldloom validate    # check that every document agrees
-worldloom evaluate    # score the baseline retriever against the corpus
-worldloom diversity   # check the batch is not one document photocopied
-worldloom inspect     # show what a corpus contains
-worldloom actors      # the actor execution ledger: who did what, on what they saw
-worldloom archetypes  # list the company shapes a build can take
-worldloom evals       # export the evaluation set
+See [Using Worldloom with coding agents](docs/skills.md).
+
+## Corpus anatomy
+
+```text
+corpus/
+|-- world.json                    company, entities, recipe, schema version
+|-- lore.jsonl                    historical priors and constraints
+|-- events.jsonl                  append-only enterprise events
+|-- facts.jsonl                   canonical and superseded facts
+|-- detail.jsonl                  transaction-level tables, when requested
+|-- masterdata.json               vendors, customers, SKUs, when requested
+|-- artifact-intents.jsonl        type, author, audience, facts, lineage
+|-- artifact-ir.jsonl             resolved tables and narrative sections
+|-- artifact-manifest.jsonl       rendered files and provenance
+|-- evals.jsonl                   questions, evidence, distractors, cutoffs
+|-- intentional-errors.jsonl      labelled, mechanically explainable mess
+|-- generation-ledger.jsonl       content-addressed generative decisions
+|-- actor-*.jsonl                 observations, messages, tasks, tool calls
+`-- artifacts/                    XLSX, DOCX, PDF, PPTX, Markdown, bundles
 ```
 
-### Shape and scale
+All ledgers are ordinary JSONL. Native artifacts are optional projections. The
+canonical state remains inspectable even when no renderer dependency is installed.
 
-An **archetype** is the shape of a company without the company: how many divisions,
-what they sell, how thin the margins are, how many stores. Everything else — names,
-figures, people, incidents — is generated from the seed.
-
-```bash
-worldloom archetypes
-worldloom build --archetype australian_grocery --comparatives 11 -f xlsx --out ./corpus
-
-# Or describe a real business and get a world of that shape:
-worldloom build --inspired-by "a large Australian grocer" --comparatives 11 -f xlsx
-```
-
-`--inspired-by` resolves a description to an archetype and stops there. It looks up
-no data about the named company; what it borrows is unit mix, margin structure,
-category depth, and store count — the things that make a corpus *hard* in the way a
-real one is hard. The generated company has an invented name, invented divisions,
-invented stores, and invented numbers.
-
-Shape is what makes the workbook worth opening. A retailer's month does not stop at
-three divisions — it decomposes by merchandise category and, independently, by store:
-
-```
-Summary                    5 rows      Business Unit P&L        5 rows
-Category P&L              39 rows      Store Performance    1,568 rows
-Revenue Trend             39 × 12      Variance Drivers         4 rows
-Lineage (hidden)       6,294 rows      Reconciliation (hidden) 10 rows
-```
-
-Both decompositions are *allocated* from the unit total rather than drawn and summed,
-so they cannot drift; the hidden Reconciliation sheet then sums each of them back —
-across sheets, in live formulas — against what the fact ledger states. Ten checks,
-every one netting to zero when the file opens.
-
-None of this reaches the narrative side. The workbook cites 6,294 facts; the CFO memo
-cites the group and unit figures only, and a build of that size still produces 23
-narrative requests with at most 32 facts each.
-
----
-
-## Scenarios
-
-A scenario is a frozen dataclass with a `run` method — deliberately not a DSL,
-because a DSL designed before the second industry exists would encode guesses
-rather than recurring structure. Four ship today:
-
-```python
-from worldloom import MonthEndClose
-from worldloom.scenarios import Hire, Departure, Reorganisation
-
-world = world.run(MonthEndClose(period="2026-03", include_operational_incident=True))
-world = world.run(Departure(period="2026-04", role_key="controller"))
-```
-
-The artifact plan follows the episode, not a template: a close without an incident
-gets no RCA, and a departure produces the personnel notice that makes the
-succession answerable. From one incident, the record fans out mutually consistent:
-
-```
-Pipeline failure
-        │
-        ▼
-ServiceNow Incident ── Status Page (stale on purpose)
-        │
-        ├────────────────┐
-        ▼                ▼
-   Jira Issues     Working Note
-        │                │
-        ▼                ▼
-Engineering RCA   CFO Variance Memo
-        │                │
-        ▼                ▼
-Knowledge Article  Executive Summary
-```
-
-Every artifact agrees on timestamps, systems, services, financial impact, root
-cause, and ownership — unless the disagreement is intentional, like the triage
-status page that never learns the confirmed cause.
-
----
-
-## Actors, optionally
-
-`worldloom build --actors` changes who decides what the incident's records say.
-Without it, a deterministic planner writes them from the whole fact ledger. With
-it, they are produced by employees calling typed tools on what each had actually
-observed at the time — and the harness enforces authority and knowledge the way
-it enforces arithmetic:
-
-```bash
-worldloom build --seed 8128 --incident --actors agent --out ./corpus
-worldloom act requests ./corpus -o decision.json   # what one employee can see
-#   you choose one tool call, and write action.json
-worldloom act accept ./corpus --from action.json   # validated before it changes anything
-worldloom actors ./corpus --observations           # who could see what, when
-```
-
-An actor that cites a fact it never observed, calls a tool beyond its role, or
-confirms a cause the world did not establish is refused with the rule it broke.
-The service desk analyst, the engineer, and the CFO genuinely see different
-incidents, which is what makes "who knew the root cause before the close moved"
-a question with a checkable answer. The full contract is in
-[AGENTS.md](AGENTS.md) and [docs/actor-simulation.md](docs/actor-simulation.md).
-
----
-
-## What Worldloom generates
-
-From the retail close episode (the default build):
-
-| Domain | Artifacts |
-| --- | --- |
-| **Finance** | Month-end workbook with live formulas · CFO variance memo · per-division close commentary · working notes · close calendar |
-| **Operations** | ServiceNow incident records · Confluence status pages · knowledge articles |
-| **Engineering** | Incident RCAs · Jira remediation issues |
-| **Communications** | Meeting minutes with attendance and decisions · email threads whose early messages honestly don't know the ending |
-| **Strategy** | Executive committee summaries |
-| **People** | Personnel notices, when someone joins, leaves, or a unit changes hands |
-| **Evaluation** | Question sets over all of it: direct, cross-artifact, numerical, causal, temporal, authority, abstention — including who was in the room, and who was told what, when |
-
-And from the banking episode (`--archetype midsize_adi`): a quarterly capital
-return challenged by the second line before lodgement, filed anyway under a
-lodgement norm, invalidated by a reconciliation break the *daily* liquidity
-cadence catches, and corrected by a **restatement** that leaves the original
-filing on the record — capital return and its restatement, RWA working papers
-(v1 revised to v2), the second-line challenge memo, incident record and RCA,
-the internal audit ruling, and a board summary with a labelled omission. Both
-lodgements sit at the same authority, so nothing but the restatement
-relationship and fact validity can say which figure is current — which is
-exactly the question the evaluation set asks.
-
-Rendered natively to **XLSX**, **DOCX**, **PPTX**, **PDF**, **Markdown**, and
-portable **Jira**, **Confluence**, and **ServiceNow** bundles. Renderers are
-plugins; adding one never touches the world model. The wider artifact families —
-board packs, PRDs, account plans, workforce plans — arrive with bounded
-fan-out, per the [roadmap](#roadmap).
-
----
-
-## Industry packs
-
-The shape, lore, and name of the company are data you can author — a JSON
-file run through one of the shipped engines, with the episode physics staying
-the engine's:
-
-```bash
-worldloom pack template retail > insurer.json   # start from a valid skeleton
-worldloom pack targets retail                   # which lore is load-bearing
-worldloom pack check insurer.json               # schema + inert-lore lint
-worldloom build --pack insurer.json --incident --narrate -f markdown --out ./corpus
-```
-
-Lore is the lever: a dated commitment aimed at a consulted target changes
-what the engine generates — how likely the incident is, how much gets
-written, how a person writes — and the corpus's own timeline witnesses it.
-The pack embeds into the corpus recipe, so a pack-built corpus rebuilds
-byte-for-byte with no pack file on hand. Reference packs in
-[`examples/packs/`](examples/packs/): a general insurer on the close engine,
-a mutual bank on the challenged-return engine.
-
-## Worlds inspired by real enterprises
-
-Generate an organisation with the shape of a real one, without reproducing anything proprietary.
-
-```python
-from worldloom import RetailWorld
-
-RetailWorld.inspired_by("a large Australian grocer", seed=8128).build()
-```
-
-```bash
-worldloom build --inspired-by "a large Australian grocer" --seed 8128 --out ./corpus
-```
-
-Preserved: unit mix, margin structure, category depth, store count — the industry
-characteristics that make a corpus hard the way a real one is hard. Invented:
-every name, employee, figure, system, and incident. No data about the described
-company is looked up or used.
-
-### Or interview your way there — planned
-
-For worlds without a real-world referent, the roadmap's step 9 is a structured
-interview that builds up company identity, operating model, history, and tensions,
-then freezes them into a **WorldSeed** the deterministic engine builds from. It is
-not built yet, and deliberately so — it comes after the target schema is proven by
-two industries, so prompt behaviour cannot anchor the architecture.
-
-Two things are easily confused, and they are not the same object:
-
-| Term | Is |
-| --- | --- |
-| **seed** | An integer — `8128`. Drives seeded randomness |
-| **WorldSeed** | The frozen priors document — identity, lore, strategy, org intent — produced by an interview or an archetype |
-
-Reproducing a world takes both, plus the generation ledger and the generator version.
-
----
-
-## Deterministic
-
-The same seed produces the same enterprise. Byte for byte, run to run, machine to machine.
+## Determinism and replay
 
 ```bash
 worldloom build --seed 8128 --incident --narrate -f xlsx -f markdown --out ./one
 worldloom build --seed 8128 --incident --replay ./one -f xlsx -f markdown --out ./two
-diff -r ./one ./two    # identical, and the second run made no generative call
+diff -r ./one ./two
 ```
 
-A world is reproducible from its seed, its recipe, and its generation ledger,
-which means a corpus is citable — you can put a seed in a paper and have someone
-else regenerate exactly what you measured.
+The second build uses the first corpus's content-addressed generation ledger and
+makes no generative call. A world is reproduced from its seed, recipe, generation
+ledger, and Worldloom version. CI exercises exact file-set and byte identity over
+a rotating dispersed sample of configurations.
 
-This holds despite the generative layer, because every generative call — prose,
-document plans, actor decisions — is content-addressed into the ledger, and
-`--replay` serves it back rather than re-prompting. Changing the model or a
-prompt version changes the ledger keys and therefore produces a *different*
-world — explicitly, never silently. Each corpus stamps the worldloom version
-that generated it into `world.json`, because reproducibility is a claim about a
-specific generator.
+Determinism is not implemented by freezing outputs. The system re-executes the
+recipe and proves that the same inputs produce the same world.
 
----
+## Evaluation is generated with the evidence
 
-## Built for evaluation
-
-Every world emits its own test set, derived from canonical facts rather than
-invented by a model:
-
-```python
-for case in world.evaluations:
-    case.question                  # what to ask
-    case.expected_fact_ids        # what is true
-    case.required_artifact_ids    # which documents support it
-    case.distractor_artifact_ids  # plausible documents that do not
-    case.temporal_cutoff          # what could have been known, and when
-    case.expects_abstention       # whether refusing is the right answer
-```
-
-And ships the baseline that makes the hard questions measurable:
+Each world creates its own evaluation set from canonical facts. An evaluation case
+can carry expected fact IDs, required artifacts, explicit distractors, a temporal
+cutoff, and an abstention expectation. Ground truth is therefore not another
+model's judgement.
 
 ```bash
-worldloom evaluate ./corpus
+worldloom evals export ./corpus --out ./evals.jsonl
+worldloom evaluate ./corpus --retriever both --json
+worldloom stats ./corpus --json
 ```
 
-A deliberately mediocre keyword retriever is scored per question family. The
-useful signal is the *shape*: a corpus on which the baseline aces direct lookup
-but fails temporal, authority, and abstention questions is a corpus that is
-actually testing something. If that score rises without anyone improving the
-retriever, the corpus got easier — CI watches for exactly that.
+BM25 and TF-IDF are deliberately modest baselines. The useful signal is the score
+shape: direct lookup should be easier than temporal state, contested authority,
+causal chains, and abstention. If a baseline rises without improving, the corpus
+may have become easier.
 
-Built for teams working on RAG, enterprise search, AI agents, document
-intelligence, knowledge graphs, and retrieval benchmarks.
+## Documentation
 
-### Controlled imperfection
+Start at the [documentation home](docs/README.md).
 
-Real enterprises are messy, and a corpus that isn't will flatter your system.
-The golden episode carries deliberate mess — an initial diagnosis that was wrong,
-a status page that never learns the confirmed cause, a summary that omits the
-control failure — and every imperfection is a labelled `IntentionalError`, so it
-is a test case rather than a bug:
-
-```python
-world.inconsistencies()
-```
-
-Generated worlds are clean by design for now: mess as a configurable mode is
-step 11 of the build order, after coherence, so a coherence bug can never hide
-behind a feature.
-
----
-
-## Architecture
-
-```
-            Socratic Interview (planned)
-                          │
-                          ▼
-                     World Seed
-                          │
-                          ▼
-                  Enterprise Builder
-                          │
-                          ▼
-                Canonical World Model
-                          │
-      ┌───────────────────┼───────────────────┐
-      │                   │                   │
-      ▼                   ▼                   ▼
-  Historical         Event Engine         Fact Ledger
-   Timeline
-      │                   │                   │
-      └───────────────────┼───────────────────┘
-                          ▼
-                   Actor Runtime
-              (employees, tools, policy)
-                          │
-                          ▼
-                   Artifact Planner
-                          │
-                          ▼
-                     Artifact IR
-                          │
-      ┌───────────────────┼───────────────────┐
-      │                   │                   │
-      ▼                   ▼                   ▼
-  Narrative            Renderers         Evaluations
-  Generator
-```
-
-The core knows about worlds, events, facts, and an artifact IR. It knows nothing about XLSX, Jira, or SAP.
-
-### Renderers are plugins
-
-A renderer reads the `ArtifactIR` and nothing else — no facts, no world, no
-model — and registers itself through `worldloom.render.register`. That is what
-lets a format be added without touching the world model, and what guarantees two
-formats of one artifact agree: they are projections of one resolved structure.
-Industry modules follow the same rule from the other side: retail specifics live
-in `worldloom.retail`, never in the core `World`. An external plugin mechanism
-for third-party packages is deliberately last on the [roadmap](#roadmap) —
-plugin APIs get extracted from real extension pressure, not designed
-speculatively.
-
----
-
-## Prior art
-
-Worldloom steals from libraries, not from AI frameworks:
-
-| Library | What we take |
+| Guide | Purpose |
 | --- | --- |
-| **SQLite** | Single-file mental model, ruthless reliability |
-| **DuckDB** | Elegant local analytics, zero configuration |
-| **Polars** | Fluent, immutable, lazy API |
-| **Pydantic** | Clean typed models at every boundary |
-| **Typer** | A CLI that mirrors the library exactly |
-| **Ruff** | Opinionated defaults, uncompromising speed |
-| **uv** | Simple commands, minimal ceremony |
-| **dbt** | Declarative recipes and lineage |
-| **PyTorch** | A genuinely Pythonic object model |
-| **Rich** | Terminal and notebook output worth looking at |
-| **pytest** | Extensibility through plugins |
+| [Architecture and invariants](docs/architecture.md) | Thin waist, generation boundary, cohesion, lineage, replay, and validation |
+| [Enterprise corpus generation](docs/enterprise-corpus.md) | Scale model, histories, sharding, resume, narration, quality gates, and operations |
+| [Python SDK](docs/sdk.md) | Blueprints, combinators, scenarios, queries, measurements, rendering, and extensions |
+| [Agent skills](docs/skills.md) | Stage commands, specialist skills, progressive disclosure, and harness-neutral operation |
+| [Generated command reference](.claude/skills/worldloom/references/commands.md) | Every installed CLI command and option, derived from Typer and checked in CI |
+| [Generation model](docs/generation-model.md) | Which decisions are deterministic and which belong to a generative author |
+| [Artifact compiler](docs/artifact-compiler.md) | Components, grammars, style genomes, diversity, and renderer constraints |
+| [Episode grammar](docs/episode-grammar.md) | Facts, phases, slots, carry-forward, lints, and authored processes |
+| [Build order](docs/build-order.md) | Historical architecture decisions, sequencing, and release gates |
 
-The litmus test for every public API we add:
+## Developing Worldloom
 
-> Could a senior engineer discover and use this from autocomplete alone, without reading the documentation?
+```bash
+git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
+cd synthetic-foundry
+pip install -e ".[dev]"
 
-If no, the API is wrong. Not the documentation.
+pytest -q
+worldloom validate retail-close
+worldloom docs --check
+```
 
----
+The top-level model stays small and typed. Generators own deterministic state.
+Scenarios append events and facts. Artifact compilers consume intents. Renderers
+consume IR. Validators remain independent of the code that produced the data.
 
-## Roadmap
+Read [AGENTS.md](AGENTS.md) before changing the harness. It states the invariants,
+the agent protocol, and the exit gates that are easy to violate with a locally
+reasonable abstraction.
 
-Worldloom is built as one coherent enterprise episode taken all the way through, then generalised — not subsystem by subsystem. The full sequence, with exit gates for each step, is in **[docs/build-order.md](docs/build-order.md)**.
+## Principles
 
-The first executable is `worldloom demo retail-close`, not `worldloom interview`.
+1. Reality is generated once; artifacts are rendered many times.
+2. The model never owns arithmetic, identity, chronology, or graph mutation.
+3. Every claim has evidence and every artifact has provenance.
+4. Refusal is a product feature, not an exceptional path.
+5. Diversity is measured across a batch, not inferred from prompt variation.
+6. Replay is offline and byte-identical.
+7. Scale may change throughput; it may not change semantics.
 
-**Gate A — Coherence.** One episode agrees with itself across facts, events, systems, and artifacts.
+## License
 
-- [x] Thin waist: `World`, `Event`, `Fact`, `Persona`, `ArtifactIntent`, `ArtifactIR`, `EvaluationCase`, `GenerationLedger`
-- [x] Hand-authored golden episode: retail month-end close, no LLM
-- [x] Library kernel: load, inspect, validate, export — `worldloom demo retail-close`
-- [x] Temporal append-only fact ledger with supersession and authority
-- [x] Coherence validator: referential, graph, financial reconciliation, temporal, lore, access
-- [x] Minimal lore: 5 commitments, each constraining a downstream decision
-- [x] Deterministic organisation, financial, and operational generators
-- [x] Lore drives generation: incident likelihood, artifact density, persona traits
-- [x] Same seed reproduces the world; every seed produces a coherent one
-
-**Gate B — Utility.** An external retrieval or agent system can ingest the corpus and be scored against it.
-
-- [x] Evaluation cases derived from canonical facts
-- [x] Direct, cross-artifact, numerical, multi-hop, temporal, and authority question types
-- [x] Expected abstention and required citation checking
-- [x] In-repo baseline retriever, so the gate is self-testable — `worldloom evaluate`
-- [x] Artifact IR with declared formulas, and a renderer registry
-- [x] XLSX source model: real formulas, named ranges, hidden lineage and reconciliation sheets
-- [x] Portable Jira, Confluence, and ServiceNow bundles
-- [x] Markdown fallback, so every artifact stays readable and diffable
-- [x] DOCX for the narrative artifacts, with document dates derived from the world
-- [x] PPTX and native PDF, both byte-stable
-- [x] LLM as constrained narrative compiler: claim extraction, fact-reference substitution, validation loop
-- [x] Deterministic fake provider and generation-ledger replay
-- [x] Structural diversity: style genomes, plan handshake, fingerprints — `worldloom diversity`
-- [x] Multi-period worlds: recurrence, superseded calendars, org change over time
-
-**Actor simulation** (roadmap A0–A5 of [docs/actor-simulation.md](docs/actor-simulation.md)) — employees as bounded actors inside the deterministic world.
-
-- [x] Actor boundary: observations, invocations, actions, tool results, execution ledger
-- [x] Epistemic observations: who knew what, when, through which channel
-- [x] Role policies and decision rights, enforced by tools rather than prompts
-- [x] 27 typed tools across service management, engineering, finance, and documents
-- [x] Event-driven scheduler with bounded episodes
-- [x] The retail-close incident as an actor episode, replayable byte-for-byte
-- [x] The `worldloom act` handshake: one decision at a time, resumable by rebuild
-- [ ] Actor memory, meetings, incentives, cross-period actors (A6–A9)
-- [x] The measured hardness gate (A10) on the banking corpus: contested authority at a deliberate rank tie, and its temporal inverse, both scoring below direct lookup — pinned as an inequality in tests
-
-**Gate C — Generality.** A second industry works without industry-specific fields reaching the core.
-
-- [x] The second vertical: banking (`BankingWorld` + `QuarterlyCapitalReturn` — the challenged, restated capital return), with zero core model changes; decision recorded in [docs/build-order.md](docs/build-order.md) §7
-- [ ] Domain modules and the industry-pack interface, extracted from two verticals rather than guessed
-- [x] Industry packs: archetype and lore as agent-authorable JSON (`worldloom pack`), embedded in the recipe, linted against each engine's consulted targets
-- [x] Pack texture: system brands and per-role prose voices, with each engine publishing its slots and roles
-- [ ] Name pools and terminology in packs (today they stay engine-owned)
-- [ ] Socratic world composer, with replay and an assumption ledger
-- [ ] Scenario DSL and artifact recipes
-- [x] Bounded fan-out, first slice: minutes, email threads, and per-unit commentary projected from each episode's own facts, in both verticals
-- [ ] Bounded fan-out at scale: wider document families, size profiles, lifecycle versions, actor-message threads
-- [ ] Enterprise mess as a separate mode: temporal versions, authority, permissions, labelled noise
-
-**Gate D — Scale.** Large corpora without changing semantics or losing reproducibility.
-
-- [ ] 10K artifacts, single process, resumable
-- [ ] 100K artifacts, partitioned storage and workers
-- [ ] 1M artifacts, distributed execution
-- [ ] External publishers for Jira, Confluence, ServiceNow
-- [ ] Further industry packs: healthcare, IT services, manufacturing
-- [ ] Multi-company ecosystems and cross-enterprise supply chains
-
-Deliberately postponed: a web UI, multi-agent world-building, a graph database, direct SaaS publishing, and meta-generation of generators. These add surface area without proving the product.
-
----
-
-## Guiding principle
-
-> **Reality is generated once. Documents are rendered many times.**
-
-That distinction is what makes Worldloom useful for building AI systems that must reason across complex enterprise information instead of memorising disconnected files.
-
----
-
-## Licence
-
-[Apache 2.0](LICENSE)
+Apache License 2.0. See [LICENSE](LICENSE).

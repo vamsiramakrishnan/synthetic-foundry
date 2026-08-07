@@ -193,6 +193,28 @@ def build(
         help="Force the operational incident on or off. Omit to let the seed and lore decide.",
     ),
     employees: int = typer.Option(None, "--employees", help="Override the archetype's stated headcount."),
+    headcount_end: int = typer.Option(
+        None,
+        "--headcount-end",
+        help=(
+            "Exact stated workforce in the final period. Intermediate periods"
+            " are interpolated deterministically; may be above or below"
+            " --employees. Requires a multi-period retail build."
+        ),
+    ),
+    business_units_end: int = typer.Option(
+        None, "--business-units-end",
+        help="Exact active business-unit count in the final period.",
+    ),
+    sites_end: int = typer.Option(
+        None, "--sites-end", help="Exact active site count in the final period.",
+    ),
+    systems_end: int = typer.Option(
+        None, "--systems-end", help="Exact active system count in the final period.",
+    ),
+    services_end: int = typer.Option(
+        None, "--services-end", help="Exact active service count in the final period.",
+    ),
     archetype: str = typer.Option(
         "omnichannel_retailer", "--archetype", "-a",
         help="Company shape to build. See `worldloom archetypes` for the list.",
@@ -334,8 +356,8 @@ def build(
             "both rather than merged — there is no listed mutual. Consequences a "
             "facet has that nothing here implements are printed rather than "
             "dropped. Costs, and the second one is the surprising one: the implied "
-            "roles are appended to the organisation, so headcount exceeds what "
-            "--employees stated; and naming any facet settles *every* facet at its "
+            "roles are appended to the organisation, so --employees must be large "
+            "enough to contain them; and naming any facet settles *every* facet at its "
             "registry default, which is what makes the claims composable but means "
             "`--facet listing=listed` alone also asserts trading_pattern=steady — a "
             "flat year, replacing the engine's 21% December. Say "
@@ -422,6 +444,21 @@ def build(
     eval_density_value = _EVAL_DENSITY_LEVELS[eval_density]
     if distractors < 0:
         err.print("[red]error:[/red] --distractors takes a non-negative count")
+        raise typer.Exit(code=2)
+    if employees is not None and employees < 0:
+        err.print("[red]error:[/red] --employees takes a non-negative headcount")
+        raise typer.Exit(code=2)
+    if headcount_end is not None and headcount_end < 0:
+        err.print("[red]error:[/red] --headcount-end takes a non-negative headcount")
+        raise typer.Exit(code=2)
+    estate_ends = {
+        "business_units": business_units_end,
+        "sites": sites_end,
+        "systems": systems_end,
+        "services": services_end,
+    }
+    if any(value is not None and value < 0 for value in estate_ends.values()):
+        err.print("[red]error:[/red] structural estate endpoints must be non-negative")
         raise typer.Exit(code=2)
     if messiness is not None:
         from . import messiness as messiness_module
@@ -727,9 +764,10 @@ def build(
         Roles are appended to the engine's own table rather than replacing it:
         an audit committee chair is what "listed" *means* operationally, and a
         build that recorded the claim without minting the role would be the
-        carried-and-inert failure again. That does mean headcount exceeds what
-        `--employees` stated; the alternative is dropping a role the claim
-        requires, which is worse and quieter.
+        carried-and-inert failure again. An explicit ``--employees`` remains
+        authoritative aggregate headcount; organisation synthesis refuses it
+        when it is smaller than the role graph rather than dropping a role the
+        claim requires.
 
         A trading year yields to one the builder already has — a pack's, which
         is an authored claim about the business — for the same reason
@@ -882,15 +920,6 @@ def build(
             )
             raise typer.Exit(code=2) from exc
 
-    if employees is not None:
-        err.print(
-            f"[red]error:[/red] --employees is not yet threaded into organisation synthesis."
-            f" Specifying headcount is deferred to the episode grammar (Phase 2, `docs/next-phase-plan.md`),"
-            f" where declared slots for carry-forward will let a builder state it once for a"
-            f" multi-period episode rather than per-period. Use the archetype's own headcount for now."
-        )
-        raise typer.Exit(code=2)
-
     if single_episode is not None:
         refused = [
             flag for flag, given in (
@@ -917,6 +946,9 @@ def build(
                 # what makes this worth revisiting when a vertical's episode can
                 # be told a month went wrong.
                 ("--timeline", timeline is not None),
+                ("--headcount-end", headcount_end is not None),
+                ("--business-units-end/--sites-end/--systems-end/--services-end",
+                 any(value is not None for value in estate_ends.values())),
             ) if given
         ]
         if refused:
@@ -980,6 +1012,66 @@ def build(
                 claimed_calendar.append(carried_year)
         world = _localised_recipe(_localised(builder).build())
 
+    workforce = None
+    workforce_path: tuple[int, ...] | None = None
+    if single_episode is None and (employees is not None or headcount_end is not None):
+        from .timeline import Workforce
+
+        workforce = Workforce(
+            initial=world.company.employees_total,
+            final=(
+                world.company.employees_total
+                if headcount_end is None
+                else headcount_end
+            ),
+        )
+        try:
+            workforce_path = workforce.headcounts(max(1, periods))
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        if workforce.initial != workforce.final:
+            console.print(
+                "[dim]workforce:[/dim] "
+                + " → ".join(f"{value:,}" for value in workforce_path)
+                + "\n"
+            )
+
+    estate_trajectory = None
+    estate_path = None
+    if single_episode is None and any(value is not None for value in estate_ends.values()):
+        from .timeline import Estate, EstateSize
+
+        initial_estate = EstateSize(
+            business_units=len(world.business_units),
+            sites=len(world.sites),
+            systems=len(world.systems),
+            services=len(world.services),
+        )
+        final_estate = EstateSize(
+            business_units=(initial_estate.business_units if business_units_end is None
+                            else business_units_end),
+            sites=initial_estate.sites if sites_end is None else sites_end,
+            systems=initial_estate.systems if systems_end is None else systems_end,
+            services=initial_estate.services if services_end is None else services_end,
+        )
+        estate_trajectory = Estate(initial_estate, final_estate)
+        try:
+            estate_path = estate_trajectory.sizes(max(1, periods))
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        if initial_estate != final_estate:
+            console.print(
+                "[dim]estate:[/dim] "
+                + " → ".join(
+                    f"{size.business_units}bu/{size.sites}site/"
+                    f"{size.systems}sys/{size.services}svc"
+                    for size in estate_path
+                )
+                + "\n"
+            )
+
     # The actor provider is resolved before the loop, and a replay makes it
     # unreachable for the same reason a replayed narration does: a fallback that
     # quietly generated instead would not be a replay.
@@ -1020,6 +1112,19 @@ def build(
             "[red]error:[/red] --timeline and --actors cannot be combined; an "
             "episode resumed from the ledger is driven one decision at a time and "
             "a sampled history is decided before the first one is taken"
+        )
+        raise typer.Exit(code=2)
+    if headcount_end is not None and actors is not None:
+        err.print(
+            "[red]error:[/red] --headcount-end and --actors cannot be combined;"
+            " actor resumption records close decisions one at a time, while a"
+            " workforce trajectory is fixed before the first period"
+        )
+        raise typer.Exit(code=2)
+    if estate_trajectory is not None and actors is not None:
+        err.print(
+            "[red]error:[/red] structural estate endpoints and --actors cannot be"
+            " combined; both advance the world between close checkpoints"
         )
         raise typer.Exit(code=2)
 
@@ -1126,6 +1231,8 @@ def build(
             periods=max(1, periods),
             seed=seed,
             density=density,
+            workforce=workforce,
+            estate=estate_trajectory,
             # The sampler decides *when* something happens; what a close is
             # remains this command's business, so the episode it schedules is
             # built here with the same arguments the plain loop uses. `stated`
@@ -1150,7 +1257,33 @@ def build(
             stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
             try:
                 world = world.run(_close(stamp, incident, index))
-            except ActorProviderError as exc:
+                if (
+                    workforce_path is not None
+                    and index + 1 < len(workforce_path)
+                    and workforce_path[index + 1] != workforce_path[index]
+                ):
+                    from .scenarios import WorkforceChange
+
+                    world = world.run(WorkforceChange(
+                        period=stamp,
+                        headcount=workforce_path[index + 1],
+                    ))
+                if (
+                    estate_path is not None
+                    and index + 1 < len(estate_path)
+                    and estate_path[index + 1] != estate_path[index]
+                ):
+                    from .scenarios import StructuralChange
+
+                    target = estate_path[index + 1]
+                    world = world.run(StructuralChange(
+                        period=stamp,
+                        business_units=target.business_units,
+                        sites=target.sites,
+                        systems=target.systems,
+                        services=target.services,
+                    ))
+            except (ActorProviderError, ValueError) as exc:
                 err.print(f"[red]error:[/red] {escape(str(exc))}")
                 raise typer.Exit(code=2) from exc
 
@@ -2100,6 +2233,19 @@ def mosaic(
     out: Path = typer.Option(None, "--out", "-o", help="Directory to write the worlds into."),
     period: str = typer.Option("2026-03", "--period", "-p", help="Reporting period, YYYY-MM."),
     periods: int = typer.Option(1, "--periods", help="Consecutive periods per world."),
+    shard_count: int = typer.Option(
+        1, "--shard-count", help="Deterministic number of batch shards.",
+    ),
+    shard_index: int = typer.Option(
+        0, "--shard-index", help="Zero-based shard owned by this worker.",
+    ),
+    resume: bool = typer.Option(
+        False, "--resume", help="Resume this exact plan from validated worlds and section checkpoints.",
+    ),
+    narration_concurrency: int = typer.Option(
+        1, "--narration-concurrency", min=1,
+        help="Concurrent narration sections per world; assembly remains deterministic.",
+    ),
     incident: bool = typer.Option(
         None, "--incident/--no-incident",
         help="Force the operational incident. Omit to let each world's seed and lore decide.",
@@ -2166,6 +2312,7 @@ def mosaic(
     require generating five worlds.
     """
     from . import mosaic as mosaic_module
+    from . import batch as batch_module
 
     if describe:
         try:
@@ -2203,6 +2350,16 @@ def mosaic(
         raise typer.Exit(code=2) from exc
 
     spread = mosaic_module.spread(variants)
+    try:
+        shard_variants = batch_module.owned(
+            variants, shard_count=shard_count, shard_index=shard_index,
+        )
+    except ValueError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+    if out is None and (resume or shard_count != 1 or shard_index != 0):
+        err.print("[red]error:[/red] sharding and resume require --out")
+        raise typer.Exit(code=2)
     if as_json:
         typer.echo(json.dumps(
             {"spread": spread, "worlds": [v.as_dict() for v in variants]}, indent=2))
@@ -2221,10 +2378,36 @@ def mosaic(
         )
         return
 
+    plan_document = {
+        "batch_version": batch_module.PLAN_VERSION,
+        "generator_version": __version__,
+        "seed": seed,
+        "count": count,
+        "engine": engine,
+        "period": period,
+        "periods": periods,
+        "incident": incident,
+        "spread": spread,
+        "narrated": narrate,
+        "formats": sorted(formats or ()),
+        "shard_count": shard_count,
+        "worlds": [variant.as_dict() for variant in variants],
+    }
+    try:
+        plan_digest = batch_module.install_plan(out, plan_document, resume=resume)
+        shard_state = batch_module.ShardState(
+            out, plan_digest=plan_digest,
+            shard_count=shard_count, shard_index=shard_index, resume=resume,
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
     from dataclasses import replace as _replace_spec
 
     from . import archetypes, domains
     from .narrative import DeterministicProvider, ProviderError
+    from .narrative.compiler import NarrationError
     from .render import RenderError
     from .scenarios import MonthEndClose
 
@@ -2252,7 +2435,30 @@ def mosaic(
     written: list[str] = []
     narrated_sections = 0
     unhealthy = 0
-    for variant in variants:
+    skipped = 0
+    for variant in shard_variants:
+        target = out / f"world-{variant.index:02d}"
+        if resume and variant.index in shard_state.completed and target.exists():
+            try:
+                existing = _load(str(target))
+                if existing.recipe.get("seed") != variant.seed:
+                    raise ValueError(
+                        f"world {variant.index} has seed {existing.recipe.get('seed')},"
+                        f" expected {variant.seed}"
+                    )
+                existing.validate().raise_if_failed()
+            except Exception as exc:
+                err.print(
+                    f"[red]error:[/red] completed world {variant.index} does not"
+                    f" validate for resume: {escape(str(exc))}"
+                )
+                raise typer.Exit(code=2) from exc
+            skipped += 1
+            console.print(
+                f"[cyan]↷[/cyan] [bold]world {variant.index}[/bold]"
+                " [dim]already complete and validated[/dim]"
+            )
+            continue
         # `speaks` gives the variant its own division, category and site-format
         # names (`worldloom.vocabulary`) without touching a share, a margin or a
         # site count, and returns `shape` unchanged for any engine whose unit
@@ -2295,9 +2501,20 @@ def mosaic(
         # them read as a hard benchmark.
         sections = 0
         if narrate:
+            checkpoint = batch_module.Checkpoint(out, variant.index)
             try:
-                world = world.narrate(provider)
-            except ProviderError as exc:
+                checkpoint_ledger = checkpoint.load() if resume else ()
+                if checkpoint.path.exists() and not resume:
+                    raise ValueError(
+                        f"checkpoint {checkpoint.path} already exists; pass --resume"
+                    )
+                world = world.narrate(
+                    provider,
+                    ledger=checkpoint_ledger,
+                    concurrency=narration_concurrency,
+                    on_accepted=checkpoint.append,
+                )
+            except (OSError, ValueError, ProviderError, NarrationError) as exc:
                 err.print(f"[red]error:[/red] world {variant.index}: {escape(str(exc))}")
                 raise typer.Exit(code=2) from exc
             sections = world._narration[0]
@@ -2313,7 +2530,6 @@ def mosaic(
                 err.print(f"[red]error:[/red] world {variant.index}: {escape(str(exc))}")
                 raise typer.Exit(code=2) from exc
 
-        target = out / f"world-{variant.index:02d}"
         written.append(str(world.export(target, overwrite=True)))
         report = world.validate()
         mark = "[green]✓[/green]" if report.ok else "[red]✗[/red]"
@@ -2326,21 +2542,19 @@ def mosaic(
         if not report.ok:
             for violation in report.violations[:3]:
                 err.print(f"    [yellow]{violation.code}[/yellow] {escape(violation.detail)}")
+        else:
+            shard_state.mark_completed(variant.index)
 
     # `narrated` and `formats` ride in the plan because a reader of the
     # directory — `evaluate.across.load` above all — otherwise has to infer
     # from a passage count whether a thin corpus is an easy one or an
     # unfinished one, and those are the two readings this whole change exists
     # to stop being confusable.
-    (out / "mosaic.json").write_text(
-        json.dumps({"seed": seed, "spread": spread, "narrated": narrate,
-                    "formats": sorted(formats or ()),
-                    "worlds": [v.as_dict() for v in variants]}, indent=2) + "\n",
-        encoding="utf-8",
-    )
     console.print(
-        f"\n[green]✓[/green] {len(written)} world(s) written under [bold]{out}[/bold]"
-        f"\n[dim]{spread['distinct_shapes']} distinct organisation shape(s);"
+        f"\n[green]✓[/green] shard {shard_index}/{shard_count} wrote"
+        f" {len(written)} world(s) under [bold]{out}[/bold]"
+        + (f"; {skipped} already complete" if skipped else "")
+        + f"\n[dim]{spread['distinct_shapes']} distinct organisation shape(s);"
         f" headcounts {spread['headcounts']}; estates {spread['estates']}."
         + (f" {narrated_sections} section(s) of prose written." if narrate else "")
         + f" The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"

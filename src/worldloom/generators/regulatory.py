@@ -170,8 +170,8 @@ def generate(
     text: Mapping[str, str] | None = None,
     existing_minimum: CanonicalFact | None = None,
     money_unit: str = MONEY,
-    physics: Parameters = DEFAULT,
     calendar: Calendar = CALENDAR,
+    physics: Parameters = DEFAULT,
 ) -> ReturnEpisode:
     """Generate the challenged return for the quarter ending *period*.
 
@@ -216,6 +216,11 @@ def generate(
     keys: dict[str, str] = {}
 
     ends = period_end(period)
+    # The liquidity cadence and the capital-return milestones must count the
+    # same working days. If only liquidity observes a locale holiday, its
+    # root-cause confirmation can move after the fixed-calendar impact event
+    # that declares it as a cause — found independently twice, by a dispersed
+    # sweep on each side, as a German bank that produced no corpus at all.
     bd = lambda n: business_days_after(ends, n, calendar)  # noqa: E731 — read as arithmetic
 
     sme = roles["cat_sme_secured"]

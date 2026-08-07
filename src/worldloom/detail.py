@@ -424,10 +424,10 @@ def allocate_scaled(total: float, weights: list[float], *, decimals: int) -> lis
     """
     from .generators.finance import allocate
 
+    if total < 0:
+        raise ValueError(f"cannot allocate a negative total ({total})")
     scale = 10 ** decimals
     units = int(round(total * scale))
-    if units < 0:
-        raise ValueError(f"cannot allocate a negative total ({total})")
     parts = allocate(units, weights)
     if decimals == 0:
         return [float(part) for part in parts]

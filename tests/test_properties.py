@@ -60,6 +60,7 @@ from hypothesis import strategies as st  # noqa: E402
 from worldloom import (  # noqa: E402
     detail,
     dispersion,
+    domains,
     doctypes,
     episodes,
     factkinds,
@@ -1229,3 +1230,117 @@ def test_halton_points_are_a_prefix_of_a_longer_sequence(dimensions, count):
     for point in longer:
         assert len(point) == dimensions
         assert all(0.0 <= coordinate < 1.0 for coordinate in point)
+
+
+# The ported block's own two names, kept as that suite defined them rather than
+# remapped onto `_FAST`/`_SLOW` above: `derandomize=True` and `database=None`
+# are a deliberate choice there (CI derives the same examples every run), and
+# silently re-pointing them at settings with different semantics would make the
+# ported properties test something other than what they were written to test.
+PROPERTY_SETTINGS = settings(
+    max_examples=100,
+    deadline=None,
+    database=None,
+    derandomize=True,
+)
+
+IDENTIFIER_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789_"
+IDENTIFIERS = st.text(
+    alphabet=IDENTIFIER_ALPHABET,
+    min_size=1,
+    max_size=20,
+).filter(lambda value: value[0].isalpha())
+
+
+# ---------------------------------------------------------------------------
+# Ported from the parallel suite that landed on `main` (PR #6)
+#
+# Two independent efforts wrote property tests for this repository in the same
+# week and, between them, found the same calendar defect in
+# `generators/regulatory.py`. Where the two suites overlapped the properties
+# agreed; these three are the ones only that suite had, kept verbatim rather
+# than paraphrased so the union is auditable against either parent.
+#
+# `finite_intervals` is its strategy, and the reason the enclosure law below
+# can be stated at all: over infinities a corner product can be `nan`, which
+# `Interval.__mul__` deliberately widens to WHOLE rather than propagating —
+# so the exact min/max claim holds on finite inputs and the NaN case is the
+# separate property above.
+# ---------------------------------------------------------------------------
+
+@st.composite
+def finite_intervals(draw: st.DrawFn) -> probe.Interval:
+    left, right = draw(st.tuples(
+        st.floats(
+            min_value=-1e100,
+            max_value=1e100,
+            allow_nan=False,
+            allow_infinity=False,
+            width=64,
+        ),
+        st.floats(
+            min_value=-1e100,
+            max_value=1e100,
+            allow_nan=False,
+            allow_infinity=False,
+            width=64,
+        ),
+    ))
+    return probe.Interval(min(left, right), max(left, right))
+
+@PROPERTY_SETTINGS
+@given(finite_intervals(), finite_intervals())
+def test_interval_product_encloses_every_extreme_corner(
+    left: probe.Interval,
+    right: probe.Interval,
+) -> None:
+    product = left * right
+    corners = (
+        left.low * right.low,
+        left.low * right.high,
+        left.high * right.low,
+        left.high * right.high,
+    )
+
+    assert product == right * left
+    assert product.low == min(corners)
+    assert product.high == max(corners)
+    assert all(product.low <= corner <= product.high for corner in corners)
+
+@PROPERTY_SETTINGS
+@given(
+    engine=st.sampled_from(domains.names()),
+    owning_lob=st.sampled_from(sorted(lob.publish())),
+)
+def test_process_seed_lint_accepts_registered_engines_and_lobs(
+    engine: str,
+    owning_lob: str,
+) -> None:
+    seed = process.ProcessSeed(
+        name="PropertyProcess",
+        purpose="Exercise the process cascade.",
+        engine=engine,
+        lob=owning_lob,
+    )
+
+    assert process.lint_seed(seed) == []
+
+@PROPERTY_SETTINGS
+@given(engine_tail=IDENTIFIERS, lob_tail=IDENTIFIERS)
+def test_process_seed_lint_refuses_unknown_engines_and_lobs(
+    engine_tail: str,
+    lob_tail: str,
+) -> None:
+    engine = f"property_unknown_{engine_tail}"
+    owning_lob = f"property_unknown_{lob_tail}"
+    seed = process.ProcessSeed(
+        name="PropertyProcess",
+        purpose="Exercise the process cascade.",
+        engine=engine,
+        lob=owning_lob,
+    )
+
+    findings = process.lint_seed(seed)
+
+    assert any(engine in finding and "not a registered domain" in finding for finding in findings)
+    assert any(owning_lob in finding and "no LOB named" in finding for finding in findings)

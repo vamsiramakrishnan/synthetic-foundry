@@ -231,6 +231,31 @@ register([
         invariants=("holds-at", "precedes-event"),
         about="A business unit's leadership handover.",
     ),
+    FactKind(
+        kind="org.headcount", domain="core",
+        generated_by="scenarios.py (WorkforceChange)",
+        invariants=("holds-at", "precedes-event"),
+        about="The company's stated total workforce after an aggregate change.",
+    ),
+    FactKind(
+        kind="org.headcount.delta", domain="core",
+        generated_by="scenarios.py (WorkforceChange)",
+        invariants=("holds-at", "precedes-event"),
+        about="The signed change from the preceding stated workforce total.",
+    ),
+    *(
+        FactKind(
+            kind=f"estate.{entity}.{measure}", domain="core",
+            generated_by="scenarios.py (StructuralChange)",
+            invariants=("holds-at", "precedes-event"),
+            about=(
+                f"Active {entity.replace('_', '-')} {measure} recorded by a"
+                " structural-estate movement."
+            ),
+        )
+        for entity in ("business_units", "sites", "systems", "services")
+        for measure in ("count", "delta")
+    ),
 ])
 
 

@@ -221,6 +221,10 @@ def test_a_crash_and_resume_reproduces_the_same_corpus() -> None:
     # sequential ones — the property `highest_numeric_suffix` exists for.
     ids = [e.id for e in resumed.ledger]
     assert len(ids) == len(set(ids))
+    assert resumed.ledger == full_world.ledger, (
+        "checkpoint replay must canonicalise provisional ids to the exact ledger"
+        " an uninterrupted run writes"
+    )
 
 
 def test_a_changed_fact_never_replays_stale_prose() -> None:

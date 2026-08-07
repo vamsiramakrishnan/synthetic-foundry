@@ -33,6 +33,7 @@ DOCUMENTS = (
     "README.md",
     "CLAUDE.md",
     ".claude/skills/worldloom/SKILL.md",
+    ".claude/skills/worldloom-sdk/SKILL.md",
     # The progressively-disclosed half. Checked exactly like the entry point:
     # a reference loaded only when needed is *more* likely to go stale, not less,
     # because nothing routine exercises it.
@@ -51,10 +52,27 @@ DOCUMENTS = (
     ".claude/commands/worldloom-design.md",
     "docs/generation-model.md",
     "docs/lore.md",
+    # User-facing operator documentation. These pages are intentionally in the
+    # same executable-surface gate as the agent procedure: a stale flag in an
+    # enterprise runbook produces the wrong dataset just as surely as one in a
+    # skill does.
+    "docs/architecture.md",
+    "docs/enterprise-corpus.md",
+    "docs/sdk.md",
+    "docs/skills.md",
     # `docs/build-order.md` is deliberately absent. It is the roadmap, so it names
     # commands that do not exist yet — `worldloom interview` among them — and
     # checking it would either fail the build for describing the future or force
     # the roadmap to stop naming things before they are built.
+)
+
+LINK_CHECKED_DOCUMENTS = (
+    "README.md",
+    "docs/README.md",
+    "docs/architecture.md",
+    "docs/enterprise-corpus.md",
+    "docs/sdk.md",
+    "docs/skills.md",
 )
 
 #: Commands that need no prose of their own. Each needs a reason, because the
@@ -77,6 +95,7 @@ UNDOCUMENTED_BY_DESIGN = {
 }
 
 _FENCE = re.compile(r"```(?:bash|sh|console)?\n(.*?)```", re.DOTALL)
+_MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 
 
 def _documents() -> list[Path]:
@@ -191,6 +210,27 @@ def test_the_generated_reference_is_current() -> None:
     assert target.read_text() == docs.reference(), (
         f"{docs.REFERENCE_PATH} is stale — run `worldloom docs` and commit the result"
     )
+
+
+@pytest.mark.parametrize("name", LINK_CHECKED_DOCUMENTS)
+def test_operator_document_local_links_resolve(name: str) -> None:
+    """The documentation front door may not point at a renamed or absent page.
+
+    This deliberately checks targets rather than Markdown anchors. GitHub's
+    heading-slug algorithm is presentation behavior; whether the file exists is
+    the repository contract and catches the expensive class of navigation drift.
+    """
+    source = ROOT / name
+    problems: list[str] = []
+    for raw in _MARKDOWN_LINK.findall(source.read_text()):
+        destination = raw.split("#", 1)[0]
+        if not destination or destination.startswith(("http://", "https://", "mailto:")):
+            continue
+        target = (source.parent / destination).resolve()
+        if not target.exists():
+            problems.append(f"{raw} -> {target.relative_to(ROOT)}")
+
+    assert not problems, f"{name} has missing local links:\n" + "\n".join(problems)
 
 
 @pytest.mark.parametrize("name", DOCUMENTS)
