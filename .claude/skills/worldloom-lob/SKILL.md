@@ -1,3 +1,8 @@
+---
+name: worldloom-lob
+description: Author a Worldloom line of business through a refusable cascade — declare its roles, responsibilities, lore, and process-slot bindings so participation, access, and accountability can be derived rather than maintained separately. Use when a company needs an organizational capability such as finance, procurement, HR, or underwriting that must participate in authored processes.
+---
+
 # Authoring Lines of Business
 
 Author a Line of Business (LOB) for a Worldloom vertical. A LOB declares the
