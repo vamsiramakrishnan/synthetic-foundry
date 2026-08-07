@@ -298,7 +298,7 @@ class Roster:
 #: as an episode — which is right for a registered vertical's own scenario, all
 #: of which take nothing but a period and are checked for exactly that.
 ORG_VERBS: frozenset[str] = frozenset({
-    "Hire", "Departure", "Reorganisation", "WorkforceChange",
+    "Hire", "Departure", "Reorganisation", "WorkforceChange", "StructuralChange",
 })
 
 
@@ -551,6 +551,17 @@ def review(timeline: Timeline, roster: Roster) -> list[Rejection]:
                 headcount = target
             changed.setdefault(period, position)
 
+        elif name == "StructuralChange":
+            targets = (step.business_units, step.sites, step.systems, step.services)
+            if any(not isinstance(value, int) or isinstance(value, bool) or value < 0
+                   for value in targets):
+                refuse(subject, "bad_estate_size",
+                       f"estate targets must be non-negative integers; got {targets}.")
+            if step.services and not step.systems:
+                refuse(subject, "services_without_systems",
+                       "a non-empty service estate needs at least one system.")
+            changed.setdefault(period, position)
+
         else:
             # Anything this module does not recognise is an episode — the
             # resident domain's close, or a registered vertical's own scenario.
@@ -795,6 +806,67 @@ class Workforce:
 
 
 @dataclass(frozen=True)
+class EstateSize:
+    """One exact active structural-estate snapshot."""
+
+    business_units: int
+    sites: int
+    systems: int
+    services: int
+
+    def __post_init__(self) -> None:
+        values = (self.business_units, self.sites, self.systems, self.services)
+        if any(not isinstance(value, int) or isinstance(value, bool) or value < 0
+               for value in values):
+            raise ValueError(f"estate sizes must be non-negative integers; got {values}")
+        if self.services and not self.systems:
+            raise ValueError("a non-empty service estate needs at least one system")
+
+
+def _integer_path(initial: int, final: int, periods: int) -> tuple[int, ...]:
+    if periods < 1:
+        raise ValueError(f"a trajectory needs at least one period, got {periods}")
+    if periods == 1:
+        if initial != final:
+            raise ValueError("a one-period trajectory cannot move; use at least two periods")
+        return (initial,)
+    denominator = periods - 1
+    delta = final - initial
+    values: list[int] = []
+    for index in range(periods):
+        numerator = delta * index
+        offset = (
+            (numerator + denominator // 2) // denominator
+            if numerator >= 0
+            else -((-numerator + denominator // 2) // denominator)
+        )
+        values.append(initial + offset)
+    return tuple(values)
+
+
+@dataclass(frozen=True)
+class Estate:
+    """Exact business-unit, site, system and service trajectory.
+
+    Each dimension is interpolated independently using the same integer
+    half-up rule as :class:`Workforce`. The first snapshot describes the built
+    world; later snapshots become ``StructuralChange`` episodes between closes.
+    """
+
+    initial: EstateSize
+    final: EstateSize
+
+    def sizes(self, periods: int) -> tuple[EstateSize, ...]:
+        paths = (
+            _integer_path(self.initial.business_units, self.final.business_units, periods),
+            _integer_path(self.initial.sites, self.final.sites, periods),
+            _integer_path(self.initial.systems, self.final.systems, periods),
+            _integer_path(self.initial.services, self.final.services, periods),
+        )
+        return tuple(EstateSize(*values) for values in zip(*paths))
+
+
+@dataclass(frozen=True)
 class Opening:
     """A post a caller wants filled at some point in the history.
 
@@ -882,6 +954,7 @@ def sample(
     seed: int,
     density: Density = QUIET,
     workforce: Workforce | None = None,
+    estate: Estate | None = None,
     openings: Sequence[Opening] = (),
     months: int = 1,
     episode: Callable[[str, bool | None], Any] = _close,
@@ -938,7 +1011,7 @@ def sample(
         changes.setdefault(index, []).append(step)
 
     from .roles import ROOT
-    from .scenarios import Departure, Hire, Reorganisation, WorkforceChange
+    from .scenarios import Departure, Hire, Reorganisation, StructuralChange, WorkforceChange
 
     # Aggregate workforce first within each period's boundary. The path's
     # second value becomes effective after the first close, so the second close
@@ -948,6 +1021,18 @@ def sample(
         for index, target in enumerate(path[1:]):
             if target != path[index]:
                 at(index, WorkforceChange(period=stamps[index], headcount=target))
+
+    if estate is not None:
+        path = estate.sizes(periods)
+        for index, target in enumerate(path[1:]):
+            if target != path[index]:
+                at(index, StructuralChange(
+                    period=stamps[index],
+                    business_units=target.business_units,
+                    sites=target.sites,
+                    systems=target.systems,
+                    services=target.services,
+                ))
 
     # Departures first, because they are the family with a candidate set that
     # can be exhausted: a role is departed at most once per sampled history
@@ -1042,7 +1127,7 @@ def sample(
 
 __all__ = [
     "Density", "Opening", "ORG_VERBS", "QUIET", "Roster", "STEADY", "TURBULENT",
-    "Workforce",
+    "Workforce", "EstateSize", "Estate",
     "Timeline", "TimelineError", "ensure", "monthly", "of", "period_after",
     "periods_from", "review", "sample",
 ]

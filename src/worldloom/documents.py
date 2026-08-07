@@ -1391,11 +1391,96 @@ _DEFAULT_OUTLINE: tuple[SectionPlan, ...] = (
 #: of tell that marks a corpus as generated.
 _ACRONYMS = {"Cfo": "CFO", "Ceo": "CEO", "Cio": "CIO", "Rca": "RCA", "Kb": "KB", "It": "IT"}
 
+# A document's declared domain is an authorship constraint, not a decorative
+# tag. Broad cross-functional domains name the functions that legitimately own
+# them; ``people`` is deliberately open because a succession notice is signed
+# by the successor, whose function is the subject of the change.
+_DOMAIN_AUTHORS: dict[str, frozenset[str] | None] = {
+    "finance": frozenset({"Finance", "Executive"}),
+    "operations": frozenset({
+        "Operations", "ServiceOperations", "Technology", "Procurement", "Executive",
+    }),
+    "engineering": frozenset({"Technology", "Engineering"}),
+    "strategy": frozenset({
+        "Executive", "Finance", "Risk", "Actuarial", "Procurement", "Merchandising",
+        "Technology", "Operations", "ServiceOperations", "Audit",
+    }),
+    "risk": frozenset({"Risk", "Audit", "Finance", "Executive"}),
+    "actuarial": frozenset({"Actuarial"}),
+    "procurement": frozenset({"Procurement", "Finance", "Operations", "Executive"}),
+    "people": None,
+}
+
 
 def _title(artifact_type: str) -> str:
     """A human title for an artifact type."""
     words = artifact_type.replace("_", " ").title().split()
     return " ".join(_ACRONYMS.get(word, word) for word in words)
+
+
+def _contracted(world: World, intent: ArtifactIntent, ir: ArtifactIR) -> ArtifactIR:
+    """Enforce and stamp the renderer-independent artifact cohesion contract."""
+    if intent.artifact_type not in declared_types() | reserved_types():
+        raise ValueError(
+            f"{intent.id}: artifact type {intent.artifact_type!r} has no declared contract"
+        )
+    author = world.people.by_id(intent.author_id)
+    permitted = _DOMAIN_AUTHORS.get(intent.domain)
+    if intent.domain not in _DOMAIN_AUTHORS:
+        raise ValueError(f"{intent.id}: artifact domain {intent.domain!r} is undeclared")
+    if permitted is not None and author.function not in permitted:
+        article = "an" if intent.domain[:1].casefold() in "aeiou" else "a"
+        raise ValueError(
+            f"{intent.id}: {author.function} author {author.name!r} cannot own"
+            f" {article} {intent.domain} artifact"
+        )
+    if not intent.audience.strip():
+        raise ValueError(f"{intent.id}: artifact audience is empty")
+    if not ir.title.strip():
+        raise ValueError(f"{intent.id}: compiled artifact has no title")
+
+    # Dedicated statutory compilers legitimately use filing names rather than
+    # the type's literal label. Requiring one meaningful type word keeps the
+    # title tied to the document family without replacing those domain titles.
+    signals = {
+        word.casefold() for word in _title(intent.artifact_type).split()
+        if len(word) > 2 and word.casefold() not in {"working", "internal"}
+    }
+    signals.update({
+        "finance_workbook": {"month-end", "model"},
+    }.get(intent.artifact_type, set()))
+    title_words = {word.strip("·—-:(),").casefold() for word in ir.title.split()}
+    if signals and not signals.intersection(title_words):
+        raise ValueError(
+            f"{intent.id}: title {ir.title!r} is not cohesive with"
+            f" artifact type {intent.artifact_type!r}"
+        )
+
+    facts = [world.facts.by_id(fact_id) for fact_id in intent.required_fact_ids]
+    allowed = set(intent.required_fact_ids)
+    escaped = sorted(set(ir.fact_ids()) - allowed)
+    if escaped:
+        raise ValueError(
+            f"{intent.id}: compiled content escapes its declared fact scope: {escaped}"
+        )
+
+    periods = sorted({fact.period for fact in facts if fact.period})
+    subjects = sorted({fact.subject for fact in facts})
+    metadata = {
+        **ir.metadata,
+        "artifact_type": intent.artifact_type,
+        "artifact_domain": intent.domain,
+        "artifact_audience": intent.audience,
+        "author_id": author.id,
+        "author_function": author.function,
+        "scope_periods": ",".join(periods),
+        "scope_subjects": ",".join(subjects),
+        "cohesion_contract": "artifact-contract@1",
+    }
+    return ir.model_copy(update={
+        "subtitle": ir.subtitle or f"{author.title} · {intent.audience.replace('_', ' ')}",
+        "metadata": metadata,
+    })
 
 
 def _planned_sections(
@@ -1699,5 +1784,7 @@ def compile_intent(world: World, intent: ArtifactIntent, minter: Minter) -> Arti
     """Compile one intent into an IR."""
     builder = _COMPILERS.get(intent.artifact_type)
     if builder is not None:
-        return builder(world, intent, minter)
-    return outline(world, intent, minter)
+        ir = builder(world, intent, minter)
+    else:
+        ir = outline(world, intent, minter)
+    return _contracted(world, intent, ir)

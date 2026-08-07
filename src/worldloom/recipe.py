@@ -73,6 +73,7 @@ STEPS: dict[str, tuple[str, ...]] = {
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
     "WorkforceChange": ("period", "headcount"),
+    "StructuralChange": ("period", "business_units", "sites", "systems", "services"),
     # Not a scenario in the sense the others are — it mints no event and no
     # fact, only documents over what already happened — but it rides the same
     # step list for the same reason `--incident`/`--comparatives` do: a corpus
@@ -505,6 +506,7 @@ def rebuild(
         Hire,
         MonthEndClose,
         Reorganisation,
+        StructuralChange,
         WorkforceChange,
     )
 
@@ -684,6 +686,16 @@ def rebuild(
         elif name == "WorkforceChange":
             world = world.run(
                 WorkforceChange(period=step["period"], headcount=step["headcount"])
+            )
+        elif name == "StructuralChange":
+            world = world.run(
+                StructuralChange(
+                    period=step["period"],
+                    business_units=step["business_units"],
+                    sites=step["sites"],
+                    systems=step["systems"],
+                    services=step["services"],
+                )
             )
         elif name == "Distractors":
             world = distractors.apply(world, count=step["count"])

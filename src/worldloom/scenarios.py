@@ -12,11 +12,12 @@ build-order step 7, once IT services has shown which parts actually repeat.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from .generators.operations import business_days_after, period_end
 from . import documents, profiles as _profiles
+from .models import Authority, Lifecycle
 from .parameters import DEFAULT, Parameters
 from .recipe import locale_of
 from .rng import Rng
@@ -151,7 +152,11 @@ def _estate_reading(world: World, episode: CloseEpisode) -> EstateReading | None
     from . import graphs
     from .generators.planning import EstateReading
 
-    graph = graphs.dependency_graph(world)
+    # Some callers reconstruct the narrow episode reading from its fact/key
+    # record only (not the full generator result). Such a legacy record has no
+    # finalised_at; its world also predates lifecycle windows, so the complete
+    # graph is the exact historical answer.
+    graph = graphs.dependency_graph(world, at=getattr(episode, "finalised_at", None))
     by_id = {fact.id: fact for fact in episode.facts}
 
     def reach(key: str) -> int:
@@ -319,7 +324,7 @@ class MonthEndClose:
             unit_ids=unit_ids,
             unit_shares=unit_shares(world._archetype),
             categories=world._categories,
-            sites=world._sites,
+            sites=tuple(world.sites_at(episode.finalised_at)),
             erp_id=roles["sys_erp"],
             commerce_id=roles["sys_commerce"],
             pos_id=roles.get("sys_pos"),
@@ -346,7 +351,7 @@ class MonthEndClose:
         # two different ways that could quietly disagree.
         categories_by_unit = {
             unit.id: [c.id for c in world.categories if c.business_unit_id == unit.id]
-            for unit in world.business_units
+            for unit in world.business_units_at(episode.finalised_at)
         }
 
         # The lore-driven artifact density (status reporting swells during a
@@ -447,8 +452,9 @@ class MonthEndClose:
                 names=world.entity_names(),
                 categories_by_unit=categories_by_unit,
                 sites_by_unit={
-                    unit.id: [s.id for s in world.sites if s.business_unit_id == unit.id]
-                    for unit in world.business_units
+                    unit.id: [s.id for s in world.sites_at(episode.finalised_at)
+                              if s.business_unit_id == unit.id]
+                    for unit in world.business_units_at(episode.finalised_at)
                 },
                 # Only the people who belong to a unit. A group CFO belongs to
                 # none, and a question about "their unit's variance" would have
@@ -472,7 +478,7 @@ class MonthEndClose:
             # the questions a nine-service prop list was. Passed as a graph
             # rather than as the world so a family here cannot quietly start
             # reading some other field of it.
-            estate=graphs.dependency_graph(world),
+            estate=graphs.dependency_graph(world, at=episode.finalised_at),
             # A pack's evaluation-text overrides ride the recipe, the same
             # seam `episode_text` uses for the episode itself, so a
             # re-voiced benchmark rebuilds with no pack file on hand.
@@ -564,6 +570,21 @@ def _announcer(world, change):
 #: `register_artifact_types` cannot refuse it because nothing registered a value
 #: for it to disagree with.
 documents.reserve_artifact_types("personnel_notice")
+documents.register_artifact_types(
+    standing={"estate_change_notice": (Authority.WORKING_DOCUMENT, Lifecycle.PUBLISHED)},
+    lags={"estate_change_notice": timedelta(hours=1)},
+    outlines={
+        "estate_change_notice": (
+            documents.SectionPlan(
+                "Operating estate",
+                ("estate.",),
+                "any",
+                "State the new structural counts and signed movements. Explain only"
+                " what changed; do not invent a rationale beyond the recorded event.",
+            ),
+        ),
+    },
+)
 
 
 def _personnel_notice(minter, change, successor, period: str) -> tuple:
@@ -707,6 +728,276 @@ class WorkforceChange:
                 period=self.period,
                 headcount=self.headcount,
             ),
+        )
+
+
+@dataclass(frozen=True)
+class StructuralChange:
+    """Exact active estate sizes effective after *period* closes.
+
+    Entity rows are never deleted. Growth appends deterministic entities and
+    contraction closes their validity windows, so an artifact written before a
+    closure still resolves the unit, site, system or service it cited. Targets
+    are exact; a target below the dependency- or ownership-safe floor is refused
+    instead of silently producing a different size.
+    """
+
+    period: str
+    business_units: int
+    sites: int
+    systems: int
+    services: int
+
+    def run(self, world: World) -> World:
+        from .models import (
+            ArtifactIntent,
+            Authority,
+            BusinessUnit,
+            CanonicalFact,
+            EnterpriseEvent,
+            Quantity,
+            Service,
+            Site,
+            System,
+        )
+        from .recipe import with_step
+
+        if world._minter is None:
+            raise ValueError(
+                "this world was loaded from disk and cannot be advanced; build one from a seed"
+            )
+        requested = {
+            "business_units": self.business_units,
+            "sites": self.sites,
+            "systems": self.systems,
+            "services": self.services,
+        }
+        if any(not isinstance(value, int) or isinstance(value, bool) or value < 0
+               for value in requested.values()):
+            raise ValueError(f"estate targets must be non-negative integers; got {requested}")
+        if self.services and not self.systems:
+            raise ValueError("a non-empty service estate needs at least one active system")
+
+        at = _period_boundary(self.period)
+        active_units = list(world.business_units_at(at))
+        active_sites = list(world.sites_at(at))
+        active_systems = list(world.systems_at(at))
+        active_services = list(world.services_at(at))
+        previous = {
+            "business_units": len(active_units),
+            "sites": len(active_sites),
+            "systems": len(active_systems),
+            "services": len(active_services),
+        }
+        if requested == previous:
+            raise ValueError(
+                "estate is already at the requested size; a structural episode"
+                " that changes nothing would mint a false audit trail"
+            )
+
+        minter = world._minter
+        role_bound = frozenset(world._roles.values())
+        changed_units: list[BusinessUnit] = []
+        changed_sites: list[Site] = []
+        changed_systems: list[System] = []
+        changed_services: list[Service] = []
+
+        # Units grow before sites so the same episode can open locations in a
+        # newly formed unit. They carry no reporting share or category: those
+        # are separate financial-model decisions, never inferred from a count.
+        while len(active_units) < self.business_units:
+            sequence = len(world._business_units) + len(changed_units) + 1
+            unit = BusinessUnit(
+                id=minter.next("BU"),
+                name=f"Enterprise Unit {sequence}",
+                company_id=world.company.id,
+                leader_id=world._roles["ceo"],
+                kind="support",
+                formed=at,
+            )
+            active_units.append(unit)
+            changed_units.append(unit)
+
+        if self.sites > 0 and not active_units:
+            raise ValueError("an active site needs at least one active business unit")
+        while len(active_sites) < self.sites:
+            sequence = len(world._sites) + len(changed_sites) + 1
+            unit = active_units[(sequence - 1) % len(active_units)]
+            site = Site(
+                id=minter.next("SITE"),
+                name=f"Enterprise Site {sequence}",
+                business_unit_id=unit.id,
+                format="office",
+                region=world.company.headquarters,
+                opened=str(at.year),
+                activated_at=at,
+                revenue_weight=0.0,
+            )
+            active_sites.append(site)
+            changed_sites.append(site)
+
+        while len(active_systems) < self.systems:
+            sequence = len(world._systems) + len(changed_systems) + 1
+            system = System(
+                id=minter.next("SYS"),
+                name=f"Enterprise Platform {sequence}",
+                purpose=f"Shared enterprise capability {sequence}",
+                owner_id=world._roles.get("cio", world._roles["ceo"]),
+                is_system_of_record_for=[],
+                introduced=at,
+            )
+            active_systems.append(system)
+            changed_systems.append(system)
+
+        while len(active_services) < self.services:
+            sequence = len(world._services) + len(changed_services) + 1
+            system = active_systems[(sequence - 1) % len(active_systems)]
+            dependencies = [active_services[-1].id] if active_services else []
+            service = Service(
+                id=minter.next("SVC"),
+                name=f"Enterprise Service {sequence}",
+                purpose=f"Operates shared enterprise capability {sequence}",
+                owner_id=world._roles.get("cio", world._roles["ceo"]),
+                system_id=system.id,
+                criticality_tier=3,
+                depends_on=dependencies,
+                introduced=at,
+            )
+            active_services.append(service)
+            changed_services.append(service)
+
+        # Retire leaf services first. A role-bound service and a service another
+        # active service depends on are both part of the exact safe floor.
+        while len(active_services) > self.services:
+            depended_on = {target for service in active_services for target in service.depends_on}
+            candidate = next(
+                (service for service in reversed(active_services)
+                 if service.id not in role_bound and service.id not in depended_on),
+                None,
+            )
+            if candidate is None:
+                raise ValueError(
+                    f"service target {self.services} is below the safe floor"
+                    f" {len(active_services)} (role-bound or depended-on services remain)"
+                )
+            active_services.remove(candidate)
+            changed_services.append(candidate.model_copy(update={"retired": at}))
+
+        while len(active_systems) > self.systems:
+            used = {
+                service.system_id for service in active_services
+            } | {
+                target for service in active_services for target in service.depends_on
+            }
+            candidate = next(
+                (system for system in reversed(active_systems)
+                 if system.id not in role_bound and system.id not in used),
+                None,
+            )
+            if candidate is None:
+                raise ValueError(
+                    f"system target {self.systems} is below the safe floor"
+                    f" {len(active_systems)} (role-bound or live-service systems remain)"
+                )
+            active_systems.remove(candidate)
+            changed_systems.append(candidate.model_copy(update={"retired": at}))
+
+        while len(active_sites) > self.sites:
+            candidate = next(
+                (site for site in reversed(active_sites) if site.id not in role_bound), None
+            )
+            if candidate is None:
+                raise ValueError(
+                    f"site target {self.sites} is below the role-bound floor {len(active_sites)}"
+                )
+            active_sites.remove(candidate)
+            changed_sites.append(candidate.model_copy(update={"closed_at": at}))
+
+        occupied_units = {
+            person.business_unit_id for person in world.org_at(at)
+            if person.business_unit_id is not None
+        } | {
+            category.business_unit_id for category in world.categories
+        } | {
+            site.business_unit_id for site in active_sites
+        }
+        while len(active_units) > self.business_units:
+            candidate = next(
+                (unit for unit in reversed(active_units)
+                 if unit.id not in role_bound and unit.id not in occupied_units),
+                None,
+            )
+            if candidate is None:
+                raise ValueError(
+                    f"business-unit target {self.business_units} is below the safe floor"
+                    f" {len(active_units)} (people, categories, sites or roles remain)"
+                )
+            active_units.remove(candidate)
+            changed_units.append(candidate.model_copy(update={"dissolved": at}))
+
+        actual = {
+            "business_units": len(active_units),
+            "sites": len(active_sites),
+            "systems": len(active_systems),
+            "services": len(active_services),
+        }
+        if actual != requested:  # defensive: every loop above promises exactness
+            raise AssertionError(f"estate change resolved {actual}, expected {requested}")
+
+        author_id = world._roles.get("cio", world._roles["ceo"])
+        event = EnterpriseEvent(
+            id=minter.next("EV"),
+            kind="structural_estate_changed",
+            occurred_at=at,
+            summary=(
+                "The operating estate changed to"
+                f" {self.business_units} business units, {self.sites} sites,"
+                f" {self.systems} systems and {self.services} services."
+            ),
+            actors=[author_id],
+        )
+        facts: list[CanonicalFact] = []
+        for key, unit in (
+            ("business_units", "business_units"),
+            ("sites", "sites"),
+            ("systems", "systems"),
+            ("services", "services"),
+        ):
+            for suffix, amount in (("count", actual[key]), ("delta", actual[key] - previous[key])):
+                facts.append(CanonicalFact(
+                    id=minter.next("FACT"),
+                    kind=f"estate.{key}.{suffix}",
+                    subject=world.company.id,
+                    period=self.period,
+                    value=Quantity(amount=float(amount), unit=unit),
+                    valid_from=at,
+                    authority=Authority.SYSTEM_OF_RECORD,
+                    event_id=event.id,
+                ))
+        notice = ArtifactIntent(
+            id=minter.next("ART"),
+            artifact_type="estate_change_notice",
+            domain="operations",
+            audience="all_staff",
+            author_id=author_id,
+            triggered_by=[event.id],
+            required_fact_ids=[fact.id for fact in facts],
+            size_profile="small",
+            rationale=(
+                "A structural movement is published with exact counts and deltas,"
+                " making estate scale visible in the document corpus and audit trail."
+            ),
+        )
+        return world.extend(
+            business_units=tuple(changed_units),
+            sites=tuple(changed_sites),
+            systems=tuple(changed_systems),
+            services=tuple(changed_services),
+            events=(event,),
+            facts=tuple(facts),
+            artifact_intents=(notice,),
+            period=self.period,
+            recipe=with_step(world._recipe, "StructuralChange", period=self.period, **requested),
         )
 
 
@@ -966,6 +1257,7 @@ __all__ = [
     "Departure",
     "Reorganisation",
     "WorkforceChange",
+    "StructuralChange",
     "lore_index",
     "likelihood_multiplier",
     "density_adjustment",

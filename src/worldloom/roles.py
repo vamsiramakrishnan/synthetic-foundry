@@ -396,7 +396,14 @@ def from_shape(
             " independent, which is what a probe's cross-layer link is for."
         )
 
-    roles: list[Role] = [Role(ROOT, "Chief Executive Officer", ordered_functions[0], None)]
+    # The root is part of the load-bearing spine too. Leaving it on the first
+    # caller-supplied function made a mosaic's CEO a Merchandising employee who
+    # authored the strategy pack; access happened to permit it, but the artifact
+    # contract correctly refused the departmental contradiction.
+    roles: list[Role] = [Role(
+        ROOT, "Chief Executive Officer",
+        engine_functions.get(ROOT, ordered_functions[0]), None,
+    )]
     pending = list(spine_keys)
     made = 0
     parents = [ROOT]

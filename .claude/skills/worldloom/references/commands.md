@@ -64,6 +64,7 @@ Generate a world deterministically from a seed, then validate it.
 | --- | --- |
 | `--actors` | Let employees produce the incident's records by calling tools on what they observed. `scripted` runs the built-in deterministic actor (no network, no key); `agent` leaves every decision for you to make through `worldloom act`. |
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
+| `--business-units-end` | Exact active business-unit count in the final period. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
 | `--distractors` | Add this many provenance-true noise artifacts once the episode(s) finish: superseded drafts, personal working copies, and routine notices — real authors, real dates, real facts, answering nothing an evaluation case needs. 0 (the default) touches nothing. |
 | `--employees` | Override the archetype's stated headcount. |
@@ -85,7 +86,10 @@ Generate a world deterministically from a seed, then validate it.
 | `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
+| `--services-end` | Exact active service count in the final period. |
+| `--sites-end` | Exact active site count in the final period. |
 | `--spec` | Build from a company specification: one JSON document that says what kind of company this is, instead of the nine surfaces that each say a piece of it. `worldloom pack spec` prints the schema and `--template` writes a starter. Every field resolves into a seam that already exists — an archetype, a vocabulary, facets, physics ranges, a role table, a locale, a pack — so this adds no capability the flags lack; what it adds is that the pieces are resolved *together*, so a description that contradicts itself is a sentence rather than a corpus. Two things worth knowing. It refuses the flags it subsumes (--archetype, --inspired-by, --pack, --employees, --facet, --physics, --locale, --estate) rather than merging with them, because two accounts of one company is what a recipe exists to make impossible. And a specification is never recorded: it resolves to consequences and the recipe records those, exactly as --facet records consequences rather than facet names, so the corpus replays after the registries move underneath it. |
+| `--systems-end` | Exact active system count in the final period. |
 | `--timeline` | Sample a history rather than repeating a month: `quiet`, `steady` or `turbulent`. `--periods 6` runs six closes signed by the same twenty-three people, drawn from the same distribution — six identical months with the dates changed. A density schedules incidents and org changes across those periods instead, so a controller who departs in period 2 means periods 3-6 are signed by their successor and "which month went wrong" becomes answerable from the corpus. Needs --periods to have room to work in. Costs: the schedule states incidents in *both* directions once it schedules any, so it and --incident cannot both decide; and hires are not sampled, because a new post's title is a business decision and a sampler inventing one would write the least plausible sentence in the corpus. |
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
 
@@ -226,11 +230,15 @@ Build several companies at once, as unlike each other as the rules allow.
 | `--incident` | Force the operational incident. Omit to let each world's seed and lore decide. |
 | `--json` | Emit the plan as data. |
 | `--narrate` | Write the prose every section is waiting for, with the built-in deterministic provider — no network, no key, no spend. On by default, unlike `build --narrate`: an un-narrated world compiles fifteen artifacts of which three carry a retrievable passage, so a third of its evaluation cases cite evidence that is in no passage at all and every score read off them is about the ranker when the sentence belongs to the corpus. `--no-narrate` writes the plan-only corpora this command used to write, for a caller who wants the shapes and will narrate them another way. |
+| `--narration-concurrency` | Concurrent narration sections per world; assembly remains deterministic. |
 | `--out`, `-o` | Directory to write the worlds into. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Consecutive periods per world. |
 | `--probe` | Take the axes from a settled probe instead of this engine's defaults. The probe decides what varies and between which bounds; the algorithm still decides which N. Every parameter the probe bound becomes an axis over the interval it argued for, and axes it said nothing about keep their defaults. |
+| `--resume` | Resume this exact plan from validated worlds and section checkpoints. |
 | `--seed`, `-s` | Base seed. World N uses seed+N-1. |
+| `--shard-count` | Deterministic number of batch shards. |
+| `--shard-index` | Zero-based shard owned by this worker. |
 
 ### `worldloom narrate`
 

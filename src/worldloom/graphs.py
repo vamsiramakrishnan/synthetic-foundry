@@ -97,7 +97,7 @@ def _ordered(nodes: list[tuple[str, dict[str, Any]]],
     return graph
 
 
-def dependency_graph(world: World) -> nx.DiGraph:
+def dependency_graph(world: World, at: Any = None) -> nx.DiGraph:
     """Services and the systems they run on, as a dependency graph.
 
     **Edge direction is ``dependent -> dependency``**, which reads the way the
@@ -112,20 +112,22 @@ def dependency_graph(world: World) -> nx.DiGraph:
     that matters most: two services whose only relationship is that they read
     the same system of record.
     """
+    systems = world.systems if at is None else world.systems_at(at)
+    services = world.services if at is None else world.services_at(at)
     nodes: list[tuple[str, dict[str, Any]]] = []
     edges: list[tuple[str, str]] = []
 
-    for system in world.systems:
+    for system in systems:
         nodes.append((system.id, {"kind": "system", "name": system.name,
                                   "owner_id": system.owner_id}))
-    for service in world.services:
+    for service in services:
         nodes.append((service.id, {"kind": "service", "name": service.name,
                                    "owner_id": service.owner_id,
                                    "tier": service.criticality_tier,
                                    "system_id": service.system_id}))
 
     known = {node for node, _ in nodes}
-    for service in world.services:
+    for service in services:
         for target in service.depends_on:
             # A dangling edge is `validate.py`'s referential check to report,
             # not this module's to guess at. Dropping it here keeps every graph

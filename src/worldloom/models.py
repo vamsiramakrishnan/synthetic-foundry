@@ -322,6 +322,9 @@ class System(Entity):
     purpose: str
     owner_id: str
     is_system_of_record_for: list[str] = Field(default_factory=list)
+    introduced: datetime | None = None
+    retired: datetime | None = None
+    """Half-open operating window. Missing bounds preserve legacy always-live estates."""
 
 
 class Service(Entity):
@@ -332,6 +335,9 @@ class Service(Entity):
     system_id: str
     criticality_tier: int = Field(ge=1, le=4)
     depends_on: list[str] = Field(default_factory=list)
+    introduced: datetime | None = None
+    retired: datetime | None = None
+    """Half-open operating window. A retired service remains available to history."""
 
 
 class CostCentre(Entity):
@@ -361,6 +367,8 @@ class Site(Entity):
     format: str
     region: str
     opened: str | None = None
+    activated_at: datetime | None = None
+    closed_at: datetime | None = None
     revenue_weight: float = Field(default=0.0, ge=0.0)
     """Relative trading size. Zero for a site that holds stock but sells nothing.
 

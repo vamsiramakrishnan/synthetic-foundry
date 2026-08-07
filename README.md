@@ -339,15 +339,20 @@ narrative requests with at most 32 facts each.
 
 A scenario is a frozen dataclass with a `run` method — deliberately not a DSL,
 because a DSL designed before the second industry exists would encode guesses
-rather than recurring structure. Four ship today:
+rather than recurring structure. The shared scenarios include:
 
 ```python
 from worldloom import MonthEndClose
-from worldloom.scenarios import Departure, Hire, Reorganisation, WorkforceChange
+from worldloom.scenarios import (
+    Departure, Hire, Reorganisation, StructuralChange, WorkforceChange,
+)
 
 world = world.run(MonthEndClose(period="2026-03", include_operational_incident=True))
 world = world.run(Departure(period="2026-04", role_key="controller"))
 world = world.run(WorkforceChange(period="2026-04", headcount=84_500))
+world = world.run(StructuralChange(
+    period="2026-04", business_units=6, sites=220, systems=18, services=42,
+))
 ```
 
 Total workforce and named employees are separate by design. `--employees`
@@ -367,6 +372,22 @@ headcount and delta facts plus a personnel notice, and replay reconstructs the
 same final organisation. A million-person company therefore creates more
 organisational activity without creating a million in-memory identities or a
 million copies of month-end close.
+
+Business units, sites, systems and services have the same temporal discipline.
+The CLI derives their initial active counts from the built world and interpolates
+any stated final counts independently:
+
+```bash
+worldloom build --periods 6 --business-units-end 8 --sites-end 240 \
+  --systems-end 24 --services-end 60 --out ./changing-estate
+```
+
+Growth appends deterministic entities. Contraction closes half-open lifecycle
+windows and retains the rows for historical artifacts; it refuses any target
+below the people/category/site, role, or dependency-safe floor. Every movement
+emits exact count and signed-delta facts, an estate notice, and a replayable
+`StructuralChange` recipe step. `world.business_units_at(...)`, `sites_at(...)`,
+`systems_at(...)` and `services_at(...)` expose the corresponding as-of views.
 
 The artifact plan follows the episode, not a template: a close without an incident
 gets no RCA, and a departure produces the personnel notice that makes the
@@ -533,6 +554,26 @@ prompt version changes the ledger keys and therefore produces a *different*
 world — explicitly, never silently. Each corpus stamps the worldloom version
 that generated it into `world.json`, because reproducibility is a claim about a
 specific generator.
+
+For a large multi-company corpus, `mosaic` partitions one global deterministic
+plan by world index and checkpoints each accepted narrative section before the
+next call begins:
+
+```bash
+# Run these on independent workers against the same output directory.
+worldloom mosaic -n 1000 --shard-count 20 --shard-index 0 --out ./enterprise-corpus
+worldloom mosaic -n 1000 --shard-count 20 --shard-index 1 --out ./enterprise-corpus
+
+# After interruption, use the same plan arguments and shard identity.
+worldloom mosaic -n 1000 --shard-count 20 --shard-index 0 \
+  --out ./enterprise-corpus --resume
+```
+
+`mosaic.json` carries a content digest of the complete plan; argument drift is
+refused. Ownership is `(world_index - 1) % shard_count`, shard progress is
+atomically replaced, and accepted prose is fsync'd to per-world JSONL. Resume
+validates complete worlds before skipping them and canonicalises provisional
+checkpoint IDs, so the final corpus is byte-identical to an uninterrupted run.
 
 ---
 
