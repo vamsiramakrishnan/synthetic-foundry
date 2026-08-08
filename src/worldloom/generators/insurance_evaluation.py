@@ -34,18 +34,19 @@ from .reserving import ReservingEpisode
 #: why reasoning strings and bare fact values are deliberately absent.
 EVAL_TEXT: dict[str, str] = {
     "q.temporal.prior_ultimate":
-        "What was the actuarial ultimate for the accident quarter {accident_period} cohort"
-        " of the long-tail liability book as at the {prior_period} valuation?",
+        "What was {company}'s actuarial ultimate for the accident quarter"
+        " {accident_period} cohort of the long-tail liability book as at the"
+        " {prior_period} valuation?",
     "a.temporal.prior_ultimate": "{value}",
     "q.authority.central_estimate":
-        "What is the actuary's central estimate of ultimate claims for the long-tail"
-        " liability book, for the quarter ended {period}?",
+        "What is {company}'s actuarial central estimate of ultimate claims for the"
+        " long-tail liability book, for the quarter ended {period}?",
     "a.authority.central_estimate":
         "{central} — the actuarial central estimate. The {booked} carried on the balance"
         " sheet is a finance decision, not the actuary's estimate.",
     "q.authority.booked_reserve":
-        "What reserve is held on the balance sheet for the long-tail liability book, for"
-        " the quarter ended {period}?",
+        "What reserve does {company} hold on its balance sheet for the long-tail"
+        " liability book, for the quarter ended {period}?",
     "a.authority.booked_reserve": "{value} — the booked reserve, the current figure of record.",
     "q.causal.why_strengthened":
         "Why did the long-tail liability book's actuarial central estimate strengthen this"
@@ -92,6 +93,7 @@ def evaluation_cases(
     episode: ReservingEpisode,
     intents: tuple[ArtifactIntent, ...],
     period: str,
+    company: str = "",
     text: Mapping[str, str] | None = None,
 ) -> tuple[EvaluationCase, ...]:
     """Derive the evaluation set for one phase-1 reserving episode.
@@ -100,6 +102,17 @@ def evaluation_cases(
     benchmark itself, the seam ``generators/episode_text`` provides.
     """
     t = episode_text.merged(EVAL_TEXT, text, field="evaluation_text")
+    # Named before any `.format` call, exactly as `banking_evaluation` does
+    # and for the measurement recorded there: this taxonomy produced 9 of 9
+    # identical question strings across four seeds, and "the long-tail
+    # liability book" is the same book in every insurer this engine builds.
+    # Falls back to the generic wording this taxonomy always used, so a
+    # caller that does not name the company gets a sentence rather than
+    # "What was 's CET1 ratio" — and so the templates stay readable in
+    # isolation, which is how every test in `tests/test_eval_text.py`
+    # reads them.
+    t = {key: value.replace("{company}", company or "the insurer")
+         for key, value in t.items()}
     k = episode.keys
     by_id = {f.id: f for f in episode.facts}
 

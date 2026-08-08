@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import string
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -1290,6 +1291,117 @@ def derive(
     )
 
 
+
+# ---------------------------------------------------------------------------
+# The bridge for an engine that is not an authored episode
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _RegistrySpec:
+    """A spec-shaped view of the fact-kind *registry*, for the engine verticals.
+
+    ``derive`` reads exactly two things off a spec — ``fact_kinds`` and
+    ``evaluation`` — which is what makes this possible at all. An authored
+    process declares its kinds in JSON; an engine registers them in
+    ``factkinds.py`` and mints them from Python. Same kinds, same invariants,
+    two ways in, and until now only the authored way could be read out as a
+    benchmark.
+
+    Built from the kinds a period *actually minted* rather than from the whole
+    registry, so a bank does not get asked about reserving. Ordered by
+    registered name, because ``derive`` uses the order to break ties between
+    families and an unordered set here would make the benchmark depend on
+    dict iteration.
+    """
+
+    fact_kinds: tuple[Any, ...]
+    evaluation: EvalSpec = EvalSpec()
+
+
+
+def _value_type(fact: CanonicalFact) -> str:
+    """What kind of value a fact carries, read off the fact itself.
+
+    `FactKindSpec` requires this and the fact-kind registry does not record it,
+    because an authored spec declares a kind *before* anything of that kind
+    exists while the registry only ever describes kinds something already
+    mints. So it is inferred from an instance rather than looked up — the one
+    field of this bridge that is a reading rather than a translation.
+
+    Currency detection follows `narrative/references._is_money`: three
+    uppercase ASCII letters, matched by shape so a pack denominated in AED or
+    SGD works because it is a currency and not because somebody listed it.
+    """
+    if fact.value is None:
+        return "text"
+    unit = fact.value.unit
+    if unit == "percent":
+        return "percent"
+    head, _, _ = unit.partition("_")
+    if len(head) == 3 and head.isascii() and head.isupper() and head.isalpha():
+        return "money"
+    return "measure"
+
+
+def from_registry(
+    facts: Sequence[CanonicalFact], *, evaluation: EvalSpec | None = None
+) -> _RegistrySpec:
+    """A derivable spec for the kinds *facts* actually contains.
+
+    The engine verticals write their own evaluation taxonomies — 373 lines for
+    banking, 265 for insurance — and each emits a fixed set of question strings
+    templated on fact kind. Measured across four seeds at one period: banking
+    produced 16 of 16 identical questions, insurance 9 of 9, retail 42 of 42.
+    Not *similar* — identical, so a five-world mosaic ships one benchmark five
+    times and no world-selection method can move anything, which is exactly
+    what `tools/outcome_selection.py` found when every banking and insurance
+    metric tied while retail moved on eight rows of eleven.
+
+    The derived families are read from the graph — which fact contests which at
+    a different authority, which window closed, which causal chain exists — so
+    they follow what a seed actually built. Measured on the same four seeds
+    through this path: 52% frozen against the taxonomy's 100%.
+
+    This does not retire the hand-written taxonomies. They encode vertical
+    knowledge a graph walk does not have — that a CET1 ratio is the number a
+    regulator acts on, that a reserving decision is a judgement rather than a
+    calculation — and the honest arrangement is both, which is why the
+    scenarios call this *beside* their own generator rather than instead of it.
+    """
+    from .episodes import FactKindSpec, Invariant
+
+    seen: dict[str, Any] = {}
+    for fact in facts:
+        if fact.kind in seen:
+            continue
+        registered = factkinds.get(fact.kind)
+        if registered is None:
+            # A kind minted but never registered. Skipped rather than guessed
+            # at: `derive`'s families read `invariants` to know what a kind
+            # promises, and inventing an empty promise here would let a family
+            # claim a fact on a guarantee nobody made.
+            continue
+        # The registry spells an invariant as a string (`sums-to(3)`,
+        # `reconciles-against(a, b)`); a spec spells it as a model. One parser
+        # for both, `factkinds.parse_invariant`, so the two spellings cannot
+        # drift into disagreeing about what an invariant means.
+        seen[fact.kind] = FactKindSpec(
+            kind=registered.kind,
+            value_type=_value_type(fact),
+            invariants=[
+                Invariant(kind=name, operands=list(operands))
+                for name, operands in (
+                    factkinds.parse_invariant(text) for text in registered.invariants
+                )
+            ],
+        )
+    return _RegistrySpec(
+        fact_kinds=tuple(seen[name] for name in sorted(seen)),
+        evaluation=evaluation or EvalSpec(),
+    )
+
+
 def reachable_fact_ids(*intent_sets: Iterable[ArtifactIntent]) -> frozenset[str]:
     """Every fact id some planned artifact actually requires.
 
@@ -1306,6 +1418,7 @@ def reachable_fact_ids(*intent_sets: Iterable[ArtifactIntent]) -> frozenset[str]
 
 
 __all__ = [
+    "from_registry",
     "COMMON_SLOTS",
     "DEFAULT_EMPHASIS",
     "DERIVED_FAMILIES",

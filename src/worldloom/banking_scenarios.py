@@ -158,6 +158,9 @@ class QuarterlyCapitalReturn:
         )
         cases = banking_evaluation.evaluation_cases(
             minter, episode=episode, intents=intents, period=self.period,
+            # Named, so the benchmark varies with the bank it is about. See
+            # `banking_evaluation.evaluation_cases` for the measurement.
+            company=world.company.name,
             # A pack's evaluation-text overrides ride the recipe too, so a
             # re-voiced benchmark rebuilds with no pack file on hand — the
             # same seam `episode_text` uses for the episode itself.

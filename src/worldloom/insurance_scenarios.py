@@ -150,6 +150,7 @@ class QuarterlyReserving:
         )
         cases = insurance_evaluation.evaluation_cases(
             minter, episode=episode, intents=intents, period=self.period,
+            company=world.company.name,
             text=(world._recipe.get("pack") or {}).get("evaluation_text") or None,
         )
 

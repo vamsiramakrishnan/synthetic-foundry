@@ -36,19 +36,19 @@ from .regulatory import ReturnEpisode
 #: way that re-voicing would change.
 EVAL_TEXT: dict[str, str] = {
     "q.direct.cet1_capital":
-        "What was the bank's Common Equity Tier 1 capital for the quarter ended {period}?",
+        "What was {company}'s Common Equity Tier 1 capital for the quarter ended {period}?",
     "a.direct.cet1_capital": "{value}",
     "q.direct.minimum_ratio": "What minimum CET1 ratio does PSA 110 require?",
     "a.direct.minimum_ratio": "{value}",
     "q.direct.affected_facilities":
-        "How many loan facilities were carried at stale collateral values?",
+        "How many of {company}'s loan facilities were carried at stale collateral values?",
     "a.direct.affected_facilities": "{value}",
-    "q.authority.cet1_ratio": "What was the bank's CET1 ratio for the quarter ended {period}?",
+    "q.authority.cet1_ratio": "What was {company}'s CET1 ratio for the quarter ended {period}?",
     "a.authority.cet1_ratio":
         "{corrected} — the restated figure. The originally filed {filed} was"
         " corrected by the restatement.",
     "q.authority.current_lodgement":
-        "Which lodgement is the current statement of the bank's capital position for"
+        "Which lodgement is the current statement of {company}'s capital position for"
         " the quarter ended {period}, and how can that be established?",
     "a.authority.current_lodgement":
         "The restatement — it restates the original return, which remains on the"
@@ -61,7 +61,7 @@ EVAL_TEXT: dict[str, str] = {
         " and the challenge was still open when the CFO approved the filing. The"
         " return itself is silent on the challenge.",
     "q.temporal.reported_ratio_as_of":
-        "As of {date}, what CET1 ratio had the bank reported for the quarter ended"
+        "As of {date}, what CET1 ratio had {company} reported for the quarter ended"
         " {period}?",
     "a.temporal.reported_ratio_as_of":
         "{value} — the figure as filed, which the later restatement proved wrong but"
@@ -120,6 +120,7 @@ def evaluation_cases(
     episode: ReturnEpisode,
     intents: tuple[ArtifactIntent, ...],
     period: str,
+    company: str = "",
     text: Mapping[str, str] | None = None,
 ) -> tuple[EvaluationCase, ...]:
     """Derive the evaluation set for one challenged-return episode.
@@ -129,6 +130,26 @@ def evaluation_cases(
     for retail (see `generators/episode_text`).
     """
     t = episode_text.merged(EVAL_TEXT, text, field="evaluation_text")
+    # The company's name substituted into every template before any `.format`
+    # call sees it, so the sixteen call sites below keep passing exactly the
+    # slots they always passed.
+    #
+    # This is the whole of the frozen-benchmark fix, and the reason it is one
+    # line rather than a rewrite. Measured across four seeds at one period,
+    # this taxonomy produced 16 of 16 *identical* question strings — and it
+    # stayed at 16 of 16 when the archetype changed to a structurally different
+    # bank, because the questions said "the bank's" and never named it. A
+    # benchmark phrased that way cannot vary with the company no matter how
+    # much the company varies, and across a mosaic it is also ambiguous: five
+    # worlds asking "what was the bank's CET1 ratio" are five questions with
+    # five different right answers and no way to tell them apart.
+    # Falls back to the generic wording this taxonomy always used, so a
+    # caller that does not name the company gets a sentence rather than
+    # "What was 's CET1 ratio" — and so the templates stay readable in
+    # isolation, which is how every test in `tests/test_eval_text.py`
+    # reads them.
+    t = {key: value.replace("{company}", company or "the bank")
+         for key, value in t.items()}
     k = episode.keys
     by_id = {f.id: f for f in episode.facts}
 
