@@ -5,6 +5,120 @@ stamps the version that made it into `world.json`. Changes that alter what a
 seed generates are listed under **Generation** — they are breaking for
 reproducibility even when no API moved.
 
+## Unreleased
+
+### A benchmark an authored process gets for free
+
+- **`worldloom.benchmark`** — evaluation cases derived from the fact graph
+  rather than templated per vertical. An authored process produced **0**
+  evaluation cases against the 11 per period its engine episode produces
+  (measured twice, docs/episode-grammar.md), because every question shape lived
+  in a per-vertical Python module the grammar cannot reach. A question shape
+  turns out to be a shape in the graph: `direct_lookup` is a fact one artifact
+  carries and nothing contests, `authority_resolution` is two or more artifacts
+  citing different-authority facts about one subject, `temporal_state` is a
+  window that closed, `causal_multi_hop` is a path in `caused_by`,
+  `cross_artifact`/`numerical_comparison` are a declared `derive` or `sums-to`
+  read against where its terms landed, and `citation_required` is a statement
+  exactly one document makes.
+- **`EpisodeSpec.evaluation`** — an `EvalSpec` for what cannot be derived:
+  question phrasing per family and per kind, difficulty targets, which families
+  a process wants emphasised, and the abstentions (a fact graph holds no witness
+  to a fact's *absence*). Declared beside `detail_tables` and linted the same
+  way — a family naming a fact kind the registry lacks is refused, as is a
+  `str.format` slot the derivation never fills. `about` is a priority as well as
+  a scope, and cannot conjure a case the corpus could not answer.
+- **Measured.** `ProcureToPay`: 0 → **17 cases per period, 49 over three**,
+  across all eight families, 11 of 17 graded hard. `QuarterlyCapitalReturn`,
+  which authors *nothing* about evaluation: 0 → **14 per quarter across six
+  families**, which is the "for free" claim unassisted. The four default engine
+  builds at seed 8128 are byte-identical against `git archive HEAD`.
+
+### A retriever anyone would deploy, and what it says about the corpus
+
+- **`worldloom.evaluate.embedding`** — dense retrieval as a third ranking
+  family, so a hardness claim no longer rests on two heuristics that share one
+  idea. `RETRIEVERS` widened from classes to factories (`RetrieverFactory`), and
+  that is the whole integration surface: `score()`'s grading still cannot ask
+  which retriever produced the passages it is holding, which is what makes the
+  comparison evidence rather than two tables printed together.
+- **Optional and absent-friendly.** `pip install "worldloom[embeddings]"`.
+  Without it, `--retriever all` skips the dense column with a message and still
+  reports the lexical pair; `--retriever embedding` says what to install and
+  exits nonzero. Never a traceback, never a silent zero.
+- **Deterministic, which for an embedding model is not free.** Pins carry a
+  model id *and a commit revision*; every vector — passages and questions — is
+  cached to a sidecar keyed by `content_key(model, revision, scheme, text)`;
+  cached vectors are L2-normalised `int8` and scoring is an integer dot product,
+  so the cosine is bit-identical on any machine holding the same cache. A corpus
+  that carries its cache is scored **with no model installed at all**, which is
+  the generation ledger's argument applied to a retriever.
+- **`worldloom evaluate --retriever all`** and `tools/measure_retrievers.py`
+  print a new per-family reading: *genuinely hard*, *lexical trap*, *semantic
+  blind spot*, *solved by everything*. `--retriever both` is unchanged — still
+  exactly BM25 against TF-IDF, same console text, same JSON.
+- **Measured, on the reference narration and a five-world mosaic.**
+  `expected_abstention` and `temporal_state` are hard for everything (0/96 and
+  0/30 lexical; 0/96 and 5/30 semantic, and those five are one question passed
+  for the wrong reason). `authority_resolution` moves 0/30 → 8/30 — still
+  failing, but part of what BM25 was failing on was vocabulary, not authority.
+  **No family turned out to be a pure lexical trap**, which is the result the
+  corpus wanted and the first time it has been shown rather than assumed.
+
+### Selection on outcomes, and what it actually bought
+
+- **`worldloom.outcomes`** — the loop this repository described and never ran:
+  generate candidates, **measure the corpora**, select on the measurements.
+  `mosaic` disperses in parameter space, which is a proxy it never checked;
+  this points the same `dispersion.farthest_first` at a measurement vector
+  built from the instruments that already existed (`Built.measure`,
+  `stats.measure`, `stats.compute`, the evaluation family and difficulty mix)
+  plus a pairwise question-overlap term. Reachable as
+  `sdk.outcome_selected(candidates, n)` and `mosaic.outcome_field(n, pool=30)`.
+  `mosaic.field` and `worldloom mosaic -n 5` are byte-for-byte unchanged.
+- **The Goodhart line is in the code, not only in the prose.** `select()`
+  optimises *spread*, has no model of a good corpus, and provably never touches
+  a retriever — `tests/test_outcomes.py` replaces the scorer with something that
+  raises and requires the default path not to notice. Selecting against one
+  baseline is a separate method (`Pool.hardest`), takes the retriever's name,
+  and warns at the call.
+- **Measured against parameter dispersion, and the result is mixed.** Same
+  candidate pool, same size, both arms narrated and surveyed with
+  `evaluate.across` (`tools/outcome_selection.py`). On retail at n=5 and n=8,
+  outcome selection reliably wins distinct question strings (124 → 147),
+  distinct (question, answer) pairs (145 → 169), cross-world near-duplicate
+  *rate* (0.0050 → 0.0042), families showing any spread (3 → 5) and failure
+  concentration (0.33 → 0.24); it reliably **loses** raw cross-world duplicate
+  pair counts — it prefers denser corpora and that count is quadratic in
+  questions per world — and it consistently halves the abstention-floor
+  transplants that change a verdict (16 → 9), which is less transfer stress,
+  not more. On banking and insurance every row ties: those evaluation
+  generators emit the same 16 and 9 question strings in every world, so no
+  selector can move anything, which is a finding about the generators rather
+  than about the selector. The win is real, partial, and retail-only.
+- **The objective's one free parameter changed nothing.** Selection was
+  identical at question weights 0, 0.5, 1 and 2 on a thirty-candidate retail
+  pool — the metric block decided it — so the win is not an artifact of a term
+  that mimics the metric being reported.
+- **Cost.** A pool of thirty retail candidates measures in 4–5 s (≈0.15 s each,
+  no narration, no render, nothing on disk), against 0.07 s to disperse the
+  same candidates on parameters alone. Banking and insurance are ≈0.03 s per
+  candidate.
+
+### Fixed
+
+- `sdk.mosaic_of` dropped the vocabulary a mosaic dealt, so its blueprints
+  rebuilt worlds the mosaic never planned. `Blueprint.speaking()` and
+  `Blueprint.vocabulary_name` carry it; an empty vocabulary is byte-identical
+  to before.
+- Blueprints from `sdk.mosaic_of(n, engine="banking"|"insurance")` raised
+  `TypeError` on `build()`: `Variant` always carries a calendar, including for
+  engines that read none, and the bridge passed it to a world spec with no such
+  field. Latent because the existing test counted blueprints without building
+  one.
+- `Built.measure()` and `Built.topology()` were a second copy of
+  `outcomes.shape_vector`'s walk; they now delegate to it.
+
 ## 0.1.0 — first release
 
 One coherent enterprise, taken all the way through. Two, in fact.

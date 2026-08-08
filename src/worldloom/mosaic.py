@@ -590,6 +590,109 @@ def from_probe(
     return _field(count, seed=seed, engine=engine, axes=kept + tuple(derived))
 
 
+#: How many parameter-dispersed candidates an outcome selection measures before
+#: choosing from them. Six times the mosaic asked for, which is a judgement and
+#: is written here so it can be argued with: the candidates are already the
+#: *best-dispersed* worlds the parameter algorithm can offer, so this is not a
+#: search over a haystack — it is asking whether the parameter algorithm's top
+#: thirty rank the same way once their corpora are read. Below about four times
+#: the count there is nothing for a different selector to disagree about; above
+#: it the cost is linear in builds and the disagreement stops growing.
+_OUTCOME_POOL = 6
+
+
+def outcome_field(
+    count: int,
+    *,
+    seed: int = 8128,
+    engine: str = "retail",
+    pool: int | None = None,
+    period: str = "2026-03",
+    periods: int = 1,
+    incident: bool | None = None,
+) -> tuple[Variant, ...]:
+    """*count* variants chosen by measuring their corpora, not their parameters.
+
+    ``field`` covers a hypercube and takes the *N* furthest apart in it. That is
+    a good algorithm pointed at a proxy: it has never looked at what came out.
+    This runs the loop a dataset actually needs — build a pool of candidates
+    cheaply, measure the corpora, select on the measurements — using
+    ``worldloom.outcomes`` for the measuring and the same
+    ``dispersion.farthest_first`` for the choosing.
+
+    **The candidate pool is ``field`` itself**, which is what makes the two
+    comparable. Gonzalez's traversal is prefix-consistent, so ``field(30)[:5]``
+    *is* ``field(5)`` — the parameter-dispersed mosaic and the outcome-selected
+    one are therefore two orderings of one candidate set, and a comparison
+    between them isolates the selector rather than confounding it with a
+    different generator. ``tools/outcome_selection.py`` runs exactly that
+    comparison.
+
+    **Seeds are preserved, indices are not.** ``field`` re-seeds by selection
+    position, which is harmless there because nothing about a parameter
+    coordinate depends on a seed. Here it would be a lie: a world is measured
+    at seed *s* and re-seeding it to *s'* on the way out would hand back a
+    corpus nobody read. So a chosen variant keeps the seed it was measured
+    under, and only ``index`` — the ``world-NN`` a caller writes it to — is
+    renumbered. The cost is that this loses ``field``'s "world *N* uses
+    ``seed + N - 1``" property, and losing it is the correct trade: that
+    property exists so a mosaic's third world rebuilds without the first two,
+    and every variant here still carries its own seed for exactly that.
+
+    **Words are dealt, never selected on**, and the candidates are measured
+    with none. ``Variant.vocabulary`` already argues why a vocabulary is not an
+    axis: it is dealt from a permuted registry by *position*, which guarantees
+    what dispersion only approximates — no two worlds of a mosaic speak the
+    same words until the registry runs out. A selection that reordered
+    positions while carrying each candidate's position-dealt vocabulary would
+    destroy that guarantee, and the first version of this function did exactly
+    that: it returned five worlds of which two were ``wholesale_club`` and two
+    ``convenience_forecourt``, which is measurably worse than the parameter
+    mosaic it was meant to improve on — a vocabulary swap alone moves two
+    otherwise identical worlds 0.73 apart in question space, so a repeat is
+    close to a repeated world however far apart the physics is.
+
+    So the pool is measured with the vocabulary stripped and the words are
+    re-dealt by selection position. That keeps the measurement honest — the
+    reading never saw a vocabulary, so re-dealing cannot invalidate it — and it
+    is the one respect in which the world handed back is not the world that was
+    read.
+
+    Costs one build, one episode run and one compile per candidate — no
+    narration, no rendering, nothing on disk. A pool of thirty retail worlds is
+    a few seconds; see ``tools/outcome_selection.py``, which prints the figure
+    for the machine it ran on rather than this docstring asserting one.
+    """
+    from dataclasses import replace as _replace
+
+    from . import outcomes, sdk
+
+    if count < 0:
+        raise ValueError(f"count must be non-negative, got {count}")
+    if count == 0:
+        return ()
+    size = max(count, pool if pool is not None else count * _OUTCOME_POOL)
+    candidates = field(size, seed=seed, engine=engine)
+    blueprints = [
+        _replace(sdk._from_variant(variant), vocabulary_name="")
+        for variant in candidates
+    ]
+    measured = outcomes.pool(
+        blueprints, start=period, periods=periods, incident=incident,
+        names=[f"candidate-{variant.index:02d}" for variant in candidates],
+    )
+    chosen = measured.select(count)
+    dialects = _vocabularies(engine, seed)
+    return tuple(
+        _replace(
+            candidates[at],
+            index=position + 1,
+            vocabulary=dialects[position % len(dialects)] if dialects else "",
+        )
+        for position, at in enumerate(chosen)
+    )
+
+
 def describe(engine: str = "retail") -> dict[str, Any]:
     """What a mosaic varies, without building anything."""
     if engine not in ENGINES:
@@ -657,4 +760,5 @@ def register_engine(engine: str, axes: tuple[Axis, ...]) -> None:
     ENGINES[engine] = axes
 
 
-__all__ = ["AXES", "ENGINES", "Axis", "Variant", "describe", "field", "spread", "register_engine"]
+__all__ = ["AXES", "ENGINES", "Axis", "Variant", "describe", "field", "outcome_field",
+           "spread", "register_engine"]
