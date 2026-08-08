@@ -20,6 +20,7 @@ minutes; these are the properties that make the minutes worth spending, and
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -137,3 +138,91 @@ def test_selected_configurations_respect_what_each_engine_has() -> None:
             assert config.engine in landscape.LANDSCAPES
         if config.data == "master_data":
             assert config.surface == "spec"          # nor a --master-data flag
+
+
+# ---------------------------------------------------------------------------
+# 3. The modes fail on different things
+# ---------------------------------------------------------------------------
+#
+# The sweep shipped with `--mode process` alone and a comment claiming that two
+# subprocesses were what caught state leaking from one build into the next.
+# Review of PR #8 pointed out that they cannot: two *fresh* interpreters both
+# start pristine, so a build that poisons a module-level registry has nothing
+# to poison, and the gate passes. Only a second build in the same interpreter
+# sees it. `--mode resident` is that build, and these pin the structural
+# difference — one subprocess for two builds, rather than two — because the
+# behavioural proof (inject a counter into `Rng.__init__`; `process` reports
+# identical, `resident` reports the differing line) costs minutes of building
+# and this file has to stay in the sub-second budget the rest of `pytest -q`
+# runs on.
+
+
+def test_the_modes_normalise_to_one_order() -> None:
+    """`--mode resident,process` and `--mode process,resident` are one run.
+
+    Order and duplication in the flag must not change the report, or the
+    printed replay command stops being a faithful reproduction of the run that
+    printed it — which is the whole contract of section 1 above.
+    """
+    assert sweep.parse_modes("process,resident") == ("process", "resident")
+    assert sweep.parse_modes("resident,process") == ("process", "resident")
+    assert sweep.parse_modes("resident, resident ,process") == ("process", "resident")
+    assert sweep.parse_modes("all") == sweep.MODES
+    # `both` predates `resident`; it keeps meaning what it meant.
+    assert sweep.parse_modes("both") == ("process", "archive")
+    with pytest.raises(ValueError, match="unknown mode"):
+        sweep.parse_modes("process,inprocess")
+    with pytest.raises(ValueError, match="at least one"):
+        sweep.parse_modes(" , ")
+
+
+def test_resident_mode_builds_twice_inside_one_interpreter(monkeypatch, tmp_path) -> None:
+    """The difference that makes `resident` able to see leakage at all.
+
+    Counted as subprocess launches rather than asserted about the source,
+    because that is the property: two launches means two pristine module
+    states and nothing to leak, one launch means the second build inherits
+    whatever the first left behind. A refactor that quietly split the resident
+    child into two processes would keep every docstring true and turn the mode
+    back into a duplicate of `process`, and this is the only thing that would
+    notice.
+    """
+    launches: list[list[str]] = []
+
+    class _Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def _fake_run(argv, **kwargs):
+        launches.append(list(argv))
+        # The resident child writes the per-build report the parent reads back;
+        # with the real child stubbed out, stand in for it.
+        if len(argv) > 2 and "worldloom.cli" not in argv[2]:
+            plan = json.loads(argv[3])
+            Path(plan["report"]).parent.mkdir(parents=True, exist_ok=True)
+            Path(plan["report"]).write_text(
+                json.dumps([{"ok": True, "seconds": 0.0}] * len(plan["builds"])),
+                encoding="utf-8",
+            )
+        return _Completed()
+
+    monkeypatch.setattr(sweep.subprocess, "run", _fake_run)
+    config = sweep.field_of(1, seed=8128, pool=64).configs[0]
+
+    sweep.run_one(config, tmp_path / "r", mode="resident", formats=(),
+                  narrate=False, archive=None)
+    assert len(launches) == 1, "two launches cannot see leakage; that is the point"
+    plan = json.loads(launches[0][3])
+    assert len(plan["builds"]) == 2
+    first, second = plan["builds"]
+    assert first != second, "two builds must write to different directories"
+    # Same configuration on both sides — the interpreter is the only variable.
+    assert [a for a in first if a != first[first.index("--out") + 1]] == [
+        a for a in second if a != second[second.index("--out") + 1]
+    ]
+
+    launches.clear()
+    sweep.run_one(config, tmp_path / "p", mode="process", formats=(),
+                  narrate=False, archive=None)
+    assert len(launches) == 2, "process mode is two pristine interpreters"

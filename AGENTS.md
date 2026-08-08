@@ -830,18 +830,27 @@ the space with `dispersion.halton`, takes the furthest apart with
 ```bash
 python3 tools/sweep.py --describe                    # the axes, building nothing
 python3 tools/sweep.py -n 12                         # twice per config, in separate processes
+python3 tools/sweep.py -n 12 --mode resident         # twice per config, in ONE interpreter
 python3 tools/sweep.py -n 12 --mode archive          # working tree vs `git archive HEAD`
 python3 tools/sweep.py --seed 8128 -n 12 --only <id> # replay one row exactly
 ```
 
-Two processes and not a loop: a second build in the same interpreter inherits
-every module-level registry and cache the first one left behind, which is
-exactly the leakage worth catching and the one thing a single-process
-comparison cannot see. `--mode archive` is the local gate — in a clean CI
-checkout the working tree *is* `HEAD` — and `.github/workflows/determinism-sweep.yml`
-runs the process mode nightly on a rotating seed, so the corners covered move
-over time instead of being the same eight forever. Every run prints its seed and
-each selected configuration, so any failure replays exactly.
+`process` and `resident` answer different questions and neither subsumes the
+other, so the nightly job runs `--mode process,resident`. Two fresh processes
+share nothing but the seed, which is what catches a build depending on an
+environment variable, a locale, or a hash seed. They cannot catch *leakage*
+between builds — both start pristine, so a first build that poisons a
+module-level registry has nothing to poison. Only a second build in the same
+interpreter can see that, which is `resident`. (This file claimed the opposite
+until review of PR #8 pointed out the hole; the fix is pinned by injecting a
+module-level counter into `Rng.__init__` and watching `process` report
+identical while `resident` reports the first differing line.)
+
+`--mode archive` is the local gate — in a clean CI checkout the working tree
+*is* `HEAD`. `.github/workflows/determinism-sweep.yml` runs nightly on a
+rotating seed, so the corners covered move over time instead of being the same
+eight forever. Every run prints its seed and each selected configuration, so
+any failure replays exactly.
 
 It is a tool, not library code: nothing under `src/` imports it and it adds no
 dependency.

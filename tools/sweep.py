@@ -15,15 +15,22 @@ messiness × front door × reference tables — covers it with a Halton sequence
 discards what cannot be built, and takes the *N* furthest apart by
 farthest-point traversal. Each survivor is then built twice and diffed:
 
-* ``--mode process`` builds twice in **separate subprocesses**. That is the
-  point of a subprocess rather than a loop: an in-process second build shares
-  every module-level registry, every ``lru_cache``, every ``episodes.install``
-  from the first, so state that leaked from build one into build two is exactly
-  what a single-process comparison cannot see. Two processes share nothing but
-  the seed.
+* ``--mode process`` builds twice in **separate subprocesses**, which share
+  nothing but the seed. That catches a build whose output depends on something
+  outside the seed and outside the tree: an environment variable, a locale, a
+  hash seed, a path.
+* ``--mode resident`` builds twice **in one interpreter**, back to back. The
+  second build inherits every module-level registry, every ``lru_cache`` and
+  every ``episodes.install`` the first one left behind, so a difference here is
+  state leaking from build to build — the one failure two fresh processes
+  structurally cannot see, since both of them start pristine.
 * ``--mode archive`` builds once from the working tree and once from a
   ``git archive HEAD`` tree, so a change that moves a corpus's bytes shows up as
   drift against the committed base rather than as a passing test.
+
+The first two are complementary and neither subsumes the other: ``process``
+asks whether a build is reproducible *from nothing*, ``resident`` whether it is
+reproducible *after a build*. The nightly gate runs both.
 
 **Reproducibility is the whole contract.** Every run prints its seed, its
 Halton window, and each selected configuration as a JSON line with a
@@ -508,12 +515,17 @@ def build_once(config: Config, out: Path, *, formats: Sequence[str], narrate: bo
                source: Path | None = None, timeout: int = 1800) -> Outcome:
     """Run one ``worldloom build`` in a fresh interpreter.
 
-    A subprocess and not a function call. Everything a build touches that is not
-    the seed — the archetype registry, the doctype registry, ``episodes``'
-    installed specs, every ``lru_cache`` on a module — is process-global, so a
-    second build in the same interpreter starts from whatever the first one left
-    behind. That is exactly the state leakage worth catching, and it is the one
-    thing a single-process comparison structurally cannot see.
+    A subprocess and not a function call, so that the only thing two builds
+    compared this way share is the seed: no warmed registry, no ``lru_cache``,
+    no ``episodes.install`` carried over. What that catches is a build whose
+    output depends on something outside the seed and outside the tree — an
+    environment variable, a locale, a path, a hash seed.
+
+    What it does **not** catch is state leaking from one build into the next,
+    and an earlier version of this docstring claimed the opposite. Two *fresh*
+    interpreters both start pristine; a first build that poisons a module-level
+    registry cannot affect a second build that never sees it. Only a second
+    build in the same interpreter can. That is ``--mode resident``.
 
     *source* points the child at a different checkout's ``src`` through
     ``PYTHONPATH``, which precedes both ``site-packages`` and the editable
@@ -548,6 +560,115 @@ def build_once(config: Config, out: Path, *, formats: Sequence[str], narrate: bo
         # reason would send the reader back to run it by hand.
         stderr=(completed.stderr + completed.stdout)[-4000:] if completed.returncode else "",
     )
+
+
+#: The child that runs two builds back to back inside one interpreter.
+#:
+#: Sent with ``-c`` rather than written to a file so that ``--mode resident``
+#: needs nothing on disk that a replay would have to reproduce, and so the
+#: interpreter is ``sys.executable`` exactly as in ``build_once``.
+#:
+#: ``app()`` is imported once, before either build, because that is what makes
+#: the comparison meaningful: import side effects — the archetype registry, the
+#: doctype registry, every ``lru_cache`` — happen once, and the second build
+#: sees them in whatever state the first left them. Every exception is caught,
+#: including ``BaseException``, because a build that dies half way still has to
+#: leave a report behind saying which build died; letting it propagate would
+#: give the parent an empty file and no way to say which of the two failed.
+_RESIDENT_CHILD = """
+import json, sys, time
+from pathlib import Path
+
+plan = json.loads(sys.argv[1])
+from worldloom.cli import app
+
+report, status = [], 0
+for argv in plan["builds"]:
+    started = time.monotonic()
+    code = 0
+    try:
+        sys.argv = ["worldloom", *argv]
+        app()
+    except SystemExit as stop:
+        code = stop.code if isinstance(stop.code, int) else (0 if stop.code is None else 1)
+    except BaseException:
+        import traceback
+        traceback.print_exc()
+        code = 1
+    report.append({"ok": code == 0, "seconds": time.monotonic() - started})
+    if code:
+        status = code
+        break
+Path(plan["report"]).write_text(json.dumps(report), encoding="utf-8")
+sys.exit(status)
+"""
+
+
+def build_resident_pair(config: Config, first: Path, second: Path, *,
+                        formats: Sequence[str], narrate: bool,
+                        timeout: int = 3600) -> list[Outcome]:
+    """Build *config* twice inside **one** interpreter, and report both.
+
+    This is the comparison ``--mode process`` cannot make. Two fresh processes
+    both start from a pristine module state, so a build that leaves a registry
+    or a cache poisoned produces byte-identical output on both sides and the
+    gate passes. Here the second build inherits everything the first touched,
+    so a difference between the two *is* the leak — there is no other variable.
+
+    A pass here is a narrower claim than a pass under ``process``: it says a
+    build is reproducible after a build, not that it is reproducible from
+    nothing. Both claims are worth having, which is why neither mode replaces
+    the other and why the nightly job runs both.
+    """
+    plan = {
+        "builds": [
+            config.argv(first, formats=formats, narrate=narrate),
+            config.argv(second, formats=formats, narrate=narrate),
+        ],
+        "report": str(first.parent / "resident.json"),
+    }
+    started = time.monotonic()
+    completed = subprocess.run(
+        [sys.executable, "-c", _RESIDENT_CHILD, json.dumps(plan)],
+        capture_output=True, text=True, timeout=timeout,
+    )
+    elapsed = time.monotonic() - started
+    noise = (completed.stderr + completed.stdout)[-4000:] if completed.returncode else ""
+
+    report_path = Path(plan["report"])
+    try:
+        timings = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        # The child died before it could write anything — an import error, a
+        # timeout kill, an OOM. Attribute the whole run to the first build
+        # rather than guessing: "build one failed" with the traceback attached
+        # is true and actionable, and inventing a second Outcome would put a
+        # row in the table for work that never started.
+        return [Outcome(ok=False, seconds=elapsed, files=0, artifacts=0,
+                        stderr=noise or "the resident child wrote no report")]
+
+    outcomes: list[Outcome] = []
+    for index, (entry, out) in enumerate(zip(timings, (first, second))):
+        files = sum(1 for path in out.rglob("*") if path.is_file()) if out.exists() else 0
+        manifest = out / "artifact-manifest.jsonl"
+        artifacts = (sum(1 for line in manifest.read_text(encoding="utf-8").splitlines()
+                         if line.strip()) if manifest.exists() else 0)
+        outcomes.append(Outcome(
+            ok=bool(entry["ok"]),
+            seconds=float(entry["seconds"]),
+            files=files,
+            artifacts=artifacts,
+            # The child's output is one stream for both builds, so it is
+            # attached to whichever one failed and to no other — the reader who
+            # sees a traceback under "build 2" is being told the truth about
+            # where it came from.
+            stderr="" if entry["ok"] else _prefixed(noise, index),
+        ))
+    return outcomes
+
+
+def _prefixed(text: str, index: int) -> str:
+    return f"[resident build {index + 1}] {text}" if text else ""
 
 
 def first_difference(left: Path, right: Path) -> str | None:
@@ -640,6 +761,20 @@ def run_one(config: Config, workspace: Path, *, mode: str, formats: Sequence[str
     home = workspace / f"{config.position:02d}-{config.id}"
     first = home / "a"
     second = home / "b"
+
+    if mode == "resident":
+        # One subprocess for both builds, so the second inherits the first's
+        # module state. Everything after the build is the same comparison the
+        # other modes make — the diff does not care how the bytes got there.
+        result.outcomes.extend(build_resident_pair(
+            config, first, second, formats=formats, narrate=narrate))
+        if not result.built:
+            failed = next(o for o in result.outcomes if not o.ok)
+            result.note = _one_line(failed.stderr)
+            return result
+        result.difference = first_difference(first, second)
+        result.identical = result.difference is None
+        return result
 
     result.outcomes.append(
         build_once(config, first, formats=formats, narrate=narrate))
@@ -774,6 +909,45 @@ def report(results: Sequence[Result], *, seed: int, chosen: Field,
 # ---------------------------------------------------------------------------
 
 
+#: The three comparisons, in the order they run when more than one is asked
+#: for. Ordered, and reported in this order, because it is the order of
+#: increasing cost of setup: `process` needs nothing, `resident` needs one
+#: interpreter to survive two builds, `archive` needs a `git archive` export.
+MODES = ("process", "resident", "archive")
+
+#: `both` predates `resident` and is left meaning what it meant — a flag that
+#: silently starts doing more than it used to is worse than a second name.
+MODE_ALIASES = {"both": ("process", "archive"), "all": MODES}
+
+
+def parse_modes(text: str) -> tuple[str, ...]:
+    """``--mode`` as a set of modes, in ``MODES`` order.
+
+    Comma separated rather than a single choice, because `process` and
+    `resident` answer different questions and the nightly gate wants both;
+    de-duplicated and re-ordered rather than taken as written, so that
+    ``--mode resident,process`` and ``--mode process,resident`` produce the
+    same report, with the rows in the same sequence, and a sweep stays as
+    replayable from its printed command as everything else here.
+    """
+    wanted: set[str] = set()
+    for word in (part.strip() for part in text.split(",")):
+        if not word:
+            continue
+        if word in MODE_ALIASES:
+            wanted.update(MODE_ALIASES[word])
+        elif word in MODES:
+            wanted.add(word)
+        else:
+            raise ValueError(
+                f"unknown mode {word!r}; expected some of"
+                f" {', '.join([*MODES, *MODE_ALIASES])}"
+            )
+    if not wanted:
+        raise ValueError("--mode needs at least one mode")
+    return tuple(mode for mode in MODES if mode in wanted)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="tools/sweep.py",
@@ -787,11 +961,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                              " world seed. Printed on every run so a failure replays.")
     parser.add_argument("--pool", type=int, default=POOL,
                         help=f"candidates covered before selection (default {POOL})")
-    parser.add_argument("--mode", choices=("process", "archive", "both"),
-                        default="process",
-                        help="process: two subprocesses from the working tree."
-                             " archive: working tree against `git archive HEAD`."
-                             " both: run each configuration under both.")
+    parser.add_argument("--mode", default="process",
+                        help="comma separated. process: two fresh subprocesses"
+                             " from the working tree. resident: two builds back"
+                             " to back in one interpreter, which is the only"
+                             " mode that can see state leaking from build to"
+                             " build. archive: working tree against"
+                             " `git archive HEAD`. `both` = process,archive;"
+                             " `all` = every mode.")
     parser.add_argument("--formats", default="markdown,xlsx",
                         help="renderers to exercise, comma separated (default"
                              " markdown,xlsx). Empty plans artifacts without"
@@ -840,7 +1017,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                   f" {[c.id for c in chosen.configs]}", file=sys.stderr)
             return 2
 
-    modes = ("process", "archive") if args.mode == "both" else (args.mode,)
+    try:
+        modes = parse_modes(args.mode)
+    except ValueError as bad:
+        print(str(bad), file=sys.stderr)
+        return 2
     workspace = Path(args.workspace) if args.workspace else Path(
         tempfile.mkdtemp(prefix="worldloom-sweep-"))
     workspace.mkdir(parents=True, exist_ok=True)
