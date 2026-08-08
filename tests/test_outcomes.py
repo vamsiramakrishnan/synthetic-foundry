@@ -123,28 +123,55 @@ def test_a_smaller_selection_is_not_promised_to_be_a_prefix() -> None:
     assert field.select(4)[:2] == field.select(2)
 
 
-def test_selection_beats_the_pool_prefix_on_the_spread_it_optimises() -> None:
+def test_selection_never_loses_to_the_pool_prefix_on_the_spread_it_optimises() -> None:
     """The weak claim, and the only one this module can make on its own.
 
     Outcome selection maximises measured spread; whether measured spread is
     worth having is a question about *datasets* that no unit test can answer
     (``tools/outcome_selection.py`` asks it). What is testable is that the
-    optimiser optimises: the chosen subset's closest pair is further apart than
-    the closest pair among the same number of candidates taken in pool order.
+    optimiser optimises.
 
-    Strict at three of eight and only ``>=`` at four, and that is the honest
-    shape of the claim rather than a weakened one: farthest-point traversal is
-    a 2-approximation to a max-min problem that is NP-hard, so it is not
-    *guaranteed* to beat any particular subset, and at four of eight it ties
-    the prefix on this pool. Asserting strict inequality everywhere would be
-    asserting a property the algorithm does not have.
+    **Measured on the matrix the selector actually used**, and that is the
+    whole point of this test's shape. It previously compared two
+    ``outcomes.report`` calls, and ``report`` builds a *fresh*
+    ``distances(picked)`` over the chosen subset alone — which is not the
+    submatrix of the full-pool matrix ``select`` optimised over. Asserted
+    directly: ``distances(all)[a][b] != distances(picked)[i][j]``. So the old
+    test held the selector to a yardstick it never optimised, and it passed
+    only because the two happened to agree on that pool; rewording the
+    evaluation questions moved the readings and the selector started
+    "losing" a comparison it was never in.
+
+    On its own matrix the traversal never loses — it ties at three and four of
+    eight and wins at five. Ties are legitimate and the strict-inequality
+    version of this assertion would be false: farthest-point traversal is a
+    2-approximation to a max-min problem that is NP-hard, so it is not
+    guaranteed to beat any particular subset, only never to be arbitrarily
+    worse than the best one.
+
+    The recomputation in ``report`` is a real inconsistency and is left for a
+    change that can measure what fixing it moves. It is harmless to a reader
+    comparing two reports with each other, and wrong only when a report is
+    compared against the selector's own objective — which is exactly what this
+    test was doing.
     """
     field = _pool(8)
-    chosen = outcomes.report(field.readings, field.select(3))
-    prefix = outcomes.report(field.readings, range(3))
-    assert chosen["closest_pair"] > prefix["closest_pair"]
-    assert (outcomes.report(field.readings, field.select(4))["closest_pair"]
-            >= outcomes.report(field.readings, range(4))["closest_pair"])
+    matrix = outcomes.distances(field.readings)
+
+    def closest(indices) -> float:  # type: ignore[no-untyped-def]
+        picked = list(indices)
+        return min(matrix[a][b]
+                   for i, a in enumerate(picked) for b in picked[i + 1:])
+
+    beats_somewhere = False
+    for count in (3, 4, 5):
+        chosen, prefix = closest(field.select(count)), closest(range(count))
+        assert chosen >= prefix, (
+            f"at {count} of 8 the traversal scored {chosen} against the prefix's"
+            f" {prefix} on its own objective, which it may tie but never lose"
+        )
+        beats_somewhere = beats_somewhere or chosen > prefix
+    assert beats_somewhere, "a traversal that only ever ties is not selecting"
 
 
 def test_a_constant_metric_contributes_nothing_rather_than_a_half() -> None:
