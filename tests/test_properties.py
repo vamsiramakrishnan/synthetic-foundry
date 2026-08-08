@@ -515,10 +515,14 @@ def test_a_divergent_cycle_settles_instead_of_grinding_to_infinity():
     (which asks `low > high`), so no contradiction was reported either. Two
     nodes. Inside `probe accept`, which runs this on every answer.
 
-    What the budget must preserve is soundness in the one direction that
-    matters: stopping early leaves domains *wider*, so it can only fail to
-    refuse — never refuse an answer that holds. Asserted here as the finite
-    bound the model's own declared domain still contains.
+    The cap alone was not enough, and review of the commit that added it said
+    so: stopping early leaves a *partial* narrowing, and nothing downstream can
+    tell a partial narrowing from a settled one, so `review` accepted and
+    `resolve` handed the engine bounds this graph never agreed to. "Wider
+    domains can only fail to refuse" was the argument, and it does not survive
+    this graph either — `[-∞, -∞]` is not wider than anything. So exhaustion is
+    now a refusal, and that is what this pins: bounded domains *and* a reported
+    contradiction naming the arc it gave up on.
     """
     questions = {
         "a": probe.Question(
@@ -550,6 +554,17 @@ def test_a_divergent_cycle_settles_instead_of_grinding_to_infinity():
         domain = result.domains[key]
         assert not math.isinf(domain.high), (key, domain)
         assert domain.high <= questions[key].domain.high, "still a narrowing"
+
+    assert result.exhausted, "giving up must be visible, not inferred"
+    assert not result.consistent, "a graph that did not settle cannot resolve"
+    (found,) = result.contradictions
+    assert found.key in ("a", "b")
+    assert "still narrowing" in found.detail
+
+    # And it reaches the callers, which is the half that was actually broken:
+    # `worlds` used to enumerate a mosaic out of these partial bounds.
+    with pytest.raises(ValueError, match="did not settle"):
+        probe.worlds(graph, count=2)
 
 
 # ---------------------------------------------------------------------------
