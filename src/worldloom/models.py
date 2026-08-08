@@ -890,13 +890,29 @@ class ArtifactSection(Model):
 
     @property
     def awaiting_prose(self) -> bool:
-        """Whether this section still needs narrative."""
-        return (
-            self.body is None
-            and self.table is None
-            and self.flow is None
-            and self.quote is None
-        )
+        """Whether this section still needs narrative.
+
+        A ``table`` exempts a section and a ``flow`` deliberately does not, and
+        the difference is what each one *is*. A table is the content — the
+        divisional summary is a grid of figures with a note, and prose beside it
+        would restate the grid. A flow is a *diagram of* an argument, not the
+        argument: an RCA's root-cause section is the conclusion of the document,
+        and a reader who gets seven boxes and an arrow where the explanation
+        should be has been shown the shape of a finding without being told what
+        it was.
+
+        Found by rendering rather than by reasoning. Extending the exemption to
+        ``flow`` by analogy with ``table`` was the obvious reading, and its only
+        symptom was that declaring a causal chain silently withdrew the section
+        from ``narrate requests`` — the prose was never written, nothing
+        reported a problem, and the rendered RCA showed a bare arrow chain under
+        "Root cause".
+
+        ``quote`` keeps the exemption for the reason ``table`` has it: a pull
+        quote is the content of its section, and narrating around it would
+        produce a paragraph whose job is to introduce a sentence.
+        """
+        return self.body is None and self.table is None and self.quote is None
 
 
 class ArtifactIR(Model):

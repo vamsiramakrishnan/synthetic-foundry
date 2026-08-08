@@ -280,7 +280,14 @@ def render(
                                       presentation=presentation)
                 if facts else section.body
             )
-        elif component_id in _FLOW_COMPONENTS and section.flow is not None and (
+
+        # A flow is *additive*, and alone among these branches. The others are
+        # alternatives — a section shows its quote or its table or an awaiting
+        # notice — but a causal chain is a diagram of the argument the prose
+        # just made, so it follows the paragraph instead of replacing it. When
+        # the dispatch was a plain `elif` chain the RCA's root-cause section
+        # rendered as seven boxes and an arrow with the finding itself missing.
+        if component_id in _FLOW_COMPONENTS and section.flow is not None and (
             section.flow.nodes or section.flow.edges
         ):
             # `ops.process_flow` and `ops.causal_chain` declared `FLOW` as an
@@ -289,6 +296,8 @@ def render(
             # collapsed to whatever `section.table`/`body` held, which is the
             # measured defect this dispatch exists to end.
             parts.append(_flow(section.flow, facts, locale, presentation))
+        elif section.body:
+            pass  # the prose above is the section; nothing further to add.
         elif component_id == _PULL_QUOTE_COMPONENT and section.quote is not None:
             parts.append(_quote(section.quote, facts, locale, presentation))
         elif component_id == _CALLOUT_COMPONENT and section.quote is not None:

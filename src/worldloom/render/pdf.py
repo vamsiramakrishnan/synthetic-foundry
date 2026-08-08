@@ -789,10 +789,17 @@ def _section_flowables(
         for block in (part.strip() for part in text.split("\n\n")):
             if block:
                 flow.append(Paragraph(_escape(block), styles["body"]))
-    elif component_id in _FLOW_COMPONENTS and section.flow is not None and (
+
+    # Additive, alone among these branches — see `render/markdown.py`'s note for
+    # the reason and for the defect that established it: a causal chain is a
+    # diagram of the argument the prose just made, and an `elif` here rendered
+    # the RCA's root-cause section as an arrow chain with the finding missing.
+    if component_id in _FLOW_COMPONENTS and section.flow is not None and (
         section.flow.nodes or section.flow.edges
     ):
         flow.extend(_flow_flowables(section.flow, facts, styles, locale, presentation))
+    elif section.body:
+        pass  # the prose above is the section; nothing further to add.
     elif component_id == _PULL_QUOTE_COMPONENT and section.quote is not None:
         flow.extend(_quote_flowables(section.quote, facts, styles, locale, presentation))
     elif component_id == _CALLOUT_COMPONENT and section.quote is not None:

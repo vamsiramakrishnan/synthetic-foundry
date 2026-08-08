@@ -202,6 +202,40 @@ def _repair_order(
     return entries
 
 
+def _most_specific(
+    fitting: Sequence[ComponentSpec], available: frozenset[str]
+) -> ComponentSpec:
+    """The fitting component that uses most of what this section actually has.
+
+    Registry order alone was the tie-break, and it made a declaration
+    unenforceable in the one direction that matters. Every component that
+    *requires* an input sits later in ``REGISTRY`` than some catch-all for the
+    same role that requires nothing, so the catch-all always won and
+    ``finance.heatmap``, ``mgmt.risk_matrix`` and ``ops.process_flow`` were
+    unreachable at every format, density and row count — three names that could
+    never be selected, whatever a section declared. Adding
+    ``required_inputs`` without this is a gate that refuses components nobody
+    could reach anyway.
+
+    So specificity first: how many of the inputs a component asked for —
+    required or optional — this section can actually supply. A component that
+    asked for a flow and got one is a better answer for that section than one
+    that never mentioned flows, whatever order they were declared in.
+
+    **Registry order still decides everything else**, and that is what makes
+    this safe rather than a rewrite. When a section declares no primitive,
+    every candidate scores zero, ``max`` returns the first maximal element, and
+    the choice is the one registry order already made — so a corpus that
+    declares nothing composes exactly as it did before this function existed.
+    That property is asserted directly in `tests/test_content_primitives.py`
+    rather than argued for here, and it is why this change moves no existing
+    corpus's bytes.
+    """
+    return max(fitting, key=lambda spec: len(
+        (spec.required_inputs | spec.optional_inputs) & available
+    ))
+
+
 def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composition:
     """Resolve *plan* into a component sequence for *fmt*.
 
@@ -229,7 +263,7 @@ def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composit
             if c.fits(fmt=fmt, density=density, rows=rows, available=beat.available_inputs)
         )
         if fitting:
-            selected.append((beat, fitting[0]))
+            selected.append((beat, _most_specific(fitting, beat.available_inputs)))
         elif beat.optional:
             # Genuinely droppable: the plan itself marked this beat as
             # supporting material, so a format that cannot spell it is a reason

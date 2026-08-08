@@ -100,12 +100,25 @@ def test_quotation_carries_text_attribution_and_its_own_fact_ids() -> None:
     assert quote.fact_ids == ["FACT-0001"]
 
 
-def test_a_section_with_only_a_flow_or_quote_is_not_awaiting_prose() -> None:
-    """`awaiting_prose` used to mean ``body is None and table is None``. A
-    section whose only content is a declared flow or quotation has content —
-    treating it as still waiting for narrative would ask a narrator to write
-    prose over a shape that already presents itself, the same reason a table
-    is already excluded."""
+def test_a_quote_exempts_a_section_from_prose_and_a_flow_does_not() -> None:
+    """The asymmetry, and the defect that established it.
+
+    Extending `awaiting_prose`'s exemption from `table` to `flow` by analogy
+    was the obvious reading and it is wrong, because the two are not the same
+    kind of thing. A table *is* the content of its section. A flow is a
+    *diagram of* an argument, and the RCA's root-cause section is the
+    conclusion of the document.
+
+    The symptom was silent: declaring a causal chain withdrew the section from
+    `narrate requests`, no prose was ever written, nothing reported a problem,
+    and the rendered RCA showed seven boxes and an arrow under "Root cause"
+    with the finding itself missing. Found by reading the rendered file, which
+    is the only place it was visible.
+
+    A quotation keeps the exemption for `table`'s reason: it is the content,
+    and narrating around it would produce a paragraph whose job is to
+    introduce a sentence.
+    """
     flow_section = ArtifactSection(
         heading="Root cause",
         flow=FlowDiagram(nodes=[FlowNode(key="a", label="Step")]),
@@ -115,7 +128,7 @@ def test_a_section_with_only_a_flow_or_quote_is_not_awaiting_prose() -> None:
     )
     empty_section = ArtifactSection(heading="Nothing yet")
 
-    assert not flow_section.awaiting_prose
+    assert flow_section.awaiting_prose, "a diagram is not the argument it draws"
     assert not quote_section.awaiting_prose
     assert empty_section.awaiting_prose
 
@@ -449,24 +462,34 @@ def test_markdown_renders_a_callout_with_its_own_watch_prefix() -> None:
     assert "> **Watch:** Freight rates trending up." in payload
 
 
-def test_markdown_prose_still_wins_over_a_declared_flow_or_quote() -> None:
-    """Identity dispatch is additive to the shape chain, not a replacement of
-    it: once a section has narrated prose, that prose is what a reader sees,
-    exactly as it always was — a component declaring `FLOW`/`QUOTE` never
-    hides finished narrative behind a diagram nobody asked to see instead."""
+def test_markdown_draws_a_declared_flow_beside_the_prose_rather_than_instead_of_it() -> None:
+    """A causal chain accompanies the finding; it does not replace it.
+
+    The first version of this dispatch was a plain `elif` chain, so prose won
+    and the diagram was silently dropped — and its sibling defect in
+    `awaiting_prose` meant that when the diagram *did* draw, the prose was
+    missing instead. Between them a section could show its argument or its
+    shape and never both, which is the one combination an RCA actually needs.
+
+    A flow is the only additive branch here. A quote and a table remain
+    alternatives, because each of those *is* the content of its section.
+    """
     ir = ArtifactIR(
         id="ART-BOTH", intent_id="ART-BOTH", title="Incident review",
         sections=[
             ArtifactSection(
                 heading="Root cause", semantic_role="explanation",
                 body="The batch job failed and the control caught it on retry.",
-                flow=FlowDiagram(nodes=[FlowNode(key="a", label="Should not appear")]),
+                flow=FlowDiagram(nodes=[FlowNode(key="a", label="Both appear")]),
             ),
         ],
     )
     payload = markdown.render(ir, artifact_type="unit_test_no_grammar").decode()
     assert "The batch job failed and the control caught it on retry." in payload
-    assert "Should not appear" not in payload
+    assert "Both appear" in payload, "the diagram must accompany the prose"
+    assert payload.index("The batch job failed") < payload.index("Both appear"), (
+        "the argument comes first, then the shape of it"
+    )
 
 
 def test_markdown_a_declared_cell_band_changes_nothing_when_the_registry_never_selects_a_banded_component() -> None:
@@ -558,20 +581,26 @@ def test_pdf_renders_a_pull_quote_and_a_callout_distinctly() -> None:
     assert "Watch:" in text
 
 
-def test_pdf_prose_still_wins_over_a_declared_flow() -> None:
+def test_pdf_draws_a_declared_flow_beside_the_prose_rather_than_instead_of_it() -> None:
+    """The Markdown property above, in the fixed-page renderer.
+
+    Both formats have to agree about this or one artifact renders as two
+    different documents — the invariant `render/values` exists to protect, one
+    layer up from the figures it protects it for.
+    """
     ir = ArtifactIR(
         id="ART-BOTH", intent_id="ART-BOTH", title="Incident review",
         sections=[
             ArtifactSection(
                 heading="Root cause", semantic_role="explanation",
                 body="The batch job failed and the control caught it on retry.",
-                flow=FlowDiagram(nodes=[FlowNode(key="a", label="Should not appear")]),
+                flow=FlowDiagram(nodes=[FlowNode(key="a", label="Both appear")]),
             ),
         ],
     )
     text = _pdf_text(pdf_renderer.render(ir, artifact_type="unit_test_no_grammar"))
     assert "The batch job failed and the control caught it on retry." in text
-    assert "Should not appear" not in text
+    assert "Both appear" in text, "the diagram must accompany the prose"
 
 
 def test_pdf_a_declared_cell_band_changes_nothing_when_the_registry_never_selects_a_banded_component() -> None:
