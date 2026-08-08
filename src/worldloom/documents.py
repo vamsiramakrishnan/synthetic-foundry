@@ -1609,14 +1609,21 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             # can only guess, and guessed wrong often enough to be worth removing
             # from the path.
             from .compiler.compose import infer_semantic_role
+            from . import templating
+
+            # Resolve {{var:...}} variables in heading and purpose from the world.
+            # Variables-of-variables are refused (they contain {{var:...}} after
+            # substitution), and unresolved variables are left as [missing var:NAME].
+            resolved_heading, _ = templating.substitute(step.heading, world)
+            resolved_purpose, _ = templating.substitute(step.purpose, world)
 
             sections.append(
                 ArtifactSection(
-                    heading=step.heading,
+                    heading=resolved_heading,
                     body=None,
                     fact_ids=assigned,
-                    purpose=step.purpose,
-                    semantic_role=infer_semantic_role(step.heading, step.kinds),
+                    purpose=resolved_purpose,
+                    semantic_role=infer_semantic_role(resolved_heading, step.kinds),
                 )
             )
 
