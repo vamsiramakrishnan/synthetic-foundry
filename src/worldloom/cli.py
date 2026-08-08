@@ -2867,9 +2867,19 @@ def evaluate(
         help=(
             "bm25 (default — the original baseline, unchanged), tfidf "
             "(vector-space cosine, a genuinely different ranking family — see "
-            "src/worldloom/evaluate/tfidf.py), or both (side by side, with a "
-            "per-family agreement reading: a family low under both retrievers "
-            "is structurally hard, not hard for one heuristic)."
+            "src/worldloom/evaluate/tfidf.py), embedding (dense vectors against "
+            "a pinned model — needs the `embeddings` extra or a vector cache), "
+            "both (the two lexical baselines side by side, with a per-family "
+            "agreement reading), or all (every retriever this installation can "
+            "run, skipping any whose model is unavailable)."
+        ),
+    ),
+    vectors: str = typer.Option(
+        "", "--vectors",
+        help=(
+            "Vector cache for --retriever embedding: a file, or a directory to "
+            "keep one per model. A corpus that carries its cache scores against "
+            "the embedding retriever with no model installed at all."
         ),
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every question."),
@@ -2882,29 +2892,75 @@ def evaluate(
         ),
     ),
 ) -> None:
-    """Score one or both baseline retrievers against the corpus's evaluation set.
+    """Score one or more retrievers against the corpus's evaluation set.
 
-    A *low* score on the hard question types is the good result. Neither
-    retriever has any notion of when a document was written or how authoritative
-    it is, so a corpus on which they do well on temporal and authority questions
-    is a corpus that is not testing anything. `--retriever both` is the stronger
+    A *low* score on the hard question types is the good result. No retriever
+    here has any notion of when a document was written or how authoritative it
+    is, so a corpus on which they do well on temporal and authority questions is
+    a corpus that is not testing anything. `--retriever both` is the stronger
     claim: a family low under BM25 *and* TF-IDF cosine — two different ranking
     families — is hard because of the corpus, not because of which keyword
-    heuristic happened to be asked.
+    heuristic happened to be asked. `--retriever all` is stronger still, because
+    both of those are still *keyword* heuristics: a family the embedding
+    retriever also fails is hard for a reason no ranking function fixes, and a
+    family it walks past was a lexical trap rather than a difficult question.
     """
     import json as json_module
 
-    from .evaluate import RETRIEVERS, compare, render_agreement
+    from .evaluate import (
+        LEXICAL_RETRIEVERS,
+        RETRIEVERS,
+        compare,
+        difficulty_by_family,
+        embedding,
+        render_agreement,
+        render_difficulty,
+    )
     from .evaluate import score as run_score
 
-    if retriever != "both" and retriever not in RETRIEVERS:
-        raise typer.BadParameter(f"must be one of {sorted([*RETRIEVERS, 'both'])}", param_hint="--retriever")
+    choices = sorted([*RETRIEVERS, "both", "all"])
+    if retriever not in choices:
+        raise typer.BadParameter(f"must be one of {choices}", param_hint="--retriever")
+
+    if vectors:
+        # Bound for this invocation only, and by rebinding the registry entry
+        # rather than by threading a path through `score()` — the scorer takes
+        # documents and a name, and giving it an argument only one retriever
+        # understands is exactly the branch the seam exists to prevent.
+        RETRIEVERS["embedding"] = embedding.configured(cache=vectors)
 
     world = _compiled(_load(corpus), corpus)
 
-    if retriever == "both":
-        cards = {name: run_score(world, k=k, retriever=name) for name in sorted(RETRIEVERS)}
+    if retriever in ("both", "all"):
+        # `both` is the two lexical baselines, and stays that way whatever else
+        # gets registered: it is the pre-existing reading, its JSON shape is
+        # pinned by tests, and "lexical versus semantic" is only a comparison
+        # while the lexical side is a fixed pair.
+        wanted = list(LEXICAL_RETRIEVERS) if retriever == "both" else sorted(RETRIEVERS)
+        cards = {}
+        for name in wanted:
+            try:
+                cards[name] = run_score(world, k=k, retriever=name)
+            except embedding.EmbeddingUnavailable as unavailable:
+                # A skip, not a failure. The two lexical readings are still a
+                # measurement, and saying which one was missing and why is more
+                # use than an exit code — see `embedding.py`'s docstring on
+                # being absent-friendly.
+                if not as_json:
+                    # Escaped: the message names the extra as
+                    # `worldloom[embeddings]`, and rich reads a bracketed word
+                    # as a style tag and prints the instruction with the part
+                    # you have to type removed.
+                    console.print(f"[yellow]skipped {name}[/yellow] — {escape(str(unavailable))}")
+                continue
+        if not cards:
+            raise typer.Exit(1)
         findings = compare(cards)
+        # Only computed where a semantic retriever actually ran. `both` is two
+        # lexical baselines, and printing "lexical vs semantic" over a table
+        # with no semantic column in it would be a heading describing an
+        # experiment that did not happen.
+        difficulty = difficulty_by_family(cards)
         if as_json:
             # A new top-level shape, not a variant of the single-retriever one —
             # `retriever="both"` is a capability nothing could request before
@@ -2912,7 +2968,7 @@ def evaluate(
             # could break. The single-retriever shape below (`bm25`, the
             # default, and `tfidf`) is untouched byte-for-byte.
             typer.echo(json_module.dumps({
-                "retriever": "both",
+                "retriever": retriever,
                 "k": k,
                 "retrievers": {name: _card_json(card) for name, card in cards.items()},
                 "agreement": {
@@ -2927,12 +2983,31 @@ def evaluate(
                     }
                     for finding in findings
                 },
+                # Additive, and absent when only lexical retrievers ran — so
+                # `--retriever both`'s payload keeps exactly the shape it had.
+                **(
+                    {
+                        "difficulty": {
+                            finding.evaluation_type.value: {
+                                "lexical": {"passed": finding.lexical[0], "total": finding.lexical[1]},
+                                "semantic": {"passed": finding.semantic[0], "total": finding.semantic[1]},
+                                "verdict": finding.verdict,
+                            }
+                            for finding in difficulty
+                        }
+                    }
+                    if difficulty
+                    else {}
+                ),
             }, indent=2))
             return
         for name in sorted(cards):
             console.print(str(cards[name]))
             console.print("")
         console.print(render_agreement(findings))
+        if difficulty:
+            console.print("")
+            console.print(render_difficulty(difficulty))
         if verbose:
             for name in sorted(cards):
                 console.print(f"\n[bold]{name}[/bold]")
@@ -2942,7 +3017,15 @@ def evaluate(
                     console.print(f"      {outcome.detail}")
         return
 
-    card = run_score(world, k=k, retriever=retriever)
+    try:
+        card = run_score(world, k=k, retriever=retriever)
+    except embedding.EmbeddingUnavailable as unavailable:
+        # Explicitly asked for, and not runnable. Nonzero, because a command
+        # that printed nothing and exited clean would read as "scored, no
+        # findings" — but a stated reason and no traceback, because this is a
+        # missing optional package, not a defect.
+        console.print(f"[red]cannot run {retriever}[/red] — {escape(str(unavailable))}")
+        raise typer.Exit(1) from None
     if as_json:
         # Exactly the pre-`--retriever` shape, plus one additive key naming
         # which retriever produced it — an old consumer reading `k`/`overall`/

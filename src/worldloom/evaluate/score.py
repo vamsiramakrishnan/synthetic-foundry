@@ -20,21 +20,31 @@ be:
 There is no model anywhere in this. A judge would put the thing under test inside
 the measurement.
 
-Two ranking families run through the same grading code (`RETRIEVERS`): BM25, the
-original baseline, and TF-IDF cosine, a genuinely different family (see
-`tfidf.py`'s module docstring for the actual axes of difference). The grading
+Three ranking families run through the same grading code (`RETRIEVERS`): BM25,
+the original baseline; TF-IDF cosine, a genuinely different lexical family (see
+`tfidf.py`'s module docstring for the actual axes of difference); and dense
+embedding retrieval (`embedding.py`), which is not lexical at all. The grading
 above never asks which retriever produced the passages it is looking at — same
 `_covers`, same authority and temporal checks either way — which is what makes a
-family that both retrievers fail *structurally* hard rather than hard for one
+family that every retriever fails *structurally* hard rather than hard for one
 heuristic's particular blind spot. `compare()` is that reading, made explicit.
+
+The third one is the one that can change a verdict rather than confirm it. BM25
+and TF-IDF share an *idea* — relevance is word overlap — so their agreement is
+weaker evidence than it looks: a family both fail may simply be a lexical trap,
+which a deployed semantic retriever walks past without noticing. A family the
+embedding retriever *also* fails is hard for a reason no ranking function
+addresses.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Protocol
 
 from ..models import EvaluationType
+from . import embedding
 from .bm25 import Bm25
 from .index import Passage, passages
 from .tfidf import TfIdf
@@ -57,20 +67,51 @@ ABSTENTION_FRACTION = 0.35
 
 
 class Retriever(Protocol):
-    """What `score()` needs from a ranking family — `Bm25` and `TfIdf` both satisfy
-    this without declaring it, which is the point: adding a third retriever means
-    writing a class with this shape, not touching the scorer."""
-
-    def __init__(self, documents: list[str]) -> None: ...
+    """What `score()` needs from a ranking family — one method, and no way to ask
+    what kind of index it is talking to. `Bm25`, `TfIdf` and `Embedding` all
+    satisfy this without declaring it, which is the point: adding a retriever
+    means writing something with this shape, not touching the scorer."""
 
     def rank(self, query: str, *, limit: int) -> list[tuple[int, float]]: ...
 
 
+#: How a retriever is built: documents in, something rankable out.
+#:
+#: A *factory*, not a class, and the widening is what lets a retriever carry
+#: configuration the scorer must never see. A lexical index needs nothing but
+#: the text, so its class is its own factory and `RETRIEVERS["bm25"] is Bm25`
+#: still holds. A dense one needs a pinned model and a vector cache, and the
+#: alternative to a closure over those would be `score()` growing arguments that
+#: only one retriever understands — which is the branch this whole design exists
+#: to keep out of the grading.
+RetrieverFactory = Callable[[list[str]], Retriever]
+
 #: Every ranking family `score()` and the CLI know how to run. Registering a new
 #: retriever here is the entire integration surface — `score()`, the CLI's
-#: `--retriever` choices, and `compare()` all read this rather than naming a
-#: retriever class directly.
-RETRIEVERS: dict[str, type[Retriever]] = {"bm25": Bm25, "tfidf": TfIdf}
+#: `--retriever` choices, `across.transfer()` and `compare()` all read this
+#: rather than naming a retriever class directly.
+#:
+#: `embedding` is registered unconditionally even though its model libraries are
+#: an optional extra. Registration says the retriever *exists*; whether this
+#: installation can run it is a separate question, answered at construction with
+#: `EmbeddingUnavailable` (and asked ahead of time by `embedding.available()`).
+#: A registry that hid the entry when a package was missing would turn "you need
+#: the extra" into "no such retriever", which is a worse error and an untrue one
+#: — a corpus carrying a vector cache runs this retriever with no extra
+#: installed at all.
+RETRIEVERS: dict[str, RetrieverFactory] = {
+    "bm25": Bm25,
+    "tfidf": TfIdf,
+    "embedding": embedding.configured(),
+}
+
+#: The two lexical baselines, in the order they were added. Named because
+#: several readings mean *these two specifically* rather than "everything
+#: registered": `--retriever both` has always meant BM25 against TF-IDF and must
+#: keep meaning that (its JSON shape is pinned by `tests/test_evaluate_cli.py`),
+#: and the lexical-versus-semantic comparison is only a comparison if the
+#: lexical side is a fixed set.
+LEXICAL_RETRIEVERS: tuple[str, ...] = ("bm25", "tfidf")
 
 #: Default kept as the original baseline, not "both": every existing caller
 #: (`score(corpus)` with no retriever argument, `worldloom evaluate` with no
@@ -186,11 +227,18 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
     are retriever-shaped but not retriever-*specific* — so a passing test suite
     for one retriever is a passing test suite for the grading, and the only thing
     that changes between `score(world)` (BM25, the default, unchanged from
-    before this function took a `retriever` argument) and `score(world,
-    retriever="tfidf")` is which class built `index`.
+    before this function took a `retriever` argument), `score(world,
+    retriever="tfidf")` and `score(world, retriever="embedding")` is which
+    factory built `index`.
+
+    That non-branching is load-bearing rather than tidy. The comparison this
+    module exists to support — lexical baselines against a semantic retriever,
+    per family — is only evidence if both were graded identically, and the only
+    way to be sure of that is for the grading to have no way of finding out which
+    it is holding.
     """
     try:
-        index_cls = RETRIEVERS[retriever]
+        build = RETRIEVERS[retriever]
     except KeyError:
         raise ValueError(f"unknown retriever {retriever!r} — choose from {sorted(RETRIEVERS)}") from None
 
@@ -198,7 +246,7 @@ def score(world: World, *, k: int = DEFAULT_K, retriever: str = DEFAULT_RETRIEVE
     if not pool:
         raise ValueError("nothing to retrieve from — render or compile the corpus first")
 
-    index = index_cls([passage.text for passage in pool])
+    index = build([passage.text for passage in pool])
     cases = list(world.evaluations)
 
     # Rank every case once. This used to happen twice — `rank(question,
@@ -425,10 +473,153 @@ def render_agreement(findings: list[FamilyAgreement]) -> str:
     if not findings:
         return "(nothing to compare)"
     names = sorted(findings[0].scores)
-    label = {"consistently hard": "hard for both", "consistently easy": "easy for both", "disagreement": "DISAGREEMENT"}
+    # "both" while two families are compared, "all" once a third is — the word
+    # is the reading, and "hard for both" printed under three columns is a
+    # sentence that describes a different experiment from the one that ran.
+    everyone = "both" if len(names) == 2 else "all"
+    label = {
+        "consistently hard": f"hard for {everyone}",
+        "consistently easy": f"easy for {everyone}",
+        "disagreement": "DISAGREEMENT",
+    }
     width = max(len(f.evaluation_type.value) for f in findings)
     lines = [f"Agreement — {' vs '.join(n.upper() for n in names)}", "─" * (width + 46)]
     for finding in findings:
         cells = "  ".join(f"{name} {p:>2}/{t:<2}" for name, (p, t) in finding.scores.items())
         lines.append(f"  {finding.evaluation_type.value.ljust(width)}  {cells}  {label[finding.finding]}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# The reading that needed a third family: lexical against semantic
+# ---------------------------------------------------------------------------
+
+#: A side of the comparison "passes" a family at or above this rate. The same
+#: half `compare()` splits hard from easy on, and deliberately the same number:
+#: two readings of one scorecard that disagreed about where hard begins would be
+#: two readings nobody could put in one sentence.
+SOLVED_RATE = 0.5
+
+Verdict = Literal[
+    "solved by everything",
+    "lexical trap",
+    "semantic blind spot",
+    "genuinely hard",
+]
+
+
+@dataclass(frozen=True)
+class FamilyDifficulty:
+    """What a family's difficulty *is*, once a non-lexical retriever has seen it.
+
+    `compare()` can only say whether the retrievers agreed. That was the best
+    reading available while every retriever ranked on word overlap, and it
+    conflates the two things this class separates:
+
+    ``lexical trap``
+        The keyword baselines fail and a semantic retriever walks past without
+        noticing. The family was never hard — it was *worded* in a way that
+        misleads term matching, which no deployed retrieval stack would fall
+        for. Reported plainly rather than quietly dropped: knowing a family is
+        easy is a finding about the corpus, and a benchmark that keeps counting
+        it as difficulty is overstating itself.
+    ``genuinely hard``
+        Nothing passes it, lexical or semantic. Whatever makes it hard is a
+        property of the corpus that no ranking function addresses — the answer
+        depends on *when* a document was written, or *which* of several sources
+        is the record, or on the absence of an answer altogether.
+    ``semantic blind spot``
+        The rarer and more interesting inverse: keyword matching gets it and
+        meaning-based ranking does not. Usually an exact token — an identifier,
+        a code, a figure — that a dense vector smooths away.
+    """
+
+    evaluation_type: EvaluationType
+    lexical: tuple[int, int]
+    """``(passed, total)`` summed over the lexical retrievers."""
+    semantic: tuple[int, int]
+    """``(passed, total)`` summed over the semantic ones."""
+    verdict: Verdict
+
+    @property
+    def lexical_rate(self) -> float:
+        return self.lexical[0] / self.lexical[1] if self.lexical[1] else 0.0
+
+    @property
+    def semantic_rate(self) -> float:
+        return self.semantic[0] / self.semantic[1] if self.semantic[1] else 0.0
+
+
+def difficulty_by_family(
+    cards: dict[str, Scorecard], *, lexical: Sequence[str] = LEXICAL_RETRIEVERS
+) -> list[FamilyDifficulty]:
+    """Per family: is this hard, or only hard for keyword matching?
+
+    Every card not named in *lexical* counts as semantic. That way round on
+    purpose — the lexical set is the fixed, known one (`LEXICAL_RETRIEVERS`),
+    and a retriever registered later is by definition not one of the two
+    baselines this repository shipped with. Returns nothing when *cards* holds
+    no semantic retriever at all, because the whole reading is a comparison
+    between two sides and one side missing is not a weaker version of it.
+    """
+    semantic_names = [name for name in sorted(cards) if name not in set(lexical)]
+    lexical_names = [name for name in sorted(cards) if name in set(lexical)]
+    if not semantic_names or not lexical_names:
+        return []
+
+    families: dict[EvaluationType, None] = {}
+    for outcome in cards[lexical_names[0]].outcomes:
+        families[outcome.evaluation_type] = None
+
+    def tally(names: Sequence[str], kind: EvaluationType) -> tuple[int, int]:
+        passed = total = 0
+        for name in names:
+            scored, count = cards[name].by_type().get(kind, (0, 0))
+            passed += scored
+            total += count
+        return passed, total
+
+    out = []
+    for kind in sorted(families, key=lambda k: k.value):
+        lexical_score = tally(lexical_names, kind)
+        semantic_score = tally(semantic_names, kind)
+        lexical_solved = (lexical_score[0] / lexical_score[1] if lexical_score[1] else 0.0) >= SOLVED_RATE
+        semantic_solved = (semantic_score[0] / semantic_score[1] if semantic_score[1] else 0.0) >= SOLVED_RATE
+        if lexical_solved and semantic_solved:
+            verdict: Verdict = "solved by everything"
+        elif semantic_solved:
+            verdict = "lexical trap"
+        elif lexical_solved:
+            verdict = "semantic blind spot"
+        else:
+            verdict = "genuinely hard"
+        out.append(FamilyDifficulty(kind, lexical_score, semantic_score, verdict))
+    return out
+
+
+def render_difficulty(findings: list[FamilyDifficulty]) -> str:
+    """The lexical-versus-semantic table for the terminal."""
+    if not findings:
+        return "(no semantic retriever ran — nothing to compare against)"
+    width = max(len(f.evaluation_type.value) for f in findings)
+    lines = [
+        "Where the difficulty actually lives",
+        "─" * (width + 52),
+        f"  {'family'.ljust(width)}   lexical    semantic   verdict",
+    ]
+    for finding in findings:
+        lines.append(
+            f"  {finding.evaluation_type.value.ljust(width)}  "
+            f"{finding.lexical[0]:>3}/{finding.lexical[1]:<4}  "
+            f"{finding.semantic[0]:>3}/{finding.semantic[1]:<4}   {finding.verdict}"
+        )
+    traps = [f.evaluation_type.value for f in findings if f.verdict == "lexical trap"]
+    if traps:
+        # Said out loud, because it is the unflattering half of the reading and
+        # the half a corpus card would otherwise omit: these families are not
+        # difficulty, whatever the BM25 column says.
+        lines.append(
+            "  " + ", ".join(traps) + " read as hard under keyword ranking only —"
+            " a semantic retriever solves them, so they are not difficulty"
+        )
     return "\n".join(lines)

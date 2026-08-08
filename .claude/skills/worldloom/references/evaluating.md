@@ -9,6 +9,7 @@ worldloom evaluate ./corpus
 worldloom evaluate ./corpus -v
 worldloom evaluate ./corpus -k 3
 worldloom evaluate ./corpus --retriever both
+worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
 worldloom evals export ./corpus -o evals.jsonl
 worldloom stats ./corpus
 ```
@@ -18,7 +19,8 @@ worldloom stats ./corpus
 lowering it makes every question type harder, which is a way to sanity-check
 that a family isn't passing only because it's allowed to return half the
 corpus. `--retriever` picks which ranking family scores the corpus — `bm25`
-(the default, unchanged), `tfidf`, or `both`; see below. `worldloom evals
+(the default, unchanged), `tfidf`, `embedding`, `both` (the two lexical
+baselines) or `all`; see below. `worldloom evals
 export` writes the evaluation set as JSONL, one case per line, sorted keys —
 the format to hand to an external retrieval system you want to score against
 this same answer key. `worldloom stats` is `evaluate`'s sibling for a different
@@ -98,6 +100,74 @@ two retrievers passing the same 3-of-6 for a family while failing entirely
 different three cases would look identical on an aggregate-only comparison and
 is exactly the kind of disagreement this exists to catch.
 
+## The reading `both` could not give you: lexical against semantic
+
+BM25 and TF-IDF are two ranking families and **one idea** — relevance is word
+overlap. So "both fail it" is weaker evidence than it looks, and it conflates
+two opposite findings: a family that is genuinely hard, and a family that is
+merely *worded* in a way that misleads term matching and that any deployed
+retrieval stack walks straight past. Every difficulty number this project
+published before `src/worldloom/evaluate/embedding.py` existed rested on that
+conflation.
+
+`worldloom evaluate ./corpus --retriever all` adds a dense retriever and prints
+a second table, per family:
+
+- **`genuinely hard`** — the lexical *and* the semantic side both fail. Nothing
+  about swapping ranking functions addresses it. This is the result worth
+  having.
+- **`lexical trap`** — the keyword baselines fail and the semantic retriever
+  solves it. **The family was never difficulty**, whatever the BM25 column
+  said, and a corpus card that keeps counting it is overstating itself. Say so
+  plainly; that is a finding about the corpus, not a failure of the
+  measurement.
+- **`semantic blind spot`** — the rarer inverse. Usually an exact token (an
+  identifier, a code, a figure) that a dense vector smooths away.
+- **`solved by everything`** — the floor families, as expected.
+
+Two cautions when reading it. A family can move *partway*: the measured
+retail-close corpora put `authority_resolution` at 0/30 lexical and 8/30
+semantic — still failing, so still hard, but the gap says part of what BM25 was
+failing on was vocabulary rather than authority. And a dense retriever can pass
+a case **for the wrong reason**: on the five-world mosaic the static-embedding
+pin passes `temporal_state` five times out of fifteen — always the same question
+— by preferring a short triage page whose text is dominated by the word the
+question uses, with no notion of *when* anything was written. A pass is not
+evidence of a capability; read `-v` and check what was actually returned.
+
+## The dense retriever, and why its vectors are pinned
+
+`src/worldloom/evaluate/embedding.py` is the third family. It is **optional**
+(`pip install "worldloom[embeddings]"`) and **absent-friendly** — without the
+extra, `--retriever all` skips it with a message and still reports the lexical
+pair, and `--retriever embedding` says what to install and exits nonzero. It
+never crashes and it never silently scores nothing.
+
+The determinism problem it has to solve is real and is unlike anything else
+here. Every other number in this repository replays from a seed and a ledger; an
+embedding retriever's ranking depends on weights that live elsewhere, are
+mutable under a name, and are loaded by a stack whose floating-point behaviour
+depends on thread count and BLAS. So:
+
+- **Pinned.** A `ModelPin` carries a model id *and a commit revision*, and the
+  revision is what gets fetched. A pin that says `main` is not a pin.
+- **Cached.** Every vector — passages *and* questions — is written to a sidecar
+  keyed by `content_key(model, revision, scheme, text)`. Point `--vectors` at
+  the corpus and commit the file: the measurement then replays on a machine with
+  no model, no GPU and no extra installed. This is the generation ledger's idea
+  applied to a retriever.
+- **Quantised.** Cached vectors are L2-normalised `int8` and scoring is an
+  integer dot product. That is the determinism argument, not a space saving:
+  integer addition is exact and order-independent, so the cosine is bit-identical
+  on any machine holding the same cache.
+
+Two pins ship. `potion-retrieval-32m` (static embeddings — a vector per token,
+mean-pooled, no torch) is the default; `all-minilm-l6-v2` is a real transformer
+encoder and needs `pip install sentence-transformers`. Running both matters:
+"a cheap semantic model failed this" and "no semantic retriever passes this" are
+different claims. `tools/measure_retrievers.py` runs every retriever over a
+corpus or a whole mosaic and prints both tables.
+
 ## The question families
 
 From `src/worldloom/generators/evaluation.py` — each `_Taxonomy` method builds
@@ -141,7 +211,11 @@ that plain keyword overlap doesn't have:
   suppliers, competitors, net promoter score. The right answer is silence. A
   keyword baseline can't produce silence — it always returns its best-overlap
   document with some confidence, so this family is where "confidently wrong" is
-  the only way to fail.
+  the only way to fail. Measured against dense retrieval it gets *harder*, not
+  easier: a dense model scores almost every passage positively, so its top
+  scores sit in a narrow high band and even a floor calibrated on that band is
+  cleared by questions the corpus cannot answer. 0 of 96 across a five-world
+  mosaic, against BM25's 3.
 - **`across_episodes`** (`across_episodes()`) questions aren't a distinct
   `EvaluationType` of their own — they're `causal_multi_hop`,
   `numerical_comparison` and `authority_resolution` cases that can only exist
@@ -157,6 +231,11 @@ baseline that scores well on `direct_lookup` and `numerical_comparison` while
 scoring badly on `temporal_state`, `expected_abstention`, and
 `causal_multi_hop` is the corpus working as designed.** That's not a caveat on
 the result, that's the result.
+
+And one caveat that only became sayable once a non-lexical retriever ran: a
+*low* keyword score is not by itself difficulty. It is difficulty only if the
+semantic column is low too — see "lexical against semantic" above. A corpus card
+quoting BM25 alone is quoting the weakest of the three readings available.
 
 State the inverted intuition plainly, because it reads backwards the first
 time: **a rising baseline score is bad news**, not good news — unless someone

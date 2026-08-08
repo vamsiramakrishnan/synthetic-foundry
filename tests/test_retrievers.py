@@ -21,7 +21,16 @@ from __future__ import annotations
 import pytest
 
 from worldloom import MonthEndClose, RetailWorld, World
-from worldloom.evaluate import RETRIEVERS, Bm25, TfIdf, compare, passages, render_agreement, score
+from worldloom.evaluate import (
+    LEXICAL_RETRIEVERS,
+    RETRIEVERS,
+    Bm25,
+    TfIdf,
+    compare,
+    passages,
+    render_agreement,
+    score,
+)
 from worldloom.evaluate.score import DEFAULT_RETRIEVER
 from worldloom.models import EvaluationType
 from worldloom.narrative import DeterministicProvider
@@ -42,8 +51,14 @@ def corpus() -> World:
 # ---------------------------------------------------------------------------
 
 
-def test_both_retrievers_are_registered() -> None:
-    assert set(RETRIEVERS) == {"bm25", "tfidf"}
+def test_both_lexical_retrievers_are_registered_as_their_own_classes() -> None:
+    """`RETRIEVERS` widened from classes to factories when the dense retriever
+    arrived (it needs a pinned model and a vector cache that the scorer must
+    never see). A lexical index needs nothing but the text, so its class is
+    still its own factory and every caller reaching for it by name still gets
+    the class — see `tests/test_embedding_retriever.py` for the third entry."""
+    assert LEXICAL_RETRIEVERS == ("bm25", "tfidf")
+    assert set(LEXICAL_RETRIEVERS) <= set(RETRIEVERS)
     assert RETRIEVERS["bm25"] is Bm25
     assert RETRIEVERS["tfidf"] is TfIdf
 

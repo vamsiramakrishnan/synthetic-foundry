@@ -61,6 +61,12 @@ worldloom validate ./corpus
 
 # 7. Find out whether it is actually hard, not merely coherent.
 worldloom evaluate ./corpus
+
+# 7b. And whether it is hard for a retriever anyone would deploy, not only for
+#     keyword matching. `all` adds a dense retriever beside BM25 and TF-IDF and
+#     names, per family, whether it is genuinely hard or merely a lexical trap.
+#     Optional extra; without it the dense column is skipped with a message.
+worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
 ```
 
 Three more readings answer questions `validate` and `evaluate` cannot, and each
@@ -854,3 +860,31 @@ any failure replays exactly.
 
 It is a tool, not library code: nothing under `src/` imports it and it adds no
 dependency.
+
+### Whether the corpus is hard, or only hard for keyword matching
+
+Every difficulty number this project published before now came from BM25 and
+TF-IDF — two ranking families and **one idea**, that relevance is word overlap.
+A family they both fail is either structurally hard or merely a *lexical* trap
+that any deployed retrieval stack walks past, and nothing here could tell those
+apart.
+
+```bash
+worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
+python3 tools/measure_retrievers.py ./corpus              # every pin, one table
+python3 tools/measure_retrievers.py ./mosaic --mosaic     # or a whole mosaic
+```
+
+Both print a second reading beside the agreement table: per family, **genuinely
+hard** (lexical and semantic both fail), **lexical trap** (semantic solves it —
+so it was never difficulty, and a corpus card counting it is overstating
+itself), **semantic blind spot**, or **solved by everything**.
+
+The retriever is an optional extra (`pip install "worldloom[embeddings]"`) and
+absent-friendly: without it the dense column is skipped with a message and the
+lexical readings still print. Its vectors are pinned to a model *revision* and
+cached to a sidecar as quantised integers, so the measurement replays
+bit-identically on a machine with no model at all — the generation ledger's
+argument, applied to a retriever. `src/worldloom/evaluate/embedding.py` makes
+that case in full, and
+`.claude/skills/worldloom/references/evaluating.md` has the reading.

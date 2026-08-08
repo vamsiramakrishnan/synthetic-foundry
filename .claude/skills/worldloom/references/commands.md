@@ -176,7 +176,7 @@ worldloom evals export <CORPUS>
 
 ### `worldloom evaluate`
 
-Score one or both baseline retrievers against the corpus's evaluation set.
+Score one or more retrievers against the corpus's evaluation set.
 
 ```
 worldloom evaluate <CORPUS>
@@ -185,7 +185,8 @@ worldloom evaluate <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. This is the measure half of the measure-then-iterate loop — an agent deciding what to change next should read data, not parse a bar chart. |
-| `--retriever` | bm25 (default — the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family — see src/worldloom/evaluate/tfidf.py), or both (side by side, with a per-family agreement reading: a family low under both retrievers is structurally hard, not hard for one heuristic). |
+| `--retriever` | bm25 (default — the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family — see src/worldloom/evaluate/tfidf.py), embedding (dense vectors against a pinned model — needs the `embeddings` extra or a vector cache), both (the two lexical baselines side by side, with a per-family agreement reading), or all (every retriever this installation can run, skipping any whose model is unavailable). |
+| `--vectors` | Vector cache for --retriever embedding: a file, or a directory to keep one per model. A corpus that carries its cache scores against the embedding retriever with no model installed at all. |
 | `--verbose`, `-v` | Show every question. |
 | `-k` | How many passages a retriever may return. |
 
