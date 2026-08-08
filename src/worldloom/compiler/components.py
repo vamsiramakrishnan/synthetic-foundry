@@ -26,6 +26,17 @@ from dataclasses import dataclass, field
 #: back and what a reader gets when no Office library is installed.
 Format = str
 
+#: Content primitives beyond the table/body/chart every component may already
+#: assume — one name per additive `models.py` field a component can declare
+#: itself against: ``CELL_BAND`` to `models.Cell.band`, ``FLOW`` to
+#: `models.ArtifactSection.flow`, ``QUOTE`` to `models.ArtifactSection.quote`.
+#: Three names, not a sprawling vocabulary, because a fourth would need a
+#: fourth primitive behind it in the thin waist first — see that module's own
+#: comments on each field for why each one exists.
+CELL_BAND = "cell_band"
+FLOW = "flow"
+QUOTE = "quote"
+
 
 @dataclass(frozen=True)
 class ComponentSpec:
@@ -37,7 +48,31 @@ class ComponentSpec:
     ``NarrativeBeat.semantic_role``."""
     supported_formats: frozenset[Format]
     required_inputs: frozenset[str] = frozenset()
+    """Content primitives (see `CELL_BAND`, `FLOW`, `QUOTE` above) this
+    component cannot honestly present without. Checked by `fits()` against
+    whatever a beat's section actually carries — a beat lacking one of these
+    fails `fits()` exactly as a beat lacking rows or the right density does,
+    so a component named for a shape it cannot present is refused at compose
+    time rather than silently rendered as the shape it collapses to.
+
+    Empty is the default for a reason: most of this registry is table- or
+    prose-shaped and needs nothing beyond what every component may already
+    assume. Declared only for the atoms whose stated purpose is meaningless
+    without the primitive — a heatmap with no cell carrying a `MagnitudeBand`
+    is not a heatmap, it is a table with a name that promises more than it
+    shows.
+    """
     optional_inputs: frozenset[str] = frozenset()
+    """Content primitives this component *presents* when they are there, but
+    does not require. The distinction from `required_inputs` matters and is
+    deliberate, not an oversight: `ops.causal_chain` is selected today for
+    every root-cause section this repository narrates, as plain prose, and no
+    generator yet decides a `FlowDiagram` for one. Requiring `FLOW` would make
+    every one of those sections newly uncomposable at density and row counts
+    that used to succeed — the exact "additive and optional, defaulting to
+    today's behaviour" rule this field exists to keep. Declared here purely so
+    a renderer can ask "did this component *want* a flow" without reaching
+    into a private convention; `fits()` never reads it."""
 
     density: tuple[float, float] = (0.0, 1.0)
     """The density band this component is legible in.
@@ -84,8 +119,25 @@ class ComponentSpec:
     which is the only thing that reads this field and picks among the declared
     families by data shape, not by taste."""
 
-    def fits(self, *, fmt: Format, density: float, rows: int | None = None) -> bool:
-        """Whether this component can be spelled in *fmt* at *density*."""
+    def fits(
+        self,
+        *,
+        fmt: Format,
+        density: float,
+        rows: int | None = None,
+        available: frozenset[str] = frozenset(),
+    ) -> bool:
+        """Whether this component can be spelled in *fmt* at *density*.
+
+        *available* is which content primitives the beat's section actually
+        carries (see `CELL_BAND`, `FLOW`, `QUOTE`) — the same kind of fitness
+        check *rows* already is, one dimension wider. Defaulted to empty
+        rather than made mandatory so every existing caller that predates
+        `required_inputs` — the static audit, every hand-built test fixture
+        that never mentions a beat's content — keeps asking the question it
+        always asked, about a component that (until now) never had an input
+        to be missing.
+        """
         if fmt not in self.supported_formats:
             return False
         low, high = self.density
@@ -96,6 +148,8 @@ class ComponentSpec:
                 return False
             if self.max_rows is not None and rows > self.max_rows:
                 return False
+        if not self.required_inputs <= available:
+            return False
         return True
 
 
@@ -111,6 +165,8 @@ def _spec(
     after_role: str | None = None,
     incompatible: str = "",
     layouts: str = "",
+    required_inputs: str = "",
+    optional_inputs: str = "",
 ) -> ComponentSpec:
     """Terse constructor. Space-separated strings beat repeating `frozenset({...})`."""
     return ComponentSpec(
@@ -124,6 +180,8 @@ def _spec(
         incompatible_with=frozenset(incompatible.split()) if incompatible else frozenset(),
         purpose=purpose,
         layouts=frozenset(layouts.split()) if layouts else frozenset(),
+        required_inputs=frozenset(required_inputs.split()) if required_inputs else frozenset(),
+        optional_inputs=frozenset(optional_inputs.split()) if optional_inputs else frozenset(),
     )
 
 
@@ -253,6 +311,19 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         "ops.causal_chain", "explanation", "markdown docx pptx pdf",
         purpose="From trigger to effect, naming the control that should have caught it.",
         after_role="chronology",
+        # `optional_inputs`, not `required_inputs`: this is the one component
+        # in the registry that is genuinely selected today — first in registry
+        # order for `explanation`, rowless and unbounded, it wins every such
+        # beat in every format it supports (measured: `roles_for` picks it at
+        # every density/row combination tried). Every root-cause section this
+        # repository has ever narrated reaches it as plain prose, because no
+        # generator yet decides a `FlowDiagram`. Requiring `FLOW` would refuse
+        # every one of those sections at compose time — exactly the behaviour
+        # change the additive-and-optional rule forbids. Declaring it optional
+        # instead means a section that *does* carry a flow (a future generator,
+        # or a hand-built test) is now presentable as one; every section that
+        # does not keeps composing and rendering exactly as it always has.
+        optional_inputs="flow",
     ),
     _spec(
         "ops.remediation_table", "management", "markdown docx xlsx pptx pdf",
@@ -280,6 +351,18 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         "mgmt.risk_matrix", "management", "markdown docx pptx pdf",
         purpose="Open risks by likelihood and impact, with an owner against each.",
         min_rows=1,
+        # `required_inputs=CELL_BAND`: a risk matrix's entire reason to exist
+        # over a plain table is that likelihood and impact are positions on a
+        # scale, not numbers — exactly `Cell.band`. Safe as a hard requirement
+        # rather than `ops.causal_chain`'s optional one because this component
+        # is provably unreachable today regardless: `core.schedule`, earlier in
+        # the registry, is rowless-eligible and unbounded for the `management`
+        # role and wins first at every density and row count `roles_for` can
+        # produce (checked exhaustively, not assumed). Requiring the band
+        # changes nothing observable now and means a future beat that *does*
+        # supply banded likelihood/impact cells is refused a plain-table
+        # substitute rather than silently rendered as one.
+        required_inputs="cell_band",
         # A handful of risks fit a likelihood/impact grid without crowding it;
         # many risks crowd a 2D grid before they crowd a list, so they fall
         # back to one. In between, a grid and a list are both genuinely
@@ -462,6 +545,18 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         "finance.heatmap", "evidence", "markdown docx pptx xlsx pdf",
         purpose="A grid of values shaded by magnitude, for when the pattern across many cells is the point, not any single figure.",
         min_rows=4,
+        # `required_inputs=CELL_BAND`: "shaded by magnitude" is this
+        # component's entire purpose, and a table with no `Cell.band` set has
+        # no magnitude to shade — rendering it anyway is exactly the collapse
+        # measured against this registry (a plain table wearing a heatmap's
+        # name). Unreachable today regardless of this field: `finance.variance_table`,
+        # earlier in the registry, has no row ceiling and the full (0.0, 1.0)
+        # density band, so it wins every `evidence` beat with two or more rows
+        # before this atom is even considered (checked exhaustively across
+        # every format, density and row count this component declares).
+        # Requiring the band is therefore free today and correct the day a
+        # beat's cells actually carry one.
+        required_inputs="cell_band",
     ),
     _spec(
         "ops.cohort_table", "evidence", "markdown docx xlsx pdf",
@@ -507,6 +602,15 @@ REGISTRY: tuple[ComponentSpec, ...] = (
             "incident timeline of the one time it failed."
         ),
         min_rows=2,
+        # `required_inputs=FLOW`, safely: this atom is declared after
+        # `ops.causal_chain`, which is rowless, unbounded, and first in
+        # registry order for the identical `explanation` role — it wins every
+        # beat this component could otherwise reach, at every density and row
+        # count (checked exhaustively). Requiring a `FlowDiagram` costs
+        # nothing today and is the honest declaration for the day something
+        # upstream of `roles_for`'s greedy order lets this atom be reached —
+        # a table of steps is not what "the steps a system takes" describes.
+        required_inputs="flow",
     ),
     # -- management, beyond the schedule and the risk grid ------------------
     _spec(
@@ -568,10 +672,30 @@ REGISTRY: tuple[ComponentSpec, ...] = (
         # more rows already (rowless bands aside, it has no upper bound). This
         # is the 0-2 row gap beneath it.
         max_rows=2,
+        # `optional_inputs`, not required: unlike `finance.heatmap` and
+        # `mgmt.risk_matrix`, this atom is *not* provably unreachable — a
+        # `comparison` beat at 0-2 rows in a format `finance.comparative_trend`
+        # and `xlsx.report_sheet` do not both dominate reaches it today, and
+        # the plan-authoring handshake (`compiler/handshake.py`) hands a model
+        # `comparison` as a real, choosable role. Requiring `QUOTE` would
+        # refuse a beat that used to compose. Declared optional so a `Quotation`
+        # is presented distinctly when set and changes nothing when it is not.
+        optional_inputs="quote",
     ),
     _spec(
         "editorial.pull_quote", "context", "markdown docx pptx pdf",
         purpose="One line pulled out and set apart, carrying an emphasis the surrounding paragraph would otherwise bury.",
+        # `optional_inputs`, not required, and for a sharper reason than
+        # `editorial.callout`'s: this is the *only* component in the registry
+        # with the `context` role, so any beat requesting it — again, a real
+        # choice the plan-authoring handshake offers a model — is refused
+        # outright if this atom cannot fit, with no fallback to catch it the
+        # way `core.narrative` catches `explanation`. Requiring `QUOTE` would
+        # make `context` entirely uncomposable until a generator starts
+        # setting `ArtifactSection.quote`, which none does. Optional keeps
+        # today's plain-paragraph rendering exactly as it is and adds the
+        # quotation treatment only once one is actually declared.
+        optional_inputs="quote",
     ),
     _spec(
         "editorial.statement", "summary", "markdown docx pptx pdf",
@@ -673,4 +797,7 @@ def compatible(earlier: str, later: str) -> bool:
     return True
 
 
-__all__ = ["Format", "REGISTRY", "ComponentSpec", "compatible", "component", "roles_for"]
+__all__ = [
+    "Format", "REGISTRY", "ComponentSpec", "CELL_BAND", "FLOW", "QUOTE",
+    "compatible", "component", "roles_for",
+]

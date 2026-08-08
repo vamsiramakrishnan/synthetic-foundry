@@ -36,9 +36,9 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from ..documents import SectionPlan
-from ..models import ArtifactIntent, ArtifactIR, CanonicalFact
+from ..models import ArtifactIntent, ArtifactIR, ArtifactSection, CanonicalFact
 from ..rng import Rng
-from .components import ComponentSpec, roles_for
+from .components import CELL_BAND, FLOW, QUOTE, ComponentSpec, roles_for
 from .grammar import GrammarViolation, check
 from .plan import (
     DENSITY_POINTS,
@@ -224,7 +224,10 @@ def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composit
     for beat in plan.beats:
         rows = len(beat.evidence)
         candidates = roles_for(beat.semantic_role, fmt=fmt)
-        fitting = tuple(c for c in candidates if c.fits(fmt=fmt, density=density, rows=rows))
+        fitting = tuple(
+            c for c in candidates
+            if c.fits(fmt=fmt, density=density, rows=rows, available=beat.available_inputs)
+        )
         if fitting:
             selected.append((beat, fitting[0]))
         elif beat.optional:
@@ -236,14 +239,16 @@ def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composit
             raise CompositionError(
                 f"{plan.artifact_type} ({plan.intent_id}): required beat {beat.key!r} "
                 f"(role {beat.semantic_role!r}) has no component that fits format "
-                f"{fmt!r} at density {density} with {rows} row(s) of evidence",
+                f"{fmt!r} at density {density} with {rows} row(s) of evidence and inputs "
+                f"{sorted(beat.available_inputs) or ['<none>']}",
                 code="no_fitting_component",
                 intent_id=plan.intent_id,
                 artifact_type=plan.artifact_type,
                 fmt=fmt,
                 detail=(
                     f"required beat {beat.key!r} (role {beat.semantic_role!r}) has no "
-                    f"component in {fmt} at density {density} with {rows} row(s)"
+                    f"component in {fmt} at density {density} with {rows} row(s) and "
+                    f"inputs {sorted(beat.available_inputs) or ['<none>']}"
                 ),
             )
 
@@ -505,7 +510,38 @@ def plan_for(
     )
 
 
-__all__ = ["Composition", "CompositionError", "compose", "plan_for", "try_compose"]
+__all__ = [
+    "Composition", "CompositionError", "compose", "plan_for", "plan_from_ir",
+    "section_components", "try_compose",
+]
+
+
+def _available_inputs(section: ArtifactSection) -> frozenset[str]:
+    """Which content primitives *section* actually carries.
+
+    The fitness dimension `ComponentSpec.required_inputs` checks against,
+    alongside density and rows — see `ComponentSpec.fits`. This function
+    invents nothing: it only names, in the vocabulary `compiler.components`
+    declares (`CELL_BAND`, `FLOW`, `QUOTE`), what is already true of *section*
+    from fields `models.py` already carries.
+
+    Every one of these is empty for every section any generator in this
+    repository produces today, which is precisely the point: `plan_from_ir`
+    calling this on unmodified IR must return the same nothing it always
+    implicitly had, so a beat that used to compose still does.
+    """
+    available: set[str] = set()
+    if section.flow is not None and (section.flow.nodes or section.flow.edges):
+        available.add(FLOW)
+    if section.quote is not None:
+        available.add(QUOTE)
+    if section.table is not None and any(
+        cell.band is not None
+        for row in section.table.rows
+        for cell in row.cells.values()
+    ):
+        available.add(CELL_BAND)
+    return frozenset(available)
 
 
 def plan_from_ir(
@@ -545,6 +581,7 @@ def plan_from_ir(
             evidence=[EvidenceRef(fact_id=fact_id, role="cited") for fact_id in section.fact_ids],
             # Trust the IR when it states a role, infer only when it does not.
             semantic_role=section.semantic_role or infer_semantic_role(section.heading, ()),
+            available_inputs=_available_inputs(section),
             optional=section.optional,
         )
         for section in ir.sections
@@ -565,3 +602,48 @@ def plan_from_ir(
         size_class=size_class,
         density_profile=density_profile,
     )
+
+
+def section_components(
+    ir: ArtifactIR,
+    *,
+    artifact_type: str,
+    fmt: str,
+    size_class: SizeClass = "medium",
+    density_profile: DensityProfile = "balanced",
+) -> dict[str, str]:
+    """Which component the compiler chose for each section of *ir*, in *fmt*.
+
+    Keyed by section heading rather than position or beat key: a renderer that
+    wants to dispatch on component identity is already walking ``ir.sections``
+    with its own loop, its own hidden/drop handling, and a heading is the join
+    key it already has in hand. `render/pdf.py::_plan` built exactly this
+    pairing privately before `render/markdown.py` needed the identical
+    question answered, which is the reason this is a named function here
+    rather than a third private copy.
+
+    Never raises. A section the compiler dropped as over-budget optional
+    material, or an IR that cannot be composed at all in *fmt* (an unknown
+    beat, a format nothing here spells), is simply absent from the mapping —
+    a renderer's shape-based dispatch (body, then table, then "awaiting")
+    already covers every section unconditionally, so a caller that gets an
+    empty mapping back loses nothing it did not already have another way to
+    render.
+    """
+    plan = plan_from_ir(
+        ir, artifact_type=artifact_type, size_class=size_class, density_profile=density_profile
+    )
+    try:
+        composition = compose(plan, fmt=fmt)
+    except CompositionError:
+        return {}
+    # `plan.beats` is one beat per `ir.section`, in that same order (see
+    # `plan_from_ir`), so this pairing is a true parallel rather than a guess —
+    # the same invariant `render/pdf.py::_plan` already leans on for its own
+    # beat-key-to-section zip.
+    heading_by_key = {beat.key: section.heading for beat, section in zip(plan.beats, ir.sections)}
+    return {
+        heading_by_key[key]: component_id
+        for key, component_id in zip(composition.beats, composition.components)
+        if key in heading_by_key
+    }

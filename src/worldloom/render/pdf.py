@@ -41,7 +41,7 @@ from ..compiler.compose import compose, plan_from_ir
 from ..compiler.grammar import GrammarViolation
 from ..compiler.plan import SizeClass
 from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
-from ..models import ArtifactIR, ArtifactSection, CanonicalFact, Table
+from ..models import ArtifactIR, ArtifactSection, CanonicalFact, FlowDiagram, MagnitudeBand, Quotation, Table
 from ..narrative import references
 from . import Rendered, RenderError, ooxml, slug_for
 from .docx import HANDLES
@@ -67,6 +67,23 @@ _SUBTOTAL_FILL = "EDF2F4"
 _NEGATIVE = "9B2226"
 _MUTED = "6B747B"
 _INK = "1A1A1A"
+
+#: `Cell.band` shaded, one fill per `MagnitudeBand` — a five-step sequential
+#: scale from cool (low) through neutral (average) to warm (high), so a
+#: heatmap's pattern reads at a glance without any cell's *text* changing.
+#: Text stays untouched deliberately: `_measured_layout` sizes columns from
+#: `format_value`'s own output, and a band spelled into the cell string would
+#: measure narrower than it renders — the exact hazard that module's own
+#: docstring warns a naive fix into. Colour carries the whole signal here;
+#: Markdown, with no colour to reach for, spells the same field as a bracketed
+#: word instead (see `render/markdown.py::_BAND_LABEL`).
+_BAND_FILL: dict[MagnitudeBand, str] = {
+    MagnitudeBand.LOW: "D9E6ED",
+    MagnitudeBand.BELOW_AVERAGE: "EDF2F4",
+    MagnitudeBand.AVERAGE: "FFFFFF",
+    MagnitudeBand.ABOVE_AVERAGE: "F7E2CE",
+    MagnitudeBand.HIGH: "EFC3A0",
+}
 
 #: A4 with the same corporate margins as `render/docx.py`. Kept in points rather
 #: than reaching for `reportlab.lib.units.mm` at module scope, so this geometry —
@@ -126,6 +143,16 @@ class DocumentPlan:
     silenced. Empty for every shipped artifact type; a non-empty tuple here is
     a defect upstream of this renderer, not something this module can repair,
     so it does not raise — the caller (a future validator) can inspect it."""
+    components: dict[str, str]
+    """Section heading -> the component id the compiler chose for it.
+
+    What lets `_section_flowables` dispatch on component *identity* — a
+    section composed as `editorial.pull_quote` draws a quotation, one composed
+    as `ops.causal_chain` with a declared flow draws a chain — beyond the
+    shape-based body/table/awaiting fallback every section already got. Built
+    from the same `composition` this plan's ordering already comes from, so
+    there is no second call to the compiler and no way for the two to disagree.
+    """
 
 
 def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> DocumentPlan:
@@ -150,6 +177,10 @@ def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> Document
     # drop entries or move one earlier via `_repair_order`.
     section_by_beat = dict(zip((beat.key for beat in plan.beats), ir.sections))
     ordered = tuple(section_by_beat[key] for key in composition.beats)
+    components = {
+        section_by_beat[key].heading: component_id
+        for key, component_id in zip(composition.beats, composition.components)
+    }
 
     return DocumentPlan(
         page_width_pt=_PAGE_WIDTH_PT,
@@ -158,6 +189,7 @@ def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> Document
         sections=ordered,
         dropped=composition.dropped,
         violations=composition.violations,
+        components=components,
     )
 
 
@@ -291,6 +323,18 @@ def _styles() -> dict:  # type: ignore[no-untyped-def]
         "cell_right_negative_bold": cell(
             "wl-cell-right-negative-bold", bold=True, right=True, colour=negative
         ),
+        "quote": ParagraphStyle(
+            "wl-quote", fontName="Helvetica-Oblique", fontSize=11, leading=15,
+            leftIndent=18, spaceBefore=4, spaceAfter=2, textColor=accent,
+        ),
+        "quote_attribution": ParagraphStyle(
+            "wl-quote-attribution", fontName="Helvetica", fontSize=8.5, leading=11,
+            leftIndent=18, spaceAfter=8, textColor=muted,
+        ),
+        "flow_step": ParagraphStyle(
+            "wl-flow-step", fontName="Helvetica", fontSize=10, leading=14,
+            leftIndent=10, spaceAfter=4, textColor=ink,
+        ),
     }
 
 
@@ -301,7 +345,8 @@ def _styles() -> dict:  # type: ignore[no-untyped-def]
 
 def _table_flowable(table: Table, frame_width: float, styles: dict,
                     locale: Locale = DEFAULT_LOCALE,
-                    presentation: Presentation = DEFAULT_PRESENTATION):  # type: ignore[no-untyped-def]
+                    presentation: Presentation = DEFAULT_PRESENTATION,
+                    *, show_bands: bool = False):  # type: ignore[no-untyped-def]
     """One IR table as a paginating platypus table.
 
     ``repeatRows=1`` is what gives this renderer real pagination for free: when
@@ -316,6 +361,15 @@ def _table_flowable(table: Table, frame_width: float, styles: dict,
     `render/docx.py::_table` cell for cell, because both read the same
     `format_value` and a reader should not be able to tell which renderer
     produced a given figure.
+
+    *show_bands* is false everywhere this was already called before
+    `Cell.band` existed — see `render/markdown.py::_table`'s identical
+    parameter for why that keeps every prior call site byte-for-byte
+    unchanged. True only for `finance.heatmap` and `mgmt.risk_matrix`, which
+    shades a banded cell's background (`_BAND_FILL`) rather than touching its
+    text, so `_measured_layout`'s column widths — measured from the same text
+    — are never affected by a decision this function makes independently of
+    them.
     """
     from reportlab.lib import colors
     from reportlab.platypus import Paragraph
@@ -363,8 +417,20 @@ def _table_flowable(table: Table, frame_width: float, styles: dict,
                 else "cell_right"
             )
             cells.append(Paragraph(_escape(text), styles[key]))
+            if show_bands and cell is not None and cell.band is not None:
+                col_index = len(cells) - 1
+                commands.append((
+                    "BACKGROUND", (col_index, row_index), (col_index, row_index),
+                    colors.HexColor(f"#{_BAND_FILL[cell.band]}"),
+                ))
         data.append(cells)
         if row.emphasis:
+            # Appended after this row's own band commands, so `TableStyle`
+            # (which applies commands in order, later winning on overlap)
+            # lets a subtotal's shading take a banded cell over — a total row
+            # is not itself "high" or "low" in the sense a band means, so the
+            # subtotal fill is the more truthful one to show where both claim
+            # the same cell.
             commands.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor(f"#{_SUBTOTAL_FILL}")))
 
     grid = PlatypusTable(data, colWidths=col_widths, repeatRows=1)
@@ -605,6 +671,83 @@ def _figure_flowables(chart, table: Table, frame_width: float, styles: dict, loc
     return flow
 
 
+def _quote_flowables(
+    quote: Quotation,
+    facts: dict[str, CanonicalFact] | None,
+    styles: dict,
+    locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
+    *,
+    prefix: str = "",
+) -> list:
+    """One `Quotation` as an indented, set-apart paragraph — for
+    `editorial.pull_quote` and, with a *prefix*, `editorial.callout`. See
+    `render/markdown.py::_quote`, which draws the identical distinction with
+    a blockquote where this renderer has a page to indent on instead.
+    """
+    from reportlab.platypus import Paragraph
+
+    text = (
+        references.substitute(quote.text, facts, locale=locale, presentation=presentation)
+        if facts else quote.text
+    )
+    flow = [Paragraph(_escape(f"{prefix}{text}"), styles["quote"])]
+    if quote.attribution:
+        flow.append(Paragraph(_escape(f"— {quote.attribution}"), styles["quote_attribution"]))
+    return flow
+
+
+def _flow_flowables(
+    flow_diagram: FlowDiagram,
+    facts: dict[str, CanonicalFact] | None,
+    styles: dict,
+    locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
+) -> list:
+    """A declared `FlowDiagram` as an ordered list of steps.
+
+    Same reasoning as `render/markdown.py::_flow`: this renderer has no more
+    of a graph-drawing surface than Markdown does (a canvas rectangle is not
+    an arrow), so a flow prints as one line per edge — source, target, and the
+    relationship between them — rather than an invented diagram that could
+    disagree with the shape actually declared.
+    """
+    from reportlab.platypus import Paragraph
+
+    label_by_key = {node.key: node.label for node in flow_diagram.nodes}
+
+    def resolved(text: str) -> str:
+        return (
+            references.substitute(text, facts, locale=locale, presentation=presentation)
+            if facts else text
+        )
+
+    lines: list[str] = []
+    if flow_diagram.edges:
+        for edge in flow_diagram.edges:
+            source = resolved(label_by_key.get(edge.source, edge.source))
+            target = resolved(label_by_key.get(edge.target, edge.target))
+            line = f"{source} → {target}"
+            if edge.label:
+                line += f" ({resolved(edge.label)})"
+            lines.append(line)
+    else:
+        lines = [resolved(node.label) for node in flow_diagram.nodes]
+    return [Paragraph(f"• {_escape(line)}", styles["flow_step"]) for line in lines]
+
+
+#: Component ids `_section_flowables` gives a distinct presentation to, beyond
+#: the shape-based body/table/awaiting fallback every section already gets —
+#: see `render/markdown.py`'s identical constants, which this module mirrors
+#: rather than imports: the two renderers draw with different toolkits
+#: (Paragraph/Table flowables here, literal Markdown there) and would gain
+#: nothing from sharing a frozenset beyond a slightly shorter import.
+_BANDED_TABLE_COMPONENTS = frozenset({"finance.heatmap", "mgmt.risk_matrix"})
+_FLOW_COMPONENTS = frozenset({"ops.process_flow", "ops.causal_chain"})
+_PULL_QUOTE_COMPONENT = "editorial.pull_quote"
+_CALLOUT_COMPONENT = "editorial.callout"
+
+
 def _section_flowables(
     section: ArtifactSection,
     facts: dict[str, CanonicalFact] | None,
@@ -612,8 +755,20 @@ def _section_flowables(
     frame_width: float,
     locale: Locale = DEFAULT_LOCALE,
     presentation: Presentation = DEFAULT_PRESENTATION,
+    *,
+    component_id: str | None = None,
 ) -> list:
-    """One IR section as a run of flowables: heading, then body or table."""
+    """One IR section as a run of flowables: heading, then body, a declared
+    flow or quotation, or a table — the fallback chain in that priority order.
+
+    *component_id* is what the artifact compiler chose for this section (see
+    `DocumentPlan.components`), asked for only to decide *which* declared
+    primitive to draw when a section carries more than one component could
+    read — the same identity dispatch `render/markdown.py::render` does for
+    the same reason. ``None`` — an IR that did not compose, or a section the
+    compiler could not place — falls straight through every component check
+    below to the body/table/awaiting chain this function has always had.
+    """
     from reportlab.platypus import Paragraph, Spacer
 
     flow: list = [Paragraph(_escape(section.heading), styles["heading"])]
@@ -634,8 +789,20 @@ def _section_flowables(
         for block in (part.strip() for part in text.split("\n\n")):
             if block:
                 flow.append(Paragraph(_escape(block), styles["body"]))
+    elif component_id in _FLOW_COMPONENTS and section.flow is not None and (
+        section.flow.nodes or section.flow.edges
+    ):
+        flow.extend(_flow_flowables(section.flow, facts, styles, locale, presentation))
+    elif component_id == _PULL_QUOTE_COMPONENT and section.quote is not None:
+        flow.extend(_quote_flowables(section.quote, facts, styles, locale, presentation))
+    elif component_id == _CALLOUT_COMPONENT and section.quote is not None:
+        flow.extend(_quote_flowables(section.quote, facts, styles, locale, presentation,
+                                      prefix="Watch: "))
     elif section.table is not None:
-        flow.append(_table_flowable(section.table, frame_width, styles, locale, presentation))
+        flow.append(_table_flowable(
+            section.table, frame_width, styles, locale, presentation,
+            show_bands=component_id in _BANDED_TABLE_COMPONENTS,
+        ))
         if section.table.note:
             flow.append(Paragraph(_escape(section.table.note), styles["note"]))
     else:
@@ -785,7 +952,8 @@ def render(
         if section.hidden and presentation.appendix != "append":
             continue
         story.extend(_section_flowables(section, facts, styles, frame_width, locale,
-                                        presentation))
+                                        presentation,
+                                        component_id=plan.components.get(section.heading)))
 
     if ir.metadata.get("voice") and presentation.provenance == "footer":
         story.append(Paragraph(

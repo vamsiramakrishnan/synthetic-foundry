@@ -10,14 +10,27 @@ Both are correct and both agree, because both read one resolved IR.
 
 A section awaiting prose says so, rather than being filled with something
 plausible. An empty heading is honest; invented narrative is not.
+
+Dispatch is by section *shape* first (does it have a body? a table?) and, since
+the component registry gained content primitives beyond those two, by
+*component identity* second — a section the compiler actually composed as
+`editorial.pull_quote` renders as a quotation rather than a paragraph, and one
+composed as `ops.causal_chain` with a declared `FlowDiagram` renders as a
+chain rather than prose. Identity is asked for through
+`compiler.compose.section_components`, which never raises: an IR that does not
+compose in this format, or a section the compiler could not place, falls
+straight through to the shape-based path below, unchanged from before identity
+dispatch existed.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..compiler.compose import section_components
+from ..compiler.plan import SizeClass
 from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
-from ..models import ArtifactIR, CanonicalFact, Chart, Table
+from ..models import ArtifactIR, CanonicalFact, Chart, FlowDiagram, MagnitudeBand, Quotation, Table
 from ..narrative import references
 from . import Rendered, slug_for
 from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
@@ -26,9 +39,40 @@ from .values import corpus_locale, format_value
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
 
+#: How a cell's `MagnitudeBand` is spelled out in a plain-text table cell.
+#: Markdown has no colour, so a heatmap or a risk matrix says in words what a
+#: workbook's conditional formatting would say in shading — the same
+#: information, presented the only way this format can present it.
+_BAND_LABEL: dict[MagnitudeBand, str] = {
+    MagnitudeBand.LOW: "low",
+    MagnitudeBand.BELOW_AVERAGE: "below average",
+    MagnitudeBand.AVERAGE: "average",
+    MagnitudeBand.ABOVE_AVERAGE: "above average",
+    MagnitudeBand.HIGH: "high",
+}
 
-def _table(table: Table, locale: Locale = DEFAULT_LOCALE) -> str:
-    """One table as GitHub-flavoured Markdown."""
+#: Component ids `render` gives a distinct presentation to, beyond the
+#: shape-based body/table/awaiting fallback every component already gets.
+#: `finance.heatmap` and `mgmt.risk_matrix` reuse the same banded-table path
+#: because both declare `CELL_BAND`: a heatmap shades the whole grid, a risk
+#: matrix shades the likelihood/impact cells specifically, and Markdown has
+#: exactly one way to spell "shaded" — words in the cell.
+_BANDED_TABLE_COMPONENTS = frozenset({"finance.heatmap", "mgmt.risk_matrix"})
+#: `ops.process_flow` and `ops.causal_chain` both declare `FLOW`; see
+#: `_flow` for why one text rendering serves both.
+_FLOW_COMPONENTS = frozenset({"ops.process_flow", "ops.causal_chain"})
+_PULL_QUOTE_COMPONENT = "editorial.pull_quote"
+_CALLOUT_COMPONENT = "editorial.callout"
+
+
+def _table(table: Table, locale: Locale = DEFAULT_LOCALE, *, show_bands: bool = False) -> str:
+    """One table as GitHub-flavoured Markdown.
+
+    *show_bands* is false everywhere this was already called before
+    `Cell.band` existed, which keeps every one of those call sites byte-for-byte
+    unchanged. Set true only for the two components that declared
+    `CELL_BAND` (`_BANDED_TABLE_COMPONENTS`) — see the module docstring.
+    """
     header = ["", *[column.label for column in table.columns]]
     lines = [
         "| " + " | ".join(header) + " |",
@@ -39,12 +83,86 @@ def _table(table: Table, locale: Locale = DEFAULT_LOCALE) -> str:
         for column in table.columns:
             cell = row.cells.get(column.key)
             text = format_value(cell.value, column.number_format, locale=locale) if cell else ""
+            if show_bands and cell is not None and cell.band is not None:
+                marker = f"({_BAND_LABEL[cell.band]})"
+                text = f"{text} {marker}" if text else marker
             cells.append(f"**{text}**" if row.emphasis and text else text)
         lines.append("| " + " | ".join(cells) + " |")
 
     if table.note:
         lines += ["", f"*{table.note}*"]
     return "\n".join(lines)
+
+
+def _quote(
+    quote: Quotation,
+    facts: dict[str, CanonicalFact] | None,
+    locale: Locale,
+    presentation: Presentation,
+    *,
+    prefix: str = "",
+) -> str:
+    """One `Quotation` as a Markdown blockquote — for `editorial.pull_quote`
+    ("carrying an emphasis the surrounding paragraph would otherwise bury")
+    and, with a *prefix*, `editorial.callout` ("the one or two things to
+    watch"). A blockquote rather than an ordinary paragraph so a reader can
+    tell at a glance that this line was pulled out, not narrated in place.
+
+    ``text`` may carry ``{{fact:ID}}`` the same as `ArtifactSection.body` —
+    resolved by the identical call, so a quotation and the body it was pulled
+    from can never disagree about a figure.
+    """
+    text = (
+        references.substitute(quote.text, facts, locale=locale, presentation=presentation)
+        if facts else quote.text
+    )
+    lines = [f"> {prefix}{text}"]
+    if quote.attribution:
+        lines.append(">")
+        lines.append(f"> — {quote.attribution}")
+    return "\n".join(lines)
+
+
+def _flow(
+    flow: FlowDiagram,
+    facts: dict[str, CanonicalFact] | None,
+    locale: Locale,
+    presentation: Presentation,
+) -> str:
+    """A declared `FlowDiagram` as an ordered Markdown list.
+
+    Markdown cannot draw a graph any more than it can draw a chart — see
+    `_caption` below, which leaves a chart's picture to the reader's
+    imagination for the identical reason. So a flow's nodes and edges are
+    printed as a checkable list, one bullet per edge, rather than an invented
+    ASCII diagram that could disagree with the shape the IR actually declared.
+    Serves both `ops.process_flow` (steps in the order a system takes them)
+    and `ops.causal_chain` (trigger to effect, naming the control that should
+    have caught it) — the edge label is what tells the two apart, not the
+    rendering.
+    """
+    label_by_key = {node.key: node.label for node in flow.nodes}
+
+    def resolved(text: str) -> str:
+        return (
+            references.substitute(text, facts, locale=locale, presentation=presentation)
+            if facts else text
+        )
+
+    if flow.edges:
+        lines = []
+        for edge in flow.edges:
+            source = resolved(label_by_key.get(edge.source, edge.source))
+            target = resolved(label_by_key.get(edge.target, edge.target))
+            arrow = f"**{source}** → **{target}**"
+            if edge.label:
+                arrow += f" ({resolved(edge.label)})"
+            lines.append(f"- {arrow}")
+        return "\n".join(lines)
+    # Nodes with no declared edges are still a real sequence when the source
+    # ordered them that way — a process with steps but no named transitions
+    # between them, which is a legitimate (if sparse) `FlowDiagram`.
+    return "\n".join(f"- **{resolved(node.label)}**" for node in flow.nodes)
 
 
 def _caption(chart: Chart, table: Table | None) -> str:
@@ -97,6 +215,8 @@ def render(
     locale: Locale = DEFAULT_LOCALE,
     detail=(),
     presentation: Presentation = DEFAULT_PRESENTATION,
+    artifact_type: str = "",
+    size_class: SizeClass = "medium",
 ) -> bytes:
     """Render one IR to Markdown bytes.
 
@@ -111,7 +231,18 @@ def render(
     *presentation* decides who the document is for — see ``presentation.py``.
     Defaulted to ``AUDIT``, which is what this function did before the profile
     existed, so an isolated render still produces the bytes its test pinned.
+
+    *artifact_type* and *size_class* feed the artifact compiler purely to learn
+    which component it chose for each section (see `section_components`) — the
+    identity dispatch this function's docstring describes. Both default to
+    values `section_components` composes safely against ("" has no grammar,
+    "medium" is a real size class), and composition never raises here even if
+    it fails, so the bare ``render(ir, facts)`` call every existing test and
+    call site already uses keeps producing exactly the bytes it always has:
+    shape-based dispatch is the only path a component-less mapping can reach.
     """
+    components = section_components(ir, artifact_type=artifact_type, fmt="markdown",
+                                     size_class=size_class)
     parts: list[str] = [f"# {ir.title}"]
     if ir.subtitle:
         parts.append(f"**{ir.subtitle}**")
@@ -141,14 +272,32 @@ def render(
             heading += " *(not part of the readable surface)*"
         parts.append(heading)
 
+        component_id = components.get(section.heading)
+
         if section.body:
             parts.append(
                 references.substitute(section.body, facts, locale=locale,
                                       presentation=presentation)
                 if facts else section.body
             )
+        elif component_id in _FLOW_COMPONENTS and section.flow is not None and (
+            section.flow.nodes or section.flow.edges
+        ):
+            # `ops.process_flow` and `ops.causal_chain` declared `FLOW` as an
+            # optional or required input — see `components.py` — and this
+            # section actually carries one. Before this branch existed, both
+            # collapsed to whatever `section.table`/`body` held, which is the
+            # measured defect this dispatch exists to end.
+            parts.append(_flow(section.flow, facts, locale, presentation))
+        elif component_id == _PULL_QUOTE_COMPONENT and section.quote is not None:
+            parts.append(_quote(section.quote, facts, locale, presentation))
+        elif component_id == _CALLOUT_COMPONENT and section.quote is not None:
+            parts.append(_quote(section.quote, facts, locale, presentation, prefix="**Watch:** "))
         elif section.table is not None:
-            parts.append(_table(section.table, locale))
+            parts.append(_table(
+                section.table, locale,
+                show_bands=component_id in _BANDED_TABLE_COMPONENTS,
+            ))
 
         else:
             parts.append(
@@ -215,7 +364,9 @@ def render_all(world: World) -> list[Rendered]:
                 media_type="text/markdown",
                 payload=render(ir, {fact.id: fact for fact in world.facts}, locale=locale,
                                detail=by_intent.get(ir.intent_id, ()),
-                               presentation=profile.for_doctype(intent.artifact_type)),
+                               presentation=profile.for_doctype(intent.artifact_type),
+                               artifact_type=intent.artifact_type,
+                               size_class=intent.size_profile),
             )
         )
     return out

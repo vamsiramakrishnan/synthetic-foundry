@@ -592,6 +592,32 @@ class FormulaKind(StrEnum):
     """A single cell elsewhere, addressed ``table:row:column``."""
 
 
+class MagnitudeBand(StrEnum):
+    """Where a cell's value sits within its column's range — declared exactly
+    the way `FormulaKind` declares a computation: a *semantic* fact about the
+    value, not a rendering decision. ``finance.heatmap``'s whole purpose is "a
+    grid of values shaded by magnitude", and until this existed there was
+    nothing in the IR for a generator to shade *by* — a renderer had no choice
+    but to draw the table underneath it and stop, which is exactly the
+    collapse this field exists to end.
+
+    A renderer picks the colour, the marker, or the shading; this only says
+    which of five positions the value occupies in its own column, so a
+    Markdown render and an XLSX conditional-format agree about *which* cells
+    are extreme without either inventing the other's spelling of "extreme".
+    Five rather than three: three bands (low/mid/high) collapse the two
+    interesting edges — "clearly above average" and "clearly below" — into the
+    same middle bucket as "exactly average", which is the one distinction a
+    heatmap is drawn to show.
+    """
+
+    LOW = "low"
+    BELOW_AVERAGE = "below_average"
+    AVERAGE = "average"
+    ABOVE_AVERAGE = "above_average"
+    HIGH = "high"
+
+
 class Cell(Model):
     """One value in a table.
 
@@ -604,6 +630,15 @@ class Cell(Model):
     fact_id: str | None = None
     formula: FormulaKind | None = None
     operands: list[str] = Field(default_factory=list)
+    band: MagnitudeBand | None = None
+    """Where this value sits in its column's range — see `MagnitudeBand`.
+
+    ``None`` means no generator has computed a range to place this cell in,
+    which is every cell in every corpus this repository ships today; it does
+    not mean "average" and a renderer must not treat it as such. Additive and
+    silent by construction: a table nobody ever bands renders exactly as it
+    always has, because nothing reads this field until it is set.
+    """
 
     @model_validator(mode="after")
     def _formula_needs_operands(self) -> Cell:
@@ -702,6 +737,97 @@ class Table(Model):
         return None
 
 
+class FlowNode(Model):
+    """One step, trigger, control, or effect in a declared `FlowDiagram`.
+
+    Carries a label, never a figure: the constraint every primitive in this
+    file is held to — see `Cell.band` — applies here identically. A node
+    names a thing that happened or should happen; any number attached to it is
+    reached through ``fact_id`` and resolved by a renderer exactly as a
+    section's own ``{{fact:ID}}`` is, never typed into ``label`` itself.
+    """
+
+    key: str
+    label: str
+    fact_id: str | None = None
+    """The fact this node stands for, if any — a renderer may resolve it into
+    the node's label the same way `narrative.references.substitute` resolves
+    a `{{fact:ID}}` marker in prose. ``None`` for a node that names a step or a
+    control rather than a measured thing."""
+
+
+class FlowEdge(Model):
+    """One connection from *source* to *target*, in a declared `FlowDiagram`.
+
+    ``label`` names the relationship — "triggers", "should have caught this",
+    "confirmed by" — the vocabulary `ops.causal_chain`'s own purpose text
+    already uses in prose. Free text rather than a closed enum, for the same
+    reason `Table.note` and `Chart.note` are: a causal chain's edges are as
+    varied as the incidents they describe, and a fixed vocabulary here would
+    either grow without bound or force an edge into a label that does not fit.
+    """
+
+    source: str
+    """A `FlowNode.key` in the same diagram."""
+    target: str
+    """A `FlowNode.key` in the same diagram."""
+    label: str = ""
+
+
+class FlowDiagram(Model):
+    """A declared shape — named nodes, and the edges between them — for a
+    section that is a sequence of steps rather than a table of figures.
+
+    Exists for `ops.process_flow` ("the steps a system takes when it works")
+    and `ops.causal_chain` ("from trigger to effect, naming the control that
+    should have caught it"): the registry's own purpose text for both already
+    describes a graph, and before this there was nothing in the IR to hold
+    one — a renderer had to fall back to prose or a table that flattened the
+    shape away. A renderer with no drawing surface still has enough here to
+    print an ordered chain; one with a canvas can lay out a real diagram —
+    the same split `Chart` already makes between the data it declares and the
+    picture a renderer decides to draw of it.
+    """
+
+    nodes: list[FlowNode] = Field(default_factory=list)
+    edges: list[FlowEdge] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _edges_reference_declared_nodes(self) -> FlowDiagram:
+        keys = {node.key for node in self.nodes}
+        for edge in self.edges:
+            if edge.source not in keys or edge.target not in keys:
+                raise ValueError(
+                    f"edge {edge.source!r} -> {edge.target!r} names a node this"
+                    " flow never declared"
+                )
+        return self
+
+
+class Quotation(Model):
+    """One line pulled out and set apart from the surrounding prose.
+
+    For `editorial.pull_quote` ("carrying an emphasis the surrounding
+    paragraph would otherwise bury") and `editorial.callout` ("the one or two
+    things to watch") — both currently spelled, if they compose at all, as a
+    plain paragraph indistinguishable from the body text around them.
+
+    ``text`` may carry ``{{fact:ID}}`` references exactly as
+    `ArtifactSection.body` does, resolved by the identical
+    `narrative.references.substitute` call, so a pulled quotation and the
+    paragraph it was drawn from can never disagree about a figure — there is
+    only ever the one resolution path.
+    """
+
+    text: str
+    attribution: str | None = None
+    fact_ids: list[str] = Field(default_factory=list)
+    """Facts this quotation rests on, beyond any resolved inline via
+    ``{{fact:ID}}`` — the same idea `ArtifactSection.fact_ids` carries for a
+    whole section, kept separate because a quotation is its own citable unit,
+    not a restatement of the section's citations."""
+
+
 class ArtifactSection(Model):
     """One resolved section of an artifact.
 
@@ -716,6 +842,18 @@ class ArtifactSection(Model):
     charts: list[Chart] = Field(default_factory=list)
     """Charts over this section's table. A view of data already present, never a
     source of data of its own."""
+    flow: FlowDiagram | None = None
+    """A declared node/edge shape for this section — see `FlowDiagram`.
+
+    Additive and silent: no generator in this repository sets it yet, so every
+    existing section keeps rendering as prose, then a table, then "awaiting
+    narrative" exactly as it always has. Set only by a generator that has
+    actually decided the shape, never inferred from a table or from prose.
+    """
+    quote: Quotation | None = None
+    """A pulled-out line for this section — see `Quotation`. Same rule as
+    ``flow``: absent changes nothing, present is a fourth content primitive a
+    renderer may present instead of falling back to prose or a table."""
     fact_ids: list[str] = Field(default_factory=list)
     purpose: str = ""
     """What this section has to accomplish, and for whom.
@@ -753,7 +891,12 @@ class ArtifactSection(Model):
     @property
     def awaiting_prose(self) -> bool:
         """Whether this section still needs narrative."""
-        return self.body is None and self.table is None
+        return (
+            self.body is None
+            and self.table is None
+            and self.flow is None
+            and self.quote is None
+        )
 
 
 class ArtifactIR(Model):
@@ -789,6 +932,18 @@ class ArtifactIR(Model):
                     for cell in row.cells.values():
                         if cell.fact_id:
                             seen.setdefault(cell.fact_id, None)
+            if section.quote:
+                # A quotation is its own citable unit — see `Quotation.fact_ids`
+                # — so its facts join the artifact's total the same way a
+                # table cell's do, two lines up. No corpus in this repository
+                # sets `quote` yet, so this is additive: an empty ``quote``
+                # (the only value that exists today) contributes nothing.
+                for fact_id in section.quote.fact_ids:
+                    seen.setdefault(fact_id, None)
+            if section.flow:
+                for node in section.flow.nodes:
+                    if node.fact_id:
+                        seen.setdefault(node.fact_id, None)
         return list(seen)
 
 
