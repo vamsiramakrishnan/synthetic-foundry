@@ -9,3 +9,16 @@ venv/
 # Agent worktrees are live workspaces, not content — committing one would land
 # in-progress, unverified work alongside a nested git checkout.
 .claude/worktrees/
+# Hypothesis's example database (tests/test_properties.py). Deliberately not
+# committed: CI must *derive* its counterexamples from the properties, not
+# replay a file somebody's laptop wrote — a checked-in database would make a
+# green run depend on which examples happened to be cached, which is the same
+# reproducibility claim `--replay` makes about a corpus.
+.hypothesis/
+# The default vector cache (`worldloom evaluate --retriever embedding`, see
+# `src/worldloom/evaluate/embedding.py`). A *corpus's* cache is meant to be
+# carried and committed — that is what makes a dense measurement replay without
+# the model — but this is the scratch one a working tree accumulates while
+# scoring whatever happened to be to hand, keyed to no corpus in particular.
+# Point `--vectors` at the corpus to keep one worth keeping.
+.worldloom/

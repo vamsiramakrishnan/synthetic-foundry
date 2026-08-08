@@ -104,19 +104,84 @@ def renderer(name: str) -> Callable[[World], list[Rendered]]:
         ) from None
 
 
+
+def citation_sidecars(world: World) -> list[Rendered]:
+    """One citations file per artifact, when the profile asks for them beside
+    the document rather than inside it.
+
+    Written here rather than in each renderer, and that is the whole reason this
+    function exists: ``appendix: "sidecar"`` produces exactly one file per
+    artifact no matter which formats were asked for. Four ``render_all``
+    implementations each emitting it would produce four identical files at four
+    paths on ``-f docx -f pdf -f markdown -f pptx``, and a corpus where the
+    number of citation files depends on which renderers ran is one whose
+    citations are a rendering artifact rather than a record.
+
+    Markdown regardless of the document's own format, deliberately. This is
+    evidence, not a document: whoever opens it is checking a figure against a
+    ledger, and a table they can grep beats a table they have to open Word for.
+    It is the same content the appendix carried — no more, no less — so a
+    corpus rendered ``filing`` and one rendered ``audit`` differ in where the
+    citations sit and never in what they say.
+    """
+    from ..presentation import of as presentation_of
+    from .values import corpus_locale, format_value
+
+    profile = presentation_of(world)
+    locale = corpus_locale(world)
+    out: list[Rendered] = []
+    for ir in world.artifact_irs:
+        intent = world.artifact_intents.by_id(ir.intent_id)
+        if profile.for_doctype(intent.artifact_type).appendix != "sidecar":
+            continue
+        hidden = [section for section in ir.sections if section.hidden and section.table]
+        if not hidden:
+            continue
+        lines = [f"# {ir.title} — supporting facts", "",
+                 "Every fact the prose in this artifact cites, at the authority"
+                 " and validity the ledger holds. Kept beside the document"
+                 " rather than inside it; the document is unchanged by its"
+                 " presence.", ""]
+        for section in hidden:
+            table = section.table
+            lines.append(f"## {section.heading}")
+            lines.append("")
+            header = [table.title] + [column.label for column in table.columns]
+            lines.append("| " + " | ".join(header) + " |")
+            lines.append("| " + " | ".join("---" for _ in header) + " |")
+            for row in table.rows:
+                cells = [row.label]
+                for column in table.columns:
+                    cell = row.cells.get(column.key)
+                    cells.append(
+                        format_value(cell.value, column.number_format, locale=locale)
+                        if cell else ""
+                    )
+                lines.append("| " + " | ".join(cells) + " |")
+            lines.append("")
+        out.append(Rendered(
+            artifact_id=ir.id,
+            path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.citations.md",
+            media_type="text/markdown",
+            payload=("\n".join(lines).rstrip() + "\n").encode("utf-8"),
+        ))
+    return out
+
+
 def _install() -> None:
     """Register the built-in formats.
 
     Imported lazily so an optional dependency for one format cannot break import
     of the library as a whole.
     """
-    from . import bundles, docx, markdown, pdf, pptx, xlsx
+    from . import bundles, docx, html, markdown, pdf, pptx, xlsx
 
     register("markdown", markdown.render_all)
     register("xlsx", xlsx.render_all)
     register("docx", docx.render_all)
     register("pdf", pdf.render_all)
     register("pptx", pptx.render_all)
+    register("html", html.render_all)
     register("jira", bundles.render_jira)
     register("confluence", bundles.render_confluence)
     register("servicenow", bundles.render_servicenow)
@@ -124,4 +189,5 @@ def _install() -> None:
 
 _install()
 
-__all__ = ["Rendered", "RenderError", "register", "available", "renderer", "slug_for"]
+__all__ = ["Rendered", "RenderError", "available", "citation_sidecars", "register",
+           "renderer", "slug_for"]

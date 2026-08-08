@@ -174,12 +174,27 @@ def test_every_retail_eval_text_default_is_filled_at_its_call_site() -> None:
     )
 
 
+#: Slots filled by substitution *before* any `.format` call, rather than as a
+#: keyword at a call site. `_fields_of` reads a template statically and cannot
+#: see one, so excluding them keeps this check meaning what it says.
+#:
+#: There is exactly one, and it earns the exception: `{company}` is what makes
+#: a benchmark vary with the company it is about. Measured across four seeds,
+#: banking produced 16 of 16 identical question strings and insurance 9 of 9,
+#: because every question said "the bank's" and never named it; naming it took
+#: banking to 35% shared and insurance to 33%. Filling it at all sixteen call
+#: sites instead would be the same substitution written sixteen times, and a
+#: pack re-voicing a template could not then use the slot in a sentence the
+#: shipped default does not.
+_PRESUBSTITUTED = frozenset({"company"})
+
+
 def test_every_banking_eval_text_default_is_filled_at_its_call_site() -> None:
     sites = _banking_call_sites(SRC / "banking_evaluation.py")
     missing = []
     mismatched = []
     for key, default in banking_evaluation.EVAL_TEXT.items():
-        required = _fields_of(default)
+        required = _fields_of(default) - _PRESUBSTITUTED
         if key not in sites:
             missing.append(key)
             continue

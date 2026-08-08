@@ -6,7 +6,7 @@ which is in `SKILL.md`.
 
 ```bash
 worldloom formats
-worldloom render ./corpus -f xlsx -f docx -f markdown -f jira -f confluence -f servicenow
+worldloom render ./corpus -f xlsx -f docx -f html -f markdown -f jira -f confluence -f servicenow
 ```
 
 `worldloom formats` lists what this installation actually has registered —
@@ -85,6 +85,106 @@ page hierarchy — and marks a page `stale` when a fact it depends on has since
 been superseded, with a comment explaining why it was left as written rather
 than corrected. That staleness is deliberate: a reader (or an agent under
 evaluation) has to notice it, not have it silently fixed.
+
+## Who the documents are for
+
+Every artifact here is two things at once: a **traceability record** (which
+facts a passage cites, at what authority, in whose voice it was asked for) and
+a **document** (something a person opens). Left alone, the renderers serve the
+first and the second leaks — a CFO variance memo renders to five PDF pages of
+which four are a fact table, and its last line is the generation brief printed
+inside the artifact it briefed.
+
+Which reading a corpus is for is a decision, not a default:
+
+```bash
+worldloom present describe
+worldloom render ./corpus -f docx -f pdf --profile reader
+```
+
+| | `audit` | `reader` | `filing` |
+|---|---|---|---|
+| supporting-fact appendix | printed | omitted | sibling `.citations.md` |
+| author voice and persona | in the document | file metadata | file metadata |
+| money figures | `AUD 5,372,800 thousands` | `AUD 5,372.8m` | `AUD 5,372.8m` |
+| PDF table columns | even split | measured, type shrinks to fit |  measured |
+
+`audit` is the default and is byte-for-byte what shipped before profiles
+existed — the right profile when the reader is a validator. **Nothing a profile
+omits is lost**: every section, `fact_ids` list and voice stays in
+`artifact-ir.jsonl` under every profile, so omitting withholds from the page and
+never from the corpus.
+
+Authoring one, when none of the three fits — usually because one doctype needs
+different treatment from the rest:
+
+```bash
+worldloom present brief ./corpus -o brief.json
+worldloom present lint profile.json --corpus ./corpus
+```
+
+The lint returns every finding at once, refuses a misspelled knob by name
+rather than ignoring it, and refuses any figure scaling that cannot multiply
+back to the ledger value exactly — a profile decides how a value is *shown* and
+may never change it. `/worldloom-present` drives the whole thing.
+
+The chosen profile is written onto the corpus's **recipe**, by value, so the
+files and the record of how they were made cannot disagree and a `--replay`
+reproduces this rendering. Re-rendering an existing corpus under a second
+profile needs no rebuild: unlike a locale, a profile decides nothing about the
+world.
+
+## Elements a section may declare
+
+`ArtifactSection` carries prose (`body`), one `Table`, a list of `Chart`, and
+three primitives that let a *component* say what it is rather than being
+inferred from shape:
+
+| primitive | field | used by |
+|---|---|---|
+| `MagnitudeBand` | `Cell.band` | `finance.heatmap`, `mgmt.risk_matrix` |
+| `FlowDiagram` | `ArtifactSection.flow` | `ops.process_flow`, `ops.causal_chain` |
+| `Quotation` | `ArtifactSection.quote` | `editorial.pull_quote`, `editorial.callout` |
+
+Each declares a **semantic** fact and leaves the spelling to a renderer — the
+relationship `FormulaKind` has to a computed cell. A band says where a value
+sits in its column's range, not what colour to paint it: Markdown spells it as a
+bracketed word because it has no colour, PDF fills the cell background. All
+three default to `None`, so a section that declares none renders exactly as it
+always did.
+
+`ComponentSpec.required_inputs` is checked at compose time, so a component
+picked for a section it cannot present is refused rather than silently falling
+back to a plain table. Six of the 39 components declare inputs today; the rest
+genuinely are plain prose or a plain table, and inventing a distinct look for
+every name would be worse than not having one.
+
+## Charts are declared, and now four formats draw them
+
+`Chart` says which table, which rows, which series, and `by_row`. A renderer
+decides only how to draw it, and **a chart never introduces a number** — every
+value it plots is a cell already in the table beside it.
+
+| format | how a chart appears |
+|---|---|
+| `xlsx` | native chart parts |
+| `docx` | native `c:chartSpace` part (no embedded workbook — `c:externalData` is optional) |
+| `pptx` | native chart via `add_chart`, with the embedded workbook OOXML requires |
+| `html` | inline SVG |
+| `pdf` | a bar built from table cells — a fixed-page approximation |
+| `markdown` | named, not drawn, and it says so |
+
+Two things worth knowing before debugging a missing chart:
+
+1. **Check the IR first.** In the shipped retail corpus only the month-end model
+   (3) and the variance memo (1) declare a chart at all; the executive deck
+   declares none. A deck with no chart is usually a `documents.py` planning gap,
+   not a renderer defect.
+2. **A chart that embeds a workbook embeds a second clock.** `add_chart` builds
+   its data workbook with `xlsxwriter`, which stamps that workbook's own
+   `docProps/core.xml` with `datetime.now()`. `ooxml.normalise` recurses into
+   nested `.xlsx` entries for exactly this reason — a chart-bearing deck would
+   otherwise pass every local test and fail CI's byte-for-byte replay.
 
 ## Determinism in Office formats
 

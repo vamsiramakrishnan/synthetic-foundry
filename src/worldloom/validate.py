@@ -37,6 +37,8 @@ from .ids import id_prefix, is_id
 from .models import Authority, ErrorType, FormulaKind, Lifecycle
 
 if TYPE_CHECKING:  # pragma: no cover
+    from datetime import datetime
+
     from .world import World
 
 #: Tolerance for reconciliation, in the corpus's currency unit. Financial facts
@@ -1345,12 +1347,124 @@ class _Validator:
                     f" before it was valid at {fact.valid_from.isoformat()}",
                 )
 
+            observer = self._people.get(observation.observer_id)
+            if observer is None:
+                continue
+            self.checks += 1
+            if (observer.joined is not None and observer.joined > observation.learned_at) or (
+                observer.left is not None and observer.left <= observation.learned_at
+            ):
+                # The employment side of the same clock. Somebody learning
+                # something before they were hired, or after they left, is not an
+                # asymmetry — it is a knowledge ledger that outran the payroll,
+                # and every "who could have acted" answer derived from it names
+                # a person who was not there. Found in the shipped scripted-actor
+                # corpus: the `duty` channel works backwards from a fact's own
+                # validity, so a 2022 close norm reached a 2024 hire in 2022.
+                self.fail(
+                    "actors",
+                    "observer_not_employed",
+                    observation.id,
+                    f"{observer.id} learned {observation.fact_id} at"
+                    f" {observation.learned_at.isoformat()}, outside their employment",
+                )
+
+        # `(observer, fact)` to the first moment they held it. Built once: the
+        # three message and authorship checks below all ask the same question of
+        # it, and re-scanning the ledger per message is the shape of quadratic
+        # this file has had to remove twice already.
+        held: dict[tuple[str, str], datetime] = {}
+        for observation in w.observations:
+            key = (observation.observer_id, observation.fact_id)
+            first = held.get(key)
+            if first is None or observation.learned_at < first:
+                held[key] = observation.learned_at
+
+        # Whether the ledger is a *settled* account of what the company knew, or
+        # a record of the projections handed to actors at the moments they were
+        # invoked. An execution ledger is present only in the second case, and
+        # the difference decides which claims can honestly be checked: an actor
+        # episode observes for the actors it woke, at the moments it woke them,
+        # and says nothing about anybody else — so a recipient who was never
+        # invoked has no entry, and requiring one would fail the runtime for a
+        # claim it does not make. `conversation.derive` does make that claim.
+        settled = not w._actor_ledger
+
         for message in w.messages:
             self.check_ref(message.id, "sender_id", message.sender_id, expect="PERSON")
             self.check_refs(message.id, "recipient_ids", message.recipient_ids, expect="PERSON")
             self.check_refs(
                 message.id, "disclosed_fact_ids", message.disclosed_fact_ids, expect=FACT_REFS
             )
+            for fact_id in message.disclosed_fact_ids:
+                if fact_id not in facts:
+                    continue
+                self.checks += 1
+                first = held.get((message.sender_id, fact_id))
+                if first is None or first > message.sent_at:
+                    # Telling somebody what you do not yet know is the fastest
+                    # way to launder a fact into a document its author could
+                    # never have had. Checked against the shipped ledger rather
+                    # than re-derived, for the reason the rest of this group is:
+                    # the runtime guards the run, and the corpus is a directory.
+                    self.fail(
+                        "actors",
+                        "undisclosed_by_sender",
+                        message.id,
+                        f"{message.sender_id} disclosed {fact_id} at"
+                        f" {message.sent_at.isoformat()}, having no record of it",
+                    )
+                    continue
+                if not settled:
+                    continue
+                for recipient in message.recipient_ids:
+                    self.checks += 1
+                    arrived = held.get((recipient, fact_id))
+                    if arrived is None or arrived > message.sent_at:
+                        # And a message that reaches nobody's ledger moved no
+                        # knowledge, which `ActorMessage`'s own docstring says is
+                        # not a message. Either the disclosure is fiction or the
+                        # ledger is incomplete; both make the asymmetry answers
+                        # derived from it wrong, and neither is visible from the
+                        # message alone.
+                        self.fail(
+                            "actors",
+                            "disclosure_not_delivered",
+                            message.id,
+                            f"disclosed {fact_id} to {recipient}, whose record of it"
+                            f" is {'absent' if arrived is None else arrived.isoformat()}",
+                        )
+
+        # An author must have heard what their document says. This is the
+        # epistemic half of `cites_future_fact`: that check asks whether a fact
+        # existed when a document was written, this one asks whether its author
+        # had any way of knowing it. Only for authors the ledger covers — a role
+        # with no `ActorPolicy` is not an actor, has no knowledge ledger, and
+        # cannot be held to one; that gap is in the policy table, not here.
+        if settled and w.observations:
+            from .documents import written_at
+
+            covered = {observation.observer_id for observation in w.observations}
+            for intent in w.artifact_intents:
+                if intent.author_id not in covered:
+                    continue
+                try:
+                    deadline = written_at(intent, facts)
+                except ValueError:
+                    continue
+                for fact_id in intent.required_fact_ids:
+                    if fact_id not in facts:
+                        continue
+                    self.checks += 1
+                    first = held.get((intent.author_id, fact_id))
+                    if first is None or first > deadline:
+                        self.fail(
+                            "actors",
+                            "author_cited_unobserved",
+                            intent.id,
+                            f"{intent.author_id} cites {fact_id} in a document dated"
+                            f" {deadline.isoformat()}, having no record of it by then",
+                        )
 
         for task in w.tasks:
             self.check_ref(task.id, "created_by", task.created_by, expect="PERSON")

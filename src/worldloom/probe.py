@@ -118,6 +118,40 @@ DEFAULT_MAX_DEPTH = 4
 #: tolerance for sloppiness.
 _MEANINGFUL = 1e-9
 
+#: Revisions ``propagate`` may spend, per arc, before it stops narrowing.
+#:
+#: ``_MEANINGFUL`` above bounds how *small* a single narrowing may be; it does
+#: not bound how *many* there are, and the two failures are not the same one.
+#: A cycle that diverges rather than converges narrows by a comfortable
+#: fraction on every pass and still never settles — ``a`` bounded above by
+#: ``b``, ``b`` scaling ``a`` by ``[1.001, 1.002]``, and each lap walks the
+#: shared upper bound a further tenth of a per cent away from zero. Every step
+#: clears the floor easily. It ends only when the bound overflows to ``-inf``,
+#: about seven hundred thousand revisions later, and lands on the meaningless
+#: domain ``[-∞, -∞]`` with no contradiction reported. Two nodes and one link,
+#: eleven seconds — inside ``probe accept``, which runs this on every answer.
+#: (`tests/test_properties.py` found it; the graph is pinned there.)
+#:
+#: Exhausting the budget is reported as a contradiction, not swallowed. The
+#: first version of this cap argued that stopping early is sound because
+#: partially narrowed domains are *wider* than the fixpoint and a wider domain
+#: can only fail to refuse. That argument is wrong twice. It is wrong in
+#: principle — ``review`` accepts and ``resolve`` hands the engine bounds the
+#: graph never actually settled on, so a genuinely inconsistent graph resolves
+#: to a world and gets built. And it is wrong in fact: ``Relation.forward``
+#: does not round outward, so an overshooting narrowing is not a superset of
+#: anything, which is how the pinned cycle below reached ``[-∞, -∞]``. Budget
+#: exhaustion means "I do not know whether this graph holds", and the only
+#: honest answer to that is a refusal. It stays deterministic either way: the
+#: worklist is sorted, so the first N revisions — and the arc the cap stops
+#: on — are the same on every run.
+#:
+#: Per arc rather than flat, because the work a sound graph needs scales with
+#: its edges. The number is three orders of magnitude of headroom, not a
+#: guess — the shipped probes and every graph the suite builds settle in at
+#: most ten revisions total, against a budget of 256 for a single-arc graph.
+_REVISION_BUDGET = 256
+
 
 # ---------------------------------------------------------------------------
 # Interval algebra
@@ -143,7 +177,26 @@ class Interval:
 
     @property
     def width(self) -> float:
-        return self.high - self.low if not self.empty else 0.0
+        if self.empty:
+            return 0.0
+        # `inf - inf` is nan, and `[∞, ∞]` arises for real: a `scales` factor
+        # large enough to overflow sends every corner product to one sign of
+        # infinity, and `meet` then propagates the degenerate point. A nan here
+        # is the failure this module's `__mul__` comment already names one
+        # layer down — it is not merely wrong, it *silently disables*
+        # narrowing, because `narrowed_by`'s `isinf(width)` reads False on a
+        # nan and its subtraction then compares `nan > slack`, which is False
+        # for every possible other interval. A node that reached `[∞, ∞]` would
+        # sit there admitting everything and narrowing to nothing.
+        #
+        # `inf` is the answer every reader of this property already wants:
+        # `narrowed_by`, `resolve`'s unbounded-band check and `worlds`' axis
+        # filter all ask `isinf(width)` to mean "unbounded, do not trust this",
+        # and a point at infinity is exactly that. Found by
+        # `tests/test_properties.py`.
+        if math.isinf(self.low) or math.isinf(self.high):
+            return math.inf
+        return self.high - self.low
 
     def meet(self, other: Interval) -> Interval:
         """The intersection. May be empty — that is the contradiction signal."""
@@ -628,7 +681,15 @@ def open_graph(premise: str, roots: Sequence[Question] = (), *, max_depth: int =
 
 @dataclass(frozen=True)
 class Contradiction:
-    """A node whose interval emptied, and the chain that emptied it."""
+    """A reason this graph cannot be resolved, and the chain it sits on.
+
+    Two shapes, both fatal to the same degree. Usually a node whose interval
+    emptied: the graph says something that cannot hold. Once — see
+    ``_REVISION_BUDGET`` — the node propagation was still narrowing when it ran
+    out of revisions, which is not a claim that the graph is wrong but a claim
+    that this module does not know, and callers must treat the two identically
+    because both mean the resolved bounds are not the graph's answer.
+    """
 
     key: str
     chain: tuple[str, ...]
@@ -642,6 +703,13 @@ class Contradiction:
 class Propagation:
     domains: Mapping[str, Interval]
     contradictions: tuple[Contradiction, ...]
+    exhausted: bool = False
+    """Whether the last contradiction is the revision budget, not a real one.
+
+    Separate from ``contradictions`` so a caller can say *why* it refused
+    without matching on message text, but deliberately not separate from
+    ``consistent``: a run that stopped mid-narrowing has no more standing to be
+    resolved than one that emptied a domain."""
 
     @property
     def consistent(self) -> bool:
@@ -663,6 +731,9 @@ def propagate(graph: Graph) -> Propagation:
     this and inheritance: a leaf grounded in a published statistic can make its
     parent's range untenable, and the parent is what the corpus was going to
     print.
+
+    Revisions are budgeted, and running out of them is itself a contradiction
+    — see ``_REVISION_BUDGET``.
     """
     domains: dict[str, Interval] = {q.key: q.domain for q in graph.ordered}
 
@@ -685,8 +756,10 @@ def propagate(graph: Graph) -> Propagation:
     queue = sorted(arcs)
     found: list[Contradiction] = []
     seen: set[str] = set()
+    budget = _REVISION_BUDGET * max(1, len(arcs))
 
-    while queue:
+    while queue and budget > 0:
+        budget -= 1
         arc = queue.pop(0)
         source_key, target_key, downward = arc
         if domains[source_key].empty:
@@ -721,6 +794,30 @@ def propagate(graph: Graph) -> Propagation:
         # Re-enqueue every arc that could now narrow further, sorted so the
         # traversal stays reproducible.
         queue = sorted(set(queue) | {a for a in arcs if a[0] == target_key})
+
+    if queue:
+        # Out of revisions with narrowing still queued. Report it as a
+        # contradiction rather than returning the partial domains quietly: the
+        # domains below are a prefix of a narrowing that had not finished, and
+        # nothing downstream can tell that from a settled answer. `review`
+        # would accept, `resolve` would hand `parameters()` bounds the graph
+        # never agreed to, and a graph that describes no world at all would
+        # build a corpus. (Raised in review of the commit that added the cap,
+        # whose comment claimed the opposite.)
+        #
+        # The queue stays sorted, so `queue[0]` is the same arc on every run
+        # and the refusal names the same node — the determinism the sorted
+        # worklist buys applies to giving up as much as to narrowing.
+        stalled = queue[0][1]
+        found.append(Contradiction(
+            stalled,
+            tuple(q.key for q in graph.ancestry(stalled)),
+            f"propagation was still narrowing after {_REVISION_BUDGET} revisions"
+            f" per arc ({len(arcs)} arcs), so these bounds are partial and this"
+            f" graph cannot be resolved: either it holds only in a limit this"
+            f" module will not reach, or a relation on this chain diverges",
+        ))
+        return Propagation(domains, tuple(found), exhausted=True)
 
     return Propagation(domains, tuple(found))
 
@@ -1385,7 +1482,9 @@ def worlds(graph: Graph, *, count: int = 5, pool: int = _POOL) -> tuple[WorldPoi
     state = propagate(graph)
     if not state.consistent:
         raise ValueError(
-            "this graph is not consistent, so it describes no worlds at all: "
+            ("propagation did not settle, so which worlds this graph describes"
+             " is unknown: " if state.exhausted else
+             "this graph is not consistent, so it describes no worlds at all: ")
             + "; ".join(str(c) for c in state.contradictions)
         )
 

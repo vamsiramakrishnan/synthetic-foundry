@@ -61,6 +61,12 @@ worldloom validate ./corpus
 
 # 7. Find out whether it is actually hard, not merely coherent.
 worldloom evaluate ./corpus
+
+# 7b. And whether it is hard for a retriever anyone would deploy, not only for
+#     keyword matching. `all` adds a dense retriever beside BM25 and TF-IDF and
+#     names, per family, whether it is genuinely hard or merely a lexical trap.
+#     Optional extra; without it the dense column is skipped with a message.
+worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
 ```
 
 Three more readings answer questions `validate` and `evaluate` cannot, and each
@@ -568,6 +574,56 @@ three months at a time rather than retail's one.
 
 ---
 
+## Conversations, optionally
+
+An event mints facts and makes documents necessary — and it makes **people
+talk**. `--conversations` records that third output, which the corpus modelled
+and never produced outside the actor runtime:
+
+```bash
+worldloom build --seed 8128 --incident --conversations --out ./corpus
+worldloom actors ./corpus --observations       # who came to know how much, and how
+```
+
+```
+What each employee came to know
+ role                            first heard         facts  by channel
+ Group Financial Controller      2022-01-01 04:00      600  duty 11, message 2, participant 584 …
+ Service Desk Analyst            2022-01-01 04:00       18  duty 7, message 5, participant 2 …
+```
+
+Two files come out — `actor-observations.jsonl` and `actor-messages.jsonl` — and
+between them they answer a question the fact ledger structurally cannot. A fact
+carries one `valid_from`; knowledge carries one moment *per person*. Six hundred
+figures reach the controller and eighteen reach the analyst, and neither of them
+is wrong.
+
+It adds no facts, no events and no documents. What it adds is:
+
+- **A knowledge ledger.** Each fact reaches each employee through exactly one of
+  the channels in `actors/observation.py` — witnessed it, was paged about it,
+  owns the system that recorded it, was told, read it, or picked it up on the
+  ordinary flow of work — and the channel decides both *when* and *how much the
+  account is worth*.
+- **Messages.** Derived, never invented: somebody is told where the routing
+  table wakes them, or where the document plan makes them the author of
+  something that event established. The second is the one that mattered — the
+  controller's working note cites a root cause their role cannot read, so before
+  this the corpus had authors writing about facts no channel could deliver to
+  them.
+- **Information-asymmetry questions.** *Which employee was first to have a record
+  of this? By the time the last of them heard, who had already been able to act?
+  Who told them?* Every answer is recomputed from the ledger, so none of them can
+  be a sentence somebody wrote.
+
+Four invariants, checked by `worldloom validate` on the shipped files rather than
+on the code that wrote them: nobody knows a fact before it was true, nobody
+learns anything outside their employment, nobody discloses what they do not yet
+hold, and no author cites a fact they never heard.
+
+It is opt-in and refused alongside `--actors`, which derives its own — two
+producers appending to one knowledge ledger is two accounts of who knew what.
+
 ## Actors, optionally
 
 `worldloom build --actors` changes who decides what the incident's records say.
@@ -816,3 +872,69 @@ requires every command to be documented somewhere.
 Read `docs/build-order.md` before adding a subsystem. It sequences the work and
 states an exit gate for each step, and the ordering is deliberate — several steps
 exist specifically to stop a later one from being built on guesses.
+
+### Checking determinism somewhere other than seed 8128
+
+CI proves byte-identity on four builds at one seed, on every push. That is one
+point of a ten-dimensional configuration space, sampled repeatedly — and this
+repository owns the algorithm for not doing that. `tools/sweep.py` points it at
+our own QA: it enumerates engine × archetype × facets × locale × estate ×
+trading year × periods × messiness × master-data *from the registries*, covers
+the space with `dispersion.halton`, takes the furthest apart with
+`dispersion.farthest_first`, and builds each one twice.
+
+```bash
+python3 tools/sweep.py --describe                    # the axes, building nothing
+python3 tools/sweep.py -n 12                         # twice per config, in separate processes
+python3 tools/sweep.py -n 12 --mode resident         # twice per config, in ONE interpreter
+python3 tools/sweep.py -n 12 --mode archive          # working tree vs `git archive HEAD`
+python3 tools/sweep.py --seed 8128 -n 12 --only <id> # replay one row exactly
+```
+
+`process` and `resident` answer different questions and neither subsumes the
+other, so the nightly job runs `--mode process,resident`. Two fresh processes
+share nothing but the seed, which is what catches a build depending on an
+environment variable, a locale, or a hash seed. They cannot catch *leakage*
+between builds — both start pristine, so a first build that poisons a
+module-level registry has nothing to poison. Only a second build in the same
+interpreter can see that, which is `resident`. (This file claimed the opposite
+until review of PR #8 pointed out the hole; the fix is pinned by injecting a
+module-level counter into `Rng.__init__` and watching `process` report
+identical while `resident` reports the first differing line.)
+
+`--mode archive` is the local gate — in a clean CI checkout the working tree
+*is* `HEAD`. `.github/workflows/determinism-sweep.yml` runs nightly on a
+rotating seed, so the corners covered move over time instead of being the same
+eight forever. Every run prints its seed and each selected configuration, so
+any failure replays exactly.
+
+It is a tool, not library code: nothing under `src/` imports it and it adds no
+dependency.
+
+### Whether the corpus is hard, or only hard for keyword matching
+
+Every difficulty number this project published before now came from BM25 and
+TF-IDF — two ranking families and **one idea**, that relevance is word overlap.
+A family they both fail is either structurally hard or merely a *lexical* trap
+that any deployed retrieval stack walks past, and nothing here could tell those
+apart.
+
+```bash
+worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
+python3 tools/measure_retrievers.py ./corpus              # every pin, one table
+python3 tools/measure_retrievers.py ./mosaic --mosaic     # or a whole mosaic
+```
+
+Both print a second reading beside the agreement table: per family, **genuinely
+hard** (lexical and semantic both fail), **lexical trap** (semantic solves it —
+so it was never difficulty, and a corpus card counting it is overstating
+itself), **semantic blind spot**, or **solved by everything**.
+
+The retriever is an optional extra (`pip install "worldloom[embeddings]"`) and
+absent-friendly: without it the dense column is skipped with a message and the
+lexical readings still print. Its vectors are pinned to a model *revision* and
+cached to a sidecar as quantised integers, so the measurement replays
+bit-identically on a machine with no model at all — the generation ledger's
+argument, applied to a retriever. `src/worldloom/evaluate/embedding.py` makes
+that case in full, and
+`.claude/skills/worldloom/references/evaluating.md` has the reading.

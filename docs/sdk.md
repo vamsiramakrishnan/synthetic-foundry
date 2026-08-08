@@ -270,6 +270,40 @@ Outcome selection should be a filter or Pareto decision, not an optimization
 loop against one baseline. Repeatedly tuning candidates until BM25 fails is an
 efficient way to overfit the corpus to BM25.
 
+### Selecting a whole field on its measurements
+
+`dispersed` measures the *descriptions*. `outcome_selected` measures the
+*corpora*:
+
+```python
+worlds = sdk.outcome_selected(candidates, 5)      # returns Built, not Blueprint
+```
+
+Every candidate is built, run for one episode, compiled and read; the same
+farthest-first traversal then runs over the measurement vector rather than over
+the configuration vector. Nothing is narrated or rendered, so a candidate costs
+a build rather than a corpus — a pool of thirty retail worlds measures in about
+five seconds.
+
+The measurement vector is `worldloom.outcomes.read()`: the eight numbers of
+`Built.measure()`, plus `stats.measure` repetition and shape counts,
+`stats.compute` lexical texture and citation density, and the evaluation
+family and difficulty *mix*. Question text is held separately and enters the
+distance as a pairwise overlap term, because two worlds asking the same forty
+sentences are two presentations of one benchmark however different their org
+charts.
+
+`outcomes.select()` is the safe objective and the only one reachable by
+default: it maximizes spread, and nothing that is fit can be overfit.
+`outcomes.Pool.hardest()` selects against a single named retriever, warns when
+called, and exists to investigate that retriever rather than to build a
+dataset.
+
+`mosaic.outcome_field(n, pool=30)` is the same loop over the mosaic's own
+candidates. `tools/outcome_selection.py` compares it against
+`mosaic.field(n)` on the metrics `evaluate.across` already reports; the
+comparison and its mixed result are summarized in the changelog.
+
 ## Company descriptions
 
 `sdk.described()` resolves the same company specification accepted by

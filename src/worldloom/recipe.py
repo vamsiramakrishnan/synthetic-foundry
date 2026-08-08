@@ -44,6 +44,14 @@ if TYPE_CHECKING:  # pragma: no cover
 #: artifacts it is spelled into.
 LOCALE_KEY = "locale"
 
+#: Where a corpus records who its documents are presented for. Beside the locale
+#: and for the same three reasons ``locale_of`` sets out — the recipe is
+#: singular so two artifacts cannot disagree, it survives the round trip to
+#: disk, and it replays. See ``presentation.py``: the profile decides how a
+#: value is *shown*, and a rebuild that lost it would produce a corpus whose
+#: prose was identical and whose documents were a different shape.
+PRESENTATION_KEY = "presentation"
+
 #: Where a corpus records the facet claims its lore was minted from. Written by
 #: ``world.extend_lore`` rather than by ``build_recipe``, because the claims
 #: reach a build through the domain's own ``lore_claims`` field and never pass
@@ -68,7 +76,7 @@ class RecipeError(Exception):
 #: load, which is a lot to accept for the convenience of not writing a line here.
 STEPS: dict[str, tuple[str, ...]] = {
     "MonthEndClose": ("period", "incident", "comparatives", "actors", "eval_density",
-                      "trend_pct"),
+                      "trend_pct", "conversations"),
     "Hire": ("period", "role_key", "title", "function", "unit_key"),
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
@@ -259,6 +267,77 @@ def locale_of(recipe: dict[str, Any]) -> Locale:
         # a Frankfurt company's variance memo in Australian punctuation and
         # report success. There is nothing in the output to notice the drop by.
         raise RecipeError(f"this corpus's recorded locale does not load: {exc}") from exc
+
+
+def presentation_of(recipe: dict[str, Any]) -> Any:
+    """Who this corpus's documents are presented for.
+
+    ``locale_of``'s sibling, and the argument for the recipe carrying it is that
+    one verbatim: the recipe is the only singular document a corpus has, so two
+    artifacts cannot disagree about the profile, and it replays.
+
+    A profile is recorded **by value and not by name**. A name would be a
+    reference into a registry that a later checkout may have changed, and this
+    project's gate is that a corpus rebuilds byte-for-byte from its own record —
+    a rebuild that resolved ``"house"`` against somebody's edited profile would
+    produce different documents and report success. The name rides along so a
+    reader knows what it was called; the knobs are what is honoured.
+
+    An absent key is ``presentation.AUDIT`` rather than an error: every corpus
+    built before the profile existed carries no key and *was* the audit
+    rendering, so that is a fact about those corpora rather than a gap in them.
+    """
+    from .presentation import AUDIT, Presentation
+
+    payload = recipe.get(PRESENTATION_KEY)
+    if payload is None:
+        return AUDIT
+    if isinstance(payload, str):
+        # A bare name is accepted on the way *in* only — `with_presentation`
+        # writes the expanded form — because a hand-edited recipe is a thing
+        # people do and refusing a name there would be pedantry. Resolved
+        # against the registry, and an unknown one is refused rather than
+        # defaulted, for `presentation.named`'s reason.
+        from .presentation import named
+
+        return named(payload)
+    try:
+        knobs = {knob: str(payload[knob]) for knob in ("appendix", "provenance",
+                                                       "magnitudes", "table_fit")
+                 if knob in payload}
+        return Presentation(name=str(payload.get("name", "recorded")),
+                            overrides=payload.get("overrides") or {}, **knobs)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RecipeError(
+            f"this corpus's recorded presentation profile does not load: {exc}"
+        ) from exc
+
+
+def with_presentation(recipe: dict[str, Any], profile: Any) -> dict[str, Any]:
+    """A copy of *recipe* presented under *profile*.
+
+    Unlike ``with_locale``, applying this after a build is *correct* rather than
+    a trap. A locale is a build input — it decides who the people are and where
+    the sites sit, so recording one the world was not built with produces a
+    rebuild that differs. A profile decides nothing about the world: the same
+    facts, the same prose, the same IR, presented differently. Re-rendering an
+    existing corpus under a second profile is the intended use, which is why
+    ``worldloom render --profile`` exists and does not require a rebuild.
+    """
+    from .presentation import Presentation, named
+
+    resolved = named(profile) if isinstance(profile, str) else profile
+    assert isinstance(resolved, Presentation)
+    document: dict[str, Any] = {
+        "name": resolved.name,
+        "appendix": resolved.appendix,
+        "provenance": resolved.provenance,
+        "magnitudes": resolved.magnitudes,
+        "table_fit": resolved.table_fit,
+    }
+    if resolved.overrides:
+        document["overrides"] = {k: dict(v) for k, v in resolved.overrides.items()}
+    return {**recipe, PRESENTATION_KEY: document}
 
 
 def with_locale(recipe: dict[str, Any], locale: str | Locale) -> dict[str, Any]:
@@ -659,6 +738,10 @@ def rebuild(
                     # corpus was built with — the knob's own default.
                     eval_density=step.get("eval_density", 1.0),
                     trend_pct=step.get("trend_pct", 0.0),
+                    # Same `.get` discipline as its neighbours, and the same
+                    # reason: absent means the corpus was built before the knob
+                    # existed, and False is what it was built with.
+                    conversations=step.get("conversations", False),
                     physics=physics,
                     seasonality=seasonality,
                 )
@@ -720,6 +803,7 @@ def has_actor_step(recipe: dict[str, Any]) -> bool:
 
 
 __all__ = [
-    "LOCALE_KEY", "RecipeError", "STEPS", "build_recipe", "has_actor_step",
-    "locale_of", "rebuild", "register_step", "with_locale", "with_step",
+    "LOCALE_KEY", "PRESENTATION_KEY", "RecipeError", "STEPS", "build_recipe",
+    "has_actor_step", "locale_of", "presentation_of", "rebuild", "register_step",
+    "with_locale", "with_presentation", "with_step",
 ]

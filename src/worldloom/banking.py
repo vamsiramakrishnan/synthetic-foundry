@@ -48,7 +48,7 @@ from typing import Any
 
 from . import archetypes as archetype_registry
 from . import validate as validate_module
-from .archetypes import MIDSIZE_ADI, Archetype
+from .archetypes import CUSTOMER_OWNED_BANK, MIDSIZE_ADI, Archetype
 from .ids import Minter
 from .models import (
     Authority,
@@ -73,7 +73,7 @@ from . import banking_documents  # noqa: F401  (registration)
 #: Archetype keys that build a ``BankingWorld``. The recipe rebuilder and the
 #: CLI dispatch on this — a corpus whose recipe names a banking archetype must
 #: rebuild through this module, not retail's.
-BANKING_ARCHETYPES = frozenset({MIDSIZE_ADI.key})
+BANKING_ARCHETYPES = frozenset({MIDSIZE_ADI.key, CUSTOMER_OWNED_BANK.key})
 
 #: Artifact types that are regulatory filings. A filing may never be revised
 #: and never leaves PUBLISHED; corrections arrive as restatements. Module-owned

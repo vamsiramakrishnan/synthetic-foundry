@@ -23,6 +23,9 @@ from typing import TYPE_CHECKING, Any
 from .ids import Minter
 from .narrative import references
 from .models import (
+    FlowNode,
+    FlowEdge,
+    FlowDiagram,
     ArtifactIntent,
     ArtifactIR,
     ArtifactSection,
@@ -1609,16 +1612,42 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             # can only guess, and guessed wrong often enough to be worth removing
             # from the path.
             from .compiler.compose import infer_semantic_role
+            from . import templating
+
+            # Resolve {{var:...}} variables in heading and purpose from the world.
+            # Variables-of-variables are refused (they contain {{var:...}} after
+            # substitution), and unresolved variables are left as [missing var:NAME].
+            resolved_heading, _ = templating.substitute(step.heading, world)
+            resolved_purpose, _ = templating.substitute(step.purpose, world)
 
             sections.append(
                 ArtifactSection(
-                    heading=step.heading,
+                    heading=resolved_heading,
                     body=None,
                     fact_ids=assigned,
-                    purpose=step.purpose,
-                    semantic_role=infer_semantic_role(step.heading, step.kinds),
+                    purpose=resolved_purpose,
+                    semantic_role=infer_semantic_role(resolved_heading, step.kinds),
                 )
             )
+
+    # The causal chain rides the *first* explanation section rather than a
+    # section of its own, because it is not extra content — it is the shape of
+    # the argument that section is already making, and a diagram sitting beside
+    # the paragraph that explains it is a second telling a reader has to
+    # reconcile.
+    flow = _causal_flow(world, intent)
+    if flow is not None:
+        # The section a reader goes to for a chain, when the outline has one:
+        # an RCA has several explanation sections and the diagram belongs with
+        # the conclusion rather than with the discarded first hypothesis, which
+        # is where "first explanation section" put it.
+        explanations = [
+            index for index, section in enumerate(sections)
+            if section.semantic_role == "explanation"
+        ]
+        named = [i for i in explanations if "root cause" in sections[i].heading.lower()]
+        for index in (named or explanations)[:1]:
+            sections[index] = sections[index].model_copy(update={"flow": flow})
 
     divisional = _divisional_summary(world, facts, intent)
     if divisional is not None:
@@ -1655,6 +1684,90 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
 #: table of divisions is a memo whose reader has to hold four numbers in their
 #: head while reading a paragraph about them, which is not how anyone reads one.
 _TABULAR_NARRATIVE = frozenset({"cfo_variance_memo"})
+
+
+
+#: Artifact types whose explanation sections describe a chain of events rather
+#: than a set of figures. An RCA is the archetype: its "Root cause" section is a
+#: walk from trigger to effect, and until there was a `FlowDiagram` to declare
+#: it, the shape was flattened into a paragraph and a renderer had no way to
+#: know a chain was what it was reading.
+_CAUSAL_NARRATIVE = frozenset({"incident_rca"})
+
+#: Event kinds that are the *spine* of an incident, in the order a reader walks
+#: them. The world mints more events than an RCA should draw — a chain that
+#: included every `caused_by` edge would put the close-finalised administrivia
+#: beside the control failure and bury the point. Ordered and closed, because
+#: which events constitute the story is an editorial claim about incidents, not
+#: something derivable from the graph.
+_CAUSAL_SPINE: tuple[str, ...] = (
+    "pipeline_failed",
+    "incident_opened",
+    "hypothesis_recorded",
+    "hypothesis_superseded",
+    "root_cause_confirmed",
+    "control_failure_identified",
+    "workaround_applied",
+)
+
+
+def _causal_flow(world: World, intent: ArtifactIntent) -> FlowDiagram | None:
+    """The incident's chain of events, as a declared shape.
+
+    Read from ``EnterpriseEvent.caused_by`` — the edges the world already
+    minted and that `benchmark.py`'s `causal_multi_hop` family already walks —
+    rather than from a second description of the incident kept beside it. There
+    is one account of what caused what, and this is a view of it.
+
+    Edges are emitted only between events that are both on the spine, so the
+    chain a reader sees is connected: a spine event whose direct cause was
+    filtered out is linked to its nearest surviving ancestor instead of being
+    left floating, because a node with no path to the trigger is exactly the
+    thing a causal diagram must not show.
+
+    Deterministic by construction — `world.events` is ordered, the spine is a
+    literal tuple, and nothing here consults a set for iteration order.
+    """
+    if intent.artifact_type not in _CAUSAL_NARRATIVE:
+        return None
+
+    spine = {event.id: event for event in world.events if event.kind in _CAUSAL_SPINE}
+    if len(spine) < 2:
+        return None
+
+    by_id = {event.id: event for event in world.events}
+
+    def nearest_on_spine(event_id: str, seen: frozenset[str] = frozenset()) -> str | None:
+        """The closest ancestor of *event_id* that the spine keeps.
+
+        Walks `caused_by` upward. `seen` guards a cycle: the world does not
+        mint one today, and a causal graph that ever did would hang this
+        function rather than produce a wrong answer, which is the worse of the
+        two failures.
+        """
+        event = by_id.get(event_id)
+        if event is None or event_id in seen:
+            return None
+        for cause in event.caused_by:
+            if cause in spine:
+                return cause
+            found = nearest_on_spine(cause, seen | {event_id})
+            if found is not None:
+                return found
+        return None
+
+    order = {kind: index for index, kind in enumerate(_CAUSAL_SPINE)}
+    ordered = sorted(spine.values(), key=lambda e: (order[e.kind], e.id))
+    nodes = [
+        FlowNode(key=event.id, label=event.kind.replace("_", " ").capitalize())
+        for event in ordered
+    ]
+    edges = []
+    for event in ordered:
+        source = nearest_on_spine(event.id)
+        if source is not None:
+            edges.append(FlowEdge(source=source, target=event.id, label="led to"))
+    return FlowDiagram(nodes=nodes, edges=edges)
 
 
 def _divisional_summary(

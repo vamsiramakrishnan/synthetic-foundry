@@ -281,6 +281,84 @@ MIDSIZE_ADI = Archetype(
 )
 
 
+
+def _mutual_bank_books() -> tuple[CategorySpec, ...]:
+    """A customer-owned bank's books, and why they are not the ADI's.
+
+    A mutual has no shareholders to return capital to, so it runs a thinner
+    net interest margin on purpose and holds a larger share of its income in
+    deposits. There is no card book worth decomposing and no asset finance at
+    all: the products a mutual does not sell are as much a part of its shape as
+    the ones it does, and a second archetype that carried the same four books
+    with different weights would vary a figure rather than a company.
+    """
+    return (
+        CategorySpec("Owner-Occupier Mortgages", 0.44, 0.014),
+        CategorySpec("Investor Mortgages", 0.16, 0.017),
+        CategorySpec("Personal and Green Loans", 0.07, 0.048),
+        CategorySpec("Member Deposits", 0.33, 0.016),
+    )
+
+
+def _wealth_books() -> tuple[CategorySpec, ...]:
+    """Advice and administration income — a fee book, not a spread book."""
+    return (
+        CategorySpec("Financial Advice", 0.58, 0.21),
+        CategorySpec("Superannuation Administration", 0.42, 0.16),
+    )
+
+
+#: A customer-owned mutual bank, and the second shape this engine has ever had.
+#:
+#: Banking, insurance and procurement each shipped exactly *one* archetype,
+#: which is why their benchmarks were frozen. Measured across four seeds at one
+#: period, a banking corpus produced 16 of 16 identical question strings and an
+#: insurance corpus 9 of 9 — not similar, identical — so a five-world mosaic
+#: shipped one benchmark five times and no world-selection method could move
+#: anything. The cause is not the evaluation generator: a seed changes figures,
+#: names and dates, while an evaluation question is about *structure*, and
+#: there was only one structure. Retail, with two archetypes, drops to 76%
+#: shared at a fixed seed for exactly that reason.
+#:
+#: So this differs from ``MIDSIZE_ADI`` where a bank actually differs, not
+#: where a random number would: three units against three but a different
+#: three — no treasury desk, because a mutual does not run a markets book, and
+#: a wealth arm earning fees rather than a spread. Smaller, branch-light,
+#: June-year like its peer but with a materially different income mix.
+CUSTOMER_OWNED_BANK = Archetype(
+    key="customer_owned_bank",
+    label="Customer-owned mutual bank",
+    industry="Banking",
+    currency="AUD",
+    currency_unit="millions",
+    fiscal_year_start_month=7,
+    annual_revenue=610,
+    employees=2_100,
+    units=(
+        UnitSpec(
+            key="retail", name="Member Banking", kind="retail_banking", share=0.72,
+            categories=_mutual_bank_books(),
+            site_formats=(
+                SiteFormat("Member Centre", 34, 1.00),
+                SiteFormat("Operations Centre", 1, 0.0),
+            ),
+        ),
+        UnitSpec(
+            key="business", name="Community Business", kind="business_banking", share=0.16,
+            categories=(
+                CategorySpec("Community Organisation Lending", 0.61, 0.026),
+                CategorySpec("Small Business Overdrafts", 0.39, 0.034),
+            ),
+            site_formats=(SiteFormat("Business Banking Centre", 3, 2.1),),
+        ),
+        UnitSpec(
+            key="wealth", name="Member Wealth", kind="wealth", share=0.12,
+            categories=_wealth_books(),
+        ),
+    ),
+)
+
+
 def _personal_lines_books() -> tuple[CategorySpec, ...]:
     """Personal lines products, share of the unit's gross written premium.
 
@@ -455,6 +533,7 @@ _REGISTRY: dict[str, Archetype] = {
     AUSTRALIAN_GROCERY.key: AUSTRALIAN_GROCERY,
     OMNICHANNEL_RETAILER.key: OMNICHANNEL_RETAILER,
     MIDSIZE_ADI.key: MIDSIZE_ADI,
+    CUSTOMER_OWNED_BANK.key: CUSTOMER_OWNED_BANK,
     MIDSIZE_GENERAL_INSURER.key: MIDSIZE_GENERAL_INSURER,
     MIDSIZE_INFRASTRUCTURE_SERVICES.key: MIDSIZE_INFRASTRUCTURE_SERVICES,
 }

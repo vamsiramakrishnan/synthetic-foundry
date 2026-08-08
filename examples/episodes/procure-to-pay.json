@@ -433,6 +433,66 @@
           ]
         }
       ],
+      "evaluation": {
+        "detail": "Everything below is judgement the fact graph cannot supply. Which facts are contested, which windows closed and which events caused which are read off the world at run time; what a contested question sounds like in the language of a purchasing department is not, and neither is the fact that this corpus records no bank account details anywhere, at any size, in any period.",
+        "emphasis": {"authority_resolution": 4},
+        "families": [
+          {
+            "family": "authority_resolution",
+            "about": ["p2p.contract_rate"],
+            "question": "What unit rate is the group contractually obliged to pay on the {period} order?",
+            "answer": "{value} — the contracted rate, stated on the {document}. What the supplier billed is what was claimed, not what was agreed.",
+            "reasoning": "The rank inversion this vertical exists for: the invoice is the system of record in the payables subledger and the order is only an approved report, so ranking by authority picks the wrong source for what was agreed. The subledger has no view at all on what was contracted."
+          },
+          {
+            "family": "authority_resolution",
+            "about": ["p2p.received_quantity"],
+            "question": "How much did the group actually receive against the {period} order?",
+            "answer": "{value} — what site signed for. Neither the order's committed quantity nor the invoice's billed quantity is a record of what arrived.",
+            "reasoning": "The tie, beside the inversion above: two documents state a quantity at system-of-record standing and rank cannot separate them. Only reading which system is the record *of what* — receipting records arrival, payables records billing — resolves it."
+          },
+          {
+            "family": "authority_resolution",
+            "about": ["p2p.invoiced_value"],
+            "question": "What did the supplier bill in total on the {period} invoice?",
+            "answer": "{value} — the invoice as posted to the payables subledger, which is the record of what was claimed whether or not any of it was agreed.",
+            "reasoning": "The contrast case, generated with the two above on purpose. Here the invoice is exactly right, and a retriever that has learned from the other two to distrust invoices fails this one."
+          },
+          {
+            "family": "cross_artifact",
+            "about": ["p2p.invoiced_value"],
+            "question": "Does what the supplier billed for {period} reconcile to what site received plus what the match disputes?",
+            "answer": "Yes — {left_value} received at the contracted rate plus {right_value} disputed gives the {value} billed.",
+            "reasoning": "The three-way match as one identity, and its three terms sit in three documents at three authorities: the receipt, the exception report and the invoice. No single document closes it."
+          },
+          {
+            "family": "numerical_comparison",
+            "about": ["p2p.match_quantity_variance"],
+            "question": "Do the quantity and price halves of the {period} match variance sum to the total the exception report escalated on?",
+            "answer": "Yes — {value} billed and not received plus the rate uplift equals {left_value}.",
+            "reasoning": "A checkable identity by construction, and the one the escalation turns on: the two halves are computed from three documents and sum exactly to the figure compared against the tolerance."
+          },
+          {
+            "family": "temporal_state",
+            "about": ["p2p.exception_status"],
+            "question": "What was the status of the {period} match exception as at {at}?",
+            "reasoning": "The status chain runs raised, escalated, resolved inside one month, and the middle link reads exactly as confident as the one that replaced it. Nothing marks it as stale; only its validity window does."
+          },
+          {
+            "family": "citation_required",
+            "about": ["p2p.exception_approved_by"],
+            "question": "Who approved settlement of the {period} match exception above tolerance, and which document records it?",
+            "answer": "Recorded in the {document}: {value}",
+            "reasoning": "Checked by the validator (procurement check h) and asked by the benchmark: an above-tolerance settlement with no approver on the record, or one approved by the person who raised the order, is a control failure rather than a document that is merely thin."
+          }
+        ],
+        "abstentions": [
+          {
+            "question": "What are the supplier's new bank account details after the requested vendor master change?",
+            "reasoning": "Bank account details are never recorded anywhere in this corpus, at any size, in any period. The vendor master change document says that a change was requested and is being held; it does not say what to, and no other document does either — the absence is structural, not a gap this month happens to have."
+          }
+        ]
+      },
       "role_slots": [
         {
           "slot": "preparer",

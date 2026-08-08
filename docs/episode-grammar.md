@@ -112,7 +112,34 @@ An `EvaluationCase` is a question the corpus is built to support:
 - **Expected answer**: fact ID or list of IDs
 - **Scope**: period, optional subject scope
 
-Cases are produced by domain-specific generators (`generators.evaluation.evaluation_cases`, `banking_evaluation.evaluation_cases`, etc.). They are not run against the corpus here; they *define* what the corpus is built to support.
+The four **engines** produce theirs from domain-specific generators
+(`generators.evaluation.evaluation_cases`, `banking_evaluation`,
+`insurance_evaluation`, `procurement_evaluation`). An **authored process** does
+not, and cannot: those modules read a vertical's own Python vocabulary and the
+grammar has no way to reach them. That was the measurement below — 11 cases per
+period from the engine, 0 from the port, twice.
+
+It is closed by `src/worldloom/benchmark.py`, and the mechanism is that **a
+question shape is a shape in the graph** rather than a template in a vertical:
+
+| Family | The shape it is read from |
+| --- | --- |
+| `direct_lookup` | a fact one artifact carries and nothing contests |
+| `authority_resolution` | two or more artifacts citing different-authority facts about one subject |
+| `temporal_state` | a fact whose window closed — the instant is `valid_to`; or one period-keyed fact asked of a period that is no longer current |
+| `causal_multi_hop` | a path in the event graph (`EnterpriseEvent.caused_by`) |
+| `cross_artifact` | a declared `derive`, or a `sums-to`, whose terms landed in several documents |
+| `numerical_comparison` | the same identity, when its terms landed in one |
+| `citation_required` | a statement exactly one document makes |
+| `expected_abstention` | **nothing** — see below |
+
+None of those reads a vertical's vocabulary, so the same code derives a
+benchmark for a bank, a builder's purchase cycle, and an industry nobody has
+authored yet. The authored half — question phrasing, difficulty targets, which
+families a process wants emphasised, and the abstentions — is `EvalSpec` on
+`EpisodeSpec.evaluation`, declared and linted exactly as `detail_tables` is:
+**a family naming a fact kind the registry lacks is refused**, and so is a
+`str.format` slot the derivation never fills.
 
 ### Validation Checks: Derived from Fact Kinds
 
@@ -257,7 +284,29 @@ These scenarios read the world's org chart and modify it, but the org chart itse
 
 ### 4. **Evaluation Case Questions**
 
-Evaluation cases are templated ("what was {{role}} accountable for?" with *role* filled in), but the question shapes themselves are authored in generator code (`generators/evaluation.py`, etc.), not in data. A case template can be overridden by pack (`evaluation_text`), but the case *kind* (direct lookup vs. causal multi-hop) is a code decision.
+The four engines template their questions in generator code
+(`generators/evaluation.py` and its three siblings), and a pack may re-voice
+them (`evaluation_text`). For an **authored process** this is no longer true of
+the case *kind*: `benchmark.py` derives which family a question belongs to from
+the graph — a closed validity window is a `temporal_state`, a differently-ranked
+rival document is an `authority_resolution` — so the taxonomy is a reading
+rather than a code decision.
+
+What stays authored, and why each is not derivable:
+
+- **Phrasing.** The graph knows the purchase order and the invoice disagree at
+  different authorities; it does not know the English is "what unit rate is the
+  group contractually obliged to pay?".
+- **Abstentions.** A fact graph contains no witness to a fact's *absence*, so
+  an abstention has nothing to be derived from. It is declared whole, and the
+  lint refuses a template slot in one — there is no case to interpolate from.
+- **Emphasis.** Which families a process is *for* is the author's claim about
+  the business: procurement exists for authority resolution and a close exists
+  for reconciliation, and a flat cap would give both the same benchmark shape.
+- **A deliberately generated pair.** Banking mints the contested figure and the
+  between-filings cut-off together so that no single retrieval bias satisfies
+  both. That is a claim about how two cases *relate*, which no reading of one
+  graph produces.
 
 ### 5. **Standing Fact Definitions and Reuse Rules**
 
@@ -374,11 +423,22 @@ byte-identical, every other file differs):
 * **The standing minimum matches exactly** (10.25, no period, reused by
   carry-forward declaration), as do the close facts, the liquidity cadence
   (same six business days, exact window handover), and 28 of 31 text facts.
-* **Artifacts: 11 intents vs 4, evaluations 16 vs 0, intentional errors 2 vs
-  0.** The artifact relationship graph — the restatement's `restates` edge,
-  the working paper's `revises`, the board summary's labelled omission, the
-  communications — and the evaluation taxonomy are planner logic
-  (`banking_documents.py`, `banking_evaluation.py`), not yet grammar.
+* **Artifacts: 11 intents vs 4, intentional errors 2 vs 0.** The artifact
+  relationship graph — the restatement's `restates` edge, the working paper's
+  `revises`, the board summary's labelled omission, the communications — is
+  planner logic (`banking_documents.py`), not yet grammar.
+* **Evaluations: 16 vs 0 when this was written; 16 vs 14 now, and the port
+  authors nothing.** `quarterly-capital-return.json` has no `evaluation` key
+  at all, and one quarter of it carries 14 cases across six families —
+  3 authority, 3 temporal, 2 causal, 2 cross-artifact, 2 numerical-or-citation,
+  2 lookups. That is the "for free" claim measured without assistance: the
+  cases come from the supersession pairs, the `sums-to` on `capital.rwa_total`,
+  the `reconciles-against` ratio and the restatement's own causal chain, all of
+  which the spec already declared for the validator's benefit. What the engine
+  still has and the port does not is the *contested pair generated together* —
+  the restated ratio and the between-filings cut-off, deliberately minted as a
+  pair so no lexical bias satisfies both — which is a judgement about how two
+  cases relate, not a shape in the graph.
 
 So: the grammar expresses the causal spine — phases, events, fact kinds with
 invariants, carry-forward, the supersession structure — and the runner
@@ -499,12 +559,44 @@ documents, the memo from the report — the relationship graph, the same gap
 the first proof named); **per-intent domain labels** (the engine files the
 receipt under `operations` and the invoice under `finance`; a spec has one
 domain); **conditional planning** (vendor_master_change once per corpus vs
-once per period — 16 vs 18 intents over three); **evaluation cases: 11 vs 0
-per period, 35 vs 0 over three**, across nine types including the
-authority-resolution questions that are this vertical's whole reason to
-exist; and **intentional errors: 1 vs 0 per period** — the payment memo's
-labelled political understatement. The artifact/eval planner gap is now
-measured twice and is the grammar's largest.
+once per period — 16 vs 18 intents over three); and **intentional errors: 1 vs
+0 per period** — the payment memo's labelled political understatement.
+
+**Evaluation cases: 11 vs 0 per period and 35 vs 0 over three when this was
+written; 11 vs 17 and 35 vs 49 now.** The port's benchmark is derived from its
+own fact graph (`benchmark.py`) and re-voiced by the `evaluation` block the
+spec now carries. One period yields 4 authority-resolution, 3 cross-artifact,
+3 direct-lookup, 2 temporal-state, 2 citation-required, 1 causal-multi-hop,
+1 numerical-comparison and 1 expected-abstention — 11 of the 17 graded hard,
+3 easy. Three periods yield 49, and the growth is genuine rather than
+photocopied: the extra cases are the across-period temporal questions ("what
+did the March order commit?", asked in April, where nothing lexical separates
+the two months) that a one-period corpus cannot pose, and a question already
+asked is refused rather than restated.
+
+The vertical's signature questions survive the port. The rank *inversion* —
+the contracted rate sits on the purchase order at `APPROVED_REPORT` while the
+invoice sits at `SYSTEM_OF_RECORD`, so ranking by authority picks the wrong
+document — is **derived**, not declared: the derivation ranks contested facts
+by whether their highest-ranked rival outranks them, and spreads the family's
+cap across distinct source documents so the three questions land on three
+documents rather than three times on one. What the spec's `evaluation` block
+supplies is the English ("what unit rate is the group contractually obliged to
+pay?"), the priority (`about`, which moves a kind forward past the cap but can
+never conjure a case the graph does not hold), and the abstention.
+
+Three residues, honestly. **The accrual cannot be asked about**: nothing in the
+port's artifact list requires `financial.accrual.grni`, `p2p.open_shortfall_*`
+or the `close.*` facts, so the reachability gate — the same one every taxonomy
+here ends at — refuses every question about the fact this port exists to land
+in a close. That is a gap in what *plans documents*, not in what asks about
+them, and it is the same `required_facts` thinness the artifact story above
+already names. **The clean line stays engine-only**, so the anti-shortcut
+control that stops the corpus being solvable by distrusting invoices is not in
+the derived set; it needs the two-line order, which needs multi-subject
+minting. And **a deliberately generated pair** — two cases minted together
+because a retriever passing one must fail the other — is a claim about how two
+cases relate, which no reading of a single graph produces.
 
 **Cross-engine attachment, proven** — the point of the migration. The
 procurement LOB's five roles enter a **retail** world through the roles seam
@@ -549,14 +641,18 @@ check families on real subjects ((a) per-document value reconciliation, (b)
 over-receipt, (c)/(d) the per-line match legs and identity, (e) group
 roll-ups, (h) the artifact-gated approval and segregation-of-duties checks —
 the port exercises (f), (g), (i), (j), (k), (l), (m), 15 of the engine's 47
-checks per period); the evaluation taxonomy (11 cases/period, 9 types); the
-labelled intentional error; the `derived_from` graph; lore linkage; system
+checks per period); the clean-line control and the two evaluation shapes that
+need it (the anti-shortcut lookup, and the deliberately-generated pair whose
+members no single retrieval bias satisfies together); the labelled intentional
+error; the `derived_from` graph; lore linkage; system
 stamps; and — not episode logic at all — the world itself: the archetype,
 the three-reporting-lines organisation, the physics registration, the check
 group, and the fact-kind registrations all live in `procurement.py` and
 `procurement_org.py` and are what the port *runs inside*. Before
 `PurchaseToPayCycle`/`procurement_cycle`/`procurement_match` could be
-deleted: (1) evaluation cases and intentional errors as grammar, (2) the
+deleted: (1) intentional errors as grammar — evaluation cases now are, derived
+rather than templated, and the port outproduces the engine 17 to 11 per period
+while authoring only their phrasing, (2) the
 artifact relationship graph and conditional planning, (3) multi-subject
 (line-level) minting or an order-line axis — the "a purchase order is not an
 entity" misfit, resolved rather than inherited, (4) lore linkage on authored
@@ -585,10 +681,10 @@ assumed.
 - **Incident specifics** (what type of failure, which component — `episode_text` override or generator code)
 - **Causality chain** (the *order* failures unfold, dependencies between phases — `generators/regulatory.py` logic)
 - **Org chart shape** (who reports to whom — `generators/organisation.py`)
-- **Evaluation question templates** (generator code or `evaluation_text` override)
+- **Evaluation question phrasing, difficulty targets, family emphasis and abstentions** (`EpisodeSpec.evaluation`, an `EvalSpec` — declared data, but authored judgement; the *cases themselves* are derived from the graph by `benchmark.py`)
 - **Access policies and approvers** (lore constraints and roles; grammar names them, role table decides specifics)
 
-The boundary is: **grammar declares facts, invariants, and structure; code decides specifics and flow**.
+The boundary is: **grammar declares facts, invariants, and structure; the graph is read for what follows from them; code decides specifics and flow**. Evaluation moved across that boundary in exactly this way — a question shape turned out to be a shape in the graph, and only its English stayed authored.
 
 ## What the Grammar Enables
 
@@ -598,7 +694,8 @@ Once fact kinds are declared with their invariants:
 2. **Lint is automatic**: a kind with no invariant is refused; an artifact citing a nonexistent kind is refused; a carry-forward citing an undeclared kind is refused
 3. **Carry-forward is automatic**: reading from the world by kind and filtering reused facts is templated, not coded per-scenario
 4. **Replayability is guaranteed**: a grammar is pure data, travels in the pack/recipe, and can be loaded deterministically
-5. **Vertical addition is lightweight**: a new industry adds an episode spec, registers domain checks, and is done — no core edits
+5. **The benchmark is derived**: seven question families are read off the fact graph, the event graph and the artifact plan — no hand-written per-vertical taxonomy, and an episode that authors nothing about evaluation still ships one (`benchmark.py`)
+6. **Vertical addition is lightweight**: a new industry adds an episode spec, registers domain checks, and is done — no core edits, and it gets a benchmark rather than a document pile
 
 ## The Two Carry-Forward Cases
 
@@ -640,7 +737,17 @@ The grammar declares the slots; `reserving.generate` sees them on the world and 
 
 The grammar as specified covers facts, events, artifacts, and carry-forward. What it *does not yet cover*:
 
-1. **Evaluation case generation**: Cases are templated in generator code and specialized per domain. The grammar could declare case *kinds* (direct lookup, causal multi-hop) and let generators fill in the questions and answers, but that is a second iteration.
+1. **Evaluation case generation**: ~~Cases are templated in generator code and
+   specialized per domain.~~ **Closed.** `benchmark.py` derives seven families
+   from the fact graph, the event graph and the artifact plan, and
+   `EpisodeSpec.evaluation` declares the part that cannot be derived. Measured:
+   the P2P port went from 0 cases to 17 per period (49 over three), and the
+   banking port — which authors *nothing* about evaluation — from 0 to 14 per
+   quarter. What remains is enumerated under the P2P proof above: a question
+   about a fact no planned artifact carries (the reachability gate refusing
+   correctly, which names a planner gap rather than a benchmark one), the
+   clean-line control that needs multi-subject minting, and pairs generated
+   together.
 
 2. **Access policy composition**: Which role approves what is a lore constraint + role table interplay. The grammar can name the role; mapping role to policy is the world's job.
 
@@ -656,4 +763,15 @@ These are tractable in phase 3, after the first three episodes are ported. The s
 
 **The proof** is QuarterlyCapitalReturn (banking's smallest episode), which the grammar can express byte-for-byte — with the caveat that specific failure modes and approval chains live in episode_text overrides or generator code, not data. That boundary is intentional: prose and causality are harder than invariants and structure.
 
-**Ports done**: QuarterlyCapitalReturn (banking) and PurchaseToPayCycle (procurement, as the LOB-owned `ProcureToPay` process — the first to run cross-engine, with the project's only period-keyed carry-forward). **Ports remain**: MonthEndClose (retail) and QuarterlyReserving (insurance). The carry-forward declarations for insurance multi-period (lifting the phase-1 cap) are the next milestone, followed by extraction of evaluation cases as declared templates — now the largest gap, measured twice.
+**Ports done**: QuarterlyCapitalReturn (banking) and PurchaseToPayCycle (procurement, as the LOB-owned `ProcureToPay` process — the first to run cross-engine, with the project's only period-keyed carry-forward). **Ports remain**: MonthEndClose (retail) and QuarterlyReserving (insurance).
+
+**The benchmark gap is closed**, and not by a fifth taxonomy: `benchmark.py`
+derives the case families from the graph the world already carries, so an
+authored vertical gets a benchmark whether or not anyone authored one.
+Measured — 0 → 17 cases per period on the P2P port, 0 → 14 per quarter on the
+banking port with no `evaluation` block at all, and the four default engine
+builds byte-identical. The remaining milestones are the carry-forward
+declarations for insurance multi-period (lifting the phase-1 cap), the artifact
+relationship graph and conditional planning, and multi-subject minting — which
+is now also what stands between the derived benchmark and the two shapes the
+procurement engine still holds alone.

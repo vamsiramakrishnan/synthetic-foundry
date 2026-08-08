@@ -38,6 +38,7 @@ import re
 from typing import TYPE_CHECKING
 
 from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, scale_money, suffix_for
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact
@@ -83,7 +84,12 @@ def bare_numbers(text: str) -> list[str]:
     return BARE_NUMBER.findall(strip_references(text))
 
 
-def render_value(fact: CanonicalFact, *, locale: Locale = DEFAULT_LOCALE) -> str:
+def render_value(
+    fact: CanonicalFact,
+    *,
+    locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
+) -> str:
     """A fact as a reader would see it in prose.
 
     Formatting lives here rather than at each call site so that the same fact reads
@@ -111,6 +117,31 @@ def render_value(fact: CanonicalFact, *, locale: Locale = DEFAULT_LOCALE) -> str
         return f"{locale.spell(amount, 0)} bps {'adverse' if amount < 0 else 'favourable'}"
     if _is_money(unit):
         currency, _, scale = unit.partition("_")
+        if presentation.magnitudes == "scaled":
+            # The one place a profile touches a figure, and the reason
+            # `presentation.review` re-multiplies every promotion before it
+            # will accept a profile: `AUD 5,372,800 thousands` is what the
+            # ledger says and `AUD 5,372.8m` is what a memo says, and they
+            # have to be the same number or this whole layer is a lie.
+            # `scale_money` promotes only when the promotion is exact, so a
+            # figure with no shorter exact spelling falls through to the
+            # ledger wording rather than being rounded into one.
+            shown, factor = scale_money(amount)
+            suffix = suffix_for(factor)
+            if suffix:
+                # The *fewest* decimals that still spell this exact figure, not
+                # the most `scale_money` was allowed to spend: it searches up to
+                # three places and returns the first that round-trips, so a
+                # figure needing one place comes back as 5372.8 and printing it
+                # at a fixed three would say `5,372.800m` — trailing zeros that
+                # claim a precision the ledger never stated.
+                places = next(p for p in range(4) if round(shown, p) == shown)
+                # No sign, and `adverse` instead — this branch has to agree with
+                # the ledger wording three lines below it, where the negative is
+                # a word and never a symbol. Printing both gave
+                # `AUD -123.800m adverse`, which says it twice.
+                rendered = f"{currency} {locale.spell(abs(shown), places)}{suffix}"
+                return f"{rendered} adverse" if amount < 0 else rendered
         rendered = f"{currency} {magnitude}"
         if scale:
             rendered += f" {scale}"
@@ -141,7 +172,11 @@ def _is_money(unit: str) -> bool:
 
 
 def describe(
-    fact: CanonicalFact, subject: str | None = None, *, locale: Locale = DEFAULT_LOCALE
+    fact: CanonicalFact,
+    subject: str | None = None,
+    *,
+    locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
 ) -> str:
     """A fact as one line: what it is about, what it measures, and what it says.
 
@@ -161,14 +196,23 @@ def describe(
     and rendered in another is being shown a figure they will not recognise in
     the finished document. Callers that pass none get the engine's, which is
     what every caller did before locales existed.
+
+    *presentation* is forwarded for that reason exactly, one layer over: a
+    writer briefed with ``AUD 5,372,800 thousands`` whose document will read
+    ``AUD 5,372.8m`` has been shown a figure they will not find on the page.
     """
-    measure = render_value(fact, locale=locale) if fact.value is not None else (fact.text_value or "")
+    measure = (render_value(fact, locale=locale, presentation=presentation)
+               if fact.value is not None else (fact.text_value or ""))
     lead = f"{subject} · " if subject else ""
     return f"{lead}{fact.kind} = {measure}" if measure else f"{lead}{fact.kind}"
 
 
 def substitute(
-    text: str, facts: dict[str, CanonicalFact], *, locale: Locale = DEFAULT_LOCALE
+    text: str,
+    facts: dict[str, CanonicalFact],
+    *,
+    locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
 ) -> str:
     """Replace every reference in *text* with its fact's value.
 
@@ -184,7 +228,8 @@ def substitute(
 
     def replace(match: re.Match[str]) -> str:
         fact = facts.get(match.group("id"))
-        return render_value(fact, locale=locale) if fact else f"[missing {match.group('id')}]"
+        return (render_value(fact, locale=locale, presentation=presentation)
+                if fact else f"[missing {match.group('id')}]")
 
     return REFERENCE.sub(replace, text)
 

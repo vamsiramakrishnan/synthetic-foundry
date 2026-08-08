@@ -66,6 +66,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--business-units-end` | Exact active business-unit count in the final period. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
+| `--conversations` | Record the episode's knowledge layer beside its facts and documents: who was told what, by whom, and therefore who knew each fact when. Adds no facts and no documents, and adds information-asymmetry evaluation cases nothing else in the corpus can pose. Refused with `--actors`, which derives its own. |
 | `--distractors` | Add this many provenance-true noise artifacts once the episode(s) finish: superseded drafts, personal working copies, and routine notices — real authors, real dates, real facts, answering nothing an evaluation case needs. 0 (the default) touches nothing. |
 | `--employees` | Override the archetype's stated headcount. |
 | `--estate` | Grow a service landscape around the episode's own services: small, medium or large. Without it the estate is the four services and five systems the close names and nothing else — nine nodes whether the archetype has three stores or sixteen hundred, so nothing has a blast radius and `worldloom topology` has little to read. Omit it and every existing corpus is byte-identical. |
@@ -176,7 +177,7 @@ worldloom evals export <CORPUS>
 
 ### `worldloom evaluate`
 
-Score one or both baseline retrievers against the corpus's evaluation set.
+Score one or more retrievers against the corpus's evaluation set.
 
 ```
 worldloom evaluate <CORPUS>
@@ -185,7 +186,8 @@ worldloom evaluate <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. This is the measure half of the measure-then-iterate loop — an agent deciding what to change next should read data, not parse a bar chart. |
-| `--retriever` | bm25 (default — the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family — see src/worldloom/evaluate/tfidf.py), or both (side by side, with a per-family agreement reading: a family low under both retrievers is structurally hard, not hard for one heuristic). |
+| `--retriever` | bm25 (default — the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family — see src/worldloom/evaluate/tfidf.py), embedding (dense vectors against a pinned model — needs the `embeddings` extra or a vector cache), both (the two lexical baselines side by side, with a per-family agreement reading), or all (every retriever this installation can run, skipping any whose model is unavailable). |
+| `--vectors` | Vector cache for --retriever embedding: a file, or a directory to keep one per model. A corpus that carries its cache scores against the embedding retriever with no model installed at all. |
 | `--verbose`, `-v` | Show every question. |
 | `-k` | How many passages a retriever may return. |
 
@@ -436,6 +438,39 @@ worldloom plan requests <CORPUS>
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
 
+### `worldloom present`
+
+Decide who a corpus's documents are for, and check a profile you wrote.
+
+### `worldloom present brief`
+
+The context needed to author a profile, as JSON.
+
+```
+worldloom present brief <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write the brief here as JSON. |
+
+### `worldloom present describe`
+
+Every registered profile and every knob, rendering nothing.
+
+### `worldloom present lint`
+
+Check a profile, and say every reason it cannot be accepted.
+
+```
+worldloom present lint <SPEC>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--corpus` | Check overrides against this corpus's doctypes. |
+| `--register` | Register the profile on acceptance, so a later --profile can name it. |
+
 ### `worldloom probe`
 
 Derive a world's physics by asking, one question at a time, under propagation.
@@ -520,6 +555,7 @@ worldloom render <CORPUS>
 | --- | --- |
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
+| `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
 
 ### `worldloom series`
 

@@ -35,8 +35,10 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from . import benchmark as benchmark_module
 from . import detail as detail_module
 from . import validate as validate_module
+from .benchmark import EvalSpec, QuestionFamily  # re-exported: a spec's own vocabulary
 from .models import Authority, CanonicalFact, EnterpriseEvent, Quantity
 from .models import ArtifactIntent as ArtifactIntentModel
 
@@ -402,6 +404,25 @@ class EpisodeSpec(Model):
     Named ``detail_tables`` because ``detail`` is already this spec's notes
     field, as it is on every other model in the grammar."""
 
+    evaluation: benchmark_module.EvalSpec = Field(
+        default_factory=benchmark_module.EvalSpec
+    )
+    """The authored half of this process's benchmark — question phrasing per
+    family, difficulty targets, which families the process wants emphasised,
+    and the abstentions nothing can derive (``benchmark.py``).
+
+    On the spec for ``detail_tables``' reason exactly: a question is a claim
+    about this process's own facts, so it is declared, linted and pack-carried
+    beside them. *Derived* by the runner hook after the facts mint and the
+    intents are planned, because which document carries which fact is what
+    decides whether a question is a lookup or an authority contest, and neither
+    exists until then.
+
+    Empty — the default — is not "no benchmark": every family in
+    ``benchmark.DERIVED_FAMILIES`` is read out of the graph regardless, in the
+    derivation's own plain phrasing. What this adds is the English, and what it
+    refuses to invent is an abstention."""
+
     detail: str = Field(default="", min_length=0)
     """General notes about the episode."""
 
@@ -691,6 +712,18 @@ def lint(specs: Iterable[EpisodeSpec], *, base: str = "") -> list[str]:
             declared_kinds={fk.kind for fk in spec.fact_kinds},
             declared_artifacts={a.artifact_type for a in spec.artifacts},
             where=f"{where}.detail",
+        ))
+
+        # -- the benchmark ------------------------------------------------
+        # Linted with this episode's own kinds in hand, exactly as the detail
+        # tables are and for the identical reason: a question family naming a
+        # kind the registry lacks is asking something nothing can answer, and
+        # a spec's self-referential lint cannot see it (the finding that put
+        # `factkinds` in this repository in the first place).
+        findings.extend(benchmark_module.lint(
+            spec.evaluation,
+            declared_kinds={fk.kind for fk in spec.fact_kinds},
+            where=f"{where}.evaluation",
         ))
 
         # -- carry-forward ------------------------------------------------
@@ -1511,10 +1544,37 @@ class AuthoredEpisode:
         known_fact_ids = set(world.facts.ids())
         new_facts = tuple(f for f in result.facts if f.id not in known_fact_ids)
 
+        # The benchmark, derived from what this episode just produced — after
+        # the intents, because whether a question is a lookup or an authority
+        # contest is decided by which documents carry which facts, and that is
+        # what the plan says. Reused standing facts stay in `result.facts` (not
+        # in `new_facts`) on purpose: a question about the rate card must cite
+        # the one fact id every period shares, and filtering it out here would
+        # make the first period's benchmark differ from the second's for a
+        # reason that has nothing to do with the corpus.
+        #
+        # The world's own facts and intents go in as the prior half, which is
+        # what makes the across-period questions askable at all: "what did the
+        # March order leave outstanding" is a question only April can pose, and
+        # only against a document March actually planned.
+        evaluations = benchmark_module.derive(
+            spec,
+            minter=world._minter,
+            period=self.period,
+            facts=result.facts,
+            events=result.events,
+            intents=result.intents,
+            prior_facts=tuple(world._facts),
+            prior_intents=tuple(world._artifact_intents),
+            prior_cases=tuple(world._evaluations),
+            names=world.entity_names(),
+        )
+
         return world.extend(
             events=result.events,
             facts=new_facts,
             artifact_intents=result.intents,
+            evaluations=evaluations,
             detail_tables=detail_tables,
             period=self.period,
             recipe=with_step(world._recipe, "AuthoredEpisode",
@@ -1537,6 +1597,8 @@ __all__ = [
     "CarryForwardSpec",
     "PhaseSpec",
     "RoleSlotSpec",
+    "EvalSpec",
+    "QuestionFamily",
     "EpisodeSpec",
     "Episodes",
     "load",

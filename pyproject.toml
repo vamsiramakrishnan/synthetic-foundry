@@ -73,6 +73,23 @@ arrow = ["pyarrow>=15.0"]
 # protocol at all. No model-SDK extra exists: this package never calls a
 # language model — the coding harness driving it is the writer.
 mcp = ["mcp>=1.2"]
+# `worldloom evaluate --retriever embedding` — dense retrieval, so a hardness
+# claim rests on something other than 1990s lexical matching. An extra, and
+# emphatically not a core dependency, for two reasons. It is the only thing in
+# this project that downloads weights over a network, and a corpus that cannot
+# be scored offline is not reproducible. And it is not needed to *replay* a
+# measurement: vectors are cached content-addressed against a pinned model id
+# and revision, so a corpus carrying its cache scores against the embedding
+# retriever with none of this installed — see `src/worldloom/evaluate/embedding.py`
+# for the argument in full. Absent, the retriever skips with a message.
+#
+# model2vec is the default pin's backend: static embeddings, so inference is a
+# token lookup and a mean pool — numpy and a tokenizer, no torch. The
+# transformer cross-check (`embedding.MINILM`) needs sentence-transformers,
+# deliberately left out of every extra here: half a gigabyte of torch is a
+# choice a user should make explicitly, and the finding it produces is a
+# cross-check on the default rather than the default itself.
+embeddings = ["model2vec>=0.6", "huggingface-hub>=0.24"]
 # Every renderer at once — the ordinary way to install the tool rather than
 # the library. `pip install "worldloom[all]"`.
 all = [
@@ -83,8 +100,14 @@ all = [
     "mcp>=1.2",
 ]
 dev = [
-    "pytest>=8.0", "hypothesis>=6.100", "openpyxl>=3.1", "python-docx>=1.1",
-    "reportlab>=4.0", "python-pptx>=1.0", "mcp>=1.2",
+    "pytest>=8.0", "openpyxl>=3.1", "python-docx>=1.1", "reportlab>=4.0",
+    "python-pptx>=1.0", "mcp>=1.2",
+    # `tests/test_properties.py`. Dev-only and never imported from `src/`: the
+    # rest of this project's determinism rests on nothing under `src/` drawing
+    # randomness, and Hypothesis draws plenty — seeded, test-side, and
+    # reproducible from its own database, which `.gitignore` keeps out of the
+    # repo so CI derives counterexamples rather than replaying a cached file.
+    "hypothesis>=6.100",
 ]
 
 [project.scripts]
