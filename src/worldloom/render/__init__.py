@@ -174,13 +174,14 @@ def _install() -> None:
     Imported lazily so an optional dependency for one format cannot break import
     of the library as a whole.
     """
-    from . import bundles, docx, markdown, pdf, pptx, xlsx
+    from . import bundles, docx, html, markdown, pdf, pptx, xlsx
 
     register("markdown", markdown.render_all)
     register("xlsx", xlsx.render_all)
     register("docx", docx.render_all)
     register("pdf", pdf.render_all)
     register("pptx", pptx.render_all)
+    register("html", html.render_all)
     register("jira", bundles.render_jira)
     register("confluence", bundles.render_confluence)
     register("servicenow", bundles.render_servicenow)
