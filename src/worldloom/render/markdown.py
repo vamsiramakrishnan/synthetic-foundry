@@ -20,6 +20,7 @@ from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..models import ArtifactIR, CanonicalFact, Chart, Table
 from ..narrative import references
 from . import Rendered, slug_for
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -95,6 +96,7 @@ def render(
     *,
     locale: Locale = DEFAULT_LOCALE,
     detail=(),
+    presentation: Presentation = DEFAULT_PRESENTATION,
 ) -> bytes:
     """Render one IR to Markdown bytes.
 
@@ -105,6 +107,10 @@ def render(
     *locale* spells every figure, in the table and in the prose alike. Defaulted
     rather than required because a determinism check that renders one IR in
     isolation has no world to ask; ``render_all`` always passes the corpus's.
+
+    *presentation* decides who the document is for — see ``presentation.py``.
+    Defaulted to ``AUDIT``, which is what this function did before the profile
+    existed, so an isolated render still produces the bytes its test pinned.
     """
     parts: list[str] = [f"# {ir.title}"]
     if ir.subtitle:
@@ -123,6 +129,13 @@ def render(
     )
 
     for section in ir.sections:
+        if section.hidden and presentation.appendix != "append":
+            # `omit` and `sidecar` both drop the section from *this* file. The
+            # sidecar's own file is written by `render_all`, which is the only
+            # place that knows what the corpus's paths look like — a renderer
+            # that invented a second path here would be the one place in the
+            # package deciding a filename outside `slug_for`.
+            continue
         heading = f"## {section.heading}"
         if section.hidden:
             heading += " *(not part of the readable surface)*"
@@ -130,7 +143,8 @@ def render(
 
         if section.body:
             parts.append(
-                references.substitute(section.body, facts, locale=locale)
+                references.substitute(section.body, facts, locale=locale,
+                                      presentation=presentation)
                 if facts else section.body
             )
         elif section.table is not None:
@@ -154,7 +168,12 @@ def render(
         parts.append(f"## {table.title}")
         parts.append(_detail_head(table, locale))
 
-    if ir.metadata.get("voice"):
+    if ir.metadata.get("voice") and presentation.provenance == "footer":
+        # Markdown has no metadata container of its own, so `properties` and
+        # `omit` land in the same place here: off the page. That is not a gap
+        # being papered over — the voice is in `artifact-ir.jsonl` for every
+        # profile, and a Markdown front-matter block invented for it would be a
+        # second home for a value the IR already holds.
         parts.append(
             f"---\n\n*Author voice: {ir.metadata['voice']}. "
             f"Persona: {ir.metadata.get('persona', '')}.*"
@@ -179,6 +198,7 @@ def own_elsewhere(*artifact_types: str) -> None:
 def render_all(world: World) -> list[Rendered]:
     """Render every artifact that has no more specific format."""
     locale = corpus_locale(world)
+    profile = presentation_of(world)
     by_intent: dict[str, list] = {}
     for table in world.detail_tables:
         if table.artifact_id:
@@ -194,7 +214,8 @@ def render_all(world: World) -> list[Rendered]:
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.md",
                 media_type="text/markdown",
                 payload=render(ir, {fact.id: fact for fact in world.facts}, locale=locale,
-                               detail=by_intent.get(ir.intent_id, ())),
+                               detail=by_intent.get(ir.intent_id, ()),
+                               presentation=profile.for_doctype(intent.artifact_type)),
             )
         )
     return out

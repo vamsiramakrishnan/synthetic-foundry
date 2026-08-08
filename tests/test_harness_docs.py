@@ -34,6 +34,7 @@ DOCUMENTS = (
     "CLAUDE.md",
     ".claude/skills/worldloom/SKILL.md",
     ".claude/skills/worldloom-sdk/SKILL.md",
+    ".claude/skills/worldloom-present/SKILL.md",
     # The progressively-disclosed half. Checked exactly like the entry point:
     # a reference loaded only when needed is *more* likely to go stale, not less,
     # because nothing routine exercises it.

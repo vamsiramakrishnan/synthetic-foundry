@@ -438,6 +438,39 @@ worldloom plan requests <CORPUS>
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
 
+### `worldloom present`
+
+Decide who a corpus's documents are for, and check a profile you wrote.
+
+### `worldloom present brief`
+
+The context needed to author a profile, as JSON.
+
+```
+worldloom present brief <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write the brief here as JSON. |
+
+### `worldloom present describe`
+
+Every registered profile and every knob, rendering nothing.
+
+### `worldloom present lint`
+
+Check a profile, and say every reason it cannot be accepted.
+
+```
+worldloom present lint <SPEC>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--corpus` | Check overrides against this corpus's doctypes. |
+| `--register` | Register the profile on acceptance, so a later --profile can name it. |
+
 ### `worldloom probe`
 
 Derive a world's physics by asking, one question at a time, under propagation.
@@ -522,6 +555,7 @@ worldloom render <CORPUS>
 | --- | --- |
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
+| `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
 
 ### `worldloom series`
 

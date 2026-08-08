@@ -47,6 +47,11 @@ from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..narrative import references
 from ..rng import Rng
 from . import Rendered, RenderError, ooxml, slug_for
+from ..presentation import (
+    DEFAULT as DEFAULT_PRESENTATION,
+    Presentation as PresentationProfile,
+    of as presentation_of,
+)
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -241,7 +246,8 @@ _SIZE_CLASS = "small"
 _DENSITY_PROFILE = "balanced"
 
 
-def _plan(ir: ArtifactIR) -> PresentationPlan:
+def _plan(ir: ArtifactIR,
+          profile: PresentationProfile = DEFAULT_PRESENTATION) -> PresentationPlan:
     """``ArtifactIR`` -> ``PresentationPlan``, by way of the compiler.
 
     ``compose`` decides which component family presents each section and
@@ -274,6 +280,12 @@ def _plan(ir: ArtifactIR) -> PresentationPlan:
     appendix_opened = False
     for component_id, beat_key in zip(composition.components, composition.beats):
         section = section_by_beat[beat_key]
+        if section.hidden and profile.appendix != "append":
+            # Dropped before the divider is considered, so a deck whose only
+            # hidden sections are omitted does not open an appendix and then
+            # put nothing in it — three slides of the shipped executive
+            # summary were the divider, the fact tables and the persona.
+            continue
         if section.hidden and not appendix_opened:
             # One divider, however many hidden sections fall inside the
             # appendix — not one per section, which would read as the deck
@@ -292,7 +304,12 @@ def _plan(ir: ArtifactIR) -> PresentationPlan:
                 hidden=section.hidden,
             )
         )
-    slides.append(SlidePlan(kind="closing", component_id="closing", heading="Closing"))
+    if profile.provenance == "footer":
+        # The closing slide carries nothing but the author voice, so under
+        # any other provenance it is a blank slide with a heading. Dropped
+        # rather than emptied: a deck ending on an empty 'Closing' is worse
+        # than one that simply ends.
+        slides.append(SlidePlan(kind="closing", component_id="closing", heading="Closing"))
 
     return PresentationPlan(title=ir.title, subtitle=ir.subtitle, metadata=ir.metadata, slides=tuple(slides))
 
@@ -641,11 +658,16 @@ _PROSE_STYLE: dict[str, dict] = {
 _DEFAULT_PROSE_STYLE = {"band": _TS_BODY}
 
 
-def _draw_prose_content(prs, slide_plan, facts, footer_text: str, g: StyleGenome = _HOUSE_GENOME, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
+def _draw_prose_content(prs, slide_plan, facts, footer_text: str,
+                        g: StyleGenome = _HOUSE_GENOME,
+                        locale: Locale = DEFAULT_LOCALE,
+                        profile: PresentationProfile = DEFAULT_PRESENTATION) -> None:  # type: ignore[no-untyped-def]
     """A section whose content is prose — ``core.position``, ``core.narrative``
     and the rest of the text-shaped components in the registry."""
     slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
-    resolved = references.substitute(slide_plan.body, facts, locale=locale) if facts else slide_plan.body
+    resolved = (references.substitute(slide_plan.body, facts, locale=locale,
+                                     presentation=profile)
+                if facts else slide_plan.body)
     # Blank lines are paragraph breaks — the same convention `docx.py` follows
     # for the identical reason: a single run holding newlines renders as one
     # unbroken block, not separate paragraphs.
@@ -934,6 +956,7 @@ def _draw_table_content(prs, slide_plan, footer_text: str, g: StyleGenome = _HOU
 def _draw_content(  # type: ignore[no-untyped-def]
     prs, plan: PresentationPlan, slide_plan, facts: dict[str, CanonicalFact],
     g: StyleGenome = _HOUSE_GENOME, locale: Locale = DEFAULT_LOCALE,
+    profile: PresentationProfile = DEFAULT_PRESENTATION,
 ) -> None:
     """Dispatch one resolved section to a table or prose slide.
 
@@ -949,7 +972,7 @@ def _draw_content(  # type: ignore[no-untyped-def]
     if slide_plan.table is not None:
         _draw_table_content(prs, slide_plan, footer_text, g, locale)
     elif slide_plan.body:
-        _draw_prose_content(prs, slide_plan, facts, footer_text, g, locale)
+        _draw_prose_content(prs, slide_plan, facts, footer_text, g, locale, profile)
     else:
         slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
         body = _textbox(slide, BODY)
@@ -966,6 +989,7 @@ def render(
     facts: dict[str, CanonicalFact] | None = None,
     *,
     locale: Locale = DEFAULT_LOCALE,
+    profile: PresentationProfile = DEFAULT_PRESENTATION,
 ) -> bytes:
     """Render one IR to PPTX bytes.
 
@@ -980,7 +1004,7 @@ def render(
     in another is a table that overflows its box for no visible reason.
     """
     pptx_pkg = _require_pptx()
-    plan = _plan(ir)
+    plan = _plan(ir, profile)
     g = _genome_for(ir)
 
     presentation = pptx_pkg.Presentation()
@@ -995,7 +1019,7 @@ def render(
         elif slide_plan.kind == "closing":
             _draw_closing(presentation, plan, g)
         else:
-            _draw_content(presentation, plan, slide_plan, facts, g, locale)
+            _draw_content(presentation, plan, slide_plan, facts, g, locale, profile)
 
     properties = presentation.core_properties
     properties.title = ir.title
@@ -1003,6 +1027,12 @@ def render(
     properties.author = ir.metadata.get("author") or "Worldloom"
     properties.comments = ir.metadata.get("note", "Synthetic corpus generated by Worldloom.")
     properties.keywords = "synthetic,worldloom,seed=" + ir.metadata.get("worldloom_seed", "")
+    if ir.metadata.get("voice") and profile.provenance == "properties":
+        # PowerPoint's category field, for `docx.render`'s reason: the brief
+        # is worth keeping and belongs off the slides.
+        properties.category = (
+            f"voice: {ir.metadata['voice']}; persona: {ir.metadata.get('persona', '')}"
+        )
 
     from io import BytesIO
 
@@ -1019,6 +1049,7 @@ def render_all(world: World) -> list[Rendered]:
     """Render every executive-summary-shaped artifact in *world*."""
     facts = {fact.id: fact for fact in world.facts}
     locale = corpus_locale(world)
+    profile = presentation_of(world)
     out: list[Rendered] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
@@ -1029,7 +1060,8 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.pptx",
                 media_type=MEDIA_TYPE,
-                payload=render(ir, facts, locale=locale),
+                payload=render(ir, facts, locale=locale,
+                               profile=profile.for_doctype(intent.artifact_type)),
             )
         )
     return out

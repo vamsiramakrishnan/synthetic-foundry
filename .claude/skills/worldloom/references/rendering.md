@@ -86,6 +86,54 @@ been superseded, with a comment explaining why it was left as written rather
 than corrected. That staleness is deliberate: a reader (or an agent under
 evaluation) has to notice it, not have it silently fixed.
 
+## Who the documents are for
+
+Every artifact here is two things at once: a **traceability record** (which
+facts a passage cites, at what authority, in whose voice it was asked for) and
+a **document** (something a person opens). Left alone, the renderers serve the
+first and the second leaks — a CFO variance memo renders to five PDF pages of
+which four are a fact table, and its last line is the generation brief printed
+inside the artifact it briefed.
+
+Which reading a corpus is for is a decision, not a default:
+
+```bash
+worldloom present describe
+worldloom render ./corpus -f docx -f pdf --profile reader
+```
+
+| | `audit` | `reader` | `filing` |
+|---|---|---|---|
+| supporting-fact appendix | printed | omitted | sibling `.citations.md` |
+| author voice and persona | in the document | file metadata | file metadata |
+| money figures | `AUD 5,372,800 thousands` | `AUD 5,372.8m` | `AUD 5,372.8m` |
+| PDF table columns | even split | measured, type shrinks to fit |  measured |
+
+`audit` is the default and is byte-for-byte what shipped before profiles
+existed — the right profile when the reader is a validator. **Nothing a profile
+omits is lost**: every section, `fact_ids` list and voice stays in
+`artifact-ir.jsonl` under every profile, so omitting withholds from the page and
+never from the corpus.
+
+Authoring one, when none of the three fits — usually because one doctype needs
+different treatment from the rest:
+
+```bash
+worldloom present brief ./corpus -o brief.json
+worldloom present lint profile.json --corpus ./corpus
+```
+
+The lint returns every finding at once, refuses a misspelled knob by name
+rather than ignoring it, and refuses any figure scaling that cannot multiply
+back to the ledger value exactly — a profile decides how a value is *shown* and
+may never change it. `/worldloom-present` drives the whole thing.
+
+The chosen profile is written onto the corpus's **recipe**, by value, so the
+files and the record of how they were made cannot disagree and a `--replay`
+reproduces this rendering. Re-rendering an existing corpus under a second
+profile needs no rebuild: unlike a locale, a profile decides nothing about the
+world.
+
 ## Determinism in Office formats
 
 `openpyxl`, `python-docx`, and `python-pptx` all stamp wall-clock timestamps

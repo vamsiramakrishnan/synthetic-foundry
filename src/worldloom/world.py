@@ -751,6 +751,7 @@ class World:
         rendered: list[render_module.Rendered] = []
         for name in formats:
             rendered.extend(render_module.renderer(name)(staged))
+        rendered.extend(render_module.citation_sidecars(staged))
 
         return replace(
             staged,

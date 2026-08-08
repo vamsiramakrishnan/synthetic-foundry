@@ -61,6 +61,11 @@ probe_app = typer.Typer(
     help="Derive a world's physics by asking, one question at a time, under propagation.",
 )
 app.add_typer(probe_app, name="probe")
+present_app = typer.Typer(
+    no_args_is_help=True,
+    help="Decide who a corpus's documents are for, and check a profile you wrote.",
+)
+app.add_typer(present_app, name="present")
 
 console = Console()
 err = Console(stderr=True)
@@ -2232,11 +2237,38 @@ def render(
     corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
     formats: list[str] = typer.Option(..., "--format", "-f", help="Formats to render. Repeatable."),
     out: Path = typer.Option(None, "--out", "-o", help="Write here instead of back into the corpus."),
+    profile: str = typer.Option(
+        None, "--profile",
+        help=(
+            "Who the documents are for. `audit` (the default, and what every "
+            "corpus rendered before this flag existed got) prints the "
+            "supporting-fact appendix and the author's voice in the document. "
+            "`reader` records both and prints neither, and spells figures the "
+            "way a memo does. `filing` puts the citations in a sibling file. "
+            "`worldloom present describe` prints every profile and knob; "
+            "`worldloom present lint` checks one you wrote."
+        ),
+    ),
 ) -> None:
-    """Render an existing corpus into files."""
+    """Render an existing corpus into files.
+
+    The profile is written onto the corpus's recipe before rendering, so the
+    files on disk and the record of how they were made cannot disagree — and a
+    later `--replay` reproduces this rendering rather than the default one.
+    Re-rendering an existing corpus under a second profile is a supported thing
+    to do and needs no rebuild: a profile decides nothing about the world.
+    """
+    from .presentation import named
+    from .recipe import with_presentation
     from .render import RenderError
 
     world = _load(corpus)
+    if profile is not None:
+        try:
+            world = world.extend(recipe=with_presentation(world.recipe, named(profile)))
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
     try:
         rendered = world.render(*formats)
     except (RenderError, ValueError) as exc:
@@ -4447,6 +4479,116 @@ def docs(
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(current)
     console.print(f"[green]✓[/green] wrote {target}")
+
+
+
+# ---------------------------------------------------------------------------
+# present — the presentation layer's own surface
+# ---------------------------------------------------------------------------
+
+
+@present_app.command("describe")
+def present_describe() -> None:
+    """Every registered profile and every knob, rendering nothing.
+
+    The same argument `mosaic --describe` makes: deciding whether a profile is
+    the one you want should not require rendering a corpus to find out.
+    """
+    from .presentation import KNOBS, PROFILES, describe as describe_profile
+
+    table = Table(title="Presentation profiles", box=None)
+    table.add_column("profile")
+    for knob in KNOBS:
+        table.add_column(knob)
+    for name, profile in sorted(PROFILES.items()):
+        knobs = describe_profile(profile)
+        table.add_row(name, *(knobs[knob] for knob in KNOBS))
+    console.print(table)
+
+    console.print()
+    for knob, values in KNOBS.items():
+        console.print(f"  [bold]{knob}[/bold]  {', '.join(values)}")
+    console.print(
+        "\n  A profile decides how a value is [italic]shown[/italic] and never"
+        " what it is. Nothing a profile omits is lost: every section, every"
+        " fact id and the author's voice stay in artifact-ir.jsonl whatever you"
+        " choose."
+    )
+
+
+@present_app.command("brief")
+def present_brief(
+    corpus: str = typer.Argument(None, help="Corpus whose doctypes an override may name."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write the brief here as JSON."),
+) -> None:
+    """The context needed to author a profile, as JSON.
+
+    `cascade.Brief`'s contract, over presentation: the rules the lint enforces
+    are stated before anything is proposed rather than discovered one refusal
+    at a time. Pass a corpus and the brief carries the doctypes it actually
+    mints, so an override cannot name one that never appears.
+    """
+    import json as _json
+
+    from .presentation import brief as presentation_brief
+
+    doctypes: tuple[str, ...] = ()
+    if corpus:
+        world = _load(corpus)
+        doctypes = tuple(sorted({
+            intent.artifact_type for intent in world.artifact_intents
+        }))
+    payload = presentation_brief(doctypes)
+    text = _json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if out:
+        out.write_text(text, encoding="utf-8")
+        console.print(f"[green]✓[/green] brief written to [bold]{out}[/bold]")
+    else:
+        console.print_json(text)
+
+
+@present_app.command("lint")
+def present_lint(
+    spec: str = typer.Argument(..., help="Path to a profile document, or the JSON itself."),
+    corpus: str = typer.Option(None, "--corpus", help="Check overrides against this corpus's doctypes."),
+    register: bool = typer.Option(
+        False, "--register",
+        help="Register the profile on acceptance, so a later --profile can name it.",
+    ),
+) -> None:
+    """Check a profile, and say every reason it cannot be accepted.
+
+    Every reason and not the first: `cascade`'s protocol, because a reviser
+    fixing one knob per round trip pays a turn per rule it could not see.
+    """
+    from .cascade import load as load_seed
+    from .presentation import PresentationSeed, register as register_profile, resolve, review
+
+    doctypes: tuple[str, ...] = ()
+    if corpus:
+        world = _load(corpus)
+        doctypes = tuple(sorted({i.artifact_type for i in world.artifact_intents}))
+
+    try:
+        seed = load_seed(spec, PresentationSeed)
+    except Exception as exc:  # noqa: BLE001 - pydantic and json raise differently
+        err.print(f"[red]refused:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    findings = review(seed, doctypes=doctypes)
+    if findings:
+        err.print(f"[red]refused:[/red] {escape(seed.name)} — {len(findings)} finding(s)")
+        for finding in findings:
+            err.print(f"  [red]•[/red] {escape(finding)}")
+        raise typer.Exit(code=1)
+
+    profile = resolve(seed)
+    if register:
+        register_profile(seed.name, profile)
+    console.print(f"[green]✓[/green] {escape(seed.name)} accepted")
+    for knob, value in sorted(profile.__dict__.items()):
+        if knob not in ("name", "overrides"):
+            console.print(f"    {knob:12} {value}")
 
 
 if __name__ == "__main__":  # pragma: no cover

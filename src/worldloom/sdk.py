@@ -724,9 +724,31 @@ class Built:
     def export(self, out: str | Path, *, overwrite: bool = True) -> Path:
         return self.world.export(Path(out), overwrite=overwrite)
 
-    def render(self, *formats: str, out: str | Path | None = None) -> Path:
-        """Render to xlsx/docx/pdf/pptx/markdown and write the corpus."""
-        rendered = self.world.render(*formats)
+    def render(self, *formats: str, out: str | Path | None = None,
+               profile: str | Any = None) -> Path:
+        """Render to xlsx/docx/pdf/pptx/markdown and write the corpus.
+
+        *profile* decides who the documents are for — ``"reader"`` for
+        something a person opens, ``"filing"`` for prose with its citations in
+        a sibling file, or a ``Presentation`` you authored. Omitted, the corpus
+        keeps whatever its recipe records, which for a corpus that never named
+        one is ``audit``: the traceability rendering, and byte-for-byte what
+        this method returned before profiles existed.
+
+        Applied to the recipe rather than passed to the renderers, so the files
+        on disk and the record of how they were made cannot disagree. Needs no
+        rebuild: a profile decides nothing about the world, so re-rendering one
+        corpus under two profiles is an ordinary thing to do.
+        """
+        world = self.world
+        if profile is not None:
+            from .presentation import named
+            from .recipe import with_presentation
+
+            world = world.extend(recipe=with_presentation(
+                world.recipe, named(profile) if isinstance(profile, str) else profile
+            ))
+        rendered = world.render(*formats)
         return rendered.export(Path(out) if out else Path("."), overwrite=True)
 
 
