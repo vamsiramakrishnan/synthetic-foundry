@@ -66,6 +66,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--business-units-end` | Exact active business-unit count in the final period. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
+| `--conversations` | Record the episode's knowledge layer beside its facts and documents: who was told what, by whom, and therefore who knew each fact when. Adds no facts and no documents, and adds information-asymmetry evaluation cases nothing else in the corpus can pose. Refused with `--actors`, which derives its own. |
 | `--distractors` | Add this many provenance-true noise artifacts once the episode(s) finish: superseded drafts, personal working copies, and routine notices — real authors, real dates, real facts, answering nothing an evaluation case needs. 0 (the default) touches nothing. |
 | `--employees` | Override the archetype's stated headcount. |
 | `--estate` | Grow a service landscape around the episode's own services: small, medium or large. Without it the estate is the four services and five systems the close names and nothing else — nine nodes whether the archetype has three stores or sixteen hundred, so nothing has a blast radius and `worldloom topology` has little to read. Omit it and every existing corpus is byte-identical. |

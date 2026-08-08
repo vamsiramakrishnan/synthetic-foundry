@@ -304,6 +304,16 @@ def build(
             "through `worldloom act`."
         ),
     ),
+    conversations: bool = typer.Option(
+        False, "--conversations",
+        help=(
+            "Record the episode's knowledge layer beside its facts and documents: "
+            "who was told what, by whom, and therefore who knew each fact when. "
+            "Adds no facts and no documents, and adds information-asymmetry "
+            "evaluation cases nothing else in the corpus can pose. Refused with "
+            "`--actors`, which derives its own."
+        ),
+    ),
     narrate: bool = typer.Option(
         False, "--narrate",
         help="Generate prose with the built-in deterministic provider (no network, no key).",
@@ -924,6 +934,12 @@ def build(
         refused = [
             flag for flag, given in (
                 ("--actors", actors is not None),
+                # Same reason as `--actors`: the knowledge layer is derived from
+                # the retail close's own routing table and document plan, and a
+                # single-episode vertical runs neither. Refused rather than
+                # silently producing an empty ledger, which would report success
+                # for a corpus that gained nothing.
+                ("--conversations", conversations),
                 ("--incident/--no-incident", incident is not None),
                 ("--comparatives", comparatives > 0),
                 # Same reasoning as its neighbour: the trend shapes retail's
@@ -1079,6 +1095,18 @@ def build(
         err.print(f"[red]error:[/red] --actors takes `scripted` or `agent`, not {actors!r}")
         raise typer.Exit(code=2)
 
+    # Both produce `observations` and `messages`. Refused rather than merged:
+    # two producers appending to one knowledge ledger would give a (person,
+    # fact) pair two learned_at values, and every asymmetry answer read off it
+    # would depend on which of them ran second.
+    if conversations and actors is not None:
+        err.print(
+            "[red]error:[/red] --conversations and --actors cannot be combined;"
+            " an actor episode already derives its own knowledge ledger from what"
+            " each employee could see when it acted"
+        )
+        raise typer.Exit(code=2)
+
     # `agent` exports the world *before* the episode, carrying a recipe that says
     # an actor close is expected. There is no half-run episode to serialise —
     # `worldloom act` resumes by rebuilding from that recipe and the ledger — so
@@ -1188,6 +1216,7 @@ def build(
             trend_pct=trend if index == 0 else 0.0,
             actors=actor_provider,
             actor_ledger=actor_ledger,
+            conversations=conversations,
             eval_density=eval_density_value,
             physics=physics_value,
             # Only when a facet put one on the builder — see `claimed_calendar`.
@@ -1292,6 +1321,14 @@ def build(
         console.print(
             f"[dim]actors:[/dim] {len(world.actor_ledger)} tool call(s), {accepted} accepted"
             f", {len(world.observations)} observation(s)\n"
+        )
+
+    if conversations:
+        told = sum(len(m.recipient_ids) for m in world.messages)
+        console.print(
+            f"[dim]conversations:[/dim] {len(world.messages)} message(s) to {told}"
+            f" recipient(s), {len(world.observations)} observation(s) across"
+            f" {len({o.observer_id for o in world.observations})} employee(s)\n"
         )
 
     # After every episode this build runs, never before — a distractor drafts
@@ -3550,6 +3587,64 @@ def stats(
         console.print(stats_module.diff(report, other_report, a_label=corpus, b_label=against))
 
 
+def _knowledge_table(world: World) -> None:
+    """Who came to know how much, and through which channels.
+
+    Per person rather than per invocation, because a derived knowledge ledger
+    has no invocations — and because the reading that matters for it is the one
+    the execution ledger cannot give: two employees in the same company holding
+    a different number of this month's facts.
+    """
+    channels: dict[str, dict[str, int]] = {}
+    earliest: dict[str, str] = {}
+    for record in world.observations:
+        counts = channels.setdefault(record.observer_id, {})
+        counts[record.source_type] = counts.get(record.source_type, 0) + 1
+        stamp = record.learned_at.strftime("%Y-%m-%d %H:%M")
+        if record.observer_id not in earliest or stamp < earliest[record.observer_id]:
+            earliest[record.observer_id] = stamp
+
+    table = Table(title="What each employee came to know", box=None)
+    table.add_column("role")
+    table.add_column("first heard")
+    table.add_column("facts", justify="right")
+    table.add_column("by channel", overflow="fold")
+    for person_id in sorted(channels, key=lambda p: (-sum(channels[p].values()), p)):
+        person = world.people.get(person_id)
+        counts = channels[person_id]
+        table.add_row(
+            person.title if person is not None else person_id,
+            earliest[person_id],
+            str(sum(counts.values())),
+            ", ".join(f"{name} {count}" for name, count in sorted(counts.items())),
+        )
+    console.print(table, "")
+
+    if not world.messages:
+        return
+    table = Table(title="Who told whom", box=None)
+    table.add_column("sent")
+    table.add_column("kind")
+    table.add_column("from")
+    table.add_column("to", overflow="fold")
+    table.add_column("facts", justify="right")
+    table.add_column("about")
+    for message in sorted(world.messages, key=lambda m: (m.sent_at, m.id)):
+        sender = world.people.get(message.sender_id)
+        recipients = [world.people.get(r) for r in message.recipient_ids]
+        table.add_row(
+            message.sent_at.strftime("%Y-%m-%d %H:%M"),
+            message.kind,
+            sender.title if sender is not None else message.sender_id,
+            ", ".join(
+                person.title if person is not None else "?" for person in recipients
+            ),
+            str(len(message.disclosed_fact_ids)),
+            message.subject_ref or "",
+        )
+    console.print(table, "")
+
+
 @app.command()
 def actors(
     corpus: str = typer.Argument(..., help="Corpus name or path."),
@@ -3571,6 +3666,14 @@ def actors(
     world = _load(corpus)
     entries = list(world.actor_ledger)
     if not entries:
+        # A corpus built with `--conversations` has a knowledge ledger and no
+        # execution ledger — nobody took a decision, but the episode still
+        # recorded who came to know what. Reporting "no actor episode" and
+        # returning would hide a file that is present, which is the failure mode
+        # this whole command exists to prevent.
+        if observations and world.observations:
+            _knowledge_table(world)
+            return
         console.print("[dim]no actor episode in this corpus[/dim]")
         return
 

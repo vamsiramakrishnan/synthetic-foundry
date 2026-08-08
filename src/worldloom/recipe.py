@@ -68,7 +68,7 @@ class RecipeError(Exception):
 #: load, which is a lot to accept for the convenience of not writing a line here.
 STEPS: dict[str, tuple[str, ...]] = {
     "MonthEndClose": ("period", "incident", "comparatives", "actors", "eval_density",
-                      "trend_pct"),
+                      "trend_pct", "conversations"),
     "Hire": ("period", "role_key", "title", "function", "unit_key"),
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
@@ -659,6 +659,10 @@ def rebuild(
                     # corpus was built with — the knob's own default.
                     eval_density=step.get("eval_density", 1.0),
                     trend_pct=step.get("trend_pct", 0.0),
+                    # Same `.get` discipline as its neighbours, and the same
+                    # reason: absent means the corpus was built before the knob
+                    # existed, and False is what it was built with.
+                    conversations=step.get("conversations", False),
                     physics=physics,
                     seasonality=seasonality,
                 )
