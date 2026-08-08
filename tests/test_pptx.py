@@ -26,7 +26,7 @@ import pptx as python_pptx
 import pytest
 
 from worldloom import MonthEndClose, RetailWorld, World
-from worldloom.models import Column, Row, Table
+from worldloom.models import Cell, Chart, ChartKind, Column, Row, Table
 from worldloom.narrative import DeterministicProvider, references
 from worldloom.render import RenderError, docx as docx_renderer, markdown, ooxml
 from worldloom.render import pptx as pptx_renderer
@@ -423,6 +423,185 @@ def test_missing_python_pptx_raises_actionably(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setitem(sys.modules, "pptx", None)
     with pytest.raises(RenderError, match="pip install"):
         pptx_renderer._require_pptx()
+
+
+# ---------------------------------------------------------------------------
+# Native charts — the retail-close executive summary declares none today
+# (see the task's own finding: an executive deck with zero charts), so these
+# exercise the general machinery every `Chart` kind shares directly, the same
+# way the "Components exercised directly" tests below reach a component the
+# real deck happens not to select.
+# ---------------------------------------------------------------------------
+
+def _chart_table_and_chart(kind: ChartKind, *, by_row: bool = False, rows: list[str] | None = None):  # type: ignore[no-untyped-def]
+    table = Table(
+        key="pnl", title="P&L", columns=[
+            Column(key="budget", label="Budget", number_format="#,##0;(#,##0)"),
+            Column(key="actual", label="Actual", number_format="#,##0;(#,##0)"),
+        ],
+        rows=[
+            Row(key="food", label="Food", cells={"budget": Cell(value=100.0), "actual": Cell(value=110.0)}),
+            Row(key="apparel", label="Apparel", cells={"budget": Cell(value=200.0), "actual": Cell(value=190.0)}),
+            Row(key="group", label="Group", emphasis=True,
+                cells={"budget": Cell(value=300.0), "actual": Cell(value=300.0)}),
+        ],
+    )
+    chart = Chart(
+        key="test", title="Test chart", kind=kind, table="pnl",
+        series=["budget", "actual"], rows=rows if rows is not None else [], by_row=by_row,
+        category_axis="Division", value_axis="AUD thousands", note="A note on the chart.",
+    )
+    return table, chart
+
+
+def _draw_chart_deck(kind: ChartKind, **kwargs):  # type: ignore[no-untyped-def]
+    table, chart = _chart_table_and_chart(kind, **kwargs)
+    presentation = _blank_deck()
+    pptx_renderer._draw_chart(presentation, chart, table, footer_text="Test · Deck")
+    return presentation, table, chart
+
+
+@pytest.mark.parametrize("kind", [ChartKind.COLUMN, ChartKind.BAR, ChartKind.LINE, ChartKind.PIE])
+def test_every_chart_kind_draws_in_bounds_with_the_font_floor(kind: ChartKind) -> None:
+    presentation, _, _ = _draw_chart_deck(kind)
+    assert len(presentation.slides) == 1
+    assert_shapes_in_bounds_and_non_overlapping(presentation)
+    assert_font_floor(presentation)
+
+
+def test_chart_series_resolves_categories_and_values_off_the_table() -> None:
+    """`Chart` never introduces a number — `_chart_series` reads nothing but
+    cells already in the table it is handed."""
+    table, chart = _chart_table_and_chart(ChartKind.COLUMN)
+    categories, series = pptx_renderer._chart_series(chart, table)
+    assert categories == ["Food", "Apparel"], "the subtotal row should not be a category"
+    assert dict((label, values) for label, values, _ in series) == {
+        "Budget": [100.0, 200.0],
+        "Actual": [110.0, 190.0],
+    }
+
+
+def test_empty_rows_means_every_row_that_is_not_a_subtotal() -> None:
+    """`Chart.rows`'s own docstring: a chart that included the subtotal would
+    double every bar."""
+    table, chart = _chart_table_and_chart(ChartKind.COLUMN, rows=[])
+    categories, _ = pptx_renderer._chart_series(chart, table)
+    assert categories == ["Food", "Apparel"]
+    assert "Group" not in categories
+
+
+def test_by_row_reads_rows_as_series_and_columns_as_categories() -> None:
+    """`Chart.by_row`'s own docstring: read the wrong way round, this renders
+    without complaint as one point per series instead of one line per row."""
+    table, chart = _chart_table_and_chart(ChartKind.LINE, by_row=True, rows=["food", "apparel"])
+    categories, series = pptx_renderer._chart_series(chart, table)
+    assert categories == ["Budget", "Actual"]
+    assert [label for label, _, _ in series] == ["Food", "Apparel"]
+
+
+def test_a_percentage_column_is_scaled_the_same_way_the_workbook_scales_it() -> None:
+    """A percentage fact stored as 24.94 should plot as 0.2494 — the same
+    conversion `xlsx.py::render` applies before Excel's percent format
+    multiplies it back out, so an axis labelled "0.00%" reads 24.94%, not
+    2494%."""
+    table = Table(
+        key="margins", title="Margins",
+        columns=[Column(key="gm_pct", label="GM%", number_format="0.00%")],
+        rows=[Row(key="food", label="Food", cells={"gm_pct": Cell(value=24.94)})],
+    )
+    chart = Chart(key="margin", title="Margin", kind=ChartKind.COLUMN, table="margins", series=["gm_pct"])
+    _, series = pptx_renderer._chart_series(chart, table)
+    assert series == [("GM%", [0.2494], "0.00%")]
+
+
+def test_a_pie_chart_plots_only_its_first_series() -> None:
+    """`ChartKind.PIE`'s own docstring: composition of a single total, one
+    series only — a second series would silently double the wedges."""
+    presentation, _, _ = _draw_chart_deck(ChartKind.PIE)
+    slide = presentation.slides[0]
+    charts = [shape.chart for shape in slide.shapes if shape.has_chart]
+    assert len(charts) == 1
+    assert len(charts[0].series) == 1
+
+
+def test_a_chart_reading_a_different_table_than_its_section_is_skipped() -> None:
+    """`Chart`'s own docstring: every value it plots is a cell already in the
+    table beside it — a mismatched `chart.table` is dropped, not guessed at."""
+    table, chart = _chart_table_and_chart(ChartKind.COLUMN)
+    mismatched = chart.model_copy(update={"table": "not_this_table"})
+    slide_plan = pptx_renderer.SlidePlan(
+        kind="content", component_id="finance.variance_table", heading="Test", table=table,
+        charts=(mismatched,),
+    )
+    presentation = _blank_deck()
+    plan = pptx_renderer.PresentationPlan(title="T", subtitle=None, metadata={}, slides=(slide_plan,))
+    pptx_renderer._draw_content(presentation, plan, slide_plan, {})
+    # Only the table slide — no extra chart slide was added.
+    assert len(presentation.slides) == 1
+
+
+def test_a_chart_slide_is_added_after_the_table_when_it_matches() -> None:
+    """Same dispatch, exercised through `_draw_content` rather than by
+    calling `_draw_chart` directly — the table slide, then one chart slide."""
+    table, chart = _chart_table_and_chart(ChartKind.COLUMN)
+    slide_plan = pptx_renderer.SlidePlan(
+        kind="content", component_id="finance.variance_table", heading="Divisional", table=table,
+        charts=(chart,),
+    )
+    presentation = _blank_deck()
+    plan = pptx_renderer.PresentationPlan(title="T", subtitle=None, metadata={}, slides=(slide_plan,))
+    pptx_renderer._draw_content(presentation, plan, slide_plan, {})
+    assert len(presentation.slides) == 2
+    assert any(shape.has_chart for shape in presentation.slides[1].shapes)
+    assert_shapes_in_bounds_and_non_overlapping(presentation)
+    assert_font_floor(presentation)
+
+
+def test_a_chart_deck_renders_twice_byte_identical() -> None:
+    table, chart = _chart_table_and_chart(ChartKind.COLUMN)
+    slide_plan = pptx_renderer.SlidePlan(
+        kind="content", component_id="finance.variance_table", heading="Divisional", table=table,
+        charts=(chart,),
+    )
+    plan = pptx_renderer.PresentationPlan(title="T", subtitle=None, metadata={}, slides=(slide_plan,))
+
+    def build() -> bytes:
+        presentation = _blank_deck()
+        pptx_renderer._draw_content(presentation, plan, slide_plan, {})
+        buffer = io.BytesIO()
+        presentation.save(buffer)
+        return ooxml.normalise(buffer.getvalue())
+
+    assert build() == build()
+
+
+def test_no_clock_reaches_a_chart_deck_including_its_embedded_workbook() -> None:
+    """The nested-clock defect `ooxml.normalise`'s own docstring describes:
+    `python-pptx`'s chart API always embeds a small `.xlsx` workbook of the
+    plotted values, and `xlsxwriter` stamps *that* workbook's own
+    `docProps/core.xml` with `datetime.now()` — a second clock the top-level
+    substitution alone never reaches."""
+    table, chart = _chart_table_and_chart(ChartKind.COLUMN)
+    slide_plan = pptx_renderer.SlidePlan(
+        kind="content", component_id="finance.variance_table", heading="Divisional", table=table,
+        charts=(chart,),
+    )
+    plan = pptx_renderer.PresentationPlan(title="T", subtitle=None, metadata={}, slides=(slide_plan,))
+    presentation = _blank_deck()
+    pptx_renderer._draw_content(presentation, plan, slide_plan, {})
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+    normalised = ooxml.normalise(buffer.getvalue())
+
+    with zipfile.ZipFile(io.BytesIO(normalised)) as archive:
+        stamps = {info.date_time for info in archive.infolist()}
+        assert stamps == {ooxml.EPOCH}
+        embedded = [n for n in archive.namelist() if n.endswith(".xlsx")]
+        assert embedded, "a native pptx chart should carry its own embedded workbook"
+        for name in embedded:
+            with zipfile.ZipFile(io.BytesIO(archive.read(name))) as inner:
+                inner_stamps = {info.date_time for info in inner.infolist()}
+                assert inner_stamps == {ooxml.EPOCH}, f"{name}: embedded workbook still carries a wall clock"
 
 
 # ---------------------------------------------------------------------------

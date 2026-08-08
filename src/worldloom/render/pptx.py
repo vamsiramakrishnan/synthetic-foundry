@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING
 
 from ..compiler.compose import compose, plan_from_ir
 from ..compiler.style import StyleGenome, genome
-from ..models import ArtifactIR, CanonicalFact, Row, Table
+from ..models import ArtifactIR, CanonicalFact, Chart, ChartKind, Row, Table
 from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..narrative import references
 from ..rng import Rng
@@ -221,6 +221,10 @@ class SlidePlan:
     body: str | None = None
     table: Table | None = None
     hidden: bool = False
+    charts: tuple[Chart, ...] = ()
+    """Charts declared over `table` — a view of it, never a source of data of
+    its own (see `Chart`'s own docstring). Drawn onto their own slide(s) after
+    whatever `table`/`body` produces, by `_draw_content`."""
 
 
 @dataclass(frozen=True)
@@ -302,6 +306,7 @@ def _plan(ir: ArtifactIR,
                 body=section.body,
                 table=section.table,
                 hidden=section.hidden,
+                charts=tuple(section.charts),
             )
         )
     if profile.provenance == "footer":
@@ -922,6 +927,178 @@ def draw_metric_cards(slide, table: Table, g: StyleGenome = _HOUSE_GENOME, local
             run.font.color.rgb = _rgb(g.colour_roles["subtotal_text"])
 
 
+# ---------------------------------------------------------------------------
+# Charts
+# ---------------------------------------------------------------------------
+
+
+def _chart_rows(chart: Chart, table: Table) -> list[str]:
+    """Row keys this chart plots, in the order they should appear.
+
+    `Chart.rows`'s own docstring draws the line: explicit rows keep the
+    author's order (a chart that puts the worst division first is a
+    decision, not noise), and empty means every row that is not a subtotal —
+    a chart that included the subtotals would double every bar. There the
+    table's own row order is the only order there is, since there is no
+    author-declared one to fall back on.
+    """
+    if chart.rows:
+        return list(chart.rows)
+    return [row.key for row in table.rows if not row.emphasis]
+
+
+def _chart_series(
+    chart: Chart, table: Table,
+) -> tuple[list[str], list[tuple[str, list[float | None], str | None]]]:
+    """Resolve a declared chart into categories and ``(label, values,
+    number_format)`` series, reading nothing but cells already in *table* —
+    see `Chart`'s own docstring: "a chart never introduces a number."
+
+    `by_row` decides which axis of the table becomes which axis of the
+    chart — see `Chart.by_row`'s own docstring for why getting this backwards
+    renders without complaint. Reads the two fields exactly as
+    `xlsx.py::_chart_block` does, so the workbook's chart and this one can
+    never disagree about which cells they plot.
+    """
+    row_keys = _chart_rows(chart, table)
+    rows_by_key = {row.key: row for row in table.rows}
+
+    def row_label(key: str) -> str:
+        row = rows_by_key.get(key)
+        return row.label if row else key
+
+    def column_label(key: str) -> str:
+        column = table.column(key)
+        return column.label if column else key
+
+    def value(row_key: str, column_key: str) -> float | None:
+        row = rows_by_key.get(row_key)
+        cell = row.cells.get(column_key) if row else None
+        if cell is None or not isinstance(cell.value, (int, float)):
+            return None
+        raw = float(cell.value)
+        column = table.column(column_key)
+        # A percentage fact is stored as 24.94; Excel's own percent format
+        # multiplies by 100 to display it, so a chart axis using that format
+        # needs the same 24.94 -> 0.2494 conversion `xlsx.py::render` applies
+        # to cells — see that function's own comment for why the format
+        # string is what decides, not the column's name.
+        if column and column.number_format and column.number_format.endswith("%"):
+            return raw / 100
+        return raw
+
+    if chart.by_row:
+        first_format = table.column(chart.series[0]).number_format if chart.series else None
+        categories = [column_label(key) for key in chart.series]
+        series = [
+            (row_label(row_key), [value(row_key, col_key) for col_key in chart.series], first_format)
+            for row_key in row_keys
+        ]
+    else:
+        categories = [row_label(key) for key in row_keys]
+        series = [
+            (column_label(col_key),
+             [value(row_key, col_key) for row_key in row_keys],
+             table.column(col_key).number_format if table.column(col_key) else None)
+            for col_key in chart.series
+        ]
+    return categories, series
+
+
+#: `ChartKind` -> `XL_CHART_TYPE`. A module-level name rather than a literal
+#: dict built inside `_draw_chart` every call — built lazily all the same,
+#: since `XL_CHART_TYPE` lives in the optional `pptx` package `_draw_chart`
+#: is the only caller of.
+def _chart_type(kind: ChartKind):  # type: ignore[no-untyped-def]
+    from pptx.enum.chart import XL_CHART_TYPE
+
+    return {
+        ChartKind.COLUMN: XL_CHART_TYPE.COLUMN_CLUSTERED,
+        ChartKind.BAR: XL_CHART_TYPE.BAR_CLUSTERED,
+        ChartKind.LINE: XL_CHART_TYPE.LINE,
+        ChartKind.PIE: XL_CHART_TYPE.PIE,
+    }[kind]
+
+
+def _draw_chart(prs, chart: Chart, table: Table, footer_text: str,
+                 g: StyleGenome = _HOUSE_GENOME) -> None:  # type: ignore[no-untyped-def]
+    """One declared chart, as a native OOXML chart — a real ``c:chartSpace``
+    graphic frame, not a picture of one or a table dressed up as bars.
+
+    ``shapes.add_chart`` embeds a small workbook of the plotted values
+    alongside the chart XML (`python-pptx`'s own chart API always creates
+    one — see `ooxml.normalise`'s docstring for the nested-clock defect that
+    turned out to cause). Every value in it is read by `_chart_series`
+    straight off *table*, never computed here, which is what lets a reader
+    check the chart against the same table the slide (or an earlier one, if
+    the table itself paginated) already showed.
+    """
+    from pptx.chart.data import CategoryChartData
+    from pptx.enum.chart import XL_LEGEND_POSITION
+
+    categories, series = _chart_series(chart, table)
+    if not categories or not series:
+        return
+
+    # A pie plots one total's composition — `ChartKind.PIE`'s own docstring —
+    # so a second series would silently double the wedges. Plotting only the
+    # first is the same defensive read `docx.py::_figure` already gives a
+    # chart whose declaration does not match its own kind.
+    plotted = series[:1] if chart.kind is ChartKind.PIE else series
+
+    slide = _new_slide(prs, chart.title, footer_text=footer_text, g=g)
+
+    box = BODY
+    note_box = None
+    if chart.note:
+        note_h = _in(0.4)
+        box = Box(BODY.x, BODY.y, BODY.cx, BODY.cy - note_h - _GUTTER)
+        note_box = Box(BODY.x, box.bottom + _GUTTER, BODY.cx, note_h)
+    _assert_in_bounds(box)
+
+    data = CategoryChartData()
+    data.categories = categories
+    for label, values, number_format in plotted:
+        # A blank cell plots as zero rather than vanishing — `add_series` has
+        # no notion of a missing point, and dropping one would silently
+        # reindex every point after it against the wrong category.
+        data.add_series(label, tuple(v if v is not None else 0.0 for v in values),
+                         number_format=number_format or "General")
+
+    graphic_frame = slide.shapes.add_chart(
+        _chart_type(chart.kind), box.x, box.y, box.cx, box.cy, data
+    )
+    native = graphic_frame.chart
+    native.has_title = False  # the slide heading above already carries it
+
+    # A single-series bar or line needs no legend to say what it is; a pie
+    # always does, because its wedges have no axis to be labelled by.
+    native.has_legend = len(plotted) > 1 or chart.kind is ChartKind.PIE
+    if native.has_legend:
+        native.legend.position = XL_LEGEND_POSITION.BOTTOM
+        native.legend.include_in_layout = False
+        native.legend.font.size = _pt(MIN_FONT_PT)
+        native.legend.font.color.rgb = _rgb(g.colour_roles["body_text"])
+
+    if chart.kind is not ChartKind.PIE:
+        for axis, title in (
+            (native.category_axis, chart.category_axis),
+            (native.value_axis, chart.value_axis),
+        ):
+            axis.tick_labels.font.size = _pt(MIN_FONT_PT)
+            axis.tick_labels.font.color.rgb = _rgb(g.colour_roles["body_text"])
+            if title:
+                axis.has_title = True
+                axis.axis_title.text_frame.text = title
+                run = axis.axis_title.text_frame.paragraphs[0].runs[0]
+                run.font.size = _pt(MIN_FONT_PT)
+                run.font.color.rgb = _rgb(g.colour_roles["body_text"])
+
+    if note_box is not None:
+        note_shape = _textbox(slide, note_box)
+        _write(note_shape.text_frame, [chart.note], size=MIN_FONT_PT, colour=_MUTED, italic=True)
+
+
 def _draw_table_content(prs, slide_plan, footer_text: str, g: StyleGenome = _HOUSE_GENOME, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
     table = slide_plan.table
     assert table is not None
@@ -977,6 +1154,18 @@ def _draw_content(  # type: ignore[no-untyped-def]
         slide = _new_slide(prs, slide_plan.heading, footer_text=footer_text, g=g)
         body = _textbox(slide, BODY)
         _write(body.text_frame, [_AWAITING], size=_clamped_pt(g.type_scale[_TS_BODY]), colour=_MUTED, italic=True)
+
+    # One extra slide per declared chart, after whatever the table (however
+    # many slides it paginated into) or prose above produced — see
+    # `SlidePlan.charts`'s own docstring. Guarded on the table actually being
+    # *this* chart's table, not merely present: `Chart`'s own docstring says
+    # every value it plots is a cell "already in the table beside it", and a
+    # mismatched `chart.table` would be this renderer inventing which table
+    # that was rather than reading it off the IR.
+    if slide_plan.table is not None:
+        for chart in slide_plan.charts:
+            if chart.table == slide_plan.table.key:
+                _draw_chart(prs, chart, slide_plan.table, footer_text, g)
 
 
 # ---------------------------------------------------------------------------
