@@ -59,6 +59,7 @@ from hypothesis import HealthCheck, assume, given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
 from worldloom import (  # noqa: E402
+    benchmark,
     detail,
     dispersion,
     domains,
@@ -1114,6 +1115,151 @@ def test_a_type_with_no_filing_is_always_reported_as_inert(kind):
     findings = doctypes.lint([_document_type([kind], filing=None)])
     _findings_are_actionable(findings)
     assert any("declares no `filing`" in finding for finding in findings), findings
+
+
+# -- benchmark.lint ---------------------------------------------------------
+#
+# The fourth lint in the cascade's family, and the newest: a question family is
+# the same hazard a document section is, one layer over. A family asked about a
+# kind nothing mints phrases nothing, forever, in silence — the corpus builds,
+# the benchmark is smaller than the author believes, and no test fails. So the
+# same three obligations apply here: an unregistered kind is always refused, a
+# registered one never is *for being unregistered*, and every finding is
+# something a model can act on.
+
+
+def _eval_family(kinds, **overrides):
+    """A minimal question family whose only defect is the generated one."""
+    payload = {
+        "family": "direct_lookup",
+        "about": list(kinds),
+        "question": "What {phrase} did {subject} record for {period}?",
+    }
+    payload.update(overrides)
+    return benchmark.QuestionFamily.model_validate(payload)
+
+
+@_SLOW
+@given(_unregistered_kinds)
+def test_a_question_family_about_an_unregistered_kind_is_always_refused(kind):
+    """The benchmark's half of the `factkinds` defence.
+
+    A spec once cited two invented fact kinds and its self-referential lint
+    passed them, which is why the registry exists. A question family names
+    kinds too, and a plausible-looking name in an `about` list is the same
+    invention wearing an evaluation's clothes.
+    """
+    findings = benchmark.lint(benchmark.EvalSpec(families=[_eval_family([kind])]))
+    _findings_are_actionable(findings)
+    assert any(repr(kind) in finding for finding in findings), findings
+
+
+@_SLOW
+@given(_unregistered_kinds)
+def test_a_skipped_kind_that_does_not_exist_is_always_refused(kind):
+    """`skip_kinds` silences questions, so a typo there silences nothing and
+    says it did — the failure mode of every exclusion list ever written."""
+    findings = benchmark.lint(benchmark.EvalSpec(skip_kinds=[kind]))
+    _findings_are_actionable(findings)
+    assert any(repr(kind) in finding for finding in findings), findings
+
+
+@_SLOW
+@given(_KNOWN_KIND)
+def test_a_question_family_about_a_registered_kind_is_never_refused_for_that(kind):
+    """The other half, over every kind the registry holds.
+
+    Other findings are allowed — the lint also reports a family scoped to a
+    kind this *process* does not mint — but never the unknown-kind one, which
+    is the claim. Quantified over the registry rather than over one engine's
+    naming, which is the shape that would have caught a rule keyed to `p2p.`.
+    """
+    findings = benchmark.lint(benchmark.EvalSpec(families=[_eval_family([kind])]))
+    _findings_are_actionable(findings)
+    assert not any("not in the fact-kind registry" in f for f in findings), findings
+
+
+@_SLOW
+@given(
+    st.sampled_from(sorted(benchmark.FAMILY_SLOTS)),
+    st.text(alphabet="abcdefghijklmnopqrstuvwxyz_", min_size=3, max_size=14),
+)
+def test_a_template_slot_no_family_fills_is_always_refused(family, slot):
+    """A `str.format` template is executable data.
+
+    An unknown slot raises `KeyError` *inside a build*, hours after the file
+    was written and with a traceback pointing at the derivation rather than at
+    the JSON. Quantified over every family because each one fills a different
+    set, and a rule that checked only the common slots would pass a template
+    naming another family's.
+    """
+    allowed = benchmark.COMMON_SLOTS | benchmark.FAMILY_SLOTS[family]
+    assume(slot not in allowed)
+    findings = benchmark.lint(benchmark.EvalSpec(
+        families=[benchmark.QuestionFamily(
+            family=family, question="A question about {%s}." % slot,
+        )],
+    ))
+    _findings_are_actionable(findings)
+    assert any(repr(slot) in finding for finding in findings), findings
+
+
+@_SLOW
+@given(st.sampled_from(sorted(benchmark.FAMILY_SLOTS)))
+def test_every_slot_a_family_advertises_is_accepted_in_both_templates(family):
+    """The inverse, and the one that keeps the advertisement honest.
+
+    `FAMILY_SLOTS` is what the lint's own error message offers an author as
+    the alternative, so a slot listed there and refused by the lint would be a
+    refusal that names an illegal fix. Both the question and the answer
+    template, because they draw on one vocabulary and a rule applied to only
+    one of them is a rule half-written.
+    """
+    allowed = sorted(benchmark.COMMON_SLOTS | benchmark.FAMILY_SLOTS[family])
+    template = " ".join("{%s}" % slot for slot in allowed)
+    findings = benchmark.lint(benchmark.EvalSpec(
+        families=[benchmark.QuestionFamily(
+            family=family, question=template, answer=template,
+        )],
+    ))
+    assert not any("never fills" in finding for finding in findings), findings
+
+
+@_SLOW
+@given(st.sampled_from(sorted(benchmark.FAMILY_SLOTS)))
+def test_every_derived_family_has_a_declared_cap_and_a_slot_vocabulary(family):
+    """Three tables have to agree about what a family is: what the derivation
+    can read out of a graph, how many of it a process gets by default, and
+    which slots its templates may name. A family in one and missing from
+    another is a `KeyError` at build time, so the agreement is quantified
+    rather than eyeballed."""
+    assert family in benchmark.DEFAULT_EMPHASIS
+    assert family in {f.value for f in benchmark.DERIVED_FAMILIES}
+    assert benchmark.lint(benchmark.EvalSpec(emphasis={family: 1})) == []
+
+
+@_FAST
+@given(_KNOWN_KIND, st.sampled_from(["p2p", "capital", "reserves", "financial"]))
+def test_a_kinds_phrase_drops_its_domain_and_keeps_everything_after(kind, domain):
+    """`benchmark.phrase` turns a kind into the noun phrase a question uses.
+
+    Only the *first* segment goes, because it names which generator owns the
+    kind rather than what the measure is — nobody asks what the "p2p received
+    value" was — and everything after it stays, because
+    `financial.revenue.actual` and `financial.revenue.budget` differ exactly
+    there. Stated as a pair of claims and not as "the domain word never
+    appears": `capital.cet1_capital` speaks as "cet1 capital", correctly, and
+    a property forbidding that would be a property about English.
+    """
+    spoken = benchmark.phrase(kind)
+    assert spoken and "_" not in spoken and "." not in spoken
+    head, _, tail = kind.partition(".")
+    if not tail:
+        return
+    assert spoken == tail.replace(".", " ").replace("_", " ")
+    # Which domain owns it reaches the phrase nowhere: re-file the same measure
+    # under any other engine and it is asked after in the same words.
+    assert benchmark.phrase(f"{domain}.{tail}") == spoken
 
 
 # ---------------------------------------------------------------------------
