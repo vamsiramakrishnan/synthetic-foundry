@@ -6,7 +6,7 @@ which is in `SKILL.md`.
 
 ```bash
 worldloom formats
-worldloom render ./corpus -f xlsx -f docx -f markdown -f jira -f confluence -f servicenow
+worldloom render ./corpus -f xlsx -f docx -f html -f markdown -f jira -f confluence -f servicenow
 ```
 
 `worldloom formats` lists what this installation actually has registered —
@@ -133,6 +133,58 @@ files and the record of how they were made cannot disagree and a `--replay`
 reproduces this rendering. Re-rendering an existing corpus under a second
 profile needs no rebuild: unlike a locale, a profile decides nothing about the
 world.
+
+## Elements a section may declare
+
+`ArtifactSection` carries prose (`body`), one `Table`, a list of `Chart`, and
+three primitives that let a *component* say what it is rather than being
+inferred from shape:
+
+| primitive | field | used by |
+|---|---|---|
+| `MagnitudeBand` | `Cell.band` | `finance.heatmap`, `mgmt.risk_matrix` |
+| `FlowDiagram` | `ArtifactSection.flow` | `ops.process_flow`, `ops.causal_chain` |
+| `Quotation` | `ArtifactSection.quote` | `editorial.pull_quote`, `editorial.callout` |
+
+Each declares a **semantic** fact and leaves the spelling to a renderer — the
+relationship `FormulaKind` has to a computed cell. A band says where a value
+sits in its column's range, not what colour to paint it: Markdown spells it as a
+bracketed word because it has no colour, PDF fills the cell background. All
+three default to `None`, so a section that declares none renders exactly as it
+always did.
+
+`ComponentSpec.required_inputs` is checked at compose time, so a component
+picked for a section it cannot present is refused rather than silently falling
+back to a plain table. Six of the 39 components declare inputs today; the rest
+genuinely are plain prose or a plain table, and inventing a distinct look for
+every name would be worse than not having one.
+
+## Charts are declared, and now four formats draw them
+
+`Chart` says which table, which rows, which series, and `by_row`. A renderer
+decides only how to draw it, and **a chart never introduces a number** — every
+value it plots is a cell already in the table beside it.
+
+| format | how a chart appears |
+|---|---|
+| `xlsx` | native chart parts |
+| `docx` | native `c:chartSpace` part (no embedded workbook — `c:externalData` is optional) |
+| `pptx` | native chart via `add_chart`, with the embedded workbook OOXML requires |
+| `html` | inline SVG |
+| `pdf` | a bar built from table cells — a fixed-page approximation |
+| `markdown` | named, not drawn, and it says so |
+
+Two things worth knowing before debugging a missing chart:
+
+1. **Check the IR first.** In the shipped retail corpus only the month-end model
+   (3) and the variance memo (1) declare a chart at all; the executive deck
+   declares none. A deck with no chart is usually a `documents.py` planning gap,
+   not a renderer defect.
+2. **A chart that embeds a workbook embeds a second clock.** `add_chart` builds
+   its data workbook with `xlsxwriter`, which stamps that workbook's own
+   `docProps/core.xml` with `datetime.now()`. `ooxml.normalise` recurses into
+   nested `.xlsx` entries for exactly this reason — a chart-bearing deck would
+   otherwise pass every local test and fail CI's byte-for-byte replay.
 
 ## Determinism in Office formats
 
