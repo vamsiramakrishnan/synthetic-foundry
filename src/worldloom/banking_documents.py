@@ -48,6 +48,36 @@ from .models import (
 MONEY_FORMAT = "#,##0;(#,##0)"
 RATIO_FORMAT = "0.00"
 
+#: Who signs each of the nine, by role key (`documents.approver_of`).
+#:
+#: A prudential return is the most-signed document in this repository's world
+#: and was carrying no signature at all, which is the gap the whole approval
+#: seam exists to close: "who signed the return the regulator challenged" is
+#: the first question anyone asks about this episode.
+#:
+#: Two absences are load-bearing rather than unfinished. The **working paper**
+#: is unsigned because a working paper is unsigned — it is the contested
+#: -authority distractor, and giving it a signature would raise its standing
+#: against the filed return it is meant to lose to. The **restated return** is
+#: covered by the `capital_return` row it shares, which is right: a restatement
+#: is signed by whoever signs the thing it restates.
+_APPROVED_BY: dict[str, str] = {
+    "capital_return": "cfo",
+    "second_line_challenge_memo": "cro",
+    "incident_rca": "cio",
+    # Audit's own review goes to the board committee over the Chief Internal
+    # Auditor's signature and nobody else's — which is why the row names the
+    # author, and therefore resolves to no countersignature at all
+    # (`approver_of` drops a signature that names the author). Written that way
+    # rather than omitted, because the omission would read as an oversight and
+    # this is an argument: independence is the whole point of the third line,
+    # and an audit report countersigned by the management it audits is the one
+    # signature that would make this corpus less true rather than more.
+    "internal_audit_review": "audit",
+    "board_risk_committee_summary": "ceo",
+    "meeting_minutes": "cfo",
+}
+
 
 def artifact_intents(
     minter: Minter,
@@ -78,6 +108,9 @@ def artifact_intents(
             domain=domain,
             audience=audience,
             author_id=author,
+            approver_id=documents.approver_of(
+                roles, artifact_type, author, _APPROVED_BY
+            ),
             triggered_by=events,
             required_fact_ids=facts,
             size_profile=size,  # type: ignore[arg-type]

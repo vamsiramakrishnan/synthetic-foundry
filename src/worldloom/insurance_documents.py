@@ -49,6 +49,26 @@ from .models import (
 
 MONEY_FORMAT = "#,##0;(#,##0)"
 
+#: Who signs each of the four, by role key (`documents.approver_of`).
+#:
+#: The pairing is the point of this episode. The chief actuary's **valuation
+#: report** goes to the reserving committee over the CFO's signature; the CFO's
+#: own **margin decision memo** — which books less than that report
+#: recommended — goes back over the chief actuary's. Each signed the other's
+#: document, which is what a contested reserve position actually looks like on
+#: paper, and where before there was an author each and no reviewer at all
+#: there are now two named people answering for the gap between the numbers.
+#:
+#: The **emergence note** is unsigned because it is a working paper written
+#: before any committee has seen it, which is the same argument banking's RWA
+#: working paper makes: a signature would raise its authority against the
+#: report it is meant to lose to.
+_APPROVED_BY: dict[str, str] = {
+    "reserve_triangle_workbook": "chief_actuary",
+    "actuarial_valuation_report": "cfo",
+    "margin_decision_memo": "chief_actuary",
+}
+
 
 def artifact_intents(
     minter: Minter,
@@ -77,6 +97,9 @@ def artifact_intents(
             domain=domain,
             audience=audience,
             author_id=author,
+            approver_id=documents.approver_of(
+                roles, artifact_type, author, _APPROVED_BY
+            ),
             triggered_by=events,
             required_fact_ids=facts,
             size_profile=size,  # type: ignore[arg-type]

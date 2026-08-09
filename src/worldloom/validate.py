@@ -343,6 +343,58 @@ class _Validator:
                     f" {policy.id} ({policy.label})",
                 )
 
+    def approvals(self) -> None:
+        """A signature has to be one somebody could actually have given.
+
+        Three ways a synthetic approval goes wrong, and all three are the kind
+        a reader notices before they notice anything else:
+
+        * **Signed by its own author.** Not an approval — a byline printed
+          twice. `planning.approver` drops it at the source; this is the check
+          that says so, because nothing stops a domain module or an authored
+          filing from setting the field directly.
+        * **Signed by somebody who cannot open it.** The same argument
+          `author_cannot_see_own_artifact` makes one method up, and it bites
+          harder here: an author who cannot read their own document is an
+          access bug, but an *approver* who cannot is a claim that somebody
+          reviewed a document they were never shown.
+        * **Signed by somebody who does not exist.** A dangling id, checked
+          separately from the two above so a report says which of the three it
+          is rather than "approval invalid".
+
+        Every corpus with no approvals scores zero out of zero here, which is
+        every corpus built before `ArtifactIntent.approver_id` existed.
+        """
+        policies = {p.id: p for p in self.world._access_policies}
+        for artifact in self.world.artifacts:
+            if not artifact.approver_id:
+                continue
+            self.checks += 1
+            approver = self._people.get(artifact.approver_id)
+            if approver is None:
+                self.fail(
+                    "access", "approver_not_employed", artifact.id,
+                    f"approver {artifact.approver_id} is not on the roster",
+                )
+                continue
+            self.checks += 1
+            if artifact.approver_id == artifact.author_id:
+                self.fail(
+                    "access", "approver_is_the_author", artifact.id,
+                    f"{approver.id} ({approver.title}) signed off their own"
+                    " document, which records no review at all",
+                )
+            policy = policies.get(artifact.access_policy_id or "")
+            if policy is None:
+                continue
+            self.checks += 1
+            if not policy.permits(approver):
+                self.fail(
+                    "access", "approver_cannot_see_what_they_signed", artifact.id,
+                    f"approver {approver.id} ({approver.function}) is not"
+                    f" permitted by {policy.id} ({policy.label})",
+                )
+
     def artifact_files(self) -> None:
         """Every manifest entry that names a file must point at one that exists.
 
@@ -1677,6 +1729,7 @@ class _Validator:
         self.referential()
         self.workforce()
         self.access()
+        self.approvals()
         self.artifact_files()
         self.charts()
         self.supersession()

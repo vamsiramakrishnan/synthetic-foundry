@@ -24,7 +24,14 @@ from datetime import datetime
 from typing import Any
 
 from ..ids import Minter
-from ..models import Authority, BusinessUnit, CanonicalFact, Employee, EnterpriseEvent
+from ..models import (
+    AccessPolicy,
+    Authority,
+    BusinessUnit,
+    CanonicalFact,
+    Employee,
+    EnterpriseEvent,
+)
 from ..rng import Rng
 from . import names
 
@@ -47,6 +54,18 @@ class OrgChange:
     people: tuple[Employee, ...]
     business_units: tuple[BusinessUnit, ...] = ()
     roles: dict[str, str] = field(default_factory=dict)
+    access_policies: tuple[AccessPolicy, ...] = ()
+    """Policies this change rewrote, merged into the world by id.
+
+    Access follows the *post*, not the person. A policy names people because a
+    function is too coarse — a divisional managing director sits in Executive
+    and still reads their own division's finance pack — and the moment a post
+    changes hands those names are stale. Found by `validate.approvals`: a
+    reorganisation hands a unit to somebody in Merchandising, who then signs
+    their division's close commentary while the finance policy still names the
+    outgoing leader, so the corpus recorded a signature from somebody it also
+    recorded as unable to open the document.
+    """
 
 
 def _employed_at(employee: Employee, moment: datetime) -> bool:
@@ -267,6 +286,7 @@ def promote(
     units: tuple[BusinessUnit, ...],
     at: datetime,
     period: str,
+    policies: tuple[AccessPolicy, ...] = (),
 ) -> OrgChange:
     """*person* takes *title* and becomes leader of every unit in *units*.
 
@@ -274,6 +294,12 @@ def promote(
     nobody left — this is the verb for a unit changing hands on its own,
     which is a different shape of change from ``depart`` handing over posts
     on the way out.
+
+    ``policies`` is the world's access policies, and passing them is what makes
+    the promotion carry the post's *access* as well as its title — see
+    ``OrgChange.access_policies``. Defaulted to empty, so a caller who does not
+    pass them produces exactly the change this function produced before the
+    argument existed.
     """
     del rng  # no draw needed: which unit and who leads it are the caller's decision
 
@@ -343,12 +369,52 @@ def promote(
             )
         )
 
+    rewritten = _access_follows_the_post(
+        policies, incoming=person.id,
+        outgoing={unit.leader_id for unit in units if unit.leader_id},
+    )
+
     return OrgChange(
         events=(event,),
         facts=tuple(facts),
         people=(promoted,),
         business_units=changed_units,
         roles={role_key: person.id},
+        access_policies=rewritten,
+    )
+
+
+def _access_follows_the_post(
+    policies: Sequence[AccessPolicy], *, incoming: str, outgoing: set[str],
+) -> tuple[AccessPolicy, ...]:
+    """*policies*, with *incoming* added wherever an *outgoing* holder is named.
+
+    A policy names people because a function is too coarse — a divisional
+    managing director sits in Executive and still reads their own division's
+    finance pack — so the moment a post changes hands those names are stale.
+    Found by `validate.approvals`: a reorganisation hands a unit to somebody in
+    Merchandising, who then signs their division's close commentary while the
+    policy still names the outgoing leader.
+
+    **Added, not substituted, and this is the whole of the rule.** Removing the
+    outgoing holder is what a real access review does and what this corpus must
+    not do: the archive is historical and the policy is current state, so a name
+    struck off today retroactively invalidates every signature that person ever
+    gave — which is exactly the violation this function exists to prevent,
+    arriving from the other direction. Measured: substituting produced five of
+    them on a six-period history where appending produces none.
+
+    `deny_people` is untouched. A denial is a statement about a *person* — a
+    conflict of interest, a live investigation — and does not transfer with a
+    job.
+    """
+    named = {who for who in outgoing if who} - {incoming}
+    return tuple(
+        policy.model_copy(
+            update={"allow_people": [*policy.allow_people, incoming]}
+        )
+        for policy in policies
+        if named & set(policy.allow_people) and incoming not in policy.allow_people
     )
 
 

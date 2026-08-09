@@ -115,12 +115,20 @@ def test_the_duplicate_detection_loop_finally_has_something_to_read(
 ) -> None:
     """The similarity join and every near-duplicate reading work over
     passages, and a plan-only world has almost none — so they reported a clean
-    corpus by having nothing to look at, which is the least useful way to pass."""
+    corpus by having nothing to look at, which is the least useful way to pass.
+
+    The multiple is 2.5 rather than the 3 it was, and the reason is worth
+    keeping: a signature block (`documents._signoff`) is resolved at *plan*
+    time, so a plan-only world legitimately gained passages — measured 39
+    against 113 narrated, where before it was 26 against 113. Narrating still
+    nearly triples what there is to read, which is the property; the exact
+    multiple was never one.
+    """
     from worldloom.stats import near_duplicate_clusters
 
     pool = [p for entry in load(plans) for p in passages(entry.world)]
     finished_pool = [p for entry in load(finished) for p in passages(entry.world)]
-    assert len(finished_pool) > 3 * len(pool)
+    assert len(finished_pool) > 2.5 * len(pool)
     # The interesting duplication is *between* worlds and only exists once
     # there is prose: `DeterministicProvider` composes from templates keyed on
     # fact kind, so the same section of the same document reads the same in

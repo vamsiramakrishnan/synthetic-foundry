@@ -16,6 +16,7 @@ reconciliation constraints everything else is checked against.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -1770,6 +1771,89 @@ def _causal_flow(world: World, intent: ArtifactIntent) -> FlowDiagram | None:
     return FlowDiagram(nodes=nodes, edges=edges)
 
 
+def approver_of(
+    roles: dict[str, str], artifact_type: str, author: str,
+    table: Mapping[str, str], *, role_key: str | None = None,
+) -> str | None:
+    """Who signs *artifact_type*, or ``None`` if nobody does.
+
+    Four planners now name approvers — retail's close, banking's return,
+    insurance's valuation, procurement's match — and each owns its own *table*
+    because who signs a prudential return is an argument about banking. What
+    they share is the two ways a signature legitimately comes back empty, and
+    those live here so the four cannot drift apart on them.
+
+    *role_key* overrides the table for a type whose approver depends on the
+    document rather than on the type — a division's close commentary is signed
+    by *that division's* managing director, and a table keyed by type has no way
+    to say which one.
+
+    A role this world does not have resolves to ``None`` rather than raising:
+    several types are gated on facets that mint roles conditionally, and a build
+    whose role table could not carry one must still produce the document. An
+    approver who *is* the author resolves to ``None`` too — a document somebody
+    signed off for themselves is not an approval, it is a byline printed twice,
+    and ``validate.approvals`` fails any that gets past here.
+    """
+    key = role_key or table.get(artifact_type)
+    person = roles.get(key) if key else None
+    return None if person == author else person
+
+
+def _signoff(
+    world: World, facts: list[CanonicalFact], intent: ArtifactIntent
+) -> ArtifactSection | None:
+    """Prepared by, reviewed by — the block a signed document ends with.
+
+    Fully structured, so it costs the narration loop nothing: no ``body``, no
+    request, nothing for a writer to invent. That is the same argument
+    ``meeting_minutes`` makes about its attendee list, and it is what lets a
+    signature reach every rendered format without a renderer learning a new
+    concept — it is a table, and every renderer already draws tables.
+
+    Dated from the artifact's own facts through ``written_at`` rather than from
+    a clock, for the reason the manifest date is: a document whose signature
+    block disagreed with its own metadata would be a document that fails its
+    corpus's reconciliation before a reader gets to the numbers.
+
+    Returns ``None`` when nobody signed, which is most types
+    (``planning._APPROVED_BY``) and every corpus built before this existed —
+    a document with no approver renders exactly as it always did.
+    """
+    if not intent.approver_id:
+        return None
+    author = world.people.by_id(intent.author_id)
+    approver = world.people.by_id(intent.approver_id)
+    if author is None or approver is None:
+        return None
+
+    at = written_at(intent, {f.id: f for f in facts}).date().isoformat()
+    columns = [
+        Column(key="name", label="Name"),
+        Column(key="role", label="Role"),
+        Column(key="date", label="Date"),
+    ]
+
+    def row(key: str, label: str, person) -> Row:  # type: ignore[no-untyped-def]
+        return Row(key=key, label=label, cells={
+            "name": Cell(value=person.name),
+            "role": Cell(value=person.title),
+            "date": Cell(value=at),
+        })
+
+    return ArtifactSection(
+        heading="Approval",
+        table=Table(
+            key="approval",
+            title="Prepared and reviewed",
+            columns=columns,
+            rows=[row("prepared", "Prepared by", author),
+                  row("approved", "Approved by", approver)],
+            note="Approval is recorded against the period the document reports on.",
+        ),
+    )
+
+
 def _divisional_summary(
     world: World, facts: list[CanonicalFact], intent: ArtifactIntent
 ) -> ArtifactSection | None:
@@ -1900,4 +1984,40 @@ def compile_intent(world: World, intent: ArtifactIntent, minter: Minter) -> Arti
         ir = builder(world, intent, minter)
     else:
         ir = outline(world, intent, minter)
-    return _contracted(world, intent, ir)
+    return _contracted(world, intent, _signed(world, intent, ir))
+
+
+def _signed(world: World, intent: ArtifactIntent, ir: ArtifactIR) -> ArtifactIR:
+    """*ir* with its signature block, when the document carries one.
+
+    Here rather than in ``outline`` because ``outline`` is one of a dozen
+    builders: the workbook, the ServiceNow bundle, the Jira export, banking's
+    return and insurance's triangle each build their own IR, and an approval
+    that only reached the outline path would have put ``approver_id`` on a
+    finance workbook's manifest entry and no signature on the workbook. Caught
+    by the test that pins the two to each other rather than by reading the
+    file, which is the only way that gap is visible — the manifest and the
+    document disagreed and both looked fine alone.
+
+    Inserted before the first *hidden* section rather than appended. A
+    signature is the last thing on the readable surface and "Supporting facts"
+    is not on it; appending would have put the sign-off underneath the
+    fact-provenance appendix, which is nowhere a signature goes.
+    """
+    signoff = _signoff(world, list(world.facts), intent)
+    if signoff is None:
+        return ir
+    sections = list(ir.sections)
+    cut = next(
+        (index for index, section in enumerate(sections) if section.hidden), len(sections)
+    )
+    sections.insert(cut, signoff)
+    approver = world.people.by_id(intent.approver_id) if intent.approver_id else None
+    return ir.model_copy(update={
+        "sections": sections,
+        "metadata": {
+            **ir.metadata,
+            "approver": approver.name if approver else "",
+            "approver_title": approver.title if approver else "",
+        },
+    })

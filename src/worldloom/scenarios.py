@@ -1314,6 +1314,12 @@ class Reorganisation:
             units=(unit,),
             at=at,
             period=self.period,
+            # Access follows the post. A divisional MD is named on the finance
+            # policy so they can read — and sign — their own division's close
+            # pack, and a handover that moved the title without moving the
+            # access left the corpus recording a signature from somebody it
+            # also recorded as unable to open the document.
+            policies=world._access_policies,
         )
 
         from .recipe import with_step
@@ -1324,6 +1330,7 @@ class Reorganisation:
             people=change.people,
             business_units=change.business_units,
             roles=change.roles,
+            access_policies=change.access_policies,
             artifact_intents=_personnel_notice(minter, change, _announcer(world, change), self.period),
             period=self.period,
             recipe=with_step(

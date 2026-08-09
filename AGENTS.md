@@ -386,6 +386,36 @@ has left with nobody named in their place. Counts are a budget, not a quota: a
 small world has fewer corrections to be stale about and the pass takes what it
 can support.
 
+### Who signed it
+
+Every document was authored and none of them approved, which is not how a
+company's archive works: "who approved the March pack for Fuel and Convenience"
+is the first question a real reader asks. A signed document now carries an
+**Approval** block — prepared by, approved by, name, role, date — in Markdown,
+DOCX, PDF, PPTX and as a worksheet in XLSX. Ten distinct people were named
+across an eight-division corpus before; nineteen after.
+
+Who signs what is a table per vertical (`_APPROVED_BY` in each planner), because
+who signs a prudential return is an argument about banking rather than a rule
+about documents. The divisional close commentary is the one approval that fans
+out with the company: eight divisions means eight different managing directors
+signing eight different documents.
+
+**Absence is a claim.** A ServiceNow ticket has an assignee, an email thread a
+sender, a calendar is issued rather than approved; banking's RWA working paper
+is unsigned *because* it is the contested-authority distractor, and internal
+audit's review carries the Chief Internal Auditor's name and no countersignature
+at all. A corpus where everything is signed is as unlike a real archive as one
+where nothing is.
+
+`validate.approvals` holds a signature to being one somebody could have given —
+the approver exists, is not the author, and is permitted by the document's own
+access policy. It found two real defects the day it existed and a third the
+first time a unit changed hands, which is why `personnel.promote` now carries
+the post's access to whoever holds it. Added, never substituted: the archive is
+historical and the policy is current state, so striking a name off today would
+retroactively invalidate every signature that person ever gave.
+
 **`--locale`** puts the corpus somewhere. It reaches the *figure grammar*,
 corpus-wide, so the DOCX, the Markdown, the PPTX and the retrieval index all
 spell one number one way — `1.234,50` and `-1.234` in Germany, where before

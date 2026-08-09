@@ -59,6 +59,29 @@ from .models import (
 )
 
 MONEY_FORMAT = "#,##0.00;(#,##0.00)"
+
+#: Who signs each document of the purchase cycle, by role key
+#: (`documents.approver_of`).
+#:
+#: Procurement is where a signature is not decoration: a three-way match
+#: exception that nobody approved is a payment nobody authorised, and this
+#: vertical exists to pose exactly that question. The **exception report** and
+#: the **payment approval memo** therefore carry the chief procurement officer's
+#: signature and the payables lead's respectively, one level above whoever
+#: raised them.
+#:
+#: The **supplier invoice** has no row and never will: it is the supplier's own
+#: claim, posted rather than agreed, and a signature on it would assert the
+#: group accepted a document it is in the middle of disputing. "Posted, not
+#: agreed — the difference between those two words is the whole of this
+#: vertical", as the intent that plans it already says.
+_APPROVED_BY: dict[str, str] = {
+    "purchase_order": "chief_procurement",
+    "goods_receipt_note": "category_manager",
+    "match_exception_report": "chief_procurement",
+    "payment_approval_memo": "chief_procurement",
+    "vendor_master_change": "financial_controller",
+}
 COUNT_FORMAT = "#,##0"
 RATE_FORMAT = "#,##0"
 
@@ -92,6 +115,9 @@ def artifact_intents(
             domain=domain,
             audience=audience,
             author_id=author,
+            approver_id=documents.approver_of(
+                roles, artifact_type, author, _APPROVED_BY
+            ),
             triggered_by=events,
             required_fact_ids=facts,
             size_profile=size,  # type: ignore[arg-type]

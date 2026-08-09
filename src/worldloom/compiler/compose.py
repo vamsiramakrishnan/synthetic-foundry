@@ -77,6 +77,16 @@ _COMPONENT_CAP: dict[SizeClass, int] = {
     "long": 12,
 }
 
+#: Beat keys that are part of the document rather than part of its argument,
+#: and are therefore outside the size-class budget above.
+#:
+#: One entry, and it should stay hard to add to: everything a reader would call
+#: content belongs inside the cap, or the cap stops meaning anything. What
+#: qualifies is a block that is fully resolved before composition, asks the
+#: narrator for nothing, and would be identical in a document that said the
+#: opposite — a signature block is all three.
+_FURNITURE: frozenset[str] = frozenset({"approval"})
+
 
 class CompositionError(ValueError):
     """A plan this module cannot satisfy, and which part of it could not be met.
@@ -250,7 +260,18 @@ def compose(plan: ArtifactPlan, *, fmt: str, rng: Rng | None = None) -> Composit
     project.
     """
     density = _DENSITY_BY_PROFILE[plan.density_profile]
-    cap = _COMPONENT_CAP[plan.size_class]
+    # A size class caps how much a document *says*, and furniture says nothing.
+    # The signature block (`documents._signoff`) is two names, two titles and a
+    # date, fully resolved, with no prose to write and no argument to make —
+    # counting it pushed `meeting_minutes` at size class "small" from four
+    # components to five and refused to compose an artifact that had not grown
+    # by a single sentence. Exempted rather than paid for by raising the cap,
+    # for the reason stated at the refusal below: raising "small" to five would
+    # move a band whose value is set by the outlines `documents.py` ships, to
+    # make room for something that is not an outline section at all.
+    cap = _COMPONENT_CAP[plan.size_class] + sum(
+        1 for beat in plan.beats if beat.key in _FURNITURE
+    )
 
     # -- 1. one component per beat, in plan order --------------------------
     selected: list[tuple[NarrativeBeat, ComponentSpec]] = []

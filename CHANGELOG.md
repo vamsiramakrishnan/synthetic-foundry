@@ -7,6 +7,60 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Somebody signed it
+
+- **`ArtifactIntent.approver_id`** — every document in this corpus was authored
+  and none of them was approved, which is not how a company works and, more to
+  the point, is not how a company's *archive* works. "Who approved the March
+  pack for Fuel and Convenience" is a question every real reader asks and no
+  artifact here could answer. A signed document now carries an **Approval**
+  block — prepared by, approved by, name, role and date — in Markdown, DOCX,
+  PDF, PPTX and as a worksheet in XLSX.
+- Measured on an eight-division retailer: **10 distinct people** named across
+  the corpus before, **19** after. The divisional close commentary is the one
+  approval that fans out with the company — widen a retailer to eight divisions
+  and eight *different* managing directors sign eight different documents.
+- Who signs what is a per-vertical table (`_APPROVED_BY` in each planner),
+  because who signs a prudential return is an argument about banking. All four
+  now have one: retail's close, banking's capital return, insurance's contested
+  reserve position (the actuary's report over the CFO's signature, the CFO's
+  margin memo over the actuary's), procurement's match exception.
+- **Absence is a claim.** A ServiceNow ticket has an assignee, an email thread
+  has a sender, a calendar is issued rather than approved, banking's RWA working
+  paper is unsigned *because* it is the contested-authority distractor, and
+  internal audit's review carries the Chief Internal Auditor's name and no
+  countersignature at all. A corpus where everything is signed is as unlike a
+  real archive as one where nothing is.
+- **`validate.approvals`** — a signature has to be one somebody could have
+  given: the approver exists, is not the author, and is permitted by the
+  document's own access policy. It found two real defects the day it existed.
+  Eight divisional MDs were signing finance-audience documents the policy would
+  not have let them open, and the CEO was signing a technology-audience
+  remediation review for the same reason; both policies now name them, the
+  second as a rule (there is no restricted document a chief executive may not
+  read) rather than as a patch.
+- **Access follows the post.** A reorganisation moved a division's title
+  without moving its access, so the corpus recorded a signature from somebody it
+  also recorded as unable to open the document. `personnel.promote` now carries
+  the post's access to whoever holds it — *added* and never substituted, because
+  the archive is historical and the policy is current state, and striking a name
+  off today would retroactively invalidate every signature that person ever
+  gave. Measured: substituting produced five violations on a six-period history
+  where appending produces none.
+- A signature block is **furniture, not content**: fully resolved at plan time,
+  no prose to write, identical in a document that said the opposite. So it costs
+  the narration loop nothing and is exempt from the size-class component budget
+  (`compose._FURNITURE`) — counting it refused to compose a `meeting_minutes`
+  that had not grown by a single sentence.
+- Baseline retrieval moved 23 → 22 at @5, `numerical_comparison` 6/8 → 5/8. Two
+  names and a date per document is more text to rank against and no more of the
+  text a figure question wants, so the corpus got harder for a keyword baseline
+  by getting more like a real archive. A signature block that made retrieval
+  *easier* would mean the baseline was matching on furniture.
+- No default moved that was not meant to: a corpus with no approvals renders
+  exactly as it did, `validate.approvals` scores zero out of zero on it, and a
+  signed corpus replays byte-identical from its own recipe.
+
 ### A synthesised role reports to somebody who does its job
 
 - **`roles.from_shape`** dealt each role's function by position in the tree and

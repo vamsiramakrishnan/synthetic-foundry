@@ -522,6 +522,25 @@ class ArtifactIntent(Model):
     domain: str
     audience: str
     author_id: str
+    approver_id: str | None = None
+    """Who signed it off, when the document is one that gets signed off.
+
+    The corpus's documents were all authored and none of them approved, which
+    is not how a company works and, more to the point, is not how a company's
+    *archive* works: "who approved the March pack for Fuel and Convenience" is
+    a question every real reader asks and no artifact here could answer.
+
+    ``None`` is not an oversight and is the value for most types — a ServiceNow
+    ticket has an assignee, an email thread has a sender, a republished
+    calendar is issued rather than approved. Which types get a signature is
+    ``planning._APPROVED`` and is a claim about what kind of document it is.
+
+    An id rather than a name, resolved against the same roster ``author_id``
+    is, because the approver is a person in this world with a function an
+    access policy can read — and ``validate.approvals`` holds the pair to that:
+    an approver who could not open what they signed is a signature nobody could
+    have given.
+    """
     triggered_by: list[str] = Field(default_factory=list)
     required_fact_ids: list[str] = Field(default_factory=list)
     size_profile: Literal["small", "medium", "long"] = "small"
@@ -978,6 +997,10 @@ class ArtifactManifestEntry(Model):
     path: str
     media_type: str
     author_id: str
+    approver_id: str | None = None
+    """Who signed it off. ``None`` for a type that is not signed off — see
+    ``ArtifactIntent.approver_id``, which this copies verbatim so the manifest
+    can answer "who approved this" without reopening the file."""
     audience: str
     created_at: datetime
     authority: Authority

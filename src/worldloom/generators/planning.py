@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from .. import documents
 from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact
 from ..roles import unit_role_key
@@ -106,6 +107,46 @@ FILING_BUNDLES: dict[str, str] = {
                        " component behind it; empty on a clean close, and"
                        " withheld under `--actors` for the reason the four"
                        " owner reports below withhold it",
+}
+
+
+#: Which role signs off each artifact type, by role key.
+#:
+#: The corpus's documents were all authored and none of them approved, which is
+#: not how a company works and, more to the point, is not how a company's
+#: *archive* works: "who approved the March pack for Fuel and Convenience" is a
+#: question every real reader asks and no artifact here could answer.
+#:
+#: A closed table rather than "the author's manager", and the reason is that
+#: approval is not a reporting line. A variance memo is signed by the CFO
+#: because the CFO owns the number, not because the controller reports to them;
+#: a remediation whose finding is an ownership gap is signed by the chief
+#: executive rather than by the CIO whose team the gap is in, which is the same
+#: argument `remediation_scope_review` already makes about who *writes* it.
+#: Reading the two tables side by side is how a reader checks that argument.
+#:
+#: **Absence is a claim too.** A ServiceNow ticket has an assignee, an email
+#: thread has a sender, a republished calendar is issued rather than approved,
+#: a working note is nobody's but its writer's, and an executive summary *is*
+#: the executive's own. Those types are missing from this table deliberately:
+#: a corpus where everything carries a signature is as unlike a real archive as
+#: one where nothing does.
+#:
+#: `member_report` is the interesting omission. A mutual's report to its
+#: members is approved by the board, and this world has no board — inventing a
+#: signature for it would put a name on a document nobody in the roster could
+#: have signed.
+_APPROVED_BY: dict[str, str] = {
+    "finance_workbook": "controller",
+    "cfo_variance_memo": "cfo",
+    "meeting_minutes": "cfo",
+    "incident_rca": "cio",
+    "service_impact_assessment": "cio",
+    "remediation_scope_review": "ceo",
+    "peak_trading_review": "ceo",
+    "audit_committee_pack": "ceo",
+    "sponsor_pack": "ceo",
+    "ministerial_brief": "ceo",
 }
 
 
@@ -240,7 +281,7 @@ def artifact_intents(
     def intent(artifact_type: str, domain: str, audience: str, author: str,
                facts: list[str], events: list[str], size: str, rationale: str,
                *, supersedes: str | None = None, derived_from: list[str] | None = None,
-               revises: str | None = None) -> None:
+               revises: str | None = None, approved_by: str | None = None) -> None:
         intents.append(
             ArtifactIntent(
                 id=minter.next("ART"),
@@ -248,6 +289,9 @@ def artifact_intents(
                 domain=domain,
                 audience=audience,
                 author_id=author,
+                approver_id=documents.approver_of(
+                    roles, artifact_type, author, _APPROVED_BY, role_key=approved_by,
+                ),
                 triggered_by=events,
                 required_fact_ids=facts,
                 size_profile=size,  # type: ignore[arg-type]
@@ -380,7 +424,13 @@ def artifact_intents(
                    roles[unit_role_key(unit_key, "_bp")],
                    unit_facts, [episode.close_event_id], "small",
                    "Each division's close is argued by the person who partners it, "
-                   "not only summed by the centre.")
+                   "not only summed by the centre.",
+                   # Signed by *this* division's managing director, which is the
+                   # one approval in the corpus that fans out with the company:
+                   # widen a retailer to eight divisions and eight different
+                   # people sign eight different documents. `_APPROVED_BY` is a
+                   # table keyed by type and has no way to say which one.
+                   approved_by=unit_role_key(unit_key, "_md"))
 
     # High-density fan-out: one layer below the unit, only once a build has
     # asked for it. A quarter of each unit's categories, ranked by revenue and
@@ -419,7 +469,8 @@ def artifact_intents(
                        roles[unit_role_key(unit_key, "_bp")],
                        category_facts, [episode.close_event_id], "small",
                        "At high density the same business partner also argues the "
-                       "categories that moved the unit, not only its total.")
+                       "categories that moved the unit, not only its total.",
+                       approved_by=unit_role_key(unit_key, "_md"))
 
     if episode.had_incident and not actor_authored:
         k = episode.keys

@@ -568,6 +568,7 @@ class World:
         systems: tuple[System, ...] = (),
         services: tuple[Service, ...] = (),
         sites: tuple[Site, ...] = (),
+        access_policies: tuple[AccessPolicy, ...] = (),
         roles: dict[str, str] | None = None,
         period: str | None = None,
         recipe: dict[str, Any] | None = None,
@@ -620,7 +621,13 @@ class World:
             _categories=self._categories,
             _sites=_merged(self._sites, sites),
             _personas=self._personas,
-            _access_policies=self._access_policies,
+            # Merged by id, like people and units and for the same reason: a
+            # policy that changes is the same policy, not a second one. What
+            # changes it is a post changing hands — access follows the post
+            # (`personnel.OrgChange.access_policies`) — and a world that
+            # appended a second POLICY-0002 instead would have two answers to
+            # "who may open this" and no way to say which is current.
+            _access_policies=_merged(self._access_policies, access_policies),
             _lore=self._lore,
             _facts=self._facts + facts,
             _events=self._events + events,
@@ -825,6 +832,7 @@ class World:
                     path=getattr(item, "path", ""),
                     media_type=getattr(item, "media_type", "application/x-worldloom-ir"),
                     author_id=intent.author_id,
+                    approver_id=intent.approver_id,
                     audience=intent.audience,
                     created_at=documents.written_at(intent, facts),
                     authority=authority,
