@@ -45,6 +45,27 @@ reproducibility even when no API moved.
   is derived from the manifest, the roster and the access policies, the corpus
   itself is untouched, and an unrendered corpus is refused by name rather than
   laid out as empty folders.
+- **`--noise none|lived_in|neglected`** makes the drive untidy the way real
+  drives are: `Copy of X`, a document dragged into `Shared/` or `_Inbox/`,
+  somebody's `X FINAL` beside the real one, an `_Archive/` leftover. Measured:
+  249 files become **336, of which 87 are labelled junk**, evenly across the
+  four kinds.
+- Every extra file is a **byte-identical copy of real corpus content**, never
+  invented text — a drive's junk is not fabricated documents, it is the same
+  documents saved again in the wrong place under the wrong name, and that is
+  what makes it hard: a retriever cannot tell the copy from the original by
+  reading it. A copy carries the permissions of what it copies, so a misfiling
+  is somewhere nobody would look and still readable only by the people the
+  original was.
+- Every junk file is **labelled** in `permissions.jsonl` with its kind and what
+  it duplicates. That is the difference between this and simply making a mess:
+  a benchmark scored against a drive it cannot account for cannot tell "found
+  the wrong copy" from "was wrong". Seeded off the world, so a corpus's drive is
+  the same drive every time — distractors that moved between runs would not be
+  a benchmark.
+- Filesystem noise, deliberately distinct from `--messiness`, which is content
+  noise. A stale page is wrong; a duplicate is not wrong at all, it is merely
+  there twice. A realistic archive wants both.
 
 ### Generation — the month-end model was empty in every multi-period corpus
 

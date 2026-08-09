@@ -97,6 +97,31 @@ Nothing is invented: every folder, title, owner and reader is derived from the
 manifest, the roster and the access policies, and the corpus itself is not
 touched.
 
+```bash
+worldloom workspace ./corpus -o ./drive --noise neglected
+```
+
+`--noise` makes the drive untidy the way real drives are: `Copy of X`, a
+document dragged into `Shared/` or `_Inbox/`, somebody's `X FINAL` beside the
+real one, an `_Archive/` leftover. Every extra file is a **byte-identical copy
+of real corpus content**, never invented text — a drive's junk is not fabricated
+documents, it is the same documents saved again in the wrong place under the
+wrong name, and that is exactly what makes it hard: a retriever cannot tell the
+copy from the original by reading it. A copy carries the permissions of what it
+copies, so a misfiling is somewhere nobody would look and still readable only by
+the people the original was.
+
+Every junk file is **labelled** in `permissions.jsonl` with what kind it is and
+what it duplicates. That is the whole difference between this and simply making
+a mess: a benchmark scored against a drive it cannot account for cannot tell
+"the assistant found the wrong copy" from "the assistant was wrong", and those
+are different failures.
+
+This is *filesystem* noise and deliberately not the same thing as
+`--messiness`, which is content noise — a page nobody updated, two documents
+disagreeing, an author who left. Both are real and they fail differently. A
+corpus wanting a realistic archive wants both.
+
 Three more readings answer questions `validate` and `evaluate` cannot, and each
 one is a different question — read all four before calling a corpus measured:
 

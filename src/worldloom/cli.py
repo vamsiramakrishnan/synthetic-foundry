@@ -4500,6 +4500,17 @@ def workspace(
     corpus: Path = typer.Argument(..., help="A rendered corpus directory."),
     out: Path = typer.Option(..., "--out", "-o", help="Where to write the tree."),
     overwrite: bool = typer.Option(False, "--overwrite", help="Replace an existing tree."),
+    noise: str = typer.Option(
+        "none", "--noise",
+        help=(
+            "How untidy the drive is: none, lived_in or neglected. Adds copies, "
+            "misfilings, personal versions and archive leftovers — every one a "
+            "duplicate of real corpus content, never invented text, because a "
+            "drive's junk is the same documents saved again in the wrong place "
+            "under the wrong name. Each is labelled in permissions.jsonl, so a "
+            "benchmark can tell 'found the wrong copy' from 'was wrong'."
+        ),
+    ),
 ) -> None:
     """Lay a rendered corpus out as a shared drive, with its permissions.
 
@@ -4525,18 +4536,19 @@ def workspace(
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
     try:
-        written = workspace_module.write(world, out, overwrite=overwrite)
+        written = workspace_module.write(world, out, overwrite=overwrite, noise=noise)
     except (FileExistsError, ValueError) as exc:
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
-    reading = workspace_module.summarise(world)
+    reading = workspace_module.summarise(world, noise=noise)
     console.print(
         f"[green]✓[/green] {reading['files']} file(s) in {reading['folders']} folder(s),"
         f" {reading['deepest']} deep, under [bold]{written}[/bold]\n"
         f"[dim]{reading['restricted']} restricted ·"
         f" {reading['distinct_owners']} distinct owner(s) ·"
-        f" {reading['superseded']} superseded[/dim]"
+        f" {reading['superseded']} superseded ·"
+        f" {reading['junk']} labelled junk[/dim]"
     )
 
 

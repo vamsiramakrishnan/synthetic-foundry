@@ -639,5 +639,6 @@ worldloom workspace <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
+| `--noise` | How untidy the drive is: none, lived_in or neglected. Adds copies, misfilings, personal versions and archive leftovers — every one a duplicate of real corpus content, never invented text, because a drive's junk is the same documents saved again in the wrong place under the wrong name. Each is labelled in permissions.jsonl, so a benchmark can tell 'found the wrong copy' from 'was wrong'. |
 | `--out`, `-o` | Where to write the tree. |
 | `--overwrite` | Replace an existing tree. |

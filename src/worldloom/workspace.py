@@ -40,7 +40,33 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-__all__ = ["Placed", "domain_for", "email_for", "layout", "write"]
+__all__ = ["NOISE", "Placed", "domain_for", "email_for", "layout", "write"]
+
+
+#: How untidy the drive is, and how many extra files each level puts on it, as
+#: a fraction of the real ones.
+#:
+#: This is *filesystem* noise and deliberately not the same thing as
+#: ``worldloom.messiness``, which is content noise — a page nobody updated, two
+#: documents disagreeing, an author who left. Both are real and they fail
+#: differently: a stale page is wrong, a duplicate is not wrong at all, it is
+#: merely there twice. A corpus wanting a realistic archive wants both.
+#:
+#: Every extra file is a *copy of real corpus content*, never invented text. A
+#: drive's junk is not fabricated documents; it is the same documents saved
+#: again in the wrong place under the wrong name, and that is exactly what makes
+#: it hard — a retriever cannot tell the copy from the original by reading it.
+NOISE: dict[str, float] = {"none": 0.0, "lived_in": 0.12, "neglected": 0.35}
+
+#: The shapes junk takes, in the order a round applies them.
+#:
+#: Ordered and closed, because the *kind* of junk is recorded per file and a
+#: benchmark that could not tell a duplicate from a misfiling could not score
+#: itself. Every one of these is something a real drive has and none of them is
+#: an error: somebody duplicated a file, somebody dragged one into the wrong
+#: folder, somebody saved a version with their name on it, somebody archived a
+#: copy and left the original.
+_NOISE_KINDS: tuple[str, ...] = ("copy", "misfiled", "versioned", "archived")
 
 
 #: Which shelf a document type sits on, and the folder it lands in.
@@ -236,6 +262,18 @@ class Placed:
     created: str
     superseded_by: str | None = None
     """The path of the file that replaced this one, when one did."""
+    noise: str | None = None
+    """What kind of junk this file is, or ``None`` for a real one.
+
+    Recorded rather than hidden, and that is the whole difference between this
+    and simply making a mess. A benchmark scored against a drive it cannot
+    account for is a benchmark that cannot tell "the assistant found the wrong
+    copy" from "the assistant was wrong", and those are different failures. The
+    junk is indistinguishable *by reading it* — which is the point — and
+    perfectly distinguishable in the manifest.
+    """
+    copy_of: str | None = None
+    """The path this one duplicates, when it duplicates one."""
 
 
 def _folder(artifact: Any, period: str | None) -> str:
@@ -378,7 +416,86 @@ def layout(world: Any) -> tuple[Placed, ...]:
     )
 
 
-def write(world: Any, destination: str | Path, *, overwrite: bool = False) -> Path:
+#: Where a misfiled document lands, and whose folder it was dragged into.
+#:
+#: Two shapes, because real drives have both: a company-wide dumping ground
+#: nobody owns, and somebody's personal folder that everybody can see into.
+_STRAY = ("Shared", "_Inbox")
+
+#: What somebody appends when they save their own version.
+_VERSION_MARKS = ("FINAL", "v2", "draft", "REVIEWED", "old")
+
+
+def _noisy(entries: tuple[Placed, ...], *, level: str, seed: int) -> tuple[Placed, ...]:
+    """*entries*, plus the junk a drive of this untidiness carries.
+
+    Seeded off the world's own seed so a corpus's drive is the same drive every
+    time — a benchmark whose distractors moved between runs would not be a
+    benchmark. Drawn over the entries in path order rather than in draw order,
+    for the reason every ordering decision here is made: the choice is seeded,
+    the sequence is not.
+    """
+    from .rng import Rng
+
+    share = NOISE.get(level)
+    if share is None:
+        raise ValueError(
+            f"unknown noise level {level!r}; known: {', '.join(NOISE)}."
+            " `none` is the default and adds nothing."
+        )
+    if not share or not entries:
+        return entries
+
+    rng = Rng(seed).derive("workspace/noise")
+    ordered = sorted(entries, key=lambda e: e.path)
+    wanted = max(1, round(len(ordered) * share))
+    picked = sorted(rng.sample(range(len(ordered)), min(wanted, len(ordered))))
+
+    out = list(entries)
+    used = {e.path.lower() for e in entries}
+    for n, index in enumerate(picked):
+        source = ordered[index]
+        kind = _NOISE_KINDS[n % len(_NOISE_KINDS)]
+        folder, _, name = source.path.rpartition("/")
+        stem, extension = Path(name).stem, Path(name).suffix
+        draw = rng.derive(f"junk/{n}")
+
+        if kind == "copy":
+            path = f"{folder}/Copy of {stem}{extension}"
+        elif kind == "misfiled":
+            path = f"{draw.choice(_STRAY)}/{stem}{extension}"
+        elif kind == "versioned":
+            path = f"{folder}/{stem} {draw.choice(_VERSION_MARKS)}{extension}"
+        else:
+            # An archive folder at the top of the shelf, not beside the file:
+            # somebody tidied a level and stopped.
+            shelf = folder.split("/")[0]
+            path = f"{shelf}/_Archive/{stem}{extension}"
+
+        bump = 1
+        candidate = path
+        while candidate.lower() in used:
+            bump += 1
+            head, _, tail = path.rpartition(".")
+            candidate = f"{head} ({bump}).{tail}" if head else f"{path} ({bump})"
+        used.add(candidate.lower())
+
+        out.append(Placed(
+            artifact_id=source.artifact_id, path=candidate,
+            title=Path(candidate).stem, owner=source.owner,
+            # A copy carries the permissions of what it copies. That is what
+            # makes a misfiled document interesting rather than merely untidy:
+            # it is somewhere nobody would look and still readable only by the
+            # people the original was readable by, so an assistant that finds it
+            # has found something it was allowed to find.
+            readers=source.readers, policy=source.policy, created=source.created,
+            noise=kind, copy_of=source.path,
+        ))
+    return tuple(out)
+
+
+def write(world: Any, destination: str | Path, *, overwrite: bool = False,
+          noise: str = "none") -> Path:
     """Write the workspace tree and its permission table. Returns the root.
 
     Copies the rendered files rather than re-rendering them, so a workspace is
@@ -412,7 +529,8 @@ def write(world: Any, destination: str | Path, *, overwrite: bool = False) -> Pa
     manifest = {a.id: a for a in world.artifacts}
     rows: list[dict[str, Any]] = []
     written = 0
-    for entry in layout(world):
+    entries = _noisy(layout(world), level=noise, seed=world.seed or 0)
+    for entry in entries:
         artifact = manifest[entry.artifact_id]
         if not artifact.path:
             # Compiled but not rendered in the formats this corpus asked for —
@@ -437,6 +555,8 @@ def write(world: Any, destination: str | Path, *, overwrite: bool = False) -> Pa
             "created": entry.created,
             **({} if entry.superseded_by is None
                else {"superseded_by": entry.superseded_by}),
+            **({} if entry.noise is None
+               else {"noise": entry.noise, "copy_of": entry.copy_of}),
         })
 
     (target / "permissions.jsonl").write_text(
@@ -451,9 +571,9 @@ def write(world: Any, destination: str | Path, *, overwrite: bool = False) -> Pa
     return target
 
 
-def summarise(world: Any) -> Mapping[str, Any]:
+def summarise(world: Any, *, noise: str = "none") -> Mapping[str, Any]:
     """What the layout came out as, for a caller that wants to print it."""
-    entries = layout(world)
+    entries = _noisy(layout(world), level=noise, seed=world.seed or 0)
     folders = {entry.path.rpartition("/")[0] for entry in entries}
     restricted = [e for e in entries if e.readers]
     return {
@@ -463,4 +583,5 @@ def summarise(world: Any) -> Mapping[str, Any]:
         "restricted": len(restricted),
         "distinct_owners": len({entry.owner for entry in entries if entry.owner}),
         "superseded": sum(1 for e in entries if e.superseded_by),
+        "junk": sum(1 for e in entries if e.noise),
     }

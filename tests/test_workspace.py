@@ -249,3 +249,83 @@ def test_an_unrendered_corpus_is_refused_by_name(tmp_path) -> None:
 
 def test_the_layout_is_the_same_every_time(rendered) -> None:
     assert workspace.layout(rendered) == workspace.layout(rendered)
+
+
+# ---------------------------------------------------------------------------
+# 6. Junk, labelled
+# ---------------------------------------------------------------------------
+
+
+def test_a_tidy_drive_is_the_default(rendered) -> None:  # type: ignore[no-untyped-def]
+    assert workspace.summarise(rendered)["junk"] == 0
+    assert all(e.noise is None for e in workspace._noisy(
+        workspace.layout(rendered), level="none", seed=1,
+    ))
+
+
+def test_junk_is_a_copy_of_real_content_and_never_invented_text(rendered, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A drive's junk is not fabricated documents. It is the same documents
+    saved again in the wrong place under the wrong name, which is exactly what
+    makes it hard: a retriever cannot tell the copy from the original by reading
+    it."""
+    root = workspace.write(rendered, tmp_path / "messy", noise="neglected")
+    rows = [json.loads(line) for line in (root / "permissions.jsonl").read_text().splitlines()]
+    junk = [r for r in rows if r.get("noise")]
+    assert junk, "asked for a neglected drive and got a tidy one"
+    for row in junk:
+        original = next(r for r in rows if r["path"] == row["copy_of"])
+        assert (root / row["path"]).read_bytes() == (root / original["path"]).read_bytes()
+
+
+def test_every_junk_file_says_what_kind_it_is(rendered, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The whole difference between this and simply making a mess. A benchmark
+    scored against a drive it cannot account for cannot tell "the assistant
+    found the wrong copy" from "the assistant was wrong"."""
+    root = workspace.write(rendered, tmp_path / "messy2", noise="lived_in")
+    rows = [json.loads(line) for line in (root / "permissions.jsonl").read_text().splitlines()]
+    kinds = {r["noise"] for r in rows if r.get("noise")}
+    assert kinds and kinds <= set(workspace._NOISE_KINDS)
+    on_disk = {
+        str(p.relative_to(root)) for p in root.rglob("*")
+        if p.is_file() and p.name != "permissions.jsonl"
+    }
+    assert {r["path"] for r in rows} == on_disk, "a file the table does not account for"
+
+
+def test_a_copy_carries_the_permissions_of_what_it_copies(rendered) -> None:  # type: ignore[no-untyped-def]
+    """What makes a misfiling interesting rather than merely untidy: it is
+    somewhere nobody would look and still readable only by the people the
+    original was readable by, so an assistant that finds it has found something
+    it was allowed to find."""
+    entries = workspace._noisy(workspace.layout(rendered), level="neglected", seed=8128)
+    by_path = {e.path: e for e in entries}
+    for entry in entries:
+        if entry.noise is None:
+            continue
+        source = by_path[entry.copy_of]
+        assert entry.readers == source.readers
+        assert entry.policy == source.policy
+
+
+def test_more_noise_means_more_files_and_the_real_ones_are_untouched(rendered) -> None:  # type: ignore[no-untyped-def]
+    clean = workspace.layout(rendered)
+    lived = workspace._noisy(clean, level="lived_in", seed=8128)
+    bad = workspace._noisy(clean, level="neglected", seed=8128)
+    assert len(clean) < len(lived) < len(bad)
+    # The real files are the same files at every level — noise is added, never
+    # substituted, or a corpus would answer differently depending on how untidy
+    # its drive was asked to be.
+    assert [e for e in lived if e.noise is None] == list(clean)
+    assert [e for e in bad if e.noise is None] == list(clean)
+
+
+def test_the_same_drive_every_time(rendered) -> None:  # type: ignore[no-untyped-def]
+    """A benchmark whose distractors moved between runs would not be one."""
+    first = workspace._noisy(workspace.layout(rendered), level="neglected", seed=8128)
+    again = workspace._noisy(workspace.layout(rendered), level="neglected", seed=8128)
+    assert first == again
+
+
+def test_an_unknown_noise_level_is_refused_naming_what_is_on_offer(rendered) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(ValueError, match="unknown noise level"):
+        workspace._noisy(workspace.layout(rendered), level="chaotic", seed=1)
