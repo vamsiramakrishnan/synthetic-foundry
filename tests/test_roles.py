@@ -519,3 +519,87 @@ def test_a_synthesised_spine_key_sits_where_its_engine_files_it() -> None:
     )
     placed = {role.key: role.function for role in unit_table}
     assert placed["gm_md"] in {"Executive", "Operations"}
+
+
+def test_an_invented_role_reports_to_somebody_who_does_its_job() -> None:
+    """The measurement: 319 of 407 synthesised people, 78%, reported across a
+    function boundary.
+
+    Round-robin dealt the function by position in the tree and the manager by
+    position in the level, and the two had nothing to do with each other. It
+    produced a "Head of Audit" reporting to a Merchandising Systems Analyst and
+    a "Head of Executive" reporting to a platform lead. Nobody has that company,
+    and it stops being cosmetic the moment anyone below the spine authors a
+    document: a one-to-one minuted between a finance manager and their
+    audit-function manager is noise wearing a document's clothes.
+    """
+    from worldloom import roles as roles_module
+
+    for engine in ("retail", "banking", "insurance"):
+        # The engine's own functions, which is what `company._functions_of`
+        # passes when a description does not name its departments — so this is
+        # the realistic case rather than a contrived one.
+        wanted = []
+        for role in roles_module._shipped(engine):
+            if role.function not in wanted:
+                wanted.append(role.function)
+        table = roles_module.from_shape(
+            functions=wanted, headcount=420, span=8, levels=6, engine=engine,
+        )
+        function_of = {role.key: role.function for role in table}
+        shipped = {role.key for role in roles_module._shipped(engine)}
+        crossed = [
+            role for role in table
+            if role.key not in shipped
+            and role.manager not in (None, ROOT)
+            and function_of[role.manager] != role.function
+        ]
+        assert not crossed, f"{engine}: {[r.key for r in crossed[:5]]}"
+
+
+def test_making_a_subtree_coherent_does_not_move_a_single_reporting_line() -> None:
+    """Inheritance rather than "pick a same-function parent", and this is why.
+
+    Choosing the manager by function unbalances the spans — a function with two
+    managers at a level would take a third of the tree — and `measure`/`review`
+    check the widest span against what the caller claimed, so a shape that was
+    accepted yesterday would be refused today. Inheriting instead leaves the
+    tree's shape byte-identical and moves only the labels.
+    """
+    from worldloom import roles as roles_module
+
+    table = roles_module.from_shape(
+        functions=["Executive", "Operations", "Commercial"],
+        headcount=420, span=8, levels=6, engine="retail",
+    )
+    shape = roles_module.measure(table)
+    assert shape["headcount"] == 420
+    assert shape["widest_span"] <= 8
+    # The invariant that matters is that every key still hangs where it hung.
+    # Pinned as a property of the pairing rather than as a golden list: the
+    # manager comes from `parents[index % len(parents)]` and nothing in the
+    # function rule may reach it.
+    assert [role.manager for role in table] == [
+        role.manager for role in roles_module.from_shape(
+            functions=["Audit", "Risk"],  # a different rotation entirely
+            headcount=420, span=8, levels=6, engine="retail",
+        )
+    ]
+
+
+def test_the_caller_s_functions_still_seed_the_organisation() -> None:
+    """Inheritance must not turn `functions` into a list nobody reads.
+
+    A synthesised role hanging off the root has no function to inherit — the
+    root is Executive and everyone would be — so there the caller's rotation
+    still decides, and each subtree carries its seed downwards.
+    """
+    from worldloom import roles as roles_module
+
+    table = roles_module.from_shape(
+        functions=["Claims", "Actuarial", "Distribution"],
+        # Small enough that the spine does not fill the first level on its own.
+        headcount=40, span=6, levels=3, engine="retail",
+    )
+    seen = {role.function for role in table}
+    assert seen & {"Claims", "Actuarial", "Distribution"}, seen

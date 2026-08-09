@@ -7,6 +7,39 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### A synthesised role reports to somebody who does its job
+
+- **`roles.from_shape`** dealt each role's function by position in the tree and
+  each role's manager by position in the level, and the two had nothing to do
+  with each other. Measured on an eight-division retailer: **319 of 407**
+  synthesised people — 78% — reported across a function boundary. It produced a
+  "Head of Audit" reporting to a Merchandising Systems Analyst and a "Head of
+  Executive" reporting to a platform lead. Now 0 of 407.
+- A role the synthesiser invented takes its **manager's** function. Inheritance
+  rather than "pick a same-function parent", because choosing the parent by
+  function unbalances the spans — a function with two managers at a level would
+  take a third of the tree — and `measure`/`review` check the widest span
+  against what the caller claimed, so a shape accepted yesterday would be
+  refused today. The tree's shape is untouched reporting line for reporting
+  line; only the labels move.
+- Two exceptions keep `functions` a real knob. The root, or every role at depth
+  1 inherits Executive and the company is one department. And a manager whose
+  function the caller did *not* ask for: the spine's functions are the engine's
+  and a caller's list may share nothing with them, in which case there is no
+  coherent answer and the honest one is the rotation the caller chose. So
+  `functions` stays the closed vocabulary for synthesised roles, exactly as
+  documented, and coherence is what you get for asking for departments your
+  engine has — which is what `company._functions_of` passes by default.
+- Cosmetic until now; load-bearing from here. Everything below the spine is
+  about to author documents, and a one-to-one minuted between a finance manager
+  and their audit-function manager is noise wearing a document's clothes.
+- Known and not fixed here: `from_shape` still discards the spine's *own*
+  declared manager links and places spine keys breadth-first, so which
+  executives land at depth 1 decides the function mix. Retail's four Technology
+  spine keys land early and its ServiceOperations keys land deep, giving a
+  420-person retailer 159 technologists and 14 service operators. Coherent, and
+  not yet the right shape.
+
 ### The knob a corpus's size actually follows
 
 - **`worldloom.divisions`** — widen a company past the divisions its archetype

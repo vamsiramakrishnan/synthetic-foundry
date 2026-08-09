@@ -347,6 +347,10 @@ def from_shape(
         )
 
     ordered_functions = tuple(functions)
+    #: Membership only — iteration stays over `ordered_functions`, whose order
+    #: is the rotation and therefore contract. What this set decides is which
+    #: functions a synthesised role may *inherit*: see the function rule below.
+    asked_functions = frozenset(ordered_functions)
     spine_keys = [key for key in required(engine, unit_keys) if key != ROOT]
 
     # Which function a spine key sits in is *read by the engine*, so it is
@@ -407,9 +411,11 @@ def from_shape(
     pending = list(spine_keys)
     made = 0
     parents = [ROOT]
+    function_of: dict[str, str] = {ROOT: roles[0].function}
     for depth, size in enumerate(sizes[1:], start=1):
         level: list[str] = []
         for index in range(size):
+            invented = not pending
             if pending:
                 key = pending.pop(0)
             else:
@@ -420,6 +426,45 @@ def from_shape(
             # iteration order or by a seed, and this runs inside a build whose
             # output must be byte-identical on replay.
             manager = parents[index % len(parents)]
+            # Which function a role sits in, in three cases, and the middle one
+            # is the one that was wrong.
+            #
+            # A key the *engine* names keeps the function the engine gives it —
+            # task #35, and the reason is that `world._policy_for` builds access
+            # out of `allow_functions`, so a `controller` filed under
+            # Merchandising is an author who cannot read what they wrote.
+            #
+            # A key the *synthesiser invented* takes its manager's function,
+            # when that function is one the caller asked for. Round-robin by
+            # position was the rule before, and it was measured on an
+            # eight-division retailer: 319 of 407 synthesised people — 78% —
+            # reported to somebody in a different function. It produced a "Head
+            # of Audit" reporting to a Merchandising Systems Analyst and a
+            # "Head of Executive" reporting to a platform lead. Nobody has that
+            # company, and it stops being cosmetic the moment anything below
+            # the spine authors a document: a one-to-one minuted between a
+            # finance manager and their audit-function manager is noise wearing
+            # a document's clothes.
+            #
+            # Inheritance rather than "pick a same-function parent", because
+            # picking the parent by function unbalances the spans — a function
+            # with two managers at a level would take a third of the tree — and
+            # `measure`/`review` check the widest span against what was
+            # claimed, so a shape accepted yesterday would be refused today.
+            # This way the tree's *shape* is untouched, reporting line for
+            # reporting line, and only the labels move.
+            #
+            # Two exceptions, and both are what keep `functions` a real knob
+            # rather than a list nobody reads. The root, because otherwise
+            # everyone at depth 1 inherits Executive and the whole company is
+            # one department. And a manager whose own function the caller did
+            # *not* ask for — the spine's functions are the engine's and the
+            # caller's list may share nothing with them, in which case there is
+            # no coherent answer and the honest one is the rotation the caller
+            # chose. So the rule reads: `functions` stays the closed vocabulary
+            # for synthesised roles, exactly as documented, and coherence is
+            # what you get for asking for departments your engine has.
+            #
             # `.get`, not `[]`: a per-unit key (`{unit}_md`) is required for
             # whatever units this world declares and is in no shipped table, so
             # it takes the caller's rotation like any synthesised role. Falling
@@ -427,9 +472,13 @@ def from_shape(
             # engine reads it by — `assign` finds it by parsing the suffix off
             # the key, which is why renaming a unit key breaks and re-filing it
             # does not.
-            function = engine_functions.get(
+            inherited = function_of[manager] if invented and manager != ROOT else None
+            if inherited not in asked_functions:
+                inherited = None
+            function = inherited or engine_functions.get(
                 key, ordered_functions[len(roles) % len(ordered_functions)]
             )
+            function_of[key] = function
             roles.append(Role(key, _title(key, function, depth), function, manager))
             level.append(key)
         parents = level
