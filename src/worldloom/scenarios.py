@@ -424,6 +424,20 @@ class MonthEndClose:
             # these would give it the whole ledger to reach into.
             filings=filings(world),
             estate=_estate_reading(world, episode),
+            # The org builder's dated lore witnesses, so the plan can put the
+            # company's own history in a document — see the timeline block at
+            # the end of `planning.artifact_intents`.
+            milestones=tuple(f for f in world._facts if f.kind == "lore.milestone"),
+            # Counts, not collections — the same discipline as `filings` and
+            # `estate` above: the plan gates on how much of each there is, and
+            # only the compiled builders read the rows themselves.
+            estate_services=len(list(world.services)),
+            # `masterdata` is None on any world that never asked for it, which
+            # is every world the flagless CLI builds.
+            masterdata_rows=(
+                len(world.masterdata.vendors) + len(world.masterdata.customers)
+                + len(world.masterdata.skus)
+            ) if world.masterdata is not None else 0,
             # The trading year, at this period. `self.seasonality or DEFAULT`
             # is the same fallback `finance.generate` is given above, and it
             # has to be: the plan must judge the month against the same year
@@ -513,6 +527,10 @@ class MonthEndClose:
             period=self.period,
             history=world._facts,
             prior_intents=prior_intents,
+            # What the corpus already asks, so the per-episode families cannot
+            # re-mint a standing question verbatim each period. Six episodes
+            # used to mean six copies of every policy and abstention case.
+            prior_cases=world._evaluations,
             density=self.eval_density,
             # The estate, as the graph it has always been. The taxonomy owns
             # what it asks; it cannot own what it can *see*, and until this

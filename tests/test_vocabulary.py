@@ -220,6 +220,7 @@ def test_all_ten_artifact_types_compose_grammatically() -> None:
         assert composition.ok, (artifact_type, [str(v) for v in composition.violations])
         seen_types.add(artifact_type)
 
-    # Thirteen since the fan-out layer: the ten close artifacts plus minutes,
-    # the escalation thread, and per-unit commentary.
-    assert len(seen_types) == 13, f"expected all 13 artifact types, saw {sorted(seen_types)}"
+    # Fourteen since the company timeline: the ten close artifacts plus
+    # minutes, the escalation thread, per-unit commentary, and the standing
+    # history page the milestone facts finally landed in.
+    assert len(seen_types) == 14, f"expected all 14 artifact types, saw {sorted(seen_types)}"

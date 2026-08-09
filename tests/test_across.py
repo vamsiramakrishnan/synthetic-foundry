@@ -104,19 +104,21 @@ def test_the_mosaic_asks_one_worlds_worth_of_questions(worlds) -> None:
     """The finding. Every question is asked in every world, word for word.
 
     Not a threshold — the exact counts, because the point of this measurement
-    is that it cannot be read charitably. Three worlds, forty-two questions
-    each, forty-two distinct strings between them.
+    is that it cannot be read charitably. Three worlds, fifty-one questions
+    each, fifty-one distinct strings between them (the five added since the
+    last pin are the milestone-provenance family, live now that the company
+    timeline carries its facts).
     """
     reading = across.overlap(worlds)
-    assert reading.questions == 46 * len(worlds)
-    assert reading.distinct_questions == 46
-    assert reading.identical_in_every_world == 46
+    assert reading.questions == 51 * len(worlds)
+    assert reading.distinct_questions == 51
+    assert reading.identical_in_every_world == 51
     # `redundancy` is rounded to four places, so the tolerance is the rounding.
     assert reading.redundancy == pytest.approx(1 - 1 / len(worlds), abs=1e-4)
     # Every question sits in a group that spans every world, and each such
     # group is a clique: C(n, 2) pairs per distinct question.
     assert reading.questions_in_a_cross_world_group == reading.questions
-    assert reading.cross_world_pairs == 46 * len(worlds) * (len(worlds) - 1) // 2
+    assert reading.cross_world_pairs == 51 * len(worlds) * (len(worlds) - 1) // 2
 
 
 def test_the_answers_are_where_the_variety_is(worlds) -> None:

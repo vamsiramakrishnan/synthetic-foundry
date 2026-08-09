@@ -640,3 +640,65 @@ def test_pdf_table_flowable_shades_banded_cells_when_asked_directly() -> None:
     unbanded = pdf_renderer._table_flowable(table, 400.0, styles, show_bands=False)
     unbanded_fills = {cmd[3] for cmd in unbanded._bkgrndcmds}
     assert colors.HexColor(f"#{pdf_renderer._BAND_FILL[MagnitudeBand.HIGH]}") not in unbanded_fills
+
+
+# ---------------------------------------------------------------------------
+# DOCX and HTML draw the same primitives
+# ---------------------------------------------------------------------------
+#
+# These two formats declared support for `ops.causal_chain` and the quote
+# components in `compiler/components.py` and drew neither: the dispatch in each
+# renderer was body → table → awaiting, so a section carrying only a flow or a
+# quote printed the awaiting notice while markdown and PDF printed the content.
+# Measured on a three-period incident build before the fix: 21 nodes and 18
+# edges per RCA in markdown and PDF, zero in DOCX and HTML. Nothing failed,
+# because this file covered only markdown and PDF — which is the coverage gap
+# these tests close, not just the rendering one.
+
+
+def _docx_xml(ir: ArtifactIR) -> str:
+    import io
+    import zipfile
+
+    from worldloom.render import docx as docx_renderer
+
+    payload = docx_renderer.render(ir, {})
+    return zipfile.ZipFile(io.BytesIO(payload)).read("word/document.xml").decode()
+
+
+def _html_text(ir: ArtifactIR) -> str:
+    from worldloom.render import html as html_renderer
+
+    return html_renderer.render(ir, {}).decode()
+
+
+def test_docx_renders_a_declared_flow_and_not_the_awaiting_notice() -> None:
+    xml = _docx_xml(_flow_ir())
+    assert "Nightly batch job" in xml
+    assert "Reconciliation control" in xml
+    assert "should have caught it" in xml
+    assert "Awaiting narrative" not in xml
+
+
+def test_docx_renders_a_quote_with_attribution() -> None:
+    xml = _docx_xml(_quote_ir())
+    assert "Sales held despite the outage." in xml
+    assert "Group Controller" in xml
+    assert "Awaiting narrative" not in xml
+
+
+def test_html_renders_a_declared_flow_and_not_the_awaiting_notice() -> None:
+    text = _html_text(_flow_ir())
+    assert "Nightly batch job" in text
+    assert "Reconciliation control" in text
+    assert "should have caught it" in text
+    assert '<ul class="flow">' in text
+    assert "Awaiting narrative" not in text
+
+
+def test_html_renders_a_quote_as_a_blockquote() -> None:
+    text = _html_text(_quote_ir())
+    assert "<blockquote>" in text
+    assert "Sales held despite the outage." in text
+    assert "Group Controller" in text
+    assert "Awaiting narrative" not in text

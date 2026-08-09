@@ -30,7 +30,7 @@ if TYPE_CHECKING:  # pragma: no cover
 #: types are workbooks is domain vocabulary, and a vertical's source artifact
 #: (banking's capital return) registers from its own module rather than being
 #: named here — the same seam `documents.register_artifact_types` provides.
-HANDLES = {"finance_workbook"}
+HANDLES = {"finance_workbook", "service_register", "reference_data_extract"}
 
 
 def register(*artifact_types: str) -> None:

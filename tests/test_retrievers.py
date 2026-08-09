@@ -120,13 +120,21 @@ def test_bm25_numbers_are_pinned_exactly(corpus: World) -> None:
     disappointing one: they land in the two families this corpus exists to keep
     hard, and a keyword baseline that could tell an author from an approver
     would mean the two were not distinguishable in the first place.
+
+    citation_required then moved 3/3 → 8/8 and the totals to 27 of 51 when the
+    company timeline landed: the five `milestone_provenance` cases had minted
+    zero on every build for as long as the family existed, because nothing
+    carried the `MFACT-` facts they cite. Now a dated history page states each
+    milestone in the question's own words, and a keyword baseline finding it is
+    the corpus finally supporting the family, not the benchmark going soft —
+    authority, temporal and abstention all still read zero.
     """
     card = score(corpus)
-    assert card.passed == 22
+    assert card.passed == 27
     assert card.by_type() == {
         EvaluationType.AUTHORITY_RESOLUTION: (0, 6),
         EvaluationType.CAUSAL_MULTI_HOP: (1, 3),
-        EvaluationType.CITATION_REQUIRED: (3, 3),
+        EvaluationType.CITATION_REQUIRED: (8, 8),
         EvaluationType.CROSS_ARTIFACT: (4, 4),
         EvaluationType.DIRECT_LOOKUP: (9, 9),
         EvaluationType.EXPECTED_ABSTENTION: (0, 10),

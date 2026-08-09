@@ -882,11 +882,59 @@ def _section(document, section: ArtifactSection, facts, g: StyleGenome,
                 for run in paragraph.runs:
                     run.font.size = Pt(_heading_pt(g, _TS_BODY))
                     run.font.color.rgb = _rgb(g.colour_roles["body_text"])
+    elif section.quote is not None:
+        # The same blockquote semantics as `markdown._quote`: a pulled-out
+        # line, visibly not narrated in place. Word has no blockquote style
+        # guaranteed present, so indent + italic carries the distinction.
+        text = (references.substitute(section.quote.text, facts, locale=locale,
+                                      presentation=presentation)
+                if facts else section.quote.text)
+        from docx.shared import Pt as _Pt
+
+        quoted = document.add_paragraph(text)
+        quoted.paragraph_format.left_indent = _Pt(24)
+        for run in quoted.runs:
+            run.italic = True
+        if section.quote.attribution:
+            by = document.add_paragraph(f"— {section.quote.attribution}")
+            by.paragraph_format.left_indent = _Pt(24)
     elif section.table is not None:
         _table(document, section.table, g, locale)
-    else:
+    elif section.flow is None or not (section.flow.nodes or section.flow.edges):
         awaiting = document.add_paragraph(_AWAITING)
         awaiting.runs[0].italic = True
+
+    # The flow is additive, exactly as in `render.markdown`: a causal chain is
+    # a diagram of the argument the prose just made, so it follows the
+    # paragraph instead of replacing it. This branch did not exist for a long
+    # time while `compiler/components.py` declared `ops.causal_chain` and
+    # `ops.process_flow` supported in "markdown docx pptx pdf" — measured on a
+    # three-period incident build, DOCX printed the awaiting notice under
+    # *Root cause* where markdown and PDF printed 21 nodes and 18 edges.
+    if section.flow is not None and (section.flow.nodes or section.flow.edges):
+        label_by_key = {node.key: node.label for node in section.flow.nodes}
+
+        def _resolved(text: str) -> str:
+            return (references.substitute(text, facts, locale=locale,
+                                          presentation=presentation)
+                    if facts else text)
+
+        steps = (
+            [
+                f"{_resolved(label_by_key.get(edge.source, edge.source))} → "
+                f"{_resolved(label_by_key.get(edge.target, edge.target))}"
+                + (f" ({_resolved(edge.label)})" if edge.label else "")
+                for edge in section.flow.edges
+            ]
+            if section.flow.edges
+            else [_resolved(node.label) for node in section.flow.nodes]
+        )
+        from docx.shared import Pt as _Pt
+
+        for step in steps:
+            bullet = document.add_paragraph(step, style="List Bullet")
+            for run in bullet.runs:
+                run.font.size = _Pt(_heading_pt(g, _TS_BODY))
 
     # After the chain, never inside it — a `for` between the `elif` and the
     # `else` binds the `else` to the loop, and Python runs a loop-else whenever

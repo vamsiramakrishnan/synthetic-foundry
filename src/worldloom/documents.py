@@ -77,6 +77,15 @@ _LAG: dict[str, timedelta] = {
     "cfo_variance_memo": timedelta(hours=17),
     "executive_summary": timedelta(days=1, hours=15),
     "close_calendar": timedelta(hours=1),
+    # A history page is written once the dust of its newest entry has settled,
+    # not within the hour of it — and `written_at` derives the page's date from
+    # that newest milestone, so this lag is the only thing standing between
+    # "the replatform happened" and "somebody wrote it up".
+    "company_timeline": timedelta(days=5),
+    # Extracts are cut the morning the close calendar goes out — same anchor
+    # fact, an hour behind it, so the archive shows the calendar first.
+    "service_register": timedelta(hours=2),
+    "reference_data_extract": timedelta(hours=2),
 }
 
 
@@ -1536,21 +1545,30 @@ _OUTLINE_VARIANTS: dict[str, tuple[tuple[SectionPlan, ...], ...]] = {}
 def _variant_for(world: Any, intent: ArtifactIntent) -> tuple[SectionPlan, ...]:
     """Which outline this particular document gets.
 
-    The ordinal is taken over the world's own intent order, which is stable and
-    is the order ids were minted in — so a document's shape does not move when a
-    later period adds another of its type.
+    Chosen by hashing the intent's own id, not by cycling an ordinal. The
+    ordinal read beautifully — "rotate the variants over the documents of a
+    type, in minted order" — and it aliased to zero at the shipped shape:
+    `unit_close_commentary` has three variants and the default retailer has
+    three business units, so `ordinal % 3` pinned every unit to one variant in
+    every period at every seed. Measured across five seeds and three periods:
+    distinct variants seen per unit = 1, and the `"Why"` variant — locked to
+    the one unit that mints no `metric.*` facts — rendered 0 times in 15
+    documents. Any modulus cycle has this failure mode whenever the count of
+    documents per period shares a factor with the variant count; a hash of the
+    id has no period to alias with, because ids never repeat.
+
+    Deterministic for the same reason everything here is: the id is minted by
+    walk order, `crc32` is defined byte-for-byte, and neither knows the clock.
+    A document's shape still never moves when a later period adds another of
+    its type — its id is already minted.
     """
     variants = _OUTLINE_VARIANTS.get(intent.artifact_type)
     default = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
     if not variants:
         return default
-    ordinal = 0
-    for other in world.artifact_intents:
-        if other.id == intent.id:
-            break
-        if other.artifact_type == intent.artifact_type:
-            ordinal += 1
-    return variants[ordinal % len(variants)]
+    from zlib import crc32
+
+    return variants[crc32(f"{intent.artifact_type}:{intent.id}".encode()) % len(variants)]
 
 
 _MEASURES_ALL = ("financial.revenue.", "financial.gross_profit.",
@@ -2219,10 +2237,273 @@ def _divisional_summary(
 #: and its facts, with no domain vocabulary of their own.
 from .generators.communications import MESSAGE_LAG, MINUTES_LAG, minutes_ir, thread_ir
 
+def company_timeline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
+    """The company's own past, as the dated table the lore already witnesses.
+
+    `organisation.generate` mints one ``MFACT-`` fact per dated lore commitment
+    — the hierarchy remap, the replatform, the four-day close norm — and for a
+    long time nothing planned a document that carried any of them: five facts
+    per world, on every engine, readable nowhere, and the whole
+    ``milestone_provenance`` evaluation family silently minting zero cases
+    behind its reachability guard because the guard was doing its job. This is
+    the missing consumer, and it is the document a real intranet always has —
+    the "about us" page every onboarding pack links to.
+
+    Compiled rather than outlined on purpose: a timeline is a table of dated
+    assertions, prose would only restate the rows, and a table-only IR makes no
+    narration request — so the reference ledger does not grow by one document's
+    worth of prose to keep this page in existence.
+    """
+    facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
+    company = world.company
+    rows = [
+        Row(
+            key=fact.id.lower(),
+            label=fact.valid_from.strftime("%B %Y"),
+            cells={"what": Cell(value=fact.text_value, fact_id=fact.id)},
+        )
+        # By date, oldest first — a timeline in mint order would interleave
+        # 2022 between 2024 and 2025 wherever the lore file listed it that way.
+        # The id is the tiebreak so two same-month milestones cannot swap.
+        for fact in sorted(facts, key=lambda f: (f.valid_from, f.id))
+    ]
+    table = Table(
+        key="timeline",
+        title="Milestones",
+        columns=[Column(key="what", label="What happened, and what it left behind")],
+        rows=rows,
+        note=(
+            "Standing record. Each row is dated by when the milestone happened, "
+            "not by when this page was written — the page is always younger than "
+            "everything on it."
+        ),
+    )
+    return ArtifactIR(
+        id=intent.id,
+        intent_id=intent.id,
+        title=f"{company.name} — Company Timeline",
+        subtitle="How this company came to run the way it runs",
+        sections=[ArtifactSection(heading="Milestones", table=table)],
+        metadata={
+            "worldloom_synthetic": "true",
+            "worldloom_seed": str(world.seed),
+            "worldloom_period": world.period or "",
+            "worldloom_created": max(f.valid_from for f in facts).isoformat(),
+            "company": company.name,
+            "note": "Synthetic corpus generated by Worldloom. Not a real company.",
+        },
+    )
+
+
+def _cut_table(world: World, intent: ArtifactIntent) -> Table:
+    """The one cited row a standing extract carries: when it was cut.
+
+    Both extracts below are projections of entity collections rather than of
+    the fact ledger, and an intent citing no fact has no date — `written_at`
+    raises, correctly. So each cites exactly one fact, the close's committed
+    date, and states it here: an extract is cut *for* a close, and the row is
+    what `validate.carried_evidence` holds the citation to.
+    """
+    fact = next(world.facts.by_id(f) for f in intent.required_fact_ids)
+    return Table(
+        key="cut", title="Extract basis",
+        columns=[Column(key="value", label="Value")],
+        rows=[Row(key="cut_for", label="Cut for the close committed on",
+                  cells={"value": Cell(value=fact.text_value, fact_id=fact.id)})],
+        note="A point-in-time extract, not a live view. Re-cut each time only if re-planned.",
+    )
+
+
+def service_register(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
+    """The estate, in a document — because a graph nobody rendered is not corpus.
+
+    `--estate large` grew the world to dozens of services and, measured, the
+    *document layer* was byte-identical to `medium`: every generated service
+    reached `worldloom topology` and the ServiceNow CMDB sidecar (which has no
+    manifest row, so the workspace drive never shelves it) and not one page a
+    retriever could read. Eight evaluation cases asked about dependency depth
+    and blast radius while their quantitative answers appeared in zero artifact
+    bytes. This register is the missing page: the service inventory a real IT
+    department keeps, plus the shape figures those questions grade against.
+    """
+    company = world.company
+    people = {p.id: p.name for p in world.people}
+    systems = {s.id: s.name for s in world.systems}
+    services = sorted(world.services, key=lambda s: s.id)
+
+    rows = [
+        Row(key=svc.id, label=svc.name, cells={
+            "purpose": Cell(value=svc.purpose),
+            "tier": Cell(value=float(svc.criticality_tier)),
+            "owner": Cell(value=people.get(svc.owner_id, "")),
+            "system": Cell(value=systems.get(svc.system_id, svc.system_id)),
+            "depends": Cell(value=float(len(svc.depends_on))),
+        })
+        for svc in services
+    ]
+    register = Table(
+        key="register", title="Service register",
+        columns=[
+            Column(key="purpose", label="Purpose"),
+            Column(key="tier", label="Criticality tier", number_format="0"),
+            Column(key="owner", label="Owner"),
+            Column(key="system", label="Runs on"),
+            Column(key="depends", label="Direct dependencies", number_format="0"),
+        ],
+        rows=rows,
+        note=(
+            f"{company.name} · one row per running service. Dependencies count both "
+            "services and the systems they run on; the chain, not this count, is what "
+            "an outage travels along."
+        ),
+    )
+
+    # The shape figures, computed from the same `depends_on` edges `graphs`
+    # reads — iterative and id-ordered, so the walk is deterministic and safe
+    # on a cycle (the validator forbids one, but a register must not hang on
+    # the corpus it would be reporting a defect in).
+    depth: dict[str, int] = {}
+
+    def chain(service_id: str) -> int:
+        if service_id in depth:
+            return depth[service_id]
+        depth[service_id] = 0  # cycle guard: a revisit reads 0 rather than recursing
+        svc = next((s for s in services if s.id == service_id), None)
+        below = [chain(d) for d in (svc.depends_on if svc else ()) if d.startswith("SVC-")]
+        depth[service_id] = 1 + max(below, default=0)
+        return depth[service_id]
+
+    deepest = max(services, key=lambda s: (chain(s.id), s.id), default=None)
+    shape = Table(
+        key="shape", title="Shape of the estate",
+        columns=[Column(key="value", label="Value")],
+        rows=[
+            Row(key="services", label="Running services",
+                cells={"value": Cell(value=float(len(services)))}),
+            Row(key="systems", label="Systems hosting them",
+                cells={"value": Cell(value=float(len(systems)))}),
+            Row(key="depth", label="Longest dependency chain (hops)",
+                cells={"value": Cell(value=float(chain(deepest.id)) if deepest else None)}),
+            Row(key="top", label="Service at the top of that chain",
+                cells={"value": Cell(value=deepest.name if deepest else "")}),
+        ],
+        note="Depth counts service-to-service hops; an outage at the bottom reaches the top.",
+    )
+
+    return ArtifactIR(
+        id=intent.id,
+        intent_id=intent.id,
+        title=f"{company.name} — Service Register",
+        subtitle="The technology estate, one row per running service",
+        sections=[
+            ArtifactSection(heading="Service register", table=register),
+            ArtifactSection(heading="Shape of the estate", table=shape),
+            ArtifactSection(heading="Extract basis", table=_cut_table(world, intent)),
+        ],
+        metadata={
+            "worldloom_synthetic": "true",
+            "worldloom_seed": str(world.seed),
+            "worldloom_period": world.period or "",
+            "worldloom_created": max(
+                (f.valid_from for f in (world.facts.by_id(i) for i in intent.required_fact_ids)),
+            ).isoformat(),
+            "company": company.name,
+            "note": "Synthetic corpus generated by Worldloom. Not a real company.",
+        },
+    )
+
+
+def reference_data_extract(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
+    """The master data, in a document — the other 800 rows nothing read.
+
+    `--master-data` minted vendors, customers and SKUs into `masterdata.json`,
+    whose only readers in the entire tree were the two lines in `world.py` that
+    wrote it and read it back: not in the manifest, not in the retrieval index,
+    not in the workspace drive, no validator group. ~1.8 MB of corpus at the
+    advertised size that no reader, retriever or eval case could reach. This
+    extract is the join surface the masterdata docstring already claims to be —
+    the vendor and item listing an ERP actually exports.
+    """
+    company = world.company
+    md = world.masterdata
+
+    def block(key: str, title: str, columns: list[Column], rows: list[Row], note: str) -> ArtifactSection:
+        return ArtifactSection(
+            heading=title,
+            table=Table(key=key, title=title, columns=columns, rows=rows, note=note),
+        )
+
+    sections = []
+    if md.vendors:
+        sections.append(block(
+            "vendors", "Vendor master",
+            [Column(key="category", label="Category"),
+             Column(key="terms", label="Payment terms"),
+             Column(key="contact", label="Contact")],
+            [Row(key=v.id, label=v.name, cells={
+                "category": Cell(value=v.category),
+                "terms": Cell(value=v.payment_terms),
+                "contact": Cell(value=v.contact_name),
+            }) for v in md.vendors],
+            "As held in the ERP vendor master. Terms are the contracted default, not "
+            "what any one invoice was settled at.",
+        ))
+    if md.customers:
+        sections.append(block(
+            "customers", "Customer master",
+            [Column(key="segment", label="Segment"),
+             Column(key="terms", label="Payment terms"),
+             Column(key="contact", label="Contact")],
+            [Row(key=c.id, label=c.name, cells={
+                "segment": Cell(value=c.segment),
+                "terms": Cell(value=c.payment_terms),
+                "contact": Cell(value=c.contact_name),
+            }) for c in md.customers],
+            "Trade customers only; a till transaction has no master record.",
+        ))
+    if md.skus:
+        vendors = {v.id: v.name for v in md.vendors}
+        sections.append(block(
+            "skus", "Item master",
+            [Column(key="vendor", label="Vendor"),
+             Column(key="category", label="Category"),
+             Column(key="price", label="Unit list price", number_format="#,##0.00")],
+            [Row(key=s.id, label=s.name, cells={
+                "vendor": Cell(value=vendors.get(s.vendor_id, s.vendor_id)),
+                "category": Cell(value=s.category),
+                "price": Cell(value=s.unit_price),
+            }) for s in md.skus],
+            "List price per unit, before any negotiated rate — the number a margin "
+            "conversation starts from, never the one it ends at.",
+        ))
+    sections.append(ArtifactSection(heading="Extract basis", table=_cut_table(world, intent)))
+
+    return ArtifactIR(
+        id=intent.id,
+        intent_id=intent.id,
+        title=f"{company.name} — Reference Data Extract",
+        subtitle="Vendor, customer and item masters, as at the close",
+        sections=sections,
+        metadata={
+            "worldloom_synthetic": "true",
+            "worldloom_seed": str(world.seed),
+            "worldloom_period": world.period or "",
+            "worldloom_created": max(
+                (f.valid_from for f in (world.facts.by_id(i) for i in intent.required_fact_ids)),
+            ).isoformat(),
+            "company": company.name,
+            "note": "Synthetic corpus generated by Worldloom. Not a real company.",
+        },
+    )
+
+
 _COMPILERS: dict[str, Any] = {
     "finance_workbook": finance_workbook,
     "meeting_minutes": minutes_ir,
     "email_thread": thread_ir,
+    "company_timeline": company_timeline,
+    "service_register": service_register,
+    "reference_data_extract": reference_data_extract,
 }
 _STANDING.update({
     # Circulated minutes are the approved record of the meeting; a thread is a
@@ -2230,6 +2511,13 @@ _STANDING.update({
     # a who-was-told-when evaluation resolves against.
     "meeting_minutes": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
     "email_thread": (Authority.UNOFFICIAL_NOTE, Lifecycle.PUBLISHED),
+    # A standing intranet page, not a filing: authoritative about its dates
+    # because the milestone facts are, published because everyone can see it.
+    "company_timeline": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
+    # Extracts of systems of record are systems of record: the CMDB and the
+    # ERP masters are where these rows *live*, and the page only projects them.
+    "service_register": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
+    "reference_data_extract": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
     "unit_close_commentary": (Authority.WORKING_DOCUMENT, Lifecycle.PUBLISHED),
 
     # The conditional filings. Their outlines are above; these are the two

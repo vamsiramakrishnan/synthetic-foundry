@@ -524,11 +524,23 @@
       ]
     },
     {
-      "id": "ART-0011/Performance",
-      "text": "Australian Food delivered {{fact:FACT-1341}} against a plan of {{fact:FACT-1380}}, a shortfall of {{fact:FACT-1419}}. The revenue miss is one thing. Margin is the story: gross profit came in at {{fact:FACT-6147}} against a budgeted {{fact:FACT-6186}}, producing {{fact:FACT-6225}}. Gross margin contracted to {{fact:FACT-6264}} against {{fact:FACT-6303}} budgeted, down from {{fact:FACT-1302}} the prior month. The division carried the group's miss.",
+      "id": "ART-0011/What we are doing about it",
+      "text": "Promotional depth cost the rate {{fact:FACT-6309}} this month, and that number now has an owner: I am taking the joint-campaign funding split to the next trading review with General Merchandise, because campaigns Food funds and General Merchandise books as margin defence cannot keep being costed to this division by default. Until that review lands, no new joint promotion clears without a stated margin impact against whichever division proposed it.",
       "claims": [
         {
-          "text": "Australian Food revenue finished below plan.",
+          "text": "Promotional depth reduced the margin rate by {{fact:FACT-6309}}.",
+          "supporting_fact_ids": [
+            "FACT-6309"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0011/Where we landed",
+      "text": "Food closed the month at {{fact:FACT-1341}} against a committed {{fact:FACT-1380}}, leaving revenue {{fact:FACT-1419}} adrift, and converted it at {{fact:FACT-6264}} against the {{fact:FACT-6303}} the division is held to. Gross profit of {{fact:FACT-6147}} against {{fact:FACT-6186}} puts the miss at {{fact:FACT-6225}}. The trading base is not the problem — last year's month was {{fact:FACT-1224}} — the rate is.",
+      "claims": [
+        {
+          "text": "Revenue closed at {{fact:FACT-1341}} against a budget of {{fact:FACT-1380}}, a variance of {{fact:FACT-1419}}.",
           "supporting_fact_ids": [
             "FACT-1341",
             "FACT-1380",
@@ -536,7 +548,7 @@
           ]
         },
         {
-          "text": "Gross profit miss exceeded the revenue miss.",
+          "text": "Gross profit was {{fact:FACT-6147}} against {{fact:FACT-6186}}, a miss of {{fact:FACT-6225}}.",
           "supporting_fact_ids": [
             "FACT-6147",
             "FACT-6186",
@@ -544,23 +556,16 @@
           ]
         },
         {
-          "text": "Gross margin declined both against budget and against the prior month.",
+          "text": "The margin rate landed at {{fact:FACT-6264}} against a budgeted {{fact:FACT-6303}}.",
           "supporting_fact_ids": [
             "FACT-6264",
-            "FACT-6303",
-            "FACT-1302"
+            "FACT-6303"
           ]
-        }
-      ]
-    },
-    {
-      "id": "ART-0011/Watch items",
-      "text": "Promotional depth moved {{fact:FACT-6309}} this period. Watch whether that margin impact holds or whether the following month improves, and whether the commercial partnership with General Merchandise on joint campaigns continues at that intensity.",
-      "claims": [
+        },
         {
-          "text": "Australian Food experienced significant promotional-driven margin impact.",
+          "text": "Revenue in the comparable month last year was {{fact:FACT-1224}}.",
           "supporting_fact_ids": [
-            "FACT-6309"
+            "FACT-1224"
           ]
         }
       ]
@@ -616,11 +621,11 @@
       ]
     },
     {
-      "id": "ART-0013/Where we landed",
-      "text": "General Merchandise closed March at {{fact:FACT-1343}} against a plan of {{fact:FACT-1382}}, {{fact:FACT-1421}}. Gross profit came in at {{fact:FACT-6149}} and margin at {{fact:FACT-6266}}. On the terms this division is held to — revenue to plan and margin held — March was a month within tolerance and is reported as such.",
+      "id": "ART-0013/Performance",
+      "text": "General Merchandise held its top line — {{fact:FACT-1343}} against {{fact:FACT-1382}}, a gap of only {{fact:FACT-1421}} — and gave most of the month back below it. Gross profit of {{fact:FACT-6149}} against {{fact:FACT-6188}} is {{fact:FACT-6227}} short, and the rate at {{fact:FACT-6266}} sits well under the {{fact:FACT-6305}} plan. The division sold what it planned to sell, at prices it did not plan to sell at.",
       "claims": [
         {
-          "text": "General Merchandise finished marginally below plan on revenue.",
+          "text": "Revenue was {{fact:FACT-1343}} against a budget of {{fact:FACT-1382}}, a variance of {{fact:FACT-1421}}.",
           "supporting_fact_ids": [
             "FACT-1343",
             "FACT-1382",
@@ -628,20 +633,28 @@
           ]
         },
         {
-          "text": "Gross profit and margin landed where the division is held to.",
+          "text": "Gross profit was {{fact:FACT-6149}} against {{fact:FACT-6188}}, a variance of {{fact:FACT-6227}}.",
           "supporting_fact_ids": [
             "FACT-6149",
-            "FACT-6266"
+            "FACT-6188",
+            "FACT-6227"
+          ]
+        },
+        {
+          "text": "The margin rate was {{fact:FACT-6266}} against a budgeted {{fact:FACT-6305}}.",
+          "supporting_fact_ids": [
+            "FACT-6266",
+            "FACT-6305"
           ]
         }
       ]
     },
     {
-      "id": "ART-0014/Performance",
-      "text": "Digital and Marketplace delivered {{fact:FACT-1344}} against {{fact:FACT-1383}}, {{fact:FACT-1422}} against plan. Gross profit came to {{fact:FACT-6150}} against {{fact:FACT-6189}} budgeted, or {{fact:FACT-6228}}. Margin ran at {{fact:FACT-6267}} against a budgeted {{fact:FACT-6306}}. The revenue shortfall is modest. The margin holds above budget in absolute terms, but the forecast assumptions have not been refreshed since the platform replatform, which makes the forecast-to-actual gap worth monitoring.",
+      "id": "ART-0014/Position",
+      "text": "For the record: revenue {{fact:FACT-1344}} against {{fact:FACT-1383}} — {{fact:FACT-1422}} adrift — gross profit {{fact:FACT-6150}}, and a rate of {{fact:FACT-6267}}. Against the same month last year, {{fact:FACT-1227}} of revenue at {{fact:FACT-1305}}, the unit is still growing, which is why this reads as a forecasting problem rather than a demand one. Nothing else in the month needs the committee's attention.",
       "claims": [
         {
-          "text": "Digital and Marketplace revenue finished below plan.",
+          "text": "Revenue was {{fact:FACT-1344}} against a budget of {{fact:FACT-1383}}, a variance of {{fact:FACT-1422}}.",
           "supporting_fact_ids": [
             "FACT-1344",
             "FACT-1383",
@@ -649,7 +662,27 @@
           ]
         },
         {
-          "text": "Gross profit missed plan.",
+          "text": "Gross profit was {{fact:FACT-6150}} and the margin rate {{fact:FACT-6267}}.",
+          "supporting_fact_ids": [
+            "FACT-6150",
+            "FACT-6267"
+          ]
+        },
+        {
+          "text": "Revenue in the comparable month last year was {{fact:FACT-1227}} at a rate of {{fact:FACT-1305}}.",
+          "supporting_fact_ids": [
+            "FACT-1227",
+            "FACT-1305"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0014/What moved",
+      "text": "Gross profit missed by {{fact:FACT-6228}}, and that is the line that matters this month: {{fact:FACT-6150}} delivered against {{fact:FACT-6189}} planned. Revenue explains part of it — {{fact:FACT-1344}} against a committed {{fact:FACT-1383}}, {{fact:FACT-1422}} short — but the rate explains the rest, landing at {{fact:FACT-6267}} against {{fact:FACT-6306}}. The movement is concentrated after the checkout replatform, and the forecast has not been re-baselined against post-replatform behaviour.",
+      "claims": [
+        {
+          "text": "Gross profit was {{fact:FACT-6150}} against {{fact:FACT-6189}}, a variance of {{fact:FACT-6228}}.",
           "supporting_fact_ids": [
             "FACT-6150",
             "FACT-6189",
@@ -657,7 +690,15 @@
           ]
         },
         {
-          "text": "Margin exceeded budget but forecasting assumptions remain stale.",
+          "text": "Revenue was {{fact:FACT-1344}} against a budget of {{fact:FACT-1383}}, {{fact:FACT-1422}} short of plan.",
+          "supporting_fact_ids": [
+            "FACT-1344",
+            "FACT-1383",
+            "FACT-1422"
+          ]
+        },
+        {
+          "text": "The margin rate was {{fact:FACT-6267}} against a budgeted {{fact:FACT-6306}}.",
           "supporting_fact_ids": [
             "FACT-6267",
             "FACT-6306"
@@ -666,14 +707,14 @@
       ]
     },
     {
-      "id": "ART-0014/Watch items",
-      "text": "Online conversion came in at {{fact:FACT-6311}} against a forecast of {{fact:FACT-6310}}. The gap reflects post-replatform volatility and a forecast that has not been re-baselined. Watch whether conversion stabilises and whether a realistic forecast baseline can be established for the channel.",
+      "id": "ART-0014/Why",
+      "text": "Conversion did it. The site converted at {{fact:FACT-6311}} against a forecast of {{fact:FACT-6310}}, and that forecast was built on pre-replatform behaviour: the checkout and loyalty stack changed underneath it and nobody re-based the number. So the miss is not customers leaving — it is a plan that still describes a site we no longer run. Re-baselining the conversion forecast is the correction, and it belongs to this team, not to trading.",
       "claims": [
         {
-          "text": "Online conversion rate ran below forecast.",
+          "text": "Online conversion was {{fact:FACT-6311}} against a forecast of {{fact:FACT-6310}}.",
           "supporting_fact_ids": [
-            "FACT-6310",
-            "FACT-6311"
+            "FACT-6311",
+            "FACT-6310"
           ]
         }
       ]

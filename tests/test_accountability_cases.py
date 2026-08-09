@@ -73,14 +73,17 @@ def test_the_shipped_evaluation_set_is_unchanged() -> None:
 
     Forty-six rather than the forty-two this originally pinned: the approval
     family (`evaluation._Taxonomy.approvals`) added three authority questions
-    and one abstention when documents gained a signature block. Re-pinned
-    rather than loosened, because the number being exact is the whole of what
-    this test checks — an accountability family that quietly grew the set by
-    one would look identical to a set that grew by four for a reason.
+    and one abstention when documents gained a signature block. Fifty-one
+    rather than forty-six: `milestone_provenance` had minted zero on every
+    build since it was written — its five candidate facts were carried by no
+    document — and the company timeline made them citable. Re-pinned rather
+    than loosened, because the number being exact is the whole of what this
+    test checks — an accountability family that quietly grew the set by one
+    would look identical to a set that grew by five for a reason.
     """
     world = RetailWorld(seed=8128).build().run(
         MonthEndClose(period=PERIOD, include_operational_incident=True))
-    assert len(world.evaluations) == 46
+    assert len(world.evaluations) == 51
 
 
 # ---------------------------------------------------------------------------

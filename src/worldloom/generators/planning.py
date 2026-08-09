@@ -81,6 +81,13 @@ REMEDIATION_REVIEW_REACH = 20
 #: reaches it at all four quarter ends, which is what that profile *means*.
 PEAK_TRADING_INDEX = 1.10
 
+#: The services every retail world ships as episode props, estate or no estate.
+#: The register documents an estate somebody *asked* to grow; a build with only
+#: the four core services already names all of them in its incident documents,
+#: and gating on this count is what keeps such a build planning exactly what it
+#: planned before the register existed.
+CORE_SERVICES = 4
+
 #: The fact bundles a *declaratively authored* filing may ask for, and what each
 #: one is (``documents.FilingPlan.facts``, ``worldloom.doctypes``).
 #:
@@ -167,6 +174,9 @@ def artifact_intents(
     filings: Mapping[str, float] | None = None,
     estate: EstateReading | None = None,
     seasonal_index: float = 1.0,
+    milestones: tuple[CanonicalFact, ...] = (),
+    estate_services: int = 0,
+    masterdata_rows: int = 0,
 ) -> tuple[ArtifactIntent, ...]:
     """Plan the artifacts this episode warrants.
 
@@ -766,5 +776,46 @@ def artifact_intents(
             continue
         intent(artifact_type, plan.domain, plan.audience, author,
                cited, [episode.close_event_id], plan.size, plan.rationale)
+
+    # The company timeline — planned by the first episode that runs, and never
+    # again. The `MFACT-` milestone facts have existed since the org builder
+    # did, and until this intent nothing carried them: five facts per world,
+    # in no document, with the `milestone_provenance` evaluation family
+    # correctly refusing to ask about any of them. Planned last so its `ART`
+    # id lands after every id an existing narration ledger already cites, and
+    # with no trigger event: the page predates every close (its date derives
+    # from the newest milestone it cites) and pinning it to this episode's
+    # start event would claim the close caused the company's history.
+    if latest("company_timeline") is None:
+        dated = sorted(f.id for f in milestones if f.kind == "lore.milestone")
+        if dated:
+            intent("company_timeline", "governance", "all_staff",
+                   roles["reporting_manager"], dated, [], "small",
+                   "Every intranet has the page the onboarding pack links to: "
+                   "what happened, dated, before anyone currently arguing about "
+                   "it was in the room.")
+
+    # The two standing extracts, on the same once-only rule as the timeline
+    # and appended after it for the same id-stability reason. Each is gated on
+    # the thing it projects actually existing: the register on an estate the
+    # `--estate` generator grew (the four core props are already named by every
+    # incident document, and a four-row register would add a page without
+    # adding reach), the reference extract on `--master-data` having minted
+    # anything. Both cite the close's committed date — an extract is cut *for*
+    # a close, and an intent citing nothing has no date.
+    if latest("service_register") is None and estate_services > CORE_SERVICES:
+        # The CIO's document where the world has a CIO; the reporting manager's
+        # where it does not — same `or`-chain shape as the filings above, so a
+        # shape without the role gets the register rather than a KeyError.
+        intent("service_register", "operations", "all_staff",
+               roles.get("cio") or roles["reporting_manager"],
+               [episode.keys["fact_due_date"]], [], "medium",
+               "The CMDB, as a page: what runs, on what, owned by whom — the "
+               "inventory every impact question starts from.")
+    if latest("reference_data_extract") is None and masterdata_rows:
+        intent("reference_data_extract", "finance", "finance",
+               roles["reporting_manager"], [episode.keys["fact_due_date"]], [], "long",
+               "The ERP's vendor, customer and item masters, extracted — the "
+               "join surface transactional documents point into.")
 
     return tuple(intents)

@@ -330,8 +330,10 @@ ALTERNATIVES: dict[str, tuple[str, ...]] = {
         "Which page holds the evidence that ruled out the initial explanation?",
     ),
     "q.citation.affected_records": (
-        "How many records were affected, and where is that number stated?",
-        "Which document gives the count of affected records, and what is it?",
+        "How many records were affected in the {period} incident, and where is"
+        " that number stated?",
+        "Which document gives the count of records affected in the {period}"
+        " incident, and what is it?",
     ),
     "q.cross.remediation_choice": (
         "Of the remediations, which one fixes the control failure rather than only"
@@ -345,14 +347,15 @@ ALTERNATIVES: dict[str, tuple[str, ...]] = {
     ),
     # -- across episodes ----------------------------------------------------
     "q.across.current_calendar": (
-        "Which close calendar carries the committed date that is currently in force?",
-        "Where is the committed date that currently applies set out?",
+        "Which close calendar carries the committed date in force for the {period}"
+        " close?",
+        "Where is the committed date that applies to the {period} close set out?",
     ),
     "q.across.recurrence": (
-        "When did a comparable valuation failure last happen, and did the response"
-        " prevent a repeat?",
-        "Has a comparable valuation failure occurred before, and did the response"
-        " stop it recurring?",
+        "When, before the {period} incident, did a comparable valuation failure"
+        " last happen — and did the response prevent a repeat?",
+        "Had a comparable valuation failure occurred before the {period} incident,"
+        " and did the response stop it recurring?",
     ),
     "q.across.incident_count": (
         "How many valuation incidents had the group opened by the end of {period}?",
@@ -425,10 +428,10 @@ ALTERNATIVES: dict[str, tuple[str, ...]] = {
         " record as the cause?",
     ),
     "q.comms.cfo_notified": (
-        "When was the Group CFO first informed the close was at risk, and by what"
-        " channel?",
+        "When was the Group CFO first informed the {period} close was at risk, and"
+        " by what channel?",
         "Through which channel, and at what point, was the Group CFO first told of"
-        " the risk to the close?",
+        " the risk to the {period} close?",
     ),
     # -- accountability -----------------------------------------------------
     "q.accountability.who_accountable": (

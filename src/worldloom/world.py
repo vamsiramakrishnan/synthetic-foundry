@@ -758,6 +758,26 @@ class World:
         rendered: list[render_module.Rendered] = []
         for name in formats:
             rendered.extend(render_module.renderer(name)(staged))
+
+        # The markdown catch-all. Markdown defers a type to the format that
+        # owns it — a workbook to its sheet, a ticket to its bundle — but the
+        # deferral is only sound while the owning renderer runs. Under
+        # `-f markdown -f docx -f xlsx -f pdf`, no requested format claimed
+        # `jira_issues` or `servicenow_incident`, so both compiled, entered
+        # the manifest with an empty path, and reached the drive as nothing —
+        # while `validate` passed, since an empty path also means the
+        # legitimate "compiled, not rendered". Only this method knows what was
+        # requested, so the orphan check lives here: anything unclaimed falls
+        # back to markdown when markdown was asked for, and a deliberately
+        # partial render (`render("xlsx")`) stays exactly as partial as the
+        # caller made it.
+        if "markdown" in formats:
+            claimed = {r.artifact_id for r in rendered if r.artifact_id}
+            orphaned = {ir.id for ir in irs if ir.id not in claimed}
+            if orphaned:
+                from .render import markdown as markdown_module
+
+                rendered.extend(markdown_module.orphans(staged, orphaned))
         rendered.extend(render_module.citation_sidecars(staged))
 
         return replace(

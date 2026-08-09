@@ -346,12 +346,54 @@ def render(
 #: workbook belongs to its sheet, a ticket to its bundle. Domain modules add
 #: their own source artifacts via `own_elsewhere` when they register a
 #: dedicated renderer for them.
-_OWNED_ELSEWHERE = {"finance_workbook", "jira_issues", "servicenow_incident"}
+_OWNED_ELSEWHERE = {
+    "finance_workbook", "jira_issues", "servicenow_incident",
+    # The two standing extracts are sheets, like the workbook — and like it
+    # they still reach a markdown-only render through `World.render`'s orphan
+    # fallback rather than by being rendered twice in a two-format one.
+    "service_register", "reference_data_extract",
+}
 
 
 def own_elsewhere(*artifact_types: str) -> None:
     """Exclude *artifact_types* from the markdown fallback."""
     _OWNED_ELSEWHERE.update(artifact_types)
+
+
+def orphans(world: World, artifact_ids: set[str]) -> list[Rendered]:
+    """Render exactly *artifact_ids*, ownership notwithstanding.
+
+    The seam `World.render` uses for artifacts whose owning format was not in
+    the requested set. Ownership is a deferral, not an exemption: "a ticket
+    belongs to its bundle" is true only while some renderer is going to produce
+    the bundle. When none is, deferring meant two of twenty-six manifest
+    entries — the ServiceNow incident and the Jira issues, 48 cells and 12
+    facts between them — had an empty ``path`` and no file on disk under the
+    everyday ``-f markdown -f docx -f xlsx -f pdf``, and `validate` said
+    nothing because an empty path also legitimately means "not rendered in
+    this format set". The caller decides which ids are orphaned, because only
+    the caller knows what was requested.
+    """
+    locale = corpus_locale(world)
+    profile = presentation_of(world)
+    facts = {fact.id: fact for fact in world.facts}
+    out: list[Rendered] = []
+    for ir in world.artifact_irs:
+        if ir.id not in artifact_ids:
+            continue
+        intent = world.artifact_intents.by_id(ir.intent_id)
+        out.append(
+            Rendered(
+                artifact_id=ir.id,
+                path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.md",
+                media_type="text/markdown",
+                payload=render(ir, facts, locale=locale,
+                               presentation=profile.for_doctype(intent.artifact_type),
+                               artifact_type=intent.artifact_type,
+                               size_class=intent.size_profile),
+            )
+        )
+    return out
 
 def render_all(world: World) -> list[Rendered]:
     """Render every artifact that has no more specific format."""

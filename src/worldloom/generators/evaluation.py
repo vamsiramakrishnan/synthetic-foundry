@@ -164,8 +164,15 @@ EVAL_TEXT: dict[str, str] = {
     "a.citation.mapping_owner": "Nobody — the owner is unassigned.",
     "q.citation.evidence_ruled_out":
         "What evidence ruled out the initial explanation, and where is it recorded?",
+    # {period} is the discriminator, not decoration. Minted once per incident,
+    # this question read identically in every period of a multi-period build
+    # while its right answer changed — three copies, three different SKU
+    # counts, and no way to tell from the wording which one was being asked.
+    # An identically-worded question with a different right answer is worse
+    # than a duplicate: it grades a retriever against a coin flip.
     "q.citation.affected_records":
-        "How many records were affected, and which document states it?",
+        "How many records were affected in the {period} incident, and which"
+        " document states it?",
     "a.citation.affected_records": "{value}",
     "q.cross.remediation_choice":
         "Which remediation addresses the underlying control failure rather than only"
@@ -177,12 +184,22 @@ EVAL_TEXT: dict[str, str] = {
         "Zero — valuation completed before the ledger closed. The impact was on the"
         " calendar only.",
     # -- across episodes ---------------------------------------------------------
+    # "…for {period}", not "currently": each period's episode mints its own
+    # copy, and every copy was current on the day it was asked. By the end of
+    # a five-period build the corpus held five identically-worded questions
+    # naming five different calendars as the answer. Anchoring the wording to
+    # the period keeps the hard part — the superseded calendars all look
+    # identical — and removes the part that was unanswerable by design.
     "q.across.current_calendar":
-        "Which close calendar states the committed date currently in force?",
+        "Which close calendar states the committed date in force for the"
+        " {period} close?",
     "a.across.current_calendar": "The calendar published for {period}, committing to {date}.",
+    # Anchored to the asking period for the same reason as the calendar
+    # question above: this is minted by every episode that follows an
+    # incident, and each copy's right answer is a different prior period.
     "q.across.recurrence":
-        "When did a comparable valuation failure last occur, and did the response"
-        " prevent it recurring?",
+        "Before the {period} incident, when did a comparable valuation failure"
+        " last occur, and did the response prevent it recurring?",
     "a.across.recurrence":
         "In {prior_period}. It did not — the same mapping table failed again in"
         " {period}, and ownership is still unassigned.",
@@ -241,8 +258,8 @@ EVAL_TEXT: dict[str, str] = {
         "The Group Financial Controller and the Group Chief Financial Officer; the"
         " minutes record: {cause}.",
     "q.comms.cfo_notified":
-        "When was the Group CFO first told the close was at risk, and through what"
-        " channel?",
+        "When was the Group CFO first told the {period} close was at risk, and"
+        " through what channel?",
     "a.comms.cfo_notified":
         "By email, within the hour of the close being recorded as delayed on"
         " {date} — before any formal report existed.",
@@ -378,6 +395,7 @@ class _Taxonomy:
         period: str,
         history: tuple[CanonicalFact, ...] = (),
         prior_intents: tuple[ArtifactIntent, ...] = (),
+        prior_cases: tuple[EvaluationCase, ...] = (),
         text: Mapping[str, str] = EVAL_TEXT,
         density: float = 1.0,
         estate: Any = None,
@@ -395,8 +413,10 @@ class _Taxonomy:
         # naming the bad key) is enforced exactly once per build.
         self.text = text
         # The builder owns minting; `self.cases` is the same list, so the
-        # family methods and the final gate read one accumulator.
-        self._build = CaseBuilder(minter)
+        # family methods and the final gate read one accumulator. It is seeded
+        # with the world's existing cases so a later episode cannot re-mint an
+        # earlier one verbatim — see `CaseBuilder` on what counts as verbatim.
+        self._build = CaseBuilder(minter, prior=prior_cases)
         self.cases = self._build.cases
 
         self.by_kind: dict[tuple[str, str], CanonicalFact] = {}
@@ -935,7 +955,7 @@ class _Taxonomy:
             sources=[rca], distractors=[stale],
         )
         self.case(
-            self.t("q.citation.affected_records"),
+            self.t("q.citation.affected_records", period=self.period),
             EvaluationType.CITATION_REQUIRED,
             self.t("a.citation.affected_records", value=_fmt(by_id[k["fact_affected"]])),
             [k["fact_affected"]],
@@ -982,7 +1002,7 @@ class _Taxonomy:
             due = self.get("close.due_date", self.subjects.company_id)
             if due:
                 self.case(
-                    self.t("q.across.current_calendar"),
+                    self.t("q.across.current_calendar", period=self.period),
                     EvaluationType.AUTHORITY_RESOLUTION,
                     self.t("a.across.current_calendar", period=self.period, date=due.text_value),
                     [due.id], difficulty="hard",
@@ -994,7 +1014,7 @@ class _Taxonomy:
             k = self.episode.keys
             previous = earlier_incidents[-1]
             self.case(
-                self.t("q.across.recurrence"),
+                self.t("q.across.recurrence", period=self.period),
                 EvaluationType.CAUSAL_MULTI_HOP,
                 self.t("a.across.recurrence", prior_period=previous.period, period=self.period),
                 [previous.id, k["fact_recurrence"], k["fact_owner"]], difficulty="hard",
@@ -1048,7 +1068,22 @@ class _Taxonomy:
         phrased against things the model deliberately does not carry: people
         costs, suppliers, customers, competitors, and any period but this one.
         """
-        for key, reasoning in (
+        # "Why was the previous close delayed?" abstains only while no earlier
+        # period actually answers it. That guard was missing, and the case was
+        # minted once per episode unconditionally — so in any multi-period
+        # incident build the corpus documented a prior root cause at length and
+        # then graded a retriever *wrong* for finding it. Measured on a
+        # six-period build: thirty-nine passages carried a documented cause,
+        # the top five BM25 hits for this exact question all stated one, and
+        # the answer key said abstain. An abstention that the corpus refutes is
+        # not a hard case; it is a wrong one, and it is the mirror image of the
+        # "how many stores" trap this docstring already warns about — a
+        # question that quietly *gained* an answer as the corpus grew.
+        prior_cause = any(
+            f.kind == "ops.cause" and f.period and self.period and f.period < self.period
+            for f in self._fact_index.values()
+        )
+        for key, reasoning in [
             ("q.abstain.previous_close_cause",
              "Presupposes an event this corpus does not contain."),
             ("q.abstain.ceo_remuneration",
@@ -1063,7 +1098,9 @@ class _Taxonomy:
              "No competitor exists in this world."),
             ("q.abstain.next_audit",
              "Forward-looking; the corpus records what happened, not what is planned."),
-        ):
+        ]:
+            if key == "q.abstain.previous_close_cause" and prior_cause:
+                continue
             self.abstain(self.t(key), reasoning)
 
     # -- history -------------------------------------------------------
@@ -1246,7 +1283,7 @@ class _Taxonomy:
         if thread:
             delayed = by_id[k["fact_close_delayed"]]
             self.case(
-                self.t("q.comms.cfo_notified"),
+                self.t("q.comms.cfo_notified", period=self.period),
                 # Cross-artifact, not temporal-state: there is no cutoff to
                 # reason at — the question joins a fact many documents carry
                 # with a channel and moment only the thread records.
@@ -1618,6 +1655,15 @@ class _Taxonomy:
                 fact = self._fact_index.get(fact_id)
                 if fact is not None:
                     cited[fact.kind] = fact
+            # A superseded edition does not get the present-tense question.
+            # `clause.asks` reads "What is the expense approval threshold?",
+            # and the revision keeps both editions on the shelf — so asking it
+            # of each minted the same words twice with two different right
+            # answers, the current figure and the retired one. The retired
+            # figure is still asked about, once, by the temporal case below,
+            # whose wording carries the tense the fact actually has.
+            if any(f.valid_to is not None for f in cited.values()):
+                continue
             for clause in spec.clauses:
                 if not clause.asks:
                     continue
@@ -1791,6 +1837,7 @@ def evaluation_cases(
     period: str,
     history: tuple[CanonicalFact, ...] = (),
     prior_intents: tuple[ArtifactIntent, ...] = (),
+    prior_cases: tuple[EvaluationCase, ...] = (),
     text: Mapping[str, str] | None = None,
     density: float = 1.0,
     estate: Any = None,
@@ -1834,6 +1881,7 @@ def evaluation_cases(
     taxonomy = _Taxonomy(
         minter, episode=episode, facts=facts, subjects=subjects, intents=intents,
         period=period, history=history, prior_intents=prior_intents,
+        prior_cases=prior_cases,
         text=episode_text.merged(EVAL_TEXT, text, field="evaluation_text"),
         density=density, estate=estate,
     )

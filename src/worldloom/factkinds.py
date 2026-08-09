@@ -258,6 +258,62 @@ register([
     ),
 ])
 
+# ---------------------------------------------------------------------------
+# The actor-tool kinds: minted when employees, not generators, write the facts.
+#
+# Registered here rather than from `actors/tools/` because that package is
+# imported only when `--actors` runs — and a registration that happens at tool
+# import is the exact lazy-registration defect the policies module had, where
+# `known()` answered differently depending on what had been imported first. A
+# corpus built with actors and linted without them would call these fourteen
+# kinds inventions. They went unregistered for as long as the actor layer has
+# existed, which is precisely the failure this registry's own docstring says it
+# was built to catch: `build --actors scripted --incident` writes nine of them
+# into facts.jsonl, and none was in `known()`.
+#
+# `holds-at` only, honestly: the deeper rules for these facts — ledger
+# integrity, authority ceilings, rejection residue — live in the `actors`
+# validator group, which checks the *ledger*, not the fact stream. Declaring
+# richer invariants here would document checks nothing runs.
+# ---------------------------------------------------------------------------
+
+register([
+    FactKind(
+        kind=kind, domain="core", generated_by=module, invariants=("holds-at",),
+        about=about,
+    )
+    for kind, module, about in (
+        ("close.assessment", "actors/tools/finance.py",
+         "An actor's recorded reading of where the close stands."),
+        ("close.journal_request", "actors/tools/finance.py",
+         "A journal an actor asked to have posted, before anyone approved it."),
+        ("close.journal_posted", "actors/tools/finance.py",
+         "The journal as posted, once the request cleared its approver."),
+        ("close.dependency", "actors/tools/finance.py",
+         "One close task waiting on another, raised by the person waiting."),
+        ("close.decision", "actors/tools/finance.py",
+         "A decision taken in the close, on the record with its taker."),
+        ("ops.incident_state", "actors/tools/incidents.py",
+         "The ticket's state as an actor moved it."),
+        ("ops.incident_assignee", "actors/tools/incidents.py",
+         "Who the ticket was handed to."),
+        ("ops.work_note", "actors/tools/incidents.py",
+         "A working note on the ticket, in its author's own words."),
+        ("ops.incident_priority", "actors/tools/incidents.py",
+         "The priority as set, and reset, while the incident ran."),
+        ("ops.cause_assessment", "actors/tools/engineering.py",
+         "An engineer's assessment of cause, before it is anyone's finding."),
+        ("ops.change_proposal", "actors/tools/engineering.py",
+         "A change an engineer proposed to make."),
+        ("ops.change_approval", "actors/tools/engineering.py",
+         "The proposal's approval, by someone with the authority to give it."),
+        ("ops.remediation_owner", "actors/tools/engineering.py",
+         "Who took ownership of the remediation."),
+        ("decision.artifact_approved", "actors/tools/artifacts.py",
+         "An artifact signed off through the tool rather than by the planner."),
+    )
+])
+
 
 __all__ = [
     "FactKind",
