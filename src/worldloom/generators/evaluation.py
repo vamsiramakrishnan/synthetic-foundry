@@ -209,6 +209,14 @@ EVAL_TEXT: dict[str, str] = {
         "According to the corpus's own history, when did this happen: {assertion}?",
     "q.history.signed_earlier": "Who signed the {doc_type} for {period}?",
     "q.history.signed_current": "Who signed the {doc_type} for {period}?",
+    # -- approvals ---------------------------------------------------------------
+    "q.approval.who_approved": "Who approved the {doc_type} for {period}?",
+    "q.approval.who_approved_unit":
+        "The {unit} close commentary for {period} was prepared by one person and"
+        " approved by another. Who approved it?",
+    "q.approval.who_prepared_unit":
+        "Who prepared the {unit} close commentary for {period}?",
+    "q.abstain.unapproved": "Who approved the {doc_type} for {period}?",
     "q.abstain.cmo":
         "Who is the company's Chief Marketing Officer, and when did they join?",
     "q.abstain.close_calendar_1995": "Who signed the close calendar in 1995?",
@@ -1423,6 +1431,128 @@ class _Taxonomy:
         )
 
 
+    def approvals(self) -> None:
+        """Who signed it, who only wrote it, and which documents nobody signed.
+
+        Documents gained a signature block (`documents._signoff`) and nothing
+        asked about it: "who approved the March pack for Fuel and Convenience"
+        was answerable from the corpus and asked by nobody.
+
+        Three shapes, and the difficulty runs in one direction.
+
+        **The trap is the byline.** A document names its author at the top, in
+        larger type, before any content; it names its approver in a table at
+        the bottom. A retrieval system that has learned "the name near the
+        title is who this document is from" gets the author every time, which
+        is why the author is stated as the wrong answer in the reasoning rather
+        than left implicit. `authority_resolution` rather than
+        `direct_lookup`: two people are named in one document and the question
+        is which of them the corpus says did *what*.
+
+        **The unit commentary is the hard case**, because eight of them exist
+        and each has a different pair — so a system that retrieves the right
+        *type* of document and the wrong division answers confidently and
+        wrongly. Both halves are asked, prepared and approved, so a system
+        that gets one by matching on "commentary" is shown getting the other
+        wrong.
+
+        **And a document nobody signed must stay unsigned.** Absence is a claim
+        here (`planning._APPROVED_BY`): a ServiceNow ticket has an assignee and
+        a calendar is issued rather than approved. Asking who approved one is
+        an abstention case, and it is the only test this corpus has that a
+        system will not invent a signature to fill a blank.
+
+        Grounded on whichever fact the document already required, the trick
+        `authorship_over_time` uses: no new fact kind, and reachable by
+        construction because the document that carries the signature is the
+        document that carries the fact.
+        """
+        signed = [i for i in self.intents if i.approver_id]
+        if not signed:
+            return
+
+        def named(person_id: str | None) -> str:
+            return self.subjects.name(person_id) if person_id else ""
+
+        # One group-level document, chosen by type rather than by position so
+        # the case is the same question whichever engine ran the episode.
+        for artifact_type in ("cfo_variance_memo", "finance_workbook"):
+            intent = next(
+                (i for i in signed
+                 if i.artifact_type == artifact_type and i.required_fact_ids),
+                None,
+            )
+            if intent is None:
+                continue
+            self.case(
+                self.t("q.approval.who_approved",
+                       doc_type=artifact_type.replace("_", " "), period=self.period),
+                EvaluationType.AUTHORITY_RESOLUTION, named(intent.approver_id),
+                [intent.required_fact_ids[0]], difficulty="medium",
+                reasoning=(
+                    f"{named(intent.author_id)} wrote it and is named in the byline;"
+                    f" {named(intent.approver_id)} signed it and is named only in the"
+                    " approval block at the foot of the document. The byline is the"
+                    " confident wrong answer."
+                ),
+                sources=[intent.id],
+            )
+            break
+
+        # One division's commentary, both halves. The unit is taken from the
+        # first signed commentary rather than a favourite one, so a widened
+        # company asks about a division a narrow one does not have.
+        commentary = next(
+            (i for i in signed
+             if i.artifact_type == "unit_close_commentary" and i.required_fact_ids),
+            None,
+        )
+        if commentary is not None:
+            subject = self._fact_index.get(commentary.required_fact_ids[0])
+            unit = self.subjects.name(subject.subject) if subject else ""
+            if unit:
+                self.case(
+                    self.t("q.approval.who_approved_unit", unit=unit, period=self.period),
+                    EvaluationType.AUTHORITY_RESOLUTION, named(commentary.approver_id),
+                    [commentary.required_fact_ids[0]], difficulty="hard",
+                    reasoning=(
+                        "One commentary exists per division and each has a different"
+                        " pair, so retrieving the right document type and the wrong"
+                        " division answers confidently and wrongly."
+                    ),
+                    sources=[commentary.id],
+                )
+                self.case(
+                    self.t("q.approval.who_prepared_unit", unit=unit, period=self.period),
+                    EvaluationType.AUTHORITY_RESOLUTION, named(commentary.author_id),
+                    [commentary.required_fact_ids[0]], difficulty="medium",
+                    reasoning=(
+                        "The other half of the pair, so a system that answers the"
+                        " approval question by matching on 'commentary' is shown"
+                        " getting this one wrong."
+                    ),
+                    sources=[commentary.id],
+                )
+
+        # And one that nobody signed.
+        unsigned = next(
+            (i for i in self.intents
+             if not i.approver_id
+             and i.artifact_type in ("close_calendar", "servicenow_incident", "email_thread")),
+            None,
+        )
+        if unsigned is not None:
+            self.abstain(
+                self.t("q.abstain.unapproved",
+                       doc_type=unsigned.artifact_type.replace("_", " "),
+                       period=self.period),
+                "The document exists and carries no approval, because its type does"
+                " not get one — a ticket has an assignee and a calendar is issued"
+                " rather than approved. The corpus records who wrote it and nobody"
+                " else, so inventing a signature is the failure this case tests.",
+            )
+
+
 def evaluation_cases(
     minter: Minter,
     *,
@@ -1499,6 +1629,10 @@ def evaluation_cases(
     # appended rather than inserted: a world with no estate mints nothing here,
     # so no `EVAL-` id in any corpus already built can move.
     taxonomy.estate_shape()
+    # Last, and appended for the reason every family above was: a world whose
+    # planner names no approver mints nothing here, so no `EVAL-` id in any
+    # corpus already built can move.
+    taxonomy.approvals()
 
     # One last pass of the rule every family is supposed to apply for itself.
     #

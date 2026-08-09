@@ -108,15 +108,15 @@ def test_the_mosaic_asks_one_worlds_worth_of_questions(worlds) -> None:
     each, forty-two distinct strings between them.
     """
     reading = across.overlap(worlds)
-    assert reading.questions == 42 * len(worlds)
-    assert reading.distinct_questions == 42
-    assert reading.identical_in_every_world == 42
+    assert reading.questions == 46 * len(worlds)
+    assert reading.distinct_questions == 46
+    assert reading.identical_in_every_world == 46
     # `redundancy` is rounded to four places, so the tolerance is the rounding.
     assert reading.redundancy == pytest.approx(1 - 1 / len(worlds), abs=1e-4)
     # Every question sits in a group that spans every world, and each such
     # group is a clique: C(n, 2) pairs per distinct question.
     assert reading.questions_in_a_cross_world_group == reading.questions
-    assert reading.cross_world_pairs == 42 * len(worlds) * (len(worlds) - 1) // 2
+    assert reading.cross_world_pairs == 46 * len(worlds) * (len(worlds) - 1) // 2
 
 
 def test_the_answers_are_where_the_variety_is(worlds) -> None:

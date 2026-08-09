@@ -472,5 +472,5 @@ def test_bm25_is_untouched_by_any_of_this(corpus: World) -> None:
 
     card = score(corpus)
     assert card.by_type()[EvaluationType.TEMPORAL_STATE] == (0, 3)
-    assert card.by_type()[EvaluationType.AUTHORITY_RESOLUTION] == (0, 3)
-    assert card.by_type()[EvaluationType.EXPECTED_ABSTENTION] == (0, 9)
+    assert card.by_type()[EvaluationType.AUTHORITY_RESOLUTION] == (0, 6)
+    assert card.by_type()[EvaluationType.EXPECTED_ABSTENTION] == (0, 10)

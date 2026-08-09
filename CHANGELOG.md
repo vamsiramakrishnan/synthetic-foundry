@@ -60,6 +60,18 @@ reproducibility even when no API moved.
 - No default moved that was not meant to: a corpus with no approvals renders
   exactly as it did, `validate.approvals` scores zero out of zero on it, and a
   signed corpus replays byte-identical from its own recipe.
+- **And the corpus asks about it**, because a document property nobody asks
+  about is decoration. Four cases per episode (`evaluation._Taxonomy.
+  approvals`): who approved a group document, who approved *and* who prepared
+  one division's commentary out of eight near-identical ones, and — the one
+  that makes absence testable — who approved a document nobody signed, which
+  must come back as an abstention. Retail's set moves 42 → 46,
+  `authority_resolution` 3 → 6, `expected_abstention` 9 → 10. The keyword
+  baseline passes none of the four, which is the intended result: a baseline
+  that could tell an author from an approver would mean the two were not
+  distinguishable in the first place. The byline is the trap — a document names
+  its author at the top in larger type and its approver in a table at the foot
+  — so a test pins that no expected answer is ever the author's name.
 
 ### A synthesised role reports to somebody who does its job
 

@@ -6,12 +6,14 @@ company's *archive* works. "Who approved the March pack for Fuel and
 Convenience" is a question every real reader asks, and until
 ``ArtifactIntent.approver_id`` existed no artifact here could answer it.
 
-Four properties, and they are the contract. That a signature is **real** — the
+Five properties, and they are the contract. That a signature is **real** — the
 approver exists, is not the author, and could open what they signed. That
 absence is a **claim** rather than an omission. That the approval **fans out**
-with the company, because a division's own managing director signs it. And
-that access **follows the post** when a unit changes hands, which is where the
-validator found the first defect the day it existed.
+with the company, because a division's own managing director signs it. That
+access **follows the post** when a unit changes hands, which is where the
+validator found the first defect the day it existed. And that the corpus
+**asks about it**, because a document property nobody asks about is
+decoration.
 """
 
 from __future__ import annotations
@@ -203,3 +205,67 @@ def test_a_signed_corpus_still_replays_byte_identically() -> None:
     assert [ir.model_dump() for ir in replayed._artifact_irs] == [
         ir.model_dump() for ir in rendered._artifact_irs
     ]
+
+
+# ---------------------------------------------------------------------------
+# 5. And the corpus asks about it
+# ---------------------------------------------------------------------------
+
+
+def test_the_signature_block_is_something_the_corpus_asks_about(closed) -> None:  # type: ignore[no-untyped-def]
+    """A document property nobody asks about is decoration.
+
+    Three authority questions and one abstention. The authority family scored
+    0/3 against a keyword baseline before and 0/6 after, which is the intended
+    result rather than a disappointing one — a baseline that could tell an
+    author from an approver would mean the two were not distinguishable in the
+    first place.
+    """
+    from worldloom.models import EvaluationType
+
+    questions = {case.question: case for case in closed.evaluations}
+    approval = [q for q in questions if "approved" in q or "prepared by" in q]
+    assert len(approval) >= 3, approval
+
+    answered = [questions[q] for q in approval if not questions[q].expects_abstention]
+    assert answered, "at least one has an answer, or the family is only abstentions"
+    for case in answered:
+        assert case.evaluation_type is EvaluationType.AUTHORITY_RESOLUTION
+        assert case.expected_answer, case.question
+
+
+def test_a_document_nobody_signed_stays_unsigned(closed) -> None:  # type: ignore[no-untyped-def]
+    """The only test this corpus has that a system will not invent a signature.
+
+    Absence is a claim (`planning._APPROVED_BY`) and a claim is worth nothing
+    if nothing checks it: asking who approved a close calendar has to come back
+    as an abstention, because the corpus records who issued it and nobody else.
+    """
+    abstentions = [
+        case for case in closed.evaluations
+        if case.expects_abstention and "approved" in case.question
+    ]
+    assert abstentions, "no case asks after an approval that does not exist"
+    unsigned = {i.artifact_type.replace("_", " ") for i in closed.artifact_intents
+                if not i.approver_id}
+    assert any(
+        any(kind in case.question for kind in unsigned) for case in abstentions
+    ), "the abstention must name a type this corpus really does leave unsigned"
+
+
+def test_the_answer_to_who_approved_is_never_the_author(closed) -> None:  # type: ignore[no-untyped-def]
+    """The byline is the trap, so it must not also be the answer.
+
+    A document names its author at the top in larger type and its approver in a
+    table at the foot. A case whose expected answer happened to be the author's
+    name would reward exactly the shortcut it exists to catch.
+    """
+    names = {p.id: p.name for p in closed.people}
+    by_id = {i.id: i for i in closed.artifact_intents}
+    for case in closed.evaluations:
+        if "Who approved" not in case.question or case.expects_abstention:
+            continue
+        for artifact_id in case.required_artifact_ids:
+            intent = by_id.get(artifact_id)
+            if intent is not None:
+                assert case.expected_answer != names[intent.author_id], case.question

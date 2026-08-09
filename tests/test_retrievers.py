@@ -112,16 +112,24 @@ def test_bm25_numbers_are_pinned_exactly(corpus: World) -> None:
     archive, which is the direction every number in this table is supposed to
     move — a signature block that made retrieval *easier* would mean the
     baseline was matching on furniture.
+
+    The corpus then grew four cases about that signature block
+    (`evaluation._Taxonomy.approvals`) — three authority questions and one
+    abstention — and the baseline passed none of them, so the totals read 22 of
+    46 rather than 22 of 42. That is the intended result rather than a
+    disappointing one: they land in the two families this corpus exists to keep
+    hard, and a keyword baseline that could tell an author from an approver
+    would mean the two were not distinguishable in the first place.
     """
     card = score(corpus)
     assert card.passed == 22
     assert card.by_type() == {
-        EvaluationType.AUTHORITY_RESOLUTION: (0, 3),
+        EvaluationType.AUTHORITY_RESOLUTION: (0, 6),
         EvaluationType.CAUSAL_MULTI_HOP: (1, 3),
         EvaluationType.CITATION_REQUIRED: (3, 3),
         EvaluationType.CROSS_ARTIFACT: (4, 4),
         EvaluationType.DIRECT_LOOKUP: (9, 9),
-        EvaluationType.EXPECTED_ABSTENTION: (0, 9),
+        EvaluationType.EXPECTED_ABSTENTION: (0, 10),
         EvaluationType.NUMERICAL_COMPARISON: (5, 8),
         EvaluationType.TEMPORAL_STATE: (0, 3),
     }
