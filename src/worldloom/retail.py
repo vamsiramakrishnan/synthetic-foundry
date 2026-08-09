@@ -280,6 +280,16 @@ class RetailWorld:
     financial year: a pack is a claim about *this company*, a locale about the
     country it is in."""
 
+    policies: str | None = None
+    """Standing documents (``worldloom.policies``): ``"core"`` or ``"full"``.
+
+    The paperwork a company *has* rather than produces — an expense policy, a
+    delegation of authority, a leave policy — as opposed to the episodic
+    documents a close or an incident emits. ``None`` mints nothing, which is
+    what keeps every corpus built before the knob existed byte-identical, the
+    same guarantee ``estate`` and ``master_data`` make. The recipe records the
+    level, never the documents, so a replay re-runs the same construction."""
+
     master_data: Any = None
     """Reference tables at scale (``generators/masterdata.py``): a mapping of
     ``vendors``/``customers``/``skus`` to row counts, e.g.
@@ -373,6 +383,7 @@ class RetailWorld:
             # resolved dict would freeze a copy of the registry into it.
             locale=self.locale,
             master_data=self.master_data,
+            policies=self.policies,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = organisation.generate(
@@ -418,7 +429,14 @@ class RetailWorld:
         # category names, under a stream root of its own so it moves nothing.
         from .generators import masterdata as masterdata_module
 
-        return masterdata_module.applied(world, self.master_data, locale=locale)
+        world = masterdata_module.applied(world, self.master_data, locale=locale)
+        # Last, and after the master data for the same reason that came after
+        # the organisation: a standing document is planned against the roles
+        # and the revenue this world actually ended up with. A strict no-op
+        # when nothing was asked for — see the field.
+        from . import policies as policies_module
+
+        return policies_module.applied(world, self.policies)
 
 
 # Retail owns its archetypes in the domain registry, like every vertical. No

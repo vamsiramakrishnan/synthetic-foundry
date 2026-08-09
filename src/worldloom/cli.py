@@ -254,6 +254,20 @@ def build(
             "existing corpus is byte-identical."
         ),
     ),
+    policies: str = typer.Option(
+        None, "--policies",
+        help=(
+            "Give the company its standing documents: core or full. These are "
+            "the papers a company *has* rather than produces — a delegation of "
+            "authority, an expense policy, a leave policy, an information "
+            "security policy — as opposed to what a close or an incident emits. "
+            "Without it an assistant asked what the approval threshold is has "
+            "nothing to find, because the company has no rules. Money "
+            "provisions scale off the company's own revenue, so two archetypes "
+            "do not share a limit. Omit it and every existing corpus is "
+            "byte-identical."
+        ),
+    ),
     physics: Path = typer.Option(
         None, "--physics",
         help=(
@@ -518,6 +532,7 @@ def build(
                 ("--physics", physics is not None),
                 ("--locale", locale is not None),
                 ("--estate", estate is not None),
+                ("--policies", policies is not None),
             ) if given
         ]
         if subsumed:
@@ -995,6 +1010,11 @@ def build(
                 # were retail's: a bank whose landscape is called
                 # `click-collect-api` is worse than a bank with no landscape.
                 **({} if estate is None else {"estate": estate}),
+                # Conditional for `estate`'s reason one line up: a domain
+                # registered outside this repository may have no such field,
+                # and passing `policies=None` to one that does not would refuse
+                # a build that has nothing wrong with it.
+                **({} if policies is None else {"policies": policies}),
             )
         ))
         world = _localised_recipe(_localised(builder).build())
@@ -1017,6 +1037,10 @@ def build(
             from dataclasses import replace as _replace_builder
 
             builder = _replace_builder(builder, estate=estate)
+        if policies is not None:
+            from dataclasses import replace as _replace_builder
+
+            builder = _replace_builder(builder, policies=policies)
         builder = _claimed(builder)
         if resolution is not None and not claimed_calendar:
             # A trading year the *pack* carries has to reach the closes too, and

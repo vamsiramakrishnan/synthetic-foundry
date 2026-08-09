@@ -85,6 +85,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Run this many consecutive episodes — closes for the retail vertical, or a single-episode vertical's own cadence (a domain's period_step_months). More than one gives recurrence, superseded documents, and the evaluation questions a single episode cannot pose. |
 | `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
+| `--policies` | Give the company its standing documents: core or full. These are the papers a company *has* rather than produces — a delegation of authority, an expense policy, a leave policy, an information security policy — as opposed to what a close or an incident emits. Without it an assistant asked what the approval threshold is has nothing to find, because the company has no rules. Money provisions scale off the company's own revenue, so two archetypes do not share a limit. Omit it and every existing corpus is byte-identical. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
 | `--services-end` | Exact active service count in the final period. |

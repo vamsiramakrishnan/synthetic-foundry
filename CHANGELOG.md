@@ -7,6 +7,61 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### The paperwork a company has, rather than the paperwork it produces
+
+- **`worldloom.policies`** — every document in this corpus was *episodic*: a
+  close ran, an incident happened, a return was filed. Measured on a
+  twelve-period, eight-division build: 195 artifacts, of which 96 were the same
+  type with a different division's name on it, and **not one was a policy**. An
+  assistant asked "what is our expense approval threshold" or "how long do we
+  keep contracts" had nothing to find, because the company had no rules.
+  `--policies core|full` gives it ten: a delegation of authority, a code of
+  conduct, business continuity, expense, travel, leave, remote work,
+  information security, data retention, procurement.
+- **A provision is a fact, not a sentence.** "Receipts above 90 need a
+  manager's approval" is minted as a `CanonicalFact` with a number in it, so
+  every question this repository can already ask of a figure — what is it, when
+  did it change, which document says so — works on a policy unchanged. Forty-
+  eight `policy.*` kinds are registered in `factkinds` like any other.
+- **Scaled off revenue**, and rounded to a figure a policy would really name,
+  so a 7.8bn retailer and a 2bn insurer do not share an expense limit. A
+  delegation-of-authority ladder that stops climbing — two rungs a decimal place
+  apart rounding to the same figure at a small enough company — is refused
+  rather than clamped.
+- **A revision is supersession.** The expense policy is the one revised entry
+  in the shipped library: the earlier threshold's validity window closes, the
+  later fact records what it superseded, *and the earlier document stays on the
+  shelf* with the current one `supersedes`-ing it. Minting only the closed facts
+  was not enough and the corpus said so — `evaluation.answerable` dropped the
+  question about the old figure, correctly, and that drop is what found it.
+- Dates are **clamped forward of whoever signs**, never back, which is
+  `form_units`' rule about a unit and its leader.
+  `validate.author_not_yet_employed` found the violation immediately: a
+  superseded policy dated five years back signed by a controller who joined
+  three years ago.
+- **`documents.extends_outline`** — a third kind of compiler. One that builds
+  its IR from nothing (a workbook, a thread) must have no outline beside it or
+  the outline is dead data; one that *composes* the outline, as
+  `policies._provisions` does by inserting a resolved provisions table, has an
+  outline that is live. Marked on the function, because the two are the same
+  callable shape, and `tests/test_doctypes.py` holds the line per-compiler so a
+  from-scratch compiler that grew an outline by accident still fails.
+- **`evaluation._Taxonomy.standing_documents`** — the questions an assistant is
+  actually asked. Retail's set moves 30 → 44 with `--policies full`: eleven
+  direct lookups whose wording is stated on the clause itself
+  (`policies.Clause.asks`), one `authority_resolution` about who signed the
+  rules, and one hard `temporal_state` — what the threshold was before the
+  revision, where the current document is the confident wrong answer and only a
+  validity window tells them apart.
+- Registered at **package import**, not lazily from inside `build()`. It was
+  lazy first, and `tests/test_doctypes.py` passed alone and failed in a full
+  suite — `documents.declared_types()` returning two different answers depending
+  on what had run before it, which is exactly the import-order determinism bug
+  `register_artifact_types` warns about.
+- Off by default: `applied(world, None)` returns the same object, every default
+  build and all five registered archetypes are byte-identical, and a policy
+  corpus replays byte-identical from its own recipe.
+
 ### The organisation is shaped like its management
 
 - **`roles.from_shape`** dealt spine keys into levels in sorted-key order and

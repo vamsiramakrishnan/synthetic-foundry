@@ -144,6 +144,7 @@ def build_recipe(
     seasonality: Any = None,
     locale: Any = None,
     master_data: Mapping[str, Any] | None = None,
+    policies: str | None = None,
 ) -> dict[str, Any]:
     """The recipe for a freshly built world, before any scenario has run.
 
@@ -186,8 +187,46 @@ def build_recipe(
         **({} if not master_data else {
             "master_data": _master_data_payload(master_data)
         }),
+        # Same conditional rule once more. The *level*, never the documents:
+        # what a policy says is derived from the company's own revenue and role
+        # table, so recording the level re-runs the same derivation while
+        # recording the documents would freeze a copy of what the library said
+        # that day — `master_data`'s argument exactly, one layer along.
+        # Validated here so a recipe can never record a level a rebuild would
+        # refuse.
+        **({} if not policies or policies == "none" else {
+            "policies": _policies_payload(policies)
+        }),
         "steps": [],
     }
+
+
+def _policies_payload(level: str) -> str:
+    from .policies import check_level
+
+    return check_level(level)
+
+
+def _with_policies(spec: Any, level: Any) -> Any:
+    """*spec* rebound to a recorded policy level, or untouched.
+
+    ``_with_master_data``'s posture: a recipe that never recorded one keeps
+    rebuilding exactly as it did, and one that did and meets a spec that cannot
+    carry it is an error — the corpus shipped with a policy library, and
+    rebuilding without one would be a company with no rules reported as the
+    same company.
+    """
+    if not level or level == "none":
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, policies=str(level))
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records a policy level, but"
+            f" {type(spec).__name__} does not accept one: {exc}"
+        ) from exc
 
 
 def _master_data_payload(master_data: Mapping[str, Any]) -> dict[str, int]:
@@ -663,6 +702,7 @@ def rebuild(
         spec = _with_estate(spec, recipe.get("estate"))
         spec = _with_lore_claims(spec, lore_claims)
         spec = _with_master_data(spec, recipe.get("master_data"))
+        spec = _with_policies(spec, recipe.get("policies"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
     else:
@@ -696,6 +736,7 @@ def rebuild(
         spec = _with_estate(spec, recipe.get("estate"))
         spec = _with_lore_claims(spec, lore_claims)
         spec = _with_master_data(spec, recipe.get("master_data"))
+        spec = _with_policies(spec, recipe.get("policies"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
 

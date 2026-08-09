@@ -331,6 +331,25 @@ def register_artifact_types(
             table[key] = value  # type: ignore[assignment]
 
 
+#: Marker attribute a compiler sets on itself to say it *composes* the outline
+#: rather than replacing it.
+#:
+#: The distinction is real and `tests/test_doctypes.py` holds the line on it. A
+#: compiler like `finance_workbook` builds its IR from nothing, so an outline
+#: registered beside it would be dead data nobody reads and an author would be
+#: editing a section list with no effect. A compiler like
+#: `policies._provisions` calls `outline` and inserts one block into what comes
+#: back, so its outline is live data and is the only place a policy's sections
+#: are stated. Marked rather than inferred, because the two are the same
+#: callable shape and nothing about a function signature can tell them apart.
+EXTENDS_OUTLINE = "worldloom_extends_outline"
+
+
+def extends_outline(compiler: Any) -> bool:
+    """Whether *compiler* reads the registered outline rather than replacing it."""
+    return bool(getattr(compiler, EXTENDS_OUTLINE, False))
+
+
 def written_at(intent: ArtifactIntent, facts: dict[str, CanonicalFact]):  # type: ignore[no-untyped-def]
     """When an artifact of this intent was written.
 
@@ -1413,6 +1432,14 @@ _DOMAIN_AUTHORS: dict[str, frozenset[str] | None] = {
     "actuarial": frozenset({"Actuarial"}),
     "procurement": frozenset({"Procurement", "Finance", "Operations", "Executive"}),
     "people": None,
+    # A standing document's domain (`worldloom.policies`). Open like `people`,
+    # and for a related reason: a policy is owned by the function it governs,
+    # so an information security policy is signed in Technology and a leave
+    # policy in Executive or People, while the *same* library has to work on
+    # four engines whose function vocabularies do not agree. A closed set here
+    # would refuse a hospital its clinical governance policy on the strength of
+    # a word retail happens not to use.
+    "governance": None,
 }
 
 

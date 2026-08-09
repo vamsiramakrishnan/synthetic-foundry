@@ -386,6 +386,43 @@ has left with nobody named in their place. Counts are a budget, not a quota: a
 small world has fewer corrections to be stale about and the pass takes what it
 can support.
 
+### The paperwork a company has, rather than the paperwork it produces
+
+Every document in this corpus was **episodic** — a close ran, an incident
+happened, a return was filed, and paperwork came out of it. Measured on a
+twelve-period, eight-division build: 195 artifacts, of which 96 were the same
+type with a different division's name on it, and not one of them was a policy.
+An assistant asked "what is our expense approval threshold" or "how long do we
+keep contracts" had nothing to find, because the company had no rules.
+
+```bash
+worldloom build --seed 8128 --policies core --out ./corpus   # five
+worldloom build --seed 8128 --policies full --out ./corpus   # ten
+```
+
+A standing document is a different shape, and `worldloom.policies` says so in
+three ways. **Nothing triggers it** — it is not caused by an event and does not
+report a period; it is in force, from a date, until it is revised. **Its content
+is parameters** — "receipts above 90 need a manager's approval" is minted as a
+`CanonicalFact` with a number in it, so every question this repository can
+already ask of a figure works on a policy unchanged, and forty-eight `policy.*`
+kinds sit in `factkinds` beside every other. **A revision is supersession** —
+the earlier threshold's window closes, the later fact records what it
+superseded, and *the earlier document stays on the shelf*, which is what makes
+"what was the limit before the revision" answerable rather than merely askable.
+
+Money provisions are stated as a fraction of the company's own revenue and
+rounded to a figure a policy would really name, so a 7.8bn retailer and a 2bn
+insurer do not share an expense limit. A delegation-of-authority ladder that
+stops climbing is refused rather than clamped, and a policy is dated no earlier
+than whoever signed it joined — `form_units`' rule about a unit and its leader,
+and `validate.author_not_yet_employed` found the violation the first time it was
+not applied.
+
+`--policies` is off by default and a strict no-op, so every corpus built before
+it existed is byte-for-byte what it was. `policies.register` adds an area for a
+vertical whose paperwork genuinely is its own.
+
 ### Who signed it
 
 Every document was authored and none of them approved, which is not how a

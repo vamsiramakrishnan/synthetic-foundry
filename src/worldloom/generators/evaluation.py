@@ -217,6 +217,11 @@ EVAL_TEXT: dict[str, str] = {
     "q.approval.who_prepared_unit":
         "Who prepared the {unit} close commentary for {period}?",
     "q.abstain.unapproved": "Who approved the {doc_type} for {period}?",
+    # -- standing documents ------------------------------------------------------
+    "q.policy.superseded":
+        "What was the {provision} under the expense policy in force before the"
+        " current version?",
+    "q.policy.owner": "Who approved the {title}?",
     "q.abstain.cmo":
         "Who is the company's Chief Marketing Officer, and when did they join?",
     "q.abstain.close_calendar_1995": "Who signed the close calendar in 1995?",
@@ -1553,6 +1558,132 @@ class _Taxonomy:
             )
 
 
+    def standing_documents(self) -> None:
+        """What the rules are, who signed them, and what they used to be.
+
+        The family the corpus most obviously lacked. Everything else here asks
+        about a *period* — what revenue was, what the close did, who was in the
+        room — and an assistant pointed at a real company's archive is asked
+        "what is our expense approval threshold" far more often than any of
+        them. It had no answer, because the company had no rules.
+
+        Three shapes over ``worldloom.policies``:
+
+        * **The provision.** A direct lookup, and deliberately so: this is the
+          question, and phrasing it as anything cleverer would be dressing up
+          the thing being measured. The clause states its own wording
+          (``policies.Clause.asks``), because an author adding a provision
+          knows what it will be asked and should not have to find a second
+          table to say so.
+        * **The provision that moved.** The expense policy is the one revised
+          version in the shipped library, so the superseded figure is in the
+          corpus with a closed validity window and the current one is not the
+          answer. `temporal_state`, and the hardest of the three: the current
+          document is the confident wrong answer and it is the one that looks
+          newest.
+        * **Who approved it.** A policy nobody approved is a draft, so every
+          standing document carries a signature — which makes the corpus's
+          authority chain reach the rules and not only the reports.
+
+        Gated on the facts existing. A build that did not ask for policies
+        mints nothing here, which is every corpus built before they did.
+        """
+        from .. import policies as policies_module
+
+        specs = {spec.artifact_type: spec for area in policies_module.LIBRARY
+                 for spec in policies_module.LIBRARY[area]}
+        # `prior_intents` as well as this episode's, and for standing documents
+        # it is only ever the former: a policy is planned when the world is
+        # *built*, before any episode runs, because it is not caused by one.
+        # That is the whole distinction this family exists to ask about, and a
+        # search of `self.intents` alone found nothing on a corpus that plainly
+        # had ten policies in it.
+        planned = [i for i in (*self.prior_intents, *self.intents)
+                   if i.artifact_type in specs]
+        if not planned:
+            return
+
+        for intent in planned:
+            spec = specs[intent.artifact_type]
+            cited = {}
+            for fact_id in intent.required_fact_ids:
+                fact = self._fact_index.get(fact_id)
+                if fact is not None:
+                    cited[fact.kind] = fact
+            for clause in spec.clauses:
+                if not clause.asks:
+                    continue
+                fact = cited.get(policies_module.kind_of(spec, clause))
+                if fact is None or fact.value is None:
+                    continue
+                self.case(
+                    clause.asks, EvaluationType.DIRECT_LOOKUP,
+                    f"{fact.value.amount:,.0f} {fact.value.unit}",
+                    [fact.id], difficulty="easy",
+                    reasoning=f"Stated in the {spec.title}, which is the only"
+                              " document in the corpus that says it.",
+                    sources=[intent.id],
+                )
+
+        # The one provision that moved, and the stale figure that is still in
+        # the archive. Found by looking for a closed window rather than by
+        # naming the expense policy, so a library that revises something else
+        # tomorrow asks about that instead.
+        # Over the world's whole ledger rather than this episode's cut: a
+        # policy fact predates every episode, so `self.facts` — the period's
+        # financial slice — contains none of them.
+        ledger = list(self._fact_index.values())
+        superseded = [
+            fact for fact in ledger
+            if fact.kind.startswith("policy.") and fact.valid_to is not None
+            and fact.value is not None
+        ]
+        for fact in superseded[:1]:
+            current = next(
+                (f for f in ledger
+                 if f.kind == fact.kind and f.valid_to is None and f.value is not None),
+                None,
+            )
+            if current is None:
+                continue
+            spec = next(
+                (s for s in specs.values()
+                 if any(policies_module.kind_of(s, c) == fact.kind for c in s.clauses)),
+                None,
+            )
+            label = next(
+                (c.label.lower() for c in (spec.clauses if spec else ())
+                 if policies_module.kind_of(spec, c) == fact.kind), "provision",
+            ) if spec else "provision"
+            self.case(
+                self.t("q.policy.superseded", provision=label),
+                EvaluationType.TEMPORAL_STATE,
+                f"{fact.value.amount:,.0f} {fact.value.unit}",
+                [fact.id], difficulty="hard",
+                reasoning=(
+                    f"The policy was revised; the figure in force now is"
+                    f" {current.value.amount:,.0f} and is the confident wrong"
+                    " answer, because it sits in the document that looks"
+                    " newest. Only the validity window distinguishes them."
+                ),
+            )
+
+        for intent in planned[:1]:
+            spec = specs[intent.artifact_type]
+            if not intent.approver_id or not intent.required_fact_ids:
+                continue
+            self.case(
+                self.t("q.policy.owner", title=spec.title),
+                EvaluationType.AUTHORITY_RESOLUTION,
+                self.subjects.name(intent.approver_id),
+                [intent.required_fact_ids[0]], difficulty="medium",
+                reasoning="A policy nobody approved is a draft, so the"
+                          " authority chain reaches the rules and not only the"
+                          " reports.",
+                sources=[intent.id],
+            )
+
+
 def evaluation_cases(
     minter: Minter,
     *,
@@ -1633,6 +1764,10 @@ def evaluation_cases(
     # planner names no approver mints nothing here, so no `EVAL-` id in any
     # corpus already built can move.
     taxonomy.approvals()
+    # Last, and appended for the reason every family above it was. A world that
+    # did not ask for standing documents mints nothing here, so no `EVAL-` id
+    # in any corpus already built can move.
+    taxonomy.standing_documents()
 
     # One last pass of the rule every family is supposed to apply for itself.
     #
