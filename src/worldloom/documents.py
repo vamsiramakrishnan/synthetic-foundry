@@ -369,7 +369,18 @@ def _money(amount: float | None, fact_id: str | None = None) -> Cell:
     return Cell(value=amount, fact_id=fact_id)
 
 
-#: The seven P&L columns, and the fact kind each reads.
+#: The eight P&L columns, and the fact kind each reads.
+#:
+#: `gm_pct_budget` was absent for a long time, and its absence was invisible:
+#: `generators/finance.py` mints `financial.gross_margin_pct.budget` for every
+#: category and unit, `generators/planning.py` puts those facts in the
+#: workbook's required set, and no column here read them — 114 facts a build,
+#: planned into a document and carried by none of it. Nothing complained,
+#: because until `validate.carried_evidence` existed nothing compared what an
+#: intent asked a document to carry against what the compiled document holds.
+#: Budget margin also earns its place on the sheet: a division can beat its
+#: gross-profit budget while missing the rate it was supposed to earn it at,
+#: and with actual margin alone a reader cannot see that.
 _MEASURES: dict[str, str] = {
     "revenue_budget": "financial.revenue.budget",
     "revenue_actual": "financial.revenue.actual",
@@ -377,6 +388,7 @@ _MEASURES: dict[str, str] = {
     "gp_budget": "financial.gross_profit.budget",
     "gp_actual": "financial.gross_profit.actual",
     "gp_variance": "financial.gross_profit.variance",
+    "gm_pct_budget": "financial.gross_margin_pct.budget",
     "gm_pct_actual": "financial.gross_margin_pct.actual",
 }
 
@@ -387,6 +399,7 @@ _MEASURES: dict[str, str] = {
 _DERIVED: dict[str, tuple[FormulaKind, list[str]]] = {
     "revenue_variance": (FormulaKind.DIFFERENCE, ["revenue_actual", "revenue_budget"]),
     "gp_variance": (FormulaKind.DIFFERENCE, ["gp_actual", "gp_budget"]),
+    "gm_pct_budget": (FormulaKind.RATIO_PCT, ["gp_budget", "revenue_budget"]),
     "gm_pct_actual": (FormulaKind.RATIO_PCT, ["gp_actual", "revenue_actual"]),
 }
 
@@ -394,7 +407,12 @@ _DERIVED: dict[str, tuple[FormulaKind, list[str]]] = {
 #: percentage is a ratio of totals, never the total of ratios; a variance, by
 #: contrast, is additive, so a subtotal sums its children's variances and shows
 #: which of them the group's miss came from.
-_NOT_ADDITIVE = frozenset({"gm_pct_actual"})
+_NOT_ADDITIVE = frozenset({"gm_pct_budget", "gm_pct_actual"})
+
+#: The same rule stated over fact *kinds* rather than column keys, for the trend
+#: sheets — which are laid out by period rather than by measure, so they cannot
+#: look a column up in `_NOT_ADDITIVE`.
+_RATE_KINDS = frozenset({"financial.gross_margin_pct.actual", "financial.gross_margin_pct.budget"})
 
 
 def _pnl_columns() -> list[Column]:
@@ -405,6 +423,7 @@ def _pnl_columns() -> list[Column]:
         Column(key="gp_budget", label="GP budget", number_format=MONEY_FORMAT),
         Column(key="gp_actual", label="GP actual", number_format=MONEY_FORMAT),
         Column(key="gp_variance", label="GP variance", number_format=MONEY_FORMAT),
+        Column(key="gm_pct_budget", label="GM% budget", number_format=PERCENT_FORMAT),
         Column(key="gm_pct_actual", label="GM% actual", number_format=PERCENT_FORMAT),
     ]
 
@@ -558,8 +577,31 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # fixture, every example and every default build has exactly one period.
     periods = sorted({f.period for f in facts if f.period})
     period = (periods[-1] if periods else "") or world.period or ""
-    units = list(world.business_units)
     company = world.company
+
+    # A business unit the finance generator booked no month for does not get a
+    # P&L row. This is the same rule `sites_of` applies below, for the same
+    # reason, and it was missing here: `world.business_units` unfiltered meant a
+    # unit added by a `StructuralChange` after the close it was measured for
+    # rendered as a row of empty cells, and a `Group` row that named it as
+    # a child of a sum it contributed nothing to. Measured on a retail build
+    # with one added unit: 3 of 15 P&L rows fully blank, `validate` clean across
+    # 21,601 checks — because a reconciliation check compares a cell to a fact
+    # and two absent numbers agree. That is the finance-workbook defect
+    # recurring one function later.
+    #
+    # The predicate is "any measured column resolves", not "revenue resolves":
+    # a unit carried on gross profit alone is still a unit that closed.
+    def measured(unit_id: str) -> bool:
+        return any(index.get(kind, unit_id, period) is not None for kind in _MEASURES.values())
+
+    units = [unit for unit in world.business_units if measured(unit.id)]
+    # A workbook whose every unit fails the test is a workbook with no month in
+    # it at all. Falling back to the full list keeps that case rendering exactly
+    # as it did before rather than emitting a sheet with only a `Group` row on
+    # it, which would be a second way to be silently empty.
+    if not units:
+        units = list(world.business_units)
 
     unit_keys = [unit.id for unit in units]
     columns = _pnl_columns()
@@ -648,7 +690,10 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                     title="Gross margin against budget by division",
                     kind=ChartKind.COLUMN,
                     table="pnl",
-                    series=["gm_pct_actual"],
+                    # The title said "against budget" while the chart plotted one
+                    # series. It could not plot two: the budget-margin column did
+                    # not exist, though the fact behind it did.
+                    series=["gm_pct_budget", "gm_pct_actual"],
                     rows=unit_keys,
                     category_axis="Division",
                     value_axis="Gross margin %",
@@ -777,76 +822,107 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         )
         sections.append(ArtifactSection(heading="Store Performance", table=store_table))
 
-    # -- Revenue trend -----------------------------------------------------
+    # -- Trend, by measure -------------------------------------------------
+    # Three sheets, not one, and the second and third are not decoration. The
+    # planner hands this workbook actuals for every comparative month across
+    # *all three* measures; the trend sheet read revenue and only revenue, so a
+    # four-month grocery build planned 234 gross-profit and margin facts into
+    # the model and carried none of them — the same defect as the missing
+    # budget-margin column, at a different scale, and equally invisible until
+    # `validate.carried_evidence` compared the plan against the compiled sheet.
+    #
+    # They also answer a question the revenue trend cannot. A category whose
+    # revenue climbs every month while its margin rate slides is the most
+    # ordinary story in retail and the one a revenue-only trend hides
+    # completely.
+    _TRENDS: tuple[tuple[str, str, str, str], ...] = (
+        ("trend", "Revenue Trend", "financial.revenue.actual", MONEY_FORMAT),
+        ("trend_gp", "Gross Profit Trend", "financial.gross_profit.actual", MONEY_FORMAT),
+        ("trend_margin", "Margin Trend", "financial.gross_margin_pct.actual", PERCENT_FORMAT),
+    )
     if len(periods) > 1:
-        trend_columns = [
-            Column(key=p, label=p, number_format=MONEY_FORMAT) for p in periods
-        ]
 
-        def trend_row(key: str, label: str, subject: str, *, children: list[str] | None = None,
-                      emphasis: bool = False) -> Row:
+        def trend_row(kind: str, key: str, label: str, subject: str, *,
+                      children: list[str] | None = None, emphasis: bool = False) -> Row:
             cells: dict[str, Cell] = {}
             for month in periods:
-                fact = index.get("financial.revenue.actual", subject, month)
+                fact = index.get(kind, subject, month)
                 cells[month] = Cell(
                     value=fact.value.amount if fact and fact.value else None,
                     fact_id=fact.id if fact else None,
-                    formula=FormulaKind.SUM if children else None,
-                    operands=children or [],
+                    # A margin rate is a ratio of totals and never the total of
+                    # ratios — the same rule `_NOT_ADDITIVE` states for the P&L
+                    # columns. A subtotal row on the margin sheet therefore
+                    # states its own fact and declares no formula, while the
+                    # money sheets sum their children.
+                    formula=(FormulaKind.SUM if children and kind not in _RATE_KINDS else None),
+                    operands=(children or [] if kind not in _RATE_KINDS else []),
                 )
             return Row(key=key, label=label, cells=cells, emphasis=emphasis)
 
-        trend_rows: list[Row] = []
-        trend_subtotals: list[str] = []
-        for unit in units:
-            members = categories_of[unit.id]
-            for category in members:
-                trend_rows.append(trend_row(category.id, f"{unit.name} · {category.name}", category.id))
-            if members:
-                trend_rows.append(
-                    trend_row(unit.id, f"{unit.name} total", unit.id,
-                              children=[c.id for c in members], emphasis=True)
-                )
-                trend_subtotals.append(unit.id)
-            else:
-                trend_rows.append(trend_row(unit.id, unit.name, unit.id))
-                trend_subtotals.append(unit.id)
-        trend_rows.append(
-            trend_row(company.id, "Group", company.id, children=trend_subtotals, emphasis=True)
-        )
-        sections.append(
-            ArtifactSection(
-                heading="Revenue Trend",
-                charts=[
-                    Chart(
-                        key="trend_units",
-                        title="Revenue by division, by month",
-                        kind=ChartKind.LINE,
-                        table="trend",
-                        series=list(periods),
-                        rows=trend_subtotals,
-                        # One line per division across months, not one line per
-                        # month across divisions. Drawn the other way round this
-                        # is twelve lines of a single point each, and it renders
-                        # without complaint.
-                        by_row=True,
-                        category_axis="Division",
-                        value_axis=f"{company.currency} {company.currency_unit}",
-                        note="A line chart is only honest where the axis is ordered. It is here.",
+        for table_key, heading, kind, number_format in _TRENDS:
+            trend_columns = [
+                Column(key=p, label=p, number_format=number_format) for p in periods
+            ]
+            trend_rows: list[Row] = []
+            trend_subtotals: list[str] = []
+            for unit in units:
+                members = categories_of[unit.id]
+                for category in members:
+                    trend_rows.append(
+                        trend_row(kind, category.id, f"{unit.name} · {category.name}", category.id)
                     )
-                ],
-                table=Table(
-                    key="trend",
-                    title="Revenue Trend",
-                    columns=trend_columns,
-                    rows=trend_rows,
-                    note=(
-                        "Actual revenue by month. Prior periods carry no budget: a trend needs "
-                        "actuals, and generating budgets nobody reads would treble the ledger."
-                    ),
-                ),
+                if members:
+                    trend_rows.append(
+                        trend_row(kind, unit.id, f"{unit.name} total", unit.id,
+                                  children=[c.id for c in members], emphasis=True)
+                    )
+                    trend_subtotals.append(unit.id)
+                else:
+                    trend_rows.append(trend_row(kind, unit.id, unit.name, unit.id))
+                    trend_subtotals.append(unit.id)
+            trend_rows.append(
+                trend_row(kind, company.id, "Group", company.id,
+                          children=trend_subtotals, emphasis=True)
             )
-        )
+            # One chart, on revenue. Three line charts of the same rows would
+            # be three ways of looking at the same shape, and the margin one
+            # would share neither its axis nor its units.
+            charts = [
+                Chart(
+                    key="trend_units",
+                    title="Revenue by division, by month",
+                    kind=ChartKind.LINE,
+                    table="trend",
+                    series=list(periods),
+                    rows=trend_subtotals,
+                    # One line per division across months, not one line per
+                    # month across divisions. Drawn the other way round this
+                    # is twelve lines of a single point each, and it renders
+                    # without complaint.
+                    by_row=True,
+                    category_axis="Division",
+                    value_axis=f"{company.currency} {company.currency_unit}",
+                    note="A line chart is only honest where the axis is ordered. It is here.",
+                )
+            ] if table_key == "trend" else []
+            sections.append(
+                ArtifactSection(
+                    heading=heading,
+                    charts=charts,
+                    table=Table(
+                        key=table_key,
+                        title=heading,
+                        columns=trend_columns,
+                        rows=trend_rows,
+                        note=(
+                            "Actual by month. Prior periods carry no budget: a trend needs "
+                            "actuals, and generating budgets nobody reads would treble the "
+                            "ledger."
+                        ),
+                    ),
+                )
+            )
 
     # -- Variance drivers --------------------------------------------------
     drivers: list[Row] = []
@@ -1248,10 +1324,18 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "State the committed date for the period. This is a standing published "
             "document; write it as policy, not as news.",
         ),
+        # Fires only in a period the date actually moved in, which is what the
+        # plan should always have said. It asked for the final status and the
+        # delay as well, `generators/planning.py` gave the calendar neither, and
+        # the section rendered zero times across thirty-one calendars — half of
+        # every close calendar's declared outline, permanently unreachable. The
+        # narrower ask is also the truer one: a timetable records the date it
+        # moved to, not how the period turned out.
         SectionPlan(
-            "Escalation", ("close.revised_date", "close.status", "close.delay"), "any",
-            "What happens when the date moves, and where the period ended up. Procedural "
-            "register — this is read by people looking up a rule.",
+            "Escalation", ("close.revised_date",), "any",
+            "The date moved. State what it moved to and what the standing rule is when it "
+            "does. Procedural register — this is read by people looking up a rule, not by "
+            "people who want to know how the period went.",
         ),
     ),
 

@@ -305,18 +305,47 @@ def artifact_intents(
     # Republished every period, replacing the last one. This is the corpus's
     # cleanest supersession chain: two documents that both look authoritative,
     # where only the newest is current and the older ones are still on the shelf.
+    # The calendar's second section — "Escalation: what happens when the date
+    # moves, and where the period ended up" — asks for `close.revised_date`,
+    # `close.status` and `close.delay`, and this intent carried the due date
+    # alone. Measured across thirty-one calendars in thirteen builds: the
+    # section fired zero times, so half of every close calendar's declared
+    # outline had never been written. A standing document that states a
+    # commitment and never states whether it was met is the document a reader
+    # goes to first and learns nothing from.
+    # The revision, and only the revision. The first attempt gave the calendar
+    # the final status and the delay as well, and that is what a close calendar
+    # is *not*: adding facts that are only true once the period has landed moved
+    # the document's own date from the first morning of the close to the day
+    # after it finished, and the corpus's earliest document — the one every
+    # supersession chain hangs off — became a retrospective. The status and the
+    # delay are reporting, and the CFO memo carries both. What belongs on a
+    # timetable is the date, and the date it moved to.
+    calendar_facts = [episode.keys["fact_due_date"]]
+    if episode.had_incident:
+        calendar_facts.append(episode.keys["fact_revised_date"])
     intent("close_calendar", "finance", "all_staff", roles["reporting_manager"],
-           [episode.keys["fact_due_date"]], [episode.keys["event_close_started"]], "small",
-           "The close calendar states the committed date every period.",
+           calendar_facts, [episode.keys["event_close_started"]], "small",
+           "The close calendar states the committed date every period, and any revision to it.",
            supersedes=latest("close_calendar"))
 
     intent("finance_workbook", "finance", "finance", roles["reporting_manager"],
            detail + acct + [episode.keys["fact_close_delay"]], [episode.close_event_id], "long",
            "The month-end model is the source artifact for the period and must reconcile.")
 
+    # Same defect, same shape: the memo's closing "Recommendation" section wants
+    # the remediation, its classification and the owner of the control behind
+    # it, and no `ops.*` fact was ever in the memo's required set — 0 of 31.
+    # The section only makes sense in a period something went wrong in, so the
+    # facts are added on the same gate the incident filings use rather than
+    # unconditionally; in a clean month the plan finds nothing and the section
+    # is correctly absent rather than permanently unreachable.
+    memo_facts = money + [episode.keys["fact_close_status_final"], episode.keys["fact_close_delay"]]
+    if episode.had_incident:
+        memo_facts += [episode.keys["fact_remediation"], episode.keys["fact_classification"],
+                       episode.keys["fact_owner"]]
     intent("cfo_variance_memo", "finance", "group_cfo", roles["controller"],
-           money + [episode.keys["fact_close_status_final"], episode.keys["fact_close_delay"]],
-           [episode.close_event_id], "medium",
+           memo_facts, [episode.close_event_id], "medium",
            "Variance commentary is produced for every close.")
 
     if episode.had_incident and not actor_authored:

@@ -1752,6 +1752,22 @@ class _Validator:
         for ir in self.world.artifact_irs:
             carried.update(ir.fact_ids())
 
+        # Compiling is all-or-nothing per corpus, so a partial set of IRs is a
+        # compiler that gave up on some intents rather than a corpus half-built
+        # on purpose — and the whole group above would then be measuring the
+        # documents that *did* compile and reporting clean. An adversarial pass
+        # over this validator deleted every IR but one and got a passing report
+        # with a smaller check count nobody compares against anything.
+        self.checks += 1
+        if len(self.world._artifact_irs) != len(self.world.artifact_intents):
+            self.fail(
+                "artifact",
+                "compiled_fewer_than_planned",
+                "compile",
+                f"{len(self.world.artifact_intents)} intent(s) planned, "
+                f"{len(self.world._artifact_irs)} compiled",
+            )
+
         for case in self.world.evaluations:
             if case.expects_abstention or not case.expected_fact_ids:
                 continue
@@ -1765,6 +1781,79 @@ class _Validator:
                     " a document, and in no compiled one. The question is"
                     " unanswerable from the corpus as built.",
                 )
+
+    def carried_evidence(self) -> None:
+        """Every fact a document was asked to carry, in the document.
+
+        `compiled_evidence` above asks the question from the evaluation set's
+        end — is this case's evidence *somewhere* — and that is a weaker
+        question than it looks, because one hit in one document satisfies it.
+        This asks it from the document's end, one check per intent per required
+        fact, and it is the check whose absence let two defects live in a corpus
+        reporting tens of thousands of clean checks:
+
+        * `financial.gross_margin_pct.budget` — minted per category and per
+          unit, planned into the month-end model, and read by no column of it.
+          114 facts a build, for as long as the workbook has existed.
+        * the reserve triangle's paid and incurred rollups — minted at
+          `period=None`, which is how a total over accident cohorts is
+          denominated, and filtered straight back out by the cohort
+          comprehension that built the rows.
+
+        Both are the same shape as the finance-workbook defect that prompted
+        this group: a document quietly carrying less than it was handed, where
+        every downstream check compares two absent things and finds them equal.
+
+        The second half is the cell rule, and it is the narrower of the two.
+        `ir.fact_ids()` collects a cell's `fact_id` without ever looking at its
+        `value`, so a workbook whose every cell went blank while keeping its
+        citations passes the first half exactly as it passes reconciliation —
+        measured by blanking all 17,216 values on a retail build and getting a
+        byte-identical check count with no violations. A cell that names a fact
+        and states nothing is the defect's actual signature on the page.
+        """
+        if not self.world._artifact_irs:
+            return
+        by_intent = {ir.intent_id: ir for ir in self.world.artifact_irs}
+
+        for intent in self.world.artifact_intents:
+            ir = by_intent.get(intent.id)
+            if ir is None:
+                # `compiled_evidence`'s parity check has already said so, once,
+                # rather than once per fact of every intent that did not compile.
+                continue
+            carried = set(ir.fact_ids())
+            missing = [f for f in intent.required_fact_ids if f not in carried]
+            for fact_id in intent.required_fact_ids:
+                self.checks += 1
+            if missing:
+                self.fail(
+                    "artifact",
+                    "required_fact_not_carried",
+                    intent.id,
+                    f"{len(missing)} of {len(intent.required_fact_ids)} required fact(s) "
+                    f"appear in no section, table cell or appendix of the compiled "
+                    f"{intent.artifact_type}: {', '.join(missing[:5])}"
+                    + (" …" if len(missing) > 5 else ""),
+                )
+
+            for section in ir.sections:
+                if section.table is None:
+                    continue
+                for row in section.table.rows:
+                    for key in sorted(row.cells):
+                        cell = row.cells[key]
+                        if not cell.fact_id:
+                            continue
+                        self.checks += 1
+                        if cell.value is None:
+                            self.fail(
+                                "artifact",
+                                "empty_cell_cites_a_fact",
+                                ir.id,
+                                f"{section.table.key}:{row.key}:{key} cites "
+                                f"{cell.fact_id} and states nothing",
+                            )
 
     def run(self) -> ValidationReport:
         self.referential()
@@ -1782,6 +1871,7 @@ class _Validator:
         self.imperfection()
         self.actors()
         self.evaluation()
+        self.carried_evidence()
         # Domain groups last, in name order so the report is stable however
         # registration happened to be sequenced.
         for name in sorted(_DOMAIN_CHECKS):

@@ -457,17 +457,34 @@ def apply(world: World, *, count: int) -> World:
         remaining -= 1
 
     # (b) derived personal copies — priority two, the near-duplicate problem.
-    for final in order:
-        if remaining <= 0:
+    #
+    # Two passes, and the second one is the point. Skipping a final that
+    # already carries a draft spreads the noise across documents, which is a
+    # *preference*; `_derived_copy`'s dating rule — the copy's register must
+    # have a longer lag than its parent's, or the extract would predate what
+    # it extracts — is a *constraint*, and it is far tighter than it looks. In
+    # the stock retail close exactly one of nine eligible finals satisfies it:
+    # the CFO memo, whose only longer-lagged candidate is `working_note`. So
+    # when (a) happened to draft that one memo, the corpus contained no derived
+    # copy at any count, and the whole near-duplicate category vanished with
+    # nothing failing but one assertion. The preference yields rather than
+    # costing the corpus a kind of distractor outright.
+    copied: set[str] = set()
+    for spread in (True, False):
+        for final in order:
+            if remaining <= 0:
+                break
+            if final.id in copied or (spread and final.id in used):
+                continue
+            copy = _derived_copy(final, facts, minter, rng)
+            if copy is None:
+                continue
+            new_intents.append(copy)
+            copied.add(final.id)
+            used.add(final.id)
+            remaining -= 1
+        if copied:
             break
-        if final.id in used:
-            continue
-        copy = _derived_copy(final, facts, minter, rng)
-        if copy is None:
-            continue
-        new_intents.append(copy)
-        used.add(final.id)
-        remaining -= 1
 
     # (c) routine notices — priority three, pure volume.
     new_intents.extend(_routine_notices(world, remaining, minter, rng))

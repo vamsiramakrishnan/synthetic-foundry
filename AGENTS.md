@@ -1021,6 +1021,18 @@ large world — and treats any of these as a defect, not a warning:
 - A reporting line that cycles, or a service that owns itself
 - An author who cannot see the document they wrote
 - Lore that constrains nothing
+- A fact a document was asked to carry and does not carry
+- A table cell that names a fact and states nothing
+- Fewer compiled documents than the plan asked for
+
+The last three are one rule looked at from three sides, and they exist because
+the worst defect this project has had passed everything above it. A workbook that
+looked its figures up at the wrong month rendered with *every cell empty* and
+validated clean, because a reconciliation check compares a cell against a fact
+and two absent numbers agree. So the plan is now compared against the compiled
+document, per document rather than over the union of all of them — an intent's
+`required_fact_ids` against its own `ArtifactIR.fact_ids()`. It found four more
+of the same shape on its first run across the four verticals.
 
 If you are tempted to make one of these pass by editing the fixture or relaxing a
 check: don't. A validator that can be talked out of failing is decoration. Fix the

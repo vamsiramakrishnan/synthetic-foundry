@@ -13,6 +13,18 @@
       ]
     },
     {
+      "id": "ART-0001/Escalation",
+      "text": "Where the committed date cannot be held, the close is re-dated once and republished; it is not extended informally by division. The revised date for this period is {{fact:FACT-0012}}, and it supersedes the date stated above for every purpose that referenced it. Re-dating is the reporting manager's decision, taken on the record. A division that cannot meet the revised date raises it before the date rather than after.",
+      "claims": [
+        {
+          "text": "The close was re-dated to {{fact:FACT-0012}} for this period.",
+          "supporting_fact_ids": [
+            "FACT-0012"
+          ]
+        }
+      ]
+    },
+    {
       "id": "ART-0003/By business unit",
       "text": "Australian Food carries the period. Revenue of {{fact:FACT-1341}} against {{fact:FACT-1380}} is {{fact:FACT-1419}} against plan, and margin of {{fact:FACT-6264}} against a budgeted {{fact:FACT-6303}} produces a gross profit shortfall of {{fact:FACT-6225}} — the largest of the four divisions by a wide margin. Digital and Marketplace is the second call on attention: revenue {{fact:FACT-1344}} against {{fact:FACT-1383}}, {{fact:FACT-1422}} against plan, with margin at {{fact:FACT-6267}} against {{fact:FACT-6306}}, and a forecast that has not been re-based since the platform changed. New Zealand Food at {{fact:FACT-1342}} and General Merchandise at {{fact:FACT-1343}} came in {{fact:FACT-1420}} and {{fact:FACT-1421}} respectively. Both behaved normally and neither warrants time this month.",
       "claims": [
@@ -122,6 +134,30 @@
             "FACT-6307",
             "FACT-1306",
             "FACT-1228"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0003/Recommendation",
+      "text": "Two things should happen, and they are not the same thing. {{fact:FACT-0015}}. The first addresses detection only: it would have caught this month's break sooner, but the same break would have occurred. The second addresses the control itself, which is where the classification puts the fault — {{fact:FACT-0013}}. The mapping table's registered owner is currently {{fact:FACT-0014}}, and that is the decision I need from you rather than from the platform team: Merchandising and the data platform each believe the other holds it, and neither will assign a reviewer until someone says which. Approving the validation ticket alone would close the incident and leave the cause in place.",
+      "claims": [
+        {
+          "text": "The remediation is {{fact:FACT-0015}}.",
+          "supporting_fact_ids": [
+            "FACT-0015"
+          ]
+        },
+        {
+          "text": "The root cause is classified as {{fact:FACT-0013}}.",
+          "supporting_fact_ids": [
+            "FACT-0013"
+          ]
+        },
+        {
+          "text": "The mapping table owner is {{fact:FACT-0014}}.",
+          "supporting_fact_ids": [
+            "FACT-0014"
           ]
         }
       ]

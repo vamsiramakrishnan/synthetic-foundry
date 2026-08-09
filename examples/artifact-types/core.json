@@ -248,12 +248,10 @@
         {
           "heading": "Escalation",
           "kinds": [
-            "close.revised_date",
-            "close.status",
-            "close.delay"
+            "close.revised_date"
           ],
           "scope": "any",
-          "purpose": "What happens when the date moves, and where the period ended up. Procedural register — this is read by people looking up a rule."
+          "purpose": "The date moved. State what it moved to and what the standing rule is when it does. Procedural register — this is read by people looking up a rule, not by people who want to know how the period went."
         }
       ]
     },
