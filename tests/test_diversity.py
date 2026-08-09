@@ -574,3 +574,74 @@ def test_assign_refuses_an_artifact_with_no_shapes_to_choose_from() -> None:
     fingerprints = _fingerprint_the_corpus()
     with pytest.raises(ValueError, match="no candidate shapes"):
         assign([[fingerprints[0]], []])
+
+
+# ---------------------------------------------------------------------------
+# Outline variants: several arguments per type, rotated over its instances
+# ---------------------------------------------------------------------------
+
+
+def test_a_type_with_variants_does_not_produce_one_shape_six_times() -> None:
+    """The measurement this mechanism exists for.
+
+    A six-period corpus produced 12 distinct shapes across 56 artifacts, and
+    every near-duplicate group was exactly ×6 — the same document once per
+    period, the same headings in the same order. Six close calendars with
+    different dates is realistic; six root-cause reviews with an identical
+    five-section skeleton is not, because real reviews differ when the incidents
+    do and a reader who sees the skeleton six times learns the skeleton.
+    """
+    from worldloom import MonthEndClose, RetailWorld
+
+    world = RetailWorld(seed=8128).build()
+    for period in ("2026-01", "2026-02", "2026-03", "2026-04"):
+        world = world.run(MonthEndClose(period=period, include_operational_incident=True))
+    world = world.compile()
+
+    by_type: dict[str, set[tuple[str, ...]]] = {}
+    types = {i.id: i.artifact_type for i in world.artifact_intents}
+    for ir in world.artifact_irs:
+        headings = tuple(s.heading for s in ir.sections if not s.hidden)
+        by_type.setdefault(types[ir.intent_id], set()).add(headings)
+
+    assert len(by_type.get("incident_rca", set())) > 1, \
+        "four RCAs and one skeleton — the rotation did not reach them"
+    assert len(by_type.get("unit_close_commentary", set())) > 1
+
+
+def test_the_first_instance_keeps_the_outline_that_shipped() -> None:
+    """So a type's first document is byte-identical to what it was, and only
+    later instances move — which is the intended generation change and the
+    smallest one that fixes the measurement."""
+    from worldloom import documents
+
+    for artifact_type, variants in documents._OUTLINE_VARIANTS.items():
+        assert variants[0] == documents._OUTLINES[artifact_type], artifact_type
+
+
+def test_the_variant_is_rotated_and_never_drawn() -> None:
+    """N instances over M variants land evenly by construction. A seeded draw
+    would only *tend* to spread and would happily give six documents the same
+    shape on an unlucky seed — the exact failure being fixed."""
+    from worldloom import MonthEndClose, RetailWorld, documents
+
+    world = RetailWorld(seed=8128).build()
+    for period in ("2026-01", "2026-02", "2026-03"):
+        world = world.run(MonthEndClose(period=period, include_operational_incident=True))
+
+    rcas = [i for i in world.artifact_intents if i.artifact_type == "incident_rca"]
+    assert len(rcas) >= 2
+    variants = documents._OUTLINE_VARIANTS["incident_rca"]
+    for ordinal, intent in enumerate(rcas):
+        assert documents._variant_for(world, intent) == variants[ordinal % len(variants)]
+
+
+def test_a_variant_is_a_different_argument_not_a_reshuffle() -> None:
+    """Re-ordering headings without changing what each section is *for* would be
+    variety a reader can see and a retriever cannot."""
+    from worldloom import documents
+
+    for artifact_type, variants in documents._OUTLINE_VARIANTS.items():
+        headings = [frozenset(p.heading for p in variant) for variant in variants]
+        assert len(set(headings)) == len(headings), \
+            f"{artifact_type} has two variants with the same sections in a different order"

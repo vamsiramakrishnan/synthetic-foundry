@@ -297,6 +297,7 @@ def register_artifact_types(
     outlines: dict[str, tuple["SectionPlan", ...]] | None = None,
     compilers: dict[str, Any] | None = None,
     filings: dict[str, FilingPlan] | None = None,
+    variants: dict[str, tuple[tuple["SectionPlan", ...], ...]] | None = None,
 ) -> None:
     """Add a domain module's artifact types to the compiler's tables.
 
@@ -324,6 +325,7 @@ def register_artifact_types(
         (_OUTLINES, outlines),
         (_COMPILERS, compilers),
         (_FILINGS, filings),
+        (_OUTLINE_VARIANTS, variants),
     ):
         for key, value in (additions or {}).items():
             if key in table and table[key] != value:
@@ -1420,6 +1422,172 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
     ),
 }
 
+#: Alternative outlines for a type, rotated over its instances.
+#:
+#: The measurement: a six-period corpus produced **12 distinct shapes across 56
+#: artifacts**, 95% of them sharing a shape with another, and every
+#: near-duplicate group was exactly ×6 — the same document once per period, the
+#: same headings in the same order. Six close calendars with different dates is
+#: realistic. Six root-cause reviews with an identical five-section skeleton is
+#: not: real reviews differ because the incidents differ, and a reader who sees
+#: the same skeleton six times learns the skeleton rather than the content.
+#:
+#: **Rotated by ordinal, not drawn.** The variant is chosen by this document's
+#: position among the instances of its own type, so N instances over M variants
+#: land evenly by construction. A seeded draw would only *tend* to spread and
+#: would happily give six documents the same shape on an unlucky seed — which is
+#: the exact failure being fixed.
+#:
+#: **The first variant is the outline that shipped**, so a type's first instance
+#: is byte-identical to what it was. Later instances move, which is the intended
+#: generation change and the whole point.
+#:
+#: Each alternative is a different *argument*, never a shuffle of the same one.
+#: A memo led by the exception is a different document from one led by the
+#: position, and re-ordering headings without changing what each section is for
+#: would be variety a reader can see and a retriever cannot.
+_OUTLINE_VARIANTS: dict[str, tuple[tuple[SectionPlan, ...], ...]] = {}
+
+
+def _variant_for(world: Any, intent: ArtifactIntent) -> tuple[SectionPlan, ...]:
+    """Which outline this particular document gets.
+
+    The ordinal is taken over the world's own intent order, which is stable and
+    is the order ids were minted in — so a document's shape does not move when a
+    later period adds another of its type.
+    """
+    variants = _OUTLINE_VARIANTS.get(intent.artifact_type)
+    default = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
+    if not variants:
+        return default
+    ordinal = 0
+    for other in world.artifact_intents:
+        if other.id == intent.id:
+            break
+        if other.artifact_type == intent.artifact_type:
+            ordinal += 1
+    return variants[ordinal % len(variants)]
+
+
+_MEASURES_ALL = ("financial.revenue.", "financial.gross_profit.",
+                 "financial.gross_margin_pct.")
+
+_OUTLINE_VARIANTS.update({
+    # Three ways to argue a division's month, and the difference is which
+    # question the writer is answering. The first states the position and then
+    # what to watch; the second leads with the exception, which is what a
+    # partner writes when the month went wrong; the third answers the question
+    # the divisional MD will actually ask, which is what happens when the month
+    # was unremarkable and the meeting is about next month.
+    #
+    # This is the corpus's most-repeated close document — forty-eight instances
+    # on a six-period, eight-division build — and rotating it is most of what
+    # the whole variant mechanism buys. It also invalidates two of the four
+    # commentaries in `examples/grocery-close/narration.json`, which is real
+    # model prose checked in against the shipped headings; those two are
+    # rewritten against the new sections rather than the type being left alone,
+    # because a reference narration is worth keeping current and a document type
+    # nobody varies is worth less than the work of keeping it.
+    "unit_close_commentary": (
+        _OUTLINES["unit_close_commentary"],
+        (
+            SectionPlan(
+                "What moved", _MEASURES_ALL, "unit",
+                "Lead with the line that missed or beat, and say by how much"
+                " before saying why. A commentary that opens with a summary of"
+                " a month its reader already lived through has spent its first"
+                " paragraph on nothing.",
+            ),
+            SectionPlan(
+                "Why", ("metric.",), "any",
+                "Attribute the movement to something a person did or something"
+                " that happened to them. 'Volume was lower' is a restatement,"
+                " not a reason.",
+            ),
+            SectionPlan(
+                "Position", _MEASURES_ALL, "unit",
+                "The rest of the month, briefly, for the record. Lines that"
+                " behaved get a clause each.",
+            ),
+        ),
+        (
+            SectionPlan(
+                "Where we landed", _MEASURES_ALL, "unit",
+                "The month in the terms this division is held to. State it"
+                " plainly and once.",
+            ),
+            SectionPlan(
+                "What we are doing about it", ("metric.",), "any",
+                "The actions in flight and who owns them. A commentary whose"
+                " last word is a number leaves the reader to work out whether"
+                " anybody has noticed.",
+            ),
+        ),
+    ),
+    # An RCA that opens with the timeline makes a reader work for the answer;
+    # an RCA that opens with the cause makes them work for the evidence. Both
+    # are written, and which one you get says something about who wrote it —
+    # the first is what a reviewer asks for, the second is what an engineer
+    # writes when they already know.
+    "incident_rca": (
+        _OUTLINES["incident_rca"],
+        (
+            SectionPlan(
+                "Cause", ("ops.cause", "ops.root_cause_classification",
+                          "ops.mapping_table_owner"), "any",
+                "Open with the conclusion. A review that withholds the cause"
+                " until section four is a review written to be defended rather"
+                " than read.",
+            ),
+            SectionPlan(
+                "What that cost", ("ops.feed_status", "ops.affected_records",
+                                   "close."), "any",
+                "The impact, in the units the business feels it in — records,"
+                " days, the close. Not in units the platform feels it in.",
+            ),
+            SectionPlan(
+                "How we got there", ("ops.incident_opened",
+                                     "ops.valuation_status",
+                                     "ops.cause_ruled_out"), "any",
+                "The sequence, including the line of enquiry that was wrong."
+                " A clean timeline is a rewritten one.",
+            ),
+            SectionPlan(
+                "Standing exposure", ("ops.previous_similar_incident",
+                                      "ops.workaround"), "any",
+                "What is still true after the fix. This is the section a"
+                " reader six months later is looking for.",
+            ),
+            SectionPlan(
+                "Actions", ("ops.remediation",), "any",
+                "What changes, who owns it, and which of them addresses the"
+                " control rather than the detection.",
+            ),
+        ),
+    ),
+    # A summary written for a committee that reads it before the meeting, and
+    # one written for a committee that reads it in the meeting. The second is
+    # shorter and leads with the ask.
+    "executive_summary": (
+        _OUTLINES["executive_summary"],
+        (
+            SectionPlan(
+                "The ask", ("close.", "financial.incident_pl_impact"), "any",
+                "What the committee is being asked to note or decide, in the"
+                " first sentence. A summary that buries the ask is a summary"
+                " that will be read after the decision.",
+            ),
+            SectionPlan(
+                "The month", ("financial.revenue.",
+                              "financial.gross_margin_pct."), "group",
+                "The group position in two figures. The committee has the pack"
+                " if they want the rest.",
+            ),
+        ),
+    ),
+})
+
+
 _DEFAULT_OUTLINE: tuple[SectionPlan, ...] = (
     SectionPlan("Summary", ("",), "any", "Summarise what the facts below establish."),
 )
@@ -1600,7 +1768,7 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     correct rather than inventing structure and data together.
     """
     facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
-    plan = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
+    plan = _variant_for(world, intent)
     unit_ids = {unit.id for unit in world.business_units}
     names = world.entity_names()
 

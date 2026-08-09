@@ -697,7 +697,74 @@ def _register() -> None:
         ),
     )
 
+    # Alternatives, rotated over the instances of each type
+    # (`documents._OUTLINE_VARIANTS`). These are the corpus's biggest repeat
+    # blocks by construction — a review cycle mints one review and one note per
+    # pair per period, so twenty-four of each on a six-period build, and with a
+    # single outline that is twenty-four documents of one shape. Each
+    # alternative is a different argument rather than a reshuffle: a review
+    # written against objectives is not the same document as one written
+    # against the year, and a manager who writes lists does not write the
+    # manager who writes paragraphs' document.
+    variants = {
+        "performance_review": (
+            review,
+            (
+                SectionPlan(
+                    "Objectives", ("people.review.objectives_",), "any",
+                    "What was set and what was met, one by one. A review that"
+                    " never lists the objectives is a review about a person"
+                    " rather than about their year.",
+                ),
+                SectionPlan(
+                    "Conclusion", ("people.review.rating",), "any",
+                    "The rating and the sentence that justifies it. One"
+                    " sentence: if it takes three, the objectives above did not"
+                    " say what they should have.",
+                ),
+            ),
+        ),
+        "one_to_one_note": (
+            note,
+            (
+                SectionPlan(
+                    "Where they are", ("people.review.held_rating",), "any",
+                    "A manager's own read, in the register they would use in"
+                    " their own notes — short, blunter than the record, and"
+                    " possibly out of date by the time anybody reads it.",
+                ),
+            ),
+        ),
+        "job_requisition": (
+            requisition,
+            (
+                SectionPlan(
+                    "Business case", ("people.requisition.annual_cost",
+                                      "people.requisition.commitment"), "any",
+                    "What this costs over its term and what the company gets"
+                    " for it. Lead with the money: a requisition is a spending"
+                    " decision wearing a job description.",
+                ),
+                SectionPlan(
+                    "The role", ("people.requisition.grade",
+                                 "people.requisition.salary_band"), "any",
+                    "Grade, band, and where it sits. Brief — the interesting"
+                    " argument is above.",
+                ),
+                SectionPlan(
+                    "Level of approval required",
+                    ("people.requisition.approval_level",), "any",
+                    "The level this commitment required and why the figure"
+                    " decides it. A reader must be able to check the approval"
+                    " against the delegation of authority holding nothing"
+                    " else.",
+                ),
+            ),
+        ),
+    }
+
     register_artifact_types(
+        variants=variants,
         standing={
             # The requisition and the offer are systems of record: a payroll
             # system holds them and they are what an audit reads back.

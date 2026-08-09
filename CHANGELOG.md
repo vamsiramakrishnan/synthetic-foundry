@@ -7,6 +7,34 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Generation — a document type may argue its case more than one way
+
+- **`documents._OUTLINE_VARIANTS`** — a six-period corpus produced **32 distinct
+  shapes across 249 artifacts (13% unique), largest group 37**, and every
+  near-duplicate group was exactly ×6: the same document once per period, the
+  same headings in the same order. Six close calendars with different dates is
+  realistic; six root-cause reviews with an identical five-section skeleton is
+  not, because real reviews differ when the incidents do. Now **40 shapes (16%
+  unique), largest group 18**.
+- Six types carry alternatives: `unit_close_commentary` (3),
+  `incident_rca`, `executive_summary`, `performance_review`, `one_to_one_note`
+  and `job_requisition` (2 each). Each alternative is a different **argument**,
+  never a reshuffle — an RCA that opens with the cause is a different document
+  from one that opens with the timeline, and a test refuses two variants whose
+  sections differ only in order.
+- **Rotated by ordinal, not drawn.** N instances over M variants land evenly by
+  construction; a seeded draw would only *tend* to spread and would happily give
+  six documents one shape on an unlucky seed — the exact failure being fixed.
+  The first variant is the outline that shipped, so a type's first instance is
+  byte-identical and only later ones move.
+- `examples/grocery-close/narration.json` — real model prose, checked in — is
+  **rewritten** for the three sections the rotation changed rather than the type
+  being left alone. A reference narration is worth keeping current, and a
+  document type nobody varies is worth less than the work of keeping it.
+- Retail's default build and the grocer differ by that rotation, which is the
+  intended change; banking, insurance and procurement are byte-identical, having
+  no variants on their own types.
+
 ### The corpus as a drive, not a folder of numbered files
 
 - **`worldloom workspace`** — a corpus exports to one flat `artifacts/`
