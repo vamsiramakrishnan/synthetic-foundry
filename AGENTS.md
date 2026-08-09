@@ -386,6 +386,38 @@ has left with nobody named in their place. Counts are a budget, not a quota: a
 small world has fewer corrections to be stale about and the pass takes what it
 can support.
 
+### Line management produces documents
+
+The organisation was modelled in full and used as a source of *bylines*. A
+420-person retailer named 24 of 444 people anywhere in its corpus: a manager
+three levels down existed, had a name, a function and a manager of their own,
+and appeared in nothing.
+
+```bash
+worldloom build --seed 8128 --policies core --periods 3 \
+  --hiring 3 --reviews 4 --out ./corpus
+```
+
+`--hiring` raises, approves, offers and fills vacancies; `--reviews` reviews
+people. The hiring manager and the reviewer come from **everybody with a direct
+report** — 73 people on a synthesised 420-person company against the dozen the
+role table names — which is the whole point. Measured on three periods:
+113 artifacts across 28 types with none above 21%, and 41 distinct people named
+in 37 distinct titles.
+
+Two things make these more than filler. **A requisition reads the company's own
+rules**: its three-year commitment is checked against the delegation of
+authority, and the lowest rung that covers it signs — so "was this approved at
+the right level" is the first question here whose answer is in neither document
+alone. And **the two performance records disagree on purpose**: the signed
+review is an approved report countersigned one level up, the running one-to-one
+note is an unofficial note carrying the view held before calibration, and the
+authority ranking is what resolves them.
+
+Both rounds mint a fifth access class on first use — an offer letter states one
+person's salary, and none of the four classes an engine ships describes a
+readership of one person and their line.
+
 ### The paperwork a company has, rather than the paperwork it produces
 
 Every document in this corpus was **episodic** — a close ran, an incident

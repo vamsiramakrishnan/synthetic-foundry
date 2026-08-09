@@ -80,6 +80,13 @@ STEPS: dict[str, tuple[str, ...]] = {
     "Hire": ("period", "role_key", "title", "function", "unit_key"),
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
+    # The two workforce rounds (`worldloom.workforce`). Only the *shape* of the
+    # round is recorded — how many vacancies, how many pairs — never who was
+    # picked or what they were offered: those are derived from the world's own
+    # seed under a stream of that module's own, so replay re-runs the same
+    # derivation. `master_data`'s argument, one layer along.
+    "HiringRound": ("period", "count"),
+    "PerformanceCycle": ("period", "pairs"),
     "WorkforceChange": ("period", "headcount"),
     "StructuralChange": ("period", "business_units", "sites", "systems", "services"),
     # Not a scenario in the sense the others are — it mints no event and no
@@ -797,6 +804,18 @@ def rebuild(
                     unit_key=step["unit_key"],
                 )
             )
+        elif name == "HiringRound":
+            from .workforce import HiringRound
+
+            world = world.run(HiringRound(
+                period=step["period"], count=step.get("count", 2),
+            ))
+        elif name == "PerformanceCycle":
+            from .workforce import PerformanceCycle
+
+            world = world.run(PerformanceCycle(
+                period=step["period"], pairs=step.get("pairs", 3),
+            ))
         elif name == "Departure":
             world = world.run(Departure(period=step["period"], role_key=step["role_key"]))
         elif name == "Reorganisation":

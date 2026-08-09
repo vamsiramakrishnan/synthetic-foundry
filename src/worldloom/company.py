@@ -282,6 +282,13 @@ class CompanySpec:
 
     calendar: str = ""
     estate: str = ""
+    policies: str = ""
+    """Standing documents (``worldloom.policies``): ``"core"`` or ``"full"``.
+
+    A description of what kind of company this is legitimately says whether it
+    writes its rules down — an audit-committee company has a delegation of
+    authority and a founder-led one may not — so this belongs beside `estate`
+    rather than only on the command line, where `--spec` refuses it."""
 
     # -- who is in it -------------------------------------------------------
     organisation: Mapping[str, Any] = _field(default_factory=dict)
@@ -333,7 +340,7 @@ class CompanySpec:
         """
         payload: dict[str, Any] = {}
         for key in ("industry", "engine", "archetype", "vocabulary", "geo",
-                    "calendar", "estate", "pack", "about"):
+                    "calendar", "estate", "policies", "pack", "about"):
             if getattr(self, key):
                 payload[key] = getattr(self, key)
         for key in ("revenue", "employees"):
@@ -375,7 +382,7 @@ class CompanySpec:
 #: ``Parameters.with_overrides`` makes about a mistyped parameter, one layer up.
 _FIELDS: frozenset[str] = frozenset({
     "industry", "engine", "archetype", "vocabulary", "revenue", "employees",
-    "geo", "facets", "physics", "calendar", "estate", "organisation",
+    "geo", "facets", "physics", "calendar", "estate", "policies", "organisation",
     "leadership", "identity", "pack", "about", "rivals", "master_data",
 })
 
@@ -448,6 +455,7 @@ def from_document(payload: Mapping[str, Any] | str | Path) -> CompanySpec:
         physics=_spans(payload.get("physics") or {}),
         calendar=str(payload.get("calendar", "")),
         estate=str(payload.get("estate", "")),
+        policies=str(payload.get("policies", "")),
         organisation=organisation,
         master_data=dict(payload.get("master_data") or {}),
         leadership=_leadership(payload.get("leadership") or ()),
@@ -668,6 +676,7 @@ class Resolution:
     lore_claims: tuple[Any, ...]
     calendar: str | None
     estate: str | None
+    policies: str | None
     locale: str | None
     employees: int | None
     annual_revenue: int | None
@@ -698,6 +707,7 @@ class Resolution:
             "lore": [claim.source for claim in self.lore_claims],
             "calendar": self.calendar,
             "estate": self.estate,
+            "policies": self.policies,
             "locale": self.locale,
             "employees": self.employees,
             "annual_revenue": self.annual_revenue,
@@ -1024,6 +1034,7 @@ def resolve(spec: CompanySpec) -> Resolution:
         lore_claims=resolved_facets.claims,
         calendar=calendar or None,
         estate=estate or None,
+        policies=_policy_level(spec, found),
         locale=locale,
         employees=spec.employees,
         annual_revenue=spec.revenue,
@@ -1117,6 +1128,24 @@ def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[st
             f" {owner.name!r} does",
         ))
     return (engine or (owner.name if owner else "retail")), base, key, found, unmet
+
+
+def _policy_level(spec: CompanySpec, found: list[Conflict]) -> str | None:
+    """The described policy level, or a conflict naming what is on offer.
+
+    Reported rather than raised, like every other registry lookup here: a
+    describer who typed `"everything"` and also named an unknown calendar reads
+    both sentences rather than the first one and a traceback.
+    """
+    if not spec.policies:
+        return None
+    from . import policies as policies_module
+
+    try:
+        return policies_module.check_level(spec.policies)
+    except ValueError as exc:
+        found.append(Conflict("policies", "unknown_policy_level", str(exc)))
+        return None
 
 
 def _functions_of(engine: str, levels: int) -> list[str]:
@@ -1431,6 +1460,10 @@ _SCHEMA: tuple[tuple[str, str, str, str], ...] = (
      "The trading year."),
     ("estate", "value", "generators/estate.PROFILES",
      "How much technology landscape: small, medium, large."),
+    ("policies", "value", "worldloom.policies",
+     "Standing documents — the paperwork a company *has* rather than produces:"
+     " core or full. Without it an assistant asked what the approval threshold"
+     " is has nothing to find, because the company has no written rules."),
     ("organisation", "value", "worldloom.roles",
      "headcount, span, levels, functions — synthesised into a reporting tree."
      " Three numbers with two degrees of freedom. Plus `divisions`"

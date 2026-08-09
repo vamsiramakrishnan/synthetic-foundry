@@ -100,6 +100,11 @@ from . import episodes as _episodes  # noqa: F401
 # `register_artifact_types` says registration belongs at package import.
 from . import policies as _policies  # noqa: F401
 
+# Same contract for the workforce rounds: importing this registers five
+# artifact types and ten fact kinds, and `policies` paid for learning that a
+# lazy registration makes `documents.declared_types()` depend on what has run.
+from .workforce import HiringRound, PerformanceCycle  # noqa: F401
+
 __version__ = "0.1.0"
 
 __all__ = [

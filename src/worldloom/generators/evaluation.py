@@ -222,6 +222,14 @@ EVAL_TEXT: dict[str, str] = {
         "What was the {provision} under the expense policy in force before the"
         " current version?",
     "q.policy.owner": "Who approved the {title}?",
+    # -- the workforce rounds ----------------------------------------------------
+    "q.people.requisition_level":
+        "The vacancy {manager} raised committed {amount}. Which level of the"
+        " delegation of authority did that require?",
+    "q.people.rating": "What rating did {person} receive for {period}?",
+    "q.people.held_view":
+        "Two records give {person} a different rating for {period}. Which is the"
+        " signed one, and what does it say?",
     "q.abstain.cmo":
         "Who is the company's Chief Marketing Officer, and when did they join?",
     "q.abstain.close_calendar_1995": "Who signed the close calendar in 1995?",
@@ -1684,6 +1692,95 @@ class _Taxonomy:
             )
 
 
+    def workforce(self) -> None:
+        """A requisition against the rules, and a rating against a note.
+
+        Two shapes, and both are cross-document by construction rather than by
+        contrivance.
+
+        **The requisition needs the policy.** Its commitment figure is in one
+        document and the ladder that decides who may approve it is in another,
+        written by a different function years earlier. This is the first
+        question in this corpus whose answer is in neither document alone, and
+        it is exactly the shape an enterprise assistant is asked — "was this
+        approved at the right level" is a compliance question, not a lookup.
+
+        **The rating needs the authority ranking.** A manager's running
+        one-to-one note carries the view they held before calibration and the
+        signed review carries the one that counts, and the two disagree on
+        purpose. Every authority-resolution case in this repository before now
+        was about an incident; a performance rating is the same shape and it
+        reaches the whole organisation rather than the dozen people an incident
+        touches.
+
+        Gated on the rounds having run. A corpus that hired nobody and reviewed
+        nobody mints nothing here.
+        """
+        by_kind: dict[str, list] = {}
+        for fact in self._fact_index.values():
+            if fact.kind.startswith("people."):
+                by_kind.setdefault(fact.kind, []).append(fact)
+        if not by_kind:
+            return
+
+        # The requisition whose approval level is highest, so the case is about
+        # the rung that had to be climbed rather than the floor everything
+        # clears. Ranked on the commitment, which is what the ladder reads.
+        commitments = sorted(
+            by_kind.get("people.requisition.commitment", []),
+            key=lambda f: (-(f.value.amount if f.value else 0), f.id),
+        )
+        for fact in commitments[:1]:
+            level = next(
+                (f for f in by_kind.get("people.requisition.approval_level", [])
+                 if f.subject == fact.subject), None,
+            )
+            if level is None or fact.value is None:
+                continue
+            self.case(
+                self.t("q.people.requisition_level",
+                       manager=self.subjects.name(fact.subject),
+                       amount=f"{fact.value.amount:,.0f} {fact.value.unit}"),
+                EvaluationType.CROSS_ARTIFACT, level.text_value or "",
+                [fact.id, level.id], difficulty="hard",
+                reasoning=(
+                    "The figure is in the requisition and the ladder that"
+                    " decides who may approve it is in the delegation of"
+                    " authority — a different document, written by a different"
+                    " function. Neither answers this alone."
+                ),
+            )
+
+        # One person whose two records disagree.
+        for signed in sorted(by_kind.get("people.review.rating", []),
+                             key=lambda f: f.id)[:1]:
+            held = next(
+                (f for f in by_kind.get("people.review.held_rating", [])
+                 if f.subject == signed.subject), None,
+            )
+            self.case(
+                self.t("q.people.rating",
+                       person=self.subjects.name(signed.subject), period=self.period),
+                EvaluationType.DIRECT_LOOKUP, signed.text_value or "",
+                [signed.id], difficulty="medium",
+                reasoning="Stated in the signed review.",
+            )
+            if held is None or held.text_value == signed.text_value:
+                continue
+            self.case(
+                self.t("q.people.held_view",
+                       person=self.subjects.name(signed.subject), period=self.period),
+                EvaluationType.AUTHORITY_RESOLUTION, signed.text_value or "",
+                [signed.id], difficulty="hard",
+                reasoning=(
+                    f"The one-to-one note says {held.text_value!r} and is an"
+                    " unofficial note; the review says otherwise and is an"
+                    " approved report countersigned one level up. Ranking the"
+                    " two is the whole of the question."
+                ),
+            )
+
+
 def evaluation_cases(
     minter: Minter,
     *,
@@ -1768,6 +1865,9 @@ def evaluation_cases(
     # did not ask for standing documents mints nothing here, so no `EVAL-` id
     # in any corpus already built can move.
     taxonomy.standing_documents()
+    # Last again, and for the same reason. A corpus that ran no workforce round
+    # mints nothing here.
+    taxonomy.workforce()
 
     # One last pass of the rule every family is supposed to apply for itself.
     #

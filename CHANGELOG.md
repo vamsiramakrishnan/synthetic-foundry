@@ -7,6 +7,54 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Line management produces documents
+
+- **`worldloom.workforce`** — the organisation was modelled in full and used as
+  a source of *bylines*. A 420-person retailer named **24 of 444 people**
+  anywhere in its corpus; a manager three levels down existed, had a name, a
+  function and a manager of their own, and appeared in nothing. Two rounds fix
+  it: `--hiring N` raises, approves, offers and fills N vacancies a period, and
+  `--reviews N` reviews N people. Five artifact types, ten fact kinds.
+- The hiring manager and the reviewer are drawn from **everybody with a direct
+  report** — 73 people on a synthesised 420-person company against the dozen the
+  role table names. Measured on a three-period build: artifacts 113 across 28
+  types with no type above 21%, and **41 distinct people named in 37 distinct
+  titles**, against 24 before.
+- **A requisition reads the company's own rules.** Its three-year commitment is
+  checked against the delegation of authority (`worldloom.policies`) and the
+  lowest rung that covers it signs — so "was this approved at the right level"
+  is the first question in this repository whose answer is in *neither document
+  alone*. Annual cost was the first rule and made the ladder say nothing: every
+  vacancy costs under 110,000 fully loaded and the second rung starts at
+  230,000, so every requisition went to the same person. A corpus built without
+  `--policies` still hires, and the requisition says "no written delegation" in
+  as many words.
+- **Two performance records disagree on purpose.** The signed review is an
+  approved report countersigned by the manager's own manager — the corpus's only
+  three-person document — and the running one-to-one note is an unofficial note
+  carrying the view held before calibration. Every authority-resolution case
+  here before now was about an incident; a rating is the same shape and reaches
+  the whole organisation.
+- **A fifth access class**, minted on first use rather than at build so an
+  un-opted corpus keeps the four policies it had. An offer letter states one
+  person's salary and a review states their rating; "all staff", "finance and
+  audit", "executive committee" and "technology" are all wrong for a readership
+  of one person and their line, and falling through to the narrowest locked the
+  *author* out of what they wrote — `validate.author_cannot_see_own_artifact`,
+  the first time this ran. Widened rather than replaced on a second round,
+  through the `access_policies` seam `personnel.promote` opened.
+- **`policies` is a specification field**, not only a flag. A description of
+  what kind of company this is legitimately says whether it writes its rules
+  down, and `--spec` refuses the flags it subsumes.
+- **`evaluation._Taxonomy.workforce`** — a `cross_artifact` case whose answer
+  needs the requisition *and* the delegation, and an `authority_resolution` case
+  over the two ratings. They arrive one period behind the rounds, which is the
+  same lag every cross-episode family already has: a corpus cannot ask about a
+  document it has not planned yet.
+- Off by default at zero, byte-identical against HEAD for the default build and
+  all five archetypes, and a corpus with two rounds a period over two periods
+  replays byte-identical from its recipe.
+
 ### The paperwork a company has, rather than the paperwork it produces
 
 - **`worldloom.policies`** — every document in this corpus was *episodic*: a

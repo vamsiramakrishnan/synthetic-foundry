@@ -268,6 +268,26 @@ def build(
             "byte-identical."
         ),
     ),
+    hiring: int = typer.Option(
+        0, "--hiring",
+        help=(
+            "Raise this many vacancies per period and fill them. Each one is a "
+            "requisition, an offer and an onboarding checklist, authored by a "
+            "manager drawn from anywhere in the reporting tree rather than from "
+            "the role table — which is how a modelled organisation stops being a "
+            "source of bylines. The approver comes from the delegation of "
+            "authority when --policies gave the company one."
+        ),
+    ),
+    reviews: int = typer.Option(
+        0, "--reviews",
+        help=(
+            "Review this many people per period. Each is a signed performance "
+            "review countersigned by the manager's own manager, plus the running "
+            "one-to-one note that fed it — at a lower authority, and saying "
+            "something slightly different."
+        ),
+    ),
     physics: Path = typer.Option(
         None, "--physics",
         help=(
@@ -1014,7 +1034,8 @@ def build(
                 # registered outside this repository may have no such field,
                 # and passing `policies=None` to one that does not would refuse
                 # a build that has nothing wrong with it.
-                **({} if policies is None else {"policies": policies}),
+                **({} if not (policies or (resolution.policies if resolution is not None else None))
+                   else {"policies": policies or resolution.policies}),
             )
         ))
         world = _localised_recipe(_localised(builder).build())
@@ -1037,10 +1058,15 @@ def build(
             from dataclasses import replace as _replace_builder
 
             builder = _replace_builder(builder, estate=estate)
-        if policies is not None:
+        # `--policies` on the command line, or the level a specification
+        # resolved. Refused together further up, so at most one is set.
+        chosen_policies = policies or (
+            resolution.policies if resolution is not None else None
+        )
+        if chosen_policies:
             from dataclasses import replace as _replace_builder
 
-            builder = _replace_builder(builder, policies=policies)
+            builder = _replace_builder(builder, policies=chosen_policies)
         builder = _claimed(builder)
         if resolution is not None and not claimed_calendar:
             # A trading year the *pack* carries has to reach the closes too, and
@@ -1315,6 +1341,18 @@ def build(
             stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
             try:
                 world = world.run(_close(stamp, incident, index))
+                # After the close, so the ART sequence a close mints is
+                # untouched: a corpus built without these rounds keeps every id
+                # it had, and one built with them only ever gains ids at the
+                # end of each period. Both are strict no-ops at zero.
+                if hiring > 0:
+                    from .workforce import HiringRound
+
+                    world = world.run(HiringRound(period=stamp, count=hiring))
+                if reviews > 0:
+                    from .workforce import PerformanceCycle
+
+                    world = world.run(PerformanceCycle(period=stamp, pairs=reviews))
                 if (
                     workforce_path is not None
                     and index + 1 < len(workforce_path)
