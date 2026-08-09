@@ -69,6 +69,34 @@ worldloom evaluate ./corpus
 worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
 ```
 
+```bash
+# 8. Lay it out as a drive somebody could be pointed at, with its permissions.
+worldloom workspace ./corpus -o ./drive
+```
+
+A corpus exports as one flat `artifacts/` folder of numbered files, which is
+right for the harness — it reads the manifest and never looks at a path — and
+wrong for what the corpus is *for*. An enterprise assistant indexes the folder a
+document sits in, the title somebody typed, who owns it and who it is shared
+with, and this corpus knows every one of those and put none of them on the
+filesystem: 293 files in one directory with identical permissions.
+
+`workspace` writes the tree that knowledge implies. Documents are shelved by the
+function that owns them (`Policies/`, `Finance/Close/2026-03/`,
+`People/Performance/`), periodic ones filed under their period and standing ones
+at the top of their shelf. Filenames are what a person would have typed and
+carry the subject, so four reviews in a month are four names rather than `(2)`
+through `(5)`. A policy revised in place sits beside its replacement marked
+`(superseded)`; a monthly calendar that supersedes last month's is not marked,
+because that is the ordinary life of a periodic document rather than a
+retirement. `permissions.jsonl` is one row per file — owner and every address
+permitted to open it — which is the half a connector actually needs, since a
+tree with no permission table tests retrieval and cannot test access.
+
+Nothing is invented: every folder, title, owner and reader is derived from the
+manifest, the roster and the access policies, and the corpus itself is not
+touched.
+
 Three more readings answer questions `validate` and `evaluate` cannot, and each
 one is a different question — read all four before calling a corpus measured:
 

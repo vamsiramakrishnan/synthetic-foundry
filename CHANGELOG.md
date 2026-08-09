@@ -7,6 +7,45 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### The corpus as a drive, not a folder of numbered files
+
+- **`worldloom workspace`** — a corpus exports to one flat `artifacts/`
+  directory of `art-0001-…` files with **identical filesystem permissions on
+  all 293**. That is right for the harness, which reads the manifest and never
+  looks at a path, and wrong for what the corpus is for: an enterprise
+  assistant indexes the folder, the title, the owner and the sharing, and path
+  and title carry a large share of retrieval signal. The corpus knew every one
+  of those and put none of them on disk.
+- Measured on a six-period, eight-division build: **249 files across 52 folders,
+  four levels deep, 224 restricted, 44 distinct owners, 6 superseded pairs.**
+- Documents are shelved by the function that owns them — `Policies/`,
+  `Finance/Close/2026-03/`, `Technology/Incidents/`, `People/Performance/` —
+  with periodic types filed under their period and standing types at the top of
+  their shelf. Filing a policy under a month would say it expired with the
+  month.
+- Filenames carry the **subject** where the facts agree on one, so a month's
+  reviews read `Performance Review - Sian Vance 2026-07` rather than `(2)`
+  through `(5)`, and divisional commentary reads `Unit Close Commentary - Fuel
+  and Convenience 2026-03`. They carry the period too, because the commonest
+  way a real document loses its context is being lifted out of its folder.
+- A policy revised in place sits beside its replacement as
+  `Expense Policy (superseded)` — and the **live** one keeps the clean name.
+  Marking ran after names were claimed at first, so the retired policy took
+  `Expense Policy.md` and the current one landed as `Expense Policy (2).md`:
+  exactly backwards, and exactly the mistake a reader would act on. A monthly
+  calendar that supersedes last month's is *not* marked, because that is the
+  ordinary life of a periodic document; the edge is recorded either way.
+- **`permissions.jsonl`** is one row per file — path, title, owner, every
+  address permitted, policy label, created date, and the successor where there
+  is one. Addresses are derived `first.last@company.example` with collisions
+  broken the way a mail administrator breaks them. An unrestricted policy lists
+  *nobody* rather than everybody, which is what a real ACL means by "inherit".
+  A tree with no permission table tests retrieval and cannot test access.
+- Nothing is invented and nothing moves: every folder, title, owner and reader
+  is derived from the manifest, the roster and the access policies, the corpus
+  itself is untouched, and an unrendered corpus is refused by name rather than
+  laid out as empty folders.
+
 ### Generation — the month-end model was empty in every multi-period corpus
 
 - **`documents.finance_workbook` took its reporting month from the world rather

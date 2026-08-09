@@ -4496,6 +4496,51 @@ def pack_template(
 
 
 @app.command()
+def workspace(
+    corpus: Path = typer.Argument(..., help="A rendered corpus directory."),
+    out: Path = typer.Option(..., "--out", "-o", help="Where to write the tree."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace an existing tree."),
+) -> None:
+    """Lay a rendered corpus out as a shared drive, with its permissions.
+
+    A corpus exports as one flat `artifacts/` folder of numbered files, which is
+    right for the harness and wrong for what the corpus is *for*: an enterprise
+    assistant indexes the folder a document sits in, the title somebody typed,
+    who owns it and who it is shared with. The corpus knows all of that and none
+    of it reached the filesystem.
+
+    Writes a folder tree, human filenames — including the subject, so four
+    reviews in a month are four names rather than `(2)` through `(5)` — and
+    `permissions.jsonl`, one row per file with its owner and every address
+    permitted to open it. Superseded documents sit beside their replacements
+    marked as such, which is what makes a shelf legible.
+
+    Written to a separate root: nothing in the corpus moves.
+    """
+    from . import workspace as workspace_module
+
+    try:
+        world = World.load(corpus)
+    except Exception as exc:  # noqa: BLE001 — surfaced, not swallowed
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+    try:
+        written = workspace_module.write(world, out, overwrite=overwrite)
+    except (FileExistsError, ValueError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    reading = workspace_module.summarise(world)
+    console.print(
+        f"[green]✓[/green] {reading['files']} file(s) in {reading['folders']} folder(s),"
+        f" {reading['deepest']} deep, under [bold]{written}[/bold]\n"
+        f"[dim]{reading['restricted']} restricted ·"
+        f" {reading['distinct_owners']} distinct owner(s) ·"
+        f" {reading['superseded']} superseded[/dim]"
+    )
+
+
+@app.command()
 def archetypes() -> None:
     """List the company shapes `build --archetype` accepts."""
     from . import archetypes as registry

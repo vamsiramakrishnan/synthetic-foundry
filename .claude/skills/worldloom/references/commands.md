@@ -628,3 +628,16 @@ worldloom validate <CORPUS>
 ### `worldloom version`
 
 Print the installed version.
+
+### `worldloom workspace`
+
+Lay a rendered corpus out as a shared drive, with its permissions.
+
+```
+worldloom workspace <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Where to write the tree. |
+| `--overwrite` | Replace an existing tree. |
