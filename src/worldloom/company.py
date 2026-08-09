@@ -384,7 +384,7 @@ _IDENTITY_FIELDS: frozenset[str] = frozenset({
 })
 
 _ORGANISATION_FIELDS: frozenset[str] = frozenset({
-    "headcount", "span", "levels", "functions",
+    "headcount", "span", "levels", "functions", "divisions",
 })
 
 
@@ -778,6 +778,34 @@ def resolve(spec: CompanySpec) -> Resolution:
         engine, shape, archetype_key, shape_conflicts, shape_unmet = _shape_of(spec)
         found.extend(shape_conflicts)
         unmet.extend(shape_unmet)
+
+    # -- how wide the company is -------------------------------------------
+    #
+    # `organisation.divisions` rides the archetype *key*, not a separate field,
+    # because a key is the only thing a recipe records about the shape — see
+    # `archetypes.get`. A width carried anywhere else would rebuild a
+    # three-division company from an eight-division corpus and report success.
+    #
+    # This is the knob that makes a corpus bigger. Measured: raising
+    # `organisation.headcount` from 23 to 429 left facts, artifacts and
+    # evaluation cases identical, because the close fans out per division and
+    # there were still three; widening three to eight took facts from 604 to
+    # 990 and questions from 42 to 52 on the same seed.
+    divisions_wanted = spec.organisation.get("divisions") if spec.organisation else None
+    if divisions_wanted is not None and shape is not None:
+        from . import divisions as divisions_module
+
+        # Refused into a `Conflict` rather than raised, because everything else
+        # in `resolve` reports rather than throws: a describer who asked for
+        # nine divisions of a pool that holds eight should see that alongside
+        # whatever else they got wrong, not instead of it.
+        try:
+            widened = divisions_module.widened(shape, int(divisions_wanted))
+        except (TypeError, ValueError) as exc:
+            found.append(Conflict("organisation", "divisions_unavailable", str(exc)))
+        else:
+            shape = widened
+            archetype_key = shape.key
 
     domain = domains.by_name(engine) if engine else None
     if engine and domain is None:
@@ -1405,7 +1433,10 @@ _SCHEMA: tuple[tuple[str, str, str, str], ...] = (
      "How much technology landscape: small, medium, large."),
     ("organisation", "value", "worldloom.roles",
      "headcount, span, levels, functions — synthesised into a reporting tree."
-     " Three numbers with two degrees of freedom."),
+     " Three numbers with two degrees of freedom. Plus `divisions`"
+     " (worldloom.divisions): how many lines of business, which is the knob"
+     " corpus size actually follows — the close fans out per division, not per"
+     " employee."),
     ("leadership", "value", "worldloom.roles",
      "Roles this company has that the engine's table does not. Appended, never"
      " substituted."),

@@ -579,6 +579,12 @@ _INSPIRATION: dict[str, str] = {
 }
 
 
+#: What a width qualifier ends with, so `omnichannel_retailer+5div` is
+#: distinguishable from a vocabulary name without a lookup. A suffix rather
+#: than a prefix because it reads as English at the end of a key.
+_WIDTH_SUFFIX = "div"
+
+
 def get(key: str) -> Archetype:
     """Look up an archetype by key, optionally qualified with a vocabulary.
 
@@ -587,23 +593,47 @@ def get(key: str) -> Archetype:
     shares, margins, site counts and unit keys — spoken as a membership
     warehouse club (``worldloom.vocabulary``).
 
+    ``"omnichannel_retailer+5div"`` is the same shape widened to five
+    divisions (``worldloom.divisions``), and the two qualifiers compose:
+    ``"omnichannel_retailer+wholesale_club+5div"`` is a five-division club.
+
     Resolved *here*, in the one function every caller already goes through,
     rather than by adding a parameter to each of them. That is what makes the
     qualified form work from ``build --archetype``, from ``Blueprint.archetype``
     and, load-bearing, from ``recipe.rebuild`` — which reads back the single
     ``archetype`` string a world stored and would otherwise rebuild a mosaic
-    world with its figures intact and every division renamed back.
+    world with its figures intact and every division renamed back, or three
+    divisions where the corpus had eight.
+
+    Widening is applied *after* the vocabulary, so a widened company's added
+    divisions keep the pool's own names rather than being re-spoken. That is
+    deliberate: `vocabulary.spoken` maps an archetype's declared units onto a
+    dialect's trades one for one, and it has nothing to say about a division
+    the dialect never described.
     """
+    from .divisions import widened
     from .vocabulary import QUALIFIER, spoken
 
-    base, _, dialect = key.partition(QUALIFIER)
+    base, _, rest = key.partition(QUALIFIER)
+    dialect, _, width = rest.partition(QUALIFIER)
+    if dialect.endswith(_WIDTH_SUFFIX) and not width:
+        dialect, width = "", dialect
     try:
         shape = _REGISTRY[base]
     except KeyError:
         raise KeyError(
             f"unknown archetype {base!r}. Registered: {', '.join(sorted(_REGISTRY))}"
         ) from None
-    return spoken(shape, dialect) if dialect else shape
+    if dialect:
+        shape = spoken(shape, dialect)
+    if width:
+        if not width.endswith(_WIDTH_SUFFIX) or not width[:-len(_WIDTH_SUFFIX)].isdigit():
+            raise KeyError(
+                f"{key!r} is not a width qualifier: expected something like"
+                f" {base}+5{_WIDTH_SUFFIX} naming how many divisions the company has"
+            )
+        shape = widened(shape, int(width[:-len(_WIDTH_SUFFIX)]))
+    return shape
 
 
 def inspired_by(description: str) -> Archetype:

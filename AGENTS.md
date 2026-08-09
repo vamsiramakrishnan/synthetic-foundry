@@ -278,6 +278,49 @@ In Python the same surface is `sdk.described(document)`, which returns an
 ordinary `Blueprint` — so a description can be crossed, swept and dispersed
 like any other.
 
+### How big the company is, which is not how many people it has
+
+`organisation.divisions` is the field that makes a corpus bigger, and the
+measurement says why. Raising `organisation.headcount` from 23 to 429 left
+facts at 8,021, artifacts at 204 and evaluation cases at 596 — every one of
+them unchanged, because 429 people were still managing the same three
+divisions. The close fans out per division and per category, so the document
+count follows the *structure*. Widening the same retailer from three divisions
+to eight took facts from 604 to 990 and questions from 42 to 52 on the same
+seed.
+
+```json
+{"archetype": "omnichannel_retailer",
+ "organisation": {"headcount": 420, "span": 8, "levels": 6, "divisions": 8}}
+```
+
+A division arrives from `worldloom.divisions.POOLS`, keyed by industry, and it
+is a real line of business rather than a relabelling — its own categories, its
+own site formats, therefore its own row in every unit-level table, its own
+close commentary and its own questions. Widening is additive: the archetype's
+declared divisions keep their names, their categories and their *relative*
+sizes, so 64/21/15 stays in that ratio however many arrive. Only the shares
+renormalise, because a share is a fraction of group revenue and a fourth
+division has to take something from somebody. Each addition is sized against
+the company's *smallest* declared division and declines from there — equal
+shares were the first rule and they gave Property a 12.5% share against
+General Merchandise's 7.9%, an adjacent business outweighing the core it was
+bolted onto.
+
+It refuses rather than improvises in three places: narrowing below what the
+archetype declares (that would silently remove every fact, document and
+question a division owned), running out of pool (named with how many are
+available, because a division called `Division 7` tells a reader the company is
+synthetic without telling them anything else), and an industry with no pool at
+all. `divisions.register` adds a pool for a fourth vertical.
+
+The width rides the **archetype key** — `omnichannel_retailer+8div`, composing
+with the vocabulary qualifier as `omnichannel_retailer+wholesale_club+8div` —
+for the reason `vocabulary.spoken` qualified its own key: the key is the only
+thing a recipe records about the shape, so a width carried anywhere else would
+rebuild a three-division company from an eight-division corpus and report
+success.
+
 ## Saying what kind of company it is, one attribute at a time
 
 The four flags below are the difference between "a corpus" and "the corpus you

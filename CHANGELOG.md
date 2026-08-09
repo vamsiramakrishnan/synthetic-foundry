@@ -7,6 +7,45 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### The knob a corpus's size actually follows
+
+- **`worldloom.divisions`** — widen a company past the divisions its archetype
+  declares. Found by measurement: raising `organisation.headcount` from 23 to
+  429 left facts at 8,021, artifacts at 204 and evaluation cases at 596 —
+  every one unchanged, because 429 people were still managing the same three
+  divisions. The close fans out per division and per category, so the corpus
+  follows the *structure* and `headcount` was never the knob. Widening the same
+  retailer three → eight divisions took facts 604 → 990, artifacts 15 → 20 and
+  questions 42 → 52 on one seed.
+- Widening is additive. The declared divisions keep their names, categories,
+  formats and *relative* sizes — 64/21/15 stays in that ratio at any width —
+  and only the shares renormalise, because a share is a fraction of group
+  revenue and a fourth division has to take something from somebody. Each
+  addition is sized against the smallest declared division and declines by 0.8
+  from there: equal shares were the first rule and they gave Property a 12.5%
+  share against General Merchandise's 7.9%, an adjacent business outweighing
+  the core it was bolted onto.
+- Pools are per industry and each entry is a real line of business rather than
+  a relabelling — its own categories and estate, therefore its own row in every
+  unit-level table, its own close commentary and its own questions. Retail
+  offers five, banking three, insurance three. `divisions.register` adds a pool
+  for a fourth vertical, and is refused on redefinition for `locales.register`'s
+  reason. An industry with no pool is refused by name rather than served a
+  division called `Division 4`.
+- Refused rather than improvised in three places: narrowing below the
+  archetype's own count (silently removing every fact, document and question a
+  division owned), exhausting the pool (named with how many are available), and
+  an unknown industry. Through `--spec` these arrive as an `organisation`
+  conflict alongside whatever else the description got wrong.
+- The width rides the **archetype key** — `omnichannel_retailer+8div`, composing
+  with the vocabulary qualifier as `omnichannel_retailer+wholesale_club+8div` —
+  for the reason `vocabulary.spoken` qualified its own key: the key is the only
+  thing a recipe records about the shape, so a width carried anywhere else
+  would rebuild a three-division company from an eight-division corpus and
+  report success. A widened corpus replays byte-identical.
+- No default moved: `widened(archetype, None)` returns the archetype itself, and
+  every corpus built before this module exists is byte-identical after it.
+
 ### A benchmark an authored process gets for free
 
 - **`worldloom.benchmark`** — evaluation cases derived from the fact graph
