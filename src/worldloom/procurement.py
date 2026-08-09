@@ -832,6 +832,56 @@ from .generators.procurement_cycle import TEXT as _PROCUREMENT_TEXT  # noqa: E40
 from .generators.procurement_evaluation import EVAL_TEXT as _PROCUREMENT_EVAL_TEXT  # noqa: E402
 from .generators.procurement_org import _ROLES as _PROCUREMENT_ROLES  # noqa: E402
 
+# The mosaic axes: what varies across a field of contractor groups. Without
+# this registration `worldloom mosaic -e procurement` was refused while the
+# other three engines built — the one gap between "procurement is a complete
+# vertical" and it being usable as a volume multiplier. Each centre range is
+# chosen so the whole band the axis carries (the engine's own span *width*,
+# recentred — see `mosaic._candidate`, and the insurance `deterioration` axis
+# for the failure mode) stays on the right side of its floor:
+#
+# * `tolerance` (width 0.8): low centre 0.6 keeps the band positive, and the
+#   ends are the two kinds of group the span's own docstring names — a tightly
+#   run 0.5% shop and a permissive near-5% one.
+# * `breach` (width 1.05): the multiple must stay strictly above 1.0 or the
+#   escalation this vertical exists to pose never happens; 1.6 is the lowest
+#   centre whose whole band clears it.
+# * `order_size` (width 700, integral): a small works package to a framework's
+#   monthly call-off.
+# * `rate_split` (width 0.25): stays inside (0, 1), and moving it moves which
+#   document the disagreement lives in — price disputes argue on the invoice,
+#   delivery shortfalls on the receipt.
+from . import mosaic as _mosaic_module
+
+# Structure minus the estate axis: `ProcureToPayWorld` refuses `estate=` by
+# design — `landscape.LANDSCAPES` is a closed core table with no registration
+# seam, and a procurement landscape would be invisible to `pack landscapes` —
+# so a mosaic axis dealing estates to this engine would build worlds the world
+# builder itself rejects. The axis is dropped rather than the guard loosened.
+_mosaic_module.register_engine("procurement", tuple(
+    axis for axis in _mosaic_module.STRUCTURE if axis.name != "estate"
+) + (
+    _mosaic_module.Axis(
+        "tolerance", 0.6, 4.5, parameter="procurement.tolerance.pct",
+        about="The approval tolerance as a share of committed order value — how"
+              " much variance a buyer may clear alone. The single number that"
+              " decides how much of the corpus is an exception at all."),
+    _mosaic_module.Axis(
+        "breach", 1.6, 3.4, parameter="procurement.tolerance.breach_multiple",
+        about="How far past the tolerance the match variance lands — how bad"
+              " the exception is. Stays above 1.0, because at it the"
+              " escalation this vertical exists to pose stops happening."),
+    _mosaic_module.Axis(
+        "order_size", 500, 5_000, integral=True,
+        parameter="procurement.order.contested_quantity",
+        about="Crew-days committed on the contested line — the size of the"
+              " order the three-way match runs against."),
+    _mosaic_module.Axis(
+        "rate_split", 0.25, 0.80, parameter="procurement.variance.price_fraction",
+        about="The share of the variance that is a rate uplift rather than a"
+              " short delivery — which document the disagreement lives in."),
+))
+
 register_domain(Domain(
     name="procurement",
     archetype_keys=PROCUREMENT_ARCHETYPES,

@@ -1713,7 +1713,13 @@ class _Taxonomy:
                 self.t("q.policy.superseded", provision=label),
                 EvaluationType.TEMPORAL_STATE,
                 f"{fact.value.amount:,.0f} {fact.value.unit}",
-                [fact.id], difficulty="hard",
+                # Medium, measured, after shipping as "hard": the question's
+                # own past-tense wording ("before the revision") is a lexical
+                # gift, and a keyword baseline passed 6 of 6 of these on a
+                # six-period build while passing 0 of 6 of the "medium"
+                # approval cases below. A label the measurement inverts is
+                # worse than no label.
+                [fact.id], difficulty="medium",
                 reasoning=(
                     f"The policy was revised; the figure in force now is"
                     f" {current.value.amount:,.0f} and is the confident wrong"
@@ -1730,7 +1736,10 @@ class _Taxonomy:
                 self.t("q.policy.owner", title=spec.title),
                 EvaluationType.AUTHORITY_RESOLUTION,
                 self.subjects.name(intent.approver_id),
-                [intent.required_fact_ids[0]], difficulty="medium",
+                # Hard, measured: authority resolution is the family every
+                # baseline scores zero on — the approver's name sits in a
+                # signature block whose vocabulary every document shares.
+                [intent.required_fact_ids[0]], difficulty="hard",
                 reasoning="A policy nobody approved is a draft, so the"
                           " authority chain reaches the rules and not only the"
                           " reports.",

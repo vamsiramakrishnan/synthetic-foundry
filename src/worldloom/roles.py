@@ -155,6 +155,17 @@ SPINE: Mapping[str, frozenset[str]] = {
         "audit", "ceo", "cfo", "chief_actuary", "claims_director",
         "financial_controller", "reserving_actuary",
     }),
+    # The keys the P2P episode actually looks up by name — computed by
+    # `tests/test_roles.py`, which is why `operations_director` is absent
+    # despite being in the shipped table: it is declared, managed under, and
+    # never resolved by key, so an author may rename it and nothing breaks.
+    # Absent for as long as procurement had no mosaic: `from_shape` is only
+    # reached through one, and the refusal below ("a new engine needs its own
+    # spine entry") fired the day a procurement mosaic was first asked for.
+    "procurement": frozenset({
+        "accounts_payable_lead", "audit", "category_manager", "ceo", "cfo",
+        "chief_procurement", "financial_controller", "site_receiving_lead",
+    }),
 }
 
 #: The one key that must be the tree's root. Not merely load-bearing —
@@ -666,6 +677,7 @@ def _shipped(engine: str) -> tuple[Role, ...]:
         "retail": "worldloom.generators.organisation",
         "banking": "worldloom.generators.banking_org",
         "insurance": "worldloom.generators.insurance_org",
+        "procurement": "worldloom.generators.procurement_org",
     }[engine])
     return from_rows(module._ROLES)
 

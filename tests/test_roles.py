@@ -32,6 +32,7 @@ _TABLES = {
     "retail": "generators/organisation.py",
     "banking": "generators/banking_org.py",
     "insurance": "generators/insurance_org.py",
+    "procurement": "generators/procurement_org.py",
 }
 
 

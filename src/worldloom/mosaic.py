@@ -220,6 +220,13 @@ ENGINES: Mapping[str, tuple[Axis, ...]] = {
 #: Retail's, for callers that predate `engine=` and for `AXES` as a public name.
 AXES: tuple[Axis, ...] = ENGINES["retail"]
 
+#: The structural axes alone, public because `register_engine` needs them: a
+#: vertical registering from its own module composes `STRUCTURE + (its physics
+#: axes)`, the same sum `ENGINES` is built from — reaching into another
+#: engine's tuple and filtering out its physics would encode the accident that
+#: structural axes happen to carry no `parameter`.
+STRUCTURE: tuple[Axis, ...] = _STRUCTURE
+
 #: Functions to draw an organisation's departments from, longest-first so a
 #: bigger company gets more of them. Ordered, never shuffled: a mosaic's shapes
 #: must be a function of its coordinates alone.
@@ -374,7 +381,11 @@ def _candidate(
         overrides=overrides,
         coordinates=tuple(coordinates),
         engine=engine,
-        estate=_ESTATES[int(values["estate"])],
+        # An engine may register without the estate axis — procurement's world
+        # builder refuses `estate=` outright, so dealing it one would build
+        # worlds the builder rejects. Absent axis, no estate, same as the
+        # `calendar` fallback two lines up.
+        estate=_ESTATES[int(values["estate"])] if "estate" in values else None,
     )
     try:
         table = variant.role_table()
@@ -760,5 +771,5 @@ def register_engine(engine: str, axes: tuple[Axis, ...]) -> None:
     ENGINES[engine] = axes
 
 
-__all__ = ["AXES", "ENGINES", "Axis", "Variant", "describe", "field", "outcome_field",
-           "spread", "register_engine"]
+__all__ = ["AXES", "ENGINES", "STRUCTURE", "Axis", "Variant", "describe", "field",
+           "outcome_field", "spread", "register_engine"]

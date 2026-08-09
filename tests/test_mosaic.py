@@ -226,7 +226,8 @@ def test_an_engine_only_varies_physics_it_actually_reads(engine: str) -> None:
     """A mosaic that moved `retail.margin.erosion` through a bank would report
     varying something it had not."""
     prefixes = {"retail": ("retail.", "ops."), "banking": ("capital.",),
-                "insurance": ("reserves.",)}[engine]
+                "insurance": ("reserves.",),
+                "procurement": ("procurement.",)}[engine]
     for axis in mosaic.ENGINES[engine]:
         if axis.parameter is not None:
             assert axis.parameter.startswith(prefixes), (engine, axis.name)
@@ -280,7 +281,8 @@ def test_an_engines_extremes_actually_build(engine: str) -> None:
     from dataclasses import replace
 
     names = {"retail": "omnichannel_retailer", "banking": "midsize_adi",
-             "insurance": "midsize_general_insurer"}
+             "insurance": "midsize_general_insurer",
+             "procurement": "midsize_infrastructure_services"}
     shape = archetypes.get(names[engine])
     domain = domains.for_archetype(shape.key)
     assert domain is not None

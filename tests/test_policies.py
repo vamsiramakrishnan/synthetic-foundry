@@ -211,7 +211,11 @@ def test_the_questions_an_assistant_is_actually_asked(governed) -> None:  # type
     temporal = [c for c in governed.evaluations
                 if "before the current version" in c.question]
     assert temporal, "a revision nobody asks about teaches nothing"
-    assert temporal[0].difficulty == "hard"
+    # Medium since the labels were measured against the baseline: the
+    # past-tense wording is a lexical gift and BM25 passed 6/6 of these, while
+    # the approval questions labelled medium scored 0/6. The label follows the
+    # measurement, not the intention.
+    assert temporal[0].difficulty == "medium"
 
 
 # ---------------------------------------------------------------------------
