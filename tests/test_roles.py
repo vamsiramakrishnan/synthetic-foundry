@@ -603,3 +603,83 @@ def test_the_caller_s_functions_still_seed_the_organisation() -> None:
     )
     seen = {role.function for role in table}
     assert seen & {"Claims", "Actuarial", "Distribution"}, seen
+
+
+def test_the_spine_keeps_its_own_reporting_lines() -> None:
+    """The engine's table already says who reports to whom, and `from_shape`
+    used to throw that away.
+
+    Spine keys were dealt into levels in sorted-key order with whatever parent
+    the rotation reached, so `svc_desk` reported to nobody in particular and
+    retail's four Technology keys — which sort early — landed at depth 1 with
+    the whole tree under them while its ServiceOperations keys sorted late and
+    landed at depth 2 with almost none. A 420-person retailer came out 159
+    technologists to 14 service operators: the function mix of the company was
+    decided by alphabetical order.
+    """
+    from worldloom import roles as roles_module
+
+    for engine in ("retail", "banking", "insurance"):
+        shipped = {role.key: role for role in roles_module._shipped(engine)}
+        table = roles_module.from_shape(
+            functions=["Executive", "Operations"],
+            headcount=200, span=6, levels=5, engine=engine,
+        )
+        placed = {role.key: role for role in table}
+        for key, role in placed.items():
+            declared = shipped.get(key)
+            if declared is None or declared.manager is None:
+                continue
+            # The declared manager, or — when this shape does not place it,
+            # because `required` returns the spine and `_shipped` is wider —
+            # the nearest declared ancestor that it does place.
+            cursor = declared.manager
+            while cursor is not None and cursor not in placed:
+                cursor = shipped[cursor].manager if cursor in shipped else None
+            expected = cursor or ROOT
+            assert role.manager == expected, f"{engine}:{key} → {role.manager} not {expected}"
+
+
+def test_a_division_is_a_subtree() -> None:
+    """Per-unit roles are in no shipped table, so this function states their
+    structure: the MD reports to the chief executive and everyone else in the
+    division reports to their MD.
+
+    Deliberately not the dotted line the engines declare — retail's `_bp`
+    reports to the group controller — because a synthesised organisation has
+    one line per person, and the one that makes a division legible is the solid
+    one.
+    """
+    from worldloom import roles as roles_module
+
+    table = roles_module.from_shape(
+        functions=["Executive", "Operations"], headcount=60, span=6, levels=4,
+        engine="retail", unit_keys=["north", "south"],
+    )
+    placed = {role.key: role for role in table}
+    for unit in ("north", "south"):
+        assert placed[f"{unit}_md"].manager == ROOT
+        assert placed[f"{unit}_bp"].manager == f"{unit}_md"
+        assert placed[f"{unit}_buyer"].manager == f"{unit}_md"
+
+
+def test_a_full_manager_pushes_a_report_down_a_level_rather_than_refusing() -> None:
+    """An organisation whose top is wide adds a layer; it does not fail to exist.
+
+    The chief executive takes the CFO, the CIO and one managing director per
+    division, so a span of three with four divisions cannot seat them all as
+    direct reports. Refusing there would reject a shape that fits perfectly
+    well — the fill walks down from the declared manager to the first
+    descendant with room instead.
+    """
+    from worldloom import roles as roles_module
+
+    table = roles_module.from_shape(
+        functions=["Executive", "Operations"], headcount=90, span=3, levels=6,
+        engine="retail", unit_keys=["a", "b", "c", "d"],
+    )
+    shape = roles_module.measure(table)
+    assert shape["headcount"] == 90
+    assert shape["widest_span"] <= 3, "nobody was given more reports than the span allows"
+    assert roles_module.review(list(table), engine="retail",
+                               unit_keys=["a", "b", "c", "d"]) == []

@@ -7,6 +7,38 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### The organisation is shaped like its management
+
+- **`roles.from_shape`** dealt spine keys into levels in sorted-key order and
+  gave each whichever parent the rotation reached, throwing away the reporting
+  lines the engine's own table already declares. Retail's four Technology keys
+  sort early and landed at depth 1 with enormous subtrees; its
+  ServiceOperations keys sort late and landed at depth 2 with almost none. A
+  420-person retailer came out **159 technologists to 14 service operators** —
+  the function mix of the whole company decided by alphabetical order. It now
+  reads 140 Finance, 128 Technology, 82 Merchandising, 42 Audit, 27
+  ServiceOperations, 1 Executive.
+- A spine key is placed at the depth its *own* manager chain implies, under
+  that manager. `svc_desk` reports to `svc_lead` reports to `cio` again, and
+  where a declared manager is not in the spine at all (`svc_lead` is in
+  retail's shipped table and not in `SPINE`) the walk climbs to the nearest
+  ancestor that is.
+- A per-unit key is in no shipped table, so this function now states their
+  structure: the division's MD reports to the chief executive and everyone else
+  in the division reports to their MD, which makes **each division a subtree**.
+  Deliberately not the dotted line the engines declare — retail's `_bp` reports
+  to the group controller — because a synthesised organisation has one line per
+  person and the one that makes a division legible is the solid one.
+- A full manager pushes a report **down a level rather than refusing**. The
+  chief executive takes the CFO, the CIO and one MD per division, so a span of
+  three with four divisions cannot seat them all; an organisation whose top is
+  wide adds a layer, it does not fail to exist. Widest span still never exceeds
+  what the caller claimed.
+- Every default build and all five registered archetypes are byte-identical —
+  they use their engine's own table and never call this. A mosaic of three
+  worlds validates clean, and a widened synthesised corpus replays
+  byte-identical from its recipe.
+
 ### Somebody signed it
 
 - **`ArtifactIntent.approver_id`** — every document in this corpus was authored
@@ -99,12 +131,10 @@ reproducibility even when no API moved.
 - Cosmetic until now; load-bearing from here. Everything below the spine is
   about to author documents, and a one-to-one minuted between a finance manager
   and their audit-function manager is noise wearing a document's clothes.
-- Known and not fixed here: `from_shape` still discards the spine's *own*
-  declared manager links and places spine keys breadth-first, so which
-  executives land at depth 1 decides the function mix. Retail's four Technology
-  spine keys land early and its ServiceOperations keys land deep, giving a
-  420-person retailer 159 technologists and 14 service operators. Coherent, and
-  not yet the right shape.
+- Left open at the time and closed above: `from_shape` still discarded the
+  spine's own declared manager links, so which executives landed at depth 1
+  decided the function mix. See *The organisation is shaped like its
+  management*.
 
 ### The knob a corpus's size actually follows
 

@@ -2649,13 +2649,15 @@ def mosaic(
         # this whole family of checks scored zero out of zero for as long as
         # the command stopped at `build`.
         #
-        # What they find today is one defect, in every world of every engine:
-        # `author_cannot_see_own_artifact`. `roles.from_shape` deals functions
-        # round-robin by position in the reporting tree, so a synthesised
-        # organisation puts the engine's `controller` in Merchandising while
-        # the access policy the planner picks for a finance document names
-        # Finance — the author of the variance memo cannot read it. The corpora
-        # were always like that; compiling them is what made it sayable.
+        # What they found when this branch was written was one defect, in every
+        # world of every engine: `author_cannot_see_own_artifact`, because
+        # `roles.from_shape` dealt functions round-robin by position and put
+        # the engine's `controller` in Merchandising while the policy on a
+        # finance document named Finance. The corpora were always like that;
+        # compiling them is what made it sayable, and it is fixed — a spine key
+        # now keeps the function its engine gives it, a synthesised role
+        # inherits its manager's, and a mosaic validates clean. The branch
+        # stays because the next such defect will arrive the same way.
         console.print(
             f"[yellow]![/yellow] {unhealthy} of {len(written)} world(s) report"
             " violations. These are checks a plan-only mosaic never ran, not"
