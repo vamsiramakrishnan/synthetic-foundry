@@ -437,6 +437,15 @@ _HEADING_ROLE_HINTS: tuple[tuple[str, str], ...] = (
     ("commitment", "chronology"),
     ("driver", "explain_change"),
     ("in brief", "summary"),
+    # The committee-in-the-meeting executive summary opens with "The ask" —
+    # what the committee is being asked to decide, which *is* that document's
+    # summary. Without this hint the section fell through to its fact kinds,
+    # and `close.` reads "chronology": the summary composed as `core.schedule`,
+    # and the grammar refused the artifact — correctly — with `wrong_opening`
+    # and `missing_role`. Latent from the day the variant landed; it only ever
+    # surfaced in the one CI job that renders an actors corpus to PPTX,
+    # because that is the only place a grammar-checked format met the variant.
+    ("the ask", "summary"),
     # Before the bare "summary" it contains: a workbook's Summary sheet is its
     # headline evidence, not an executive summary, and reading it as prose is
     # what made `finance_workbook` fail its own grammar.
