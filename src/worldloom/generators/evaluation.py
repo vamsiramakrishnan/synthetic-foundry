@@ -164,8 +164,15 @@ EVAL_TEXT: dict[str, str] = {
     "a.citation.mapping_owner": "Nobody — the owner is unassigned.",
     "q.citation.evidence_ruled_out":
         "What evidence ruled out the initial explanation, and where is it recorded?",
+    # {period} is the discriminator, not decoration. Minted once per incident,
+    # this question read identically in every period of a multi-period build
+    # while its right answer changed — three copies, three different SKU
+    # counts, and no way to tell from the wording which one was being asked.
+    # An identically-worded question with a different right answer is worse
+    # than a duplicate: it grades a retriever against a coin flip.
     "q.citation.affected_records":
-        "How many records were affected, and which document states it?",
+        "How many records were affected in the {period} incident, and which"
+        " document states it?",
     "a.citation.affected_records": "{value}",
     "q.cross.remediation_choice":
         "Which remediation addresses the underlying control failure rather than only"
@@ -177,12 +184,22 @@ EVAL_TEXT: dict[str, str] = {
         "Zero — valuation completed before the ledger closed. The impact was on the"
         " calendar only.",
     # -- across episodes ---------------------------------------------------------
+    # "…for {period}", not "currently": each period's episode mints its own
+    # copy, and every copy was current on the day it was asked. By the end of
+    # a five-period build the corpus held five identically-worded questions
+    # naming five different calendars as the answer. Anchoring the wording to
+    # the period keeps the hard part — the superseded calendars all look
+    # identical — and removes the part that was unanswerable by design.
     "q.across.current_calendar":
-        "Which close calendar states the committed date currently in force?",
+        "Which close calendar states the committed date in force for the"
+        " {period} close?",
     "a.across.current_calendar": "The calendar published for {period}, committing to {date}.",
+    # Anchored to the asking period for the same reason as the calendar
+    # question above: this is minted by every episode that follows an
+    # incident, and each copy's right answer is a different prior period.
     "q.across.recurrence":
-        "When did a comparable valuation failure last occur, and did the response"
-        " prevent it recurring?",
+        "Before the {period} incident, when did a comparable valuation failure"
+        " last occur, and did the response prevent it recurring?",
     "a.across.recurrence":
         "In {prior_period}. It did not — the same mapping table failed again in"
         " {period}, and ownership is still unassigned.",
@@ -209,6 +226,27 @@ EVAL_TEXT: dict[str, str] = {
         "According to the corpus's own history, when did this happen: {assertion}?",
     "q.history.signed_earlier": "Who signed the {doc_type} for {period}?",
     "q.history.signed_current": "Who signed the {doc_type} for {period}?",
+    # -- approvals ---------------------------------------------------------------
+    "q.approval.who_approved": "Who approved the {doc_type} for {period}?",
+    "q.approval.who_approved_unit":
+        "The {unit} close commentary for {period} was prepared by one person and"
+        " approved by another. Who approved it?",
+    "q.approval.who_prepared_unit":
+        "Who prepared the {unit} close commentary for {period}?",
+    "q.abstain.unapproved": "Who approved the {doc_type} for {period}?",
+    # -- standing documents ------------------------------------------------------
+    "q.policy.superseded":
+        "What was the {provision} under the expense policy in force before the"
+        " current version?",
+    "q.policy.owner": "Who approved the {title}?",
+    # -- the workforce rounds ----------------------------------------------------
+    "q.people.requisition_level":
+        "The vacancy {manager} raised committed {amount}. Which level of the"
+        " delegation of authority did that require?",
+    "q.people.rating": "What rating did {person} receive for {period}?",
+    "q.people.held_view":
+        "Two records give {person} a different rating for {period}. Which is the"
+        " signed one, and what does it say?",
     "q.abstain.cmo":
         "Who is the company's Chief Marketing Officer, and when did they join?",
     "q.abstain.close_calendar_1995": "Who signed the close calendar in 1995?",
@@ -220,8 +258,8 @@ EVAL_TEXT: dict[str, str] = {
         "The Group Financial Controller and the Group Chief Financial Officer; the"
         " minutes record: {cause}.",
     "q.comms.cfo_notified":
-        "When was the Group CFO first told the close was at risk, and through what"
-        " channel?",
+        "When was the Group CFO first told the {period} close was at risk, and"
+        " through what channel?",
     "a.comms.cfo_notified":
         "By email, within the hour of the close being recorded as delayed on"
         " {date} — before any formal report existed.",
@@ -357,6 +395,7 @@ class _Taxonomy:
         period: str,
         history: tuple[CanonicalFact, ...] = (),
         prior_intents: tuple[ArtifactIntent, ...] = (),
+        prior_cases: tuple[EvaluationCase, ...] = (),
         text: Mapping[str, str] = EVAL_TEXT,
         density: float = 1.0,
         estate: Any = None,
@@ -374,8 +413,10 @@ class _Taxonomy:
         # naming the bad key) is enforced exactly once per build.
         self.text = text
         # The builder owns minting; `self.cases` is the same list, so the
-        # family methods and the final gate read one accumulator.
-        self._build = CaseBuilder(minter)
+        # family methods and the final gate read one accumulator. It is seeded
+        # with the world's existing cases so a later episode cannot re-mint an
+        # earlier one verbatim — see `CaseBuilder` on what counts as verbatim.
+        self._build = CaseBuilder(minter, prior=prior_cases)
         self.cases = self._build.cases
 
         self.by_kind: dict[tuple[str, str], CanonicalFact] = {}
@@ -914,7 +955,7 @@ class _Taxonomy:
             sources=[rca], distractors=[stale],
         )
         self.case(
-            self.t("q.citation.affected_records"),
+            self.t("q.citation.affected_records", period=self.period),
             EvaluationType.CITATION_REQUIRED,
             self.t("a.citation.affected_records", value=_fmt(by_id[k["fact_affected"]])),
             [k["fact_affected"]],
@@ -961,7 +1002,7 @@ class _Taxonomy:
             due = self.get("close.due_date", self.subjects.company_id)
             if due:
                 self.case(
-                    self.t("q.across.current_calendar"),
+                    self.t("q.across.current_calendar", period=self.period),
                     EvaluationType.AUTHORITY_RESOLUTION,
                     self.t("a.across.current_calendar", period=self.period, date=due.text_value),
                     [due.id], difficulty="hard",
@@ -973,7 +1014,7 @@ class _Taxonomy:
             k = self.episode.keys
             previous = earlier_incidents[-1]
             self.case(
-                self.t("q.across.recurrence"),
+                self.t("q.across.recurrence", period=self.period),
                 EvaluationType.CAUSAL_MULTI_HOP,
                 self.t("a.across.recurrence", prior_period=previous.period, period=self.period),
                 [previous.id, k["fact_recurrence"], k["fact_owner"]], difficulty="hard",
@@ -1027,7 +1068,22 @@ class _Taxonomy:
         phrased against things the model deliberately does not carry: people
         costs, suppliers, customers, competitors, and any period but this one.
         """
-        for key, reasoning in (
+        # "Why was the previous close delayed?" abstains only while no earlier
+        # period actually answers it. That guard was missing, and the case was
+        # minted once per episode unconditionally — so in any multi-period
+        # incident build the corpus documented a prior root cause at length and
+        # then graded a retriever *wrong* for finding it. Measured on a
+        # six-period build: thirty-nine passages carried a documented cause,
+        # the top five BM25 hits for this exact question all stated one, and
+        # the answer key said abstain. An abstention that the corpus refutes is
+        # not a hard case; it is a wrong one, and it is the mirror image of the
+        # "how many stores" trap this docstring already warns about — a
+        # question that quietly *gained* an answer as the corpus grew.
+        prior_cause = any(
+            f.kind == "ops.cause" and f.period and self.period and f.period < self.period
+            for f in self._fact_index.values()
+        )
+        for key, reasoning in [
             ("q.abstain.previous_close_cause",
              "Presupposes an event this corpus does not contain."),
             ("q.abstain.ceo_remuneration",
@@ -1042,7 +1098,9 @@ class _Taxonomy:
              "No competitor exists in this world."),
             ("q.abstain.next_audit",
              "Forward-looking; the corpus records what happened, not what is planned."),
-        ):
+        ]:
+            if key == "q.abstain.previous_close_cause" and prior_cause:
+                continue
             self.abstain(self.t(key), reasoning)
 
     # -- history -------------------------------------------------------
@@ -1225,7 +1283,7 @@ class _Taxonomy:
         if thread:
             delayed = by_id[k["fact_close_delayed"]]
             self.case(
-                self.t("q.comms.cfo_notified"),
+                self.t("q.comms.cfo_notified", period=self.period),
                 # Cross-artifact, not temporal-state: there is no cutoff to
                 # reason at — the question joins a fact many documents carry
                 # with a channel and moment only the thread records.
@@ -1423,6 +1481,361 @@ class _Taxonomy:
         )
 
 
+    def approvals(self) -> None:
+        """Who signed it, who only wrote it, and which documents nobody signed.
+
+        Documents gained a signature block (`documents._signoff`) and nothing
+        asked about it: "who approved the March pack for Fuel and Convenience"
+        was answerable from the corpus and asked by nobody.
+
+        Three shapes, and the difficulty runs in one direction.
+
+        **The trap is the byline.** A document names its author at the top, in
+        larger type, before any content; it names its approver in a table at
+        the bottom. A retrieval system that has learned "the name near the
+        title is who this document is from" gets the author every time, which
+        is why the author is stated as the wrong answer in the reasoning rather
+        than left implicit. `authority_resolution` rather than
+        `direct_lookup`: two people are named in one document and the question
+        is which of them the corpus says did *what*.
+
+        **The unit commentary is the hard case**, because eight of them exist
+        and each has a different pair — so a system that retrieves the right
+        *type* of document and the wrong division answers confidently and
+        wrongly. Both halves are asked, prepared and approved, so a system
+        that gets one by matching on "commentary" is shown getting the other
+        wrong.
+
+        **And a document nobody signed must stay unsigned.** Absence is a claim
+        here (`planning._APPROVED_BY`): a ServiceNow ticket has an assignee and
+        a calendar is issued rather than approved. Asking who approved one is
+        an abstention case, and it is the only test this corpus has that a
+        system will not invent a signature to fill a blank.
+
+        Grounded on whichever fact the document already required, the trick
+        `authorship_over_time` uses: no new fact kind, and reachable by
+        construction because the document that carries the signature is the
+        document that carries the fact.
+        """
+        signed = [i for i in self.intents if i.approver_id]
+        if not signed:
+            return
+
+        def named(person_id: str | None) -> str:
+            return self.subjects.name(person_id) if person_id else ""
+
+        # One group-level document, chosen by type rather than by position so
+        # the case is the same question whichever engine ran the episode.
+        for artifact_type in ("cfo_variance_memo", "finance_workbook"):
+            intent = next(
+                (i for i in signed
+                 if i.artifact_type == artifact_type and i.required_fact_ids),
+                None,
+            )
+            if intent is None:
+                continue
+            self.case(
+                self.t("q.approval.who_approved",
+                       doc_type=artifact_type.replace("_", " "), period=self.period),
+                EvaluationType.AUTHORITY_RESOLUTION, named(intent.approver_id),
+                [intent.required_fact_ids[0]], difficulty="medium",
+                reasoning=(
+                    f"{named(intent.author_id)} wrote it and is named in the byline;"
+                    f" {named(intent.approver_id)} signed it and is named only in the"
+                    " approval block at the foot of the document. The byline is the"
+                    " confident wrong answer."
+                ),
+                sources=[intent.id],
+            )
+            break
+
+        # One division's commentary, both halves. The unit is taken from the
+        # first signed commentary rather than a favourite one, so a widened
+        # company asks about a division a narrow one does not have.
+        commentary = next(
+            (i for i in signed
+             if i.artifact_type == "unit_close_commentary" and i.required_fact_ids),
+            None,
+        )
+        if commentary is not None:
+            subject = self._fact_index.get(commentary.required_fact_ids[0])
+            unit = self.subjects.name(subject.subject) if subject else ""
+            if unit:
+                self.case(
+                    self.t("q.approval.who_approved_unit", unit=unit, period=self.period),
+                    EvaluationType.AUTHORITY_RESOLUTION, named(commentary.approver_id),
+                    [commentary.required_fact_ids[0]], difficulty="hard",
+                    reasoning=(
+                        "One commentary exists per division and each has a different"
+                        " pair, so retrieving the right document type and the wrong"
+                        " division answers confidently and wrongly."
+                    ),
+                    sources=[commentary.id],
+                )
+                self.case(
+                    self.t("q.approval.who_prepared_unit", unit=unit, period=self.period),
+                    EvaluationType.AUTHORITY_RESOLUTION, named(commentary.author_id),
+                    [commentary.required_fact_ids[0]], difficulty="medium",
+                    reasoning=(
+                        "The other half of the pair, so a system that answers the"
+                        " approval question by matching on 'commentary' is shown"
+                        " getting this one wrong."
+                    ),
+                    sources=[commentary.id],
+                )
+
+        # And one that nobody signed.
+        unsigned = next(
+            (i for i in self.intents
+             if not i.approver_id
+             and i.artifact_type in ("close_calendar", "servicenow_incident", "email_thread")),
+            None,
+        )
+        if unsigned is not None:
+            self.abstain(
+                self.t("q.abstain.unapproved",
+                       doc_type=unsigned.artifact_type.replace("_", " "),
+                       period=self.period),
+                "The document exists and carries no approval, because its type does"
+                " not get one — a ticket has an assignee and a calendar is issued"
+                " rather than approved. The corpus records who wrote it and nobody"
+                " else, so inventing a signature is the failure this case tests.",
+            )
+
+
+    def standing_documents(self) -> None:
+        """What the rules are, who signed them, and what they used to be.
+
+        The family the corpus most obviously lacked. Everything else here asks
+        about a *period* — what revenue was, what the close did, who was in the
+        room — and an assistant pointed at a real company's archive is asked
+        "what is our expense approval threshold" far more often than any of
+        them. It had no answer, because the company had no rules.
+
+        Three shapes over ``worldloom.policies``:
+
+        * **The provision.** A direct lookup, and deliberately so: this is the
+          question, and phrasing it as anything cleverer would be dressing up
+          the thing being measured. The clause states its own wording
+          (``policies.Clause.asks``), because an author adding a provision
+          knows what it will be asked and should not have to find a second
+          table to say so.
+        * **The provision that moved.** The expense policy is the one revised
+          version in the shipped library, so the superseded figure is in the
+          corpus with a closed validity window and the current one is not the
+          answer. `temporal_state`, and the hardest of the three: the current
+          document is the confident wrong answer and it is the one that looks
+          newest.
+        * **Who approved it.** A policy nobody approved is a draft, so every
+          standing document carries a signature — which makes the corpus's
+          authority chain reach the rules and not only the reports.
+
+        Gated on the facts existing. A build that did not ask for policies
+        mints nothing here, which is every corpus built before they did.
+        """
+        from .. import policies as policies_module
+
+        specs = {spec.artifact_type: spec for area in policies_module.LIBRARY
+                 for spec in policies_module.LIBRARY[area]}
+        # `prior_intents` as well as this episode's, and for standing documents
+        # it is only ever the former: a policy is planned when the world is
+        # *built*, before any episode runs, because it is not caused by one.
+        # That is the whole distinction this family exists to ask about, and a
+        # search of `self.intents` alone found nothing on a corpus that plainly
+        # had ten policies in it.
+        planned = [i for i in (*self.prior_intents, *self.intents)
+                   if i.artifact_type in specs]
+        if not planned:
+            return
+
+        for intent in planned:
+            spec = specs[intent.artifact_type]
+            cited = {}
+            for fact_id in intent.required_fact_ids:
+                fact = self._fact_index.get(fact_id)
+                if fact is not None:
+                    cited[fact.kind] = fact
+            # A superseded edition does not get the present-tense question.
+            # `clause.asks` reads "What is the expense approval threshold?",
+            # and the revision keeps both editions on the shelf — so asking it
+            # of each minted the same words twice with two different right
+            # answers, the current figure and the retired one. The retired
+            # figure is still asked about, once, by the temporal case below,
+            # whose wording carries the tense the fact actually has.
+            if any(f.valid_to is not None for f in cited.values()):
+                continue
+            for clause in spec.clauses:
+                if not clause.asks:
+                    continue
+                fact = cited.get(policies_module.kind_of(spec, clause))
+                if fact is None or fact.value is None:
+                    continue
+                self.case(
+                    clause.asks, EvaluationType.DIRECT_LOOKUP,
+                    f"{fact.value.amount:,.0f} {fact.value.unit}",
+                    [fact.id], difficulty="easy",
+                    reasoning=f"Stated in the {spec.title}, which is the only"
+                              " document in the corpus that says it.",
+                    sources=[intent.id],
+                )
+
+        # The one provision that moved, and the stale figure that is still in
+        # the archive. Found by looking for a closed window rather than by
+        # naming the expense policy, so a library that revises something else
+        # tomorrow asks about that instead.
+        # Over the world's whole ledger rather than this episode's cut: a
+        # policy fact predates every episode, so `self.facts` — the period's
+        # financial slice — contains none of them.
+        ledger = list(self._fact_index.values())
+        superseded = [
+            fact for fact in ledger
+            if fact.kind.startswith("policy.") and fact.valid_to is not None
+            and fact.value is not None
+        ]
+        for fact in superseded[:1]:
+            current = next(
+                (f for f in ledger
+                 if f.kind == fact.kind and f.valid_to is None and f.value is not None),
+                None,
+            )
+            if current is None:
+                continue
+            spec = next(
+                (s for s in specs.values()
+                 if any(policies_module.kind_of(s, c) == fact.kind for c in s.clauses)),
+                None,
+            )
+            label = next(
+                (c.label.lower() for c in (spec.clauses if spec else ())
+                 if policies_module.kind_of(spec, c) == fact.kind), "provision",
+            ) if spec else "provision"
+            self.case(
+                self.t("q.policy.superseded", provision=label),
+                EvaluationType.TEMPORAL_STATE,
+                f"{fact.value.amount:,.0f} {fact.value.unit}",
+                # Medium, measured, after shipping as "hard": the question's
+                # own past-tense wording ("before the revision") is a lexical
+                # gift, and a keyword baseline passed 6 of 6 of these on a
+                # six-period build while passing 0 of 6 of the "medium"
+                # approval cases below. A label the measurement inverts is
+                # worse than no label.
+                [fact.id], difficulty="medium",
+                reasoning=(
+                    f"The policy was revised; the figure in force now is"
+                    f" {current.value.amount:,.0f} and is the confident wrong"
+                    " answer, because it sits in the document that looks"
+                    " newest. Only the validity window distinguishes them."
+                ),
+            )
+
+        for intent in planned[:1]:
+            spec = specs[intent.artifact_type]
+            if not intent.approver_id or not intent.required_fact_ids:
+                continue
+            self.case(
+                self.t("q.policy.owner", title=spec.title),
+                EvaluationType.AUTHORITY_RESOLUTION,
+                self.subjects.name(intent.approver_id),
+                # Hard, measured: authority resolution is the family every
+                # baseline scores zero on — the approver's name sits in a
+                # signature block whose vocabulary every document shares.
+                [intent.required_fact_ids[0]], difficulty="hard",
+                reasoning="A policy nobody approved is a draft, so the"
+                          " authority chain reaches the rules and not only the"
+                          " reports.",
+                sources=[intent.id],
+            )
+
+
+    def workforce(self) -> None:
+        """A requisition against the rules, and a rating against a note.
+
+        Two shapes, and both are cross-document by construction rather than by
+        contrivance.
+
+        **The requisition needs the policy.** Its commitment figure is in one
+        document and the ladder that decides who may approve it is in another,
+        written by a different function years earlier. This is the first
+        question in this corpus whose answer is in neither document alone, and
+        it is exactly the shape an enterprise assistant is asked — "was this
+        approved at the right level" is a compliance question, not a lookup.
+
+        **The rating needs the authority ranking.** A manager's running
+        one-to-one note carries the view they held before calibration and the
+        signed review carries the one that counts, and the two disagree on
+        purpose. Every authority-resolution case in this repository before now
+        was about an incident; a performance rating is the same shape and it
+        reaches the whole organisation rather than the dozen people an incident
+        touches.
+
+        Gated on the rounds having run. A corpus that hired nobody and reviewed
+        nobody mints nothing here.
+        """
+        by_kind: dict[str, list] = {}
+        for fact in self._fact_index.values():
+            if fact.kind.startswith("people."):
+                by_kind.setdefault(fact.kind, []).append(fact)
+        if not by_kind:
+            return
+
+        # The requisition whose approval level is highest, so the case is about
+        # the rung that had to be climbed rather than the floor everything
+        # clears. Ranked on the commitment, which is what the ladder reads.
+        commitments = sorted(
+            by_kind.get("people.requisition.commitment", []),
+            key=lambda f: (-(f.value.amount if f.value else 0), f.id),
+        )
+        for fact in commitments[:1]:
+            level = next(
+                (f for f in by_kind.get("people.requisition.approval_level", [])
+                 if f.subject == fact.subject), None,
+            )
+            if level is None or fact.value is None:
+                continue
+            self.case(
+                self.t("q.people.requisition_level",
+                       manager=self.subjects.name(fact.subject),
+                       amount=f"{fact.value.amount:,.0f} {fact.value.unit}"),
+                EvaluationType.CROSS_ARTIFACT, level.text_value or "",
+                [fact.id, level.id], difficulty="hard",
+                reasoning=(
+                    "The figure is in the requisition and the ladder that"
+                    " decides who may approve it is in the delegation of"
+                    " authority — a different document, written by a different"
+                    " function. Neither answers this alone."
+                ),
+            )
+
+        # One person whose two records disagree.
+        for signed in sorted(by_kind.get("people.review.rating", []),
+                             key=lambda f: f.id)[:1]:
+            held = next(
+                (f for f in by_kind.get("people.review.held_rating", [])
+                 if f.subject == signed.subject), None,
+            )
+            self.case(
+                self.t("q.people.rating",
+                       person=self.subjects.name(signed.subject), period=self.period),
+                EvaluationType.DIRECT_LOOKUP, signed.text_value or "",
+                [signed.id], difficulty="medium",
+                reasoning="Stated in the signed review.",
+            )
+            if held is None or held.text_value == signed.text_value:
+                continue
+            self.case(
+                self.t("q.people.held_view",
+                       person=self.subjects.name(signed.subject), period=self.period),
+                EvaluationType.AUTHORITY_RESOLUTION, signed.text_value or "",
+                [signed.id], difficulty="hard",
+                reasoning=(
+                    f"The one-to-one note says {held.text_value!r} and is an"
+                    " unofficial note; the review says otherwise and is an"
+                    " approved report countersigned one level up. Ranking the"
+                    " two is the whole of the question."
+                ),
+            )
+
+
 def evaluation_cases(
     minter: Minter,
     *,
@@ -1433,6 +1846,7 @@ def evaluation_cases(
     period: str,
     history: tuple[CanonicalFact, ...] = (),
     prior_intents: tuple[ArtifactIntent, ...] = (),
+    prior_cases: tuple[EvaluationCase, ...] = (),
     text: Mapping[str, str] | None = None,
     density: float = 1.0,
     estate: Any = None,
@@ -1476,6 +1890,7 @@ def evaluation_cases(
     taxonomy = _Taxonomy(
         minter, episode=episode, facts=facts, subjects=subjects, intents=intents,
         period=period, history=history, prior_intents=prior_intents,
+        prior_cases=prior_cases,
         text=episode_text.merged(EVAL_TEXT, text, field="evaluation_text"),
         density=density, estate=estate,
     )
@@ -1499,6 +1914,17 @@ def evaluation_cases(
     # appended rather than inserted: a world with no estate mints nothing here,
     # so no `EVAL-` id in any corpus already built can move.
     taxonomy.estate_shape()
+    # Last, and appended for the reason every family above was: a world whose
+    # planner names no approver mints nothing here, so no `EVAL-` id in any
+    # corpus already built can move.
+    taxonomy.approvals()
+    # Last, and appended for the reason every family above it was. A world that
+    # did not ask for standing documents mints nothing here, so no `EVAL-` id
+    # in any corpus already built can move.
+    taxonomy.standing_documents()
+    # Last again, and for the same reason. A corpus that ran no workforce round
+    # mints nothing here.
+    taxonomy.workforce()
 
     # One last pass of the rule every family is supposed to apply for itself.
     #

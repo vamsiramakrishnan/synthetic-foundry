@@ -25,10 +25,11 @@ from typing import TYPE_CHECKING
 
 from ..compiler.style import StyleGenome, genome
 from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
-from ..models import ArtifactIR, ArtifactSection, CanonicalFact, Table
+from ..models import ArtifactIR, ArtifactSection, CanonicalFact, Chart, ChartKind, Table
 from ..narrative import references
 from ..rng import Rng
 from . import Rendered, RenderError, ooxml, slug_for
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -522,38 +523,319 @@ def _table(document, table: Table, g: StyleGenome, locale: Locale = DEFAULT_LOCA
         note.runs[0].font.color.rgb = _rgb(_MUTED)
 
 
-#: How wide the widest bar in a figure is drawn, in block characters.
-_BAR_WIDTH = 28
+#: A chart figure's size on the page — the full text column width (A4 minus
+#: the corporate margins `_page_setup` sets), and a height chosen for a
+#: legible legend/axis band under it rather than derived from anything in
+#: the IR. 1mm is exactly 36,000 EMU (914,400 EMU/inch / 25.4mm/inch) — the
+#: same unit `Box`/`_in` in `pptx.py` uses, spelled in mm here because
+#: `_PAGE` already is.
+_EMU_PER_MM = 36_000
+_CHART_WIDTH_EMU = (_PAGE["width_mm"] - 2 * _PAGE["margin_mm"]) * _EMU_PER_MM
+_CHART_HEIGHT_EMU = 95 * _EMU_PER_MM
+
+#: The two axes' `c:axId` values inside one chart's own `c:chartSpace`. Fixed
+#: rather than generated, because an axId only has to be unique *within the
+#: chart part that declares it* (it is how that one chart's `c:catAx`/
+#: `c:valAx` cross-reference each other, per `c:crossAx`) — every chart this
+#: renderer writes gets a fresh, independent chart part, so reusing the same
+#: pair everywhere introduces no collision and needs no counter.
+_CAT_AXIS_ID, _VAL_AXIS_ID = "111111111", "222222222"
+
+_CHART_NS = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 
 
-def _figure(document, chart, table: Table, g: StyleGenome, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
-    """A declared chart, drawn with the means Word gives us for free.
+def _chart_rows(chart: Chart, table: Table) -> list[str]:
+    """Row keys this chart plots, in the order they should appear.
 
-    Not a native chart: python-docx has no API for DrawingML charts, and the two
-    alternatives both cost more than they return. A plotted image needs matplotlib
-    — thirty megabytes of dependency and a new determinism surface, for a picture
-    of numbers that are already in the table above. Hand-writing the chart part
-    means composing an embedded workbook inside the document package.
-
-    So the figure is drawn as proportional bars from the same cells the table
-    shows. It is deterministic, it needs nothing installed, it prints, and a
-    reader can check every bar against the row beside it. Native charts live in
-    the formats whose libraries actually support them.
+    Same rule `pptx.py::_chart_rows` reads off `Chart.rows`'s own docstring:
+    explicit rows keep the author's order; empty means every row that is not
+    a subtotal, and there the table's own row order is the only order there
+    is.
     """
+    if chart.rows:
+        return list(chart.rows)
+    return [row.key for row in table.rows if not row.emphasis]
+
+
+def _chart_series(
+    chart: Chart, table: Table,
+) -> tuple[list[str], list[tuple[str, list[float | None], str | None]]]:
+    """Resolve a declared chart into categories and ``(label, values,
+    number_format)`` series, reading nothing but cells already in *table* —
+    see `Chart`'s own docstring: "a chart never introduces a number."
+
+    Identical to `pptx.py::_chart_series` — both read `by_row` and `rows`
+    the same way `xlsx.py::_chart_block` does, so no two of this project's
+    three chart-drawing renderers can disagree about which cells a given
+    chart plots.
+    """
+    row_keys = _chart_rows(chart, table)
+    rows_by_key = {row.key: row for row in table.rows}
+
+    def row_label(key: str) -> str:
+        row = rows_by_key.get(key)
+        return row.label if row else key
+
+    def column_label(key: str) -> str:
+        column = table.column(key)
+        return column.label if column else key
+
+    def value(row_key: str, column_key: str) -> float | None:
+        row = rows_by_key.get(row_key)
+        cell = row.cells.get(column_key) if row else None
+        if cell is None or not isinstance(cell.value, (int, float)):
+            return None
+        raw = float(cell.value)
+        column = table.column(column_key)
+        # A percentage fact is stored as 24.94; Excel's own percent format
+        # multiplies by 100 to display it, so a chart axis using that format
+        # needs the same 24.94 -> 0.2494 conversion `xlsx.py::render` applies
+        # to cells — see that function's own comment for why the format
+        # string is what decides.
+        if column and column.number_format and column.number_format.endswith("%"):
+            return raw / 100
+        return raw
+
+    if chart.by_row:
+        first_format = table.column(chart.series[0]).number_format if chart.series else None
+        categories = [column_label(key) for key in chart.series]
+        series = [
+            (row_label(row_key), [value(row_key, col_key) for col_key in chart.series], first_format)
+            for row_key in row_keys
+        ]
+    else:
+        categories = [row_label(key) for key in row_keys]
+        series = [
+            (column_label(col_key),
+             [value(row_key, col_key) for row_key in row_keys],
+             table.column(col_key).number_format if table.column(col_key) else None)
+            for col_key in chart.series
+        ]
+    return categories, series
+
+
+def _column_letter(index: int) -> int | str:  # type: ignore[no-untyped-def]
+    """1-based column index to its spreadsheet letter — the base-26,
+    no-zero scheme every spreadsheet uses. `xlsx.py` gets this from
+    `openpyxl`, which is that renderer's own dependency already; this module
+    has no reason to add it just to spell a cosmetic cell reference (see
+    `_chart_xml`'s docstring for why the reference is cosmetic here), so it
+    is spelled out directly instead.
+    """
+    letters = ""
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        letters = chr(ord("A") + remainder) + letters
+    return letters
+
+
+def _axis_title_xml(text: str) -> str:
+    """A `c:title` element carrying plain text — used for both a chart's
+    axis titles. Word ignores an axis with no `c:title` child entirely
+    (rather than showing a blank one), which is why this returns "" for an
+    unset axis rather than an empty title element.
+    """
+    if not text:
+        return ""
+    from xml.sax.saxutils import escape
+
+    return (
+        "<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>"
+        + escape(text)
+        + "</a:t></a:r></a:p></c:rich></c:tx><c:overlay val=\"0\"/></c:title>"
+    )
+
+
+def _series_xml(index: int, label: str, values: list[float | None], number_format: str,
+                 *, marker: bool, categories: list[str]) -> str:
+    """One `c:ser` element: its own name, the shared category list, and its
+    values — each as a cache (`c:strCache`/`c:numCache`), the values Word
+    actually draws with no workbook to resolve. See `_chart_xml`'s docstring
+    for why there is no workbook behind the `c:f` cell references below; they
+    are spelled anyway, in the same `Sheet1!$B$2:$B$5` shape a real embedded
+    workbook would use, so nothing here looks unlike what `pptx.py`'s charts
+    (which do have a backing workbook) produce.
+    """
+    from xml.sax.saxutils import escape
+
+    def strcache(items: list[str]) -> str:
+        points = "".join(f'<c:pt idx="{i}"><c:v>{escape(str(v))}</c:v></c:pt>' for i, v in enumerate(items))
+        return f'<c:ptCount val="{len(items)}"/>{points}'
+
+    def numcache(items: list[float | None]) -> str:
+        points = "".join(
+            f'<c:pt idx="{i}"><c:v>{v!r}</c:v></c:pt>' for i, v in enumerate(items) if v is not None
+        )
+        return (
+            f'<c:formatCode>{escape(number_format or "General")}</c:formatCode>'
+            f'<c:ptCount val="{len(items)}"/>{points}'
+        )
+
+    col = _column_letter(index + 2)  # column A holds the categories
+    cat_col = _column_letter(1)
+    return (
+        f'<c:ser><c:idx val="{index}"/><c:order val="{index}"/>'
+        f'<c:tx><c:strRef><c:f>Sheet1!${col}$1</c:f>'
+        f'<c:strCache>{strcache([label])}</c:strCache></c:strRef></c:tx>'
+        + ('<c:marker><c:symbol val="none"/></c:marker>' if marker else "")
+        + f'<c:cat><c:strRef><c:f>Sheet1!${cat_col}$2:${cat_col}${len(categories) + 1}</c:f>'
+        f'<c:strCache>{strcache(categories)}</c:strCache></c:strRef></c:cat>'
+        f'<c:val><c:numRef><c:f>Sheet1!${col}$2:${col}${len(values) + 1}</c:f>'
+        f'<c:numCache>{numcache(values)}</c:numCache></c:numRef></c:val>'
+        "</c:ser>"
+    )
+
+
+def _chart_xml(
+    chart: Chart, categories: list[str], series: list[tuple[str, list[float | None], str | None]],
+) -> bytes:
+    """The DrawingML chart part XML for one declared chart — cached values
+    only, no linked workbook.
+
+    `python-docx` has no chart API at all (unlike `python-pptx`, whose
+    `shapes.add_chart` this project's `pptx.py` uses directly), so this
+    builds the `c:chartSpace` part by hand — the same DrawingML chart schema
+    every OOXML host (Word, PowerPoint, Excel) shares, which is what makes a
+    hand-built one exactly as valid as a library-built one.
+
+    A real embedded workbook — what `pptx.py`'s charts carry, because
+    `python-pptx`'s API always creates one — is deliberately not built here.
+    `CT_ChartSpace`'s `c:externalData` is optional (ECMA-376 §21.2.2.101,
+    ``minOccurs="0"``): a chart is *displayed* from its own `c:numCache`/
+    `c:strCache`, and the external workbook exists only so a reader can
+    choose "Edit Data in Excel" on it. Building one would mean a second OOXML
+    package nested inside this one — `python-pptx` reaches for `xlsxwriter`
+    to do it, which is exactly the nested-clock defect `ooxml.normalise`'s
+    own docstring describes fixing for `pptx.py`. Skipping it is not a
+    shortcut taken to avoid that fix: it removes an entire dependency and an
+    entire determinism surface, and a reader can still see and check every
+    plotted value against the table beside it either way.
+    """
+    is_pie = chart.kind is ChartKind.PIE
+    plotted = series[:1] if is_pie else series
+    is_line = chart.kind is ChartKind.LINE
+
+    ser_xml = "".join(
+        _series_xml(index, label, values, number_format or "General", marker=is_line, categories=categories)
+        for index, (label, values, number_format) in enumerate(plotted)
+    )
+
+    if is_pie:
+        plot = f'<c:pieChart><c:varyColors val="1"/>{ser_xml}</c:pieChart>'
+        axes = ""
+    else:
+        tag, direction = {
+            ChartKind.COLUMN: ("barChart", "col"),
+            ChartKind.BAR: ("barChart", "bar"),
+            ChartKind.LINE: ("lineChart", None),
+        }[chart.kind]
+        grouping = '<c:grouping val="clustered"/>' if tag == "barChart" else '<c:grouping val="standard"/>'
+        direction_el = f'<c:barDir val="{direction}"/>' if direction else ""
+        marker_el = '<c:marker val="1"/>' if is_line else ""
+        plot = (
+            f"<c:{tag}>{direction_el}{grouping}{marker_el}{ser_xml}"
+            f'<c:axId val="{_CAT_AXIS_ID}"/><c:axId val="{_VAL_AXIS_ID}"/></c:{tag}>'
+        )
+        # A horizontal bar chart's category axis runs up the left edge, not
+        # along the bottom — swapped here rather than left at the vertical
+        # chart's positions, which would put category labels on the value
+        # axis and vice versa.
+        cat_pos, val_pos = ("l", "b") if direction == "bar" else ("b", "l")
+        axes = (
+            f'<c:catAx><c:axId val="{_CAT_AXIS_ID}"/><c:scaling><c:orientation val="minMax"/></c:scaling>'
+            f'<c:delete val="0"/><c:axPos val="{cat_pos}"/>{_axis_title_xml(chart.category_axis)}'
+            '<c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'
+            f'<c:crossAx val="{_VAL_AXIS_ID}"/><c:crosses val="autoZero"/><c:auto val="1"/>'
+            '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>'
+            f'<c:valAx><c:axId val="{_VAL_AXIS_ID}"/><c:scaling><c:orientation val="minMax"/></c:scaling>'
+            f'<c:delete val="0"/><c:axPos val="{val_pos}"/>{_axis_title_xml(chart.value_axis)}'
+            '<c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="0"/>'
+            '<c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'
+            f'<c:crossAx val="{_CAT_AXIS_ID}"/><c:crosses val="autoZero"/></c:valAx>'
+        )
+
+    # A single plotted series needs no legend to say what it is; a pie
+    # always does, because its wedges have no axis to be labelled by.
+    legend = '<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>' if len(plotted) > 1 or is_pie else ""
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<c:chartSpace xmlns:c="{_CHART_NS}" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        "<c:chart><c:autoTitleDeleted val=\"1\"/>"  # the caption paragraph beside it already carries the title
+        f"<c:plotArea><c:layout/>{plot}{axes}</c:plotArea>"
+        f"{legend}<c:plotVisOnly val=\"1\"/><c:dispBlanksAs val=\"gap\"/></c:chart>"
+        "</c:chartSpace>"
+    )
+    return xml.encode("utf-8")
+
+
+def _add_chart_part(document, xml_bytes: bytes) -> str:  # type: ignore[no-untyped-def]
+    """Add one chart XML blob as a package part related to the main document
+    part, and return the relationship id `document.xml` uses to reach it.
+
+    `docx.opc.part.Part`/`OpcPackage` are the same OPC machinery
+    `python-pptx` builds its own chart parts on top of (both packages
+    descend from the same original library) — this is that machinery used
+    directly, one layer below where `python-docx`'s own API stops. Content
+    types are derived automatically from every part reachable from the
+    package's relationship graph at save time (`docx.opc.pkgwriter`), so
+    adding this relationship is the only bookkeeping this function needs to
+    do; there is no `[Content_Types].xml` entry to maintain by hand.
+    """
+    from docx.opc.constants import CONTENT_TYPE as CT
+    from docx.opc.constants import RELATIONSHIP_TYPE as RT
+    from docx.opc.part import Part
+
+    part = document.part
+    partname = part.package.next_partname("/word/charts/chart%d.xml")
+    chart_part = Part(partname, CT.DML_CHART, xml_bytes, part.package)
+    return part.relate_to(chart_part, RT.CHART)
+
+
+def _chart_drawing_xml(rid: str, drawing_id: int) -> str:
+    """A `<w:r><w:drawing>...` run embedding the chart part *rid* points to,
+    sized to `_CHART_WIDTH_EMU`/`_CHART_HEIGHT_EMU`.
+
+    Appended to a paragraph's own element (`paragraph._p.append(...)`) rather
+    than assembled as a whole `<w:p>` and appended to `document.element.body`
+    — `w:body`'s last child must be its `w:sectPr` (section properties), and
+    `document.add_paragraph()` already knows how to insert *before* it;
+    appending straight to `body` would put the drawing after it instead,
+    which is exactly the "needs repair" defect a first attempt at this
+    produced and a round-trip open through `python-docx` alone did not catch
+    (nothing here reads `body`'s child order back).
+    """
+    from docx.oxml.ns import nsdecls
+
+    return (
+        f'<w:r {nsdecls("w")}><w:drawing>'
+        f'<wp:inline {nsdecls("wp")} distT="0" distB="0" distL="0" distR="0">'
+        f'<wp:extent cx="{_CHART_WIDTH_EMU}" cy="{_CHART_HEIGHT_EMU}"/>'
+        '<wp:effectExtent l="0" t="0" r="0" b="0"/>'
+        f'<wp:docPr id="{drawing_id}" name="Chart {drawing_id}"/>'
+        f'<a:graphic {nsdecls("a")}>'
+        f'<a:graphicData uri="{_CHART_NS}">'
+        f'<c:chart {nsdecls("c", "r")} r:id="{rid}"/>'
+        "</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>"
+    )
+
+
+def _figure(document, chart: Chart, table: Table, g: StyleGenome, chart_index) -> None:  # type: ignore[no-untyped-def]
+    """A declared chart, drawn as a native OOXML chart part — see
+    `_chart_xml`'s own docstring for why it carries no linked workbook.
+
+    *chart_index* is an `itertools.count()` shared across the whole document
+    (threaded down from `render`) — `wp:docPr`'s `id` has to be unique across
+    every drawing the finished document contains, and nothing else here is
+    tracking how many precede this one.
+    """
+    from docx.oxml.parser import parse_xml
     from docx.shared import Pt
 
-    if not chart.series:
-        return
-    measure = chart.series[0]
-    column = table.column(measure)
-    rows = [row for row in table.rows if row.key in set(chart.rows)] or list(table.rows)
-
-    values: list[tuple[str, float]] = []
-    for row in rows:
-        cell = row.cells.get(measure)
-        if cell is not None and isinstance(cell.value, (int, float)):
-            values.append((row.label, float(cell.value)))
-    if not values:
+    categories, series = _chart_series(chart, table)
+    if not categories or not series:
         return
 
     caption = document.add_paragraph()
@@ -561,29 +843,10 @@ def _figure(document, chart, table: Table, g: StyleGenome, locale: Locale = DEFA
     label.bold = True
     label.font.size = Pt(_heading_pt(g, _TS_BODY))
 
-    widest = max(abs(value) for _, value in values) or 1.0
-    grid = document.add_table(rows=0, cols=3)
-    for name, value in values:
-        cells = grid.add_row().cells
-        cells[0].text = name
-        cells[1].text = _negative_text(
-            value,
-            format_value(value, column.number_format if column else None, locale=locale),
-            g.number_negatives,
-        )
-        cells[2].text = "█" * max(1, round(abs(value) / widest * _BAR_WIDTH))
-        for index, cell in enumerate(cells):
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.size = Pt(_heading_pt(g, _TS_CAPTION))
-                    if index == 2:
-                        # Reuses `accent` rather than sampling a third colour —
-                        # `style.py` deliberately sets `accent == header_fill`
-                        # so "this is us" never drifts from the header colour
-                        # a reader already associates with the document.
-                        run.font.color.rgb = _rgb(
-                            g.colour_roles["negative_text"] if value < 0 else g.colour_roles["accent"]
-                        )
+    xml_bytes = _chart_xml(chart, categories, series)
+    rid = _add_chart_part(document, xml_bytes)
+    drawing = document.add_paragraph()
+    drawing._p.append(parse_xml(_chart_drawing_xml(rid, next(chart_index))))
 
     if chart.note:
         note = document.add_paragraph(chart.note)
@@ -591,7 +854,10 @@ def _figure(document, chart, table: Table, g: StyleGenome, locale: Locale = DEFA
         note.runs[0].font.size = Pt(_heading_pt(g, _TS_CAPTION))
 
 
-def _section(document, section: ArtifactSection, facts, g: StyleGenome, locale: Locale = DEFAULT_LOCALE) -> None:  # type: ignore[no-untyped-def]
+def _section(document, section: ArtifactSection, facts, g: StyleGenome,
+             locale: Locale = DEFAULT_LOCALE,
+             presentation: Presentation = DEFAULT_PRESENTATION,
+             chart_index=None) -> None:  # type: ignore[no-untyped-def]
     heading = document.add_heading(section.heading, level=1)
     _style_heading(
         heading, size_pt=_heading_pt(g, _TS_HEADING), colour_hex=g.colour_roles["body_text"],
@@ -602,7 +868,9 @@ def _section(document, section: ArtifactSection, facts, g: StyleGenome, locale: 
         marker.runs[0].italic = True
 
     if section.body:
-        text = references.substitute(section.body, facts, locale=locale) if facts else section.body
+        text = (references.substitute(section.body, facts, locale=locale,
+                                      presentation=presentation)
+                if facts else section.body)
         # Blank lines are paragraph breaks. Word has no other way to say it, and a
         # single run containing newlines renders as one unbroken block.
         from docx.shared import Pt
@@ -614,19 +882,79 @@ def _section(document, section: ArtifactSection, facts, g: StyleGenome, locale: 
                 for run in paragraph.runs:
                     run.font.size = Pt(_heading_pt(g, _TS_BODY))
                     run.font.color.rgb = _rgb(g.colour_roles["body_text"])
+    elif section.quote is not None:
+        # The same blockquote semantics as `markdown._quote`: a pulled-out
+        # line, visibly not narrated in place. Word has no blockquote style
+        # guaranteed present, so indent + italic carries the distinction.
+        text = (references.substitute(section.quote.text, facts, locale=locale,
+                                      presentation=presentation)
+                if facts else section.quote.text)
+        from docx.shared import Pt as _Pt
+
+        quoted = document.add_paragraph(text)
+        quoted.paragraph_format.left_indent = _Pt(24)
+        for run in quoted.runs:
+            run.italic = True
+        if section.quote.attribution:
+            by = document.add_paragraph(f"— {section.quote.attribution}")
+            by.paragraph_format.left_indent = _Pt(24)
     elif section.table is not None:
         _table(document, section.table, g, locale)
-    else:
+    elif section.flow is None or not (section.flow.nodes or section.flow.edges):
         awaiting = document.add_paragraph(_AWAITING)
         awaiting.runs[0].italic = True
+
+    # The flow is additive, exactly as in `render.markdown`: a causal chain is
+    # a diagram of the argument the prose just made, so it follows the
+    # paragraph instead of replacing it. This branch did not exist for a long
+    # time while `compiler/components.py` declared `ops.causal_chain` and
+    # `ops.process_flow` supported in "markdown docx pptx pdf" — measured on a
+    # three-period incident build, DOCX printed the awaiting notice under
+    # *Root cause* where markdown and PDF printed 21 nodes and 18 edges.
+    if section.flow is not None and (section.flow.nodes or section.flow.edges):
+        label_by_key = {node.key: node.label for node in section.flow.nodes}
+
+        def _resolved(text: str) -> str:
+            return (references.substitute(text, facts, locale=locale,
+                                          presentation=presentation)
+                    if facts else text)
+
+        steps = (
+            [
+                f"{_resolved(label_by_key.get(edge.source, edge.source))} → "
+                f"{_resolved(label_by_key.get(edge.target, edge.target))}"
+                + (f" ({_resolved(edge.label)})" if edge.label else "")
+                for edge in section.flow.edges
+            ]
+            if section.flow.edges
+            else [_resolved(node.label) for node in section.flow.nodes]
+        )
+        from docx.shared import Pt as _Pt
+
+        for step in steps:
+            bullet = document.add_paragraph(step, style="List Bullet")
+            for run in bullet.runs:
+                run.font.size = _Pt(_heading_pt(g, _TS_BODY))
 
     # After the chain, never inside it — a `for` between the `elif` and the
     # `else` binds the `else` to the loop, and Python runs a loop-else whenever
     # the loop did not break. That mistake put an "awaiting narrative" notice
     # under finished prose in the Markdown renderer.
+    if section.charts and chart_index is None:
+        # A direct call with no counter supplied (as several tests make) —
+        # unique only within this one section's own figures, which is still
+        # correct: nothing before this call has drawn a chart into `document`.
+        from itertools import count as _count
+
+        chart_index = _count(1)
     for chart in section.charts:
-        if section.table is not None:
-            _figure(document, chart, section.table, g, locale)
+        # `chart.table` names the table this chart reads — see `Chart`'s own
+        # docstring, "every value it plots is a cell already in the table
+        # beside it". Skipped rather than guessed at when it names some
+        # other table: drawing from `section.table` anyway would be this
+        # renderer inventing which table the chart meant.
+        if section.table is not None and chart.table == section.table.key:
+            _figure(document, chart, section.table, g, chart_index)
 
 
 def render(
@@ -634,6 +962,7 @@ def render(
     facts: dict[str, CanonicalFact] | None = None,
     *,
     locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
 ) -> bytes:
     """Render one IR to DOCX bytes.
 
@@ -645,7 +974,13 @@ def render(
     rather than looked up per table — see ``values.corpus_locale``. It defaults
     to the engine's so that rendering a single IR without a world (the idiom
     every determinism test in ``tests/test_docx.py`` uses) still works.
+
+    *presentation* rides beside it and decides who the document is for —
+    see ``presentation.py``. It defaults to ``AUDIT`` for the same reason,
+    and because ``AUDIT`` is what this function did before profiles existed.
     """
+    from itertools import count
+
     docx = _require_docx()
     document = docx.Document()
     g = _genome_for(ir)
@@ -655,10 +990,17 @@ def render(
     _cover(document, ir, g)
     _contents(document, ir, g)
 
+    # One counter for the whole document, not one per section — `wp:docPr`'s
+    # `id` has to be unique across every chart the finished document
+    # contains, and a fresh `count(1)` per section would hand out "1" again
+    # the moment a second section drew a chart.
+    chart_index = count(1)
     for section in ir.sections:
-        _section(document, section, facts, g, locale)
+        if section.hidden and presentation.appendix != "append":
+            continue
+        _section(document, section, facts, g, locale, presentation, chart_index)
 
-    if ir.metadata.get("voice"):
+    if ir.metadata.get("voice") and presentation.provenance == "footer":
         closing = document.add_paragraph(
             f"Author voice: {ir.metadata['voice']}. Persona: {ir.metadata.get('persona', '')}."
         )
@@ -676,6 +1018,14 @@ def render(
         "note", "Synthetic corpus generated by Worldloom."
     )
     properties.keywords = "synthetic,worldloom,seed=" + ir.metadata.get("worldloom_seed", "")
+    if ir.metadata.get("voice") and presentation.provenance == "properties":
+        # Word's own "category" field, which no reader of the document sees
+        # and every corpus tool can read. The brief is worth keeping — it is
+        # how a later reader knows why a memo sounds the way it does — and
+        # the only thing wrong with it was being the last paragraph.
+        properties.category = (
+            f"voice: {ir.metadata['voice']}; persona: {ir.metadata.get('persona', '')}"
+        )
 
     from io import BytesIO
 
@@ -691,6 +1041,7 @@ def render_all(world: World) -> list[Rendered]:
     """Render every document-shaped artifact in *world*."""
     facts = {fact.id: fact for fact in world.facts}
     locale = corpus_locale(world)
+    profile = presentation_of(world)
     out: list[Rendered] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
@@ -701,7 +1052,8 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.docx",
                 media_type=MEDIA_TYPE,
-                payload=render(ir, facts, locale=locale),
+                payload=render(ir, facts, locale=locale,
+                               presentation=profile.for_doctype(intent.artifact_type)),
             )
         )
     return out

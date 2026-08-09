@@ -61,6 +61,11 @@ probe_app = typer.Typer(
     help="Derive a world's physics by asking, one question at a time, under propagation.",
 )
 app.add_typer(probe_app, name="probe")
+present_app = typer.Typer(
+    no_args_is_help=True,
+    help="Decide who a corpus's documents are for, and check a profile you wrote.",
+)
+app.add_typer(present_app, name="present")
 
 console = Console()
 err = Console(stderr=True)
@@ -234,6 +239,16 @@ def build(
             "`worldloom pack check` to lint it."
         ),
     ),
+    episode: list[str] = typer.Option(
+        None, "--episode",
+        help=(
+            "Run a pack-authored business process each period, after the engine's "
+            "own — repeatable. Names an EpisodeSpec the --pack carries under "
+            "`episodes` (see the worldloom-process skill for authoring one). This "
+            "is how authored sales, legal or project processes ship: the pack "
+            "declares them, this flag runs them, and the recipe replays them."
+        ),
+    ),
     comparatives: int = typer.Option(
         0, "--comparatives",
         help="Prior months of actuals to generate, for a trend. 11 gives a rolling year.",
@@ -247,6 +262,40 @@ def build(
             "archetype has three stores or sixteen hundred, so nothing has a blast "
             "radius and `worldloom topology` has little to read. Omit it and every "
             "existing corpus is byte-identical."
+        ),
+    ),
+    policies: str = typer.Option(
+        None, "--policies",
+        help=(
+            "Give the company its standing documents: core or full. These are "
+            "the papers a company *has* rather than produces — a delegation of "
+            "authority, an expense policy, a leave policy, an information "
+            "security policy — as opposed to what a close or an incident emits. "
+            "Without it an assistant asked what the approval threshold is has "
+            "nothing to find, because the company has no rules. Money "
+            "provisions scale off the company's own revenue, so two archetypes "
+            "do not share a limit. Omit it and every existing corpus is "
+            "byte-identical."
+        ),
+    ),
+    hiring: int = typer.Option(
+        0, "--hiring",
+        help=(
+            "Raise this many vacancies per period and fill them. Each one is a "
+            "requisition, an offer and an onboarding checklist, authored by a "
+            "manager drawn from anywhere in the reporting tree rather than from "
+            "the role table — which is how a modelled organisation stops being a "
+            "source of bylines. The approver comes from the delegation of "
+            "authority when --policies gave the company one."
+        ),
+    ),
+    reviews: int = typer.Option(
+        0, "--reviews",
+        help=(
+            "Review this many people per period. Each is a signed performance "
+            "review countersigned by the manager's own manager, plus the running "
+            "one-to-one note that fed it — at a lower authority, and saying "
+            "something slightly different."
         ),
     ),
     physics: Path = typer.Option(
@@ -302,6 +351,16 @@ def build(
             "they observed. `scripted` runs the built-in deterministic actor (no "
             "network, no key); `agent` leaves every decision for you to make "
             "through `worldloom act`."
+        ),
+    ),
+    conversations: bool = typer.Option(
+        False, "--conversations",
+        help=(
+            "Record the episode's knowledge layer beside its facts and documents: "
+            "who was told what, by whom, and therefore who knew each fact when. "
+            "Adds no facts and no documents, and adds information-asymmetry "
+            "evaluation cases nothing else in the corpus can pose. Refused with "
+            "`--actors`, which derives its own."
         ),
     ),
     narrate: bool = typer.Option(
@@ -503,6 +562,7 @@ def build(
                 ("--physics", physics is not None),
                 ("--locale", locale is not None),
                 ("--estate", estate is not None),
+                ("--policies", policies is not None),
             ) if given
         ]
         if subsumed:
@@ -621,6 +681,25 @@ def build(
     # (`period_step_months`) instead. The retail close keeps its bespoke loop
     # below.
     single_episode = domain.single_episode if domain is not None else None
+
+    # Checked before anything builds: `--episode` names an authored process,
+    # and the only shipping path for one is the pack that carries it —
+    # `packs.archetype_of` installed this pack's specs a few lines up, so a
+    # name still missing here is missing everywhere, and failing now beats a
+    # world half-built when the second period's step raises.
+    if episode:
+        from . import episodes as episodes_module
+
+        for episode_name in episode:
+            if episode_name not in episodes_module.loaded():
+                installed_names = sorted(episodes_module.loaded()) or ["(none)"]
+                err.print(
+                    f"[red]error:[/red] --episode {episode_name!r} names no installed"
+                    f" process; installed: {', '.join(installed_names)}. An authored"
+                    " episode ships in a pack's `episodes` field — build with the"
+                    " --pack that declares it."
+                )
+                raise typer.Exit(code=2)
 
     # Resolved once, before anything is built, and applied to the builder *and*
     # every episode: the world's organisation and the episode's figures are
@@ -924,6 +1003,12 @@ def build(
         refused = [
             flag for flag, given in (
                 ("--actors", actors is not None),
+                # Same reason as `--actors`: the knowledge layer is derived from
+                # the retail close's own routing table and document plan, and a
+                # single-episode vertical runs neither. Refused rather than
+                # silently producing an empty ledger, which would report success
+                # for a corpus that gained nothing.
+                ("--conversations", conversations),
                 ("--incident/--no-incident", incident is not None),
                 ("--comparatives", comparatives > 0),
                 # Same reasoning as its neighbour: the trend shapes retail's
@@ -974,13 +1059,22 @@ def build(
                 # were retail's: a bank whose landscape is called
                 # `click-collect-api` is worse than a bank with no landscape.
                 **({} if estate is None else {"estate": estate}),
+                # Conditional for `estate`'s reason one line up: a domain
+                # registered outside this repository may have no such field,
+                # and passing `policies=None` to one that does not would refuse
+                # a build that has nothing wrong with it.
+                **({} if not (policies or (resolution.policies if resolution is not None else None))
+                   else {"policies": policies or resolution.policies}),
             )
         ))
         world = _localised_recipe(_localised(builder).build())
         for index in range(max(1, periods)):
-            world = world.run(_under_physics(
-                single_episode(_step_period(period, index, domain.period_step_months))
-            ))
+            stamp = _step_period(period, index, domain.period_step_months)
+            world = world.run(_under_physics(single_episode(stamp)))
+            for episode_name in episode or []:
+                from .episodes import AuthoredEpisode
+
+                world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
     else:
         builder = _under_physics(
             RetailWorld.from_pack(pack_obj, seed=seed)
@@ -996,6 +1090,15 @@ def build(
             from dataclasses import replace as _replace_builder
 
             builder = _replace_builder(builder, estate=estate)
+        # `--policies` on the command line, or the level a specification
+        # resolved. Refused together further up, so at most one is set.
+        chosen_policies = policies or (
+            resolution.policies if resolution is not None else None
+        )
+        if chosen_policies:
+            from dataclasses import replace as _replace_builder
+
+            builder = _replace_builder(builder, policies=chosen_policies)
         builder = _claimed(builder)
         if resolution is not None and not claimed_calendar:
             # A trading year the *pack* carries has to reach the closes too, and
@@ -1077,6 +1180,18 @@ def build(
     # quietly generated instead would not be a replay.
     if actors is not None and actors not in {"scripted", "agent"}:
         err.print(f"[red]error:[/red] --actors takes `scripted` or `agent`, not {actors!r}")
+        raise typer.Exit(code=2)
+
+    # Both produce `observations` and `messages`. Refused rather than merged:
+    # two producers appending to one knowledge ledger would give a (person,
+    # fact) pair two learned_at values, and every asymmetry answer read off it
+    # would depend on which of them ran second.
+    if conversations and actors is not None:
+        err.print(
+            "[red]error:[/red] --conversations and --actors cannot be combined;"
+            " an actor episode already derives its own knowledge ledger from what"
+            " each employee could see when it acted"
+        )
         raise typer.Exit(code=2)
 
     # `agent` exports the world *before* the episode, carrying a recipe that says
@@ -1188,6 +1303,7 @@ def build(
             trend_pct=trend if index == 0 else 0.0,
             actors=actor_provider,
             actor_ledger=actor_ledger,
+            conversations=conversations,
             eval_density=eval_density_value,
             physics=physics_value,
             # Only when a facet put one on the builder — see `claimed_calendar`.
@@ -1257,6 +1373,26 @@ def build(
             stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
             try:
                 world = world.run(_close(stamp, incident, index))
+                # After the close, so the ART sequence a close mints is
+                # untouched: a corpus built without these rounds keeps every id
+                # it had, and one built with them only ever gains ids at the
+                # end of each period. Both are strict no-ops at zero.
+                if hiring > 0:
+                    from .workforce import HiringRound
+
+                    world = world.run(HiringRound(period=stamp, count=hiring))
+                if reviews > 0:
+                    from .workforce import PerformanceCycle
+
+                    world = world.run(PerformanceCycle(period=stamp, pairs=reviews))
+                # Authored processes run after the engine's own steps for the
+                # id-stability reason the workforce rounds do: a corpus built
+                # without `--episode` keeps every id it had, and one built with
+                # it only ever gains ids at the end of each period.
+                for episode_name in episode or []:
+                    from .episodes import AuthoredEpisode
+
+                    world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
                 if (
                     workforce_path is not None
                     and index + 1 < len(workforce_path)
@@ -1292,6 +1428,14 @@ def build(
         console.print(
             f"[dim]actors:[/dim] {len(world.actor_ledger)} tool call(s), {accepted} accepted"
             f", {len(world.observations)} observation(s)\n"
+        )
+
+    if conversations:
+        told = sum(len(m.recipient_ids) for m in world.messages)
+        console.print(
+            f"[dim]conversations:[/dim] {len(world.messages)} message(s) to {told}"
+            f" recipient(s), {len(world.observations)} observation(s) across"
+            f" {len({o.observer_id for o in world.observations})} employee(s)\n"
         )
 
     # After every episode this build runs, never before — a distractor drafts
@@ -2195,11 +2339,38 @@ def render(
     corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
     formats: list[str] = typer.Option(..., "--format", "-f", help="Formats to render. Repeatable."),
     out: Path = typer.Option(None, "--out", "-o", help="Write here instead of back into the corpus."),
+    profile: str = typer.Option(
+        None, "--profile",
+        help=(
+            "Who the documents are for. `audit` (the default, and what every "
+            "corpus rendered before this flag existed got) prints the "
+            "supporting-fact appendix and the author's voice in the document. "
+            "`reader` records both and prints neither, and spells figures the "
+            "way a memo does. `filing` puts the citations in a sibling file. "
+            "`worldloom present describe` prints every profile and knob; "
+            "`worldloom present lint` checks one you wrote."
+        ),
+    ),
 ) -> None:
-    """Render an existing corpus into files."""
+    """Render an existing corpus into files.
+
+    The profile is written onto the corpus's recipe before rendering, so the
+    files on disk and the record of how they were made cannot disagree — and a
+    later `--replay` reproduces this rendering rather than the default one.
+    Re-rendering an existing corpus under a second profile is a supported thing
+    to do and needs no rebuild: a profile decides nothing about the world.
+    """
+    from .presentation import named
+    from .recipe import with_presentation
     from .render import RenderError
 
     world = _load(corpus)
+    if profile is not None:
+        try:
+            world = world.extend(recipe=with_presentation(world.recipe, named(profile)))
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
     try:
         rendered = world.render(*formats)
     except (RenderError, ValueError) as exc:
@@ -2580,13 +2751,15 @@ def mosaic(
         # this whole family of checks scored zero out of zero for as long as
         # the command stopped at `build`.
         #
-        # What they find today is one defect, in every world of every engine:
-        # `author_cannot_see_own_artifact`. `roles.from_shape` deals functions
-        # round-robin by position in the reporting tree, so a synthesised
-        # organisation puts the engine's `controller` in Merchandising while
-        # the access policy the planner picks for a finance document names
-        # Finance — the author of the variance memo cannot read it. The corpora
-        # were always like that; compiling them is what made it sayable.
+        # What they found when this branch was written was one defect, in every
+        # world of every engine: `author_cannot_see_own_artifact`, because
+        # `roles.from_shape` dealt functions round-robin by position and put
+        # the engine's `controller` in Merchandising while the policy on a
+        # finance document named Finance. The corpora were always like that;
+        # compiling them is what made it sayable, and it is fixed — a spine key
+        # now keeps the function its engine gives it, a synthesised role
+        # inherits its manager's, and a mosaic validates clean. The branch
+        # stays because the next such defect will arrive the same way.
         console.print(
             f"[yellow]![/yellow] {unhealthy} of {len(written)} world(s) report"
             " violations. These are checks a plan-only mosaic never ran, not"
@@ -2867,9 +3040,19 @@ def evaluate(
         help=(
             "bm25 (default — the original baseline, unchanged), tfidf "
             "(vector-space cosine, a genuinely different ranking family — see "
-            "src/worldloom/evaluate/tfidf.py), or both (side by side, with a "
-            "per-family agreement reading: a family low under both retrievers "
-            "is structurally hard, not hard for one heuristic)."
+            "src/worldloom/evaluate/tfidf.py), embedding (dense vectors against "
+            "a pinned model — needs the `embeddings` extra or a vector cache), "
+            "both (the two lexical baselines side by side, with a per-family "
+            "agreement reading), or all (every retriever this installation can "
+            "run, skipping any whose model is unavailable)."
+        ),
+    ),
+    vectors: str = typer.Option(
+        "", "--vectors",
+        help=(
+            "Vector cache for --retriever embedding: a file, or a directory to "
+            "keep one per model. A corpus that carries its cache scores against "
+            "the embedding retriever with no model installed at all."
         ),
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every question."),
@@ -2882,29 +3065,75 @@ def evaluate(
         ),
     ),
 ) -> None:
-    """Score one or both baseline retrievers against the corpus's evaluation set.
+    """Score one or more retrievers against the corpus's evaluation set.
 
-    A *low* score on the hard question types is the good result. Neither
-    retriever has any notion of when a document was written or how authoritative
-    it is, so a corpus on which they do well on temporal and authority questions
-    is a corpus that is not testing anything. `--retriever both` is the stronger
+    A *low* score on the hard question types is the good result. No retriever
+    here has any notion of when a document was written or how authoritative it
+    is, so a corpus on which they do well on temporal and authority questions is
+    a corpus that is not testing anything. `--retriever both` is the stronger
     claim: a family low under BM25 *and* TF-IDF cosine — two different ranking
     families — is hard because of the corpus, not because of which keyword
-    heuristic happened to be asked.
+    heuristic happened to be asked. `--retriever all` is stronger still, because
+    both of those are still *keyword* heuristics: a family the embedding
+    retriever also fails is hard for a reason no ranking function fixes, and a
+    family it walks past was a lexical trap rather than a difficult question.
     """
     import json as json_module
 
-    from .evaluate import RETRIEVERS, compare, render_agreement
+    from .evaluate import (
+        LEXICAL_RETRIEVERS,
+        RETRIEVERS,
+        compare,
+        difficulty_by_family,
+        embedding,
+        render_agreement,
+        render_difficulty,
+    )
     from .evaluate import score as run_score
 
-    if retriever != "both" and retriever not in RETRIEVERS:
-        raise typer.BadParameter(f"must be one of {sorted([*RETRIEVERS, 'both'])}", param_hint="--retriever")
+    choices = sorted([*RETRIEVERS, "both", "all"])
+    if retriever not in choices:
+        raise typer.BadParameter(f"must be one of {choices}", param_hint="--retriever")
+
+    if vectors:
+        # Bound for this invocation only, and by rebinding the registry entry
+        # rather than by threading a path through `score()` — the scorer takes
+        # documents and a name, and giving it an argument only one retriever
+        # understands is exactly the branch the seam exists to prevent.
+        RETRIEVERS["embedding"] = embedding.configured(cache=vectors)
 
     world = _compiled(_load(corpus), corpus)
 
-    if retriever == "both":
-        cards = {name: run_score(world, k=k, retriever=name) for name in sorted(RETRIEVERS)}
+    if retriever in ("both", "all"):
+        # `both` is the two lexical baselines, and stays that way whatever else
+        # gets registered: it is the pre-existing reading, its JSON shape is
+        # pinned by tests, and "lexical versus semantic" is only a comparison
+        # while the lexical side is a fixed pair.
+        wanted = list(LEXICAL_RETRIEVERS) if retriever == "both" else sorted(RETRIEVERS)
+        cards = {}
+        for name in wanted:
+            try:
+                cards[name] = run_score(world, k=k, retriever=name)
+            except embedding.EmbeddingUnavailable as unavailable:
+                # A skip, not a failure. The two lexical readings are still a
+                # measurement, and saying which one was missing and why is more
+                # use than an exit code — see `embedding.py`'s docstring on
+                # being absent-friendly.
+                if not as_json:
+                    # Escaped: the message names the extra as
+                    # `worldloom[embeddings]`, and rich reads a bracketed word
+                    # as a style tag and prints the instruction with the part
+                    # you have to type removed.
+                    console.print(f"[yellow]skipped {name}[/yellow] — {escape(str(unavailable))}")
+                continue
+        if not cards:
+            raise typer.Exit(1)
         findings = compare(cards)
+        # Only computed where a semantic retriever actually ran. `both` is two
+        # lexical baselines, and printing "lexical vs semantic" over a table
+        # with no semantic column in it would be a heading describing an
+        # experiment that did not happen.
+        difficulty = difficulty_by_family(cards)
         if as_json:
             # A new top-level shape, not a variant of the single-retriever one —
             # `retriever="both"` is a capability nothing could request before
@@ -2912,7 +3141,7 @@ def evaluate(
             # could break. The single-retriever shape below (`bm25`, the
             # default, and `tfidf`) is untouched byte-for-byte.
             typer.echo(json_module.dumps({
-                "retriever": "both",
+                "retriever": retriever,
                 "k": k,
                 "retrievers": {name: _card_json(card) for name, card in cards.items()},
                 "agreement": {
@@ -2927,12 +3156,31 @@ def evaluate(
                     }
                     for finding in findings
                 },
+                # Additive, and absent when only lexical retrievers ran — so
+                # `--retriever both`'s payload keeps exactly the shape it had.
+                **(
+                    {
+                        "difficulty": {
+                            finding.evaluation_type.value: {
+                                "lexical": {"passed": finding.lexical[0], "total": finding.lexical[1]},
+                                "semantic": {"passed": finding.semantic[0], "total": finding.semantic[1]},
+                                "verdict": finding.verdict,
+                            }
+                            for finding in difficulty
+                        }
+                    }
+                    if difficulty
+                    else {}
+                ),
             }, indent=2))
             return
         for name in sorted(cards):
             console.print(str(cards[name]))
             console.print("")
         console.print(render_agreement(findings))
+        if difficulty:
+            console.print("")
+            console.print(render_difficulty(difficulty))
         if verbose:
             for name in sorted(cards):
                 console.print(f"\n[bold]{name}[/bold]")
@@ -2942,7 +3190,15 @@ def evaluate(
                     console.print(f"      {outcome.detail}")
         return
 
-    card = run_score(world, k=k, retriever=retriever)
+    try:
+        card = run_score(world, k=k, retriever=retriever)
+    except embedding.EmbeddingUnavailable as unavailable:
+        # Explicitly asked for, and not runnable. Nonzero, because a command
+        # that printed nothing and exited clean would read as "scored, no
+        # findings" — but a stated reason and no traceback, because this is a
+        # missing optional package, not a defect.
+        console.print(f"[red]cannot run {retriever}[/red] — {escape(str(unavailable))}")
+        raise typer.Exit(1) from None
     if as_json:
         # Exactly the pre-`--retriever` shape, plus one additive key naming
         # which retriever produced it — an old consumer reading `k`/`overall`/
@@ -3467,6 +3723,64 @@ def stats(
         console.print(stats_module.diff(report, other_report, a_label=corpus, b_label=against))
 
 
+def _knowledge_table(world: World) -> None:
+    """Who came to know how much, and through which channels.
+
+    Per person rather than per invocation, because a derived knowledge ledger
+    has no invocations — and because the reading that matters for it is the one
+    the execution ledger cannot give: two employees in the same company holding
+    a different number of this month's facts.
+    """
+    channels: dict[str, dict[str, int]] = {}
+    earliest: dict[str, str] = {}
+    for record in world.observations:
+        counts = channels.setdefault(record.observer_id, {})
+        counts[record.source_type] = counts.get(record.source_type, 0) + 1
+        stamp = record.learned_at.strftime("%Y-%m-%d %H:%M")
+        if record.observer_id not in earliest or stamp < earliest[record.observer_id]:
+            earliest[record.observer_id] = stamp
+
+    table = Table(title="What each employee came to know", box=None)
+    table.add_column("role")
+    table.add_column("first heard")
+    table.add_column("facts", justify="right")
+    table.add_column("by channel", overflow="fold")
+    for person_id in sorted(channels, key=lambda p: (-sum(channels[p].values()), p)):
+        person = world.people.get(person_id)
+        counts = channels[person_id]
+        table.add_row(
+            person.title if person is not None else person_id,
+            earliest[person_id],
+            str(sum(counts.values())),
+            ", ".join(f"{name} {count}" for name, count in sorted(counts.items())),
+        )
+    console.print(table, "")
+
+    if not world.messages:
+        return
+    table = Table(title="Who told whom", box=None)
+    table.add_column("sent")
+    table.add_column("kind")
+    table.add_column("from")
+    table.add_column("to", overflow="fold")
+    table.add_column("facts", justify="right")
+    table.add_column("about")
+    for message in sorted(world.messages, key=lambda m: (m.sent_at, m.id)):
+        sender = world.people.get(message.sender_id)
+        recipients = [world.people.get(r) for r in message.recipient_ids]
+        table.add_row(
+            message.sent_at.strftime("%Y-%m-%d %H:%M"),
+            message.kind,
+            sender.title if sender is not None else message.sender_id,
+            ", ".join(
+                person.title if person is not None else "?" for person in recipients
+            ),
+            str(len(message.disclosed_fact_ids)),
+            message.subject_ref or "",
+        )
+    console.print(table, "")
+
+
 @app.command()
 def actors(
     corpus: str = typer.Argument(..., help="Corpus name or path."),
@@ -3488,6 +3802,14 @@ def actors(
     world = _load(corpus)
     entries = list(world.actor_ledger)
     if not entries:
+        # A corpus built with `--conversations` has a knowledge ledger and no
+        # execution ledger — nobody took a decision, but the episode still
+        # recorded who came to know what. Reporting "no actor episode" and
+        # returning would hide a file that is present, which is the failure mode
+        # this whole command exists to prevent.
+        if observations and world.observations:
+            _knowledge_table(world)
+            return
         console.print("[dim]no actor episode in this corpus[/dim]")
         return
 
@@ -4214,6 +4536,63 @@ def pack_template(
 
 
 @app.command()
+def workspace(
+    corpus: Path = typer.Argument(..., help="A rendered corpus directory."),
+    out: Path = typer.Option(..., "--out", "-o", help="Where to write the tree."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace an existing tree."),
+    noise: str = typer.Option(
+        "none", "--noise",
+        help=(
+            "How untidy the drive is: none, lived_in or neglected. Adds copies, "
+            "misfilings, personal versions and archive leftovers — every one a "
+            "duplicate of real corpus content, never invented text, because a "
+            "drive's junk is the same documents saved again in the wrong place "
+            "under the wrong name. Each is labelled in permissions.jsonl, so a "
+            "benchmark can tell 'found the wrong copy' from 'was wrong'."
+        ),
+    ),
+) -> None:
+    """Lay a rendered corpus out as a shared drive, with its permissions.
+
+    A corpus exports as one flat `artifacts/` folder of numbered files, which is
+    right for the harness and wrong for what the corpus is *for*: an enterprise
+    assistant indexes the folder a document sits in, the title somebody typed,
+    who owns it and who it is shared with. The corpus knows all of that and none
+    of it reached the filesystem.
+
+    Writes a folder tree, human filenames — including the subject, so four
+    reviews in a month are four names rather than `(2)` through `(5)` — and
+    `permissions.jsonl`, one row per file with its owner and every address
+    permitted to open it. Superseded documents sit beside their replacements
+    marked as such, which is what makes a shelf legible.
+
+    Written to a separate root: nothing in the corpus moves.
+    """
+    from . import workspace as workspace_module
+
+    try:
+        world = World.load(corpus)
+    except Exception as exc:  # noqa: BLE001 — surfaced, not swallowed
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+    try:
+        written = workspace_module.write(world, out, overwrite=overwrite, noise=noise)
+    except (FileExistsError, ValueError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    reading = workspace_module.summarise(world, noise=noise)
+    console.print(
+        f"[green]✓[/green] {reading['files']} file(s) in {reading['folders']} folder(s),"
+        f" {reading['deepest']} deep, under [bold]{written}[/bold]\n"
+        f"[dim]{reading['restricted']} restricted ·"
+        f" {reading['distinct_owners']} distinct owner(s) ·"
+        f" {reading['superseded']} superseded ·"
+        f" {reading['junk']} labelled junk[/dim]"
+    )
+
+
+@app.command()
 def archetypes() -> None:
     """List the company shapes `build --archetype` accepts."""
     from . import archetypes as registry
@@ -4261,6 +4640,116 @@ def docs(
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(current)
     console.print(f"[green]✓[/green] wrote {target}")
+
+
+
+# ---------------------------------------------------------------------------
+# present — the presentation layer's own surface
+# ---------------------------------------------------------------------------
+
+
+@present_app.command("describe")
+def present_describe() -> None:
+    """Every registered profile and every knob, rendering nothing.
+
+    The same argument `mosaic --describe` makes: deciding whether a profile is
+    the one you want should not require rendering a corpus to find out.
+    """
+    from .presentation import KNOBS, PROFILES, describe as describe_profile
+
+    table = Table(title="Presentation profiles", box=None)
+    table.add_column("profile")
+    for knob in KNOBS:
+        table.add_column(knob)
+    for name, profile in sorted(PROFILES.items()):
+        knobs = describe_profile(profile)
+        table.add_row(name, *(knobs[knob] for knob in KNOBS))
+    console.print(table)
+
+    console.print()
+    for knob, values in KNOBS.items():
+        console.print(f"  [bold]{knob}[/bold]  {', '.join(values)}")
+    console.print(
+        "\n  A profile decides how a value is [italic]shown[/italic] and never"
+        " what it is. Nothing a profile omits is lost: every section, every"
+        " fact id and the author's voice stay in artifact-ir.jsonl whatever you"
+        " choose."
+    )
+
+
+@present_app.command("brief")
+def present_brief(
+    corpus: str = typer.Argument(None, help="Corpus whose doctypes an override may name."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write the brief here as JSON."),
+) -> None:
+    """The context needed to author a profile, as JSON.
+
+    `cascade.Brief`'s contract, over presentation: the rules the lint enforces
+    are stated before anything is proposed rather than discovered one refusal
+    at a time. Pass a corpus and the brief carries the doctypes it actually
+    mints, so an override cannot name one that never appears.
+    """
+    import json as _json
+
+    from .presentation import brief as presentation_brief
+
+    doctypes: tuple[str, ...] = ()
+    if corpus:
+        world = _load(corpus)
+        doctypes = tuple(sorted({
+            intent.artifact_type for intent in world.artifact_intents
+        }))
+    payload = presentation_brief(doctypes)
+    text = _json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if out:
+        out.write_text(text, encoding="utf-8")
+        console.print(f"[green]✓[/green] brief written to [bold]{out}[/bold]")
+    else:
+        console.print_json(text)
+
+
+@present_app.command("lint")
+def present_lint(
+    spec: str = typer.Argument(..., help="Path to a profile document, or the JSON itself."),
+    corpus: str = typer.Option(None, "--corpus", help="Check overrides against this corpus's doctypes."),
+    register: bool = typer.Option(
+        False, "--register",
+        help="Register the profile on acceptance, so a later --profile can name it.",
+    ),
+) -> None:
+    """Check a profile, and say every reason it cannot be accepted.
+
+    Every reason and not the first: `cascade`'s protocol, because a reviser
+    fixing one knob per round trip pays a turn per rule it could not see.
+    """
+    from .cascade import load as load_seed
+    from .presentation import PresentationSeed, register as register_profile, resolve, review
+
+    doctypes: tuple[str, ...] = ()
+    if corpus:
+        world = _load(corpus)
+        doctypes = tuple(sorted({i.artifact_type for i in world.artifact_intents}))
+
+    try:
+        seed = load_seed(spec, PresentationSeed)
+    except Exception as exc:  # noqa: BLE001 - pydantic and json raise differently
+        err.print(f"[red]refused:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    findings = review(seed, doctypes=doctypes)
+    if findings:
+        err.print(f"[red]refused:[/red] {escape(seed.name)} — {len(findings)} finding(s)")
+        for finding in findings:
+            err.print(f"  [red]•[/red] {escape(finding)}")
+        raise typer.Exit(code=1)
+
+    profile = resolve(seed)
+    if register:
+        register_profile(seed.name, profile)
+    console.print(f"[green]✓[/green] {escape(seed.name)} accepted")
+    for knob, value in sorted(profile.__dict__.items()):
+        if knob not in ("name", "overrides"):
+            console.print(f"    {knob:12} {value}")
 
 
 if __name__ == "__main__":  # pragma: no cover

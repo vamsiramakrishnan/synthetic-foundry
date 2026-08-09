@@ -18,6 +18,7 @@ import docx as python_docx
 import pytest
 
 from worldloom import MonthEndClose, RetailWorld, World
+from worldloom.models import Cell, Chart, ChartKind, Column, Row, Table
 from worldloom.narrative import DeterministicProvider, references
 from worldloom.render import docx as docx_renderer
 from worldloom.render import ooxml, slug_for
@@ -318,7 +319,10 @@ def test_the_memo_carries_a_divisional_table_and_a_figure(rendered: World) -> No
 
     body = _text_of(_one(rendered, "cfo-variance-memo"))
     assert "Figure — Revenue against plan by division" in body
-    assert "█" in body, "the figure should draw proportional bars"
+
+    charts = _chart_parts(_payload(rendered, "cfo-variance-memo"))
+    assert len(charts) == 1, "one declared chart should become one chart part"
+    assert "<c:barChart>" in charts[0], "ChartKind.BAR should draw as a bar chart, not a column one"
 
 
 def _text_of(document) -> str:  # type: ignore[no-untyped-def]
@@ -329,8 +333,25 @@ def _text_of(document) -> str:  # type: ignore[no-untyped-def]
     return "\n".join(parts)
 
 
+def _payload(rendered: World, fragment: str) -> bytes:
+    return next(r.payload for r in rendered._rendered if fragment in r.path and r.path.endswith(".docx"))
+
+
+def _chart_parts(payload: bytes) -> list[str]:
+    """Every chart part's XML text, decoded — there is one file per declared
+    chart (`word/charts/chart1.xml`, `chart2.xml`, ...)."""
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        return [
+            archive.read(name).decode("utf-8")
+            for name in sorted(archive.namelist())
+            if name.startswith("word/charts/chart") and name.endswith(".xml")
+        ]
+
+
 def test_the_figure_plots_the_same_values_the_table_shows(rendered: World) -> None:
-    """The bars are drawn from the cells beside them, so they cannot disagree."""
+    """The chart is drawn from the cells beside it, so it cannot disagree —
+    checked in the chart part's own cache, since a native chart's plotted
+    values live there rather than as document text `_text_of` can see."""
     ir = next(
         ir for ir in rendered.artifact_irs
         if rendered.artifact_intents.by_id(ir.intent_id).artifact_type == "cfo_variance_memo"
@@ -339,9 +360,201 @@ def test_the_figure_plots_the_same_values_the_table_shows(rendered: World) -> No
     chart = section.charts[0]
     measure = chart.series[0]
 
-    body = _text_of(_one(rendered, "cfo-variance-memo"))
+    chart_xml = _chart_parts(_payload(rendered, "cfo-variance-memo"))[0]
+    checked = 0
     for row in section.table.rows:
         cell = row.cells.get(measure)
         if cell is None or not isinstance(cell.value, (int, float)):
             continue
-        assert format_value(cell.value, "#,##0;(#,##0)") in body
+        assert repr(float(cell.value)) in chart_xml, f"{row.key}: {cell.value!r} missing from the chart cache"
+        checked += 1
+    assert checked > 0, "the chart's own table should have plottable rows"
+
+
+# ---------------------------------------------------------------------------
+# Native charts — no first-class chart API in python-docx, so this is a
+# hand-built `c:chartSpace` package part (see `docx.py::_chart_xml`'s own
+# docstring). The tests above check the one chart the shipped corpus
+# declares; these check the general machinery every `Chart` kind shares.
+# ---------------------------------------------------------------------------
+
+
+def _table_and_chart(kind: ChartKind, *, by_row: bool = False, rows: list[str] | None = None) -> tuple[Table, Chart]:
+    table = Table(
+        key="pnl",
+        title="P&L",
+        columns=[
+            Column(key="budget", label="Budget", number_format="#,##0;(#,##0)"),
+            Column(key="actual", label="Actual", number_format="#,##0;(#,##0)"),
+        ],
+        rows=[
+            Row(key="food", label="Food", cells={"budget": Cell(value=100.0), "actual": Cell(value=110.0)}),
+            Row(key="apparel", label="Apparel", cells={"budget": Cell(value=200.0), "actual": Cell(value=190.0)}),
+            Row(key="group", label="Group", emphasis=True,
+                cells={"budget": Cell(value=300.0), "actual": Cell(value=300.0)}),
+        ],
+    )
+    chart = Chart(
+        key="test", title="Test chart", kind=kind, table="pnl",
+        series=["budget", "actual"], rows=rows if rows is not None else [], by_row=by_row,
+        category_axis="Division", value_axis="AUD thousands", note="A note on the chart.",
+    )
+    return table, chart
+
+
+def _rendered_chart(kind: ChartKind, **kwargs):  # type: ignore[no-untyped-def]
+    from itertools import count
+
+    import docx as _docx
+
+    from worldloom.compiler.style import genome as _genome
+    from worldloom.rng import Rng as _Rng
+
+    table, chart = _table_and_chart(kind, **kwargs)
+    document = _docx.Document()
+    g = _genome(_Rng(0).derive("style"), archetype="house")
+    docx_renderer._figure(document, chart, table, g, count(1))
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue(), table, chart
+
+
+@pytest.mark.parametrize("kind", [ChartKind.COLUMN, ChartKind.BAR, ChartKind.LINE, ChartKind.PIE])
+def test_every_chart_kind_draws_a_native_chart_part(kind: ChartKind) -> None:
+    payload, _, _ = _rendered_chart(kind)
+    charts = _chart_parts(payload)
+    assert len(charts) == 1
+    tag = {
+        ChartKind.COLUMN: "<c:barChart>",
+        ChartKind.BAR: "<c:barChart>",
+        ChartKind.LINE: "<c:lineChart>",
+        ChartKind.PIE: "<c:pieChart>",
+    }[kind]
+    assert tag in charts[0]
+    # A round trip through python-docx itself, proving the package is not
+    # merely well-formed XML but a document Word's own reader (which
+    # `python-docx` implements against) accepts without error.
+    python_docx.Document(io.BytesIO(payload))
+
+
+def test_empty_rows_means_every_row_that_is_not_a_subtotal() -> None:
+    """`Chart.rows`'s own docstring: a chart that included the subtotal would
+    double every bar. This is the defect the old ASCII-bar `_figure` had —
+    `rows=[]` fell through to *every* row, subtotal included."""
+    payload, table, chart = _rendered_chart(ChartKind.COLUMN, rows=[])
+    chart_xml = _chart_parts(payload)[0]
+    assert "Food" in chart_xml and "Apparel" in chart_xml
+    assert "Group" not in chart_xml, "the subtotal row should not be plotted"
+
+
+def test_by_row_reads_rows_as_series_and_columns_as_categories() -> None:
+    """`Chart.by_row`'s own docstring: read the wrong way round, this renders
+    without complaint as one point per series instead of one line per row."""
+    payload, table, chart = _rendered_chart(ChartKind.COLUMN, by_row=True, rows=["food", "apparel"])
+    chart_xml = _chart_parts(payload)[0]
+    # Series names are now the row labels, not the column labels.
+    assert "<c:v>Food</c:v>" in chart_xml and "<c:v>Apparel</c:v>" in chart_xml
+    # Categories are now the column labels.
+    assert "<c:v>Budget</c:v>" in chart_xml and "<c:v>Actual</c:v>" in chart_xml
+    assert chart_xml.count("<c:ser>") == 2, "one series per plotted row"
+
+
+def test_a_percentage_column_is_scaled_the_same_way_the_workbook_scales_it() -> None:
+    """A percentage fact is stored as e.g. 24.94; a chart plotting it should
+    show `0.2494`, the same `xlsx.py::render` scales a percent cell to
+    before Excel's own percent format multiplies it back out."""
+    table = Table(
+        key="margins", title="Margins",
+        columns=[Column(key="gm_pct", label="GM%", number_format="0.00%")],
+        rows=[
+            Row(key="food", label="Food", cells={"gm_pct": Cell(value=24.94)}),
+            Row(key="apparel", label="Apparel", cells={"gm_pct": Cell(value=31.5)}),
+        ],
+    )
+    chart = Chart(key="margin", title="Margin", kind=ChartKind.COLUMN, table="margins", series=["gm_pct"])
+    document = python_docx.Document()
+    from itertools import count as _count
+
+    from worldloom.compiler.style import genome as _genome
+    from worldloom.rng import Rng as _Rng
+
+    g = _genome(_Rng(0).derive("style"), archetype="house")
+    docx_renderer._figure(document, chart, table, g, _count(1))
+    buffer = io.BytesIO()
+    document.save(buffer)
+    chart_xml = _chart_parts(buffer.getvalue())[0]
+    assert repr(0.2494) in chart_xml
+    assert repr(24.94) not in chart_xml
+
+
+def test_a_pie_chart_plots_only_its_first_series() -> None:
+    """`ChartKind.PIE`'s own docstring: composition of a single total, one
+    series only — a second series would silently double the wedges."""
+    payload, _, _ = _rendered_chart(ChartKind.PIE)
+    chart_xml = _chart_parts(payload)[0]
+    assert chart_xml.count("<c:ser>") == 1
+
+
+def test_a_chart_reading_a_different_table_than_its_section_is_skipped() -> None:
+    """`Chart`'s own docstring: every value it plots is a cell already in the
+    table beside it. A `chart.table` naming some other table is not a value
+    to draw from a guess — it is dropped."""
+    table, chart = _table_and_chart(ChartKind.COLUMN)
+    mismatched = chart.model_copy(update={"table": "not_this_table"})
+    from worldloom.models import ArtifactSection
+
+    section = ArtifactSection(heading="Test", table=table, charts=[mismatched])
+    document = python_docx.Document()
+    from worldloom.compiler.style import genome as _genome
+    from worldloom.rng import Rng as _Rng
+
+    g = _genome(_Rng(0).derive("style"), archetype="house")
+    docx_renderer._section(document, section, {}, g)
+    buffer = io.BytesIO()
+    document.save(buffer)
+    assert _chart_parts(buffer.getvalue()) == []
+
+
+def test_no_chart_carries_a_linked_workbook() -> None:
+    """No `c:externalData`, and no embedded `.xlsx` part — see `_chart_xml`'s
+    own docstring for why: the values are already cached in the chart XML,
+    and a linked workbook would be a second OOXML package (and a second
+    clock) nested inside this one for no reader-visible benefit."""
+    payload, _, _ = _rendered_chart(ChartKind.COLUMN)
+    chart_xml = _chart_parts(payload)[0]
+    assert "externalData" not in chart_xml
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        assert not any(name.endswith(".xlsx") for name in archive.namelist())
+
+
+def test_two_charts_in_one_document_get_distinct_drawing_ids() -> None:
+    """`wp:docPr`'s `id` must be unique across the whole document — a second
+    chart reusing "1" is exactly the bug a per-section counter would produce."""
+    from itertools import count
+
+    table, chart_a = _table_and_chart(ChartKind.COLUMN)
+    chart_b = chart_a.model_copy(update={"key": "second", "title": "Second chart"})
+    document = python_docx.Document()
+    from worldloom.compiler.style import genome as _genome
+    from worldloom.rng import Rng as _Rng
+
+    g = _genome(_Rng(0).derive("style"), archetype="house")
+    chart_index = count(1)
+    docx_renderer._figure(document, chart_a, table, g, chart_index)
+    docx_renderer._figure(document, chart_b, table, g, chart_index)
+    buffer = io.BytesIO()
+    document.save(buffer)
+
+    docs = python_docx.Document(io.BytesIO(buffer.getvalue()))
+    ids = [
+        el.get("id")
+        for el in docs.element.body.iter()
+        if el.tag.endswith("}docPr")
+    ]
+    assert len(ids) == 2 and len(set(ids)) == 2
+
+
+def test_a_chart_document_renders_twice_byte_identical() -> None:
+    payload_a, table, chart = _rendered_chart(ChartKind.LINE, by_row=True, rows=["food", "apparel"])
+    payload_b, _, _ = _rendered_chart(ChartKind.LINE, by_row=True, rows=["food", "apparel"])
+    assert payload_a == payload_b

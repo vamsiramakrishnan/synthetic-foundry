@@ -61,8 +61,8 @@ from .roles import from_shape, to_rows
 
 __all__ = [
     "Blueprint", "Built", "banking", "built", "companies", "cross", "described",
-    "dispersed", "company", "engine", "insurance", "mosaic_of", "probe_of", "retail",
-    "sweep",
+    "dispersed", "company", "engine", "insurance", "mosaic_of", "outcome_selected",
+    "probe_of", "retail", "sweep",
 ]
 
 
@@ -103,6 +103,19 @@ class Blueprint:
     folded into ``archetype_key`` because a pack is not a shape: it also carries
     the company's name, its lore, its voices and its geography, and
     ``World.from_pack`` is a different constructor from ``World(...)``."""
+
+    vocabulary_name: str = ""
+    """Which ``worldloom.vocabulary`` preset this world's divisions, categories
+    and site formats are named from. Empty is the archetype's own words, and
+    empty is byte-identical to a build made before this field existed —
+    ``vocabulary.spoken`` returns the archetype untouched for an empty name,
+    which is the property that lets ``build`` apply it unconditionally.
+
+    Here because ``mosaic_of`` was dropping it. A mosaic deals its worlds
+    distinct vocabularies precisely so that no two of them are the same company
+    (``mosaic._vocabularies``), and a blueprint that carried the mosaic's
+    shape, seed, physics and estate but not its words rebuilt a world the
+    mosaic never planned."""
 
     locale_name: str | None = None
     """The jurisdiction this corpus is written in. Applied to the *recipe*
@@ -197,6 +210,21 @@ class Blueprint:
         """The trading year, by name from ``worldloom.profiles``."""
         profiles.named(name)          # refuse an unknown one here, not at build
         return replace(self, calendar_name=name)
+
+    def speaking(self, name: str) -> Blueprint:
+        """The words this company uses, by preset from ``worldloom.vocabulary``.
+
+        Changes what the units are *called* and nothing about what they are —
+        no share, no margin, no site count moves. Refuses an unknown preset
+        here rather than at build, for ``calendar``'s reason: a comprehension
+        crossing four vocabularies should fail on the typo, not four worlds
+        later.
+        """
+        from . import vocabulary
+
+        if name:
+            vocabulary.named(name)
+        return replace(self, vocabulary_name=name)
 
     def estate(self, size: str, *, vocabulary: str | None = None) -> Blueprint:
         """How much technology landscape, and optionally whose vocabulary."""
@@ -478,6 +506,7 @@ class Blueprint:
             "shape": dict(self.shape) if self.shape else None,
             "calendar": self.calendar_name,
             "estate": self.estate_size,
+            "vocabulary": self.vocabulary_name,
             "locale": self.locale_name,
             "revenue": self.annual_revenue,
             "pack": None if self.pack_source is None else self.pack_source.name,
@@ -528,8 +557,14 @@ class Blueprint:
             # of the pack contract that could drift from the one the CLI uses.
             spec = registered.world.from_pack(self.pack_source, seed=self.seed)
         else:
+            from .vocabulary import spoken
+
             spec = registered.world(
-                seed=self.seed, archetype=archetypes.get(key),
+                # `spoken` with an empty name returns the archetype itself, so
+                # this line is byte-identical to `archetypes.get(key)` for every
+                # blueprint that never called `.speaking()` — which is what lets
+                # it be applied unconditionally rather than behind a branch.
+                seed=self.seed, archetype=spoken(archetypes.get(key), self.vocabulary_name),
                 **({} if self.employees is None else {"employees": self.employees}),
                 **({} if self.annual_revenue is None
                    else {"annual_revenue": self.annual_revenue}),
@@ -660,34 +695,60 @@ class Built:
         return self.world.validate().ok
 
     def topology(self) -> dict[str, Any]:
-        """Blast radius, chokepoints and depth — what a loop filters on."""
-        from . import graphs
+        """Blast radius, chokepoints and depth — what a loop filters on.
 
-        dependency = graphs.dependency_graph(self.world)
-        return {
-            "nodes": dependency.number_of_nodes(),
-            "chokepoints": len(graphs.chokepoints(dependency)),
-            "longest_chain": len(graphs.longest_chain(dependency)),
-        }
+        The graph subset of ``measure()``, projected from it rather than
+        computed again: the extra work is one walk over the people list, and
+        the alternative is two definitions of "chokepoint" that a future edit
+        can move independently.
+        """
+        from . import outcomes
+
+        measured = outcomes.shape_vector(self.world)
+        return {key: measured[key] for key in ("nodes", "chokepoints", "longest_chain")}
 
     def measure(self) -> dict[str, Any]:
-        """A shape vector for this corpus. Enough to sort or disperse a field on."""
-        people = [p for p in self.world.people if p.left is None]
-        return {
-            "people": len(people),
-            "titles": len({p.title for p in people}),
-            "facts": len(self.world.facts),
-            "artifacts": len(self.world.artifact_intents),
-            "evaluations": len(self.world.evaluations),
-            **self.topology(),
-        }
+        """A shape vector for this corpus. Enough to sort or disperse a field on.
+
+        The same eight numbers ``outcomes.shape_vector`` reads, and now
+        literally them: an outcome-selected field and a hand-filtered loop have
+        to agree about what a chokepoint is, and two copies of this walk were
+        how they could stop agreeing. Imported here rather than at module level
+        because ``outcomes`` imports ``stats``, which imports the retrieval
+        index — a cost no caller of ``sdk.retail()`` should pay.
+        """
+        from . import outcomes
+
+        return outcomes.shape_vector(self.world)
 
     def export(self, out: str | Path, *, overwrite: bool = True) -> Path:
         return self.world.export(Path(out), overwrite=overwrite)
 
-    def render(self, *formats: str, out: str | Path | None = None) -> Path:
-        """Render to xlsx/docx/pdf/pptx/markdown and write the corpus."""
-        rendered = self.world.render(*formats)
+    def render(self, *formats: str, out: str | Path | None = None,
+               profile: str | Any = None) -> Path:
+        """Render to xlsx/docx/pdf/pptx/markdown and write the corpus.
+
+        *profile* decides who the documents are for — ``"reader"`` for
+        something a person opens, ``"filing"`` for prose with its citations in
+        a sibling file, or a ``Presentation`` you authored. Omitted, the corpus
+        keeps whatever its recipe records, which for a corpus that never named
+        one is ``audit``: the traceability rendering, and byte-for-byte what
+        this method returned before profiles existed.
+
+        Applied to the recipe rather than passed to the renderers, so the files
+        on disk and the record of how they were made cannot disagree. Needs no
+        rebuild: a profile decides nothing about the world, so re-rendering one
+        corpus under two profiles is an ordinary thing to do.
+        """
+        world = self.world
+        if profile is not None:
+            from .presentation import named
+            from .recipe import with_presentation
+
+            world = world.extend(recipe=with_presentation(
+                world.recipe, named(profile) if isinstance(profile, str) else profile
+            ))
+        rendered = world.render(*formats)
         return rendered.export(Path(out) if out else Path("."), overwrite=True)
 
 
@@ -885,6 +946,45 @@ def dispersed(
     return tuple(candidates[at] for at in chosen)
 
 
+def outcome_selected(
+    candidates: Sequence[Blueprint],
+    count: int,
+    *,
+    start: str = "2026-03",
+    periods: int = 1,
+    incident: bool | None = None,
+) -> tuple[Built, ...]:
+    """``dispersed``'s sibling that looks at what came out.
+
+    ``dispersed`` measures the *descriptions*: headcount, calendar index,
+    estate, the low end of every physics override. That is a proxy, and this
+    module has never said how good a one. Two descriptions far apart in that
+    space can produce corpora that measure identically — a margin band no
+    figure lands in — and two close ones can differ sharply, because one more
+    reporting level changes who signs what and therefore what the evaluation
+    generator can ask.
+
+    So this builds every candidate, runs its episodes, compiles, measures the
+    corpora with the instruments this repository already owns, and runs the
+    same farthest-point traversal over the **measurements**. See
+    ``worldloom.outcomes`` for what is measured and for why the safe objective
+    is spread rather than difficulty.
+
+    Returns ``Built`` worlds rather than blueprints, and that is not a
+    convenience: the candidates have already been built to be measured, and
+    handing back descriptions would make the caller pay for the whole field a
+    second time. It also costs what it costs — a pool of thirty is thirty
+    builds — so this is the call to reach for when the field is tens, not
+    thousands. Cut a large product down with ``dispersed`` first, then measure
+    what survives.
+    """
+    from . import outcomes
+
+    field = outcomes.pool(candidates, start=start, periods=periods, incident=incident)
+    chosen = field.select(count)
+    return tuple(Built(field.worlds[at], candidates[at]) for at in chosen)
+
+
 def _vectors(candidates: Sequence[Blueprint]) -> list[list[float]]:
     """Coordinates for a whole candidate set, over one shared key space.
 
@@ -971,14 +1071,33 @@ def probe_of(session: Any, count: int, *, engine: str = "retail",
 
 
 def _from_variant(variant: Any) -> Blueprint:
+    from . import mosaic as mosaic_module
+
+    # Only when this engine's mosaic actually varies a trading year. `Variant`
+    # always carries one — `mosaic._DEFAULT_CALENDAR` for an engine that reads
+    # none — and passing it on made `build()` hand a `seasonality` to a world
+    # spec with no such field, so every blueprint from `mosaic_of(n,
+    # engine="banking")` raised `TypeError` the moment it was built. Latent
+    # until now because nothing built one: `test_sdk` counted the blueprints.
+    # `cli.mosaic` draws the same guard for the same reason.
+    varies_calendar = any(
+        axis.name == "calendar" for axis in mosaic_module.ENGINES[variant.engine]
+    )
     return Blueprint(
         domain_name=variant.engine,
         seed=variant.seed,
         physics_overrides=dict(variant.overrides),
         shape={"headcount": variant.headcount, "span": variant.span,
                "levels": variant.levels, "functions": list(variant.functions)},
-        calendar_name=variant.calendar,
+        calendar_name=variant.calendar if varies_calendar else None,
         estate_size=variant.estate,
+        # The words the mosaic dealt this world, which this bridge used to
+        # drop. A mosaic deals distinct vocabularies so that no two of its
+        # worlds are the same company; a blueprint that carried everything
+        # except the words rebuilt a world the mosaic never planned, and the
+        # only symptom was that `sdk.mosaic_of(5)` and `worldloom mosaic -n 5`
+        # disagreed about what the divisions were called.
+        vocabulary_name=variant.vocabulary,
     )
 
 

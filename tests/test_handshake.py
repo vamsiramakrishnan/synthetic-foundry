@@ -390,14 +390,30 @@ def test_requests_are_empty_once_everything_is_narrated(tmp_path) -> None:
     assert "nothing awaiting prose" in again.output
 
 
-def test_an_unrendered_artifact_has_no_path_and_that_is_allowed(tmp_path) -> None:
-    """A Jira bundle has no file when only Markdown was asked for."""
+def test_markdown_claims_the_orphans_and_a_partial_render_stays_partial(tmp_path) -> None:
+    """This test used to assert the opposite — "a Jira bundle has no file when
+    only Markdown was asked for" — and that reading turned out to describe a
+    hole, not a contract. Markdown's deferral of a type to the format that owns
+    it is only sound while the owning renderer runs; under the everyday
+    ``-f markdown -f docx -f xlsx -f pdf`` the ticket types compiled, entered
+    the manifest with an empty path, and reached the drive as *nothing*, while
+    `validate` stayed silent because an empty path also legitimately means
+    "compiled, not rendered". So: when markdown is among the requested formats,
+    everything unclaimed falls back to it and every artifact has a file. The
+    legitimate empty path still exists — a deliberately partial render — and
+    the second half pins that it stays legal.
+    """
     corpus = _corpus(tmp_path)
     assert runner.invoke(app, ["render", str(corpus), "-f", "markdown"]).exit_code == 0
 
     world = World.load(corpus)
-    empty = [a for a in world.artifacts if not a.path]
-    assert empty, "some artifacts have no Markdown rendering"
+    assert all(a.path for a in world.artifacts), "markdown must claim every orphan"
+    assert world.validate().ok
+
+    partial = _corpus(tmp_path / "partial")
+    assert runner.invoke(app, ["render", str(partial), "-f", "xlsx"]).exit_code == 0
+    world = World.load(partial)
+    assert any(not a.path for a in world.artifacts), "an xlsx-only render is partial on purpose"
     assert world.validate().ok
 
 

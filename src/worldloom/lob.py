@@ -517,6 +517,8 @@ def lint_responsibilities(
     responsibilities: Sequence[Responsibility],
     *,
     roles: Sequence[str],
+    known_artifact_types: frozenset[str] | set[str] | None = None,
+    known_fact_kinds: frozenset[str] | set[str] | None = None,
 ) -> list[str]:
     """Findings for proposed responsibilities before accepting.
 
@@ -562,7 +564,14 @@ def lint_responsibilities(
             )
 
         for kind in resp.fact_kinds:
-            if not factkinds.resolvable(kind):
+            # A pack's own episodes mint kinds the process registry has never
+            # heard of — that is what authoring a process *is* — so the lint
+            # accepts them under the registry's own prefix semantics.
+            authored_here = any(
+                extra == kind or extra.startswith(kind + ".")
+                for extra in (known_fact_kinds or ())
+            )
+            if not authored_here and not factkinds.resolvable(kind):
                 findings.append(
                     f"responsibilities[{i}] ({resp.role_key}): fact kind"
                     f" '{kind}' is not in the fact-kind registry — nothing in"
@@ -571,7 +580,108 @@ def lint_responsibilities(
                     " See worldloom.factkinds.names() for what is real."
                 )
 
+        # The other half of the same rule, unchecked for as long as the field
+        # existed: a responsibility naming an artifact type nothing declares is
+        # an edge to a document that will never be planned. The shipped `hr`
+        # LOB declared two such types and nothing said so — the lint compared
+        # fact kinds against their registry and took artifact types on faith.
+        # `known_artifact_types` lets a pack pass the types it is authoring in
+        # the same document; `None` means the process registry as it stands.
+        for artifact_type in resp.artifact_types:
+            if not _artifact_type_known(artifact_type, known_artifact_types):
+                findings.append(
+                    f"responsibilities[{i}] ({resp.role_key}): artifact type"
+                    f" '{artifact_type}' is declared by no engine and authored"
+                    " by no pack on hand — the edge points at a document that"
+                    " will never be planned. See documents.declared_types()."
+                )
+
     return findings
+
+
+def _artifact_type_known(
+    artifact_type: str, extra: frozenset[str] | set[str] | None
+) -> bool:
+    from . import documents
+
+    if extra and artifact_type in extra:
+        return True
+    return artifact_type in documents.declared_types()
+
+
+def lint_lob(
+    lob: Lob,
+    *,
+    base: str = "",
+    episodes: Sequence[Any] = (),
+    known_artifact_types: frozenset[str] | set[str] | None = None,
+) -> list[str]:
+    """Every finding for one complete LOB, composed from the stage lints.
+
+    The pack seam's entry point: a ``Pack`` carries whole accepted ``Lob``s,
+    not authoring sessions, so it needs the stage lints run together against
+    the engine, the artifact registry *plus whatever the same pack authors*,
+    and the episodes shipping beside it. ``artifact_filings`` gets the same
+    known-type check a responsibility does — it is the field the shipped `hr`
+    LOB used to name a type that does not exist, read by nothing but
+    ``describe`` and wrong in the one place an author would look.
+    """
+    findings: list[str] = []
+    if base and lob.engine != base:
+        findings.append(
+            f"lob[{lob.name}]: engine {lob.engine!r} is not the pack's base"
+            f" {base!r} — a LOB ships with the company whose engine runs it"
+        )
+    findings.extend(
+        f"lob[{lob.name}]: {finding}"
+        for finding in lint_roles(lob.roles, engine=lob.engine)
+    )
+    findings.extend(
+        f"lob[{lob.name}]: {finding}"
+        for finding in lint_responsibilities(
+            lob.responsibilities,
+            roles=[role.key for role in lob.roles],
+            known_artifact_types=known_artifact_types,
+            known_fact_kinds=frozenset(
+                fk.kind for spec in episodes for fk in getattr(spec, "fact_kinds", ())
+            ),
+        )
+    )
+    for filing in lob.artifact_filings:
+        if not _artifact_type_known(filing, known_artifact_types):
+            findings.append(
+                f"lob[{lob.name}]: artifact_filings names '{filing}', which no"
+                " engine declares and no pack on hand authors"
+            )
+    # Only the processes this LOB actually binds into: `lint_bindings`'s
+    # unbound-required-slot refusal is a claim about a process this LOB claims
+    # to staff, and holding the commercial LOB to the delivery process's seats
+    # would refuse every pack that ships two of either. Whether *some* LOB in
+    # the pack fills every seat is the pack's question, answered in
+    # `packs.lint` across the union.
+    for spec in episodes:
+        if any(b.process == getattr(spec, "name", "") for b in lob.slot_bindings):
+            findings.extend(
+                f"lob[{lob.name}]: {finding}"
+                for finding in lint_bindings(lob, spec)
+            )
+    # A binding into a process that is neither shipping beside this LOB nor
+    # already installed is a seat in a room that does not exist.
+    known_processes = {getattr(spec, "name", "") for spec in episodes} | set(_INSTALLED_PROCESSES())
+    for binding in lob.slot_bindings:
+        if binding.process not in known_processes:
+            findings.append(
+                f"lob[{lob.name}]: slot_bindings names process"
+                f" '{binding.process}', which is neither in this pack's"
+                " episodes nor installed"
+            )
+    return findings
+
+
+def _INSTALLED_PROCESSES() -> tuple[str, ...]:
+    from . import episodes
+
+    return tuple(episodes.loaded())
 
 
 def lint_bindings(lob: Lob, spec: Any) -> list[str]:
@@ -854,18 +964,24 @@ _HR = Lob(
     responsibilities=[
         # The org-change scenarios mint `org.joined` / `org.departed`; the
         # library used to say `employee.headcount` and `employee.hire`, a
-        # vocabulary nothing generates.
+        # vocabulary nothing generates. The artifact types had the same
+        # disease one field over: `org_announcement` and `hire_announcement`
+        # existed nowhere, and the lint took artifact types on faith while it
+        # checked fact kinds against their registry — so the library's own
+        # exemplar carried edges to documents that could never be planned.
+        # These are `worldloom.workforce`'s real types, which is what HR
+        # actually authors in this engine.
         Responsibility(
             role_key="head_of_people",
             fact_kinds=["org.joined", "org.departed"],
-            artifact_types=["org_announcement"],
+            artifact_types=["job_requisition", "performance_review"],
         ),
         Responsibility(
             role_key="recruiter",
             fact_kinds=["org.joined"],
-            artifact_types=["hire_announcement"],
+            artifact_types=["offer_letter", "onboarding_checklist"],
         ),
     ],
-    artifact_filings=["org_announcement"],
+    artifact_filings=["job_requisition"],
     episode_contributions=["Hire"],
 )

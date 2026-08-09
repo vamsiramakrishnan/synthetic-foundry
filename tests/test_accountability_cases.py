@@ -69,10 +69,21 @@ def test_a_world_with_no_accountability_lore_asks_nothing() -> None:
 
 def test_the_shipped_evaluation_set_is_unchanged() -> None:
     """No shipped lore names an accountability, so the stock case count must
-    not have moved — the family is additive or it is a regression."""
+    not have moved — the family is additive or it is a regression.
+
+    Forty-six rather than the forty-two this originally pinned: the approval
+    family (`evaluation._Taxonomy.approvals`) added three authority questions
+    and one abstention when documents gained a signature block. Fifty-one
+    rather than forty-six: `milestone_provenance` had minted zero on every
+    build since it was written — its five candidate facts were carried by no
+    document — and the company timeline made them citable. Re-pinned rather
+    than loosened, because the number being exact is the whole of what this
+    test checks — an accountability family that quietly grew the set by one
+    would look identical to a set that grew by five for a reason.
+    """
     world = RetailWorld(seed=8128).build().run(
         MonthEndClose(period=PERIOD, include_operational_incident=True))
-    assert len(world.evaluations) == 42
+    assert len(world.evaluations) == 51
 
 
 # ---------------------------------------------------------------------------

@@ -305,6 +305,16 @@ class InsuranceWorld:
     ``Locale.suffixes_for("insurance")``. Same gap as banking's, stated on
     ``BankingWorld.locale``."""
 
+    policies: str | None = None
+    """Standing documents (``worldloom.policies``): ``"core"`` or ``"full"``.
+
+    The paperwork a company *has* rather than produces — an expense policy, a
+    delegation of authority, a leave policy — as opposed to the episodic
+    documents a close or an incident emits. ``None`` mints nothing, which is
+    what keeps every corpus built before the knob existed byte-identical, the
+    same guarantee ``estate`` and ``master_data`` make. The recipe records the
+    level, never the documents, so a replay re-runs the same construction."""
+
     master_data: Any = None
     """Reference tables at scale — `RetailWorld.master_data`, verbatim: the
     same knob, the same no-op default, the same counts-on-the-recipe replay."""
@@ -365,6 +375,7 @@ class InsuranceWorld:
             # What it was given, not what it resolved to — `RetailWorld.build`.
             locale=self.locale,
             master_data=self.master_data,
+            policies=self.policies,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = insurance_org.generate(
@@ -441,7 +452,14 @@ class InsuranceWorld:
         # category names, under a stream root of its own so it moves nothing.
         from .generators import masterdata as masterdata_module
 
-        return masterdata_module.applied(world, self.master_data, locale=locale)
+        world = masterdata_module.applied(world, self.master_data, locale=locale)
+        # Last, and after the master data for the same reason that came after
+        # the organisation: a standing document is planned against the roles
+        # and the revenue this world actually ended up with. A strict no-op
+        # when nothing was asked for — see the field.
+        from . import policies as policies_module
+
+        return policies_module.applied(world, self.policies)
 
 
 # ---------------------------------------------------------------------------

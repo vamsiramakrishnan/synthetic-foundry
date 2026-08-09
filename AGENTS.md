@@ -61,7 +61,86 @@ worldloom validate ./corpus
 
 # 7. Find out whether it is actually hard, not merely coherent.
 worldloom evaluate ./corpus
+
+# 7b. And whether it is hard for a retriever anyone would deploy, not only for
+#     keyword matching. `all` adds a dense retriever beside BM25 and TF-IDF and
+#     names, per family, whether it is genuinely hard or merely a lexical trap.
+#     Optional extra; without it the dense column is skipped with a message.
+worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
 ```
+
+```bash
+# 8. Lay it out as a drive somebody could be pointed at, with its permissions.
+worldloom workspace ./corpus -o ./drive
+```
+
+A corpus exports as one flat `artifacts/` folder of numbered files, which is
+right for the harness — it reads the manifest and never looks at a path — and
+wrong for what the corpus is *for*. An enterprise assistant indexes the folder a
+document sits in, the title somebody typed, who owns it and who it is shared
+with, and this corpus knows every one of those and put none of them on the
+filesystem: 293 files in one directory with identical permissions.
+
+`workspace` writes the tree that knowledge implies. Documents are shelved by the
+function that owns them (`Policies/`, `Finance/Close/2026-03/`,
+`People/Performance/`), periodic ones filed under their period and standing ones
+at the top of their shelf. Filenames are what a person would have typed and
+carry the subject, so four reviews in a month are four names rather than `(2)`
+through `(5)`. A policy revised in place sits beside its replacement marked
+`(superseded)`; a monthly calendar that supersedes last month's is not marked,
+because that is the ordinary life of a periodic document rather than a
+retirement. `permissions.jsonl` is one row per file — owner and every address
+permitted to open it — which is the half a connector actually needs, since a
+tree with no permission table tests retrieval and cannot test access.
+
+Nothing is invented: every folder, title, owner and reader is derived from the
+manifest, the roster and the access policies, and the corpus itself is not
+touched.
+
+```bash
+worldloom workspace ./corpus -o ./drive --noise neglected
+```
+
+`--noise` makes the drive untidy the way real drives are: `Copy of X`, a
+document dragged into `Shared/` or `_Inbox/`, somebody's `X FINAL` beside the
+real one, an `_Archive/` leftover. Every extra file is a **byte-identical copy
+of real corpus content**, never invented text — a drive's junk is not fabricated
+documents, it is the same documents saved again in the wrong place under the
+wrong name, and that is exactly what makes it hard: a retriever cannot tell the
+copy from the original by reading it. A copy carries the permissions of what it
+copies, so a misfiling is somewhere nobody would look and still readable only by
+the people the original was.
+
+Every junk file is **labelled** in `permissions.jsonl` with what kind it is and
+what it duplicates. That is the whole difference between this and simply making
+a mess: a benchmark scored against a drive it cannot account for cannot tell
+"the assistant found the wrong copy" from "the assistant was wrong", and those
+are different failures.
+
+This is *filesystem* noise and deliberately not the same thing as
+`--messiness`, which is content noise — a page nobody updated, two documents
+disagreeing, an author who left. Both are real and they fail differently. A
+corpus wanting a realistic archive wants both.
+
+### One type, several arguments
+
+A six-period corpus produced 32 distinct shapes across 249 artifacts and every
+near-duplicate group was exactly ×6 — the same document once per period, the
+same headings in the same order. Six close calendars with different dates is
+realistic. Six root-cause reviews with an identical five-section skeleton is
+not: real reviews differ because the incidents differ, and a reader who sees the
+skeleton six times learns the skeleton rather than the content.
+
+Six types now carry alternative outlines (`documents._OUTLINE_VARIANTS`), and
+each alternative is a different *argument* rather than a reshuffle — an RCA that
+opens with the cause is a different document from one that opens with the
+timeline, and a commentary that leads with the exception is what a partner
+writes when the month went wrong. The variant is chosen by the document's
+ordinal among its own type, so N instances over M variants land evenly by
+construction; a seeded draw would only tend to spread. The first variant is the
+outline that shipped, so a type's first instance is unchanged.
+
+Measured: 40 shapes, largest group 37 → 18.
 
 Three more readings answer questions `validate` and `evaluate` cannot, and each
 one is a different question — read all four before calling a corpus measured:
@@ -272,6 +351,49 @@ In Python the same surface is `sdk.described(document)`, which returns an
 ordinary `Blueprint` — so a description can be crossed, swept and dispersed
 like any other.
 
+### How big the company is, which is not how many people it has
+
+`organisation.divisions` is the field that makes a corpus bigger, and the
+measurement says why. Raising `organisation.headcount` from 23 to 429 left
+facts at 8,021, artifacts at 204 and evaluation cases at 596 — every one of
+them unchanged, because 429 people were still managing the same three
+divisions. The close fans out per division and per category, so the document
+count follows the *structure*. Widening the same retailer from three divisions
+to eight took facts from 604 to 990 and questions from 42 to 52 on the same
+seed.
+
+```json
+{"archetype": "omnichannel_retailer",
+ "organisation": {"headcount": 420, "span": 8, "levels": 6, "divisions": 8}}
+```
+
+A division arrives from `worldloom.divisions.POOLS`, keyed by industry, and it
+is a real line of business rather than a relabelling — its own categories, its
+own site formats, therefore its own row in every unit-level table, its own
+close commentary and its own questions. Widening is additive: the archetype's
+declared divisions keep their names, their categories and their *relative*
+sizes, so 64/21/15 stays in that ratio however many arrive. Only the shares
+renormalise, because a share is a fraction of group revenue and a fourth
+division has to take something from somebody. Each addition is sized against
+the company's *smallest* declared division and declines from there — equal
+shares were the first rule and they gave Property a 12.5% share against
+General Merchandise's 7.9%, an adjacent business outweighing the core it was
+bolted onto.
+
+It refuses rather than improvises in three places: narrowing below what the
+archetype declares (that would silently remove every fact, document and
+question a division owned), running out of pool (named with how many are
+available, because a division called `Division 7` tells a reader the company is
+synthetic without telling them anything else), and an industry with no pool at
+all. `divisions.register` adds a pool for a fourth vertical.
+
+The width rides the **archetype key** — `omnichannel_retailer+8div`, composing
+with the vocabulary qualifier as `omnichannel_retailer+wholesale_club+8div` —
+for the reason `vocabulary.spoken` qualified its own key: the key is the only
+thing a recipe records about the shape, so a width carried anywhere else would
+rebuild a three-division company from an eight-division corpus and report
+success.
+
 ## Saying what kind of company it is, one attribute at a time
 
 The four flags below are the difference between "a corpus" and "the corpus you
@@ -336,6 +458,105 @@ documents disagreeing with a ledger that says which is right, and an author who
 has left with nobody named in their place. Counts are a budget, not a quota: a
 small world has fewer corrections to be stale about and the pass takes what it
 can support.
+
+### Line management produces documents
+
+The organisation was modelled in full and used as a source of *bylines*. A
+420-person retailer named 24 of 444 people anywhere in its corpus: a manager
+three levels down existed, had a name, a function and a manager of their own,
+and appeared in nothing.
+
+```bash
+worldloom build --seed 8128 --policies core --periods 3 \
+  --hiring 3 --reviews 4 --out ./corpus
+```
+
+`--hiring` raises, approves, offers and fills vacancies; `--reviews` reviews
+people. The hiring manager and the reviewer come from **everybody with a direct
+report** — 73 people on a synthesised 420-person company against the dozen the
+role table names — which is the whole point. Measured on three periods:
+113 artifacts across 28 types with none above 21%, and 41 distinct people named
+in 37 distinct titles.
+
+Two things make these more than filler. **A requisition reads the company's own
+rules**: its three-year commitment is checked against the delegation of
+authority, and the lowest rung that covers it signs — so "was this approved at
+the right level" is the first question here whose answer is in neither document
+alone. And **the two performance records disagree on purpose**: the signed
+review is an approved report countersigned one level up, the running one-to-one
+note is an unofficial note carrying the view held before calibration, and the
+authority ranking is what resolves them.
+
+Both rounds mint a fifth access class on first use — an offer letter states one
+person's salary, and none of the four classes an engine ships describes a
+readership of one person and their line.
+
+### The paperwork a company has, rather than the paperwork it produces
+
+Every document in this corpus was **episodic** — a close ran, an incident
+happened, a return was filed, and paperwork came out of it. Measured on a
+twelve-period, eight-division build: 195 artifacts, of which 96 were the same
+type with a different division's name on it, and not one of them was a policy.
+An assistant asked "what is our expense approval threshold" or "how long do we
+keep contracts" had nothing to find, because the company had no rules.
+
+```bash
+worldloom build --seed 8128 --policies core --out ./corpus   # five
+worldloom build --seed 8128 --policies full --out ./corpus   # ten
+```
+
+A standing document is a different shape, and `worldloom.policies` says so in
+three ways. **Nothing triggers it** — it is not caused by an event and does not
+report a period; it is in force, from a date, until it is revised. **Its content
+is parameters** — "receipts above 90 need a manager's approval" is minted as a
+`CanonicalFact` with a number in it, so every question this repository can
+already ask of a figure works on a policy unchanged, and forty-eight `policy.*`
+kinds sit in `factkinds` beside every other. **A revision is supersession** —
+the earlier threshold's window closes, the later fact records what it
+superseded, and *the earlier document stays on the shelf*, which is what makes
+"what was the limit before the revision" answerable rather than merely askable.
+
+Money provisions are stated as a fraction of the company's own revenue and
+rounded to a figure a policy would really name, so a 7.8bn retailer and a 2bn
+insurer do not share an expense limit. A delegation-of-authority ladder that
+stops climbing is refused rather than clamped, and a policy is dated no earlier
+than whoever signed it joined — `form_units`' rule about a unit and its leader,
+and `validate.author_not_yet_employed` found the violation the first time it was
+not applied.
+
+`--policies` is off by default and a strict no-op, so every corpus built before
+it existed is byte-for-byte what it was. `policies.register` adds an area for a
+vertical whose paperwork genuinely is its own.
+
+### Who signed it
+
+Every document was authored and none of them approved, which is not how a
+company's archive works: "who approved the March pack for Fuel and Convenience"
+is the first question a real reader asks. A signed document now carries an
+**Approval** block — prepared by, approved by, name, role, date — in Markdown,
+DOCX, PDF, PPTX and as a worksheet in XLSX. Ten distinct people were named
+across an eight-division corpus before; nineteen after.
+
+Who signs what is a table per vertical (`_APPROVED_BY` in each planner), because
+who signs a prudential return is an argument about banking rather than a rule
+about documents. The divisional close commentary is the one approval that fans
+out with the company: eight divisions means eight different managing directors
+signing eight different documents.
+
+**Absence is a claim.** A ServiceNow ticket has an assignee, an email thread a
+sender, a calendar is issued rather than approved; banking's RWA working paper
+is unsigned *because* it is the contested-authority distractor, and internal
+audit's review carries the Chief Internal Auditor's name and no countersignature
+at all. A corpus where everything is signed is as unlike a real archive as one
+where nothing is.
+
+`validate.approvals` holds a signature to being one somebody could have given —
+the approver exists, is not the author, and is permitted by the document's own
+access policy. It found two real defects the day it existed and a third the
+first time a unit changed hands, which is why `personnel.promote` now carries
+the post's access to whoever holds it. Added, never substituted: the archive is
+historical and the policy is current state, so striking a name off today would
+retroactively invalidate every signature that person ever gave.
 
 **`--locale`** puts the corpus somewhere. It reaches the *figure grammar*,
 corpus-wide, so the DOCX, the Markdown, the PPTX and the retrieval index all
@@ -568,6 +789,56 @@ three months at a time rather than retail's one.
 
 ---
 
+## Conversations, optionally
+
+An event mints facts and makes documents necessary — and it makes **people
+talk**. `--conversations` records that third output, which the corpus modelled
+and never produced outside the actor runtime:
+
+```bash
+worldloom build --seed 8128 --incident --conversations --out ./corpus
+worldloom actors ./corpus --observations       # who came to know how much, and how
+```
+
+```
+What each employee came to know
+ role                            first heard         facts  by channel
+ Group Financial Controller      2022-01-01 04:00      600  duty 11, message 2, participant 584 …
+ Service Desk Analyst            2022-01-01 04:00       18  duty 7, message 5, participant 2 …
+```
+
+Two files come out — `actor-observations.jsonl` and `actor-messages.jsonl` — and
+between them they answer a question the fact ledger structurally cannot. A fact
+carries one `valid_from`; knowledge carries one moment *per person*. Six hundred
+figures reach the controller and eighteen reach the analyst, and neither of them
+is wrong.
+
+It adds no facts, no events and no documents. What it adds is:
+
+- **A knowledge ledger.** Each fact reaches each employee through exactly one of
+  the channels in `actors/observation.py` — witnessed it, was paged about it,
+  owns the system that recorded it, was told, read it, or picked it up on the
+  ordinary flow of work — and the channel decides both *when* and *how much the
+  account is worth*.
+- **Messages.** Derived, never invented: somebody is told where the routing
+  table wakes them, or where the document plan makes them the author of
+  something that event established. The second is the one that mattered — the
+  controller's working note cites a root cause their role cannot read, so before
+  this the corpus had authors writing about facts no channel could deliver to
+  them.
+- **Information-asymmetry questions.** *Which employee was first to have a record
+  of this? By the time the last of them heard, who had already been able to act?
+  Who told them?* Every answer is recomputed from the ledger, so none of them can
+  be a sentence somebody wrote.
+
+Four invariants, checked by `worldloom validate` on the shipped files rather than
+on the code that wrote them: nobody knows a fact before it was true, nobody
+learns anything outside their employment, nobody discloses what they do not yet
+hold, and no author cites a fact they never heard.
+
+It is opt-in and refused alongside `--actors`, which derives its own — two
+producers appending to one knowledge ledger is two accounts of who knew what.
+
 ## Actors, optionally
 
 `worldloom build --actors` changes who decides what the incident's records say.
@@ -750,6 +1021,18 @@ large world — and treats any of these as a defect, not a warning:
 - A reporting line that cycles, or a service that owns itself
 - An author who cannot see the document they wrote
 - Lore that constrains nothing
+- A fact a document was asked to carry and does not carry
+- A table cell that names a fact and states nothing
+- Fewer compiled documents than the plan asked for
+
+The last three are one rule looked at from three sides, and they exist because
+the worst defect this project has had passed everything above it. A workbook that
+looked its figures up at the wrong month rendered with *every cell empty* and
+validated clean, because a reconciliation check compares a cell against a fact
+and two absent numbers agree. So the plan is now compared against the compiled
+document, per document rather than over the union of all of them — an intent's
+`required_fact_ids` against its own `ArtifactIR.fact_ids()`. It found four more
+of the same shape on its first run across the four verticals.
 
 If you are tempted to make one of these pass by editing the fixture or relaxing a
 check: don't. A validator that can be talked out of failing is decoration. Fix the
@@ -816,3 +1099,69 @@ requires every command to be documented somewhere.
 Read `docs/build-order.md` before adding a subsystem. It sequences the work and
 states an exit gate for each step, and the ordering is deliberate — several steps
 exist specifically to stop a later one from being built on guesses.
+
+### Checking determinism somewhere other than seed 8128
+
+CI proves byte-identity on four builds at one seed, on every push. That is one
+point of a ten-dimensional configuration space, sampled repeatedly — and this
+repository owns the algorithm for not doing that. `tools/sweep.py` points it at
+our own QA: it enumerates engine × archetype × facets × locale × estate ×
+trading year × periods × messiness × master-data *from the registries*, covers
+the space with `dispersion.halton`, takes the furthest apart with
+`dispersion.farthest_first`, and builds each one twice.
+
+```bash
+python3 tools/sweep.py --describe                    # the axes, building nothing
+python3 tools/sweep.py -n 12                         # twice per config, in separate processes
+python3 tools/sweep.py -n 12 --mode resident         # twice per config, in ONE interpreter
+python3 tools/sweep.py -n 12 --mode archive          # working tree vs `git archive HEAD`
+python3 tools/sweep.py --seed 8128 -n 12 --only <id> # replay one row exactly
+```
+
+`process` and `resident` answer different questions and neither subsumes the
+other, so the nightly job runs `--mode process,resident`. Two fresh processes
+share nothing but the seed, which is what catches a build depending on an
+environment variable, a locale, or a hash seed. They cannot catch *leakage*
+between builds — both start pristine, so a first build that poisons a
+module-level registry has nothing to poison. Only a second build in the same
+interpreter can see that, which is `resident`. (This file claimed the opposite
+until review of PR #8 pointed out the hole; the fix is pinned by injecting a
+module-level counter into `Rng.__init__` and watching `process` report
+identical while `resident` reports the first differing line.)
+
+`--mode archive` is the local gate — in a clean CI checkout the working tree
+*is* `HEAD`. `.github/workflows/determinism-sweep.yml` runs nightly on a
+rotating seed, so the corners covered move over time instead of being the same
+eight forever. Every run prints its seed and each selected configuration, so
+any failure replays exactly.
+
+It is a tool, not library code: nothing under `src/` imports it and it adds no
+dependency.
+
+### Whether the corpus is hard, or only hard for keyword matching
+
+Every difficulty number this project published before now came from BM25 and
+TF-IDF — two ranking families and **one idea**, that relevance is word overlap.
+A family they both fail is either structurally hard or merely a *lexical* trap
+that any deployed retrieval stack walks past, and nothing here could tell those
+apart.
+
+```bash
+worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
+python3 tools/measure_retrievers.py ./corpus              # every pin, one table
+python3 tools/measure_retrievers.py ./mosaic --mosaic     # or a whole mosaic
+```
+
+Both print a second reading beside the agreement table: per family, **genuinely
+hard** (lexical and semantic both fail), **lexical trap** (semantic solves it —
+so it was never difficulty, and a corpus card counting it is overstating
+itself), **semantic blind spot**, or **solved by everything**.
+
+The retriever is an optional extra (`pip install "worldloom[embeddings]"`) and
+absent-friendly: without it the dense column is skipped with a message and the
+lexical readings still print. Its vectors are pinned to a model *revision* and
+cached to a sidecar as quantised integers, so the measurement replays
+bit-identically on a machine with no model at all — the generation ledger's
+argument, applied to a retriever. `src/worldloom/evaluate/embedding.py` makes
+that case in full, and
+`.claude/skills/worldloom/references/evaluating.md` has the reading.

@@ -282,6 +282,13 @@ class CompanySpec:
 
     calendar: str = ""
     estate: str = ""
+    policies: str = ""
+    """Standing documents (``worldloom.policies``): ``"core"`` or ``"full"``.
+
+    A description of what kind of company this is legitimately says whether it
+    writes its rules down — an audit-committee company has a delegation of
+    authority and a founder-led one may not — so this belongs beside `estate`
+    rather than only on the command line, where `--spec` refuses it."""
 
     # -- who is in it -------------------------------------------------------
     organisation: Mapping[str, Any] = _field(default_factory=dict)
@@ -333,7 +340,7 @@ class CompanySpec:
         """
         payload: dict[str, Any] = {}
         for key in ("industry", "engine", "archetype", "vocabulary", "geo",
-                    "calendar", "estate", "pack", "about"):
+                    "calendar", "estate", "policies", "pack", "about"):
             if getattr(self, key):
                 payload[key] = getattr(self, key)
         for key in ("revenue", "employees"):
@@ -375,7 +382,7 @@ class CompanySpec:
 #: ``Parameters.with_overrides`` makes about a mistyped parameter, one layer up.
 _FIELDS: frozenset[str] = frozenset({
     "industry", "engine", "archetype", "vocabulary", "revenue", "employees",
-    "geo", "facets", "physics", "calendar", "estate", "organisation",
+    "geo", "facets", "physics", "calendar", "estate", "policies", "organisation",
     "leadership", "identity", "pack", "about", "rivals", "master_data",
 })
 
@@ -384,7 +391,7 @@ _IDENTITY_FIELDS: frozenset[str] = frozenset({
 })
 
 _ORGANISATION_FIELDS: frozenset[str] = frozenset({
-    "headcount", "span", "levels", "functions",
+    "headcount", "span", "levels", "functions", "divisions",
 })
 
 
@@ -448,6 +455,7 @@ def from_document(payload: Mapping[str, Any] | str | Path) -> CompanySpec:
         physics=_spans(payload.get("physics") or {}),
         calendar=str(payload.get("calendar", "")),
         estate=str(payload.get("estate", "")),
+        policies=str(payload.get("policies", "")),
         organisation=organisation,
         master_data=dict(payload.get("master_data") or {}),
         leadership=_leadership(payload.get("leadership") or ()),
@@ -668,6 +676,7 @@ class Resolution:
     lore_claims: tuple[Any, ...]
     calendar: str | None
     estate: str | None
+    policies: str | None
     locale: str | None
     employees: int | None
     annual_revenue: int | None
@@ -698,6 +707,7 @@ class Resolution:
             "lore": [claim.source for claim in self.lore_claims],
             "calendar": self.calendar,
             "estate": self.estate,
+            "policies": self.policies,
             "locale": self.locale,
             "employees": self.employees,
             "annual_revenue": self.annual_revenue,
@@ -778,6 +788,34 @@ def resolve(spec: CompanySpec) -> Resolution:
         engine, shape, archetype_key, shape_conflicts, shape_unmet = _shape_of(spec)
         found.extend(shape_conflicts)
         unmet.extend(shape_unmet)
+
+    # -- how wide the company is -------------------------------------------
+    #
+    # `organisation.divisions` rides the archetype *key*, not a separate field,
+    # because a key is the only thing a recipe records about the shape — see
+    # `archetypes.get`. A width carried anywhere else would rebuild a
+    # three-division company from an eight-division corpus and report success.
+    #
+    # This is the knob that makes a corpus bigger. Measured: raising
+    # `organisation.headcount` from 23 to 429 left facts, artifacts and
+    # evaluation cases identical, because the close fans out per division and
+    # there were still three; widening three to eight took facts from 604 to
+    # 990 and questions from 42 to 52 on the same seed.
+    divisions_wanted = spec.organisation.get("divisions") if spec.organisation else None
+    if divisions_wanted is not None and shape is not None:
+        from . import divisions as divisions_module
+
+        # Refused into a `Conflict` rather than raised, because everything else
+        # in `resolve` reports rather than throws: a describer who asked for
+        # nine divisions of a pool that holds eight should see that alongside
+        # whatever else they got wrong, not instead of it.
+        try:
+            widened = divisions_module.widened(shape, int(divisions_wanted))
+        except (TypeError, ValueError) as exc:
+            found.append(Conflict("organisation", "divisions_unavailable", str(exc)))
+        else:
+            shape = widened
+            archetype_key = shape.key
 
     domain = domains.by_name(engine) if engine else None
     if engine and domain is None:
@@ -996,6 +1034,7 @@ def resolve(spec: CompanySpec) -> Resolution:
         lore_claims=resolved_facets.claims,
         calendar=calendar or None,
         estate=estate or None,
+        policies=_policy_level(spec, found),
         locale=locale,
         employees=spec.employees,
         annual_revenue=spec.revenue,
@@ -1089,6 +1128,24 @@ def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[st
             f" {owner.name!r} does",
         ))
     return (engine or (owner.name if owner else "retail")), base, key, found, unmet
+
+
+def _policy_level(spec: CompanySpec, found: list[Conflict]) -> str | None:
+    """The described policy level, or a conflict naming what is on offer.
+
+    Reported rather than raised, like every other registry lookup here: a
+    describer who typed `"everything"` and also named an unknown calendar reads
+    both sentences rather than the first one and a traceback.
+    """
+    if not spec.policies:
+        return None
+    from . import policies as policies_module
+
+    try:
+        return policies_module.check_level(spec.policies)
+    except ValueError as exc:
+        found.append(Conflict("policies", "unknown_policy_level", str(exc)))
+        return None
 
 
 def _functions_of(engine: str, levels: int) -> list[str]:
@@ -1403,9 +1460,16 @@ _SCHEMA: tuple[tuple[str, str, str, str], ...] = (
      "The trading year."),
     ("estate", "value", "generators/estate.PROFILES",
      "How much technology landscape: small, medium, large."),
+    ("policies", "value", "worldloom.policies",
+     "Standing documents — the paperwork a company *has* rather than produces:"
+     " core or full. Without it an assistant asked what the approval threshold"
+     " is has nothing to find, because the company has no written rules."),
     ("organisation", "value", "worldloom.roles",
      "headcount, span, levels, functions — synthesised into a reporting tree."
-     " Three numbers with two degrees of freedom."),
+     " Three numbers with two degrees of freedom. Plus `divisions`"
+     " (worldloom.divisions): how many lines of business, which is the knob"
+     " corpus size actually follows — the close fans out per division, not per"
+     " employee."),
     ("leadership", "value", "worldloom.roles",
      "Roles this company has that the engine's table does not. Appended, never"
      " substituted."),

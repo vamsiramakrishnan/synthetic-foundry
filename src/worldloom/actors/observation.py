@@ -68,6 +68,13 @@ _CHANNELS: tuple[tuple[str, timedelta, float], ...] = (
 
 _LAG = {name: lag for name, lag, _ in _CHANNELS}
 _CONFIDENCE = {name: confidence for name, _, confidence in _CHANNELS}
+
+#: The slowest channel. Anything that can reach an employee at all has reached
+#: them this long after it became true, so it is how far past the last event a
+#: caller has to look to read the *settled* knowledge ledger rather than a
+#: snapshot taken mid-delivery. Derived from the table rather than written out,
+#: so adding a slower channel moves it.
+MAX_LAG: timedelta = max(lag for _, lag, _ in _CHANNELS)
 #: Preference order for breaking a tie on ``learned_at``. Earlier is better.
 _PRECEDENCE = {name: index for index, (name, _, _) in enumerate(_CHANNELS)}
 
@@ -217,6 +224,21 @@ def observations_for(
         source_type, learned_at, source_id = resolved
         if learned_at > at:
             continue
+        # Nobody learns anything here before their first day. The channel
+        # calculation works backwards from a fact's own validity, so the `duty`
+        # backstop — the slowest and the one that reaches furthest back — was
+        # recording employees learning the 2022 close norm in 2022, years before
+        # they were hired. Two such observations shipped in every scripted-actor
+        # corpus this project has built.
+        #
+        # Clamped rather than dropped, because dropping is wrong in the other
+        # direction: a norm adopted before you arrived is something you do come
+        # to know, on the ordinary flow of work, once you are here. Raising the
+        # moment can never push it past `at` — employment at `at` was checked
+        # above, so `joined <= at` — nor below the fact's own validity, so both
+        # of the invariants `validate.actors` polices survive it.
+        if person.joined is not None and learned_at < person.joined:
+            learned_at = person.joined
         out.append(
             Observation(
                 id=mint.next("OBS"),
@@ -303,4 +325,4 @@ def project(
     )
 
 
-__all__ = ["observations_for", "project"]
+__all__ = ["MAX_LAG", "observations_for", "project"]

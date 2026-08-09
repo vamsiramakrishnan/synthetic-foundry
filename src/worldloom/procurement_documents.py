@@ -59,6 +59,29 @@ from .models import (
 )
 
 MONEY_FORMAT = "#,##0.00;(#,##0.00)"
+
+#: Who signs each document of the purchase cycle, by role key
+#: (`documents.approver_of`).
+#:
+#: Procurement is where a signature is not decoration: a three-way match
+#: exception that nobody approved is a payment nobody authorised, and this
+#: vertical exists to pose exactly that question. The **exception report** and
+#: the **payment approval memo** therefore carry the chief procurement officer's
+#: signature and the payables lead's respectively, one level above whoever
+#: raised them.
+#:
+#: The **supplier invoice** has no row and never will: it is the supplier's own
+#: claim, posted rather than agreed, and a signature on it would assert the
+#: group accepted a document it is in the middle of disputing. "Posted, not
+#: agreed — the difference between those two words is the whole of this
+#: vertical", as the intent that plans it already says.
+_APPROVED_BY: dict[str, str] = {
+    "purchase_order": "chief_procurement",
+    "goods_receipt_note": "category_manager",
+    "match_exception_report": "chief_procurement",
+    "payment_approval_memo": "chief_procurement",
+    "vendor_master_change": "financial_controller",
+}
 COUNT_FORMAT = "#,##0"
 RATE_FORMAT = "#,##0"
 
@@ -92,6 +115,9 @@ def artifact_intents(
             domain=domain,
             audience=audience,
             author_id=author,
+            approver_id=documents.approver_of(
+                roles, artifact_type, author, _APPROVED_BY
+            ),
             triggered_by=events,
             required_fact_ids=facts,
             size_profile=size,  # type: ignore[arg-type]
@@ -295,6 +321,50 @@ def _line_rows(world, facts, columns: dict[str, str]):  # type: ignore[no-untype
     ]
 
 
+def _counterparty_table(world, facts):  # type: ignore[no-untyped-def]
+    """Who each line is with, cited rather than only printed.
+
+    `_supplier_of` reads the counterparty out of the same fact and puts it in
+    the document's subtitle, which reads correctly and cites nothing: a subtitle
+    is not a section, so `ArtifactIR.fact_ids()` never sees it. The order and
+    the invoice both *required* `p2p.contract_counterparty` and both carried it
+    nowhere — two facts a document was handed and did not hold, in a corpus
+    reporting clean, which is the finance-workbook shape once more. Surfaced by
+    `validate.carried_evidence` asking the question per intent rather than over
+    the union of every document, where the vendor-master change already held it.
+
+    A table rather than a column on the money tables: the counterparty is one
+    repeated string per line and putting it beside the rates would crowd out the
+    comparison those tables exist for.
+    """
+    names = {c.id: c.name for c in world.categories}
+    resolved = _by_kind(facts, "p2p.contract_counterparty")
+    rows = [
+        Row(key=subject, label=names[subject],
+            cells={"counterparty": _cell(resolved[subject], number=False)})
+        for subject in sorted(resolved)
+        if subject in names
+    ]
+    if not rows:
+        return None
+    return Table(
+        key="counterparty", title="Contracted with",
+        columns=[Column(key="counterparty", label="Counterparty and contractual basis")],
+        rows=rows,
+        note="One line, one contract. Read the rates on this document against this basis.",
+    )
+
+
+def _contract_section(world, facts):  # type: ignore[no-untyped-def]
+    """The counterparty table wrapped as a section, or nothing at all.
+
+    Spread into the section list so a document whose facts name no counterparty
+    gets no empty heading — an absent section is honest, an empty one is not.
+    """
+    table = _counterparty_table(world, facts)
+    return [ArtifactSection(heading="Contracted with", table=table)] if table else []
+
+
 def _framed(world, intent: ArtifactIntent, facts, title: str, subtitle: str,  # type: ignore[no-untyped-def]
             sections: list[ArtifactSection]) -> ArtifactIR:
     author = world.people.by_id(intent.author_id)
@@ -375,6 +445,7 @@ def purchase_order_ir(world, intent: ArtifactIntent, minter: Minter) -> Artifact
         f"{_supplier_of(facts)} · {company.currency} {company.currency_unit}",
         [
             ArtifactSection(heading="Order lines", table=order),
+            *_contract_section(world, facts),
             ArtifactSection(heading="Commitment and delegated authority", table=commitment),
         ],
     )
@@ -496,6 +567,7 @@ def supplier_invoice_ir(world, intent: ArtifactIntent, minter: Minter) -> Artifa
         f"{_supplier_of(facts)} · as posted · {company.currency} {company.currency_unit}",
         [
             ArtifactSection(heading="Invoice lines", table=billed),
+            *_contract_section(world, facts),
             ArtifactSection(heading="Invoice total", table=total),
         ],
     )

@@ -112,6 +112,7 @@ from . import documents
 from .documents import FilingPlan, SectionPlan
 from .models import Authority, Lifecycle
 from .roles import parse_unit_role
+from . import templating
 
 #: Headings ``outline()`` appends itself, after the authored sections.
 #:
@@ -437,7 +438,34 @@ def install(types: Sequence[DocumentType]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def lint(types: Iterable[DocumentType], *, base: str = "") -> list[str]:
+def _valid_variable_names() -> frozenset[str]:
+    """The closed vocabulary of variable names authors may use.
+
+    Variables resolve at document-compilation time from the world. This list
+    names what is always available, and a world may not add custom variables —
+    the variables-of-variables problem and the determinism requirement make
+    dynamic resolution unsafe.
+    """
+    return frozenset({
+        "company.name",
+        "company.industry",
+        "company.headquarters",
+        "company.currency",
+        "company.currency_unit",
+        # Add more as use cases demand them. Each new variable needs:
+        # - A new resolution rule in templating._resolve_variable
+        # - A test in tests/test_templating.py
+        # - A finding in this lint if the world does not have the data
+    })
+
+
+def lint(
+    types: Iterable[DocumentType],
+    *,
+    base: str = "",
+    episode_kinds: frozenset[str] | set[str] = frozenset(),
+    episode_planned: frozenset[str] | set[str] = frozenset(),
+) -> list[str]:
     """Findings an author should read before building.
 
     Same contract as ``packs.lint`` and for the same reason: a list of strings,
@@ -452,15 +480,24 @@ def lint(types: Iterable[DocumentType], *, base: str = "") -> list[str]:
     the role rules are skipped rather than guessed: an author linting a bare
     types file has not said which engine it is for, and inventing an answer
     would report every role in a banking type as unknown.
+
+    ``episode_kinds`` and ``episode_planned`` are what the pack shipping these
+    types also ships: the fact kinds its episodes mint, and the artifact types
+    its episodes plan. Both existed after this lint did, and without them it
+    reported every episode-fed section as "written about nothing" and every
+    episode-planned type as inert — eleven findings on the first pack to carry
+    a process, all eleven describing the one world where the pack is *not*
+    built with its own episodes.
     """
     from . import domains
 
     findings: list[str] = []
     domain = domains.by_name(base) if base else None
-    known_kinds = documents.narrated_kinds()
+    known_kinds = documents.narrated_kinds() | set(episode_kinds)
     subject_scoped = documents.scoped_kinds()
     declared = documents.declared_types()
     reserved = documents.reserved_types()
+    valid_variables = _valid_variable_names()
 
     seen: dict[str, int] = {}
     for index, spec in enumerate(types):
@@ -503,6 +540,48 @@ def lint(types: Iterable[DocumentType], *, base: str = "") -> list[str]:
         headings: dict[str, int] = {}
         for position, section in enumerate(spec.sections):
             at = f"{where}.sections[{position}] ({section.heading!r})"
+
+            # Check for malformed variables in heading and purpose
+            malformed_heading = templating.unresolved(section.heading)
+            if malformed_heading:
+                findings.append(
+                    f"{at}: heading contains malformed variable reference(s)"
+                    f" {', '.join(repr(v) for v in malformed_heading)} — variables must"
+                    " start with a lowercase letter and contain only lowercase, digits,"
+                    " underscores and dots"
+                )
+
+            malformed_purpose = templating.unresolved(section.purpose)
+            if malformed_purpose:
+                findings.append(
+                    f"{at}: purpose contains malformed variable reference(s)"
+                    f" {', '.join(repr(v) for v in malformed_purpose)} — variables must"
+                    " start with a lowercase letter and contain only lowercase, digits,"
+                    " underscores and dots"
+                )
+
+            # Check for unknown variables
+            unknown_heading = [
+                var for var in templating.referenced(section.heading)
+                if var not in valid_variables
+            ]
+            if unknown_heading:
+                findings.append(
+                    f"{at}: heading references unknown variable(s)"
+                    f" {', '.join(repr(v) for v in unknown_heading)} — valid variables:"
+                    f" {', '.join(sorted(valid_variables))}"
+                )
+
+            unknown_purpose = [
+                var for var in templating.referenced(section.purpose)
+                if var not in valid_variables
+            ]
+            if unknown_purpose:
+                findings.append(
+                    f"{at}: purpose references unknown variable(s)"
+                    f" {', '.join(repr(v) for v in unknown_purpose)} — valid variables:"
+                    f" {', '.join(sorted(valid_variables))}"
+                )
 
             if section.heading in headings:
                 findings.append(
@@ -584,13 +663,18 @@ def lint(types: Iterable[DocumentType], *, base: str = "") -> list[str]:
 
         # -- the filing --------------------------------------------------
         if spec.filing is None:
-            findings.append(
-                f"{where}: declares no `filing`, so nothing will ever plan one."
-                " An authored type is planned by the generic filing block, which"
-                " reads this table; without it the type is declared, renderable,"
-                " and inert — the same carried-and-cited-and-nothing-happens"
-                " failure `packs.lint` exists to catch one layer down."
-            )
+            # An episode-planned type needs no filing entry: the pack's own
+            # process names it under `artifacts` and the runner plans it every
+            # episode, which is a stronger guarantee than the density table the
+            # generic filing block reads.
+            if spec.key not in episode_planned:
+                findings.append(
+                    f"{where}: declares no `filing`, so nothing will ever plan one."
+                    " An authored type is planned by the generic filing block, which"
+                    " reads this table; without it the type is declared, renderable,"
+                    " and inert — the same carried-and-cited-and-nothing-happens"
+                    " failure `packs.lint` exists to catch one layer down."
+                )
         else:
             findings.extend(_lint_filing(where, spec, domain, base))
 
@@ -604,6 +688,28 @@ def _lint_filing(where: str, spec: DocumentType, domain: Any, base: str) -> list
     filing = spec.filing
     assert filing is not None  # the caller checked; this keeps the type narrow
     findings: list[str] = []
+    valid_variables = _valid_variable_names()
+
+    # Check for malformed and unknown variables in rationale
+    malformed_rationale = templating.unresolved(filing.rationale)
+    if malformed_rationale:
+        findings.append(
+            f"{where}.filing.rationale: contains malformed variable reference(s)"
+            f" {', '.join(repr(v) for v in malformed_rationale)} — variables must"
+            " start with a lowercase letter and contain only lowercase, digits,"
+            " underscores and dots"
+        )
+
+    unknown_rationale = [
+        var for var in templating.referenced(filing.rationale)
+        if var not in valid_variables
+    ]
+    if unknown_rationale:
+        findings.append(
+            f"{where}.filing.rationale: references unknown variable(s)"
+            f" {', '.join(repr(v) for v in unknown_rationale)} — valid variables:"
+            f" {', '.join(sorted(valid_variables))}"
+        )
 
     unknown = [name for name in filing.facts if name not in FILING_BUNDLES]
     if unknown:

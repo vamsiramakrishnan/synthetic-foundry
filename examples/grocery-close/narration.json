@@ -13,39 +13,20 @@
       ]
     },
     {
-      "id": "ART-0003/Position",
-      "text": "Revenue of {{fact:FACT-1345}} against a plan of {{fact:FACT-1384}} left the group {{fact:FACT-1423}} against plan. That is a soft month on sales, and it is not the story. The story is margin. Gross profit came in at {{fact:FACT-6151}} against a budgeted {{fact:FACT-6190}}, or {{fact:FACT-6229}} against plan, a wider gap than the revenue shortfall on its own would produce. Group gross margin closed at {{fact:FACT-6268}} against {{fact:FACT-6307}} budgeted, and below the {{fact:FACT-1306}} achieved a month earlier on revenue of {{fact:FACT-1228}}. On sales the period is acceptable. On margin it is not, and that is the sentence I would take to the board.",
+      "id": "ART-0001/Escalation",
+      "text": "Where the committed date cannot be held, the close is re-dated once and republished; it is not extended informally by division. The revised date for this period is {{fact:FACT-0012}}, and it supersedes the date stated above for every purpose that referenced it. Re-dating is the reporting manager's decision, taken on the record. A division that cannot meet the revised date raises it before the date rather than after.",
       "claims": [
         {
-          "text": "Revenue finished below plan.",
+          "text": "The close was re-dated to {{fact:FACT-0012}} for this period.",
           "supporting_fact_ids": [
-            "FACT-1345",
-            "FACT-1384",
-            "FACT-1423"
-          ]
-        },
-        {
-          "text": "Gross profit missed plan by proportionally more than revenue did.",
-          "supporting_fact_ids": [
-            "FACT-6151",
-            "FACT-6190",
-            "FACT-6229"
-          ]
-        },
-        {
-          "text": "Group gross margin was below budget and below the prior month.",
-          "supporting_fact_ids": [
-            "FACT-6268",
-            "FACT-6307",
-            "FACT-1306",
-            "FACT-1228"
+            "FACT-0012"
           ]
         }
       ]
     },
     {
       "id": "ART-0003/By business unit",
-      "text": "Australian Food carries the period. Revenue of {{fact:FACT-1341}} against {{fact:FACT-1380}} is {{fact:FACT-1419}} against plan, and margin of {{fact:FACT-6264}} against a budgeted {{fact:FACT-6303}} produces a gross profit shortfall of {{fact:FACT-6225}} \u2014 the largest of the four divisions by a wide margin. Digital and Marketplace is the second call on attention: revenue {{fact:FACT-1344}} against {{fact:FACT-1383}}, {{fact:FACT-1422}} against plan, with margin at {{fact:FACT-6267}} against {{fact:FACT-6306}}, and a forecast that has not been re-based since the platform changed. New Zealand Food at {{fact:FACT-1342}} and General Merchandise at {{fact:FACT-1343}} came in {{fact:FACT-1420}} and {{fact:FACT-1421}} respectively. Both behaved normally and neither warrants time this month.",
+      "text": "Australian Food carries the period. Revenue of {{fact:FACT-1341}} against {{fact:FACT-1380}} is {{fact:FACT-1419}} against plan, and margin of {{fact:FACT-6264}} against a budgeted {{fact:FACT-6303}} produces a gross profit shortfall of {{fact:FACT-6225}} — the largest of the four divisions by a wide margin. Digital and Marketplace is the second call on attention: revenue {{fact:FACT-1344}} against {{fact:FACT-1383}}, {{fact:FACT-1422}} against plan, with margin at {{fact:FACT-6267}} against {{fact:FACT-6306}}, and a forecast that has not been re-based since the platform changed. New Zealand Food at {{fact:FACT-1342}} and General Merchandise at {{fact:FACT-1343}} came in {{fact:FACT-1420}} and {{fact:FACT-1421}} respectively. Both behaved normally and neither warrants time this month.",
       "claims": [
         {
           "text": "Australian Food produced the largest revenue and gross profit shortfall of the four divisions.",
@@ -83,8 +64,26 @@
       ]
     },
     {
+      "id": "ART-0003/Close timetable",
+      "text": "The period closed at {{fact:FACT-0018}}, {{fact:FACT-0019}} beyond the committed date. That is a calendar overrun and should be read as one. A close that runs long and a close that produces a different number are separate failures, and the standing four-day expectation is a timetable commitment rather than an accuracy one — the escalation it triggers is about the date. I am stating the distinction explicitly because it is the one most often lost when this is summarised upward, where a late close and an unreliable close tend to arrive as the same sentence. Nothing in the timetable record speaks to the reported result, and this section does not.",
+      "claims": [
+        {
+          "text": "The close reached final status.",
+          "supporting_fact_ids": [
+            "FACT-0018"
+          ]
+        },
+        {
+          "text": "The close completed later than the committed date.",
+          "supporting_fact_ids": [
+            "FACT-0019"
+          ]
+        }
+      ]
+    },
+    {
       "id": "ART-0003/Drivers",
-      "text": "Group margin moved {{fact:FACT-6308}} against budget, and the movement is not evenly spread. Promotional depth inside Australian Food accounts for {{fact:FACT-6309}} on its own \u2014 more than the whole group movement \u2014 which places the driver inside a division rather than across the group, and inside a division whose promotional programme is agreed jointly rather than set alone. I would treat that as structural. The same terms will produce the same result next period unless they change, and the question of whose commercial choice they represent is not settled internally. Digital and Marketplace is a separate matter: conversion was forecast at {{fact:FACT-6310}} and ran at {{fact:FACT-6311}}. Since the forecast has not been re-based against post-replatform behaviour, I would treat that gap as a forecasting problem before treating it as a trading one.",
+      "text": "Group margin moved {{fact:FACT-6308}} against budget, and the movement is not evenly spread. Promotional depth inside Australian Food accounts for {{fact:FACT-6309}} on its own — more than the whole group movement — which places the driver inside a division rather than across the group, and inside a division whose promotional programme is agreed jointly rather than set alone. I would treat that as structural. The same terms will produce the same result next period unless they change, and the question of whose commercial choice they represent is not settled internally. Digital and Marketplace is a separate matter: conversion was forecast at {{fact:FACT-6310}} and ran at {{fact:FACT-6311}}. Since the forecast has not been re-based against post-replatform behaviour, I would treat that gap as a forecasting problem before treating it as a trading one.",
       "claims": [
         {
           "text": "Group gross margin moved adversely against budget.",
@@ -109,38 +108,63 @@
       ]
     },
     {
-      "id": "ART-0003/Close timetable",
-      "text": "The period closed at {{fact:FACT-0018}}, {{fact:FACT-0019}} beyond the committed date. That is a calendar overrun and should be read as one. A close that runs long and a close that produces a different number are separate failures, and the standing four-day expectation is a timetable commitment rather than an accuracy one \u2014 the escalation it triggers is about the date. I am stating the distinction explicitly because it is the one most often lost when this is summarised upward, where a late close and an unreliable close tend to arrive as the same sentence. Nothing in the timetable record speaks to the reported result, and this section does not.",
+      "id": "ART-0003/Position",
+      "text": "Revenue of {{fact:FACT-1345}} against a plan of {{fact:FACT-1384}} left the group {{fact:FACT-1423}} against plan. That is a soft month on sales, and it is not the story. The story is margin. Gross profit came in at {{fact:FACT-6151}} against a budgeted {{fact:FACT-6190}}, or {{fact:FACT-6229}} against plan, a wider gap than the revenue shortfall on its own would produce. Group gross margin closed at {{fact:FACT-6268}} against {{fact:FACT-6307}} budgeted, and below the {{fact:FACT-1306}} achieved a month earlier on revenue of {{fact:FACT-1228}}. On sales the period is acceptable. On margin it is not, and that is the sentence I would take to the board.",
       "claims": [
         {
-          "text": "The close reached final status.",
+          "text": "Revenue finished below plan.",
           "supporting_fact_ids": [
-            "FACT-0018"
+            "FACT-1345",
+            "FACT-1384",
+            "FACT-1423"
           ]
         },
         {
-          "text": "The close completed later than the committed date.",
+          "text": "Gross profit missed plan by proportionally more than revenue did.",
           "supporting_fact_ids": [
-            "FACT-0019"
+            "FACT-6151",
+            "FACT-6190",
+            "FACT-6229"
+          ]
+        },
+        {
+          "text": "Group gross margin was below budget and below the prior month.",
+          "supporting_fact_ids": [
+            "FACT-6268",
+            "FACT-6307",
+            "FACT-1306",
+            "FACT-1228"
           ]
         }
       ]
     },
     {
-      "id": "ART-0004/Where the close stands",
-      "text": "Close showing {{fact:FACT-0011}}. Valuation is the blocker, not the ledger. Escalated already \u2014 same-day is the standing expectation once the date is at risk. Nothing further tonight. Revisit first thing; if valuation is still short in the morning this stops being a timetable problem and starts being a reporting one.",
+      "id": "ART-0003/Recommendation",
+      "text": "Two things should happen, and they are not the same thing. {{fact:FACT-0015}}. The first addresses detection only: it would have caught this month's break sooner, but the same break would have occurred. The second addresses the control itself, which is where the classification puts the fault — {{fact:FACT-0013}}. The mapping table's registered owner is currently {{fact:FACT-0014}}, and that is the decision I need from you rather than from the platform team: Merchandising and the data platform each believe the other holds it, and neither will assign a reviewer until someone says which. Approving the validation ticket alone would close the incident and leave the cause in place.",
       "claims": [
         {
-          "text": "The close status was recorded as delayed.",
+          "text": "The remediation is {{fact:FACT-0015}}.",
           "supporting_fact_ids": [
-            "FACT-0011"
+            "FACT-0015"
+          ]
+        },
+        {
+          "text": "The root cause is classified as {{fact:FACT-0013}}.",
+          "supporting_fact_ids": [
+            "FACT-0013"
+          ]
+        },
+        {
+          "text": "The mapping table owner is {{fact:FACT-0014}}.",
+          "supporting_fact_ids": [
+            "FACT-0014"
           ]
         }
       ]
     },
     {
       "id": "ART-0004/Running note",
-      "text": "Feed status {{fact:FACT-0002}}. First read was {{fact:FACT-0004}} \u2014 that is what the overnight picture suggested and what I noted at the time. It did not hold. Position now is {{fact:FACT-0006}}, which is the mapping that has been maintained by hand since the remap. Still open: who is supposed to be maintaining it. Not resolved tonight.",
+      "text": "Feed status {{fact:FACT-0002}}. First read was {{fact:FACT-0004}} — that is what the overnight picture suggested and what I noted at the time. It did not hold. Position now is {{fact:FACT-0006}}, which is the mapping that has been maintained by hand since the remap. Still open: who is supposed to be maintaining it. Not resolved tonight.",
       "claims": [
         {
           "text": "The valuation feed failed.",
@@ -158,6 +182,18 @@
           "text": "The cause now held is a stale hierarchy mapping.",
           "supporting_fact_ids": [
             "FACT-0006"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0004/Where the close stands",
+      "text": "Close showing {{fact:FACT-0011}}. Valuation is the blocker, not the ledger. Escalated already — same-day is the standing expectation once the date is at risk. Nothing further tonight. Revisit first thing; if valuation is still short in the morning this stops being a timetable problem and starts being a reporting one.",
+      "claims": [
+        {
+          "text": "The close status was recorded as delayed.",
+          "supporting_fact_ids": [
+            "FACT-0011"
           ]
         }
       ]
@@ -237,50 +273,44 @@
       ]
     },
     {
-      "id": "ART-0007/Summary",
-      "text": "The period's inventory valuation did not complete. The feed reported {{fact:FACT-0002}}, stopping the run outright rather than degrading it, so the failure surfaced at once instead of as a discrepancy found weeks later. The scope was {{fact:FACT-0007}} \u2014 a large enough share of the catalogue that no partial valuation would have been defensible. The consequence fell on the timetable rather than on any reported figure: valuation had to be completed by other means before the ledger could be locked, and nothing downstream of it could proceed until it was. Anyone reading only this section should take away three things. The run failed cleanly and visibly rather than silently. Its scope was material. And the mechanism behind it is one this organisation has been carrying deliberately since the category structure was remapped, which is why the sections below spend more time on the condition than on the fault.",
+      "id": "ART-0007/Actions",
+      "text": "Two tickets are open. {{fact:FACT-0015}}. The distinction between them matters more than the work in either, and it is stated on the record: {{fact:FACT-0016}}. That should be read carefully before either is prioritised. Automated validation will catch the next stale mapping sooner, and it will not stop mappings going stale — it converts a silent failure into a loud one, which is worth having and is not a fix. The ownership assignment is the fix, because it creates the party who is expected to notice and the reviewer whose absence is what let this through. If only one of the two is resourced this quarter it should be ownership. Closing the detection ticket alone would leave this review technically actioned and materially unaddressed, and would put us in the same position at the next remap.",
       "claims": [
         {
-          "text": "The valuation feed reported a failure.",
+          "text": "Two remediation tickets have been raised.",
           "supporting_fact_ids": [
-            "FACT-0002"
+            "FACT-0015"
           ]
         },
         {
-          "text": "The failure affected a material set of items.",
+          "text": "Only one of the two addresses the control failure; the other addresses detection.",
           "supporting_fact_ids": [
-            "FACT-0007"
+            "FACT-0016"
           ]
         }
       ]
     },
     {
-      "id": "ART-0007/Timeline",
-      "text": "{{fact:FACT-0003}}. That is the point at which a job failure became an incident. The close was still inside its committed window at that stage, so the initial handling treated it as a routine batch failure and scheduled a retry. The position changed when the retry did not clear and the period was recorded as {{fact:FACT-0011}} \u2014 the moment this stopped being an operational matter and became a reporting one. From there the sequence is short: the working hypothesis was tested and set aside, the mapping was corrected by hand, and {{fact:FACT-0010}}. Valuation completing is the event that matters most in this timeline. Everything after it \u2014 ledger lock, sign-off, the reported result \u2014 was blocked until it happened, and everything before it was recoverable.",
+      "id": "ART-0007/Contributing factors",
+      "text": "{{fact:FACT-0008}}. That is the strongest signal in this review and it belongs at the front of this section: the same table produced the same class of failure before, and the response then restored service without changing the conditions that produced it. The second factor is the recovery itself. {{fact:FACT-0009}} — an intervention that is effective, repeatable and entirely undocumented, performed under close pressure by whoever is available. Each time it works it reduces the pressure to fix the control beneath it, which is how a workaround of this kind hardens into a procedure without anyone deciding that it should. The close calendar compounds both. A failure inside the close window is handled by whatever restores the timetable fastest, and a standing expectation that the close completes within its committed window is a strong incentive to reach for the manual override rather than to stop and ask why an override is needed at all.",
       "claims": [
         {
-          "text": "The incident was opened against the valuation service.",
+          "text": "A comparable failure has occurred before, traced to the same mapping table.",
           "supporting_fact_ids": [
-            "FACT-0003"
+            "FACT-0008"
           ]
         },
         {
-          "text": "The close was recorded as delayed.",
+          "text": "A manual override was applied to complete valuation.",
           "supporting_fact_ids": [
-            "FACT-0011"
-          ]
-        },
-        {
-          "text": "Inventory valuation ultimately completed.",
-          "supporting_fact_ids": [
-            "FACT-0010"
+            "FACT-0009"
           ]
         }
       ]
     },
     {
       "id": "ART-0007/Initial assessment and why it was wrong",
-      "text": "The first assessment pointed upstream, to an interruption in the overnight window. On the evidence available at the time that was the reasonable read: the failure appeared in an overnight batch, the job had no history of reference-data faults, and an upstream interruption would have produced precisely the symptom seen. It was tested rather than assumed, and it did not survive the test \u2014 {{fact:FACT-0005}}. That finding is what redirected the investigation from infrastructure to data, and it did so within the same working day. Recording the hypothesis was not the error, and this section should not be read as though it were. Withholding an assessment until it was certain would have left the incident without a working direction during exactly the hours when the close was most at risk. The hypothesis did its job by being specific enough to disprove quickly.",
+      "text": "The first assessment pointed upstream, to an interruption in the overnight window. On the evidence available at the time that was the reasonable read: the failure appeared in an overnight batch, the job had no history of reference-data faults, and an upstream interruption would have produced precisely the symptom seen. It was tested rather than assumed, and it did not survive the test — {{fact:FACT-0005}}. That finding is what redirected the investigation from infrastructure to data, and it did so within the same working day. Recording the hypothesis was not the error, and this section should not be read as though it were. Withholding an assessment until it was certain would have left the incident without a working direction during exactly the hours when the close was most at risk. The hypothesis did its job by being specific enough to disprove quickly.",
       "claims": [
         {
           "text": "Log evidence ruled out an interruption during the valuation window.",
@@ -292,7 +322,7 @@
     },
     {
       "id": "ART-0007/Root cause",
-      "text": "The confirmed cause is {{fact:FACT-0006}}. The initial assessment, {{fact:FACT-0004}}, was set aside when {{fact:FACT-0005}}. What allowed that mapping to reach production stale is a separate question from what broke, and it is the more important one. The mapping between the legacy and current category structures has been maintained by hand since the remap rather than migrated into the merchandising master, so it drifts whenever the structure moves and nothing reconciles it back. The classification recorded against this incident is {{fact:FACT-0013}}. The ownership position is the finding: {{fact:FACT-0014}}. An unowned control is not a control. There is no team that would have been expected to notice the drift, no reviewer whose sign-off was skipped, and therefore no process failure to point at \u2014 which is precisely why this recurred rather than being caught. Treating the stale mapping as the cause and stopping there would leave the condition that produced it entirely intact.",
+      "text": "The confirmed cause is {{fact:FACT-0006}}. The initial assessment, {{fact:FACT-0004}}, was set aside when {{fact:FACT-0005}}. What allowed that mapping to reach production stale is a separate question from what broke, and it is the more important one. The mapping between the legacy and current category structures has been maintained by hand since the remap rather than migrated into the merchandising master, so it drifts whenever the structure moves and nothing reconciles it back. The classification recorded against this incident is {{fact:FACT-0013}}. The ownership position is the finding: {{fact:FACT-0014}}. An unowned control is not a control. There is no team that would have been expected to notice the drift, no reviewer whose sign-off was skipped, and therefore no process failure to point at — which is precisely why this recurred rather than being caught. Treating the stale mapping as the cause and stopping there would leave the condition that produced it entirely intact.",
       "claims": [
         {
           "text": "The confirmed cause is a stale legacy-to-new hierarchy mapping.",
@@ -327,44 +357,50 @@
       ]
     },
     {
-      "id": "ART-0007/Contributing factors",
-      "text": "{{fact:FACT-0008}}. That is the strongest signal in this review and it belongs at the front of this section: the same table produced the same class of failure before, and the response then restored service without changing the conditions that produced it. The second factor is the recovery itself. {{fact:FACT-0009}} \u2014 an intervention that is effective, repeatable and entirely undocumented, performed under close pressure by whoever is available. Each time it works it reduces the pressure to fix the control beneath it, which is how a workaround of this kind hardens into a procedure without anyone deciding that it should. The close calendar compounds both. A failure inside the close window is handled by whatever restores the timetable fastest, and a standing expectation that the close completes within its committed window is a strong incentive to reach for the manual override rather than to stop and ask why an override is needed at all.",
+      "id": "ART-0007/Summary",
+      "text": "The period's inventory valuation did not complete. The feed reported {{fact:FACT-0002}}, stopping the run outright rather than degrading it, so the failure surfaced at once instead of as a discrepancy found weeks later. The scope was {{fact:FACT-0007}} — a large enough share of the catalogue that no partial valuation would have been defensible. The consequence fell on the timetable rather than on any reported figure: valuation had to be completed by other means before the ledger could be locked, and nothing downstream of it could proceed until it was. Anyone reading only this section should take away three things. The run failed cleanly and visibly rather than silently. Its scope was material. And the mechanism behind it is one this organisation has been carrying deliberately since the category structure was remapped, which is why the sections below spend more time on the condition than on the fault.",
       "claims": [
         {
-          "text": "A comparable failure has occurred before, traced to the same mapping table.",
+          "text": "The valuation feed reported a failure.",
           "supporting_fact_ids": [
-            "FACT-0008"
+            "FACT-0002"
           ]
         },
         {
-          "text": "A manual override was applied to complete valuation.",
+          "text": "The failure affected a material set of items.",
           "supporting_fact_ids": [
-            "FACT-0009"
+            "FACT-0007"
           ]
         }
       ]
     },
     {
-      "id": "ART-0007/Actions",
-      "text": "Two tickets are open. {{fact:FACT-0015}}. The distinction between them matters more than the work in either, and it is stated on the record: {{fact:FACT-0016}}. That should be read carefully before either is prioritised. Automated validation will catch the next stale mapping sooner, and it will not stop mappings going stale \u2014 it converts a silent failure into a loud one, which is worth having and is not a fix. The ownership assignment is the fix, because it creates the party who is expected to notice and the reviewer whose absence is what let this through. If only one of the two is resourced this quarter it should be ownership. Closing the detection ticket alone would leave this review technically actioned and materially unaddressed, and would put us in the same position at the next remap.",
+      "id": "ART-0007/Timeline",
+      "text": "{{fact:FACT-0003}}. That is the point at which a job failure became an incident. The close was still inside its committed window at that stage, so the initial handling treated it as a routine batch failure and scheduled a retry. The position changed when the retry did not clear and the period was recorded as {{fact:FACT-0011}} — the moment this stopped being an operational matter and became a reporting one. From there the sequence is short: the working hypothesis was tested and set aside, the mapping was corrected by hand, and {{fact:FACT-0010}}. Valuation completing is the event that matters most in this timeline. Everything after it — ledger lock, sign-off, the reported result — was blocked until it happened, and everything before it was recoverable.",
       "claims": [
         {
-          "text": "Two remediation tickets have been raised.",
+          "text": "The incident was opened against the valuation service.",
           "supporting_fact_ids": [
-            "FACT-0015"
+            "FACT-0003"
           ]
         },
         {
-          "text": "Only one of the two addresses the control failure; the other addresses detection.",
+          "text": "The close was recorded as delayed.",
           "supporting_fact_ids": [
-            "FACT-0016"
+            "FACT-0011"
+          ]
+        },
+        {
+          "text": "Inventory valuation ultimately completed.",
+          "supporting_fact_ids": [
+            "FACT-0010"
           ]
         }
       ]
     },
     {
       "id": "ART-0008/Summary",
-      "text": "{{fact:FACT-0013}}. Concretely: {{fact:FACT-0014}}. {{fact:FACT-0015}}. The two are not interchangeable and must not be closed as one \u2014 {{fact:FACT-0016}}.",
+      "text": "{{fact:FACT-0013}}. Concretely: {{fact:FACT-0014}}. {{fact:FACT-0015}}. The two are not interchangeable and must not be closed as one — {{fact:FACT-0016}}.",
       "claims": [
         {
           "text": "The incident is classified as a control failure.",
@@ -393,18 +429,6 @@
       ]
     },
     {
-      "id": "ART-0009/When to use this",
-      "text": "Use this article when the overnight inventory valuation fails and the failure points at the product hierarchy rather than at the valuation job itself. The recognisable symptom is a run that stops outright rather than completing with gaps, with the affected items concentrated in recently remapped categories; the last occurrence covered {{fact:FACT-0007}}. If the run completed and the numbers merely look wrong, this is the wrong article \u2014 that is a reconciliation problem, not a mapping one. If the run stopped and the error names a hierarchy node that does not resolve, you are in the right place. The procedure below restores the period. It does not prevent the next occurrence, and it is not a substitute for raising the incident.",
-      "claims": [
-        {
-          "text": "The last occurrence affected a defined set of items.",
-          "supporting_fact_ids": [
-            "FACT-0007"
-          ]
-        }
-      ]
-    },
-    {
       "id": "ART-0009/Cause",
       "text": "The immediate cause is {{fact:FACT-0006}}. The mapping between the legacy and current category structures is kept by hand rather than held in the merchandising master, so it drifts whenever the structure changes and nothing reconciles it back. Valuation resolves every item through that mapping, so a single entry that no longer resolves stops the whole run. Who to go to is the awkward part: {{fact:FACT-0014}}. In practice, raise it with whoever is on call for the platform and copy merchandising systems, but expect the ownership question itself to be open when you ask it. That is a known gap rather than an oversight on your part, and it is worth restating on the incident every time this happens.",
       "claims": [
@@ -424,12 +448,55 @@
     },
     {
       "id": "ART-0009/Procedure",
-      "text": "Confirm the valuation run has stopped rather than merely slowed; check job status before changing anything. Identify the unresolved hierarchy nodes from the run log and record them on the incident \u2014 that list is what any eventual fix needs. Apply the override: {{fact:FACT-0009}}. Re-run valuation for the period and confirm it completes end to end rather than resuming from the failure point. Reconcile the valued total against the prior period before releasing it; a mapping override that silently drops items will still complete. Attach both the override applied and the node list to the incident record. Finally, raise or update the ownership ticket. Do not close the incident on a successful re-run alone \u2014 the run completing means the period is recoverable, not that the fault is gone.",
+      "text": "Confirm the valuation run has stopped rather than merely slowed; check job status before changing anything. Identify the unresolved hierarchy nodes from the run log and record them on the incident — that list is what any eventual fix needs. Apply the override: {{fact:FACT-0009}}. Re-run valuation for the period and confirm it completes end to end rather than resuming from the failure point. Reconcile the valued total against the prior period before releasing it; a mapping override that silently drops items will still complete. Attach both the override applied and the node list to the incident record. Finally, raise or update the ownership ticket. Do not close the incident on a successful re-run alone — the run completing means the period is recoverable, not that the fault is gone.",
       "claims": [
         {
           "text": "The documented recovery is a manual hierarchy mapping override.",
           "supporting_fact_ids": [
             "FACT-0009"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0009/When to use this",
+      "text": "Use this article when the overnight inventory valuation fails and the failure points at the product hierarchy rather than at the valuation job itself. The recognisable symptom is a run that stops outright rather than completing with gaps, with the affected items concentrated in recently remapped categories; the last occurrence covered {{fact:FACT-0007}}. If the run completed and the numbers merely look wrong, this is the wrong article — that is a reconciliation problem, not a mapping one. If the run stopped and the error names a hierarchy node that does not resolve, you are in the right place. The procedure below restores the period. It does not prevent the next occurrence, and it is not a substitute for raising the incident.",
+      "claims": [
+        {
+          "text": "The last occurrence affected a defined set of items.",
+          "supporting_fact_ids": [
+            "FACT-0007"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0010/Close",
+      "text": "The books closed at {{fact:FACT-0018}}, {{fact:FACT-0019}} beyond the committed date. The effect of that overrun on the reported result was {{fact:FACT-0017}}: the delay was to the timetable, not to the numbers. Escalation ran on the day, as standing practice requires.",
+      "claims": [
+        {
+          "text": "The close reached final status, later than committed.",
+          "supporting_fact_ids": [
+            "FACT-0018",
+            "FACT-0019"
+          ]
+        },
+        {
+          "text": "The incident had no effect on the reported result.",
+          "supporting_fact_ids": [
+            "FACT-0017"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0010/Focus next period",
+      "text": "Gross margin. The group moved {{fact:FACT-6308}} against budget this period, and that is the line to watch rather than revenue — a soft month on sales tends to recover on its own, a margin position does not. One period is not a trend. A second consecutive movement of that order would be.",
+      "claims": [
+        {
+          "text": "Group gross margin moved adversely against budget.",
+          "supporting_fact_ids": [
+            "FACT-6308"
           ]
         }
       ]
@@ -457,72 +524,11 @@
       ]
     },
     {
-      "id": "ART-0010/Close",
-      "text": "The books closed at {{fact:FACT-0018}}, {{fact:FACT-0019}} beyond the committed date. The effect of that overrun on the reported result was {{fact:FACT-0017}}: the delay was to the timetable, not to the numbers. Escalation ran on the day, as standing practice requires.",
+      "id": "ART-0011/What we are doing about it",
+      "text": "Promotional depth cost the rate {{fact:FACT-6309}} this month, and that number now has an owner: I am taking the joint-campaign funding split to the next trading review with General Merchandise, because campaigns Food funds and General Merchandise books as margin defence cannot keep being costed to this division by default. Until that review lands, no new joint promotion clears without a stated margin impact against whichever division proposed it.",
       "claims": [
         {
-          "text": "The close reached final status, later than committed.",
-          "supporting_fact_ids": [
-            "FACT-0018",
-            "FACT-0019"
-          ]
-        },
-        {
-          "text": "The incident had no effect on the reported result.",
-          "supporting_fact_ids": [
-            "FACT-0017"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "ART-0010/Focus next period",
-      "text": "Gross margin. The group moved {{fact:FACT-6308}} against budget this period, and that is the line to watch rather than revenue \u2014 a soft month on sales tends to recover on its own, a margin position does not. One period is not a trend. A second consecutive movement of that order would be.",
-      "claims": [
-        {
-          "text": "Group gross margin moved adversely against budget.",
-          "supporting_fact_ids": [
-            "FACT-6308"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "ART-0011/Performance",
-      "text": "Australian Food delivered {{fact:FACT-1341}} against a plan of {{fact:FACT-1380}}, a shortfall of {{fact:FACT-1419}}. The revenue miss is one thing. Margin is the story: gross profit came in at {{fact:FACT-6147}} against a budgeted {{fact:FACT-6186}}, producing {{fact:FACT-6225}}. Gross margin contracted to {{fact:FACT-6264}} against {{fact:FACT-6303}} budgeted, down from {{fact:FACT-1302}} the prior month. The division carried the group's miss.",
-      "claims": [
-        {
-          "text": "Australian Food revenue finished below plan.",
-          "supporting_fact_ids": [
-            "FACT-1341",
-            "FACT-1380",
-            "FACT-1419"
-          ]
-        },
-        {
-          "text": "Gross profit miss exceeded the revenue miss.",
-          "supporting_fact_ids": [
-            "FACT-6147",
-            "FACT-6186",
-            "FACT-6225"
-          ]
-        },
-        {
-          "text": "Gross margin declined both against budget and against the prior month.",
-          "supporting_fact_ids": [
-            "FACT-6264",
-            "FACT-6303",
-            "FACT-1302"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "ART-0011/Watch items",
-      "text": "Promotional depth moved {{fact:FACT-6309}} this period. Watch whether that margin impact holds or whether the following month improves, and whether the commercial partnership with General Merchandise on joint campaigns continues at that intensity.",
-      "claims": [
-        {
-          "text": "Australian Food experienced significant promotional-driven margin impact.",
+          "text": "Promotional depth reduced the margin rate by {{fact:FACT-6309}}.",
           "supporting_fact_ids": [
             "FACT-6309"
           ]
@@ -530,11 +536,75 @@
       ]
     },
     {
-      "id": "ART-0012/Performance",
-      "text": "New Zealand Food closed at {{fact:FACT-1342}} against {{fact:FACT-1381}}, {{fact:FACT-1420}} against plan. Gross profit finished at {{fact:FACT-6148}} against a budgeted {{fact:FACT-6187}}, producing {{fact:FACT-6226}}. Margin stood at {{fact:FACT-6265}} against {{fact:FACT-6304}} budgeted. The division performed close to plan on both revenue and margin.",
+      "id": "ART-0011/Where we landed",
+      "text": "Food closed the month at {{fact:FACT-1341}} against a committed {{fact:FACT-1380}}, leaving revenue {{fact:FACT-1419}} adrift, and converted it at {{fact:FACT-6264}} against the {{fact:FACT-6303}} the division is held to. Gross profit of {{fact:FACT-6147}} against {{fact:FACT-6186}} puts the miss at {{fact:FACT-6225}}. The trading base is not the problem — last year's month was {{fact:FACT-1224}} — the rate is.",
       "claims": [
         {
-          "text": "New Zealand Food revenue finished slightly below plan.",
+          "text": "Revenue closed at {{fact:FACT-1341}} against a budget of {{fact:FACT-1380}}, a variance of {{fact:FACT-1419}}.",
+          "supporting_fact_ids": [
+            "FACT-1341",
+            "FACT-1380",
+            "FACT-1419"
+          ]
+        },
+        {
+          "text": "Gross profit was {{fact:FACT-6147}} against {{fact:FACT-6186}}, a miss of {{fact:FACT-6225}}.",
+          "supporting_fact_ids": [
+            "FACT-6147",
+            "FACT-6186",
+            "FACT-6225"
+          ]
+        },
+        {
+          "text": "The margin rate landed at {{fact:FACT-6264}} against a budgeted {{fact:FACT-6303}}.",
+          "supporting_fact_ids": [
+            "FACT-6264",
+            "FACT-6303"
+          ]
+        },
+        {
+          "text": "Revenue in the comparable month last year was {{fact:FACT-1224}}.",
+          "supporting_fact_ids": [
+            "FACT-1224"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0012/Position",
+      "text": "Everything below revenue behaved. Gross profit closed at {{fact:FACT-6148}} against {{fact:FACT-6187}} budgeted, {{fact:FACT-6226}}. Margin held at {{fact:FACT-6265}} against a planned {{fact:FACT-6304}}. Revenue is where the month was lost and nowhere else — restated here for the record rather than because it needs arguing.",
+      "claims": [
+        {
+          "text": "Gross profit finished close to budget.",
+          "supporting_fact_ids": [
+            "FACT-6148",
+            "FACT-6187",
+            "FACT-6226"
+          ]
+        },
+        {
+          "text": "Margin held against plan.",
+          "supporting_fact_ids": [
+            "FACT-6265",
+            "FACT-6304"
+          ]
+        },
+        {
+          "text": "The revenue shortfall is the whole of the variance.",
+          "supporting_fact_ids": [
+            "FACT-1342",
+            "FACT-1381",
+            "FACT-1420"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0012/What moved",
+      "text": "Revenue is the line that moved: New Zealand Food closed at {{fact:FACT-1342}} against a plan of {{fact:FACT-1381}}, {{fact:FACT-1420}} short. The shortfall sits against a February actual of {{fact:FACT-1225}}, so the division grew through the month and still finished behind what was asked of it — the gap is against plan, not against trend.",
+      "claims": [
+        {
+          "text": "New Zealand Food finished March behind plan on revenue.",
           "supporting_fact_ids": [
             "FACT-1342",
             "FACT-1381",
@@ -542,23 +612,20 @@
           ]
         },
         {
-          "text": "Gross profit and margin were also close to budget.",
+          "text": "The division still grew month on month.",
           "supporting_fact_ids": [
-            "FACT-6148",
-            "FACT-6187",
-            "FACT-6226",
-            "FACT-6265",
-            "FACT-6304"
+            "FACT-1342",
+            "FACT-1225"
           ]
         }
       ]
     },
     {
       "id": "ART-0013/Performance",
-      "text": "General Merchandise reported {{fact:FACT-1343}} against {{fact:FACT-1382}}, {{fact:FACT-1421}} against plan. Gross profit was {{fact:FACT-6149}} against a budget of {{fact:FACT-6188}}, for {{fact:FACT-6227}}. Margin sat at {{fact:FACT-6266}} against {{fact:FACT-6305}} budgeted. The division was close to plan on both lines.",
+      "text": "General Merchandise held its top line — {{fact:FACT-1343}} against {{fact:FACT-1382}}, a gap of only {{fact:FACT-1421}} — and gave most of the month back below it. Gross profit of {{fact:FACT-6149}} against {{fact:FACT-6188}} is {{fact:FACT-6227}} short, and the rate at {{fact:FACT-6266}} sits well under the {{fact:FACT-6305}} plan. The division sold what it planned to sell, at prices it did not plan to sell at.",
       "claims": [
         {
-          "text": "General Merchandise revenue finished marginally below plan.",
+          "text": "Revenue was {{fact:FACT-1343}} against a budget of {{fact:FACT-1382}}, a variance of {{fact:FACT-1421}}.",
           "supporting_fact_ids": [
             "FACT-1343",
             "FACT-1382",
@@ -566,11 +633,16 @@
           ]
         },
         {
-          "text": "Gross profit and margin were also in line with budget.",
+          "text": "Gross profit was {{fact:FACT-6149}} against {{fact:FACT-6188}}, a variance of {{fact:FACT-6227}}.",
           "supporting_fact_ids": [
             "FACT-6149",
             "FACT-6188",
-            "FACT-6227",
+            "FACT-6227"
+          ]
+        },
+        {
+          "text": "The margin rate was {{fact:FACT-6266}} against a budgeted {{fact:FACT-6305}}.",
+          "supporting_fact_ids": [
             "FACT-6266",
             "FACT-6305"
           ]
@@ -578,11 +650,11 @@
       ]
     },
     {
-      "id": "ART-0014/Performance",
-      "text": "Digital and Marketplace delivered {{fact:FACT-1344}} against {{fact:FACT-1383}}, {{fact:FACT-1422}} against plan. Gross profit came to {{fact:FACT-6150}} against {{fact:FACT-6189}} budgeted, or {{fact:FACT-6228}}. Margin ran at {{fact:FACT-6267}} against a budgeted {{fact:FACT-6306}}. The revenue shortfall is modest. The margin holds above budget in absolute terms, but the forecast assumptions have not been refreshed since the platform replatform, which makes the forecast-to-actual gap worth monitoring.",
+      "id": "ART-0014/Position",
+      "text": "For the record: revenue {{fact:FACT-1344}} against {{fact:FACT-1383}} — {{fact:FACT-1422}} adrift — gross profit {{fact:FACT-6150}}, and a rate of {{fact:FACT-6267}}. Against the same month last year, {{fact:FACT-1227}} of revenue at {{fact:FACT-1305}}, the unit is still growing, which is why this reads as a forecasting problem rather than a demand one. Nothing else in the month needs the committee's attention.",
       "claims": [
         {
-          "text": "Digital and Marketplace revenue finished below plan.",
+          "text": "Revenue was {{fact:FACT-1344}} against a budget of {{fact:FACT-1383}}, a variance of {{fact:FACT-1422}}.",
           "supporting_fact_ids": [
             "FACT-1344",
             "FACT-1383",
@@ -590,7 +662,27 @@
           ]
         },
         {
-          "text": "Gross profit missed plan.",
+          "text": "Gross profit was {{fact:FACT-6150}} and the margin rate {{fact:FACT-6267}}.",
+          "supporting_fact_ids": [
+            "FACT-6150",
+            "FACT-6267"
+          ]
+        },
+        {
+          "text": "Revenue in the comparable month last year was {{fact:FACT-1227}} at a rate of {{fact:FACT-1305}}.",
+          "supporting_fact_ids": [
+            "FACT-1227",
+            "FACT-1305"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ART-0014/What moved",
+      "text": "Gross profit missed by {{fact:FACT-6228}}, and that is the line that matters this month: {{fact:FACT-6150}} delivered against {{fact:FACT-6189}} planned. Revenue explains part of it — {{fact:FACT-1344}} against a committed {{fact:FACT-1383}}, {{fact:FACT-1422}} short — but the rate explains the rest, landing at {{fact:FACT-6267}} against {{fact:FACT-6306}}. The movement is concentrated after the checkout replatform, and the forecast has not been re-baselined against post-replatform behaviour.",
+      "claims": [
+        {
+          "text": "Gross profit was {{fact:FACT-6150}} against {{fact:FACT-6189}}, a variance of {{fact:FACT-6228}}.",
           "supporting_fact_ids": [
             "FACT-6150",
             "FACT-6189",
@@ -598,7 +690,15 @@
           ]
         },
         {
-          "text": "Margin exceeded budget but forecasting assumptions remain stale.",
+          "text": "Revenue was {{fact:FACT-1344}} against a budget of {{fact:FACT-1383}}, {{fact:FACT-1422}} short of plan.",
+          "supporting_fact_ids": [
+            "FACT-1344",
+            "FACT-1383",
+            "FACT-1422"
+          ]
+        },
+        {
+          "text": "The margin rate was {{fact:FACT-6267}} against a budgeted {{fact:FACT-6306}}.",
           "supporting_fact_ids": [
             "FACT-6267",
             "FACT-6306"
@@ -607,20 +707,20 @@
       ]
     },
     {
-      "id": "ART-0014/Watch items",
-      "text": "Online conversion came in at {{fact:FACT-6311}} against a forecast of {{fact:FACT-6310}}. The gap reflects post-replatform volatility and a forecast that has not been re-baselined. Watch whether conversion stabilises and whether a realistic forecast baseline can be established for the channel.",
+      "id": "ART-0014/Why",
+      "text": "Conversion did it. The site converted at {{fact:FACT-6311}} against a forecast of {{fact:FACT-6310}}, and that forecast was built on pre-replatform behaviour: the checkout and loyalty stack changed underneath it and nobody re-based the number. So the miss is not customers leaving — it is a plan that still describes a site we no longer run. Re-baselining the conversion forecast is the correction, and it belongs to this team, not to trading.",
       "claims": [
         {
-          "text": "Online conversion rate ran below forecast.",
+          "text": "Online conversion was {{fact:FACT-6311}} against a forecast of {{fact:FACT-6310}}.",
           "supporting_fact_ids": [
-            "FACT-6310",
-            "FACT-6311"
+            "FACT-6311",
+            "FACT-6310"
           ]
         }
       ]
     },
     {
-      "id": "ART-0016/1 \u00b7 Adaeze Haverkamp to Solveig Rasmussen \u00b7 01 Apr 08:37",
+      "id": "ART-0016/1 · Adaeze Haverkamp to Solveig Rasmussen · 01 Apr 08:37",
       "text": "{{fact:FACT-0003}}. The valuation feed is {{fact:FACT-0002}}. Raising to you for triage. Platform team to investigate.",
       "claims": [
         {
@@ -638,7 +738,7 @@
       ]
     },
     {
-      "id": "ART-0016/2 \u00b7 Adaeze Haverkamp \u00b7 01 Apr 09:31",
+      "id": "ART-0016/2 · Adaeze Haverkamp · 01 Apr 09:31",
       "text": "Position update on {{fact:FACT-0003}}. Triage assessment: {{fact:FACT-0004}}. Run was overnight batch. The feed is {{fact:FACT-0002}}. No immediate mitigation yet. Platform running diagnostics now.",
       "claims": [
         {
@@ -662,7 +762,7 @@
       ]
     },
     {
-      "id": "ART-0016/3 \u00b7 Grethe Mwangi-Turner to Rosalind Vandermolen \u00b7 01 Apr 13:52",
+      "id": "ART-0016/3 · Grethe Mwangi-Turner to Rosalind Vandermolen · 01 Apr 13:52",
       "text": "Escalation on {{fact:FACT-0003}}. The overnight hypothesis did not hold: {{fact:FACT-0005}}. Root cause confirmed: {{fact:FACT-0006}}. The feed is {{fact:FACT-0002}}. Initial assessment was {{fact:FACT-0004}}, but that did not survive testing. Scope is material. Applying manual workaround now. Finance will need a recovery run before the ledger can lock.",
       "claims": [
         {
@@ -698,7 +798,7 @@
       ]
     },
     {
-      "id": "ART-0016/4 \u00b7 Isaura Trbojevic to Takoda Fitzmaurice \u00b7 02 Apr 09:25",
+      "id": "ART-0016/4 · Isaura Trbojevic to Takoda Fitzmaurice · 02 Apr 09:25",
       "text": "Incident on {{fact:FACT-0003}} continues. {{fact:FACT-0002}} confirmed. The position is {{fact:FACT-0004}}; that was the initial triage, but the root cause is now confirmed as {{fact:FACT-0006}}. Workaround is in progress. Close will not complete on the committed date. {{fact:FACT-0011}} as of this morning and escalation has gone to the CFO per the standing protocol. Valuation team is priority; everything downstream is blocked until that completes.",
       "claims": [
         {

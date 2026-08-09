@@ -155,6 +155,17 @@ SPINE: Mapping[str, frozenset[str]] = {
         "audit", "ceo", "cfo", "chief_actuary", "claims_director",
         "financial_controller", "reserving_actuary",
     }),
+    # The keys the P2P episode actually looks up by name — computed by
+    # `tests/test_roles.py`, which is why `operations_director` is absent
+    # despite being in the shipped table: it is declared, managed under, and
+    # never resolved by key, so an author may rename it and nothing breaks.
+    # Absent for as long as procurement had no mosaic: `from_shape` is only
+    # reached through one, and the refusal below ("a new engine needs its own
+    # spine entry") fired the day a procurement mosaic was first asked for.
+    "procurement": frozenset({
+        "accounts_payable_lead", "audit", "category_manager", "ceo", "cfo",
+        "chief_procurement", "financial_controller", "site_receiving_lead",
+    }),
 }
 
 #: The one key that must be the tree's root. Not merely load-bearing —
@@ -347,6 +358,10 @@ def from_shape(
         )
 
     ordered_functions = tuple(functions)
+    #: Membership only — iteration stays over `ordered_functions`, whose order
+    #: is the rotation and therefore contract. What this set decides is which
+    #: functions a synthesised role may *inherit*: see the function rule below.
+    asked_functions = frozenset(ordered_functions)
     spine_keys = [key for key in required(engine, unit_keys) if key != ROOT]
 
     # Which function a spine key sits in is *read by the engine*, so it is
@@ -367,85 +382,195 @@ def from_shape(
     # spine contains.
     engine_functions = {role.key: role.function for role in _shipped(engine)}
 
-    # How many people sit at each level, root downwards.
+    # Where the spine goes, and why it is not breadth-first.
     #
-    # Filled greedily — each level takes as many as its parents' span allows —
-    # while *reserving one person for every level still to come*. That reserve
-    # is the whole of the fix for a defect measurement caught: without it the
-    # fill runs out of people part-way down and returns a tree shallower than
-    # was asked for, reporting success. Since `measure` exists precisely so a
-    # handshake can refuse a shape that does not match its claim, a synthesiser
-    # that quietly produced one was the worst possible caller of it.
-    sizes = [1]
-    remaining = headcount - 1
-    for level in range(1, levels + 1):
-        still_to_come = levels - level
-        take = min(sizes[-1] * span, remaining - still_to_come)
-        if take < 1:
+    # The engine's own table already says who reports to whom — retail's
+    # `svc_desk` reports to `svc_lead` reports to `cio` — and this function
+    # used to throw that away, dealing spine keys into levels in sorted-key
+    # order and giving each one whichever parent the rotation reached. The
+    # consequence was measurable and wrong: a 420-person retailer came out with
+    # 159 technologists and 14 service operators, because retail's four
+    # Technology keys sort early and land at depth 1 with enormous subtrees
+    # under them while its ServiceOperations keys sort late and land at depth 2
+    # with almost none. The function mix of the whole company was decided by
+    # alphabetical order.
+    #
+    # So the spine is placed at the depth its *own* manager chain implies, and
+    # everything synthesised hangs off that. The shape of the company then
+    # follows the shape of its management, which is the only defensible answer
+    # to "how many people are in Service Operations" that this function can
+    # give without being told.
+    declared: dict[str, str | None] = {
+        role.key: role.manager for role in _shipped(engine) if role.key != ROOT
+    }
+    # A per-unit key is in no shipped table — it is minted per business unit by
+    # whichever generator owns the vertical — so its structure is stated here:
+    # the division's MD reports to the chief executive and everyone else in the
+    # division reports to their MD. That makes each division a subtree, which
+    # is the point of a division. It is deliberately *not* the dotted line the
+    # engines declare (retail's `_bp` reports to the group controller): a
+    # synthesised organisation has one line per person, and the one that makes
+    # a division legible is the solid one.
+    for unit in unit_keys:
+        declared[unit_role_key(unit, UNIT_ROLE_SUFFIXES[0])] = ROOT
+        for suffix in UNIT_ROLE_SUFFIXES[1:]:
+            declared[unit_role_key(unit, suffix)] = unit_role_key(unit, UNIT_ROLE_SUFFIXES[0])
+
+    # The order keys are *considered* in, which decides nothing about depth and
+    # everything about which sibling comes first. Shipped order before sorted
+    # order, because the shipped table reads top-down — the CFO before the
+    # controller before the reporting manager — and a manager considered after
+    # their own report would be placed under the root by the ancestor walk
+    # below. Unit keys last, and in the caller's order.
+    shipped_order = [role.key for role in _shipped(engine) if role.key != ROOT]
+    wanted = set(spine_keys)
+    spine_order = [key for key in shipped_order if key in wanted]
+    spine_order += [key for key in spine_keys if key not in set(spine_order)]
+
+    depth_of: dict[str, int] = {ROOT: 0}
+    children: dict[str, int] = {ROOT: 0}
+    order: list[str] = [ROOT]
+    manager_of: dict[str, str | None] = {ROOT: None}
+    function_of: dict[str, str] = {}
+
+    def has_room(key: str) -> bool:
+        return children.get(key, 0) < span and depth_of[key] < levels
+
+    def attach(key: str, parent: str) -> None:
+        depth_of[key] = depth_of[parent] + 1
+        children[key] = 0
+        children[parent] = children.get(parent, 0) + 1
+        manager_of[key] = parent
+        order.append(key)
+
+    def anchor(key: str) -> str | None:
+        """The nearest placed ancestor of *key*, with room, or ``None``.
+
+        Two walks, and both are load-bearing. **Up** the declared chain first,
+        because a key's own manager may be one this shape does not place at all
+        — `required` returns the engine's *spine*, and retail's `svc_lead` is
+        not in it, so `svc_desk` has to find `cio`. Then **down**, breadth-first
+        from wherever that landed, because a declared parent can be full: the
+        chief executive takes the CFO, the CIO and one MD per division, and a
+        span of four with five divisions has to put somebody a level lower
+        rather than refuse a shape that fits perfectly well. An organisation
+        whose top is wide adds a layer; it does not fail to exist.
+        """
+        cursor, seen = declared.get(key), {key}
+        while cursor is not None and cursor not in depth_of and cursor not in seen:
+            seen.add(cursor)
+            cursor = declared.get(cursor)
+        start = cursor if cursor in depth_of else ROOT
+        queue = [start]
+        while queue:
+            node = queue.pop(0)
+            if has_room(node):
+                return node
+            queue.extend(key for key in order if manager_of.get(key) == node)
+        return None
+
+    for key in spine_order:
+        parent = anchor(key)
+        if parent is None:
             raise ValueError(
-                f"{headcount} people cannot fill {levels} level(s): a tree that"
-                f" deep needs at least {levels + 1} people, one per level."
+                f"a {engine} organisation needs at least {len(spine_keys) + 1} roles for"
+                f" the engine's own lookups; a headcount of {headcount} leaves"
+                f" {key!r} with nowhere to sit at a span of {span} and {levels}"
+                f" level(s)"
             )
-        sizes.append(take)
-        remaining -= take
-    if remaining:
-        raise ValueError(
-            f"{headcount} people do not fit in {levels} level(s) at a span of"
-            f" {span}: that shape holds at most {headcount - remaining}. Widen"
-            " the span, add a level, or reduce headcount — the three are not"
-            " independent, which is what a probe's cross-layer link is for."
+        attach(key, parent)
+        function_of[key] = engine_functions.get(
+            key, ordered_functions[(len(order) - 1) % len(ordered_functions)]
         )
 
-    # The root is part of the load-bearing spine too. Leaving it on the first
-    # caller-supplied function made a mosaic's CEO a Merchandising employee who
-    # authored the strategy pack; access happened to permit it, but the artifact
-    # contract correctly refused the departmental contradiction.
-    roles: list[Role] = [Role(
-        ROOT, "Chief Executive Officer",
-        engine_functions.get(ROOT, ordered_functions[0]), None,
-    )]
-    pending = list(spine_keys)
-    made = 0
-    parents = [ROOT]
-    for depth, size in enumerate(sizes[1:], start=1):
-        level: list[str] = []
-        for index in range(size):
-            if pending:
-                key = pending.pop(0)
-            else:
-                made += 1
-                key = f"role_{made:03d}"
-            # Parents cycle lowest-index-first, so the remainder lands on the
-            # earliest managers. Not cosmetic: the alternative spreads it by
-            # iteration order or by a seed, and this runs inside a build whose
-            # output must be byte-identical on replay.
-            manager = parents[index % len(parents)]
-            # `.get`, not `[]`: a per-unit key (`{unit}_md`) is required for
-            # whatever units this world declares and is in no shipped table, so
-            # it takes the caller's rotation like any synthesised role. Falling
-            # back rather than raising because a unit role has no function the
-            # engine reads it by — `assign` finds it by parsing the suffix off
-            # the key, which is why renaming a unit key breaks and re-filing it
-            # does not.
-            function = engine_functions.get(
-                key, ordered_functions[len(roles) % len(ordered_functions)]
-            )
-            roles.append(Role(key, _title(key, function, depth), function, manager))
-            level.append(key)
-        parents = level
-
-    if pending:
+    if len(order) > headcount:
         # Everything the engine consults must exist, even if the shape asked
-        # for fewer people than the spine needs. Reported by raising rather
-        # than by quietly exceeding the headcount: a caller who asked for forty
-        # people and got fifty-three has had their claim overruled, and should
-        # find that out here rather than from a headcount fact later.
+        # for fewer people. Reported by raising rather than by quietly
+        # exceeding the headcount: a caller who asked for forty people and got
+        # fifty-three has had their claim overruled, and should find that out
+        # here rather than from a headcount fact later.
         raise ValueError(
             f"a {engine} organisation needs at least {len(spine_keys) + 1} roles for"
             f" the engine's own lookups; a headcount of {headcount} leaves"
-            f" {len(pending)} unplaced ({', '.join(pending[:5])}"
-            f"{'…' if len(pending) > 5 else ''})"
+            f" {len(order) - headcount} unplaced"
         )
+
+    # Everything else. Breadth-first into whatever room the spine left, while
+    # *reserving one person for every level still to come* — that reserve is
+    # the whole of the fix for a defect measurement caught: without it the fill
+    # runs out of people part-way down and returns a tree shallower than was
+    # asked for, reporting success. Since `measure` exists precisely so a
+    # handshake can refuse a shape that does not match its claim, a synthesiser
+    # that quietly produced one was the worst possible caller of it.
+    made = 0
+    while len(order) < headcount:
+        deepest = max(depth_of.values())
+        if headcount - len(order) <= levels - deepest:
+            # Spend what is left going down rather than out.
+            parent = max(
+                (key for key in order if has_room(key)),
+                key=lambda key: (depth_of[key], -order.index(key)),
+                default=None,
+            )
+        else:
+            parent = min(
+                (key for key in order if has_room(key)),
+                key=lambda key: (depth_of[key], order.index(key)),
+                default=None,
+            )
+        if parent is None:
+            raise ValueError(
+                f"{headcount} people do not fit in {levels} level(s) at a span of"
+                f" {span}: that shape holds at most {len(order)}. Widen"
+                " the span, add a level, or reduce headcount — the three are not"
+                " independent, which is what a probe's cross-layer link is for."
+            )
+        made += 1
+        key = f"role_{made:03d}"
+        attach(key, parent)
+        # A role the synthesiser invented takes its manager's function, when
+        # that function is one the caller asked for. Round-robin by position
+        # was the rule before, and it was measured on an eight-division
+        # retailer: 319 of 407 synthesised people — 78% — reported across a
+        # function boundary. It produced a "Head of Audit" reporting to a
+        # Merchandising Systems Analyst and a "Head of Executive" reporting to
+        # a platform lead. Nobody has that company, and it stops being cosmetic
+        # the moment anything below the spine authors a document: a one-to-one
+        # minuted between a finance manager and their audit-function manager is
+        # noise wearing a document's clothes.
+        #
+        # Two exceptions, and both are what keep `functions` a real knob rather
+        # than a list nobody reads. The root, or every role at depth 1 inherits
+        # Executive and the whole company is one department. And a manager
+        # whose own function the caller did *not* ask for — the spine's
+        # functions are the engine's and the caller's list may share nothing
+        # with them, in which case there is no coherent answer and the honest
+        # one is the rotation the caller chose. So `functions` stays the closed
+        # vocabulary for synthesised roles, exactly as documented, and coherence
+        # is what you get for asking for departments your engine has.
+        inherited = function_of.get(parent) if parent != ROOT else None
+        if inherited not in asked_functions:
+            inherited = None
+        function_of[key] = inherited or ordered_functions[
+            (len(order) - 1) % len(ordered_functions)
+        ]
+
+    if max(depth_of.values()) < levels:
+        raise ValueError(
+            f"{headcount} people cannot fill {levels} level(s): a tree that"
+            f" deep needs at least {levels + 1} people, one per level."
+        )
+
+    roles: list[Role] = []
+    for key in order:
+        if key == ROOT:
+            roles.append(Role(
+                ROOT, "Chief Executive Officer",
+                engine_functions.get(ROOT, ordered_functions[0]), None,
+            ))
+            continue
+        function = function_of[key]
+        roles.append(Role(key, _title(key, function, depth_of[key]), function, manager_of[key]))
     return tuple(roles)
 
 
@@ -552,6 +677,7 @@ def _shipped(engine: str) -> tuple[Role, ...]:
         "retail": "worldloom.generators.organisation",
         "banking": "worldloom.generators.banking_org",
         "insurance": "worldloom.generators.insurance_org",
+        "procurement": "worldloom.generators.procurement_org",
     }[engine])
     return from_rows(module._ROLES)
 

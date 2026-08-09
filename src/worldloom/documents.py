@@ -16,6 +16,7 @@ reconciliation constraints everything else is checked against.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -23,6 +24,9 @@ from typing import TYPE_CHECKING, Any
 from .ids import Minter
 from .narrative import references
 from .models import (
+    FlowNode,
+    FlowEdge,
+    FlowDiagram,
     ArtifactIntent,
     ArtifactIR,
     ArtifactSection,
@@ -73,6 +77,15 @@ _LAG: dict[str, timedelta] = {
     "cfo_variance_memo": timedelta(hours=17),
     "executive_summary": timedelta(days=1, hours=15),
     "close_calendar": timedelta(hours=1),
+    # A history page is written once the dust of its newest entry has settled,
+    # not within the hour of it — and `written_at` derives the page's date from
+    # that newest milestone, so this lag is the only thing standing between
+    # "the replatform happened" and "somebody wrote it up".
+    "company_timeline": timedelta(days=5),
+    # Extracts are cut the morning the close calendar goes out — same anchor
+    # fact, an hour behind it, so the archive shows the calendar first.
+    "service_register": timedelta(hours=2),
+    "reference_data_extract": timedelta(hours=2),
 }
 
 
@@ -293,6 +306,7 @@ def register_artifact_types(
     outlines: dict[str, tuple["SectionPlan", ...]] | None = None,
     compilers: dict[str, Any] | None = None,
     filings: dict[str, FilingPlan] | None = None,
+    variants: dict[str, tuple[tuple["SectionPlan", ...], ...]] | None = None,
 ) -> None:
     """Add a domain module's artifact types to the compiler's tables.
 
@@ -320,11 +334,31 @@ def register_artifact_types(
         (_OUTLINES, outlines),
         (_COMPILERS, compilers),
         (_FILINGS, filings),
+        (_OUTLINE_VARIANTS, variants),
     ):
         for key, value in (additions or {}).items():
             if key in table and table[key] != value:
                 raise ValueError(f"artifact type {key!r} is already registered differently")
             table[key] = value  # type: ignore[assignment]
+
+
+#: Marker attribute a compiler sets on itself to say it *composes* the outline
+#: rather than replacing it.
+#:
+#: The distinction is real and `tests/test_doctypes.py` holds the line on it. A
+#: compiler like `finance_workbook` builds its IR from nothing, so an outline
+#: registered beside it would be dead data nobody reads and an author would be
+#: editing a section list with no effect. A compiler like
+#: `policies._provisions` calls `outline` and inserts one block into what comes
+#: back, so its outline is live data and is the only place a policy's sections
+#: are stated. Marked rather than inferred, because the two are the same
+#: callable shape and nothing about a function signature can tell them apart.
+EXTENDS_OUTLINE = "worldloom_extends_outline"
+
+
+def extends_outline(compiler: Any) -> bool:
+    """Whether *compiler* reads the registered outline rather than replacing it."""
+    return bool(getattr(compiler, EXTENDS_OUTLINE, False))
 
 
 def written_at(intent: ArtifactIntent, facts: dict[str, CanonicalFact]):  # type: ignore[no-untyped-def]
@@ -344,7 +378,18 @@ def _money(amount: float | None, fact_id: str | None = None) -> Cell:
     return Cell(value=amount, fact_id=fact_id)
 
 
-#: The seven P&L columns, and the fact kind each reads.
+#: The eight P&L columns, and the fact kind each reads.
+#:
+#: `gm_pct_budget` was absent for a long time, and its absence was invisible:
+#: `generators/finance.py` mints `financial.gross_margin_pct.budget` for every
+#: category and unit, `generators/planning.py` puts those facts in the
+#: workbook's required set, and no column here read them — 114 facts a build,
+#: planned into a document and carried by none of it. Nothing complained,
+#: because until `validate.carried_evidence` existed nothing compared what an
+#: intent asked a document to carry against what the compiled document holds.
+#: Budget margin also earns its place on the sheet: a division can beat its
+#: gross-profit budget while missing the rate it was supposed to earn it at,
+#: and with actual margin alone a reader cannot see that.
 _MEASURES: dict[str, str] = {
     "revenue_budget": "financial.revenue.budget",
     "revenue_actual": "financial.revenue.actual",
@@ -352,6 +397,7 @@ _MEASURES: dict[str, str] = {
     "gp_budget": "financial.gross_profit.budget",
     "gp_actual": "financial.gross_profit.actual",
     "gp_variance": "financial.gross_profit.variance",
+    "gm_pct_budget": "financial.gross_margin_pct.budget",
     "gm_pct_actual": "financial.gross_margin_pct.actual",
 }
 
@@ -362,6 +408,7 @@ _MEASURES: dict[str, str] = {
 _DERIVED: dict[str, tuple[FormulaKind, list[str]]] = {
     "revenue_variance": (FormulaKind.DIFFERENCE, ["revenue_actual", "revenue_budget"]),
     "gp_variance": (FormulaKind.DIFFERENCE, ["gp_actual", "gp_budget"]),
+    "gm_pct_budget": (FormulaKind.RATIO_PCT, ["gp_budget", "revenue_budget"]),
     "gm_pct_actual": (FormulaKind.RATIO_PCT, ["gp_actual", "revenue_actual"]),
 }
 
@@ -369,7 +416,12 @@ _DERIVED: dict[str, tuple[FormulaKind, list[str]]] = {
 #: percentage is a ratio of totals, never the total of ratios; a variance, by
 #: contrast, is additive, so a subtotal sums its children's variances and shows
 #: which of them the group's miss came from.
-_NOT_ADDITIVE = frozenset({"gm_pct_actual"})
+_NOT_ADDITIVE = frozenset({"gm_pct_budget", "gm_pct_actual"})
+
+#: The same rule stated over fact *kinds* rather than column keys, for the trend
+#: sheets — which are laid out by period rather than by measure, so they cannot
+#: look a column up in `_NOT_ADDITIVE`.
+_RATE_KINDS = frozenset({"financial.gross_margin_pct.actual", "financial.gross_margin_pct.budget"})
 
 
 def _pnl_columns() -> list[Column]:
@@ -380,6 +432,7 @@ def _pnl_columns() -> list[Column]:
         Column(key="gp_budget", label="GP budget", number_format=MONEY_FORMAT),
         Column(key="gp_actual", label="GP actual", number_format=MONEY_FORMAT),
         Column(key="gp_variance", label="GP variance", number_format=MONEY_FORMAT),
+        Column(key="gm_pct_budget", label="GM% budget", number_format=PERCENT_FORMAT),
         Column(key="gm_pct_actual", label="GM% actual", number_format=PERCENT_FORMAT),
     ]
 
@@ -514,10 +567,50 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     by_id = {fact.id: fact for fact in world._facts}
     index = _Facts([by_id[f] for f in intent.required_fact_ids if f in by_id])
     facts = index.all
+    # The workbook's *own* facts decide which month it reports, and the world's
+    # current period is only the fallback for a document whose facts carry none.
+    #
+    # It read the other way round, and the defect that hid behind it is the
+    # worst this repository has had. `compile()` compiles every intent against
+    # the world as it stands *now*, so in a two-period corpus March's workbook
+    # was looked up at April: every `index.get(kind, subject, period)` missed,
+    # and the month-end model — the corpus's system of record, the document
+    # every other one reconciles against — rendered with **every cell empty**.
+    # Measured: a one-period build's Business Unit P&L carries 28 of 28 values;
+    # a two-period build's carries 0 of 28, and `validate` passed both, because
+    # a reconciliation check compares a cell against a fact and two absent
+    # numbers agree.
+    #
+    # Single-period builds are byte-identical either way — `world.period` and
+    # `periods[-1]` are the same string — which is why this survived: every
+    # fixture, every example and every default build has exactly one period.
     periods = sorted({f.period for f in facts if f.period})
-    period = world.period or (periods[-1] if periods else "")
-    units = list(world.business_units)
+    period = (periods[-1] if periods else "") or world.period or ""
     company = world.company
+
+    # A business unit the finance generator booked no month for does not get a
+    # P&L row. This is the same rule `sites_of` applies below, for the same
+    # reason, and it was missing here: `world.business_units` unfiltered meant a
+    # unit added by a `StructuralChange` after the close it was measured for
+    # rendered as a row of empty cells, and a `Group` row that named it as
+    # a child of a sum it contributed nothing to. Measured on a retail build
+    # with one added unit: 3 of 15 P&L rows fully blank, `validate` clean across
+    # 21,601 checks — because a reconciliation check compares a cell to a fact
+    # and two absent numbers agree. That is the finance-workbook defect
+    # recurring one function later.
+    #
+    # The predicate is "any measured column resolves", not "revenue resolves":
+    # a unit carried on gross profit alone is still a unit that closed.
+    def measured(unit_id: str) -> bool:
+        return any(index.get(kind, unit_id, period) is not None for kind in _MEASURES.values())
+
+    units = [unit for unit in world.business_units if measured(unit.id)]
+    # A workbook whose every unit fails the test is a workbook with no month in
+    # it at all. Falling back to the full list keeps that case rendering exactly
+    # as it did before rather than emitting a sheet with only a `Group` row on
+    # it, which would be a second way to be silently empty.
+    if not units:
+        units = list(world.business_units)
 
     unit_keys = [unit.id for unit in units]
     columns = _pnl_columns()
@@ -606,7 +699,10 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                     title="Gross margin against budget by division",
                     kind=ChartKind.COLUMN,
                     table="pnl",
-                    series=["gm_pct_actual"],
+                    # The title said "against budget" while the chart plotted one
+                    # series. It could not plot two: the budget-margin column did
+                    # not exist, though the fact behind it did.
+                    series=["gm_pct_budget", "gm_pct_actual"],
                     rows=unit_keys,
                     category_axis="Division",
                     value_axis="Gross margin %",
@@ -735,76 +831,107 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         )
         sections.append(ArtifactSection(heading="Store Performance", table=store_table))
 
-    # -- Revenue trend -----------------------------------------------------
+    # -- Trend, by measure -------------------------------------------------
+    # Three sheets, not one, and the second and third are not decoration. The
+    # planner hands this workbook actuals for every comparative month across
+    # *all three* measures; the trend sheet read revenue and only revenue, so a
+    # four-month grocery build planned 234 gross-profit and margin facts into
+    # the model and carried none of them — the same defect as the missing
+    # budget-margin column, at a different scale, and equally invisible until
+    # `validate.carried_evidence` compared the plan against the compiled sheet.
+    #
+    # They also answer a question the revenue trend cannot. A category whose
+    # revenue climbs every month while its margin rate slides is the most
+    # ordinary story in retail and the one a revenue-only trend hides
+    # completely.
+    _TRENDS: tuple[tuple[str, str, str, str], ...] = (
+        ("trend", "Revenue Trend", "financial.revenue.actual", MONEY_FORMAT),
+        ("trend_gp", "Gross Profit Trend", "financial.gross_profit.actual", MONEY_FORMAT),
+        ("trend_margin", "Margin Trend", "financial.gross_margin_pct.actual", PERCENT_FORMAT),
+    )
     if len(periods) > 1:
-        trend_columns = [
-            Column(key=p, label=p, number_format=MONEY_FORMAT) for p in periods
-        ]
 
-        def trend_row(key: str, label: str, subject: str, *, children: list[str] | None = None,
-                      emphasis: bool = False) -> Row:
+        def trend_row(kind: str, key: str, label: str, subject: str, *,
+                      children: list[str] | None = None, emphasis: bool = False) -> Row:
             cells: dict[str, Cell] = {}
             for month in periods:
-                fact = index.get("financial.revenue.actual", subject, month)
+                fact = index.get(kind, subject, month)
                 cells[month] = Cell(
                     value=fact.value.amount if fact and fact.value else None,
                     fact_id=fact.id if fact else None,
-                    formula=FormulaKind.SUM if children else None,
-                    operands=children or [],
+                    # A margin rate is a ratio of totals and never the total of
+                    # ratios — the same rule `_NOT_ADDITIVE` states for the P&L
+                    # columns. A subtotal row on the margin sheet therefore
+                    # states its own fact and declares no formula, while the
+                    # money sheets sum their children.
+                    formula=(FormulaKind.SUM if children and kind not in _RATE_KINDS else None),
+                    operands=(children or [] if kind not in _RATE_KINDS else []),
                 )
             return Row(key=key, label=label, cells=cells, emphasis=emphasis)
 
-        trend_rows: list[Row] = []
-        trend_subtotals: list[str] = []
-        for unit in units:
-            members = categories_of[unit.id]
-            for category in members:
-                trend_rows.append(trend_row(category.id, f"{unit.name} · {category.name}", category.id))
-            if members:
-                trend_rows.append(
-                    trend_row(unit.id, f"{unit.name} total", unit.id,
-                              children=[c.id for c in members], emphasis=True)
-                )
-                trend_subtotals.append(unit.id)
-            else:
-                trend_rows.append(trend_row(unit.id, unit.name, unit.id))
-                trend_subtotals.append(unit.id)
-        trend_rows.append(
-            trend_row(company.id, "Group", company.id, children=trend_subtotals, emphasis=True)
-        )
-        sections.append(
-            ArtifactSection(
-                heading="Revenue Trend",
-                charts=[
-                    Chart(
-                        key="trend_units",
-                        title="Revenue by division, by month",
-                        kind=ChartKind.LINE,
-                        table="trend",
-                        series=list(periods),
-                        rows=trend_subtotals,
-                        # One line per division across months, not one line per
-                        # month across divisions. Drawn the other way round this
-                        # is twelve lines of a single point each, and it renders
-                        # without complaint.
-                        by_row=True,
-                        category_axis="Division",
-                        value_axis=f"{company.currency} {company.currency_unit}",
-                        note="A line chart is only honest where the axis is ordered. It is here.",
+        for table_key, heading, kind, number_format in _TRENDS:
+            trend_columns = [
+                Column(key=p, label=p, number_format=number_format) for p in periods
+            ]
+            trend_rows: list[Row] = []
+            trend_subtotals: list[str] = []
+            for unit in units:
+                members = categories_of[unit.id]
+                for category in members:
+                    trend_rows.append(
+                        trend_row(kind, category.id, f"{unit.name} · {category.name}", category.id)
                     )
-                ],
-                table=Table(
-                    key="trend",
-                    title="Revenue Trend",
-                    columns=trend_columns,
-                    rows=trend_rows,
-                    note=(
-                        "Actual revenue by month. Prior periods carry no budget: a trend needs "
-                        "actuals, and generating budgets nobody reads would treble the ledger."
-                    ),
-                ),
+                if members:
+                    trend_rows.append(
+                        trend_row(kind, unit.id, f"{unit.name} total", unit.id,
+                                  children=[c.id for c in members], emphasis=True)
+                    )
+                    trend_subtotals.append(unit.id)
+                else:
+                    trend_rows.append(trend_row(kind, unit.id, unit.name, unit.id))
+                    trend_subtotals.append(unit.id)
+            trend_rows.append(
+                trend_row(kind, company.id, "Group", company.id,
+                          children=trend_subtotals, emphasis=True)
             )
-        )
+            # One chart, on revenue. Three line charts of the same rows would
+            # be three ways of looking at the same shape, and the margin one
+            # would share neither its axis nor its units.
+            charts = [
+                Chart(
+                    key="trend_units",
+                    title="Revenue by division, by month",
+                    kind=ChartKind.LINE,
+                    table="trend",
+                    series=list(periods),
+                    rows=trend_subtotals,
+                    # One line per division across months, not one line per
+                    # month across divisions. Drawn the other way round this
+                    # is twelve lines of a single point each, and it renders
+                    # without complaint.
+                    by_row=True,
+                    category_axis="Division",
+                    value_axis=f"{company.currency} {company.currency_unit}",
+                    note="A line chart is only honest where the axis is ordered. It is here.",
+                )
+            ] if table_key == "trend" else []
+            sections.append(
+                ArtifactSection(
+                    heading=heading,
+                    charts=charts,
+                    table=Table(
+                        key=table_key,
+                        title=heading,
+                        columns=trend_columns,
+                        rows=trend_rows,
+                        note=(
+                            "Actual by month. Prior periods carry no budget: a trend needs "
+                            "actuals, and generating budgets nobody reads would treble the "
+                            "ledger."
+                        ),
+                    ),
+                )
+            )
 
     # -- Variance drivers --------------------------------------------------
     drivers: list[Row] = []
@@ -1206,10 +1333,18 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "State the committed date for the period. This is a standing published "
             "document; write it as policy, not as news.",
         ),
+        # Fires only in a period the date actually moved in, which is what the
+        # plan should always have said. It asked for the final status and the
+        # delay as well, `generators/planning.py` gave the calendar neither, and
+        # the section rendered zero times across thirty-one calendars — half of
+        # every close calendar's declared outline, permanently unreachable. The
+        # narrower ask is also the truer one: a timetable records the date it
+        # moved to, not how the period turned out.
         SectionPlan(
-            "Escalation", ("close.revised_date", "close.status", "close.delay"), "any",
-            "What happens when the date moves, and where the period ended up. Procedural "
-            "register — this is read by people looking up a rule.",
+            "Escalation", ("close.revised_date",), "any",
+            "The date moved. State what it moved to and what the standing rule is when it "
+            "does. Procedural register — this is read by people looking up a rule, not by "
+            "people who want to know how the period went.",
         ),
     ),
 
@@ -1380,6 +1515,181 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
     ),
 }
 
+#: Alternative outlines for a type, rotated over its instances.
+#:
+#: The measurement: a six-period corpus produced **12 distinct shapes across 56
+#: artifacts**, 95% of them sharing a shape with another, and every
+#: near-duplicate group was exactly ×6 — the same document once per period, the
+#: same headings in the same order. Six close calendars with different dates is
+#: realistic. Six root-cause reviews with an identical five-section skeleton is
+#: not: real reviews differ because the incidents differ, and a reader who sees
+#: the same skeleton six times learns the skeleton rather than the content.
+#:
+#: **Rotated by ordinal, not drawn.** The variant is chosen by this document's
+#: position among the instances of its own type, so N instances over M variants
+#: land evenly by construction. A seeded draw would only *tend* to spread and
+#: would happily give six documents the same shape on an unlucky seed — which is
+#: the exact failure being fixed.
+#:
+#: **The first variant is the outline that shipped**, so a type's first instance
+#: is byte-identical to what it was. Later instances move, which is the intended
+#: generation change and the whole point.
+#:
+#: Each alternative is a different *argument*, never a shuffle of the same one.
+#: A memo led by the exception is a different document from one led by the
+#: position, and re-ordering headings without changing what each section is for
+#: would be variety a reader can see and a retriever cannot.
+_OUTLINE_VARIANTS: dict[str, tuple[tuple[SectionPlan, ...], ...]] = {}
+
+
+def _variant_for(world: Any, intent: ArtifactIntent) -> tuple[SectionPlan, ...]:
+    """Which outline this particular document gets.
+
+    Chosen by hashing the intent's own id, not by cycling an ordinal. The
+    ordinal read beautifully — "rotate the variants over the documents of a
+    type, in minted order" — and it aliased to zero at the shipped shape:
+    `unit_close_commentary` has three variants and the default retailer has
+    three business units, so `ordinal % 3` pinned every unit to one variant in
+    every period at every seed. Measured across five seeds and three periods:
+    distinct variants seen per unit = 1, and the `"Why"` variant — locked to
+    the one unit that mints no `metric.*` facts — rendered 0 times in 15
+    documents. Any modulus cycle has this failure mode whenever the count of
+    documents per period shares a factor with the variant count; a hash of the
+    id has no period to alias with, because ids never repeat.
+
+    Deterministic for the same reason everything here is: the id is minted by
+    walk order, `crc32` is defined byte-for-byte, and neither knows the clock.
+    A document's shape still never moves when a later period adds another of
+    its type — its id is already minted.
+    """
+    variants = _OUTLINE_VARIANTS.get(intent.artifact_type)
+    default = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
+    if not variants:
+        return default
+    from zlib import crc32
+
+    return variants[crc32(f"{intent.artifact_type}:{intent.id}".encode()) % len(variants)]
+
+
+_MEASURES_ALL = ("financial.revenue.", "financial.gross_profit.",
+                 "financial.gross_margin_pct.")
+
+_OUTLINE_VARIANTS.update({
+    # Three ways to argue a division's month, and the difference is which
+    # question the writer is answering. The first states the position and then
+    # what to watch; the second leads with the exception, which is what a
+    # partner writes when the month went wrong; the third answers the question
+    # the divisional MD will actually ask, which is what happens when the month
+    # was unremarkable and the meeting is about next month.
+    #
+    # This is the corpus's most-repeated close document — forty-eight instances
+    # on a six-period, eight-division build — and rotating it is most of what
+    # the whole variant mechanism buys. It also invalidates two of the four
+    # commentaries in `examples/grocery-close/narration.json`, which is real
+    # model prose checked in against the shipped headings; those two are
+    # rewritten against the new sections rather than the type being left alone,
+    # because a reference narration is worth keeping current and a document type
+    # nobody varies is worth less than the work of keeping it.
+    "unit_close_commentary": (
+        _OUTLINES["unit_close_commentary"],
+        (
+            SectionPlan(
+                "What moved", _MEASURES_ALL, "unit",
+                "Lead with the line that missed or beat, and say by how much"
+                " before saying why. A commentary that opens with a summary of"
+                " a month its reader already lived through has spent its first"
+                " paragraph on nothing.",
+            ),
+            SectionPlan(
+                "Why", ("metric.",), "any",
+                "Attribute the movement to something a person did or something"
+                " that happened to them. 'Volume was lower' is a restatement,"
+                " not a reason.",
+            ),
+            SectionPlan(
+                "Position", _MEASURES_ALL, "unit",
+                "The rest of the month, briefly, for the record. Lines that"
+                " behaved get a clause each.",
+            ),
+        ),
+        (
+            SectionPlan(
+                "Where we landed", _MEASURES_ALL, "unit",
+                "The month in the terms this division is held to. State it"
+                " plainly and once.",
+            ),
+            SectionPlan(
+                "What we are doing about it", ("metric.",), "any",
+                "The actions in flight and who owns them. A commentary whose"
+                " last word is a number leaves the reader to work out whether"
+                " anybody has noticed.",
+            ),
+        ),
+    ),
+    # An RCA that opens with the timeline makes a reader work for the answer;
+    # an RCA that opens with the cause makes them work for the evidence. Both
+    # are written, and which one you get says something about who wrote it —
+    # the first is what a reviewer asks for, the second is what an engineer
+    # writes when they already know.
+    "incident_rca": (
+        _OUTLINES["incident_rca"],
+        (
+            SectionPlan(
+                "Cause", ("ops.cause", "ops.root_cause_classification",
+                          "ops.mapping_table_owner"), "any",
+                "Open with the conclusion. A review that withholds the cause"
+                " until section four is a review written to be defended rather"
+                " than read.",
+            ),
+            SectionPlan(
+                "What that cost", ("ops.feed_status", "ops.affected_records",
+                                   "close."), "any",
+                "The impact, in the units the business feels it in — records,"
+                " days, the close. Not in units the platform feels it in.",
+            ),
+            SectionPlan(
+                "How we got there", ("ops.incident_opened",
+                                     "ops.valuation_status",
+                                     "ops.cause_ruled_out"), "any",
+                "The sequence, including the line of enquiry that was wrong."
+                " A clean timeline is a rewritten one.",
+            ),
+            SectionPlan(
+                "Standing exposure", ("ops.previous_similar_incident",
+                                      "ops.workaround"), "any",
+                "What is still true after the fix. This is the section a"
+                " reader six months later is looking for.",
+            ),
+            SectionPlan(
+                "Actions", ("ops.remediation",), "any",
+                "What changes, who owns it, and which of them addresses the"
+                " control rather than the detection.",
+            ),
+        ),
+    ),
+    # A summary written for a committee that reads it before the meeting, and
+    # one written for a committee that reads it in the meeting. The second is
+    # shorter and leads with the ask.
+    "executive_summary": (
+        _OUTLINES["executive_summary"],
+        (
+            SectionPlan(
+                "The ask", ("close.", "financial.incident_pl_impact"), "any",
+                "What the committee is being asked to note or decide, in the"
+                " first sentence. A summary that buries the ask is a summary"
+                " that will be read after the decision.",
+            ),
+            SectionPlan(
+                "The month", ("financial.revenue.",
+                              "financial.gross_margin_pct."), "group",
+                "The group position in two figures. The committee has the pack"
+                " if they want the rest.",
+            ),
+        ),
+    ),
+})
+
+
 _DEFAULT_OUTLINE: tuple[SectionPlan, ...] = (
     SectionPlan("Summary", ("",), "any", "Summarise what the facts below establish."),
 )
@@ -1409,6 +1719,14 @@ _DOMAIN_AUTHORS: dict[str, frozenset[str] | None] = {
     "actuarial": frozenset({"Actuarial"}),
     "procurement": frozenset({"Procurement", "Finance", "Operations", "Executive"}),
     "people": None,
+    # A standing document's domain (`worldloom.policies`). Open like `people`,
+    # and for a related reason: a policy is owned by the function it governs,
+    # so an information security policy is signed in Technology and a leave
+    # policy in Executive or People, while the *same* library has to work on
+    # four engines whose function vocabularies do not agree. A closed set here
+    # would refuse a hospital its clinical governance policy on the strength of
+    # a word retail happens not to use.
+    "governance": None,
 }
 
 
@@ -1552,7 +1870,7 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     correct rather than inventing structure and data together.
     """
     facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
-    plan = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
+    plan = _variant_for(world, intent)
     unit_ids = {unit.id for unit in world.business_units}
     names = world.entity_names()
 
@@ -1609,16 +1927,42 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             # can only guess, and guessed wrong often enough to be worth removing
             # from the path.
             from .compiler.compose import infer_semantic_role
+            from . import templating
+
+            # Resolve {{var:...}} variables in heading and purpose from the world.
+            # Variables-of-variables are refused (they contain {{var:...}} after
+            # substitution), and unresolved variables are left as [missing var:NAME].
+            resolved_heading, _ = templating.substitute(step.heading, world)
+            resolved_purpose, _ = templating.substitute(step.purpose, world)
 
             sections.append(
                 ArtifactSection(
-                    heading=step.heading,
+                    heading=resolved_heading,
                     body=None,
                     fact_ids=assigned,
-                    purpose=step.purpose,
-                    semantic_role=infer_semantic_role(step.heading, step.kinds),
+                    purpose=resolved_purpose,
+                    semantic_role=infer_semantic_role(resolved_heading, step.kinds),
                 )
             )
+
+    # The causal chain rides the *first* explanation section rather than a
+    # section of its own, because it is not extra content — it is the shape of
+    # the argument that section is already making, and a diagram sitting beside
+    # the paragraph that explains it is a second telling a reader has to
+    # reconcile.
+    flow = _causal_flow(world, intent)
+    if flow is not None:
+        # The section a reader goes to for a chain, when the outline has one:
+        # an RCA has several explanation sections and the diagram belongs with
+        # the conclusion rather than with the discarded first hypothesis, which
+        # is where "first explanation section" put it.
+        explanations = [
+            index for index, section in enumerate(sections)
+            if section.semantic_role == "explanation"
+        ]
+        named = [i for i in explanations if "root cause" in sections[i].heading.lower()]
+        for index in (named or explanations)[:1]:
+            sections[index] = sections[index].model_copy(update={"flow": flow})
 
     divisional = _divisional_summary(world, facts, intent)
     if divisional is not None:
@@ -1655,6 +1999,173 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
 #: table of divisions is a memo whose reader has to hold four numbers in their
 #: head while reading a paragraph about them, which is not how anyone reads one.
 _TABULAR_NARRATIVE = frozenset({"cfo_variance_memo"})
+
+
+
+#: Artifact types whose explanation sections describe a chain of events rather
+#: than a set of figures. An RCA is the archetype: its "Root cause" section is a
+#: walk from trigger to effect, and until there was a `FlowDiagram` to declare
+#: it, the shape was flattened into a paragraph and a renderer had no way to
+#: know a chain was what it was reading.
+_CAUSAL_NARRATIVE = frozenset({"incident_rca"})
+
+#: Event kinds that are the *spine* of an incident, in the order a reader walks
+#: them. The world mints more events than an RCA should draw — a chain that
+#: included every `caused_by` edge would put the close-finalised administrivia
+#: beside the control failure and bury the point. Ordered and closed, because
+#: which events constitute the story is an editorial claim about incidents, not
+#: something derivable from the graph.
+_CAUSAL_SPINE: tuple[str, ...] = (
+    "pipeline_failed",
+    "incident_opened",
+    "hypothesis_recorded",
+    "hypothesis_superseded",
+    "root_cause_confirmed",
+    "control_failure_identified",
+    "workaround_applied",
+)
+
+
+def _causal_flow(world: World, intent: ArtifactIntent) -> FlowDiagram | None:
+    """The incident's chain of events, as a declared shape.
+
+    Read from ``EnterpriseEvent.caused_by`` — the edges the world already
+    minted and that `benchmark.py`'s `causal_multi_hop` family already walks —
+    rather than from a second description of the incident kept beside it. There
+    is one account of what caused what, and this is a view of it.
+
+    Edges are emitted only between events that are both on the spine, so the
+    chain a reader sees is connected: a spine event whose direct cause was
+    filtered out is linked to its nearest surviving ancestor instead of being
+    left floating, because a node with no path to the trigger is exactly the
+    thing a causal diagram must not show.
+
+    Deterministic by construction — `world.events` is ordered, the spine is a
+    literal tuple, and nothing here consults a set for iteration order.
+    """
+    if intent.artifact_type not in _CAUSAL_NARRATIVE:
+        return None
+
+    spine = {event.id: event for event in world.events if event.kind in _CAUSAL_SPINE}
+    if len(spine) < 2:
+        return None
+
+    by_id = {event.id: event for event in world.events}
+
+    def nearest_on_spine(event_id: str, seen: frozenset[str] = frozenset()) -> str | None:
+        """The closest ancestor of *event_id* that the spine keeps.
+
+        Walks `caused_by` upward. `seen` guards a cycle: the world does not
+        mint one today, and a causal graph that ever did would hang this
+        function rather than produce a wrong answer, which is the worse of the
+        two failures.
+        """
+        event = by_id.get(event_id)
+        if event is None or event_id in seen:
+            return None
+        for cause in event.caused_by:
+            if cause in spine:
+                return cause
+            found = nearest_on_spine(cause, seen | {event_id})
+            if found is not None:
+                return found
+        return None
+
+    order = {kind: index for index, kind in enumerate(_CAUSAL_SPINE)}
+    ordered = sorted(spine.values(), key=lambda e: (order[e.kind], e.id))
+    nodes = [
+        FlowNode(key=event.id, label=event.kind.replace("_", " ").capitalize())
+        for event in ordered
+    ]
+    edges = []
+    for event in ordered:
+        source = nearest_on_spine(event.id)
+        if source is not None:
+            edges.append(FlowEdge(source=source, target=event.id, label="led to"))
+    return FlowDiagram(nodes=nodes, edges=edges)
+
+
+def approver_of(
+    roles: dict[str, str], artifact_type: str, author: str,
+    table: Mapping[str, str], *, role_key: str | None = None,
+) -> str | None:
+    """Who signs *artifact_type*, or ``None`` if nobody does.
+
+    Four planners now name approvers — retail's close, banking's return,
+    insurance's valuation, procurement's match — and each owns its own *table*
+    because who signs a prudential return is an argument about banking. What
+    they share is the two ways a signature legitimately comes back empty, and
+    those live here so the four cannot drift apart on them.
+
+    *role_key* overrides the table for a type whose approver depends on the
+    document rather than on the type — a division's close commentary is signed
+    by *that division's* managing director, and a table keyed by type has no way
+    to say which one.
+
+    A role this world does not have resolves to ``None`` rather than raising:
+    several types are gated on facets that mint roles conditionally, and a build
+    whose role table could not carry one must still produce the document. An
+    approver who *is* the author resolves to ``None`` too — a document somebody
+    signed off for themselves is not an approval, it is a byline printed twice,
+    and ``validate.approvals`` fails any that gets past here.
+    """
+    key = role_key or table.get(artifact_type)
+    person = roles.get(key) if key else None
+    return None if person == author else person
+
+
+def _signoff(
+    world: World, facts: list[CanonicalFact], intent: ArtifactIntent
+) -> ArtifactSection | None:
+    """Prepared by, reviewed by — the block a signed document ends with.
+
+    Fully structured, so it costs the narration loop nothing: no ``body``, no
+    request, nothing for a writer to invent. That is the same argument
+    ``meeting_minutes`` makes about its attendee list, and it is what lets a
+    signature reach every rendered format without a renderer learning a new
+    concept — it is a table, and every renderer already draws tables.
+
+    Dated from the artifact's own facts through ``written_at`` rather than from
+    a clock, for the reason the manifest date is: a document whose signature
+    block disagreed with its own metadata would be a document that fails its
+    corpus's reconciliation before a reader gets to the numbers.
+
+    Returns ``None`` when nobody signed, which is most types
+    (``planning._APPROVED_BY``) and every corpus built before this existed —
+    a document with no approver renders exactly as it always did.
+    """
+    if not intent.approver_id:
+        return None
+    author = world.people.by_id(intent.author_id)
+    approver = world.people.by_id(intent.approver_id)
+    if author is None or approver is None:
+        return None
+
+    at = written_at(intent, {f.id: f for f in facts}).date().isoformat()
+    columns = [
+        Column(key="name", label="Name"),
+        Column(key="role", label="Role"),
+        Column(key="date", label="Date"),
+    ]
+
+    def row(key: str, label: str, person) -> Row:  # type: ignore[no-untyped-def]
+        return Row(key=key, label=label, cells={
+            "name": Cell(value=person.name),
+            "role": Cell(value=person.title),
+            "date": Cell(value=at),
+        })
+
+    return ArtifactSection(
+        heading="Approval",
+        table=Table(
+            key="approval",
+            title="Prepared and reviewed",
+            columns=columns,
+            rows=[row("prepared", "Prepared by", author),
+                  row("approved", "Approved by", approver)],
+            note="Approval is recorded against the period the document reports on.",
+        ),
+    )
 
 
 def _divisional_summary(
@@ -1726,10 +2237,273 @@ def _divisional_summary(
 #: and its facts, with no domain vocabulary of their own.
 from .generators.communications import MESSAGE_LAG, MINUTES_LAG, minutes_ir, thread_ir
 
+def company_timeline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
+    """The company's own past, as the dated table the lore already witnesses.
+
+    `organisation.generate` mints one ``MFACT-`` fact per dated lore commitment
+    — the hierarchy remap, the replatform, the four-day close norm — and for a
+    long time nothing planned a document that carried any of them: five facts
+    per world, on every engine, readable nowhere, and the whole
+    ``milestone_provenance`` evaluation family silently minting zero cases
+    behind its reachability guard because the guard was doing its job. This is
+    the missing consumer, and it is the document a real intranet always has —
+    the "about us" page every onboarding pack links to.
+
+    Compiled rather than outlined on purpose: a timeline is a table of dated
+    assertions, prose would only restate the rows, and a table-only IR makes no
+    narration request — so the reference ledger does not grow by one document's
+    worth of prose to keep this page in existence.
+    """
+    facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
+    company = world.company
+    rows = [
+        Row(
+            key=fact.id.lower(),
+            label=fact.valid_from.strftime("%B %Y"),
+            cells={"what": Cell(value=fact.text_value, fact_id=fact.id)},
+        )
+        # By date, oldest first — a timeline in mint order would interleave
+        # 2022 between 2024 and 2025 wherever the lore file listed it that way.
+        # The id is the tiebreak so two same-month milestones cannot swap.
+        for fact in sorted(facts, key=lambda f: (f.valid_from, f.id))
+    ]
+    table = Table(
+        key="timeline",
+        title="Milestones",
+        columns=[Column(key="what", label="What happened, and what it left behind")],
+        rows=rows,
+        note=(
+            "Standing record. Each row is dated by when the milestone happened, "
+            "not by when this page was written — the page is always younger than "
+            "everything on it."
+        ),
+    )
+    return ArtifactIR(
+        id=intent.id,
+        intent_id=intent.id,
+        title=f"{company.name} — Company Timeline",
+        subtitle="How this company came to run the way it runs",
+        sections=[ArtifactSection(heading="Milestones", table=table)],
+        metadata={
+            "worldloom_synthetic": "true",
+            "worldloom_seed": str(world.seed),
+            "worldloom_period": world.period or "",
+            "worldloom_created": max(f.valid_from for f in facts).isoformat(),
+            "company": company.name,
+            "note": "Synthetic corpus generated by Worldloom. Not a real company.",
+        },
+    )
+
+
+def _cut_table(world: World, intent: ArtifactIntent) -> Table:
+    """The one cited row a standing extract carries: when it was cut.
+
+    Both extracts below are projections of entity collections rather than of
+    the fact ledger, and an intent citing no fact has no date — `written_at`
+    raises, correctly. So each cites exactly one fact, the close's committed
+    date, and states it here: an extract is cut *for* a close, and the row is
+    what `validate.carried_evidence` holds the citation to.
+    """
+    fact = next(world.facts.by_id(f) for f in intent.required_fact_ids)
+    return Table(
+        key="cut", title="Extract basis",
+        columns=[Column(key="value", label="Value")],
+        rows=[Row(key="cut_for", label="Cut for the close committed on",
+                  cells={"value": Cell(value=fact.text_value, fact_id=fact.id)})],
+        note="A point-in-time extract, not a live view. Re-cut each time only if re-planned.",
+    )
+
+
+def service_register(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
+    """The estate, in a document — because a graph nobody rendered is not corpus.
+
+    `--estate large` grew the world to dozens of services and, measured, the
+    *document layer* was byte-identical to `medium`: every generated service
+    reached `worldloom topology` and the ServiceNow CMDB sidecar (which has no
+    manifest row, so the workspace drive never shelves it) and not one page a
+    retriever could read. Eight evaluation cases asked about dependency depth
+    and blast radius while their quantitative answers appeared in zero artifact
+    bytes. This register is the missing page: the service inventory a real IT
+    department keeps, plus the shape figures those questions grade against.
+    """
+    company = world.company
+    people = {p.id: p.name for p in world.people}
+    systems = {s.id: s.name for s in world.systems}
+    services = sorted(world.services, key=lambda s: s.id)
+
+    rows = [
+        Row(key=svc.id, label=svc.name, cells={
+            "purpose": Cell(value=svc.purpose),
+            "tier": Cell(value=float(svc.criticality_tier)),
+            "owner": Cell(value=people.get(svc.owner_id, "")),
+            "system": Cell(value=systems.get(svc.system_id, svc.system_id)),
+            "depends": Cell(value=float(len(svc.depends_on))),
+        })
+        for svc in services
+    ]
+    register = Table(
+        key="register", title="Service register",
+        columns=[
+            Column(key="purpose", label="Purpose"),
+            Column(key="tier", label="Criticality tier", number_format="0"),
+            Column(key="owner", label="Owner"),
+            Column(key="system", label="Runs on"),
+            Column(key="depends", label="Direct dependencies", number_format="0"),
+        ],
+        rows=rows,
+        note=(
+            f"{company.name} · one row per running service. Dependencies count both "
+            "services and the systems they run on; the chain, not this count, is what "
+            "an outage travels along."
+        ),
+    )
+
+    # The shape figures, computed from the same `depends_on` edges `graphs`
+    # reads — iterative and id-ordered, so the walk is deterministic and safe
+    # on a cycle (the validator forbids one, but a register must not hang on
+    # the corpus it would be reporting a defect in).
+    depth: dict[str, int] = {}
+
+    def chain(service_id: str) -> int:
+        if service_id in depth:
+            return depth[service_id]
+        depth[service_id] = 0  # cycle guard: a revisit reads 0 rather than recursing
+        svc = next((s for s in services if s.id == service_id), None)
+        below = [chain(d) for d in (svc.depends_on if svc else ()) if d.startswith("SVC-")]
+        depth[service_id] = 1 + max(below, default=0)
+        return depth[service_id]
+
+    deepest = max(services, key=lambda s: (chain(s.id), s.id), default=None)
+    shape = Table(
+        key="shape", title="Shape of the estate",
+        columns=[Column(key="value", label="Value")],
+        rows=[
+            Row(key="services", label="Running services",
+                cells={"value": Cell(value=float(len(services)))}),
+            Row(key="systems", label="Systems hosting them",
+                cells={"value": Cell(value=float(len(systems)))}),
+            Row(key="depth", label="Longest dependency chain (hops)",
+                cells={"value": Cell(value=float(chain(deepest.id)) if deepest else None)}),
+            Row(key="top", label="Service at the top of that chain",
+                cells={"value": Cell(value=deepest.name if deepest else "")}),
+        ],
+        note="Depth counts service-to-service hops; an outage at the bottom reaches the top.",
+    )
+
+    return ArtifactIR(
+        id=intent.id,
+        intent_id=intent.id,
+        title=f"{company.name} — Service Register",
+        subtitle="The technology estate, one row per running service",
+        sections=[
+            ArtifactSection(heading="Service register", table=register),
+            ArtifactSection(heading="Shape of the estate", table=shape),
+            ArtifactSection(heading="Extract basis", table=_cut_table(world, intent)),
+        ],
+        metadata={
+            "worldloom_synthetic": "true",
+            "worldloom_seed": str(world.seed),
+            "worldloom_period": world.period or "",
+            "worldloom_created": max(
+                (f.valid_from for f in (world.facts.by_id(i) for i in intent.required_fact_ids)),
+            ).isoformat(),
+            "company": company.name,
+            "note": "Synthetic corpus generated by Worldloom. Not a real company.",
+        },
+    )
+
+
+def reference_data_extract(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
+    """The master data, in a document — the other 800 rows nothing read.
+
+    `--master-data` minted vendors, customers and SKUs into `masterdata.json`,
+    whose only readers in the entire tree were the two lines in `world.py` that
+    wrote it and read it back: not in the manifest, not in the retrieval index,
+    not in the workspace drive, no validator group. ~1.8 MB of corpus at the
+    advertised size that no reader, retriever or eval case could reach. This
+    extract is the join surface the masterdata docstring already claims to be —
+    the vendor and item listing an ERP actually exports.
+    """
+    company = world.company
+    md = world.masterdata
+
+    def block(key: str, title: str, columns: list[Column], rows: list[Row], note: str) -> ArtifactSection:
+        return ArtifactSection(
+            heading=title,
+            table=Table(key=key, title=title, columns=columns, rows=rows, note=note),
+        )
+
+    sections = []
+    if md.vendors:
+        sections.append(block(
+            "vendors", "Vendor master",
+            [Column(key="category", label="Category"),
+             Column(key="terms", label="Payment terms"),
+             Column(key="contact", label="Contact")],
+            [Row(key=v.id, label=v.name, cells={
+                "category": Cell(value=v.category),
+                "terms": Cell(value=v.payment_terms),
+                "contact": Cell(value=v.contact_name),
+            }) for v in md.vendors],
+            "As held in the ERP vendor master. Terms are the contracted default, not "
+            "what any one invoice was settled at.",
+        ))
+    if md.customers:
+        sections.append(block(
+            "customers", "Customer master",
+            [Column(key="segment", label="Segment"),
+             Column(key="terms", label="Payment terms"),
+             Column(key="contact", label="Contact")],
+            [Row(key=c.id, label=c.name, cells={
+                "segment": Cell(value=c.segment),
+                "terms": Cell(value=c.payment_terms),
+                "contact": Cell(value=c.contact_name),
+            }) for c in md.customers],
+            "Trade customers only; a till transaction has no master record.",
+        ))
+    if md.skus:
+        vendors = {v.id: v.name for v in md.vendors}
+        sections.append(block(
+            "skus", "Item master",
+            [Column(key="vendor", label="Vendor"),
+             Column(key="category", label="Category"),
+             Column(key="price", label="Unit list price", number_format="#,##0.00")],
+            [Row(key=s.id, label=s.name, cells={
+                "vendor": Cell(value=vendors.get(s.vendor_id, s.vendor_id)),
+                "category": Cell(value=s.category),
+                "price": Cell(value=s.unit_price),
+            }) for s in md.skus],
+            "List price per unit, before any negotiated rate — the number a margin "
+            "conversation starts from, never the one it ends at.",
+        ))
+    sections.append(ArtifactSection(heading="Extract basis", table=_cut_table(world, intent)))
+
+    return ArtifactIR(
+        id=intent.id,
+        intent_id=intent.id,
+        title=f"{company.name} — Reference Data Extract",
+        subtitle="Vendor, customer and item masters, as at the close",
+        sections=sections,
+        metadata={
+            "worldloom_synthetic": "true",
+            "worldloom_seed": str(world.seed),
+            "worldloom_period": world.period or "",
+            "worldloom_created": max(
+                (f.valid_from for f in (world.facts.by_id(i) for i in intent.required_fact_ids)),
+            ).isoformat(),
+            "company": company.name,
+            "note": "Synthetic corpus generated by Worldloom. Not a real company.",
+        },
+    )
+
+
 _COMPILERS: dict[str, Any] = {
     "finance_workbook": finance_workbook,
     "meeting_minutes": minutes_ir,
     "email_thread": thread_ir,
+    "company_timeline": company_timeline,
+    "service_register": service_register,
+    "reference_data_extract": reference_data_extract,
 }
 _STANDING.update({
     # Circulated minutes are the approved record of the meeting; a thread is a
@@ -1737,6 +2511,13 @@ _STANDING.update({
     # a who-was-told-when evaluation resolves against.
     "meeting_minutes": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
     "email_thread": (Authority.UNOFFICIAL_NOTE, Lifecycle.PUBLISHED),
+    # A standing intranet page, not a filing: authoritative about its dates
+    # because the milestone facts are, published because everyone can see it.
+    "company_timeline": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
+    # Extracts of systems of record are systems of record: the CMDB and the
+    # ERP masters are where these rows *live*, and the page only projects them.
+    "service_register": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
+    "reference_data_extract": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
     "unit_close_commentary": (Authority.WORKING_DOCUMENT, Lifecycle.PUBLISHED),
 
     # The conditional filings. Their outlines are above; these are the two
@@ -1787,4 +2568,40 @@ def compile_intent(world: World, intent: ArtifactIntent, minter: Minter) -> Arti
         ir = builder(world, intent, minter)
     else:
         ir = outline(world, intent, minter)
-    return _contracted(world, intent, ir)
+    return _contracted(world, intent, _signed(world, intent, ir))
+
+
+def _signed(world: World, intent: ArtifactIntent, ir: ArtifactIR) -> ArtifactIR:
+    """*ir* with its signature block, when the document carries one.
+
+    Here rather than in ``outline`` because ``outline`` is one of a dozen
+    builders: the workbook, the ServiceNow bundle, the Jira export, banking's
+    return and insurance's triangle each build their own IR, and an approval
+    that only reached the outline path would have put ``approver_id`` on a
+    finance workbook's manifest entry and no signature on the workbook. Caught
+    by the test that pins the two to each other rather than by reading the
+    file, which is the only way that gap is visible — the manifest and the
+    document disagreed and both looked fine alone.
+
+    Inserted before the first *hidden* section rather than appended. A
+    signature is the last thing on the readable surface and "Supporting facts"
+    is not on it; appending would have put the sign-off underneath the
+    fact-provenance appendix, which is nowhere a signature goes.
+    """
+    signoff = _signoff(world, list(world.facts), intent)
+    if signoff is None:
+        return ir
+    sections = list(ir.sections)
+    cut = next(
+        (index for index, section in enumerate(sections) if section.hidden), len(sections)
+    )
+    sections.insert(cut, signoff)
+    approver = world.people.by_id(intent.approver_id) if intent.approver_id else None
+    return ir.model_copy(update={
+        "sections": sections,
+        "metadata": {
+            **ir.metadata,
+            "approver": approver.name if approver else "",
+            "approver_title": approver.title if approver else "",
+        },
+    })

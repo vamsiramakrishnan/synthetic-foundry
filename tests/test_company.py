@@ -258,6 +258,57 @@ def test_an_over_determined_organisation_is_refused_with_the_arithmetic() -> Non
     assert any(c.rule == "shape_does_not_hold" for c in resolved.conflicts)
 
 
+def test_the_division_count_reaches_the_archetype_key_and_nowhere_else() -> None:
+    """The one field that makes a corpus bigger, recorded the one way it replays.
+
+    `organisation.divisions` has to arrive as part of the archetype *key*,
+    because the key is the only thing a recipe records about the shape. Carried
+    as a resolved field of its own it would rebuild a three-division company
+    from an eight-division corpus and report success — the failure
+    `vocabulary.spoken` qualified its own key to avoid.
+    """
+    resolved = company.resolve(company.from_document({
+        "archetype": "omnichannel_retailer",
+        "organisation": {"headcount": 420, "span": 8, "levels": 6, "divisions": 8},
+    }))
+    assert resolved.ok, resolved.conflicts
+    assert resolved.archetype_key == "omnichannel_retailer+8div"
+    assert len(archetypes.get(resolved.archetype_key).units) == 8
+
+
+def test_a_width_the_pool_cannot_supply_is_a_conflict_not_an_exception() -> None:
+    """Reported alongside everything else the description got wrong.
+
+    Everything in `resolve` reports rather than throws, so a describer who
+    asked for ninety-nine divisions *and* an unknown calendar reads both
+    sentences rather than the first one and a traceback.
+    """
+    resolved = company.resolve(company.from_document({
+        "archetype": "omnichannel_retailer",
+        "calendar": "no_such_year",
+        "organisation": {"divisions": 99},
+    }))
+    assert not resolved.ok
+    conflict = next(c for c in resolved.conflicts if c.subject == "organisation")
+    assert conflict.rule == "divisions_unavailable"
+    assert "is the most it can be widened to" in conflict.detail
+    assert any(c.subject == "calendar" for c in resolved.conflicts), "both, at once"
+
+
+def test_a_description_that_never_mentions_divisions_is_the_build_that_shipped() -> None:
+    """The byte-stable path, asserted at the surface rather than in the module.
+
+    `divisions.widened(a, None)` returning `a` is only useful if this layer
+    actually passes `None`, so the property worth pinning is that an
+    unqualified key stays unqualified.
+    """
+    resolved = company.resolve(company.from_document({
+        "archetype": "omnichannel_retailer",
+        "organisation": {"headcount": 420, "span": 8, "levels": 6},
+    }))
+    assert resolved.archetype_key == "omnichannel_retailer"
+
+
 def test_every_conflict_comes_back_at_once() -> None:
     """A describer who wrote three incompatible things should read three
     sentences, not three error messages one build at a time."""

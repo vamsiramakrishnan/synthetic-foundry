@@ -48,7 +48,7 @@ from typing import Any
 
 from . import archetypes as archetype_registry
 from . import validate as validate_module
-from .archetypes import MIDSIZE_ADI, Archetype
+from .archetypes import CUSTOMER_OWNED_BANK, MIDSIZE_ADI, Archetype
 from .ids import Minter
 from .models import (
     Authority,
@@ -73,7 +73,7 @@ from . import banking_documents  # noqa: F401  (registration)
 #: Archetype keys that build a ``BankingWorld``. The recipe rebuilder and the
 #: CLI dispatch on this — a corpus whose recipe names a banking archetype must
 #: rebuild through this module, not retail's.
-BANKING_ARCHETYPES = frozenset({MIDSIZE_ADI.key})
+BANKING_ARCHETYPES = frozenset({MIDSIZE_ADI.key, CUSTOMER_OWNED_BANK.key})
 
 #: Artifact types that are regulatory filings. A filing may never be revised
 #: and never leaves PUBLISHED; corrections arrive as restatements. Module-owned
@@ -308,6 +308,16 @@ class BankingWorld:
     Until that draw moves, a Frankfurt bank is named in English rather than
     misnamed as a Handelsgruppe, which is the honest of the two failures."""
 
+    policies: str | None = None
+    """Standing documents (``worldloom.policies``): ``"core"`` or ``"full"``.
+
+    The paperwork a company *has* rather than produces — an expense policy, a
+    delegation of authority, a leave policy — as opposed to the episodic
+    documents a close or an incident emits. ``None`` mints nothing, which is
+    what keeps every corpus built before the knob existed byte-identical, the
+    same guarantee ``estate`` and ``master_data`` make. The recipe records the
+    level, never the documents, so a replay re-runs the same construction."""
+
     master_data: Any = None
     """Reference tables at scale — `RetailWorld.master_data`, verbatim: the
     same knob, the same no-op default, the same counts-on-the-recipe replay."""
@@ -368,6 +378,7 @@ class BankingWorld:
             # What it was given, not what it resolved to — `RetailWorld.build`.
             locale=self.locale,
             master_data=self.master_data,
+            policies=self.policies,
         )
         commitments, recipe = extend_lore(commitments, self.lore_claims, minter, recipe)
         org = banking_org.generate(
@@ -442,7 +453,14 @@ class BankingWorld:
         # category names, under a stream root of its own so it moves nothing.
         from .generators import masterdata as masterdata_module
 
-        return masterdata_module.applied(world, self.master_data, locale=locale)
+        world = masterdata_module.applied(world, self.master_data, locale=locale)
+        # Last, and after the master data for the same reason that came after
+        # the organisation: a standing document is planned against the roles
+        # and the revenue this world actually ended up with. A strict no-op
+        # when nothing was asked for — see the field.
+        from . import policies as policies_module
+
+        return policies_module.applied(world, self.policies)
 
 
 # ---------------------------------------------------------------------------

@@ -41,6 +41,7 @@ from .models import (
     Cell,
     Column,
     ErrorType,
+    FormulaKind,
     IntentionalError,
     Lifecycle,
     Row,
@@ -48,6 +49,26 @@ from .models import (
 )
 
 MONEY_FORMAT = "#,##0;(#,##0)"
+
+#: Who signs each of the four, by role key (`documents.approver_of`).
+#:
+#: The pairing is the point of this episode. The chief actuary's **valuation
+#: report** goes to the reserving committee over the CFO's signature; the CFO's
+#: own **margin decision memo** — which books less than that report
+#: recommended — goes back over the chief actuary's. Each signed the other's
+#: document, which is what a contested reserve position actually looks like on
+#: paper, and where before there was an author each and no reviewer at all
+#: there are now two named people answering for the gap between the numbers.
+#:
+#: The **emergence note** is unsigned because it is a working paper written
+#: before any committee has seen it, which is the same argument banking's RWA
+#: working paper makes: a signature would raise its authority against the
+#: report it is meant to lose to.
+_APPROVED_BY: dict[str, str] = {
+    "reserve_triangle_workbook": "chief_actuary",
+    "actuarial_valuation_report": "cfo",
+    "margin_decision_memo": "chief_actuary",
+}
 
 
 def artifact_intents(
@@ -77,6 +98,9 @@ def artifact_intents(
             domain=domain,
             audience=audience,
             author_id=author,
+            approver_id=documents.approver_of(
+                roles, artifact_type, author, _APPROVED_BY
+            ),
             triggered_by=events,
             required_fact_ids=facts,
             size_profile=size,  # type: ignore[arg-type]
@@ -252,28 +276,76 @@ def reserve_triangle_ir(world, intent: ArtifactIntent, minter: Minter) -> Artifa
         })
         for ay in cohorts
     ]
+    # The book row. `generators/reserving.py` mints a paid and an incurred
+    # rollup at each valuation with `period=None` — that is how a total over
+    # accident cohorts is denominated — and the cohort comprehension above
+    # filters on `f.period`, so all four landed in no compiled cell: a reserve
+    # triangle with no total, and four facts a document was asked to carry and
+    # did not. The same shape as the finance-workbook defect, one file over: a
+    # period predicate that reads as a tidy-up and is really a filter on the
+    # thing being looked for.
+    #
+    # Declared as a SUM of the cohorts rather than pasted, so a reader who
+    # deletes an accident quarter sees the book move — and so the render tests'
+    # formula evaluator recomputes it against the rollup fact the cell names.
+    def rollup(kind: str, chooser) -> Cell:  # type: ignore[no-untyped-def]
+        found = chooser(facts, kind, None)
+        return Cell(
+            value=found.value.amount if found and found.value else None,
+            fact_id=found.id if found else None,
+            formula=FormulaKind.SUM,
+            operands=list(cohorts),
+        )
+
+    if cohorts:
+        diagonal_rows.append(Row(key="book", label="Whole book", emphasis=True, cells={
+            "paid_prior": rollup("claims.paid_to_date", _earliest),
+            "incurred_prior": rollup("claims.incurred_to_date", _earliest),
+            "paid_current": rollup("claims.paid_to_date", _latest),
+            "incurred_current": rollup("claims.incurred_to_date", _latest),
+        }))
     diagonals = Table(
         key="diagonals", title="Paid and incurred by accident cohort",
         columns=value_columns, rows=diagonal_rows,
         note=(
             f"{company.name} · long-tail liability book · {company.currency} "
-            f"{company.currency_unit}. Both valuations, one row per accident quarter."
+            f"{company.currency_unit}. Both valuations, one row per accident quarter, "
+            "and the whole book beneath them."
         ),
     )
 
     estimate_rows = [
         Row(key=ay, label=f"Accident quarter {ay}", cells={
+            # Both valuations, not only the live one. A reserve triangle whose
+            # estimate sheet carries one column is not a triangle — the whole
+            # subject of this episode is that an ultimate *moved*, and a reader
+            # holding only the strengthened figure cannot see that it did.
+            #
+            # Found by `validate.compiled_evidence` the day it existed: the
+            # prior ultimate was required by this workbook, cited by the corpus's
+            # own first evaluation case ("as at the 2026-03 valuation"), and
+            # carried by no compiled document. The `Book position` sheet below
+            # already showed prior against current for the totals; the
+            # cohort-level sheet did not.
+            "prior_ultimate": cell(_earliest(facts, "reserves.ultimate", ay)),
             "ultimate": cell(_latest(facts, "reserves.ultimate", ay)),
+            "prior_ibnr": cell(_earliest(facts, "reserves.ibnr", ay)),
             "ibnr": cell(_latest(facts, "reserves.ibnr", ay)),
             "future_development": Cell(value=None),
         })
         for ay in cohorts
     ]
     estimates = Table(
-        key="estimates", title="Actuarial estimate by accident cohort (current valuation)",
+        key="estimates", title="Actuarial estimate by accident cohort",
         columns=[
-            Column(key="ultimate", label="Ultimate", number_format=MONEY_FORMAT),
-            Column(key="ibnr", label="IBNR", number_format=MONEY_FORMAT),
+            Column(key="prior_ultimate", label="Ultimate, prior valuation",
+                   number_format=MONEY_FORMAT),
+            Column(key="ultimate", label="Ultimate, current valuation",
+                   number_format=MONEY_FORMAT),
+            Column(key="prior_ibnr", label="IBNR, prior valuation",
+                   number_format=MONEY_FORMAT),
+            Column(key="ibnr", label="IBNR, current valuation",
+                   number_format=MONEY_FORMAT),
             Column(key="future_development", label="Development beyond this valuation"),
         ],
         rows=estimate_rows,
@@ -307,10 +379,46 @@ def reserve_triangle_ir(world, intent: ArtifactIntent, minter: Minter) -> Artifa
         note="Booked = central estimate + risk margin remaining, at every valuation date.",
     )
 
+    # The reporting status of the valuation this grid is cut at. The intent has
+    # always required `close.status` — a workbook read at a period still open is
+    # a workbook whose figures can still move — and nothing in the compiler drew
+    # it, so the one fact that tells a reader how much weight the sheet bears
+    # was required by the document and carried by none of it.
+    basis = Table(
+        key="basis", title="Valuation basis and held position",
+        columns=[Column(key="value", label="Value")],
+        # By valid_from over the document's own facts, not by `world.period`.
+        # The first version of this row looked the status up at the world's
+        # current period and a German-locale insurance build — where the world
+        # stands at one period and the reserving episode reports another —
+        # rendered it blank, which is the finance-workbook defect exactly, in
+        # the code added to close the finance-workbook defect. `validate`'s new
+        # `carried_evidence` caught it on its first dispersed replay.
+        rows=[
+            Row(key="close_status", label="Reporting close status",
+                cells={"value": cell(_latest_of(facts, "close.status"))}),
+            # The margin the book actually holds over the actuary's own number.
+            # Required by this workbook since the episode was written, carried
+            # by the margin decision memo and by no sheet of the grid the memo
+            # argues against — which the union-level `compiled_evidence` could
+            # never see, because *some* document held it. The per-intent rule is
+            # what surfaced it: this document was handed the figure.
+            Row(key="held_gap", label="Held less actuarial central estimate",
+                emphasis=True,
+                cells={"value": cell(_latest_of(facts, "reserves.held_vs_central_gap"))}),
+        ],
+        note=(
+            "A valuation cut at an open close is provisional; the grid above moves with it. "
+            "The held position is stated here so the grid and the booked figure can be read "
+            "together rather than from two documents."
+        ),
+    )
+
     sections = [
         ArtifactSection(heading="Paid and incurred by accident cohort", table=diagonals),
         ArtifactSection(heading="Actuarial estimate by accident cohort", table=estimates),
         ArtifactSection(heading="Book position", table=position),
+        ArtifactSection(heading="Valuation basis", table=basis),
     ]
 
     author = world.people.by_id(intent.author_id)
@@ -345,6 +453,18 @@ def _earliest(facts, kind: str, period: str | None):  # type: ignore[no-untyped-
 
 def _latest(facts, kind: str, period: str | None):  # type: ignore[no-untyped-def]
     found = sorted((f for f in facts if f.kind == kind and f.period == period), key=lambda f: f.valid_from)
+    return found[-1] if found else None
+
+
+def _latest_of(facts, kind: str):  # type: ignore[no-untyped-def]
+    """The newest fact of *kind* the document holds, whatever period it names.
+
+    For the singletons — a close status, a valuation basis — where the document
+    carries exactly one and the period on it is the episode's, which is not
+    necessarily the world's. Reaching for `world.period` here is the mistake
+    that emptied the finance workbook, and a `period=` argument invites it.
+    """
+    found = sorted((f for f in facts if f.kind == kind), key=lambda f: f.valid_from)
     return found[-1] if found else None
 
 

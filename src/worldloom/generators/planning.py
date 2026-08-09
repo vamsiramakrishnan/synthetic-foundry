@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from .. import documents
 from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact
 from ..roles import unit_role_key
@@ -80,6 +81,13 @@ REMEDIATION_REVIEW_REACH = 20
 #: reaches it at all four quarter ends, which is what that profile *means*.
 PEAK_TRADING_INDEX = 1.10
 
+#: The services every retail world ships as episode props, estate or no estate.
+#: The register documents an estate somebody *asked* to grow; a build with only
+#: the four core services already names all of them in its incident documents,
+#: and gating on this count is what keeps such a build planning exactly what it
+#: planned before the register existed.
+CORE_SERVICES = 4
+
 #: The fact bundles a *declaratively authored* filing may ask for, and what each
 #: one is (``documents.FilingPlan.facts``, ``worldloom.doctypes``).
 #:
@@ -109,6 +117,46 @@ FILING_BUNDLES: dict[str, str] = {
 }
 
 
+#: Which role signs off each artifact type, by role key.
+#:
+#: The corpus's documents were all authored and none of them approved, which is
+#: not how a company works and, more to the point, is not how a company's
+#: *archive* works: "who approved the March pack for Fuel and Convenience" is a
+#: question every real reader asks and no artifact here could answer.
+#:
+#: A closed table rather than "the author's manager", and the reason is that
+#: approval is not a reporting line. A variance memo is signed by the CFO
+#: because the CFO owns the number, not because the controller reports to them;
+#: a remediation whose finding is an ownership gap is signed by the chief
+#: executive rather than by the CIO whose team the gap is in, which is the same
+#: argument `remediation_scope_review` already makes about who *writes* it.
+#: Reading the two tables side by side is how a reader checks that argument.
+#:
+#: **Absence is a claim too.** A ServiceNow ticket has an assignee, an email
+#: thread has a sender, a republished calendar is issued rather than approved,
+#: a working note is nobody's but its writer's, and an executive summary *is*
+#: the executive's own. Those types are missing from this table deliberately:
+#: a corpus where everything carries a signature is as unlike a real archive as
+#: one where nothing does.
+#:
+#: `member_report` is the interesting omission. A mutual's report to its
+#: members is approved by the board, and this world has no board — inventing a
+#: signature for it would put a name on a document nobody in the roster could
+#: have signed.
+_APPROVED_BY: dict[str, str] = {
+    "finance_workbook": "controller",
+    "cfo_variance_memo": "cfo",
+    "meeting_minutes": "cfo",
+    "incident_rca": "cio",
+    "service_impact_assessment": "cio",
+    "remediation_scope_review": "ceo",
+    "peak_trading_review": "ceo",
+    "audit_committee_pack": "ceo",
+    "sponsor_pack": "ceo",
+    "ministerial_brief": "ceo",
+}
+
+
 def artifact_intents(
     minter: Minter,
     *,
@@ -126,6 +174,9 @@ def artifact_intents(
     filings: Mapping[str, float] | None = None,
     estate: EstateReading | None = None,
     seasonal_index: float = 1.0,
+    milestones: tuple[CanonicalFact, ...] = (),
+    estate_services: int = 0,
+    masterdata_rows: int = 0,
 ) -> tuple[ArtifactIntent, ...]:
     """Plan the artifacts this episode warrants.
 
@@ -240,7 +291,7 @@ def artifact_intents(
     def intent(artifact_type: str, domain: str, audience: str, author: str,
                facts: list[str], events: list[str], size: str, rationale: str,
                *, supersedes: str | None = None, derived_from: list[str] | None = None,
-               revises: str | None = None) -> None:
+               revises: str | None = None, approved_by: str | None = None) -> None:
         intents.append(
             ArtifactIntent(
                 id=minter.next("ART"),
@@ -248,6 +299,9 @@ def artifact_intents(
                 domain=domain,
                 audience=audience,
                 author_id=author,
+                approver_id=documents.approver_of(
+                    roles, artifact_type, author, _APPROVED_BY, role_key=approved_by,
+                ),
                 triggered_by=events,
                 required_fact_ids=facts,
                 size_profile=size,  # type: ignore[arg-type]
@@ -261,18 +315,47 @@ def artifact_intents(
     # Republished every period, replacing the last one. This is the corpus's
     # cleanest supersession chain: two documents that both look authoritative,
     # where only the newest is current and the older ones are still on the shelf.
+    # The calendar's second section — "Escalation: what happens when the date
+    # moves, and where the period ended up" — asks for `close.revised_date`,
+    # `close.status` and `close.delay`, and this intent carried the due date
+    # alone. Measured across thirty-one calendars in thirteen builds: the
+    # section fired zero times, so half of every close calendar's declared
+    # outline had never been written. A standing document that states a
+    # commitment and never states whether it was met is the document a reader
+    # goes to first and learns nothing from.
+    # The revision, and only the revision. The first attempt gave the calendar
+    # the final status and the delay as well, and that is what a close calendar
+    # is *not*: adding facts that are only true once the period has landed moved
+    # the document's own date from the first morning of the close to the day
+    # after it finished, and the corpus's earliest document — the one every
+    # supersession chain hangs off — became a retrospective. The status and the
+    # delay are reporting, and the CFO memo carries both. What belongs on a
+    # timetable is the date, and the date it moved to.
+    calendar_facts = [episode.keys["fact_due_date"]]
+    if episode.had_incident:
+        calendar_facts.append(episode.keys["fact_revised_date"])
     intent("close_calendar", "finance", "all_staff", roles["reporting_manager"],
-           [episode.keys["fact_due_date"]], [episode.keys["event_close_started"]], "small",
-           "The close calendar states the committed date every period.",
+           calendar_facts, [episode.keys["event_close_started"]], "small",
+           "The close calendar states the committed date every period, and any revision to it.",
            supersedes=latest("close_calendar"))
 
     intent("finance_workbook", "finance", "finance", roles["reporting_manager"],
            detail + acct + [episode.keys["fact_close_delay"]], [episode.close_event_id], "long",
            "The month-end model is the source artifact for the period and must reconcile.")
 
+    # Same defect, same shape: the memo's closing "Recommendation" section wants
+    # the remediation, its classification and the owner of the control behind
+    # it, and no `ops.*` fact was ever in the memo's required set — 0 of 31.
+    # The section only makes sense in a period something went wrong in, so the
+    # facts are added on the same gate the incident filings use rather than
+    # unconditionally; in a clean month the plan finds nothing and the section
+    # is correctly absent rather than permanently unreachable.
+    memo_facts = money + [episode.keys["fact_close_status_final"], episode.keys["fact_close_delay"]]
+    if episode.had_incident:
+        memo_facts += [episode.keys["fact_remediation"], episode.keys["fact_classification"],
+                       episode.keys["fact_owner"]]
     intent("cfo_variance_memo", "finance", "group_cfo", roles["controller"],
-           money + [episode.keys["fact_close_status_final"], episode.keys["fact_close_delay"]],
-           [episode.close_event_id], "medium",
+           memo_facts, [episode.close_event_id], "medium",
            "Variance commentary is produced for every close.")
 
     if episode.had_incident and not actor_authored:
@@ -380,7 +463,13 @@ def artifact_intents(
                    roles[unit_role_key(unit_key, "_bp")],
                    unit_facts, [episode.close_event_id], "small",
                    "Each division's close is argued by the person who partners it, "
-                   "not only summed by the centre.")
+                   "not only summed by the centre.",
+                   # Signed by *this* division's managing director, which is the
+                   # one approval in the corpus that fans out with the company:
+                   # widen a retailer to eight divisions and eight different
+                   # people sign eight different documents. `_APPROVED_BY` is a
+                   # table keyed by type and has no way to say which one.
+                   approved_by=unit_role_key(unit_key, "_md"))
 
     # High-density fan-out: one layer below the unit, only once a build has
     # asked for it. A quarter of each unit's categories, ranked by revenue and
@@ -419,7 +508,8 @@ def artifact_intents(
                        roles[unit_role_key(unit_key, "_bp")],
                        category_facts, [episode.close_event_id], "small",
                        "At high density the same business partner also argues the "
-                       "categories that moved the unit, not only its total.")
+                       "categories that moved the unit, not only its total.",
+                       approved_by=unit_role_key(unit_key, "_md"))
 
     if episode.had_incident and not actor_authored:
         k = episode.keys
@@ -686,5 +776,46 @@ def artifact_intents(
             continue
         intent(artifact_type, plan.domain, plan.audience, author,
                cited, [episode.close_event_id], plan.size, plan.rationale)
+
+    # The company timeline — planned by the first episode that runs, and never
+    # again. The `MFACT-` milestone facts have existed since the org builder
+    # did, and until this intent nothing carried them: five facts per world,
+    # in no document, with the `milestone_provenance` evaluation family
+    # correctly refusing to ask about any of them. Planned last so its `ART`
+    # id lands after every id an existing narration ledger already cites, and
+    # with no trigger event: the page predates every close (its date derives
+    # from the newest milestone it cites) and pinning it to this episode's
+    # start event would claim the close caused the company's history.
+    if latest("company_timeline") is None:
+        dated = sorted(f.id for f in milestones if f.kind == "lore.milestone")
+        if dated:
+            intent("company_timeline", "governance", "all_staff",
+                   roles["reporting_manager"], dated, [], "small",
+                   "Every intranet has the page the onboarding pack links to: "
+                   "what happened, dated, before anyone currently arguing about "
+                   "it was in the room.")
+
+    # The two standing extracts, on the same once-only rule as the timeline
+    # and appended after it for the same id-stability reason. Each is gated on
+    # the thing it projects actually existing: the register on an estate the
+    # `--estate` generator grew (the four core props are already named by every
+    # incident document, and a four-row register would add a page without
+    # adding reach), the reference extract on `--master-data` having minted
+    # anything. Both cite the close's committed date — an extract is cut *for*
+    # a close, and an intent citing nothing has no date.
+    if latest("service_register") is None and estate_services > CORE_SERVICES:
+        # The CIO's document where the world has a CIO; the reporting manager's
+        # where it does not — same `or`-chain shape as the filings above, so a
+        # shape without the role gets the register rather than a KeyError.
+        intent("service_register", "operations", "all_staff",
+               roles.get("cio") or roles["reporting_manager"],
+               [episode.keys["fact_due_date"]], [], "medium",
+               "The CMDB, as a page: what runs, on what, owned by whom — the "
+               "inventory every impact question starts from.")
+    if latest("reference_data_extract") is None and masterdata_rows:
+        intent("reference_data_extract", "finance", "finance",
+               roles["reporting_manager"], [episode.keys["fact_due_date"]], [], "long",
+               "The ERP's vendor, customer and item masters, extracted — the "
+               "join surface transactional documents point into.")
 
     return tuple(intents)

@@ -215,6 +215,24 @@ class MonthEndClose:
     actor_ledger: tuple = field(default=(), compare=False)
     """Recorded actor decisions to replay instead of asking the provider."""
 
+    conversations: bool = False
+    """Produce the episode's knowledge layer beside its facts and artifacts.
+
+    An event mints facts and makes artifacts necessary — *including people
+    talking*. With this on, ``worldloom.conversation`` derives the third output:
+    who was told what, by whom, and therefore who in the company knew each fact
+    at each moment. It adds no facts, no events and no documents; it records the
+    epistemics of the ones the episode already produced, and
+    ``worldloom.asymmetry`` turns that record into evaluation cases nothing else
+    in the corpus can pose.
+
+    Off by default, and off is byte-for-byte what every corpus already built is:
+    nothing runs, and ``World.export`` writes the two files only when they have
+    rows. Refused together with ``actors``, which produces the same two records
+    itself and from richer input — two producers for one ledger is two accounts
+    of who knew what.
+    """
+
     eval_density: float = 1.0
     """The ``--eval-density`` knob's numeric value: 0.0/1.0/2.0 for
     low/standard/high, or any value a caller composes directly.
@@ -262,6 +280,16 @@ class MonthEndClose:
         # currency its one financial fact is stated in.
         if world._archetype is None:
             raise ValueError("this world has no archetype; build one with RetailWorld(...)")
+        if self.conversations and self.actors is not None:
+            # Both write `observations` and `messages`. Refused rather than
+            # merged: two producers appending to one knowledge ledger would put
+            # two learned_at values on one (person, fact) pair, and every
+            # asymmetry answer derived from it would depend on which producer
+            # ran second.
+            raise ValueError(
+                "conversations and actors both produce this episode's knowledge"
+                " ledger; an actor episode already derives its own"
+            )
 
         rng = Rng(world.seed).derive(f"scenario/{type(self).__name__}/{self.period}")
         minter = world._minter
@@ -396,6 +424,20 @@ class MonthEndClose:
             # these would give it the whole ledger to reach into.
             filings=filings(world),
             estate=_estate_reading(world, episode),
+            # The org builder's dated lore witnesses, so the plan can put the
+            # company's own history in a document — see the timeline block at
+            # the end of `planning.artifact_intents`.
+            milestones=tuple(f for f in world._facts if f.kind == "lore.milestone"),
+            # Counts, not collections — the same discipline as `filings` and
+            # `estate` above: the plan gates on how much of each there is, and
+            # only the compiled builders read the rows themselves.
+            estate_services=len(list(world.services)),
+            # `masterdata` is None on any world that never asked for it, which
+            # is every world the flagless CLI builds.
+            masterdata_rows=(
+                len(world.masterdata.vendors) + len(world.masterdata.customers)
+                + len(world.masterdata.skus)
+            ) if world.masterdata is not None else 0,
             # The trading year, at this period. `self.seasonality or DEFAULT`
             # is the same fallback `finance.generate` is given above, and it
             # has to be: the plan must judge the month against the same year
@@ -436,6 +478,21 @@ class MonthEndClose:
             # planner did not write.
             intents = tuple(advanced._artifact_intents[len(prior_intents):])
 
+        conversation = None
+        if self.conversations:
+            from .conversation import derive as derive_conversation
+
+            # Derived from the whole world rather than from this period's slice:
+            # who knew what is cumulative, and a controller who learned the
+            # mapping table was unowned in an earlier period still knows it. The
+            # observation ledger is keyed on (observer, fact) and appended, so a
+            # second period adds only what is new.
+            conversation = derive_conversation(advanced, minter=minter, roles=roles)
+            actor_state = {
+                "observations": conversation.observations,
+                "messages": conversation.messages,
+            }
+
         from . import graphs
         # Imported here rather than at module scope for the reason `graphs` is:
         # `evaluate` pulls in the render layer through its index, and a
@@ -470,6 +527,10 @@ class MonthEndClose:
             period=self.period,
             history=world._facts,
             prior_intents=prior_intents,
+            # What the corpus already asks, so the per-episode families cannot
+            # re-mint a standing question verbatim each period. Six episodes
+            # used to mean six copies of every policy and abstention case.
+            prior_cases=world._evaluations,
             density=self.eval_density,
             # The estate, as the graph it has always been. The taxonomy owns
             # what it asks; it cannot own what it can *see*, and until this
@@ -507,6 +568,32 @@ class MonthEndClose:
                                         tasks=actor_state["tasks"], period=self.period),
             )
 
+        if conversation is not None and conversation.observations:
+            from .asymmetry import cases as asymmetry_cases
+
+            # Generated against a world that already carries the ledger, because
+            # every case here has to be checkable by the corpus a reader gets:
+            # `validate` re-derives nothing, it reads `observations.jsonl`.
+            enriched = advanced.extend(
+                observations=conversation.observations,
+                messages=conversation.messages,
+            )
+            cases = (
+                *cases,
+                *asymmetry_cases(
+                    minter,
+                    world=enriched,
+                    # The whole ledger, so "who already held it" names everyone
+                    # who did — including people who learned it in an earlier
+                    # period — while `eligible` keeps the *questions* about what
+                    # this close newly put in front of somebody.
+                    observations=tuple(enriched.observations),
+                    messages=tuple(enriched.messages),
+                    period=self.period,
+                    eligible=frozenset(o.fact_id for o in conversation.observations),
+                ),
+            )
+
         from .recipe import with_step
 
         return advanced.extend(
@@ -536,6 +623,11 @@ class MonthEndClose:
                 # corpora were built must not appear in the recipe of a build
                 # that did not use it.
                 **({} if self.trend_pct == 0.0 else {"trend_pct": self.trend_pct}),
+                # And again. `conversations` is the newest of the three and the
+                # cheapest to get wrong: writing `false` unconditionally would
+                # move the recipe of every default build, which is precisely the
+                # byte-for-byte diff CI runs on every push.
+                **({} if not self.conversations else {"conversations": True}),
             ),
             **actor_state,
         )
@@ -1240,6 +1332,12 @@ class Reorganisation:
             units=(unit,),
             at=at,
             period=self.period,
+            # Access follows the post. A divisional MD is named on the finance
+            # policy so they can read — and sign — their own division's close
+            # pack, and a handover that moved the title without moving the
+            # access left the corpus recording a signature from somebody it
+            # also recorded as unable to open the document.
+            policies=world._access_policies,
         )
 
         from .recipe import with_step
@@ -1250,6 +1348,7 @@ class Reorganisation:
             people=change.people,
             business_units=change.business_units,
             roles=change.roles,
+            access_policies=change.access_policies,
             artifact_intents=_personnel_notice(minter, change, _announcer(world, change), self.period),
             period=self.period,
             recipe=with_step(

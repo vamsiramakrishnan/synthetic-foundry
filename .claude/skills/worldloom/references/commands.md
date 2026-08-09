@@ -66,13 +66,16 @@ Generate a world deterministically from a seed, then validate it.
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--business-units-end` | Exact active business-unit count in the final period. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
+| `--conversations` | Record the episode's knowledge layer beside its facts and documents: who was told what, by whom, and therefore who knew each fact when. Adds no facts and no documents, and adds information-asymmetry evaluation cases nothing else in the corpus can pose. Refused with `--actors`, which derives its own. |
 | `--distractors` | Add this many provenance-true noise artifacts once the episode(s) finish: superseded drafts, personal working copies, and routine notices — real authors, real dates, real facts, answering nothing an evaluation case needs. 0 (the default) touches nothing. |
 | `--employees` | Override the archetype's stated headcount. |
+| `--episode` | Run a pack-authored business process each period, after the engine's own — repeatable. Names an EpisodeSpec the --pack carries under `episodes` (see the worldloom-process skill for authoring one). This is how authored sales, legal or project processes ship: the pack declares them, this flag runs them, and the recipe replays them. |
 | `--estate` | Grow a service landscape around the episode's own services: small, medium or large. Without it the estate is the four services and five systems the close names and nothing else — nine nodes whether the archetype has three stores or sixteen hundred, so nothing has a blast radius and `worldloom topology` has little to read. Omit it and every existing corpus is byte-identical. |
 | `--eval-density` | How much of the world's own size the evaluation set and its fan-out documents are allowed to exploit: `low` trims the optional close documents to the floor a benchmark needs; `standard` is today's corpus, unchanged; `high` adds direct-lookup, comparison, and cross-period cases (and the documents to source them from) that only exist once a world has more units, categories, sites, or periods to ask about. `standard` reproduces every existing corpus byte for byte. |
 | `--facet` | Say what the company *is*, as `name=value` — `--facet listing=listed --facet maturity=legacy`. Repeatable; `worldloom pack facets` lists the dimensions and what each value commits the world to. A facet is not a label: `listed` mints an audit committee chair and a head of investor relations, raises status-report density, and puts the audit committee in the filing approval chain, because that is what being listed means operationally. Contradictory claims are refused naming both rather than merged — there is no listed mutual. Consequences a facet has that nothing here implements are printed rather than dropped. Costs, and the second one is the surprising one: the implied roles are appended to the organisation, so --employees must be large enough to contain them; and naming any facet settles *every* facet at its registry default, which is what makes the claims composable but means `--facet listing=listed` alone also asserts trading_pattern=steady — a flat year, replacing the engine's 21% December. Say `--facet trading_pattern=christmas_peak` to keep it. An explicit --estate beats a facet's, and a pack's own trading year beats one a facet implies, because you said those and the facet only implied it. |
 | `--format`, `-f` | Render these formats. Repeatable. Omit to plan artifacts without rendering. |
 | `--headcount-end` | Exact stated workforce in the final period. Intermediate periods are interpolated deterministically; may be above or below --employees. Requires a multi-period retail build. |
+| `--hiring` | Raise this many vacancies per period and fill them. Each one is a requisition, an offer and an onboarding checklist, authored by a manager drawn from anywhere in the reporting tree rather than from the role table — which is how a modelled organisation stops being a source of bylines. The approver comes from the delegation of authority when --policies gave the company one. |
 | `--incident` | Force the operational incident on or off. Omit to let the seed and lore decide. |
 | `--inspired-by` | Describe a real business and build a world of that shape (e.g. 'a large Australian grocer'). Shape only — no data about it is used. |
 | `--locale` | The jurisdiction this corpus is in: `australia`, `united_kingdom`, `germany` or `gulf` (`worldloom pack locales`). Every world this tool has built is Australian, and in more places than place names: a German subsidiary's variance memo printing `(1,234)` where every German report prints `-1.234` tells a reader the corpus is synthetic, and tells them from the punctuation. It reaches the *render* half — the digit grammar, applied corpus-wide so a table and the prose citing it cannot disagree — and the *build* half: the region labels in every site name, the pools the people are drawn from, the headquarters city, the retailer's own second word, and the currency and financial year every money fact is stated in. A pack's `name_pools`, `regions`, `headquarters` and currency still win where they overlap, because a pack is a claim about this company and a locale about the country it is in. One thing it still does not reach: the working week never leaves the world spec, so the close calendar counts Monday to Friday wherever the corpus is set, and a bank's or insurer's own name comes from its vertical's pool rather than the locale's. It rides the recipe, so a localised corpus rebuilds as the same world spelled the same way. Omit it and every existing corpus is byte-identical. |
@@ -84,7 +87,9 @@ Generate a world deterministically from a seed, then validate it.
 | `--period`, `-p` | Reporting period, YYYY-MM. |
 | `--periods` | Run this many consecutive episodes — closes for the retail vertical, or a single-episode vertical's own cadence (a domain's period_step_months). More than one gives recurrence, superseded documents, and the evaluation questions a single episode cannot pose. |
 | `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
+| `--policies` | Give the company its standing documents: core or full. These are the papers a company *has* rather than produces — a delegation of authority, an expense policy, a leave policy, an information security policy — as opposed to what a close or an incident emits. Without it an assistant asked what the approval threshold is has nothing to find, because the company has no rules. Money provisions scale off the company's own revenue, so two archetypes do not share a limit. Omit it and every existing corpus is byte-identical. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
+| `--reviews` | Review this many people per period. Each is a signed performance review countersigned by the manager's own manager, plus the running one-to-one note that fed it — at a lower authority, and saying something slightly different. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
 | `--services-end` | Exact active service count in the final period. |
 | `--sites-end` | Exact active site count in the final period. |
@@ -176,7 +181,7 @@ worldloom evals export <CORPUS>
 
 ### `worldloom evaluate`
 
-Score one or both baseline retrievers against the corpus's evaluation set.
+Score one or more retrievers against the corpus's evaluation set.
 
 ```
 worldloom evaluate <CORPUS>
@@ -185,7 +190,8 @@ worldloom evaluate <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. This is the measure half of the measure-then-iterate loop — an agent deciding what to change next should read data, not parse a bar chart. |
-| `--retriever` | bm25 (default — the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family — see src/worldloom/evaluate/tfidf.py), or both (side by side, with a per-family agreement reading: a family low under both retrievers is structurally hard, not hard for one heuristic). |
+| `--retriever` | bm25 (default — the original baseline, unchanged), tfidf (vector-space cosine, a genuinely different ranking family — see src/worldloom/evaluate/tfidf.py), embedding (dense vectors against a pinned model — needs the `embeddings` extra or a vector cache), both (the two lexical baselines side by side, with a per-family agreement reading), or all (every retriever this installation can run, skipping any whose model is unavailable). |
+| `--vectors` | Vector cache for --retriever embedding: a file, or a directory to keep one per model. A corpus that carries its cache scores against the embedding retriever with no model installed at all. |
 | `--verbose`, `-v` | Show every question. |
 | `-k` | How many passages a retriever may return. |
 
@@ -436,6 +442,39 @@ worldloom plan requests <CORPUS>
 | --- | --- |
 | `--out`, `-o` | Write JSON here instead of stdout. |
 
+### `worldloom present`
+
+Decide who a corpus's documents are for, and check a profile you wrote.
+
+### `worldloom present brief`
+
+The context needed to author a profile, as JSON.
+
+```
+worldloom present brief <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write the brief here as JSON. |
+
+### `worldloom present describe`
+
+Every registered profile and every knob, rendering nothing.
+
+### `worldloom present lint`
+
+Check a profile, and say every reason it cannot be accepted.
+
+```
+worldloom present lint <SPEC>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--corpus` | Check overrides against this corpus's doctypes. |
+| `--register` | Register the profile on acceptance, so a later --profile can name it. |
+
 ### `worldloom probe`
 
 Derive a world's physics by asking, one question at a time, under propagation.
@@ -520,6 +559,7 @@ worldloom render <CORPUS>
 | --- | --- |
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
+| `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
 
 ### `worldloom series`
 
@@ -589,3 +629,17 @@ worldloom validate <CORPUS>
 ### `worldloom version`
 
 Print the installed version.
+
+### `worldloom workspace`
+
+Lay a rendered corpus out as a shared drive, with its permissions.
+
+```
+worldloom workspace <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--noise` | How untidy the drive is: none, lived_in or neglected. Adds copies, misfilings, personal versions and archive leftovers — every one a duplicate of real corpus content, never invented text, because a drive's junk is the same documents saved again in the wrong place under the wrong name. Each is labelled in permissions.jsonl, so a benchmark can tell 'found the wrong copy' from 'was wrong'. |
+| `--out`, `-o` | Where to write the tree. |
+| `--overwrite` | Replace an existing tree. |

@@ -568,6 +568,7 @@ class World:
         systems: tuple[System, ...] = (),
         services: tuple[Service, ...] = (),
         sites: tuple[Site, ...] = (),
+        access_policies: tuple[AccessPolicy, ...] = (),
         roles: dict[str, str] | None = None,
         period: str | None = None,
         recipe: dict[str, Any] | None = None,
@@ -620,7 +621,13 @@ class World:
             _categories=self._categories,
             _sites=_merged(self._sites, sites),
             _personas=self._personas,
-            _access_policies=self._access_policies,
+            # Merged by id, like people and units and for the same reason: a
+            # policy that changes is the same policy, not a second one. What
+            # changes it is a post changing hands — access follows the post
+            # (`personnel.OrgChange.access_policies`) — and a world that
+            # appended a second POLICY-0002 instead would have two answers to
+            # "who may open this" and no way to say which is current.
+            _access_policies=_merged(self._access_policies, access_policies),
             _lore=self._lore,
             _facts=self._facts + facts,
             _events=self._events + events,
@@ -752,6 +759,27 @@ class World:
         for name in formats:
             rendered.extend(render_module.renderer(name)(staged))
 
+        # The markdown catch-all. Markdown defers a type to the format that
+        # owns it — a workbook to its sheet, a ticket to its bundle — but the
+        # deferral is only sound while the owning renderer runs. Under
+        # `-f markdown -f docx -f xlsx -f pdf`, no requested format claimed
+        # `jira_issues` or `servicenow_incident`, so both compiled, entered
+        # the manifest with an empty path, and reached the drive as nothing —
+        # while `validate` passed, since an empty path also means the
+        # legitimate "compiled, not rendered". Only this method knows what was
+        # requested, so the orphan check lives here: anything unclaimed falls
+        # back to markdown when markdown was asked for, and a deliberately
+        # partial render (`render("xlsx")`) stays exactly as partial as the
+        # caller made it.
+        if "markdown" in formats:
+            claimed = {r.artifact_id for r in rendered if r.artifact_id}
+            orphaned = {ir.id for ir in irs if ir.id not in claimed}
+            if orphaned:
+                from .render import markdown as markdown_module
+
+                rendered.extend(markdown_module.orphans(staged, orphaned))
+        rendered.extend(render_module.citation_sidecars(staged))
+
         return replace(
             staged,
             _artifacts=self._manifest_for(irs, rendered=rendered),
@@ -824,6 +852,7 @@ class World:
                     path=getattr(item, "path", ""),
                     media_type=getattr(item, "media_type", "application/x-worldloom-ir"),
                     author_id=intent.author_id,
+                    approver_id=intent.approver_id,
                     audience=intent.audience,
                     created_at=documents.written_at(intent, facts),
                     authority=authority,

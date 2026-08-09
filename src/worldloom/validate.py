@@ -37,6 +37,8 @@ from .ids import id_prefix, is_id
 from .models import Authority, ErrorType, FormulaKind, Lifecycle
 
 if TYPE_CHECKING:  # pragma: no cover
+    from datetime import datetime
+
     from .world import World
 
 #: Tolerance for reconciliation, in the corpus's currency unit. Financial facts
@@ -339,6 +341,58 @@ class _Validator:
                     artifact.id,
                     f"author {author.id} ({author.function}) is not permitted by"
                     f" {policy.id} ({policy.label})",
+                )
+
+    def approvals(self) -> None:
+        """A signature has to be one somebody could actually have given.
+
+        Three ways a synthetic approval goes wrong, and all three are the kind
+        a reader notices before they notice anything else:
+
+        * **Signed by its own author.** Not an approval — a byline printed
+          twice. `planning.approver` drops it at the source; this is the check
+          that says so, because nothing stops a domain module or an authored
+          filing from setting the field directly.
+        * **Signed by somebody who cannot open it.** The same argument
+          `author_cannot_see_own_artifact` makes one method up, and it bites
+          harder here: an author who cannot read their own document is an
+          access bug, but an *approver* who cannot is a claim that somebody
+          reviewed a document they were never shown.
+        * **Signed by somebody who does not exist.** A dangling id, checked
+          separately from the two above so a report says which of the three it
+          is rather than "approval invalid".
+
+        Every corpus with no approvals scores zero out of zero here, which is
+        every corpus built before `ArtifactIntent.approver_id` existed.
+        """
+        policies = {p.id: p for p in self.world._access_policies}
+        for artifact in self.world.artifacts:
+            if not artifact.approver_id:
+                continue
+            self.checks += 1
+            approver = self._people.get(artifact.approver_id)
+            if approver is None:
+                self.fail(
+                    "access", "approver_not_employed", artifact.id,
+                    f"approver {artifact.approver_id} is not on the roster",
+                )
+                continue
+            self.checks += 1
+            if artifact.approver_id == artifact.author_id:
+                self.fail(
+                    "access", "approver_is_the_author", artifact.id,
+                    f"{approver.id} ({approver.title}) signed off their own"
+                    " document, which records no review at all",
+                )
+            policy = policies.get(artifact.access_policy_id or "")
+            if policy is None:
+                continue
+            self.checks += 1
+            if not policy.permits(approver):
+                self.fail(
+                    "access", "approver_cannot_see_what_they_signed", artifact.id,
+                    f"approver {approver.id} ({approver.function}) is not"
+                    f" permitted by {policy.id} ({policy.label})",
                 )
 
     def artifact_files(self) -> None:
@@ -1345,12 +1399,124 @@ class _Validator:
                     f" before it was valid at {fact.valid_from.isoformat()}",
                 )
 
+            observer = self._people.get(observation.observer_id)
+            if observer is None:
+                continue
+            self.checks += 1
+            if (observer.joined is not None and observer.joined > observation.learned_at) or (
+                observer.left is not None and observer.left <= observation.learned_at
+            ):
+                # The employment side of the same clock. Somebody learning
+                # something before they were hired, or after they left, is not an
+                # asymmetry — it is a knowledge ledger that outran the payroll,
+                # and every "who could have acted" answer derived from it names
+                # a person who was not there. Found in the shipped scripted-actor
+                # corpus: the `duty` channel works backwards from a fact's own
+                # validity, so a 2022 close norm reached a 2024 hire in 2022.
+                self.fail(
+                    "actors",
+                    "observer_not_employed",
+                    observation.id,
+                    f"{observer.id} learned {observation.fact_id} at"
+                    f" {observation.learned_at.isoformat()}, outside their employment",
+                )
+
+        # `(observer, fact)` to the first moment they held it. Built once: the
+        # three message and authorship checks below all ask the same question of
+        # it, and re-scanning the ledger per message is the shape of quadratic
+        # this file has had to remove twice already.
+        held: dict[tuple[str, str], datetime] = {}
+        for observation in w.observations:
+            key = (observation.observer_id, observation.fact_id)
+            first = held.get(key)
+            if first is None or observation.learned_at < first:
+                held[key] = observation.learned_at
+
+        # Whether the ledger is a *settled* account of what the company knew, or
+        # a record of the projections handed to actors at the moments they were
+        # invoked. An execution ledger is present only in the second case, and
+        # the difference decides which claims can honestly be checked: an actor
+        # episode observes for the actors it woke, at the moments it woke them,
+        # and says nothing about anybody else — so a recipient who was never
+        # invoked has no entry, and requiring one would fail the runtime for a
+        # claim it does not make. `conversation.derive` does make that claim.
+        settled = not w._actor_ledger
+
         for message in w.messages:
             self.check_ref(message.id, "sender_id", message.sender_id, expect="PERSON")
             self.check_refs(message.id, "recipient_ids", message.recipient_ids, expect="PERSON")
             self.check_refs(
                 message.id, "disclosed_fact_ids", message.disclosed_fact_ids, expect=FACT_REFS
             )
+            for fact_id in message.disclosed_fact_ids:
+                if fact_id not in facts:
+                    continue
+                self.checks += 1
+                first = held.get((message.sender_id, fact_id))
+                if first is None or first > message.sent_at:
+                    # Telling somebody what you do not yet know is the fastest
+                    # way to launder a fact into a document its author could
+                    # never have had. Checked against the shipped ledger rather
+                    # than re-derived, for the reason the rest of this group is:
+                    # the runtime guards the run, and the corpus is a directory.
+                    self.fail(
+                        "actors",
+                        "undisclosed_by_sender",
+                        message.id,
+                        f"{message.sender_id} disclosed {fact_id} at"
+                        f" {message.sent_at.isoformat()}, having no record of it",
+                    )
+                    continue
+                if not settled:
+                    continue
+                for recipient in message.recipient_ids:
+                    self.checks += 1
+                    arrived = held.get((recipient, fact_id))
+                    if arrived is None or arrived > message.sent_at:
+                        # And a message that reaches nobody's ledger moved no
+                        # knowledge, which `ActorMessage`'s own docstring says is
+                        # not a message. Either the disclosure is fiction or the
+                        # ledger is incomplete; both make the asymmetry answers
+                        # derived from it wrong, and neither is visible from the
+                        # message alone.
+                        self.fail(
+                            "actors",
+                            "disclosure_not_delivered",
+                            message.id,
+                            f"disclosed {fact_id} to {recipient}, whose record of it"
+                            f" is {'absent' if arrived is None else arrived.isoformat()}",
+                        )
+
+        # An author must have heard what their document says. This is the
+        # epistemic half of `cites_future_fact`: that check asks whether a fact
+        # existed when a document was written, this one asks whether its author
+        # had any way of knowing it. Only for authors the ledger covers — a role
+        # with no `ActorPolicy` is not an actor, has no knowledge ledger, and
+        # cannot be held to one; that gap is in the policy table, not here.
+        if settled and w.observations:
+            from .documents import written_at
+
+            covered = {observation.observer_id for observation in w.observations}
+            for intent in w.artifact_intents:
+                if intent.author_id not in covered:
+                    continue
+                try:
+                    deadline = written_at(intent, facts)
+                except ValueError:
+                    continue
+                for fact_id in intent.required_fact_ids:
+                    if fact_id not in facts:
+                        continue
+                    self.checks += 1
+                    first = held.get((intent.author_id, fact_id))
+                    if first is None or first > deadline:
+                        self.fail(
+                            "actors",
+                            "author_cited_unobserved",
+                            intent.id,
+                            f"{intent.author_id} cites {fact_id} in a document dated"
+                            f" {deadline.isoformat()}, having no record of it by then",
+                        )
 
         for task in w.tasks:
             self.check_ref(task.id, "created_by", task.created_by, expect="PERSON")
@@ -1559,10 +1725,141 @@ class _Validator:
                         f"expects {fact_id} but no artifact or plan carries it",
                     )
 
+        self.compiled_evidence()
+
+    def compiled_evidence(self) -> None:
+        """A fact a document was *asked* to carry is not a fact it carries.
+
+        `unreachable_answer` above reads `required_fact_ids` — the plan — and
+        has to, because at step 3 nothing is compiled and the plan is all there
+        is. The moment a corpus *is* compiled that becomes the weaker claim, and
+        the gap between the two is where the worst defect this repository has
+        had was hiding: in a multi-period corpus the month-end model looked its
+        figures up at the wrong month and rendered with every cell empty, while
+        the plan still listed the thousand facts it had been handed. Measured on
+        an eight-division, six-period build: **6,185 facts planned into
+        documents, 1,718 actually carried**, and 55 of 479 evaluation cases with
+        their evidence in no document at all — with `validate` reporting clean.
+
+        So this is the same question asked of what was *built* rather than of
+        what was intended, and it runs only when there is something built to ask
+        it of. A plan-only corpus scores zero out of zero here, which is what it
+        should: nothing has been compiled, so nothing can be missing from it.
+        """
+        if not self.world._artifact_irs:
+            return
+        carried: set[str] = set()
+        for ir in self.world.artifact_irs:
+            carried.update(ir.fact_ids())
+
+        # Compiling is all-or-nothing per corpus, so a partial set of IRs is a
+        # compiler that gave up on some intents rather than a corpus half-built
+        # on purpose — and the whole group above would then be measuring the
+        # documents that *did* compile and reporting clean. An adversarial pass
+        # over this validator deleted every IR but one and got a passing report
+        # with a smaller check count nobody compares against anything.
+        self.checks += 1
+        if len(self.world._artifact_irs) != len(self.world.artifact_intents):
+            self.fail(
+                "artifact",
+                "compiled_fewer_than_planned",
+                "compile",
+                f"{len(self.world.artifact_intents)} intent(s) planned, "
+                f"{len(self.world._artifact_irs)} compiled",
+            )
+
+        for case in self.world.evaluations:
+            if case.expects_abstention or not case.expected_fact_ids:
+                continue
+            self.checks += 1
+            if not set(case.expected_fact_ids) & carried:
+                self.fail(
+                    "evaluation",
+                    "evidence_not_in_any_document",
+                    case.id,
+                    f"cites {', '.join(case.expected_fact_ids[:3])} — planned into"
+                    " a document, and in no compiled one. The question is"
+                    " unanswerable from the corpus as built.",
+                )
+
+    def carried_evidence(self) -> None:
+        """Every fact a document was asked to carry, in the document.
+
+        `compiled_evidence` above asks the question from the evaluation set's
+        end — is this case's evidence *somewhere* — and that is a weaker
+        question than it looks, because one hit in one document satisfies it.
+        This asks it from the document's end, one check per intent per required
+        fact, and it is the check whose absence let two defects live in a corpus
+        reporting tens of thousands of clean checks:
+
+        * `financial.gross_margin_pct.budget` — minted per category and per
+          unit, planned into the month-end model, and read by no column of it.
+          114 facts a build, for as long as the workbook has existed.
+        * the reserve triangle's paid and incurred rollups — minted at
+          `period=None`, which is how a total over accident cohorts is
+          denominated, and filtered straight back out by the cohort
+          comprehension that built the rows.
+
+        Both are the same shape as the finance-workbook defect that prompted
+        this group: a document quietly carrying less than it was handed, where
+        every downstream check compares two absent things and finds them equal.
+
+        The second half is the cell rule, and it is the narrower of the two.
+        `ir.fact_ids()` collects a cell's `fact_id` without ever looking at its
+        `value`, so a workbook whose every cell went blank while keeping its
+        citations passes the first half exactly as it passes reconciliation —
+        measured by blanking all 17,216 values on a retail build and getting a
+        byte-identical check count with no violations. A cell that names a fact
+        and states nothing is the defect's actual signature on the page.
+        """
+        if not self.world._artifact_irs:
+            return
+        by_intent = {ir.intent_id: ir for ir in self.world.artifact_irs}
+
+        for intent in self.world.artifact_intents:
+            ir = by_intent.get(intent.id)
+            if ir is None:
+                # `compiled_evidence`'s parity check has already said so, once,
+                # rather than once per fact of every intent that did not compile.
+                continue
+            carried = set(ir.fact_ids())
+            missing = [f for f in intent.required_fact_ids if f not in carried]
+            for fact_id in intent.required_fact_ids:
+                self.checks += 1
+            if missing:
+                self.fail(
+                    "artifact",
+                    "required_fact_not_carried",
+                    intent.id,
+                    f"{len(missing)} of {len(intent.required_fact_ids)} required fact(s) "
+                    f"appear in no section, table cell or appendix of the compiled "
+                    f"{intent.artifact_type}: {', '.join(missing[:5])}"
+                    + (" …" if len(missing) > 5 else ""),
+                )
+
+            for section in ir.sections:
+                if section.table is None:
+                    continue
+                for row in section.table.rows:
+                    for key in sorted(row.cells):
+                        cell = row.cells[key]
+                        if not cell.fact_id:
+                            continue
+                        self.checks += 1
+                        if cell.value is None:
+                            self.fail(
+                                "artifact",
+                                "empty_cell_cites_a_fact",
+                                ir.id,
+                                f"{section.table.key}:{row.key}:{key} cites "
+                                f"{cell.fact_id} and states nothing",
+                            )
+
     def run(self) -> ValidationReport:
         self.referential()
         self.workforce()
         self.access()
+        self.approvals()
         self.artifact_files()
         self.charts()
         self.supersession()
@@ -1574,6 +1871,7 @@ class _Validator:
         self.imperfection()
         self.actors()
         self.evaluation()
+        self.carried_evidence()
         # Domain groups last, in name order so the report is stable however
         # registration happened to be sequenced.
         for name in sorted(_DOMAIN_CHECKS):

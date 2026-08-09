@@ -544,7 +544,22 @@ def generate(
             id=minter.next("POLICY"),
             label="Finance and audit only",
             allow_functions=["Finance", "Audit"],
-            allow_people=[role_ids["ceo"], role_ids["cio"]],
+            # The named exceptions, and the divisional managing directors are
+            # the third. Found by `validate.approvals` the day approvals
+            # existed: a division's close commentary is *signed* by its MD, who
+            # sits in Executive, so eight of them were signing documents this
+            # policy would not have let them open. A signature from somebody
+            # who was never shown the document is worse than no signature.
+            #
+            # Read access rather than a per-document grant, which would need a
+            # policy per artifact — and this is honest on its own terms anyway:
+            # a divisional MD reading group finance's pack is what happens in
+            # every company, and the CEO already sits on this list for the same
+            # reason.
+            allow_people=[role_ids["ceo"], role_ids["cio"]] + [
+                role_ids[unit_role_key(unit.key, "_md")] for unit in units
+                if unit_role_key(unit.key, "_md") in role_ids
+            ],
         ),
         AccessPolicy(
             id=minter.next("POLICY"),
@@ -556,7 +571,31 @@ def generate(
             id=minter.next("POLICY"),
             label="Technology and service operations",
             allow_functions=["Technology", "ServiceOperations"],
-            allow_people=[role_ids["cio"]],
+            # The chief executive is a named exception on every restricted
+            # policy, which "Finance and audit only" above already said and
+            # this one had not. Found by `validate.approvals`: a remediation
+            # scope review is signed by the CEO precisely *because* the finding
+            # is an ownership gap in the CIO's own estate, and a signature from
+            # somebody the policy would not have shown the document to is not a
+            # review. Stated as a rule rather than patched as a case — there is
+            # no restricted document in a company the chief executive may not
+            # read, and the three policies now agree about that.
+            allow_people=[role_ids["cio"], role_ids["ceo"]],
+        ),
+        # The commercial desk's shelf: trade agreements, pipeline reviews, the
+        # paper a supplier negotiation leaves. Absent until a pack-authored
+        # trade process needed it, and its absence was measured the sharp way:
+        # the desk's own documents had no audience that admitted their author —
+        # "finance and audit only" excludes Merchandising, and the unknown-
+        # audience fallback is *most restrictive* by design, so the commercial
+        # lead was locked out of the agreement they signed. Finance and Audit
+        # are in because recognition and review both read the contract; the
+        # CEO by the standing rule stated on the technology policy above.
+        AccessPolicy(
+            id=minter.next("POLICY"),
+            label="Commercial and finance",
+            allow_functions=["Merchandising", "Finance", "Audit"],
+            allow_people=[role_ids["ceo"]],
         ),
     )
 

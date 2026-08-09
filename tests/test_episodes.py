@@ -125,7 +125,10 @@ def test_the_recurrence_names_the_period_it_recurred_from(series: World) -> None
 def test_the_series_asks_across_episodes(series: World) -> None:
     questions = [c.question for c in series.evaluations]
     assert any("last occur" in q for q in questions), "no recurrence question"
-    assert any("currently in force" in q for q in questions), "no current-document question"
+    # "…in force for the {period} close", not "currently": five episodes used
+    # to mint five identically-worded "currently in force" questions naming
+    # five different calendars as the answer.
+    assert any("in force for the" in q for q in questions), "no current-document question"
 
 
 def test_the_hard_families_are_no_longer_thin(series: World) -> None:
@@ -133,17 +136,22 @@ def test_the_hard_families_are_no_longer_thin(series: World) -> None:
     from collections import Counter
 
     counts = Counter(c.evaluation_type for c in series.evaluations)
-    for kind in (
-        EvaluationType.TEMPORAL_STATE,
-        EvaluationType.AUTHORITY_RESOLUTION,
-        EvaluationType.CAUSAL_MULTI_HOP,
-    ):
-        assert counts[kind] >= 6, f"{kind.value} has only {counts[kind]} cases"
+    # Temporal's floor is five, not six, since `CaseBuilder` learned to refuse
+    # verbatim clones: the sixth "temporal" case was the superseded-policy
+    # question re-minted each episode with the identical answer, which was
+    # count, not coverage. The floor is the honest supply of three closes.
+    floors = {
+        EvaluationType.TEMPORAL_STATE: 5,
+        EvaluationType.AUTHORITY_RESOLUTION: 6,
+        EvaluationType.CAUSAL_MULTI_HOP: 6,
+    }
+    for kind, floor in floors.items():
+        assert counts[kind] >= floor, f"{kind.value} has only {counts[kind]} cases"
 
 
 def test_a_superseded_document_is_named_as_a_distractor(series: World) -> None:
     current = next(
-        c for c in series.evaluations if "currently in force" in c.question
+        c for c in series.evaluations if "in force for the" in c.question
     )
     assert current.distractor_artifact_ids
     for artifact_id in current.distractor_artifact_ids:

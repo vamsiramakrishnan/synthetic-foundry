@@ -1,0 +1,1009 @@
+{
+  "name": "trading-retailer",
+  "base": "retail",
+  "description": "An omnichannel retailer whose commercial desk, legal review and replatform programme all leave paper — the transactional half a close alone never writes.",
+  "company_name": "Harbourline Retail Group",
+  "industry": "Omnichannel retail",
+  "currency": "AUD",
+  "currency_unit": "thousands",
+  "annual_revenue": 5200000,
+  "employees": 41000,
+  "units": [
+    {
+      "key": "food",
+      "name": "Food and Grocery",
+      "kind": "supermarket",
+      "share": 0.62,
+      "categories": [
+        {
+          "name": "Fresh",
+          "share": 0.4,
+          "margin": 0.24
+        },
+        {
+          "name": "Packaged Grocery",
+          "share": 0.38,
+          "margin": 0.22
+        },
+        {
+          "name": "Beverages",
+          "share": 0.22,
+          "margin": 0.25
+        }
+      ],
+      "site_formats": [
+        {
+          "name": "Supermarket",
+          "count": 130,
+          "revenue_weight": 1.0
+        },
+        {
+          "name": "Distribution Centre",
+          "count": 3,
+          "revenue_weight": 0.0
+        }
+      ]
+    },
+    {
+      "key": "home",
+      "name": "Home and Leisure",
+      "kind": "general_merchandise",
+      "share": 0.23,
+      "categories": [
+        {
+          "name": "Homewares",
+          "share": 0.55,
+          "margin": 0.31
+        },
+        {
+          "name": "Outdoor Living",
+          "share": 0.45,
+          "margin": 0.28
+        }
+      ],
+      "site_formats": [
+        {
+          "name": "Big Box",
+          "count": 38,
+          "revenue_weight": 1.0
+        }
+      ]
+    },
+    {
+      "key": "digital",
+      "name": "Digital Marketplace",
+      "kind": "online",
+      "share": 0.15,
+      "categories": [
+        {
+          "name": "Marketplace Sellers",
+          "share": 0.6,
+          "margin": 0.3
+        },
+        {
+          "name": "Direct Online",
+          "share": 0.4,
+          "margin": 0.27
+        }
+      ],
+      "site_formats": [
+        {
+          "name": "Fulfilment Centre",
+          "count": 2,
+          "revenue_weight": 0.0
+        }
+      ]
+    }
+  ],
+  "lore": [
+    {
+      "kind": "norm",
+      "assertion": "Trade funding — rebates and promotional contributions — is agreed in annual joint business plans and recognised monthly against the signed agreement, never on handshakes. An unsigned plan books nothing.",
+      "constrains": [
+        {
+          "kind": "terminology",
+          "target": "trade_funding",
+          "effect": "'Trade funding' covers rebates and promotional contributions together; the two are not interchangeable line items."
+        }
+      ],
+      "effective_from": "2024-07"
+    },
+    {
+      "kind": "norm",
+      "assertion": "Every trade agreement passes a legal and controls review before signature. The review can and does hold agreements — a held agreement is a position, not a failure.",
+      "constrains": [
+        {
+          "kind": "terminology",
+          "target": "legal_review",
+          "effect": "'Cleared' and 'held' are review outcomes; 'approved' belongs to the signature, not the review."
+        }
+      ],
+      "effective_from": "2024-07"
+    },
+    {
+      "kind": "decision",
+      "assertion": "The checkout and loyalty replatform runs as a funded programme with monthly steering. Spend is reported cumulatively against a fixed envelope; the programme does not rebase its own budget.",
+      "effective_from": "2025-09",
+      "constrains": [
+        {
+          "kind": "artifact_density",
+          "target": "filing/project_status_report",
+          "effect": "A funded programme that reported nothing monthly would contradict its own governance.",
+          "magnitude": 1.0
+        }
+      ]
+    }
+  ],
+  "voices": {
+    "merch_lead": {
+      "voice": "commercial, direct, negotiates in writing",
+      "phrases": [
+        "under the plan",
+        "at the contracted rate"
+      ]
+    },
+    "audit": {
+      "voice": "precise, guarded, cites the clause",
+      "phrases": [
+        "on review",
+        "cleared for signature"
+      ]
+    }
+  },
+  "artifact_types": [
+    {
+      "key": "trade_pipeline_review",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 6,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Pipeline position",
+          "kinds": [
+            "trade.pipeline_value",
+            "trade.agreements_in_negotiation"
+          ],
+          "scope": "any",
+          "purpose": "The value under negotiation and how many agreements carry it. State the number that moved since last month first; a pipeline review that opens with the total is a review of nothing."
+        },
+        {
+          "heading": "This month's signature",
+          "kinds": [
+            "trade.agreement_value",
+            "trade.counterparty",
+            "trade.rebate_rate"
+          ],
+          "scope": "any",
+          "purpose": "The agreement that signed: who with, its annual value, and the rebate rate agreed. One deal argued properly, not a list."
+        },
+        {
+          "heading": "Funding recognised",
+          "kinds": [
+            "trade.funding_recognised"
+          ],
+          "scope": "any",
+          "purpose": "What this month's ledger books against signed agreements. Recognition follows the signed plan, and this figure is the month's answer to 'did it'."
+        }
+      ]
+    },
+    {
+      "key": "trade_agreement",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 2,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Parties and term",
+          "kinds": [
+            "trade.counterparty"
+          ],
+          "scope": "any",
+          "purpose": "Who the agreement binds, stated as the contract states it. Formal register — this is the document the others quote."
+        },
+        {
+          "heading": "Commercial terms",
+          "kinds": [
+            "trade.agreement_value",
+            "trade.rebate_rate"
+          ],
+          "scope": "any",
+          "purpose": "The annual committed value and the rebate rate. Numbers with their basis, no commentary — a contract that argues is a memo."
+        },
+        {
+          "heading": "Review and clearance",
+          "kinds": [
+            "legal.review_status"
+          ],
+          "scope": "any",
+          "purpose": "The legal review outcome this signature relied on, by reference. A signed agreement citing no clearance is the defect the review gate exists to prevent."
+        }
+      ]
+    },
+    {
+      "key": "legal_review_note",
+      "authority": "approved_report",
+      "lifecycle": "reviewed",
+      "lag": {
+        "days": 0,
+        "hours": 4,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Scope of review",
+          "kinds": [
+            "trade.counterparty",
+            "trade.agreement_value"
+          ],
+          "scope": "any",
+          "purpose": "What was reviewed: the agreement, its counterparty, the value at stake. Written so a later reader can tell whether this note covers the document in their other hand."
+        },
+        {
+          "heading": "Findings and clearance",
+          "kinds": [
+            "legal.review_status",
+            "legal.risk_note"
+          ],
+          "scope": "any",
+          "purpose": "The outcome and the one risk worth recording. 'Cleared' and 'held' are the vocabulary; if held, say what unheld it or would."
+        }
+      ]
+    },
+    {
+      "key": "project_status_report",
+      "authority": "working_document",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 5,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Status",
+          "kinds": [
+            "project.status",
+            "project.milestone_due"
+          ],
+          "scope": "any",
+          "purpose": "The programme's state in one word its own governance defines, and the next milestone with its date. The reader is deciding whether to escalate, not learning the project exists."
+        },
+        {
+          "heading": "Spend against envelope",
+          "kinds": [
+            "project.spend_to_date",
+            "project.budget_total",
+            "project.spend_this_period"
+          ],
+          "scope": "any",
+          "purpose": "Cumulative spend against the fixed envelope, and this month's burn. The envelope does not move; say plainly how much of it is left."
+        }
+      ]
+    },
+    {
+      "key": "steering_minutes",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 20,
+        "minutes": 0
+      },
+      "word": true,
+      "sections": [
+        {
+          "heading": "Decisions",
+          "kinds": [
+            "project.status",
+            "project.spend_to_date"
+          ],
+          "scope": "any",
+          "purpose": "What the steering committee decided, with the figures it decided on. Minutes record decisions and who owns them — discussion belongs in the memory of the people who had it."
+        },
+        {
+          "heading": "Risks accepted",
+          "kinds": [
+            "project.risk_count"
+          ],
+          "scope": "any",
+          "purpose": "The open risks the committee saw and chose to carry. A count with the top one named, not a register."
+        }
+      ]
+    }
+  ],
+  "episodes": [
+    {
+      "name": "TradeAgreementCycle",
+      "domain": "retail",
+      "period": "month",
+      "detail": "One month of the commercial desk: the pipeline reviewed, one agreement legally reviewed and signed, funding recognised against signed plans. The legal gate is the episode's spine — signature is caused by clearance, never beside it.",
+      "fact_kinds": [
+        {
+          "kind": "trade.pipeline_value",
+          "value_type": "money",
+          "authority": "working_document",
+          "period_scope": "period-keyed",
+          "amount": 46800,
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        },
+        {
+          "kind": "trade.agreements_in_negotiation",
+          "value_type": "measure",
+          "authority": "working_document",
+          "period_scope": "period-keyed",
+          "amount": 7,
+          "unit": "agreements",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        },
+        {
+          "kind": "trade.counterparty",
+          "value_type": "text",
+          "authority": "system_of_record",
+          "period_scope": "standing",
+          "text": "Meridian Foods Group, under the FY26 joint business plan",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            },
+            {
+              "kind": "standing",
+              "detail": "The annual plan's counterparty belongs to no month; the monthly cycle recognises against it."
+            }
+          ]
+        },
+        {
+          "kind": "trade.agreement_value",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "standing",
+          "amount": 5400,
+          "invariants": [
+            {
+              "kind": "holds-at"
+            },
+            {
+              "kind": "standing",
+              "detail": "The committed annual value is agreed at signature and holds for the term."
+            }
+          ]
+        },
+        {
+          "kind": "trade.rebate_rate",
+          "value_type": "percent",
+          "authority": "system_of_record",
+          "period_scope": "standing",
+          "amount": 4.25,
+          "invariants": [
+            {
+              "kind": "holds-at"
+            },
+            {
+              "kind": "standing",
+              "detail": "The rate is a term of the agreement, not a monthly negotiation."
+            }
+          ]
+        },
+        {
+          "kind": "trade.funding_recognised",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "derive": "percent_of(trade.agreement_value, trade.rebate_rate)",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        },
+        {
+          "kind": "legal.review_status",
+          "value_type": "text",
+          "authority": "approved_report",
+          "period_scope": "period-keyed",
+          "text": "Cleared for signature — indemnity clause amended at review",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        },
+        {
+          "kind": "legal.risk_note",
+          "value_type": "text",
+          "authority": "approved_report",
+          "period_scope": "period-keyed",
+          "text": "Volume-commitment exposure if category resets mid-term; mitigated by the quarterly true-up clause",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "kind": "pipeline_reviewed",
+          "when": "start",
+          "anchor": "prior_period_end",
+          "business_day": 4,
+          "hour": 10,
+          "minute": 0,
+          "summary": "The commercial desk reviewed the trade pipeline: value under negotiation and the agreements carrying it, ahead of this month's signature.",
+          "actors": [
+            "merch_lead"
+          ],
+          "fact_keys": [
+            "trade.pipeline_value",
+            "trade.agreements_in_negotiation"
+          ]
+        },
+        {
+          "kind": "legal_review_completed",
+          "when": "start",
+          "anchor": "prior_period_end",
+          "business_day": 7,
+          "hour": 15,
+          "minute": 30,
+          "summary": "Legal and controls review of the lead agreement closed: cleared for signature with the indemnity clause amended.",
+          "actors": [
+            "audit"
+          ],
+          "fact_keys": [
+            "legal.review_status",
+            "legal.risk_note"
+          ]
+        },
+        {
+          "kind": "agreement_signed",
+          "when": "start",
+          "anchor": "prior_period_end",
+          "business_day": 9,
+          "hour": 11,
+          "minute": 0,
+          "caused_by": "legal_review_completed",
+          "summary": "The joint business plan was signed following clearance: committed annual value and rebate rate now on the record.",
+          "actors": [
+            "merch_lead"
+          ],
+          "fact_keys": [
+            "trade.counterparty",
+            "trade.agreement_value",
+            "trade.rebate_rate"
+          ]
+        },
+        {
+          "kind": "funding_recognised",
+          "when": "start",
+          "anchor": "prior_period_end",
+          "business_day": 12,
+          "hour": 9,
+          "minute": 30,
+          "caused_by": "agreement_signed",
+          "summary": "Monthly trade funding was recognised against signed agreements, at the contracted rebate rate.",
+          "actors": [
+            "cfo"
+          ],
+          "fact_keys": [
+            "trade.funding_recognised"
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "artifact_type": "trade_pipeline_review",
+          "author_role": "merch_lead",
+          "audience": "commercial_and_finance",
+          "required_facts": [
+            "trade.pipeline_value",
+            "trade.agreements_in_negotiation",
+            "trade.agreement_value",
+            "trade.counterparty",
+            "trade.rebate_rate",
+            "trade.funding_recognised"
+          ],
+          "size": "medium",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": [
+            "pipeline_reviewed"
+          ],
+          "rationale": "The desk's monthly account of what is in negotiation and what signed — the document a 'what deals are in flight' question retrieves.",
+          "domain": "strategy"
+        },
+        {
+          "artifact_type": "trade_agreement",
+          "author_role": "merch_lead",
+          "audience": "commercial_and_finance",
+          "required_facts": [
+            "trade.counterparty",
+            "trade.agreement_value",
+            "trade.rebate_rate",
+            "legal.review_status"
+          ],
+          "size": "small",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": [
+            "agreement_signed"
+          ],
+          "rationale": "The contract of record: parties, term, committed value, rate — and the clearance it relied on, by reference.",
+          "domain": "strategy"
+        },
+        {
+          "artifact_type": "legal_review_note",
+          "author_role": "audit",
+          "audience": "commercial_and_finance",
+          "required_facts": [
+            "trade.counterparty",
+            "trade.agreement_value",
+            "legal.review_status",
+            "legal.risk_note"
+          ],
+          "size": "small",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": [
+            "legal_review_completed"
+          ],
+          "rationale": "The review the signature cites: scope, findings, and the one risk worth carrying forward on the record.",
+          "domain": "risk"
+        }
+      ],
+      "carry_forward": [
+        {
+          "from_kind": "trade.counterparty",
+          "to_kind": "trade.counterparty",
+          "rule": "reuse",
+          "detail": "The annual plan's counterparty does not change monthly; month N recognises against month 1's signature."
+        },
+        {
+          "from_kind": "trade.agreement_value",
+          "to_kind": "trade.agreement_value",
+          "rule": "reuse",
+          "detail": "The committed annual value is a term of the signed plan."
+        },
+        {
+          "from_kind": "trade.rebate_rate",
+          "to_kind": "trade.rebate_rate",
+          "rule": "reuse",
+          "detail": "So is the rate — a rate that renegotiated itself monthly would contradict LORE-TRADE-FUNDING."
+        }
+      ],
+      "role_slots": [
+        {
+          "slot": "negotiator",
+          "required": true,
+          "purpose": "review the pipeline and sign the agreement once cleared"
+        },
+        {
+          "slot": "reviewer",
+          "required": true,
+          "purpose": "run the legal and controls review; may hold the agreement"
+        },
+        {
+          "slot": "recogniser",
+          "required": true,
+          "purpose": "book the monthly funding against signed plans — never the negotiator"
+        }
+      ],
+      "evaluation": {
+        "detail": "The gate is the story: signature follows clearance. The questions worth authoring are the ones whose confident wrong answer is the bigger, better-known number one document over.",
+        "emphasis": {
+          "authority_resolution": 2
+        },
+        "families": [
+          {
+            "family": "authority_resolution",
+            "about": [
+              "trade.rebate_rate"
+            ],
+            "question": "What rebate rate is the group contractually entitled to under the signed joint business plan, as at {period}?",
+            "answer": "{value} — the rate the trade agreement states. The pipeline review quotes it secondhand; the agreement is the record.",
+            "reasoning": "Two documents carry the rate and only one is the contract."
+          }
+        ],
+        "abstentions": [
+          {
+            "question": "What hourly rate does the group pay its external counsel for trade agreement reviews?",
+            "reasoning": "Reviews are performed in-house by the legal and controls function; no external counsel, and no rate, exists anywhere in the corpus."
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProjectSteering",
+      "domain": "retail",
+      "period": "month",
+      "detail": "Monthly steering of the checkout and loyalty replatform: status reported, spend booked cumulatively against a fixed envelope, risks counted and carried. The programme LORE-REPLATFORM promises is the one this episode papers.",
+      "fact_kinds": [
+        {
+          "kind": "project.status",
+          "value_type": "text",
+          "authority": "working_document",
+          "period_scope": "period-keyed",
+          "text": "Amber — conversion volatility holding the cutover gate",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        },
+        {
+          "kind": "project.budget_total",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "standing",
+          "amount": 18000,
+          "invariants": [
+            {
+              "kind": "holds-at"
+            },
+            {
+              "kind": "standing",
+              "detail": "The envelope is fixed by the funding decision; a programme that rebases its own budget is the defect LORE-REPLATFORM names."
+            }
+          ]
+        },
+        {
+          "kind": "project.spend_this_period",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "amount": 1450,
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        },
+        {
+          "kind": "project.spend_prior",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "derive": "prior(project.spend_to_date)",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        },
+        {
+          "kind": "project.spend_to_date",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "derive": "plus(project.spend_prior, project.spend_this_period)",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        },
+        {
+          "kind": "project.milestone_due",
+          "value_type": "date",
+          "authority": "working_document",
+          "period_scope": "period-keyed",
+          "text": "{bd:15}",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        },
+        {
+          "kind": "project.risk_count",
+          "value_type": "measure",
+          "authority": "working_document",
+          "period_scope": "period-keyed",
+          "amount": 4,
+          "unit": "open risks",
+          "invariants": [
+            {
+              "kind": "holds-at"
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "kind": "status_reported",
+          "when": "start",
+          "anchor": "prior_period_end",
+          "business_day": 6,
+          "hour": 9,
+          "minute": 0,
+          "summary": "The programme reported its monthly status: state, spend against the envelope, and the next milestone.",
+          "actors": [
+            "platform_lead"
+          ],
+          "fact_keys": [
+            "project.status",
+            "project.budget_total",
+            "project.spend_this_period",
+            "project.spend_prior",
+            "project.spend_to_date",
+            "project.milestone_due",
+            "project.risk_count"
+          ]
+        },
+        {
+          "kind": "steering_held",
+          "when": "start",
+          "anchor": "prior_period_end",
+          "business_day": 8,
+          "hour": 14,
+          "minute": 0,
+          "caused_by": "status_reported",
+          "summary": "The steering committee met on the reported position and recorded its decisions and the risks it chose to carry.",
+          "actors": [
+            "cio"
+          ],
+          "fact_keys": []
+        }
+      ],
+      "artifacts": [
+        {
+          "artifact_type": "project_status_report",
+          "author_role": "platform_lead",
+          "audience": "all_staff",
+          "required_facts": [
+            "project.status",
+            "project.milestone_due",
+            "project.spend_to_date",
+            "project.budget_total",
+            "project.spend_this_period"
+          ],
+          "size": "small",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": [
+            "status_reported"
+          ],
+          "rationale": "The monthly report the funded programme owes its governance — status, burn, and what is left of a fixed envelope.",
+          "domain": "engineering"
+        },
+        {
+          "artifact_type": "steering_minutes",
+          "author_role": "cio",
+          "audience": "all_staff",
+          "required_facts": [
+            "project.status",
+            "project.spend_to_date",
+            "project.risk_count"
+          ],
+          "size": "small",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": [
+            "steering_held"
+          ],
+          "rationale": "Decisions with the figures they were taken on, and the risks the committee accepted — the record a 'who decided' question retrieves.",
+          "domain": "engineering"
+        }
+      ],
+      "carry_forward": [
+        {
+          "from_kind": "project.spend_to_date",
+          "to_kind": "project.spend_prior",
+          "rule": "derive",
+          "detail": "This month opens where last month closed — cumulative spend is the one figure here whose whole meaning is its history, and the first month opens at zero because nothing had been spent, not because nothing was recorded."
+        },
+        {
+          "from_kind": "project.budget_total",
+          "to_kind": "project.budget_total",
+          "rule": "reuse",
+          "detail": "The envelope does not move."
+        }
+      ],
+      "role_slots": [
+        {
+          "slot": "programme_lead",
+          "required": true,
+          "purpose": "report status and spend; owns the plan"
+        },
+        {
+          "slot": "sponsor",
+          "required": true,
+          "purpose": "chair steering and own the decisions"
+        }
+      ],
+      "evaluation": {
+        "detail": "Cumulative spend against a fixed envelope is the question shape here — the confident wrong answer is always this month's burn.",
+        "emphasis": {},
+        "families": [
+          {
+            "family": "numerical_comparison",
+            "about": [
+              "project.spend_to_date",
+              "project.budget_total"
+            ],
+            "question": "How much of the replatform programme's fixed envelope had been spent by the end of {period}?",
+            "answer": "{value} of the envelope — cumulative to date, not the month's burn.",
+            "reasoning": "The status report states both figures; the trap is answering with the period spend."
+          }
+        ],
+        "abstentions": [
+          {
+            "question": "Which external systems integrator is delivering the checkout replatform?",
+            "reasoning": "The programme is delivered by the platform engineering team; no integrator is engaged or named anywhere in the corpus."
+          }
+        ]
+      }
+    }
+  ],
+  "lobs": [
+    {
+      "name": "commercial",
+      "title": "Commercial Trading",
+      "purpose": "Negotiate supplier trade agreements, hold them to legal review, and answer for the funding recognised against them.",
+      "engine": "retail",
+      "roles": [
+        {
+          "key": "ceo",
+          "title": "Group Chief Executive Officer",
+          "function": "Executive",
+          "reports_to": null
+        },
+        {
+          "key": "cfo",
+          "title": "Group Chief Financial Officer",
+          "function": "Finance",
+          "reports_to": "ceo"
+        },
+        {
+          "key": "merch_lead",
+          "title": "Commercial Trading Lead",
+          "function": "Merchandising",
+          "reports_to": "cfo"
+        },
+        {
+          "key": "audit",
+          "title": "Legal and Controls Reviewer",
+          "function": "Audit",
+          "reports_to": "ceo"
+        }
+      ],
+      "responsibilities": [
+        {
+          "role_key": "merch_lead",
+          "fact_kinds": [
+            "trade.pipeline_value",
+            "trade.agreement_value",
+            "trade.rebate_rate"
+          ],
+          "artifact_types": [
+            "trade_pipeline_review",
+            "trade_agreement"
+          ]
+        },
+        {
+          "role_key": "audit",
+          "fact_kinds": [
+            "legal.review_status",
+            "legal.risk_note"
+          ],
+          "artifact_types": [
+            "legal_review_note"
+          ]
+        },
+        {
+          "role_key": "cfo",
+          "fact_kinds": [
+            "trade.funding_recognised"
+          ],
+          "artifact_types": []
+        }
+      ],
+      "artifact_filings": [
+        "trade_pipeline_review"
+      ],
+      "episode_contributions": [
+        "TradeAgreementCycle"
+      ],
+      "slot_bindings": [
+        {
+          "process": "TradeAgreementCycle",
+          "slot": "negotiator",
+          "role_key": "merch_lead"
+        },
+        {
+          "process": "TradeAgreementCycle",
+          "slot": "reviewer",
+          "role_key": "audit"
+        },
+        {
+          "process": "TradeAgreementCycle",
+          "slot": "recogniser",
+          "role_key": "cfo"
+        }
+      ]
+    },
+    {
+      "name": "delivery",
+      "title": "Programme Delivery",
+      "purpose": "Run the funded change programmes, report their spend against fixed envelopes, and carry their risks on the record.",
+      "engine": "retail",
+      "roles": [
+        {
+          "key": "ceo",
+          "title": "Group Chief Executive Officer",
+          "function": "Executive",
+          "reports_to": null
+        },
+        {
+          "key": "cio",
+          "title": "Group Chief Information Officer",
+          "function": "Technology",
+          "reports_to": "ceo"
+        },
+        {
+          "key": "platform_lead",
+          "title": "Programme Lead, Replatform",
+          "function": "Technology",
+          "reports_to": "cio"
+        }
+      ],
+      "responsibilities": [
+        {
+          "role_key": "platform_lead",
+          "fact_kinds": [
+            "project.status",
+            "project.spend_to_date"
+          ],
+          "artifact_types": [
+            "project_status_report"
+          ]
+        },
+        {
+          "role_key": "cio",
+          "fact_kinds": [
+            "project.risk_count"
+          ],
+          "artifact_types": [
+            "steering_minutes"
+          ]
+        }
+      ],
+      "artifact_filings": [
+        "project_status_report"
+      ],
+      "episode_contributions": [
+        "ProjectSteering"
+      ],
+      "slot_bindings": [
+        {
+          "process": "ProjectSteering",
+          "slot": "programme_lead",
+          "role_key": "platform_lead"
+        },
+        {
+          "process": "ProjectSteering",
+          "slot": "sponsor",
+          "role_key": "cio"
+        }
+      ]
+    }
+  ]
+}

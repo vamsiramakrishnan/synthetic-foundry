@@ -44,7 +44,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .archetypes import Archetype
 from .doctypes import DocumentType
+from .episodes import EpisodeSpec
 from .generators.hierarchy import CategorySpec, SiteFormat, UnitSpec
+from .lob import Lob
 from .ids import Minter
 from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
 from .roles import parse_unit_role
@@ -313,6 +315,29 @@ class Pack(PackModel):
     compiler stays code.
     """
 
+    episodes: list[EpisodeSpec] = Field(default_factory=list)
+    """Business processes this company runs that the engine does not ship.
+
+    The sixth thing a pack authors, and the one whose absence made the whole
+    episode grammar SDK-only: ``episodes.install`` had zero call sites in
+    ``src/``, so a process authored through the cascade — steps, fact kinds,
+    role slots, its own benchmark — could be written, linted and run in a
+    Python session and could not ship in a corpus anyone builds with a
+    command. They ride the pack for ``artifact_types``' exact reason: the pack
+    embeds in the recipe verbatim, so a corpus whose history contains an
+    ``AuthoredEpisode`` step rebuilds in any process with the spec on hand —
+    which is the loud-failure contract that step's own docstring promises.
+    Run with ``worldloom build --pack ... --episode <Name>``."""
+
+    lobs: list[Lob] = Field(default_factory=list)
+    """Lines of business this company declares — roles, responsibilities, and
+    the seats they take in this pack's episodes.
+
+    Same seam, same argument, and the third layer of the same cascade: a LOB
+    binds its roles into the slots the episodes above declare, so the two ship
+    together or the bindings point at processes the corpus does not hold.
+    ``lob.install`` had no caller outside the SDK either."""
+
     regions: list[str] = Field(default_factory=list)
     """Region labels for the site estate (``generators/hierarchy.py``'s
     ``region`` field and the site names built from it — e.g. a site named
@@ -383,9 +408,18 @@ def archetype_of(pack: Pack) -> Archetype:
     check`` loads a pack it is only inspecting, and linting a document must not
     change the process that lints it.
     """
-    from . import doctypes
+    from . import doctypes, episodes as episodes_module, lob as lob_module
 
     doctypes.install(pack.artifact_types)
+    # The other two authored layers, on the same one-function path and for the
+    # same reason: this is the only function between *any* Pack — file, recipe
+    # rebuild, or SDK — and a world built from it. Installing here is what
+    # makes an `AuthoredEpisode` recipe step replayable from nothing but the
+    # corpus directory: the rebuild reconstructs the pack, the pack installs
+    # the spec, and the step finds it — instead of failing in exactly the
+    # process that most needed it to work.
+    episodes_module.install(pack.episodes)
+    lob_module.install(pack.lobs)
     return Archetype(
         key=f"pack:{pack.name}",
         authored=True,
@@ -578,8 +612,56 @@ def lint(pack: Pack) -> list[str]:
     from . import doctypes
     from .facets import FILING_PREFIX as _FILING_PREFIX
 
-    findings.extend(doctypes.lint(pack.artifact_types, base=pack.base))
+    findings.extend(doctypes.lint(
+        pack.artifact_types,
+        base=pack.base,
+        # What this pack's own episodes mint and plan — the doctypes lint
+        # cannot see one field over, and without these it reports a section an
+        # episode feeds as "written about nothing" and an episode-planned type
+        # as inert.
+        episode_kinds=frozenset(
+            fk.kind for spec in pack.episodes for fk in spec.fact_kinds
+        ),
+        episode_planned=frozenset(
+            artifact.artifact_type
+            for spec in pack.episodes
+            for artifact in spec.artifacts
+        ),
+    ))
     authored = {spec.key for spec in pack.artifact_types}
+
+    # The other two authored layers, against the registries *plus this pack*:
+    # an episode may plan a type the same document authors, and a LOB may bind
+    # into an episode shipping beside it — checking either against the process
+    # registries alone would refuse exactly the self-contained pack this seam
+    # exists for.
+    from . import episodes as episodes_module, lob as lob_module
+
+    findings.extend(episodes_module.lint(pack.episodes, base=pack.base))
+    for lob_spec in pack.lobs:
+        findings.extend(lob_module.lint_lob(
+            lob_spec,
+            base=pack.base,
+            episodes=pack.episodes,
+            known_artifact_types=authored,
+        ))
+    # Seat coverage is a pack question, not a LOB question: each LOB is held
+    # only to the processes it binds into, so a required seat every LOB
+    # ignored would otherwise be found by nobody until the run raised.
+    for spec in pack.episodes:
+        bound = {
+            binding.slot
+            for lob_spec in pack.lobs
+            for binding in lob_spec.slot_bindings
+            if binding.process == spec.name
+        }
+        for slot in spec.role_slots:
+            if slot.required and slot.slot not in bound:
+                findings.append(
+                    f"episodes[{spec.name}]: required slot '{slot.slot}' is bound"
+                    " by no LOB in this pack — the process declares the seat and"
+                    " nobody sits in it"
+                )
 
     consulted: dict[str, str] = dict(domain.consulted_targets)
     for index, commitment in enumerate(pack.lore):

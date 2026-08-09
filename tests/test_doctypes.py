@@ -150,10 +150,18 @@ def test_the_data_code_line_falls_at_the_compilers_and_nowhere_else() -> None:
         "finance_workbook", "meeting_minutes", "email_thread",
         "capital_return", "reserve_triangle_workbook",
     } <= set(documents._COMPILERS)
-    # A type with both would have two accounts of its structure, and nothing
-    # says which wins — `compile_intent` reaches the compiler and the outline is
-    # never read, silently.
-    assert not set(documents._COMPILERS) & set(documents._OUTLINES)
+    # A type with both would have two accounts of its structure and nothing to
+    # say which wins — `compile_intent` reaches the compiler and the outline is
+    # never read, silently. Unless the compiler is one that *composes* the
+    # outline (`documents.extends_outline`), in which case there is one account
+    # and the compiler is how its last block gets resolved. The exemption is
+    # per-compiler and marked on the function, so a from-scratch compiler that
+    # grew an outline by accident still fails here — which is the defect this
+    # line exists to catch.
+    assert not {
+        key for key in set(documents._COMPILERS) & set(documents._OUTLINES)
+        if not documents.extends_outline(documents._COMPILERS[key])
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -219,10 +227,18 @@ def test_the_types_the_schema_cannot_express_are_exactly_the_compiled_ones() -> 
     because those are data whoever builds the IR; it cannot carry the compiler,
     and pretending otherwise would let somebody author a
     `reserve_triangle_workbook` that came out as an empty outline.
+
+    A third case arrived with standing documents and the distinction is worth
+    the branch: a compiler that *composes* the outline — calls `outline` and
+    inserts one resolved block into what comes back, as `policies._provisions`
+    does with its provisions table — has an outline that is live data rather
+    than dead. Marked on the compiler rather than inferred, because the two
+    kinds are the same callable shape (`documents.extends_outline`).
     """
     for key in sorted(documents.declared_types()):
         described = doctypes.describe(key)
-        if key in documents._COMPILERS:
+        compiler = documents._COMPILERS.get(key)
+        if compiler is not None and not documents.extends_outline(compiler):
             assert not described.sections, (
                 f"{key} has a compiler; an outline beside it would be dead data"
             )

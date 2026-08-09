@@ -32,6 +32,7 @@ _TABLES = {
     "retail": "generators/organisation.py",
     "banking": "generators/banking_org.py",
     "insurance": "generators/insurance_org.py",
+    "procurement": "generators/procurement_org.py",
 }
 
 
@@ -519,3 +520,167 @@ def test_a_synthesised_spine_key_sits_where_its_engine_files_it() -> None:
     )
     placed = {role.key: role.function for role in unit_table}
     assert placed["gm_md"] in {"Executive", "Operations"}
+
+
+def test_an_invented_role_reports_to_somebody_who_does_its_job() -> None:
+    """The measurement: 319 of 407 synthesised people, 78%, reported across a
+    function boundary.
+
+    Round-robin dealt the function by position in the tree and the manager by
+    position in the level, and the two had nothing to do with each other. It
+    produced a "Head of Audit" reporting to a Merchandising Systems Analyst and
+    a "Head of Executive" reporting to a platform lead. Nobody has that company,
+    and it stops being cosmetic the moment anyone below the spine authors a
+    document: a one-to-one minuted between a finance manager and their
+    audit-function manager is noise wearing a document's clothes.
+    """
+    from worldloom import roles as roles_module
+
+    for engine in ("retail", "banking", "insurance"):
+        # The engine's own functions, which is what `company._functions_of`
+        # passes when a description does not name its departments — so this is
+        # the realistic case rather than a contrived one.
+        wanted = []
+        for role in roles_module._shipped(engine):
+            if role.function not in wanted:
+                wanted.append(role.function)
+        table = roles_module.from_shape(
+            functions=wanted, headcount=420, span=8, levels=6, engine=engine,
+        )
+        function_of = {role.key: role.function for role in table}
+        shipped = {role.key for role in roles_module._shipped(engine)}
+        crossed = [
+            role for role in table
+            if role.key not in shipped
+            and role.manager not in (None, ROOT)
+            and function_of[role.manager] != role.function
+        ]
+        assert not crossed, f"{engine}: {[r.key for r in crossed[:5]]}"
+
+
+def test_making_a_subtree_coherent_does_not_move_a_single_reporting_line() -> None:
+    """Inheritance rather than "pick a same-function parent", and this is why.
+
+    Choosing the manager by function unbalances the spans — a function with two
+    managers at a level would take a third of the tree — and `measure`/`review`
+    check the widest span against what the caller claimed, so a shape that was
+    accepted yesterday would be refused today. Inheriting instead leaves the
+    tree's shape byte-identical and moves only the labels.
+    """
+    from worldloom import roles as roles_module
+
+    table = roles_module.from_shape(
+        functions=["Executive", "Operations", "Commercial"],
+        headcount=420, span=8, levels=6, engine="retail",
+    )
+    shape = roles_module.measure(table)
+    assert shape["headcount"] == 420
+    assert shape["widest_span"] <= 8
+    # The invariant that matters is that every key still hangs where it hung.
+    # Pinned as a property of the pairing rather than as a golden list: the
+    # manager comes from `parents[index % len(parents)]` and nothing in the
+    # function rule may reach it.
+    assert [role.manager for role in table] == [
+        role.manager for role in roles_module.from_shape(
+            functions=["Audit", "Risk"],  # a different rotation entirely
+            headcount=420, span=8, levels=6, engine="retail",
+        )
+    ]
+
+
+def test_the_caller_s_functions_still_seed_the_organisation() -> None:
+    """Inheritance must not turn `functions` into a list nobody reads.
+
+    A synthesised role hanging off the root has no function to inherit — the
+    root is Executive and everyone would be — so there the caller's rotation
+    still decides, and each subtree carries its seed downwards.
+    """
+    from worldloom import roles as roles_module
+
+    table = roles_module.from_shape(
+        functions=["Claims", "Actuarial", "Distribution"],
+        # Small enough that the spine does not fill the first level on its own.
+        headcount=40, span=6, levels=3, engine="retail",
+    )
+    seen = {role.function for role in table}
+    assert seen & {"Claims", "Actuarial", "Distribution"}, seen
+
+
+def test_the_spine_keeps_its_own_reporting_lines() -> None:
+    """The engine's table already says who reports to whom, and `from_shape`
+    used to throw that away.
+
+    Spine keys were dealt into levels in sorted-key order with whatever parent
+    the rotation reached, so `svc_desk` reported to nobody in particular and
+    retail's four Technology keys — which sort early — landed at depth 1 with
+    the whole tree under them while its ServiceOperations keys sorted late and
+    landed at depth 2 with almost none. A 420-person retailer came out 159
+    technologists to 14 service operators: the function mix of the company was
+    decided by alphabetical order.
+    """
+    from worldloom import roles as roles_module
+
+    for engine in ("retail", "banking", "insurance"):
+        shipped = {role.key: role for role in roles_module._shipped(engine)}
+        table = roles_module.from_shape(
+            functions=["Executive", "Operations"],
+            headcount=200, span=6, levels=5, engine=engine,
+        )
+        placed = {role.key: role for role in table}
+        for key, role in placed.items():
+            declared = shipped.get(key)
+            if declared is None or declared.manager is None:
+                continue
+            # The declared manager, or — when this shape does not place it,
+            # because `required` returns the spine and `_shipped` is wider —
+            # the nearest declared ancestor that it does place.
+            cursor = declared.manager
+            while cursor is not None and cursor not in placed:
+                cursor = shipped[cursor].manager if cursor in shipped else None
+            expected = cursor or ROOT
+            assert role.manager == expected, f"{engine}:{key} → {role.manager} not {expected}"
+
+
+def test_a_division_is_a_subtree() -> None:
+    """Per-unit roles are in no shipped table, so this function states their
+    structure: the MD reports to the chief executive and everyone else in the
+    division reports to their MD.
+
+    Deliberately not the dotted line the engines declare — retail's `_bp`
+    reports to the group controller — because a synthesised organisation has
+    one line per person, and the one that makes a division legible is the solid
+    one.
+    """
+    from worldloom import roles as roles_module
+
+    table = roles_module.from_shape(
+        functions=["Executive", "Operations"], headcount=60, span=6, levels=4,
+        engine="retail", unit_keys=["north", "south"],
+    )
+    placed = {role.key: role for role in table}
+    for unit in ("north", "south"):
+        assert placed[f"{unit}_md"].manager == ROOT
+        assert placed[f"{unit}_bp"].manager == f"{unit}_md"
+        assert placed[f"{unit}_buyer"].manager == f"{unit}_md"
+
+
+def test_a_full_manager_pushes_a_report_down_a_level_rather_than_refusing() -> None:
+    """An organisation whose top is wide adds a layer; it does not fail to exist.
+
+    The chief executive takes the CFO, the CIO and one managing director per
+    division, so a span of three with four divisions cannot seat them all as
+    direct reports. Refusing there would reject a shape that fits perfectly
+    well — the fill walks down from the declared manager to the first
+    descendant with room instead.
+    """
+    from worldloom import roles as roles_module
+
+    table = roles_module.from_shape(
+        functions=["Executive", "Operations"], headcount=90, span=3, levels=6,
+        engine="retail", unit_keys=["a", "b", "c", "d"],
+    )
+    shape = roles_module.measure(table)
+    assert shape["headcount"] == 90
+    assert shape["widest_span"] <= 3, "nobody was given more reports than the span allows"
+    assert roles_module.review(list(table), engine="retail",
+                               unit_keys=["a", "b", "c", "d"]) == []

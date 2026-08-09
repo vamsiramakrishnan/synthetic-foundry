@@ -107,6 +107,20 @@ class NarrativeBeat(Model):
     semantic_role: str = "evidence"
     """Which component family can implement this beat. Matched against
     ``ComponentSpec.semantic_roles``."""
+    available_inputs: frozenset[str] = Field(default_factory=frozenset)
+    """Content primitives this beat's own section actually carries — see
+    ``compiler.components.CELL_BAND``, ``FLOW``, ``QUOTE``. Matched against
+    ``ComponentSpec.required_inputs`` by ``ComponentSpec.fits()``, the same way
+    ``evidence``'s length is matched against ``min_rows``/``max_rows``.
+
+    Empty by default, and left empty by every plan built before this field
+    existed: a beat this compiler never asked "what does your content
+    actually hold" is honestly a beat with nothing declared, not a beat that
+    happens to carry every primitive going. Populated by
+    ``compose.plan_from_ir`` from the resolved ``ArtifactSection`` it was built
+    from — the one place in the compiler that has already-resolved content to
+    read rather than an intent still waiting for it.
+    """
     optional: bool = False
     """Droppable when the artifact is over budget, rather than truncated.
 

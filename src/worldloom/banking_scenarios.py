@@ -143,8 +143,14 @@ class QuarterlyCapitalReturn:
             # The archetype's own currency — every RWA and CET1-capital fact
             # used to say "AUD_millions" regardless of what a pack named.
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
-            calendar=calendar,
             physics=self.physics,
+            # The same working week the liquidity series above walks on, and for
+            # the same reason one line further: the return's dates and the daily
+            # observations that catch its error are one timeline. Passing the
+            # calendar to one and not the other is what made the German build
+            # schedule its impact assessment before the cause it follows —
+            # `regulatory.generate`'s own note has the arithmetic.
+            calendar=calendar,
         )
 
         intents, errors = banking_documents.artifact_intents(
@@ -152,6 +158,9 @@ class QuarterlyCapitalReturn:
         )
         cases = banking_evaluation.evaluation_cases(
             minter, episode=episode, intents=intents, period=self.period,
+            # Named, so the benchmark varies with the bank it is about. See
+            # `banking_evaluation.evaluation_cases` for the measurement.
+            company=world.company.name,
             # A pack's evaluation-text overrides ride the recipe too, so a
             # re-voiced benchmark rebuilds with no pack file on hand — the
             # same seam `episode_text` uses for the episode itself.

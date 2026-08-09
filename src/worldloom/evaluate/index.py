@@ -98,6 +98,33 @@ def passages(world: World, *, include_hidden: bool = False) -> list[Passage]:
                     for cell in row.cells.values()
                     if cell.fact_id
                 ) | frozenset(section.fact_ids)
+            elif section.flow is not None and (section.flow.nodes or section.flow.edges):
+                # A causal chain is readable content — every renderer draws it
+                # — and this branch not existing meant an RCA's root-cause
+                # section yielded no passage at all: the retrieval index held
+                # less than the page a reader was looking at, and a question
+                # about the chain graded against passages that never contained
+                # it. Rendered the way `render.markdown._flow` prints it, one
+                # line per edge, so what the index ranks is what a reader sees.
+                labels = {node.key: node.label for node in section.flow.nodes}
+
+                def _resolved(raw: str) -> str:
+                    return references.substitute(raw, facts, locale=locale)
+
+                lines = (
+                    [
+                        f"{_resolved(labels.get(edge.source, edge.source))} → "
+                        f"{_resolved(labels.get(edge.target, edge.target))}"
+                        + (f" ({_resolved(edge.label)})" if edge.label else "")
+                        for edge in section.flow.edges
+                    ]
+                    if section.flow.edges
+                    else [_resolved(node.label) for node in section.flow.nodes]
+                )
+                text = "\n".join(lines)
+                cited = frozenset(
+                    node.fact_id for node in section.flow.nodes if node.fact_id
+                ) | frozenset(section.fact_ids)
             else:
                 continue
 

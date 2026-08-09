@@ -20,9 +20,13 @@ DOCX; nothing here computes one. See ``tests/test_pdf.py`` for the proof that
 two renders of the same IR, even in separate processes, are byte-identical —
 the property a derived PDF could never offer.
 
-Hidden sections are rendered, marked, exactly as DOCX and Markdown do — an
-appendix present in one format and silently absent from another is two
-documents of one artifact disagreeing about what the artifact contains.
+What becomes of a hidden section is ``presentation.py``'s decision, not this
+renderer's — and it is still true that an appendix present in one format and
+silently absent from another would be two documents of one artifact
+disagreeing. That invariant now holds because every format asks the *same*
+corpus-wide profile, rather than because every format was hardcoded the same
+way. ``table_fit`` is this renderer's alone, because only a fixed-page format
+has a column-width problem at all.
 """
 
 from __future__ import annotations
@@ -37,10 +41,11 @@ from ..compiler.compose import compose, plan_from_ir
 from ..compiler.grammar import GrammarViolation
 from ..compiler.plan import SizeClass
 from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
-from ..models import ArtifactIR, ArtifactSection, CanonicalFact, Table
+from ..models import ArtifactIR, ArtifactSection, CanonicalFact, FlowDiagram, MagnitudeBand, Quotation, Table
 from ..narrative import references
 from . import Rendered, RenderError, ooxml, slug_for
 from .docx import HANDLES
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -62,6 +67,23 @@ _SUBTOTAL_FILL = "EDF2F4"
 _NEGATIVE = "9B2226"
 _MUTED = "6B747B"
 _INK = "1A1A1A"
+
+#: `Cell.band` shaded, one fill per `MagnitudeBand` — a five-step sequential
+#: scale from cool (low) through neutral (average) to warm (high), so a
+#: heatmap's pattern reads at a glance without any cell's *text* changing.
+#: Text stays untouched deliberately: `_measured_layout` sizes columns from
+#: `format_value`'s own output, and a band spelled into the cell string would
+#: measure narrower than it renders — the exact hazard that module's own
+#: docstring warns a naive fix into. Colour carries the whole signal here;
+#: Markdown, with no colour to reach for, spells the same field as a bracketed
+#: word instead (see `render/markdown.py::_BAND_LABEL`).
+_BAND_FILL: dict[MagnitudeBand, str] = {
+    MagnitudeBand.LOW: "D9E6ED",
+    MagnitudeBand.BELOW_AVERAGE: "EDF2F4",
+    MagnitudeBand.AVERAGE: "FFFFFF",
+    MagnitudeBand.ABOVE_AVERAGE: "F7E2CE",
+    MagnitudeBand.HIGH: "EFC3A0",
+}
 
 #: A4 with the same corporate margins as `render/docx.py`. Kept in points rather
 #: than reaching for `reportlab.lib.units.mm` at module scope, so this geometry —
@@ -121,6 +143,16 @@ class DocumentPlan:
     silenced. Empty for every shipped artifact type; a non-empty tuple here is
     a defect upstream of this renderer, not something this module can repair,
     so it does not raise — the caller (a future validator) can inspect it."""
+    components: dict[str, str]
+    """Section heading -> the component id the compiler chose for it.
+
+    What lets `_section_flowables` dispatch on component *identity* — a
+    section composed as `editorial.pull_quote` draws a quotation, one composed
+    as `ops.causal_chain` with a declared flow draws a chain — beyond the
+    shape-based body/table/awaiting fallback every section already got. Built
+    from the same `composition` this plan's ordering already comes from, so
+    there is no second call to the compiler and no way for the two to disagree.
+    """
 
 
 def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> DocumentPlan:
@@ -145,6 +177,10 @@ def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> Document
     # drop entries or move one earlier via `_repair_order`.
     section_by_beat = dict(zip((beat.key for beat in plan.beats), ir.sections))
     ordered = tuple(section_by_beat[key] for key in composition.beats)
+    components = {
+        section_by_beat[key].heading: component_id
+        for key, component_id in zip(composition.beats, composition.components)
+    }
 
     return DocumentPlan(
         page_width_pt=_PAGE_WIDTH_PT,
@@ -153,6 +189,7 @@ def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> Document
         sections=ordered,
         dropped=composition.dropped,
         violations=composition.violations,
+        components=components,
     )
 
 
@@ -286,6 +323,18 @@ def _styles() -> dict:  # type: ignore[no-untyped-def]
         "cell_right_negative_bold": cell(
             "wl-cell-right-negative-bold", bold=True, right=True, colour=negative
         ),
+        "quote": ParagraphStyle(
+            "wl-quote", fontName="Helvetica-Oblique", fontSize=11, leading=15,
+            leftIndent=18, spaceBefore=4, spaceAfter=2, textColor=accent,
+        ),
+        "quote_attribution": ParagraphStyle(
+            "wl-quote-attribution", fontName="Helvetica", fontSize=8.5, leading=11,
+            leftIndent=18, spaceAfter=8, textColor=muted,
+        ),
+        "flow_step": ParagraphStyle(
+            "wl-flow-step", fontName="Helvetica", fontSize=10, leading=14,
+            leftIndent=10, spaceAfter=4, textColor=ink,
+        ),
     }
 
 
@@ -294,7 +343,10 @@ def _styles() -> dict:  # type: ignore[no-untyped-def]
 # ---------------------------------------------------------------------------
 
 
-def _table_flowable(table: Table, frame_width: float, styles: dict, locale: Locale = DEFAULT_LOCALE):  # type: ignore[no-untyped-def]
+def _table_flowable(table: Table, frame_width: float, styles: dict,
+                    locale: Locale = DEFAULT_LOCALE,
+                    presentation: Presentation = DEFAULT_PRESENTATION,
+                    *, show_bands: bool = False):  # type: ignore[no-untyped-def]
     """One IR table as a paginating platypus table.
 
     ``repeatRows=1`` is what gives this renderer real pagination for free: when
@@ -309,15 +361,30 @@ def _table_flowable(table: Table, frame_width: float, styles: dict, locale: Loca
     `render/docx.py::_table` cell for cell, because both read the same
     `format_value` and a reader should not be able to tell which renderer
     produced a given figure.
+
+    *show_bands* is false everywhere this was already called before
+    `Cell.band` existed — see `render/markdown.py::_table`'s identical
+    parameter for why that keeps every prior call site byte-for-byte
+    unchanged. True only for `finance.heatmap` and `mgmt.risk_matrix`, which
+    shades a banded cell's background (`_BAND_FILL`) rather than touching its
+    text, so `_measured_layout`'s column widths — measured from the same text
+    — are never affected by a decision this function makes independently of
+    them.
     """
     from reportlab.lib import colors
     from reportlab.platypus import Paragraph
     from reportlab.platypus import Table as PlatypusTable
     from reportlab.platypus import TableStyle
 
-    label_width = frame_width * 0.34
-    per_column = (frame_width - label_width) / max(1, len(table.columns))
-    col_widths = [label_width] + [per_column] * len(table.columns)
+    cell_pt = _CELL_PT
+    if presentation.table_fit == "measured":
+        col_widths, cell_pt = _measured_layout(table, frame_width, locale)
+        if cell_pt < _CELL_PT:
+            styles = _scaled_cells(styles, cell_pt)
+    else:
+        label_width = frame_width * 0.34
+        per_column = (frame_width - label_width) / max(1, len(table.columns))
+        col_widths = [label_width] + [per_column] * len(table.columns)
 
     header_row = [Paragraph(_escape(table.title), styles["cell_header"])]
     header_row += [Paragraph(_escape(column.label), styles["cell_right_header"]) for column in table.columns]
@@ -350,13 +417,177 @@ def _table_flowable(table: Table, frame_width: float, styles: dict, locale: Loca
                 else "cell_right"
             )
             cells.append(Paragraph(_escape(text), styles[key]))
+            if show_bands and cell is not None and cell.band is not None:
+                col_index = len(cells) - 1
+                commands.append((
+                    "BACKGROUND", (col_index, row_index), (col_index, row_index),
+                    colors.HexColor(f"#{_BAND_FILL[cell.band]}"),
+                ))
         data.append(cells)
         if row.emphasis:
+            # Appended after this row's own band commands, so `TableStyle`
+            # (which applies commands in order, later winning on overlap)
+            # lets a subtotal's shading take a banded cell over — a total row
+            # is not itself "high" or "low" in the sense a band means, so the
+            # subtotal fill is the more truthful one to show where both claim
+            # the same cell.
             commands.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor(f"#{_SUBTOTAL_FILL}")))
 
     grid = PlatypusTable(data, colWidths=col_widths, repeatRows=1)
     grid.setStyle(TableStyle(commands))
     return grid
+
+
+
+#: Font and size the measurement assumes. **Bold** and not the regular face,
+#: deliberately: `_styles()` builds every cell style from one factory at 9pt and
+#: flips to `Helvetica-Bold` for headers and emphasis rows, so bold is the
+#: widest any cell can be and measuring against it is the only choice that
+#: cannot under-measure. Measuring the regular face would fit the body rows and
+#: break the header, which is the row a reader looks at first.
+#:
+#: The size is 9 because `_styles()` says 9. It was written as 8.5 on the first
+#: pass — a guess, not a reading — and the symptom was instructive: the
+#: computed widths were arithmetically perfect and the timestamps still broke,
+#: because every column had been measured 6% narrow. A layout that measures
+#: against a font it is not set in is not measured at all.
+_CELL_FONT, _CELL_PT = "Helvetica-Bold", 9.0
+
+#: The smallest a measured table may be set at. Below this the fix is worse
+#: than the defect: a broken token in a 9pt table is legible and obviously
+#: wrong, and a whole table at 6pt is neither.
+_CELL_MIN_PT = 7.0
+
+
+def _scaled_cells(styles: dict, size_pt: float) -> dict:
+    """*styles* with every cell style re-set at *size_pt*.
+
+    A copy, never a mutation: `_styles()` is called once per render and its
+    dict is shared by every section, so shrinking in place would set one
+    wide table's font on every table after it in the document.
+    """
+    from reportlab.lib.styles import ParagraphStyle
+
+    scaled = dict(styles)
+    for name, style in styles.items():
+        if not name.startswith("cell"):
+            continue
+        scaled[name] = ParagraphStyle(
+            f"{style.name}-{size_pt}", parent=style,
+            fontSize=size_pt, leading=size_pt * 1.3,
+        )
+    return scaled
+
+#: Padding `_table_flowable` sets on both sides of every cell, in points. Here
+#: as a constant because the measurement has to subtract exactly what the table
+#: adds; two numbers that must agree and live apart is how a column ends up one
+#: character short.
+_CELL_PADDING_PT = 8.0
+
+#: The widest a single column may be before the slack goes to somebody else, as
+#: a share of the frame. Without a cap, one long free-text cell — a fact
+#: statement, an incident summary — takes the whole row and every other column
+#: collapses to its header. The cap is what makes "measured" mean *balanced*
+#: rather than *first come*.
+_COLUMN_CAP = 0.42
+
+
+def _measured_layout(table: Table, frame_width: float,
+                     locale: Locale) -> tuple[list[float], float]:
+    """Column widths sized to what each column actually holds.
+
+    The fixed 34%-then-even split this replaces produced, on the five-column
+    supporting-facts table, ``system_of_recor`` / ``d`` and a timestamp broken
+    as ``2026-04-07T16:4`` / ``0:00+00:00``. Nothing real hyphenates a
+    timestamp mid-token, and no reader believes a document that does.
+
+    Two measurements per column, and the second is the one that matters.
+    *Natural* is the longest whole cell — what the column wants. *Floor* is the
+    longest run with no space in it: a fact id, a dotted fact kind, an ISO
+    timestamp, ``system_of_record``. A column narrower than its floor cannot
+    wrap, it can only break a token in half, so floors are allocated first and
+    only the slack above them is shared out in proportion to what each column
+    still wants. Sizing on natural width alone was the first attempt and it
+    fixed ``system_of_record`` while leaving the timestamp broken — the column
+    was 96pt against a 100pt token, which proportional scaling has no way to
+    see.
+
+    When the floors alone exceed the frame, no allocation of width can help and
+    the type has to give — which is what a person laying this out in Word would
+    do, and what the first two attempts here would not. The shipped
+    supporting-facts table needs 1.097x the frame for its unbreakable tokens at
+    9pt, so it is set at 8.2pt and fits. The shrink is bounded by
+    ``_CELL_MIN_PT``: below that a table is not readable and breaking a token is
+    the lesser harm, so it goes back to sharing the shortfall across every
+    column rather than shrinking to nothing.
+
+    Returns ``(widths, font_pt)``, because those two decisions cannot be made
+    apart: the widths are only correct for the size they were measured at.
+
+    Deterministic, which is not incidental — this decides bytes in a corpus
+    whose gate is byte identity. ``stringWidth`` is a pure function of the text
+    and the AFM metrics shipped with reportlab, there is no clock and no
+    set iteration, and the arithmetic runs in a fixed order.
+    """
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    def measure(text: str) -> float:
+        return stringWidth(text, _CELL_FONT, _CELL_PT)
+
+    def column(texts: list[str]) -> tuple[float, float]:
+        present = [text for text in texts if text]
+        natural = max((measure(text) for text in present), default=0.0) + _CELL_PADDING_PT
+        floor = max(
+            (measure(token) for text in present for token in text.split()),
+            default=0.0,
+        ) + _CELL_PADDING_PT
+        return natural, floor
+
+    measured = [column([table.title] + [row.label for row in table.rows])]
+    for spec in table.columns:
+        cells = [spec.label]
+        for row in table.rows:
+            cell = row.cells.get(spec.key)
+            cells.append(
+                format_value(cell.value, spec.number_format, locale=locale) if cell else ""
+            )
+        measured.append(column(cells))
+
+    naturals = [min(natural, frame_width * _COLUMN_CAP) for natural, _ in measured]
+    floors = [min(floor, frame_width * _COLUMN_CAP) for _, floor in measured]
+    floors = [min(floor, natural) for floor, natural in zip(floors, naturals)]
+
+    if sum(naturals) <= 0:
+        # Every cell empty. An empty table is a legitimate thing to render and
+        # the caller has already decided it belongs here, so fall back to the
+        # even split rather than dividing by zero.
+        return ([frame_width / max(1, len(table.columns) + 1)] * (len(table.columns) + 1),
+                _CELL_PT)
+
+    if sum(naturals) <= frame_width:
+        # Everything fits with room over. Grow proportionally to fill the frame:
+        # a table that stopped short of its own margin reads as a layout bug.
+        return [natural * frame_width / sum(naturals) for natural in naturals], _CELL_PT
+
+    slack = frame_width - sum(floors)
+    if slack <= 0:
+        # Shrink the type by exactly the overshoot, rounded down to a tenth of
+        # a point so the size is a short decimal rather than a float with a
+        # tail — this ends up in the PDF, and a corpus gated on byte identity
+        # should not carry 8.203419...pt.
+        shrink = frame_width / sum(floors)
+        scaled_pt = int(_CELL_PT * shrink * 10) / 10
+        if scaled_pt >= _CELL_MIN_PT:
+            return [floor * shrink for floor in floors], scaled_pt
+        return [floor * frame_width / sum(floors) for floor in floors], _CELL_MIN_PT
+
+    wanted = [natural - floor for natural, floor in zip(naturals, floors)]
+    total_wanted = sum(wanted)
+    if total_wanted <= 0:
+        return [floor + slack / len(floors) for floor in floors], _CELL_PT
+    return [
+        floor + slack * want / total_wanted for floor, want in zip(floors, wanted)
+    ], _CELL_PT
 
 
 def _figure_flowables(chart, table: Table, frame_width: float, styles: dict, locale: Locale = DEFAULT_LOCALE) -> list:  # type: ignore[no-untyped-def]
@@ -440,14 +671,104 @@ def _figure_flowables(chart, table: Table, frame_width: float, styles: dict, loc
     return flow
 
 
+def _quote_flowables(
+    quote: Quotation,
+    facts: dict[str, CanonicalFact] | None,
+    styles: dict,
+    locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
+    *,
+    prefix: str = "",
+) -> list:
+    """One `Quotation` as an indented, set-apart paragraph — for
+    `editorial.pull_quote` and, with a *prefix*, `editorial.callout`. See
+    `render/markdown.py::_quote`, which draws the identical distinction with
+    a blockquote where this renderer has a page to indent on instead.
+    """
+    from reportlab.platypus import Paragraph
+
+    text = (
+        references.substitute(quote.text, facts, locale=locale, presentation=presentation)
+        if facts else quote.text
+    )
+    flow = [Paragraph(_escape(f"{prefix}{text}"), styles["quote"])]
+    if quote.attribution:
+        flow.append(Paragraph(_escape(f"— {quote.attribution}"), styles["quote_attribution"]))
+    return flow
+
+
+def _flow_flowables(
+    flow_diagram: FlowDiagram,
+    facts: dict[str, CanonicalFact] | None,
+    styles: dict,
+    locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
+) -> list:
+    """A declared `FlowDiagram` as an ordered list of steps.
+
+    Same reasoning as `render/markdown.py::_flow`: this renderer has no more
+    of a graph-drawing surface than Markdown does (a canvas rectangle is not
+    an arrow), so a flow prints as one line per edge — source, target, and the
+    relationship between them — rather than an invented diagram that could
+    disagree with the shape actually declared.
+    """
+    from reportlab.platypus import Paragraph
+
+    label_by_key = {node.key: node.label for node in flow_diagram.nodes}
+
+    def resolved(text: str) -> str:
+        return (
+            references.substitute(text, facts, locale=locale, presentation=presentation)
+            if facts else text
+        )
+
+    lines: list[str] = []
+    if flow_diagram.edges:
+        for edge in flow_diagram.edges:
+            source = resolved(label_by_key.get(edge.source, edge.source))
+            target = resolved(label_by_key.get(edge.target, edge.target))
+            line = f"{source} → {target}"
+            if edge.label:
+                line += f" ({resolved(edge.label)})"
+            lines.append(line)
+    else:
+        lines = [resolved(node.label) for node in flow_diagram.nodes]
+    return [Paragraph(f"• {_escape(line)}", styles["flow_step"]) for line in lines]
+
+
+#: Component ids `_section_flowables` gives a distinct presentation to, beyond
+#: the shape-based body/table/awaiting fallback every section already gets —
+#: see `render/markdown.py`'s identical constants, which this module mirrors
+#: rather than imports: the two renderers draw with different toolkits
+#: (Paragraph/Table flowables here, literal Markdown there) and would gain
+#: nothing from sharing a frozenset beyond a slightly shorter import.
+_BANDED_TABLE_COMPONENTS = frozenset({"finance.heatmap", "mgmt.risk_matrix"})
+_FLOW_COMPONENTS = frozenset({"ops.process_flow", "ops.causal_chain"})
+_PULL_QUOTE_COMPONENT = "editorial.pull_quote"
+_CALLOUT_COMPONENT = "editorial.callout"
+
+
 def _section_flowables(
     section: ArtifactSection,
     facts: dict[str, CanonicalFact] | None,
     styles: dict,
     frame_width: float,
     locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
+    *,
+    component_id: str | None = None,
 ) -> list:
-    """One IR section as a run of flowables: heading, then body or table."""
+    """One IR section as a run of flowables: heading, then body, a declared
+    flow or quotation, or a table — the fallback chain in that priority order.
+
+    *component_id* is what the artifact compiler chose for this section (see
+    `DocumentPlan.components`), asked for only to decide *which* declared
+    primitive to draw when a section carries more than one component could
+    read — the same identity dispatch `render/markdown.py::render` does for
+    the same reason. ``None`` — an IR that did not compose, or a section the
+    compiler could not place — falls straight through every component check
+    below to the body/table/awaiting chain this function has always had.
+    """
     from reportlab.platypus import Paragraph, Spacer
 
     flow: list = [Paragraph(_escape(section.heading), styles["heading"])]
@@ -462,12 +783,33 @@ def _section_flowables(
         flow.append(Paragraph(_escape(section.purpose), styles["purpose"]))
 
     if section.body:
-        text = references.substitute(section.body, facts, locale=locale) if facts else section.body
+        text = (references.substitute(section.body, facts, locale=locale,
+                                      presentation=presentation)
+                if facts else section.body)
         for block in (part.strip() for part in text.split("\n\n")):
             if block:
                 flow.append(Paragraph(_escape(block), styles["body"]))
+
+    # Additive, alone among these branches — see `render/markdown.py`'s note for
+    # the reason and for the defect that established it: a causal chain is a
+    # diagram of the argument the prose just made, and an `elif` here rendered
+    # the RCA's root-cause section as an arrow chain with the finding missing.
+    if component_id in _FLOW_COMPONENTS and section.flow is not None and (
+        section.flow.nodes or section.flow.edges
+    ):
+        flow.extend(_flow_flowables(section.flow, facts, styles, locale, presentation))
+    elif section.body:
+        pass  # the prose above is the section; nothing further to add.
+    elif component_id == _PULL_QUOTE_COMPONENT and section.quote is not None:
+        flow.extend(_quote_flowables(section.quote, facts, styles, locale, presentation))
+    elif component_id == _CALLOUT_COMPONENT and section.quote is not None:
+        flow.extend(_quote_flowables(section.quote, facts, styles, locale, presentation,
+                                      prefix="Watch: "))
     elif section.table is not None:
-        flow.append(_table_flowable(section.table, frame_width, styles, locale))
+        flow.append(_table_flowable(
+            section.table, frame_width, styles, locale, presentation,
+            show_bands=component_id in _BANDED_TABLE_COMPONENTS,
+        ))
         if section.table.note:
             flow.append(Paragraph(_escape(section.table.note), styles["note"]))
     else:
@@ -574,6 +916,7 @@ def render(
     artifact_type: str = "",
     size_class: SizeClass = "medium",
     locale: Locale = DEFAULT_LOCALE,
+    presentation: Presentation = DEFAULT_PRESENTATION,
 ) -> bytes:
     """Render one IR to PDF bytes.
 
@@ -613,9 +956,13 @@ def render(
     ))
 
     for section in plan.sections:
-        story.extend(_section_flowables(section, facts, styles, frame_width, locale))
+        if section.hidden and presentation.appendix != "append":
+            continue
+        story.extend(_section_flowables(section, facts, styles, frame_width, locale,
+                                        presentation,
+                                        component_id=plan.components.get(section.heading)))
 
-    if ir.metadata.get("voice"):
+    if ir.metadata.get("voice") and presentation.provenance == "footer":
         story.append(Paragraph(
             _escape(f"Author voice: {ir.metadata['voice']}. Persona: {ir.metadata.get('persona', '')}."),
             styles["note"],
@@ -678,6 +1025,7 @@ def render_all(world: World) -> list[Rendered]:
     """
     facts = {fact.id: fact for fact in world.facts}
     locale = corpus_locale(world)
+    profile = presentation_of(world)
     out: list[Rendered] = []
     for ir in world.artifact_irs:
         intent = world.artifact_intents.by_id(ir.intent_id)
@@ -691,6 +1039,7 @@ def render_all(world: World) -> list[Rendered]:
                 payload=render(
                     ir, facts, artifact_type=intent.artifact_type,
                     size_class=intent.size_profile, locale=locale,
+                    presentation=profile.for_doctype(intent.artifact_type),
                 ),
             )
         )

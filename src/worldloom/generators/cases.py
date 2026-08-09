@@ -45,11 +45,32 @@ def adverse(fact: CanonicalFact) -> str:
 
 
 class CaseBuilder:
-    """Mints evaluation cases in order, so ``EVAL`` ids stay append-only."""
+    """Mints evaluation cases in order, so ``EVAL`` ids stay append-only.
 
-    def __init__(self, minter: Minter) -> None:
+    ``prior`` is every case the world already holds, and it exists to stop the
+    benchmark inflating itself: a family that runs once per episode re-asks any
+    question grounded in facts that do not change per episode. Measured on a
+    six-period build before this guard: 556 cases, 342 distinct — the policy
+    and abstention families re-minting "who approved the Delegation of
+    Authority?" verbatim six times, identical answer, identical evidence.
+
+    The key is ``(question, expected answer)``, not the evidence: two cases a
+    grader cannot tell apart are one case, even when a later period re-derives
+    the same answer from its own facts — three identical incidents produced
+    "what is the confirmed root cause?" three times with three different fact
+    ids and one right answer. What the key must *not* absorb is same wording
+    with a **different** answer: that is not a duplicate but a defect — a
+    question with two right answers grades a retriever against a coin flip —
+    and the fix for it is a discriminator in the question, at the family that
+    minted it, which is why nothing here drops those.
+    """
+
+    def __init__(self, minter: Minter, prior: Iterable[EvaluationCase] = ()) -> None:
         self.minter = minter
         self.cases: list[EvaluationCase] = []
+        self._seen: set[tuple[str, str]] = {
+            (case.question, case.expected_answer) for case in prior
+        }
 
     def case(
         self,
@@ -64,6 +85,10 @@ class CaseBuilder:
         sources: list[str | None] | None = None,
         distractors: list[str | None] | None = None,
     ) -> None:
+        key = (question, answer)
+        if key in self._seen:
+            return
+        self._seen.add(key)
         self.cases.append(
             EvaluationCase(
                 id=self.minter.next("EVAL"),
@@ -79,13 +104,24 @@ class CaseBuilder:
             )
         )
 
+    #: The one answer every abstention case carries — module-level so
+    #: ``abstain``'s dedup key and the minted case can never drift apart,
+    #: which is exactly how the first version of this guard failed: it keyed
+    #: abstentions on a sentinel while ``prior`` seeded the real answer text,
+    #: and every abstention re-minted per episode anyway.
+    ABSTAIN_ANSWER = "Not present in the corpus."
+
     def abstain(self, question: str, reasoning: str) -> None:
+        key = (question, self.ABSTAIN_ANSWER)
+        if key in self._seen:
+            return
+        self._seen.add(key)
         self.cases.append(
             EvaluationCase(
                 id=self.minter.next("EVAL"),
                 question=question,
                 evaluation_type=EvaluationType.EXPECTED_ABSTENTION,
-                expected_answer="Not present in the corpus.",
+                expected_answer=self.ABSTAIN_ANSWER,
                 expects_abstention=True,
                 difficulty="hard",
                 reasoning=reasoning,

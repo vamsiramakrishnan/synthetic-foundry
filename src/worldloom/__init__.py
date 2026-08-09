@@ -90,6 +90,21 @@ from . import messiness  # noqa: F401
 # fails loudly in `AuthoredEpisode.run`, not with `unknown scenario` here.
 from . import episodes as _episodes  # noqa: F401
 
+# And once more for the standing documents. `policies` registers ten artifact
+# types by being imported, and it was reached only from inside a world
+# builder's `build()` — so a process that had not built with `--policies` did
+# not know those types existed, and `documents.declared_types()` returned two
+# different answers depending on what had run before it. Caught by
+# `tests/test_doctypes.py` passing alone and failing in a full suite, which is
+# exactly how this class of defect announces itself and exactly why
+# `register_artifact_types` says registration belongs at package import.
+from . import policies as _policies  # noqa: F401
+
+# Same contract for the workforce rounds: importing this registers five
+# artifact types and ten fact kinds, and `policies` paid for learning that a
+# lazy registration makes `documents.declared_types()` depend on what has run.
+from .workforce import HiringRound, PerformanceCycle  # noqa: F401
+
 __version__ = "0.1.0"
 
 __all__ = [
