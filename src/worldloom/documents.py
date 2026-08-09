@@ -537,8 +537,25 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     by_id = {fact.id: fact for fact in world._facts}
     index = _Facts([by_id[f] for f in intent.required_fact_ids if f in by_id])
     facts = index.all
+    # The workbook's *own* facts decide which month it reports, and the world's
+    # current period is only the fallback for a document whose facts carry none.
+    #
+    # It read the other way round, and the defect that hid behind it is the
+    # worst this repository has had. `compile()` compiles every intent against
+    # the world as it stands *now*, so in a two-period corpus March's workbook
+    # was looked up at April: every `index.get(kind, subject, period)` missed,
+    # and the month-end model — the corpus's system of record, the document
+    # every other one reconciles against — rendered with **every cell empty**.
+    # Measured: a one-period build's Business Unit P&L carries 28 of 28 values;
+    # a two-period build's carries 0 of 28, and `validate` passed both, because
+    # a reconciliation check compares a cell against a fact and two absent
+    # numbers agree.
+    #
+    # Single-period builds are byte-identical either way — `world.period` and
+    # `periods[-1]` are the same string — which is why this survived: every
+    # fixture, every example and every default build has exactly one period.
     periods = sorted({f.period for f in facts if f.period})
-    period = world.period or (periods[-1] if periods else "")
+    period = (periods[-1] if periods else "") or world.period or ""
     units = list(world.business_units)
     company = world.company
 

@@ -475,23 +475,32 @@ def test_regression_the_measured_problem_has_a_floor_to_raise() -> None:
     Three periods of `RetailWorld(seed=8128)` compose to 13 docx/xlsx
     artifacts (cfo_variance_memo, finance_workbook, and close_calendar each
     appear three times — one per period — plus one each of working_note,
-    incident_rca, knowledge_article, and executive_summary) and land on 8
-    distinct shapes: cfo_variance_memo and close_calendar each compose
-    identically in all three periods today, which is exactly the "12 CFO
-    memos, identical outlines" symptom this module exists to detect and
+    incident_rca, knowledge_article, and executive_summary) and land on 7
+    distinct shapes: cfo_variance_memo, close_calendar and finance_workbook
+    each compose identically in all three periods, which is exactly the "12
+    CFO memos, identical outlines" symptom this module exists to detect and
     later fix.
 
-    8 is a **floor**, not a target: this is the number *before* any diversity
+    **It read 8, and the eighth shape was a bug.** `documents.finance_workbook`
+    took its reporting month from the world's *current* period rather than from
+    its own facts, so in a multi-period corpus every workbook but the last
+    looked its figures up at the wrong month and came out with every cell empty
+    — a different composition from the populated one, and counted here as
+    diversity. Fixing it dropped this number by one. A corpus is not more varied
+    for having two of its thirteen documents broken, and a floor that rewarded
+    the breakage was measuring the wrong thing.
+
+    7 is a **floor**, not a target: this is the number *before* any diversity
     mechanism (batch quotas, candidate selection) is wired into generation —
     that wiring is integration work this module deliberately does not do.
     Diversity work landing later should only ever raise this number. A drop
-    below 8 means diversity regressed, not that the fixture needs updating.
+    below 7 means diversity regressed, not that the fixture needs updating.
     """
     fingerprints = _fingerprint_the_corpus()
 
     assert len(fingerprints) == 13, "the fixture's own shape moved — update the docstring above, not just the floor"
     batch = report(fingerprints)
-    assert batch.distinct_digests >= 8, (
+    assert batch.distinct_digests >= 7, (
         f"only {batch.distinct_digests} distinct shapes across {batch.count} artifacts — "
         "below the recorded floor; diversity regressed"
     )

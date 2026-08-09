@@ -7,6 +7,38 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Generation — the month-end model was empty in every multi-period corpus
+
+- **`documents.finance_workbook` took its reporting month from the world rather
+  than from its own facts.** `compile()` compiles every intent against the world
+  as it stands *now*, so in a two-period corpus March's workbook was looked up
+  at April: every measure lookup missed and the month-end model — the corpus's
+  system of record, the document every other one reconciles against — rendered
+  with **every cell empty**. Measured: a one-period build's Business Unit P&L
+  carries 28 of 28 values, a two-period build's carried **0 of 28**, and the
+  Store Performance sheet vanished entirely because it is gated on the period
+  having site facts. Single-period builds are byte-identical either way, which
+  is why it survived — every fixture, example and default build has one period.
+- **`validate.compiled_evidence`** — the check that would have caught it.
+  `unreachable_answer` reads `required_fact_ids`, the *plan*, and has to,
+  because at step 3 nothing is compiled. The moment a corpus is compiled that
+  becomes the weaker claim, and the gap between them is where this hid.
+  Measured on an eight-division, six-period build: **6,185 facts planned into
+  documents and 1,718 actually carried**, with 55 of 479 evaluation cases
+  citing evidence in no document — and `validate` reporting clean. After both
+  fixes: 6,071 carried and **0 unanswerable cases**.
+- **The reserve triangle showed one valuation.** Found by the new check the day
+  it existed: the prior-valuation ultimate was required by the workbook, cited
+  by the insurer's own first evaluation case ("as at the 2026-03 valuation"),
+  and carried by no compiled document. A triangle whose estimate sheet has one
+  column is not a triangle — the subject of that whole episode is that an
+  ultimate *moved*. Both valuations now appear per cohort, as the book-position
+  sheet already did for the totals.
+- The diversity floor drops 8 → 7, and the eighth shape was the bug: two empty
+  workbooks composed differently from the populated one and were counted as
+  variety. A corpus is not more varied for having two of its thirteen documents
+  broken.
+
 ### Line management produces documents
 
 - **`worldloom.workforce`** — the organisation was modelled in full and used as

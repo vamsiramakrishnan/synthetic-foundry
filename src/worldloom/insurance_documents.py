@@ -286,17 +286,36 @@ def reserve_triangle_ir(world, intent: ArtifactIntent, minter: Minter) -> Artifa
 
     estimate_rows = [
         Row(key=ay, label=f"Accident quarter {ay}", cells={
+            # Both valuations, not only the live one. A reserve triangle whose
+            # estimate sheet carries one column is not a triangle — the whole
+            # subject of this episode is that an ultimate *moved*, and a reader
+            # holding only the strengthened figure cannot see that it did.
+            #
+            # Found by `validate.compiled_evidence` the day it existed: the
+            # prior ultimate was required by this workbook, cited by the corpus's
+            # own first evaluation case ("as at the 2026-03 valuation"), and
+            # carried by no compiled document. The `Book position` sheet below
+            # already showed prior against current for the totals; the
+            # cohort-level sheet did not.
+            "prior_ultimate": cell(_earliest(facts, "reserves.ultimate", ay)),
             "ultimate": cell(_latest(facts, "reserves.ultimate", ay)),
+            "prior_ibnr": cell(_earliest(facts, "reserves.ibnr", ay)),
             "ibnr": cell(_latest(facts, "reserves.ibnr", ay)),
             "future_development": Cell(value=None),
         })
         for ay in cohorts
     ]
     estimates = Table(
-        key="estimates", title="Actuarial estimate by accident cohort (current valuation)",
+        key="estimates", title="Actuarial estimate by accident cohort",
         columns=[
-            Column(key="ultimate", label="Ultimate", number_format=MONEY_FORMAT),
-            Column(key="ibnr", label="IBNR", number_format=MONEY_FORMAT),
+            Column(key="prior_ultimate", label="Ultimate, prior valuation",
+                   number_format=MONEY_FORMAT),
+            Column(key="ultimate", label="Ultimate, current valuation",
+                   number_format=MONEY_FORMAT),
+            Column(key="prior_ibnr", label="IBNR, prior valuation",
+                   number_format=MONEY_FORMAT),
+            Column(key="ibnr", label="IBNR, current valuation",
+                   number_format=MONEY_FORMAT),
             Column(key="future_development", label="Development beyond this valuation"),
         ],
         rows=estimate_rows,

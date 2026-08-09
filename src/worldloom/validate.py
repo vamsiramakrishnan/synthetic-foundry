@@ -1725,6 +1725,47 @@ class _Validator:
                         f"expects {fact_id} but no artifact or plan carries it",
                     )
 
+        self.compiled_evidence()
+
+    def compiled_evidence(self) -> None:
+        """A fact a document was *asked* to carry is not a fact it carries.
+
+        `unreachable_answer` above reads `required_fact_ids` — the plan — and
+        has to, because at step 3 nothing is compiled and the plan is all there
+        is. The moment a corpus *is* compiled that becomes the weaker claim, and
+        the gap between the two is where the worst defect this repository has
+        had was hiding: in a multi-period corpus the month-end model looked its
+        figures up at the wrong month and rendered with every cell empty, while
+        the plan still listed the thousand facts it had been handed. Measured on
+        an eight-division, six-period build: **6,185 facts planned into
+        documents, 1,718 actually carried**, and 55 of 479 evaluation cases with
+        their evidence in no document at all — with `validate` reporting clean.
+
+        So this is the same question asked of what was *built* rather than of
+        what was intended, and it runs only when there is something built to ask
+        it of. A plan-only corpus scores zero out of zero here, which is what it
+        should: nothing has been compiled, so nothing can be missing from it.
+        """
+        if not self.world._artifact_irs:
+            return
+        carried: set[str] = set()
+        for ir in self.world.artifact_irs:
+            carried.update(ir.fact_ids())
+
+        for case in self.world.evaluations:
+            if case.expects_abstention or not case.expected_fact_ids:
+                continue
+            self.checks += 1
+            if not set(case.expected_fact_ids) & carried:
+                self.fail(
+                    "evaluation",
+                    "evidence_not_in_any_document",
+                    case.id,
+                    f"cites {', '.join(case.expected_fact_ids[:3])} — planned into"
+                    " a document, and in no compiled one. The question is"
+                    " unanswerable from the corpus as built.",
+                )
+
     def run(self) -> ValidationReport:
         self.referential()
         self.workforce()
