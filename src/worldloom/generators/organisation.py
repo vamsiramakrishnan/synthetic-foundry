@@ -582,6 +582,21 @@ def generate(
             # read, and the three policies now agree about that.
             allow_people=[role_ids["cio"], role_ids["ceo"]],
         ),
+        # The commercial desk's shelf: trade agreements, pipeline reviews, the
+        # paper a supplier negotiation leaves. Absent until a pack-authored
+        # trade process needed it, and its absence was measured the sharp way:
+        # the desk's own documents had no audience that admitted their author —
+        # "finance and audit only" excludes Merchandising, and the unknown-
+        # audience fallback is *most restrictive* by design, so the commercial
+        # lead was locked out of the agreement they signed. Finance and Audit
+        # are in because recognition and review both read the contract; the
+        # CEO by the standing rule stated on the technology policy above.
+        AccessPolicy(
+            id=minter.next("POLICY"),
+            label="Commercial and finance",
+            allow_functions=["Merchandising", "Finance", "Audit"],
+            allow_people=[role_ids["ceo"]],
+        ),
     )
 
     # Drawn before the override is applied — see the docstring: a pack naming

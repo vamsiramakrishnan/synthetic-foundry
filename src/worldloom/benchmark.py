@@ -279,19 +279,28 @@ def lint(
         return findings
 
     def check_kind(kind: str, spot: str) -> None:
-        # The registry test is the non-negotiable half, and it is the same one
-        # `detail.lint` applies for the same reason: a family asked about a
-        # kind nothing generates is a question with no possible answer, and a
-        # spec's self-referential lint cannot see that.
+        # The spec's own mints answer first: an authored process exists to
+        # declare kinds the registry has never heard of — that is what
+        # authoring a process *is* — and the registry test used to fire on
+        # exactly those, refusing every family a new process asked about its
+        # own facts. Measured on the first pack to ship an episode: both of
+        # its families flagged, both about kinds the same document declares
+        # twenty lines up.
+        if declared_kinds is not None and any(
+            factkinds.covers(kind, minted) for minted in declared_kinds
+        ):
+            return
+        # The registry test is the non-negotiable half for everything else,
+        # and it is the same one `detail.lint` applies for the same reason: a
+        # family asked about a kind nothing generates is a question with no
+        # possible answer, and a spec's self-referential lint cannot see that.
         if factkinds.get(kind) is None and not factkinds.resolvable(kind):
             findings.append(
                 f"{spot}: fact kind {kind!r} is not in the fact-kind registry —"
                 " a question may only be asked of a kind something generates"
                 " and something validates."
             )
-        elif declared_kinds is not None and not any(
-            factkinds.covers(kind, minted) for minted in declared_kinds
-        ):
+        elif declared_kinds is not None:
             findings.append(
                 f"{spot}: fact kind {kind!r} is registry-known but not minted by"
                 " this process — the family would phrase cases this process can"

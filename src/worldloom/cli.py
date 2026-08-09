@@ -239,6 +239,16 @@ def build(
             "`worldloom pack check` to lint it."
         ),
     ),
+    episode: list[str] = typer.Option(
+        None, "--episode",
+        help=(
+            "Run a pack-authored business process each period, after the engine's "
+            "own — repeatable. Names an EpisodeSpec the --pack carries under "
+            "`episodes` (see the worldloom-process skill for authoring one). This "
+            "is how authored sales, legal or project processes ship: the pack "
+            "declares them, this flag runs them, and the recipe replays them."
+        ),
+    ),
     comparatives: int = typer.Option(
         0, "--comparatives",
         help="Prior months of actuals to generate, for a trend. 11 gives a rolling year.",
@@ -672,6 +682,25 @@ def build(
     # below.
     single_episode = domain.single_episode if domain is not None else None
 
+    # Checked before anything builds: `--episode` names an authored process,
+    # and the only shipping path for one is the pack that carries it —
+    # `packs.archetype_of` installed this pack's specs a few lines up, so a
+    # name still missing here is missing everywhere, and failing now beats a
+    # world half-built when the second period's step raises.
+    if episode:
+        from . import episodes as episodes_module
+
+        for episode_name in episode:
+            if episode_name not in episodes_module.loaded():
+                installed_names = sorted(episodes_module.loaded()) or ["(none)"]
+                err.print(
+                    f"[red]error:[/red] --episode {episode_name!r} names no installed"
+                    f" process; installed: {', '.join(installed_names)}. An authored"
+                    " episode ships in a pack's `episodes` field — build with the"
+                    " --pack that declares it."
+                )
+                raise typer.Exit(code=2)
+
     # Resolved once, before anything is built, and applied to the builder *and*
     # every episode: the world's organisation and the episode's figures are
     # drawn under the same physics or the corpus is internally inconsistent
@@ -1040,9 +1069,12 @@ def build(
         ))
         world = _localised_recipe(_localised(builder).build())
         for index in range(max(1, periods)):
-            world = world.run(_under_physics(
-                single_episode(_step_period(period, index, domain.period_step_months))
-            ))
+            stamp = _step_period(period, index, domain.period_step_months)
+            world = world.run(_under_physics(single_episode(stamp)))
+            for episode_name in episode or []:
+                from .episodes import AuthoredEpisode
+
+                world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
     else:
         builder = _under_physics(
             RetailWorld.from_pack(pack_obj, seed=seed)
@@ -1353,6 +1385,14 @@ def build(
                     from .workforce import PerformanceCycle
 
                     world = world.run(PerformanceCycle(period=stamp, pairs=reviews))
+                # Authored processes run after the engine's own steps for the
+                # id-stability reason the workforce rounds do: a corpus built
+                # without `--episode` keeps every id it had, and one built with
+                # it only ever gains ids at the end of each period.
+                for episode_name in episode or []:
+                    from .episodes import AuthoredEpisode
+
+                    world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
                 if (
                     workforce_path is not None
                     and index + 1 < len(workforce_path)

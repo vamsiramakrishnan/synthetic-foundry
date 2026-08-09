@@ -459,7 +459,13 @@ def _valid_variable_names() -> frozenset[str]:
     })
 
 
-def lint(types: Iterable[DocumentType], *, base: str = "") -> list[str]:
+def lint(
+    types: Iterable[DocumentType],
+    *,
+    base: str = "",
+    episode_kinds: frozenset[str] | set[str] = frozenset(),
+    episode_planned: frozenset[str] | set[str] = frozenset(),
+) -> list[str]:
     """Findings an author should read before building.
 
     Same contract as ``packs.lint`` and for the same reason: a list of strings,
@@ -474,12 +480,20 @@ def lint(types: Iterable[DocumentType], *, base: str = "") -> list[str]:
     the role rules are skipped rather than guessed: an author linting a bare
     types file has not said which engine it is for, and inventing an answer
     would report every role in a banking type as unknown.
+
+    ``episode_kinds`` and ``episode_planned`` are what the pack shipping these
+    types also ships: the fact kinds its episodes mint, and the artifact types
+    its episodes plan. Both existed after this lint did, and without them it
+    reported every episode-fed section as "written about nothing" and every
+    episode-planned type as inert — eleven findings on the first pack to carry
+    a process, all eleven describing the one world where the pack is *not*
+    built with its own episodes.
     """
     from . import domains
 
     findings: list[str] = []
     domain = domains.by_name(base) if base else None
-    known_kinds = documents.narrated_kinds()
+    known_kinds = documents.narrated_kinds() | set(episode_kinds)
     subject_scoped = documents.scoped_kinds()
     declared = documents.declared_types()
     reserved = documents.reserved_types()
@@ -649,13 +663,18 @@ def lint(types: Iterable[DocumentType], *, base: str = "") -> list[str]:
 
         # -- the filing --------------------------------------------------
         if spec.filing is None:
-            findings.append(
-                f"{where}: declares no `filing`, so nothing will ever plan one."
-                " An authored type is planned by the generic filing block, which"
-                " reads this table; without it the type is declared, renderable,"
-                " and inert — the same carried-and-cited-and-nothing-happens"
-                " failure `packs.lint` exists to catch one layer down."
-            )
+            # An episode-planned type needs no filing entry: the pack's own
+            # process names it under `artifacts` and the runner plans it every
+            # episode, which is a stronger guarantee than the density table the
+            # generic filing block reads.
+            if spec.key not in episode_planned:
+                findings.append(
+                    f"{where}: declares no `filing`, so nothing will ever plan one."
+                    " An authored type is planned by the generic filing block, which"
+                    " reads this table; without it the type is declared, renderable,"
+                    " and inert — the same carried-and-cited-and-nothing-happens"
+                    " failure `packs.lint` exists to catch one layer down."
+                )
         else:
             findings.extend(_lint_filing(where, spec, domain, base))
 

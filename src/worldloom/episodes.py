@@ -280,6 +280,15 @@ class ArtifactIntentSpec(Model):
     audience: str = Field(min_length=1)
     """Who may read it (e.g., ``"finance"``, ``"executive_committee"``)."""
 
+    domain: str = ""
+    """The artifact's *functional* domain — ``finance``, ``strategy``, ``risk``
+    — the vocabulary ``documents._DOMAIN_AUTHORS`` polices authorship in.
+    Empty means the spec's own ``domain``, which is an *engine* name, and the
+    two coincided for exactly as long as every authored episode belonged to a
+    vertical whose engine name was also a functional domain: procurement's
+    was, retail's is not, and the first retail-engine authored episode failed
+    compile with "artifact domain 'retail' is undeclared"."""
+
     required_facts: list[str] = Field(default_factory=list)
     """Which fact kinds must be provided to this artifact for it to compile."""
 
@@ -1283,7 +1292,7 @@ def run(
         intents.append(ArtifactIntentModel(
             id=minter.next("ART"),
             artifact_type=artifact.artifact_type,
-            domain=spec.domain,
+            domain=artifact.domain or spec.domain,
             audience=artifact.audience,
             author_id=author,
             triggered_by=[event_ids[k] for k in artifact.triggered_by_events],
