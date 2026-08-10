@@ -566,18 +566,28 @@ def test_two_quarter_export_then_replay_is_byte_identical(two_quarters: World, t
 
 
 def test_cli_periods_steps_by_the_domains_own_cadence(two_quarters: World, tmp_path) -> None:
-    """Phase 3 defers multi-period support for single-episode domains: `--periods`
-    is refused with a note that carry-forward will arrive as a declared slot in
-    the episode grammar (Phase 2). This keeps Phase 3 from hand-coding a second
-    bespoke carry-forward; each vertical will express it as data once."""
+    """This test used to assert the opposite — that `--periods 2` was *refused*
+    for a single-episode domain, pending "the episode grammar (Phase 2)". The
+    grammar arrived, carry-forward became declared slots, and the refusal
+    outlived its justification while the mosaic path stepped these domains
+    multi-period all along. Now the claim is the one the test's name always
+    made: `--periods` steps by the domain's own cadence — two banking periods
+    are two consecutive *quarters*, and the built world validates.
+
+    The per-scenario limit that is real stays where the code that knows it
+    lives: `QuarterlyReserving` refuses its own second quarter with the
+    increment-2 reason, and the CLI surfaces that message instead of guessing.
+    """
     out = tmp_path / "two-quarter-cli"
     result = runner.invoke(app, [
         "build", "--seed", str(SEED), "--period", PERIOD, "--archetype", "midsize_adi",
         "--periods", "2", "--out", str(out),
     ])
-    assert result.exit_code == 2
-    assert "is not supported for banking" in result.output
-    assert "episode grammar" in result.output
+    assert result.exit_code == 0, result.output
+    world = World.load(str(out))
+    quarters = sorted({f.period for f in world.facts if f.period})
+    assert quarters == ["2026-03", "2026-06"], quarters
+    assert world.validate().ok
 
 
 def test_cli_still_refuses_the_retail_only_flags_for_banking(tmp_path) -> None:

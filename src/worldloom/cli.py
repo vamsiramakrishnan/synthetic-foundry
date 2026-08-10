@@ -1310,15 +1310,16 @@ def build(
             **({} if not claimed_calendar else {"seasonality": claimed_calendar[0]}),
         )
 
-    if periods > 1 and single_episode is not None:
-        err.print(
-            f"[red]error:[/red] --periods {periods} is not supported for {domain.name}."
-            f" Multi-period support for single-episode verticals arrives with the episode"
-            f" grammar (Phase 2, `docs/next-phase-plan.md`), which will define carry-forward"
-            f" as declared slots in the episode specification rather than hand-coded per-vertical."
-            f" For now, build one period per world."
-        )
-        raise typer.Exit(code=2)
+    # No blanket multi-period refusal for single-episode domains any more. The
+    # one that stood here predated the episode grammar it was waiting for, and
+    # it outlived its own justification: carry-forward *is* declared slots now,
+    # the mosaic path has stepped these domains multi-period for as long as it
+    # has existed, and measured today banking runs three consecutive quarters
+    # and P2P six consecutive months, both validating clean. The authority on
+    # whether a *particular* scenario supports a second run is the scenario —
+    # `QuarterlyReserving` refuses its own second quarter, loudly and with the
+    # reason (attribution supersession is increment 2) — and a gate here would
+    # only ever disagree with the code that actually knows.
 
     if timeline is not None and single_episode is None:
         # A history rather than a repetition. Note what is *not* here: no new
