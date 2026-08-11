@@ -97,6 +97,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--systems-end` | Exact active system count in the final period. |
 | `--timeline` | Sample a history rather than repeating a month: `quiet`, `steady` or `turbulent`. `--periods 6` runs six closes signed by the same twenty-three people, drawn from the same distribution — six identical months with the dates changed. A density schedules incidents and org changes across those periods instead, so a controller who departs in period 2 means periods 3-6 are signed by their successor and "which month went wrong" becomes answerable from the corpus. Needs --periods to have room to work in. Costs: the schedule states incidents in *both* directions once it schedules any, so it and --incident cannot both decide; and hires are not sampled, because a new post's title is a business decision and a sampler inventing one would write the least plausible sentence in the corpus. |
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
+| `--vary-incidents` | Rotate the incident's storyline across periods — a stale FX table one month, a duplicated goods receipt the next — instead of the same failure retold monthly. Surface only: causality, fact ids and machine values are identical either way, and each period's storyline is recorded on its recipe step so --replay reproduces it. Off (the default) rebuilds every existing corpus byte for byte. |
 
 ### `worldloom compose`
 
@@ -151,6 +152,7 @@ worldloom diversity <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
+| `--across` | Additional corpora to compare against — repeatable. Reports shape overlap and cross-corpus prose duplicates over the whole set, the failure no single corpus's report can see: five mosaic companies can each look varied while all five hold the same shapes and say the same sentences. |
 | `--check-quotas` | Exit non-zero if the batch fails a declared Quotas threshold (see compiler/diversity.py). For CI: assert the corpus does not get more monotonous over time. |
 | `--near-duplicates` | Also group passages whose prose is near-identical, and name which artifacts they belong to. Structural sameness and prose sameness are different failures — a batch can carry twenty distinct shapes and still say the same sentences in all of them. |
 | `--verbose`, `-v` | Show the per-artifact-type breakdown and every distinct shape within it. |

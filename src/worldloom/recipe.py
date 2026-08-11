@@ -76,7 +76,7 @@ class RecipeError(Exception):
 #: load, which is a lot to accept for the convenience of not writing a line here.
 STEPS: dict[str, tuple[str, ...]] = {
     "MonthEndClose": ("period", "incident", "comparatives", "actors", "eval_density",
-                      "trend_pct", "conversations"),
+                      "trend_pct", "conversations", "storyline"),
     "Hire": ("period", "role_key", "title", "function", "unit_key"),
     "Departure": ("period", "role_key"),
     "Reorganisation": ("period", "unit_key", "new_leader_role"),
@@ -792,6 +792,14 @@ def rebuild(
                     conversations=step.get("conversations", False),
                     physics=physics,
                     seasonality=seasonality,
+                    # Same `.get` discipline: absent means the step was
+                    # recorded before storylines existed, and the classic
+                    # storyline is exactly what it was built with. An unknown
+                    # recorded name is refused inside the scenario
+                    # (`operations.storyline_text`), not defaulted here — a
+                    # recipe must rebuild the world it describes or fail
+                    # saying why.
+                    storyline=step.get("storyline", "hierarchy_mapping"),
                 )
             )
         elif name == "Hire":

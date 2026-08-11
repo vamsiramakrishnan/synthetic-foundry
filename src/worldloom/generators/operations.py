@@ -94,6 +94,391 @@ TEXT: dict[str, str] = {
 }
 
 
+#: Alternative incident storylines: the same eight-step causal chain — detect,
+#: triage, be wrong, be corrected, work around, escalate — wearing a different
+#: failure. Each entry is a ``TEXT`` overlay (the same seam a pack re-voices
+#: through), so a storyline can never touch causality, fact ids, or machine
+#: values; it can only change what the failure *was*. The library exists
+#: because a 24-period flagship measured 24 byte-similar incidents — one
+#: distinct confirmed cause across 48 ``ops.cause`` facts — and a company
+#: whose only operational failure mode is one stale mapping table, monthly,
+#: with the same remediation raised each time and never done, is a diversity
+#: hole and a coherence hole at once. Every storyline still blocks inventory
+#: valuation (that is the causal layer: the close is delayed because stock
+#: cannot be valued) and still lands on a control failure with two tickets,
+#: because the downstream documents — RCA, Jira summary, knowledge article —
+#: are planned against those keys.
+#:
+#: ``hierarchy_mapping`` is the storyline this engine always told, as an empty
+#: overlay: the default build is byte-identical to every corpus that predates
+#: the library.
+STORYLINES: dict[str, dict[str, str]] = {
+    "hierarchy_mapping": {},
+    "fx_rate_stale": {
+        "event.pipeline_failed":
+            "The inventory valuation pipeline failed. Landed costs could not be computed, so "
+            "on-hand stock could not be valued for the period.",
+        "event.hypothesis_recorded":
+            "Initial triage attributed the failure to an overnight outage of the market-rates service.",
+        "event.hypothesis_superseded":
+            "The rates-service outage hypothesis was ruled out; the service's logs showed "
+            "uninterrupted publication through the window.",
+        "event.root_cause_confirmed":
+            "Root cause confirmed as a stale foreign-exchange rate table in the landed-cost "
+            "engine, leaving {affected:,} imported SKUs valued at a rate the period never traded at.",
+        "event.workaround_applied":
+            "The rate table was refreshed by hand and the affected receipts revalued so the "
+            "period could close.",
+        "event.control_failure_identified":
+            "Review established the underlying failure as a control failure: the rate-table "
+            "refresh has no registered owner and no required reviewer.",
+        "event.remediation_created":
+            "Two remediation tickets raised: automate rate-staleness validation, and assign "
+            "ownership of the refresh with a mandatory reviewer.",
+        "fact.hypothesis": "Overnight market-rates service outage",
+        "fact.hypothesis_ruled_out":
+            "Rates-service logs show uninterrupted publication during the valuation window",
+        "fact.cause": "Stale foreign-exchange rate table in the landed-cost engine",
+        "fact.recurrence_with_period":
+            "A comparable valuation failure in {prior_period} was traced to the same rate table,"
+            " and the response then refreshed the rates without assigning ownership",
+        "fact.recurrence_first": "A comparable valuation failure was traced to the same rate table",
+        "fact.workaround":
+            "Manual rate refresh and revaluation applied to complete valuation for the period",
+        "fact.classification":
+            "control_failure: the rate-table refresh has no registered owner and no required reviewer",
+        "fact.remediation":
+            "One ticket automates rate-staleness validation; one assigns refresh ownership "
+            "with a mandatory reviewer",
+        "fact.remediation_scope":
+            "The ownership ticket addresses the control failure; the staleness check addresses "
+            "only the detection gap",
+    },
+    "duplicate_grn": {
+        "event.pipeline_failed":
+            "The inventory valuation pipeline failed its reconciliation gate. Receipts exceeded "
+            "purchase orders, so on-hand stock could not be valued for the period.",
+        "event.hypothesis_recorded":
+            "Initial triage attributed the failure to a warehouse network outage double-sending receipts.",
+        "event.hypothesis_superseded":
+            "The network outage hypothesis was ruled out; transmission logs showed a single, "
+            "clean delivery of each receipt file.",
+        "event.root_cause_confirmed":
+            "Root cause confirmed as duplicate goods-receipt postings from a retried batch job "
+            "with no idempotency guard, inflating {affected:,} SKUs' on-hand quantities.",
+        "event.workaround_applied":
+            "The duplicate postings were reversed by journal and the batch rerun under "
+            "supervision so valuation could complete for the period.",
+        "event.control_failure_identified":
+            "Review established the underlying failure as a control failure: the receipt batch "
+            "retries without an idempotency key, and manual reposts have no required reviewer.",
+        "event.remediation_created":
+            "Two remediation tickets raised: add an idempotency key to receipt posting, and "
+            "put a mandatory reviewer on manual reposts.",
+        "fact.hypothesis": "Warehouse network outage double-sending receipt files",
+        "fact.hypothesis_ruled_out":
+            "Transmission logs show one clean delivery per receipt file during the window",
+        "fact.cause":
+            "Duplicate goods-receipt postings from a retried batch job with no idempotency guard",
+        "fact.recurrence_with_period":
+            "A comparable valuation failure in {prior_period} was traced to the same retry path,"
+            " and the response then reversed the duplicates without guarding the retry",
+        "fact.recurrence_first": "A comparable valuation failure was traced to the same retry path",
+        "fact.workaround":
+            "Duplicate receipts reversed by journal and the batch rerun to complete valuation "
+            "for the period",
+        "fact.classification":
+            "control_failure: receipt posting retries carry no idempotency key and manual "
+            "reposts have no required reviewer",
+        "fact.remediation":
+            "One ticket adds an idempotency key to receipt posting; one puts a mandatory "
+            "reviewer on manual reposts",
+        "fact.remediation_scope":
+            "The idempotency ticket addresses the control failure; the reviewer ticket addresses "
+            "only the manual path",
+    },
+    "snapshot_late": {
+        "event.pipeline_failed":
+            "The inventory valuation pipeline failed its completeness check. The stock snapshot "
+            "closed early, so on-hand stock could not be valued for the period.",
+        "event.hypothesis_recorded":
+            "Initial triage attributed the failure to an overnight ERP outage delaying putaway postings.",
+        "event.hypothesis_superseded":
+            "The ERP outage hypothesis was ruled out; ERP logs showed postings flowing "
+            "normally through the window.",
+        "event.root_cause_confirmed":
+            "Root cause confirmed as the warehouse stock snapshot cutting over before final "
+            "putaways posted, leaving {affected:,} SKUs counted short of what was on hand.",
+        "event.workaround_applied":
+            "The snapshot was re-taken after putaway confirmation so valuation could complete "
+            "for the period.",
+        "event.control_failure_identified":
+            "Review established the underlying failure as a control failure: the snapshot "
+            "cutover time is edited by hand with no registered owner and no required reviewer.",
+        "event.remediation_created":
+            "Two remediation tickets raised: derive the cutover from putaway confirmation, and "
+            "assign ownership of the snapshot schedule with a mandatory reviewer.",
+        "fact.hypothesis": "Overnight ERP outage delaying putaway postings",
+        "fact.hypothesis_ruled_out": "ERP logs show postings flowing normally during the window",
+        "fact.cause":
+            "Warehouse stock snapshot cut over before final putaways posted",
+        "fact.recurrence_with_period":
+            "A comparable valuation failure in {prior_period} was traced to the same snapshot"
+            " schedule, and the response then re-took the snapshot without assigning ownership",
+        "fact.recurrence_first":
+            "A comparable valuation failure was traced to the same snapshot schedule",
+        "fact.workaround":
+            "Snapshot re-taken after putaway confirmation to complete valuation for the period",
+        "fact.classification":
+            "control_failure: the snapshot cutover time is hand-edited with no registered owner "
+            "and no required reviewer",
+        "fact.remediation":
+            "One ticket derives the cutover from putaway confirmation; one assigns snapshot "
+            "schedule ownership with a mandatory reviewer",
+        "fact.remediation_scope":
+            "The derivation ticket addresses the control failure; the ownership ticket addresses "
+            "only the accountability gap",
+    },
+    "credential_expired": {
+        "event.pipeline_failed":
+            "The inventory valuation pipeline failed at authentication. The costing engine could "
+            "not read the merchandising master, so on-hand stock could not be valued for the period.",
+        "event.hypothesis_recorded":
+            "Initial triage attributed the failure to the previous evening's platform release.",
+        "event.hypothesis_superseded":
+            "The release hypothesis was ruled out; the deployment log showed no release touching "
+            "the costing path in the window.",
+        "event.root_cause_confirmed":
+            "Root cause confirmed as an expired service credential between the costing engine and "
+            "the merchandising master, leaving {affected:,} SKUs unreadable and unvaluable.",
+        "event.workaround_applied":
+            "An emergency credential rotation was applied so valuation could complete for the period.",
+        "event.control_failure_identified":
+            "Review established the underlying failure as a control failure: service credential "
+            "expiry is untracked, with no registered owner and no required reviewer for rotation.",
+        "event.remediation_created":
+            "Two remediation tickets raised: monitor credential expiry ahead of the deadline, and "
+            "assign rotation ownership with a mandatory reviewer.",
+        "fact.hypothesis": "Previous evening's platform release broke the costing path",
+        "fact.hypothesis_ruled_out":
+            "Deployment logs show no release touching the costing path during the window",
+        "fact.cause":
+            "Expired service credential between the costing engine and the merchandising master",
+        "fact.recurrence_with_period":
+            "A comparable valuation failure in {prior_period} was traced to the same credential,"
+            " and the response then rotated it without assigning ownership",
+        "fact.recurrence_first": "A comparable valuation failure was traced to the same credential",
+        "fact.workaround":
+            "Emergency credential rotation applied to complete valuation for the period",
+        "fact.classification":
+            "control_failure: service credential expiry is untracked, with no registered owner "
+            "and no required reviewer for rotation",
+        "fact.remediation":
+            "One ticket monitors credential expiry ahead of the deadline; one assigns rotation "
+            "ownership with a mandatory reviewer",
+        "fact.remediation_scope":
+            "The monitoring ticket addresses the detection gap; the ownership ticket addresses "
+            "the control failure",
+    },
+    "uom_overwrite": {
+        "event.pipeline_failed":
+            "The inventory valuation pipeline failed its sanity bounds. Unit conversions produced "
+            "impossible quantities, so on-hand stock could not be valued for the period.",
+        "event.hypothesis_recorded":
+            "Initial triage attributed the failure to storage-layer corruption in the data platform.",
+        "event.hypothesis_superseded":
+            "The corruption hypothesis was ruled out; storage integrity checks came back clean "
+            "across the window.",
+        "event.root_cause_confirmed":
+            "Root cause confirmed as unit-of-measure conversion factors overwritten by a supplier "
+            "catalogue import, mis-stating quantities on {affected:,} SKUs.",
+        "event.workaround_applied":
+            "The conversion table was restored from the prior day's backup so valuation could "
+            "complete for the period.",
+        "event.control_failure_identified":
+            "Review established the underlying failure as a control failure: the catalogue import "
+            "writes straight to the production conversion table, with no registered owner and no "
+            "required reviewer.",
+        "event.remediation_created":
+            "Two remediation tickets raised: stage catalogue imports behind a validation gate, and "
+            "assign conversion-table ownership with a mandatory reviewer.",
+        "fact.hypothesis": "Storage-layer corruption in the data platform",
+        "fact.hypothesis_ruled_out":
+            "Storage integrity checks report clean across the valuation window",
+        "fact.cause":
+            "Unit-of-measure conversion factors overwritten by a supplier catalogue import",
+        "fact.recurrence_with_period":
+            "A comparable valuation failure in {prior_period} was traced to the same import path,"
+            " and the response then restored the table without staging the import",
+        "fact.recurrence_first": "A comparable valuation failure was traced to the same import path",
+        "fact.workaround":
+            "Conversion table restored from the prior day's backup to complete valuation for "
+            "the period",
+        "fact.classification":
+            "control_failure: the catalogue import writes straight to the production conversion "
+            "table with no registered owner and no required reviewer",
+        "fact.remediation":
+            "One ticket stages catalogue imports behind a validation gate; one assigns "
+            "conversion-table ownership with a mandatory reviewer",
+        "fact.remediation_scope":
+            "The staging ticket addresses the control failure; the ownership ticket addresses "
+            "only the accountability gap",
+    },
+}
+
+
+#: The same storylines, on the *benchmark's* surface (`evaluation.EVAL_TEXT`).
+#: Seven of the engine's answer templates state the classic failure in words —
+#: "the same mapping table", "the product hierarchy mapping table" — and under
+#: any other storyline those answers would contradict the corpus's own facts:
+#: a benchmark asserting a mapping table failed in a month whose confirmed
+#: cause was an expired credential grades retrievers against a lie. Kept in
+#: this module beside `STORYLINES`, not in `evaluation`, because a storyline
+#: is one authored thing with two surfaces, and splitting it across modules is
+#: how the two surfaces drift apart.
+EVAL_STORYLINES: dict[str, dict[str, str]] = {
+    "hierarchy_mapping": {},
+    "fx_rate_stale": {
+        "a.incident.undetected":
+            "The rate-table refresh has no registered owner and no required reviewer, so no"
+            " control would have caught it.",
+        "a.incident.recurrence":
+            "Yes — a comparable valuation failure was traced to the same rate table, and"
+            " the response refreshed the rates without assigning ownership.",
+        "q.citation.mapping_owner": "Who owns the landed-cost engine's foreign-exchange rate table?",
+        "a.across.recurrence":
+            "In {prior_period}. It did not — the same rate table failed again in"
+            " {period}, and refresh ownership is still unassigned.",
+        "q.abstain.next_audit": "When is the next scheduled audit of the rate table?",
+        "q.incident.undetected.estate":
+            "The rate table sits under {system}, which {reach} service(s) depend on."
+            " What allowed the valuation failure to reach production undetected?",
+        "q.citation.mapping_owner.estate":
+            "Who owns the foreign-exchange rate table held in {system}?",
+        "a.cross.remediation_choice":
+            "The refresh-ownership assignment. The staleness check addresses detection only.",
+    },
+    "duplicate_grn": {
+        "a.incident.undetected":
+            "Receipt posting retries carry no idempotency key and manual reposts have no"
+            " required reviewer, so no control would have caught it.",
+        "a.incident.recurrence":
+            "Yes — a comparable valuation failure was traced to the same retry path, and"
+            " the response reversed the duplicates without guarding the retry.",
+        "q.citation.mapping_owner": "Who owns the goods-receipt posting batch job?",
+        "a.across.recurrence":
+            "In {prior_period}. It did not — the same retry path failed again in"
+            " {period}, and ownership is still unassigned.",
+        "q.abstain.next_audit": "When is the next scheduled audit of the receipt posting job?",
+        "q.incident.undetected.estate":
+            "The receipt batch runs under {system}, which {reach} service(s) depend on."
+            " What allowed the valuation failure to reach production undetected?",
+        "q.citation.mapping_owner.estate":
+            "Who owns the goods-receipt posting batch job held in {system}?",
+        "a.cross.remediation_choice":
+            "The idempotency key. The reviewer ticket addresses only the manual repost path.",
+    },
+    "snapshot_late": {
+        "a.incident.undetected":
+            "The snapshot cutover time is hand-edited with no registered owner and no"
+            " required reviewer, so no control would have caught it.",
+        "a.incident.recurrence":
+            "Yes — a comparable valuation failure was traced to the same snapshot schedule,"
+            " and the response re-took the snapshot without assigning ownership.",
+        "q.citation.mapping_owner": "Who owns the warehouse stock snapshot schedule?",
+        "a.across.recurrence":
+            "In {prior_period}. It did not — the same snapshot schedule failed again in"
+            " {period}, and ownership is still unassigned.",
+        "q.abstain.next_audit": "When is the next scheduled audit of the snapshot schedule?",
+        "q.incident.undetected.estate":
+            "The snapshot schedule sits under {system}, which {reach} service(s) depend on."
+            " What allowed the valuation failure to reach production undetected?",
+        "q.citation.mapping_owner.estate":
+            "Who owns the stock snapshot schedule held in {system}?",
+        "a.cross.remediation_choice":
+            "Deriving the cutover from putaway confirmation. The ownership ticket addresses"
+            " only the accountability gap.",
+    },
+    "credential_expired": {
+        "a.incident.undetected":
+            "Service credential expiry is untracked, with no registered owner and no required"
+            " reviewer for rotation, so no control would have caught it.",
+        "a.incident.recurrence":
+            "Yes — a comparable valuation failure was traced to the same credential, and"
+            " the response rotated it without assigning ownership.",
+        "q.citation.mapping_owner": "Who owns rotation of the costing engine's service credential?",
+        "a.across.recurrence":
+            "In {prior_period}. It did not — the same credential failed again in"
+            " {period}, and rotation ownership is still unassigned.",
+        "q.abstain.next_audit": "When is the next scheduled audit of the credential register?",
+        "q.incident.undetected.estate":
+            "The credential authenticates against {system}, which {reach} service(s) depend on."
+            " What allowed the valuation failure to reach production undetected?",
+        "q.citation.mapping_owner.estate":
+            "Who owns rotation of the service credential for {system}?",
+        "a.cross.remediation_choice":
+            "The rotation-ownership assignment. The expiry monitoring addresses detection only.",
+    },
+    "uom_overwrite": {
+        "a.incident.undetected":
+            "The catalogue import writes straight to the production conversion table, with no"
+            " registered owner and no required reviewer, so no control would have caught it.",
+        "a.incident.recurrence":
+            "Yes — a comparable valuation failure was traced to the same import path, and"
+            " the response restored the table without staging the import.",
+        "q.citation.mapping_owner": "Who owns the unit-of-measure conversion table?",
+        "a.across.recurrence":
+            "In {prior_period}. It did not — the same import path failed again in"
+            " {period}, and ownership is still unassigned.",
+        "q.abstain.next_audit": "When is the next scheduled audit of the conversion table?",
+        "q.incident.undetected.estate":
+            "The conversion table sits under {system}, which {reach} service(s) depend on."
+            " What allowed the valuation failure to reach production undetected?",
+        "q.citation.mapping_owner.estate":
+            "Who owns the unit-of-measure conversion table held in {system}?",
+        "a.cross.remediation_choice":
+            "The staging gate. The ownership ticket addresses only the accountability gap.",
+    },
+}
+
+
+def storyline_eval_text(name: str) -> dict[str, str]:
+    """The ``EVAL_TEXT`` overlay for a named incident storyline.
+
+    Same refusal posture as ``storyline_text``, and looked up there first so
+    one unknown name produces one error, not two."""
+    storyline_text(name)
+    return EVAL_STORYLINES[name]
+
+
+def storyline_text(name: str) -> dict[str, str]:
+    """The ``TEXT`` overlay for a named incident storyline.
+
+    Refused rather than defaulted for an unknown name: a recipe that recorded
+    a storyline this build does not know cannot be silently rebuilt as the
+    classic one — that would be a different world reported as the same world,
+    which is the exact lie the recipe exists to prevent.
+    """
+    try:
+        return STORYLINES[name]
+    except KeyError:
+        raise ValueError(
+            f"unknown incident storyline {name!r}; known:"
+            f" {', '.join(sorted(STORYLINES))}"
+        ) from None
+
+
+def storyline_rotation(rng: Rng) -> list[str]:
+    """Every storyline once — the classic first, the rest in seed order.
+
+    Classic-first is load-bearing, not aesthetic: a single-period build under
+    rotation is then byte-identical to a build without it, so turning the knob
+    on cannot move a corpus that was too short to benefit from it.
+    """
+    rest = [name for name in STORYLINES if name != "hierarchy_mapping"]
+    return ["hierarchy_mapping", *rng.shuffled(rest)]
+
+
 class Calendar(Protocol):
     """What the close asks of a working calendar.
 

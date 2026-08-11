@@ -254,6 +254,19 @@ class MonthEndClose:
     a premium book that peaks at Christmas is not a subtle error, it is a
     different industry."""
 
+    storyline: str = "hierarchy_mapping"
+    """Which incident storyline this close's failure tells
+    (``operations.STORYLINES``).
+
+    Surface only: the causal chain, its fact ids, and its machine values are
+    identical under every storyline, because a storyline is applied through
+    the same episode-text seam a pack re-voices. The default is the storyline
+    this engine always told, so a close that never names one is byte-identical
+    to every close built before the library existed. The library exists
+    because a 24-period build measured 24 copies of one incident — the same
+    confirmed cause, monthly — which no company's operational history looks
+    like."""
+
     physics: Parameters = DEFAULT
     """The world physics this close is generated under (``worldloom.parameters``).
 
@@ -323,14 +336,37 @@ class MonthEndClose:
             lore_by_target=index,
             incident_likelihood=likelihood,
             force_incident=self.include_operational_incident,
+            # Only earlier closes that told the *same* storyline count as
+            # recurrence: each storyline's recurrence text names its own
+            # artefact ("the same mapping table", "the same rate table"), and
+            # citing a prior period whose confirmed cause was a different
+            # failure would be the corpus contradicting itself. Read off the
+            # recipe rather than the facts because the recipe is where the
+            # storyline is recorded; a step that predates the field is the
+            # classic storyline by definition. For a world whose steps never
+            # name one, every period matches — the exact tuple this always was.
             prior_incident_periods=tuple(
                 fact.period
                 for fact in world.facts.where(kind="ops.incident_opened")
-                if fact.period
+                if fact.period and fact.period in {
+                    step["period"]
+                    for step in world._recipe.get("steps", ())
+                    if step.get("scenario") == "MonthEndClose"
+                    and step.get("storyline", "hierarchy_mapping") == self.storyline
+                }
             ),
             # A pack's episode-text overrides ride the recipe, which is what
             # lets a pack-built corpus rebuild them with no pack file on hand.
-            text=(world._recipe.get("pack") or {}).get("episode_text") or None,
+            # The storyline overlay sits *under* the pack's: a pack that
+            # re-voices an incident key authored those words for its own
+            # world, and a rotation knob must not argue with an author. The
+            # classic storyline's overlay is empty, so the merged dict — and
+            # the `or None` — reproduce the exact value this call always
+            # passed.
+            text={
+                **operations.storyline_text(self.storyline),
+                **((world._recipe.get("pack") or {}).get("episode_text") or {}),
+            } or None,
             money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
             physics=self.physics,
         )
@@ -554,7 +590,16 @@ class MonthEndClose:
             # no-op wherever it was one before). Pack overrides win, because an
             # author who re-voiced a question said what they meant and a deal
             # is a default.
+            # The storyline's benchmark overlay sits *above* the dealt
+            # phrasing and *below* the pack: seven of the engine's answer
+            # templates state the classic failure in words, and an answer
+            # asserting a mapping table failed in a month whose confirmed
+            # cause was an expired credential grades retrievers against a
+            # lie — content correctness outranks vocabulary variety. The
+            # classic overlay is empty, so every stock build's merge is the
+            # exact dict it always was.
             text={**(phrasing.overrides(world) or {}),
+                  **operations.storyline_eval_text(self.storyline),
                   **((world._recipe.get("pack") or {}).get("evaluation_text") or {})} or None,
         )
 
@@ -628,6 +673,13 @@ class MonthEndClose:
                 # move the recipe of every default build, which is precisely the
                 # byte-for-byte diff CI runs on every push.
                 **({} if not self.conversations else {"conversations": True}),
+                # Same conditional-write rule. The default name is the story
+                # this engine always told, so a close that never chose one
+                # leaves the recipe exactly as it was — and the recurrence
+                # filter above, which reads this key back, sees every prior
+                # period, exactly as it always did.
+                **({} if self.storyline == "hierarchy_mapping"
+                   else {"storyline": self.storyline}),
             ),
             **actor_state,
         )

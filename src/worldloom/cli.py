@@ -197,6 +197,17 @@ def build(
         None, "--incident/--no-incident",
         help="Force the operational incident on or off. Omit to let the seed and lore decide.",
     ),
+    vary_incidents: bool = typer.Option(
+        False, "--vary-incidents",
+        help=(
+            "Rotate the incident's storyline across periods — a stale FX table one "
+            "month, a duplicated goods receipt the next — instead of the same "
+            "failure retold monthly. Surface only: causality, fact ids and machine "
+            "values are identical either way, and each period's storyline is "
+            "recorded on its recipe step so --replay reproduces it. Off (the "
+            "default) rebuilds every existing corpus byte for byte."
+        ),
+    ),
     employees: int = typer.Option(None, "--employees", help="Override the archetype's stated headcount."),
     headcount_end: int = typer.Option(
         None,
@@ -1295,6 +1306,19 @@ def build(
     year, month = (int(part) for part in period.split("-"))
     from .actors import ActorProviderError
 
+    # One rotation for the whole build, drawn from the world seed under its
+    # own label: period N is the same storyline on every rebuild of this
+    # world, and a different world's seed deals a different order. Classic
+    # first (see `storyline_rotation`), so a one-period build is byte-equal
+    # with the flag on or off.
+    from .generators import operations as operations_module
+    from .rng import Rng
+
+    storyline_order = (
+        operations_module.storyline_rotation(Rng(seed).derive("incident-storylines"))
+        if vary_incidents else None
+    )
+
     def _close(stamp: str, stated: bool | None, index: int) -> Any:
         return MonthEndClose(
             period=stamp,
@@ -1308,6 +1332,8 @@ def build(
             physics=physics_value,
             # Only when a facet put one on the builder — see `claimed_calendar`.
             **({} if not claimed_calendar else {"seasonality": claimed_calendar[0]}),
+            **({} if storyline_order is None
+               else {"storyline": storyline_order[index % len(storyline_order)]}),
         )
 
     # No blanket multi-period refusal for single-episode domains any more. The
@@ -3240,6 +3266,16 @@ def diversity(
             "say the same sentences in all of them."
         ),
     ),
+    across: list[str] = typer.Option(
+        None, "--across",
+        help=(
+            "Additional corpora to compare against — repeatable. Reports shape "
+            "overlap and cross-corpus prose duplicates over the whole set, the "
+            "failure no single corpus's report can see: five mosaic companies can "
+            "each look varied while all five hold the same shapes and say the "
+            "same sentences."
+        ),
+    ),
 ) -> None:
     """Fingerprint every compilable artifact and report how structurally varied the batch is.
 
@@ -3342,6 +3378,50 @@ def diversity(
             console.print(f"[bold]near-duplicate passage groups[/bold] ({len(groups)})")
             for group in groups[:10]:
                 where = ", ".join(sorted({pool[i].artifact_id for i in group}))
+                console.print(f"  ×{len(group)}  {where}")
+                console.print(f"      [dim]{pool[group[0]].text[:110]}…[/dim]")
+
+    if across:
+        # The fleet-level reading no single corpus can give. Shape overlap
+        # first (structure), then prose duplicates over the pooled passages
+        # (surface) — the same two-failure split `--near-duplicates`'s help
+        # text draws, measured across corpora instead of within one.
+        from .compiler.diversity import cross_report
+        from .stats import near_duplicate_clusters
+
+        batches = {corpus: fingerprints}
+        pool = list(passages(world))
+        origin = [corpus] * len(pool)
+        for other_name in across:
+            other = _load(other_name)
+            if not other.artifact_irs:
+                try:
+                    other = other.compile()
+                except ValueError:
+                    pass
+            batches[other_name] = list(census(other).fingerprints)
+            other_passages = list(passages(other))
+            pool.extend(other_passages)
+            origin.extend([other_name] * len(other_passages))
+
+        console.print("")
+        console.print(str(cross_report(batches)))
+
+        groups = near_duplicate_clusters(pool)
+        spanning = [
+            group for group in groups
+            if len({origin[i] for i in group}) > 1
+        ]
+        if not spanning:
+            console.print("[green]✓[/green] no near-duplicate passages span corpora")
+        else:
+            console.print(
+                f"[bold]near-duplicate passages spanning corpora[/bold] ({len(spanning)})"
+            )
+            for group in spanning[:10]:
+                where = ", ".join(sorted({
+                    f"{origin[i]}:{pool[i].artifact_id}" for i in group
+                })[:6])
                 console.print(f"  ×{len(group)}  {where}")
                 console.print(f"      [dim]{pool[group[0]].text[:110]}…[/dim]")
 
