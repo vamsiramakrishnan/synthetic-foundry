@@ -646,6 +646,7 @@ def lint(specs: Iterable[EpisodeSpec], *, base: str = "") -> list[str]:
             )
 
         declared_events = [event.kind for event in spec.events]
+        kinds_by_name = {fk.kind: fk for fk in spec.fact_kinds}
         for fk_index, fk in enumerate(spec.fact_kinds):
             fk_where = f"{where}.fact_kinds[{fk_index}] ({fk.kind})"
 
@@ -741,16 +742,44 @@ def lint(specs: Iterable[EpisodeSpec], *, base: str = "") -> list[str]:
                         " kind's `parameter`, and none is declared — the draw"
                         " would have no span."
                     )
-                if head == "prior" and operand_kinds and not any(
+                # Both backward-looking derivations answer to the same rule.
+                # `prior_in_cohort` resolves its own lookup (same kind, same
+                # cohort period) and could technically run undeclared — but
+                # then two derivations that mean "this figure's meaning depends
+                # on what came before" would ask different things of an author,
+                # and the declaration is not plumbing: it is where a reader
+                # learns that this kind has a history at all.
+                if head in ("prior", "prior_in_cohort") and operand_kinds and not any(
                     cf.rule in ("sum", "derive") and cf.from_kind == operand_kinds[0]
                     for cf in spec.carry_forward
                 ):
                     findings.append(
-                        f"{fk_where}: derive prior({operand_kinds[0]}) reads a"
+                        f"{fk_where}: derive {head}({operand_kinds[0]}) reads a"
                         " prior period's value, and no sum/derive carry-forward"
                         " declares that slot — the runner only resolves what a"
                         " declaration asks it to."
                     )
+
+                # A grid handed to a scalar derivation is silently rolled up by
+                # `scalar_of`. That is a defensible reading and an unstated
+                # one: `plus(grid, x)` would compile, produce a number, and
+                # never say which of "the grid's total" or "a cell" it meant.
+                # Refused in favour of declaring a `rolls-up-to` parent and
+                # deriving from that, so the total a figure rests on is a fact
+                # the corpus carries rather than an inference inside a helper.
+                if head not in ("allocation_of", "prior_in_cohort"):
+                    gridded = [
+                        operand for operand in operand_kinds
+                        if (other := kinds_by_name.get(operand)) is not None and other.cohort
+                    ]
+                    if gridded:
+                        findings.append(
+                            f"{fk_where}: derive {fk.derive!r} takes cohort"
+                            f" grid(s) {gridded} as a scalar operand. Declare a"
+                            " `rolls-up-to` parent for the grid and derive from"
+                            " that — a silently summed grid states a total no"
+                            " document carries."
+                        )
 
             if not fk.invariants:
                 findings.append(
@@ -1228,6 +1257,12 @@ def run(
                         for cohort in grid
                     ]
                 total = scalar_of(operands[0])
+                # Largest remainder, and the spare units land on the *oldest*
+                # cohorts — `allocate`'s index-order tie-break meeting a grid
+                # that is ordered oldest-first. Stated rather than left to be
+                # rediscovered: it is arbitrary between cohorts of equal
+                # weight, and the only thing that matters is that it is the
+                # same arbitrary choice every rebuild makes.
                 allocated = primitives.rollup(int(round(total)), weights)
                 values[kind] = ("cohort", dict(zip(grid, allocated)))
             elif head == "prior_in_cohort":

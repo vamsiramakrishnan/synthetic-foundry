@@ -701,8 +701,15 @@ _register_kinds([
              generated_by="generators/reserving.py",
              invariants=("holds-at", "standing"),
              about="The board's margin policy, standing beside the philosophy."),
+    # `rolls-up-to` is registered here ahead of the authored spec that will
+    # declare it: the registry is the cross-module truth about a kind, and
+    # `episodes.lint` refuses a spec claiming an invariant the registry does
+    # not hold. Registering it now means the reserving pack can state the rule
+    # its cells already keep — the cohort ultimates sum to the central
+    # estimate — rather than the lint and the pack disagreeing about what the
+    # kind means.
     FactKind(kind="reserves.ultimate", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="A cohort's ultimate claims cost."),
+             invariants=("holds-at", "rolls-up-to"), about="A cohort's ultimate claims cost."),
     FactKind(kind="reserves.ibnr", domain="insurance", generated_by="generators/reserving.py",
              invariants=("holds-at",), about="Incurred-but-not-reported for a cohort."),
     FactKind(kind="reserves.central_estimate_total", domain="insurance",
