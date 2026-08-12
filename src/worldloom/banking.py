@@ -520,15 +520,51 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # full-collection scans were 33 seconds of it. `Collection` is immutable and
     # `facts` is a snapshot list, so hoisting cannot change an answer — the same
     # argument `_Validator.__init__`'s binding rests on.
-    earliest_confirmed_cause = min(
-        (f.valid_from for f in facts
-         if f.kind == "ops.cause" and f.authority is Authority.CONFIRMED),
-        default=None,
+    #
+    # Both are keyed by the quarter they belong to. A single-quarter corpus has
+    # one of each, so "the corpus's earliest confirmed cause" and "the books
+    # that ever moved" read as this quarter's — and they stop meaning that the
+    # moment a second quarter lands, in the direction that makes the check pass
+    # rather than fail: every later restatement clears a confirmation that
+    # happened a quarter before its own incident was even opened, and cites
+    # books that moved in somebody else's quarter. A check that cannot fail on
+    # quarters 2..N is not covering them.
+    #
+    # `ops.cause` carries no period (the incident-chain kinds are retail's, and
+    # a cause is about a service, not a reporting period), so a quarter's causes
+    # are the ones inside its own incident window: from its `ops.incident_opened`
+    # — which does carry the period — until the next quarter opens one. The
+    # windows are half-open and contiguous by construction, so every confirmed
+    # cause lands in exactly one.
+    incidents = sorted(
+        ((f.valid_from, f.period) for f in facts
+         if f.kind == "ops.incident_opened" and f.period),
     )
-    # The books that genuinely moved: the ones whose corrected fact supersedes
-    # a filed one. A property of the world, not of any one restatement.
+    confirmed_causes = sorted(
+        f.valid_from for f in facts
+        if f.kind == "ops.cause" and f.authority is Authority.CONFIRMED
+    )
+    earliest_confirmed_cause = min(confirmed_causes, default=None)
+    # Merged rather than filtered per window: both lists are already in time
+    # order, so one walk finds every quarter's first confirmation, where a
+    # comprehension per quarter would rescan every cause once per quarter — the
+    # quadratic shape this module's reconciliation loops were reworked out of.
+    cause_by_period: dict[str, Any] = {}
+    next_cause = 0
+    for index, (opened, period) in enumerate(incidents):
+        closes = incidents[index + 1][0] if index + 1 < len(incidents) else None
+        while next_cause < len(confirmed_causes) and confirmed_causes[next_cause] < opened:
+            next_cause += 1
+        if next_cause < len(confirmed_causes) and (
+            closes is None or confirmed_causes[next_cause] < closes
+        ):
+            cause_by_period[period] = confirmed_causes[next_cause]
+    # The books that genuinely moved, per quarter: the ones whose corrected fact
+    # supersedes a filed one. A property of the world *in that quarter*, not of
+    # any one restatement — and not of the corpus, because the same book being
+    # corrected in March says nothing about whether June's figure for it moved.
     moved_books = {
-        f.subject for f in facts
+        (f.period, f.subject) for f in facts
         if f.kind == "capital.rwa_by_book" and f.supersedes
     }
     for entry in world.artifacts:
@@ -540,6 +576,15 @@ def _checks(world: World) -> tuple[list[Violation], int]:
         checks += 1
         cited = set(entry.supporting_fact_ids)
         originally = set(original.supporting_fact_ids)
+        # Which quarter this restatement is about, read off the capital facts it
+        # cites. Hoisted above check (c) rather than left where check (d) first
+        # needed it, because (c) now asks the same question — a correction is
+        # early or late against *its own* quarter's root cause.
+        periods = lambda ids: {  # noqa: E731
+            by_id[f].period for f in ids
+            if f in by_id and by_id[f].kind.startswith("capital.") and by_id[f].period
+        }
+        corrected_periods = periods(cited)
         moves = any(
             (new := by_id.get(new_id)) is not None
             and new.supersedes
@@ -556,39 +601,51 @@ def _checks(world: World) -> tuple[list[Violation], int]:
 
         # -- (c) corrections follow confirmation ---------------------------
         checks += 1
-        # "some confirmed cause existed by then" is a question about the
-        # *earliest* one, so the list this used to build was thrown away except
-        # for its emptiness.
-        if earliest_confirmed_cause is None or earliest_confirmed_cause > entry.created_at:
+        # "a confirmed cause existed by then" is a question about the *earliest*
+        # one, so the list this used to build was thrown away except for its
+        # emptiness — and about the earliest in *this restatement's own
+        # quarter*, because a March incident's confirmed cause is not a reason
+        # to believe a June correction knows what it is correcting.
+        #
+        # The corpus-wide earliest stands in when the quarter cannot be
+        # resolved: a restatement citing no period-keyed capital fact, or one
+        # whose quarter opened no incident, is not evidence about which cause
+        # explains it, and failing it here would report a defect in the
+        # *validator's* view rather than in the corpus.
+        confirmed_at = next(
+            (cause_by_period[period] for period in sorted(corrected_periods)
+             if period in cause_by_period),
+            earliest_confirmed_cause,
+        )
+        if confirmed_at is None or confirmed_at > entry.created_at:
             fail("correction_before_confirmation", entry.id,
                  "was created before any confirmed cause existed — a restatement"
                  " lodged ahead of its own root cause is a correction guessing")
 
         # -- (d) a restatement corrects its own period ----------------------
         checks += 1
-        periods = lambda ids: {  # noqa: E731
-            by_id[f].period for f in ids
-            if f in by_id and by_id[f].kind.startswith("capital.") and by_id[f].period
-        }
-        if periods(cited) != periods(originally):
+        if corrected_periods != periods(originally):
             fail("restates_different_period", entry.id,
-                 f"cites capital facts for {sorted(periods(cited))} but the filing"
+                 f"cites capital facts for {sorted(corrected_periods)} but the filing"
                  f" covered {sorted(periods(originally))}")
 
         # -- (e) the correction is scoped to the error ----------------------
         # `moved_books` is hoisted above: a restatement citing a *new* figure
         # for a book that never moved would be a second, unexplained correction,
         # and which books moved is a fact about the world rather than about this
-        # restatement.
+        # restatement. Matched on (period, book) rather than book alone: the
+        # cited fact states which quarter it is a figure for, and a book that was
+        # corrected last quarter is not thereby licensed to appear in this
+        # quarter's restatement — which is the whole claim this check makes.
         for new_id in sorted(cited - originally):
             fact = by_id.get(new_id)
             if fact is None or fact.kind != "capital.rwa_by_book":
                 continue
             checks += 1
-            if fact.subject not in moved_books:
+            if (fact.period, fact.subject) not in moved_books:
                 fail("correction_exceeds_error", entry.id,
                      f"cites a new by-book figure for {fact.subject}, which the"
-                     " confirmed error never touched")
+                     f" confirmed error never touched in {fact.period}")
 
     # -- (f) coexistence: contested facts are legal at different authority --
     # Two unclosed facts for one (kind, subject, period) are the live

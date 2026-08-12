@@ -56,6 +56,7 @@ its own it declined to add.
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from typing import Any
 
@@ -555,17 +556,62 @@ def _checks(world: World) -> tuple[list[Violation], int]:
 
     # -- (d) booked = central + margin, at every valuation date --------------
     # None of the three ever closes — they are recurring per-valuation
-    # snapshots, like `capital.cet1_ratio_as_filed` — so "at every valuation
-    # date" is resolved positionally: exactly one of each is minted per
-    # valuation round, always prior before current, so the *n*-th booked
-    # figure pairs with the *n*-th central and margin figures regardless of
-    # the (different, causally staged) instants within the round each was
-    # actually posted at.
+    # snapshots, like `capital.cet1_ratio_as_filed` — so a booked figure is
+    # paired with the central estimate and the margin *in force when the
+    # ledger posted it*: the latest of each dated no later than the booking,
+    # which is the same `holds_at`-style resolution check (c) uses one block
+    # up and for the same reason (the three are staged hours apart inside one
+    # valuation — estimate, then decision, then posting).
+    #
+    # This used to be a positional `zip` over the three globally sorted lists,
+    # on the argument that exactly one of each is minted per round so the
+    # *n*-th of each belong together. That holds for exactly as long as no
+    # round ever mints a different number of them: one valuation that books
+    # nothing, or restates a margin without re-posting, shifts every later
+    # triple by one and the check starts comparing one quarter's booked total
+    # against the next quarter's estimate — silently, and with an arithmetic
+    # verdict either way. Resolving each figure from its own moment cannot
+    # drift, and at one valuation it pairs exactly what the `zip` did.
     booked = sorted((f for f in facts if f.kind == "reserves.booked_total"), key=lambda f: f.valid_from)
     central = sorted((f for f in facts if f.kind == "reserves.central_estimate_total"), key=lambda f: f.valid_from)
     margin = sorted((f for f in facts if f.kind == "reserves.risk_margin_remaining"), key=lambda f: f.valid_from)
-    for b, c, m in zip(booked, central, margin):
-        if b.subject != c.subject or b.subject != m.subject:
+
+    # Each of the three, bucketed by subject and kept in `valid_from` order (the
+    # lists above are already sorted, and filtering preserves that), beside the
+    # bare moments so the three resolutions below are a `bisect` rather than a
+    # scan. Deliberate, not tidiness: one of each is minted per valuation, so a
+    # rescan inside a per-valuation loop is quadratic in the number of quarters
+    # — the shape banking's reconciliation loops were reworked out of after they
+    # cost 38 seconds of an 82-second validate at 1,024 periods.
+    def by_subject(stated: list) -> dict[str, tuple[list, list]]:
+        buckets: dict[str, list] = {}
+        for fact in stated:
+            buckets.setdefault(fact.subject, []).append(fact)
+        return {
+            subject: (group, [fact.valid_from for fact in group])
+            for subject, group in buckets.items()
+        }
+
+    booked_by_subject = by_subject(booked)
+    central_by_subject = by_subject(central)
+    margin_by_subject = by_subject(margin)
+
+    def in_force(index: dict, subject: str, moment) -> Any:  # type: ignore[no-untyped-def]
+        """The subject's latest figure in *index* dated no later than *moment*."""
+        group, moments = index.get(subject, ((), ()))
+        at = bisect_right(moments, moment)
+        return group[at - 1] if at else None
+
+    def posted_from(index: dict, subject: str, moment) -> Any:  # type: ignore[no-untyped-def]
+        """The subject's earliest figure in *index* dated at or after *moment*."""
+        group, moments = index.get(subject, ((), ()))
+        at = bisect_left(moments, moment)
+        return group[at] if at < len(group) else None
+
+    for b in booked:
+        c = in_force(central_by_subject, b.subject, b.valid_from)
+        m = in_force(margin_by_subject, b.subject, b.valid_from)
+        if c is None or m is None:
             continue
         checks += 1
         derived = c.value.amount + m.value.amount
@@ -575,6 +621,22 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                  f"{derived:,.0f}, but booked states {b.value.amount:,.0f}")
 
     # -- (e) attribution parts sum to the movement they decompose -----------
+    # The movement an attribution decomposes is *this* valuation's step: the
+    # central estimate this round set, less the one it replaced. It used to be
+    # `central[-1] - central[0]` — first against last across the whole corpus,
+    # which is the same figure only while the corpus holds one valuation. At
+    # two it becomes the movement across both rounds, so a correct split fails
+    # and an incorrect one can pass; the attribution facts themselves carry no
+    # period (`generators/reserving.py` mints them at book level), so the run
+    # they belong to is resolved from where they sit in the estimate's own
+    # sequence rather than from a period field that is not there.
+    #
+    # The split is stated *before* the estimate it explains — the committee
+    # attributes the emergence, then the strengthened estimate is set — so the
+    # "after" figure is the first estimate dated at or after the split, and the
+    # "before" figure is the one immediately preceding it. A split that trails
+    # its own estimate (no later one exists) falls back to the last pair, which
+    # is that same step read from the other side.
     pattern = [f for f in facts if f.kind == "reserves.attribution_pattern_change"]
     deterioration = [f for f in facts if f.kind == "reserves.attribution_deterioration"]
     for p in pattern:
@@ -582,13 +644,12 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                    and f.valid_from == p.valid_from), None)
         if d is None:
             continue
-        movement_pair = sorted(
-            (f for f in central if f.subject == p.subject), key=lambda f: f.valid_from
-        )
-        if len(movement_pair) < 2:
+        estimates, moments = central_by_subject.get(p.subject, ([], []))
+        after = min(bisect_left(moments, p.valid_from), len(estimates) - 1)
+        if after < 1:
             continue
         checks += 1
-        movement = movement_pair[-1].value.amount - movement_pair[0].value.amount
+        movement = estimates[after].value.amount - estimates[after - 1].value.amount
         summed = p.value.amount + d.value.amount
         if abs(summed - movement) > RECONCILIATION_TOLERANCE:
             fail("attribution_does_not_sum", p.id,
@@ -603,11 +664,25 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # a policy grant. The central estimate is resolved `holds_at`-style (the
     # latest dated no later than the gap itself, since the strengthening
     # always precedes the decision that opens the gap); the booked figure is
-    # resolved as the subject's latest overall, because the ledger posting
-    # is staged *after* the gap fact within the same decision
+    # the *earliest posted at or after* the gap, because the ledger posting is
+    # staged after the gap fact within the same decision
     # (`booked_total_frozen` follows `reserves_partially_booked`) — a
-    # `holds_at` filter on the gap's own moment would exclude the very
-    # figure the gap is about.
+    # `holds_at` filter on the gap's own moment would exclude the very figure
+    # the gap is about, and the subject's latest overall reaches past this
+    # valuation into every later one.
+    #
+    # That last reading is what this was, and it is wrong in both directions
+    # once a corpus holds more than one valuation. Measured on the authored
+    # insurer (`examples/packs/longtail-insurer.json`, four quarters, seed
+    # 8128): the first two quarters' gaps were reported as
+    # `unexplained_override` against a memo that explains them perfectly, and
+    # the third quarter's gap *passed* — not because its own memo explained it
+    # but because the fourth quarter's memo happens to cite the prior central
+    # estimate as a comparative alongside its own booked total, completing the
+    # pair this check looks for out of two different valuations. A check that
+    # can be satisfied by a document about a different quarter is not checking
+    # anything; resolving the booked figure from the gap's own decision is what
+    # makes the pair mean "this memo explains this override".
     #
     # Skipped entirely on a world with no artifact manifest yet
     # (`world.artifacts` empty, e.g. right after `.run()` and before
@@ -623,10 +698,8 @@ def _checks(world: World) -> tuple[list[Violation], int]:
         if gap.value.amount <= 0:
             continue
         checks += 1
-        c = max((f for f in central if f.subject == gap.subject and f.valid_from <= gap.valid_from),
-                 key=lambda f: f.valid_from, default=None)
-        subject_booked = [f for f in booked if f.subject == gap.subject]
-        b = subject_booked[-1] if subject_booked else None
+        c = in_force(central_by_subject, gap.subject, gap.valid_from)
+        b = posted_from(booked_by_subject, gap.subject, gap.valid_from)
         if c is None or b is None:
             continue
         explained = any(
