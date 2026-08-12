@@ -416,7 +416,17 @@ def _rendered_chart(kind: ChartKind, **kwargs):  # type: ignore[no-untyped-def]
     docx_renderer._figure(document, chart, table, g, count(1))
     buffer = io.BytesIO()
     document.save(buffer)
-    return buffer.getvalue(), table, chart
+    # Through the normaliser, because that is what the renderer ships and
+    # `document.save` alone is not it: python-docx stamps every zip entry with
+    # the wall clock, so two saves a second apart differ in the DOS timestamp
+    # of each part while the document is identical. A byte-identity assertion
+    # over un-normalised output is a claim about how fast the test ran, and it
+    # duly passed for months and then failed in CI on a slower runner, in the
+    # template-derived parts (theme, fonts, settings) that happened to cross
+    # the second boundary. `render` applies exactly this call.
+    from worldloom.render import ooxml
+
+    return ooxml.normalise(buffer.getvalue()), table, chart
 
 
 @pytest.mark.parametrize("kind", [ChartKind.COLUMN, ChartKind.BAR, ChartKind.LINE, ChartKind.PIE])
