@@ -22,6 +22,7 @@ from rich.table import Table
 
 from . import __version__
 from .corpus import CorpusError
+from .validate import ValidationReport
 from .world import World
 
 app = typer.Typer(
@@ -147,8 +148,14 @@ def _compiled(world: World, corpus: str) -> World:
         raise typer.Exit(code=2) from exc
 
 
-def _report(world: World, *, quiet: bool = False) -> bool:
-    report = world.validate()
+def _print_report(report: ValidationReport, *, quiet: bool = False) -> bool:
+    """Print a validation report and say whether it passed.
+
+    Split from `_report` because `validate` needs the report *before* it is
+    printed — it has to catch the corpus errors reconstructing a corpus's own
+    pack can raise, and a helper that validates and prints in one breath gives
+    it nowhere to stand. Every other caller still hands over a world.
+    """
     if report.ok:
         if not quiet:
             console.print(f"[green]✓[/green] coherent — {report.checks_run} checks passed")
@@ -159,6 +166,10 @@ def _report(world: World, *, quiet: bool = False) -> bool:
         for violation in items:
             err.print(f"  [yellow]{violation.code}[/yellow] {violation.subject}: {violation.detail}")
     return False
+
+
+def _report(world: World, *, quiet: bool = False) -> bool:
+    return _print_report(world.validate(), quiet=quiet)
 
 
 @app.command()
@@ -2984,11 +2995,27 @@ def validate(
         help="Emit the report as JSON — violations as data, not prose to parse.",
     ),
 ) -> None:
-    """Check a corpus for coherence violations."""
+    """Check a corpus for coherence violations.
+
+    A corpus built from a pack is checked under its own pack: `validate`
+    reconstructs it from the corpus's recipe and installs it before the checks
+    run, so an authored corpus's authored invariants are verified here and not
+    only in the process that built it. See `validate._under_the_corpus_rules`.
+    """
+    world = _load(corpus)
+    # `_load` maps a corpus that cannot be *read* to exit 2; a corpus whose own
+    # rules cannot be *reconstructed* is the same kind of failure and gets the
+    # same exit, one step later. Not caught inside `_report`, which the build
+    # and render commands share: those hold a world they just built in this
+    # process, where the pack is installed already and this cannot arise.
+    try:
+        report = world.validate()
+    except CorpusError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
     if as_json:
         import json as json_module
 
-        report = _load(corpus).validate()
         typer.echo(json_module.dumps({
             "ok": report.ok,
             "checks": report.checks_run,
@@ -3000,7 +3027,7 @@ def validate(
         if not report.ok:
             raise typer.Exit(code=1)
         return
-    if not _report(_load(corpus)):
+    if not _print_report(report):
         raise typer.Exit(code=1)
 
 

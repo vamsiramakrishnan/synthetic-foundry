@@ -266,11 +266,13 @@ def test_the_booked_reserve_stands_below_the_central_estimate_every_quarter() ->
 def test_the_two_quarter_corpus_validates_clean() -> None:
     """Including the cohort group, which only runs where the spec is installed.
 
-    Stated because it is the one check group a corpus cannot carry with it:
-    `cohorts._specs()` reads the *process* registry, so `worldloom validate`
-    on a corpus directory in a process that never installed the pack skips
-    the grid entirely. Here the spec is installed, so the roll-up and the
-    grid completeness are actually exercised.
+    `cohorts._specs()` reads the *process* registry rather than the world, so
+    the grid is checked only where something installed the spec. Here the
+    build did. It used to be the one check group a corpus could not carry with
+    it — `worldloom validate` on a corpus directory skipped the grid entirely,
+    40 checks short of this number — and `validate` now installs the corpus's
+    own pack off its recipe before checking it, which
+    `tests/test_validate_packs.py` pins from the disk side.
     """
     world = _built()
     report = world.validate()

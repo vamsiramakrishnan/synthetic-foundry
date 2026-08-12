@@ -24,15 +24,22 @@ actors
 
 A violation is an error unless it is explained by a registered
 ``IntentionalError`` — that is the whole point of labelling deliberate mess.
+
+A corpus built from a pack brings rules of its own, and ``validate`` installs
+them from the corpus's own recipe before checking it — see
+``_under_the_corpus_rules`` at the foot of this module for why that is the
+difference between a claim and a test.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from .corpus import CorpusError
 from .ids import id_prefix, is_id
 from .models import Authority, ErrorType, FormulaKind, Lifecycle
 
@@ -1900,6 +1907,154 @@ def _quantity_matches(amount: float, stated: str) -> bool:
     return any(form in stated for form in forms)
 
 
+# ---------------------------------------------------------------------------
+# A corpus's own rules
+# ---------------------------------------------------------------------------
+
+
+def _pack_registries() -> tuple[dict[str, Any], ...]:
+    """Every process-global registry a pack install writes into.
+
+    Named here rather than reached for at each use so the snapshot below can
+    never drift from what ``packs.archetype_of`` actually installs: a seventh
+    authored layer joining a pack adds one line here and stays contained.
+
+    Imported inside the function, not at module scope, because this module sits
+    *under* the ones that install: ``episodes`` imports it to reach
+    ``register_domain_checks``, and ``packs`` imports ``episodes``, so a
+    top-level import here would close the cycle. It is the same late import
+    ``cohorts`` makes of ``episodes``, for the same reason.
+    """
+    from . import doctypes, episodes, lob
+
+    return (
+        doctypes._INSTALLED,
+        episodes._LOADED,
+        # The derived-check cache is keyed by *spec name*, so it has to be
+        # restored alongside `_LOADED` rather than left as a harmless cache:
+        # two corpora may each author an episode called `QuarterlyValuation`,
+        # and a cache that outlived the first would hand the second corpus the
+        # first one's checks under its own episode's name.
+        episodes._REGISTERED_CHECKS,
+        lob._INSTALLED,
+        _DOMAIN_CHECKS,
+    )
+
+
+def _embedded_pack(world: World) -> Any:
+    """The pack this corpus was built from, reconstructed from its recipe.
+
+    ``None`` for a corpus built from a shipped archetype, and for the
+    hand-authored fixtures whose recipe is empty — those must validate exactly
+    as they did before packs existed, and the byte-identical check count is
+    what proves it.
+    """
+    payload = world.recipe.get("pack")
+    if not payload:
+        return None
+    from . import packs
+
+    try:
+        return packs.load(dict(payload))
+    except Exception as exc:
+        # Loud, never degraded. A corpus whose embedded pack no longer
+        # validates cannot be checked by the rules it was built under, and
+        # reporting the core groups as a clean run is precisely the defect this
+        # install exists to fix — the answer would be "coherent" from a check
+        # set that silently lost the corpus's own invariants.
+        raise CorpusError(
+            f"this corpus's embedded pack does not validate: {exc}"
+        ) from exc
+
+
+@contextmanager
+def _under_the_corpus_rules(world: World) -> Iterator[None]:
+    """Install *world*'s own pack for the duration of the block, then undo it.
+
+    A corpus built from a pack carries authored fact kinds, authored episodes
+    and the check groups derived from them, and on disk none of those ran:
+    ``World.load`` reads facts and a recipe, nothing installs anything, and the
+    validator's domain registry holds only what package import put there. The
+    authored insurer measured 851 checks from ``worldloom validate`` against
+    891 in the process that built it — so its own invariants were verified only
+    by whoever ran the build, which is the opposite of a corpus carrying its
+    rules with it.
+
+    ``packs.archetype_of`` is the install path rather than the three installers
+    it calls, for the reason its own docstring gives: it is the single function
+    between *any* pack — file, recipe rebuild, or SDK — and a world built from
+    it, so reaching past it into ``doctypes.install`` here would be a second
+    definition of "installed" to keep in step. The archetype it returns is
+    discarded; this call is for the side effect.
+
+    ``install_checks`` is separate because installing the *grammar* does not
+    derive the *checks* — only ``AuthoredEpisode.run`` does that, and a corpus
+    on disk has no run to do it. Every episode the pack declares gets its group
+    registered, not only the ones the recipe ran: a derived group returns
+    nothing on a world carrying none of its kinds (``derived_checks``' early
+    return), so an unrun episode costs a comparison and the set of rules stays
+    "what this corpus was built under" rather than "what it happened to use".
+
+    **Undoing it is the scoping mechanism, not tidiness.** The registries are
+    process-global, so validating corpus A and then corpus B in one process
+    would otherwise check B's facts against A's grid rules and A's derived
+    invariants — and that is not hypothetical: two packs may legitimately mint
+    the same fact kinds (banking mints retail's ``close.*`` verbatim), which is
+    exactly the case where A's rules would find B's facts and rule on them.
+    Restoring rather than clearing is what keeps the in-process caller whole: a
+    world built from a pack in this session has the spec installed already, the
+    re-install is identical and refused by nothing, and the snapshot puts back
+    the registry the build populated instead of emptying it under the caller.
+
+    Which also states the boundary honestly. This undoes what *validation*
+    installed; it does not undo what a *build* installed, because
+    ``AuthoredEpisode.run`` registers a spec for the life of the process and
+    a caller that built two pack worlds in one session is holding both on
+    purpose. Scoping that away — replacing the registries with the corpus's own
+    pack rather than adding to them — would also drop a spec installed directly
+    through ``episodes.install`` beside a pack, and silently stop checking
+    facts. Reading a corpus in its own process, which is what ``worldloom
+    validate`` does, has neither problem.
+    """
+    pack = _embedded_pack(world)
+    if pack is None:
+        # Nothing to install, and nothing to restore. The early return also
+        # keeps the packless path free of the snapshot copies, so a corpus that
+        # never had a pack pays literally nothing for this.
+        yield
+        return
+
+    from . import episodes, packs
+
+    saved = [(registry, dict(registry)) for registry in _pack_registries()]
+    try:
+        try:
+            packs.archetype_of(pack)
+            for spec in pack.episodes:
+                episodes.install_checks(spec)
+        except Exception as exc:
+            # The realistic failure is `episodes.install` refusing a name this
+            # process already holds with different content — a genuine clash
+            # between the corpus's rules and the ones already loaded. Reported
+            # as a corpus error for `_embedded_pack`'s reason: the alternative
+            # is a traceback out of a command whose whole job is to say whether
+            # a directory is coherent.
+            raise CorpusError(
+                f"this corpus's own rules could not be installed: {exc}"
+            ) from exc
+        yield
+    finally:
+        for registry, original in saved:
+            registry.clear()
+            registry.update(original)
+
+
 def validate(world: World) -> ValidationReport:
-    """Validate *world* and return a report."""
-    return _Validator(world).run()
+    """Validate *world* and return a report.
+
+    Runs under the corpus's own pack, so a world loaded from disk is checked by
+    exactly the rules it was built under rather than by whatever this process
+    happened to import.
+    """
+    with _under_the_corpus_rules(world):
+        return _Validator(world).run()
