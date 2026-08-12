@@ -268,7 +268,12 @@ def build(
             "own — repeatable. Names an EpisodeSpec the --pack carries under "
             "`episodes` (see the worldloom-process skill for authoring one). This "
             "is how authored sales, legal or project processes ship: the pack "
-            "declares them, this flag runs them, and the recipe replays them."
+            "declares them, this flag runs them, and the recipe replays them. "
+            "Additive unless the episode's spec declares `replaces`, naming the "
+            "built-in episode it stands in for — that one is then not run, "
+            "because two processes minting the same kinds over one period "
+            "collide. It is a property of the episode rather than a flag: an "
+            "authored reserving cycle *is* the reserving cycle in every build."
         ),
     ),
     comparatives: int = typer.Option(
@@ -709,6 +714,14 @@ def build(
     # `packs.archetype_of` installed this pack's specs a few lines up, so a
     # name still missing here is missing everywhere, and failing now beats a
     # world half-built when the second period's step raises.
+    #
+    # Resolved in the same pass: which built-in episode an authored one *stands
+    # in for* (`EpisodeSpec.replaces`). Without it `--episode` is additive — the
+    # domain's own episode runs and then the authored one, over the same period
+    # — and two processes minting the same kinds collide. The decision is the
+    # spec's, never a flag's: that an episode is the reserving cycle is true of
+    # every build that runs it.
+    stands_in_for: dict[str, list[str]] = {}
     if episode:
         from . import episodes as episodes_module
 
@@ -722,6 +735,27 @@ def build(
                     " --pack that declares it."
                 )
                 raise typer.Exit(code=2)
+            replaced = episodes_module.loaded()[episode_name].replaces
+            if replaced:
+                stands_in_for.setdefault(replaced, []).append(episode_name)
+
+    # A substitution this build cannot honour is refused rather than quietly
+    # ignored: the spec says it takes the place of another vertical's episode
+    # (or of a close this loop drives with flags the grammar cannot state), and
+    # building on regardless would run both and report success — the very
+    # collision `replaces` exists to end.
+    built_in_name = (
+        getattr(single_episode, "__name__", "") if single_episode is not None else ""
+    )
+    unhonoured = sorted(name for name in stands_in_for if name != built_in_name)
+    if unhonoured:
+        err.print(
+            f"[red]error:[/red] --episode declares replaces={unhonoured[0]!r}, but this"
+            f" build runs {built_in_name or 'the retail close loop'}; the episode would"
+            " stand in for nothing and both would mint over the same period. Build the"
+            " archetype whose engine owns that episode."
+        )
+        raise typer.Exit(code=2)
 
     # Resolved once, before anything is built, and applied to the builder *and*
     # every episode: the world's organisation and the episode's figures are
@@ -1090,9 +1124,22 @@ def build(
             )
         ))
         world = _localised_recipe(_localised(builder).build())
+        # The built-in runs unless an authored episode declared itself its
+        # stand-in. Announced rather than silent: a skipped episode is a
+        # different corpus, and the one thing worse than the collision is a
+        # build that quietly produced neither what the flag said nor what the
+        # archetype implies. Nothing is recorded on the recipe for it — the
+        # steps that ran *are* the record, so the replay drops the same one.
+        standing_in = stands_in_for.get(built_in_name, [])
+        if standing_in:
+            console.print(
+                f"[dim]episode:[/dim] {', '.join(standing_in)} stands in for"
+                f" {built_in_name}, which is not run\n"
+            )
         for index in range(max(1, periods)):
             stamp = _step_period(period, index, domain.period_step_months)
-            world = world.run(_under_physics(single_episode(stamp)))
+            if not standing_in:
+                world = world.run(_under_physics(single_episode(stamp)))
             for episode_name in episode or []:
                 from .episodes import AuthoredEpisode
 

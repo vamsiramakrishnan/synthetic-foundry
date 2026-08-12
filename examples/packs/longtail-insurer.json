@@ -95,7 +95,7 @@
       "responsibilities": [
         {
           "role_key": "reserving_actuary",
-          "fact_kinds": ["reserves.ultimate", "reserves.ultimate_at_prior_valuation"],
+          "fact_kinds": ["reserves.ultimate", "reserves.ultimate_at_prior_valuation", "reserves.adverse_development", "reserves.ibnr", "claims.incurred_to_date", "claims.paid_to_date"],
           "artifact_types": []
         },
         {
@@ -128,6 +128,7 @@
       "name": "QuarterlyValuation",
       "domain": "insurance",
       "period": "quarter",
+      "replaces": "QuarterlyReserving",
       "detail": "One quarterly valuation of the long-tail liability book, on a declared accident-quarter axis. The book's central estimate is drawn; the four cohorts in view are allocated from it, so the triangle reconciles to the book by construction; each cohort's previous carrying value is read back off its own row; the movement since the prior valuation is what the committee recommends booking; and finance books part of it, releasing more margin than it holds, which is what leaves the booked reserve below the central estimate on the record.",
       "cohorts": [
         {"name": "accident_quarter", "count": 4, "spacing_months": 3, "lag_months": 3}
@@ -201,6 +202,66 @@
           "derive": "prior_in_cohort(reserves.ultimate)",
           "invariants": [
             {"kind": "holds-at", "detail": "What this same accident quarter was carried at one valuation ago — the diagonal step, which the period axis cannot take because a cohort's period does not move. Zero at a cohort's first appearance: nothing had emerged yet, which is a claim rather than an absence. Minted as its own fact because the valuation report prints it as a column, and an artifact intent cannot walk a supersession chain to find one."}
+          ]
+        },
+        {
+          "kind": "reserves.adverse_development",
+          "value_type": "money",
+          "authority": "confirmed",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_actuarial",
+          "derive": "minus(reserves.ultimate, reserves.ultimate_at_prior_valuation)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "How far this accident quarter moved since the last valuation — the figure a reserving committee actually argues about, because a book-level movement says a quarter went badly and this says which quarter. Two grids on one axis subtracted cell by cell, which is what a shape-polymorphic `minus` means: the same verb over two book totals is the movement in the central estimate, and over two grids it is development per cohort. At a cohort's first appearance the comparative is zero by declaration, so its whole ultimate reads as development — which is the honest reading of a quarter that had no prior valuation to develop from, and the same claim-not-an-absence rule the comparative itself keeps."}
+          ]
+        },
+        {
+          "kind": "claims.incurred_to_date",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_claims",
+          "derive": "multiple_of(reserves.ultimate)",
+          "parameter": "reserves.cohort.incurred_ratio",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "never-superseded", "detail": "The diagonal, and the reason this pack could not state one until an invariant became an instruction to the runner as well as a rule for the checker: a reading of a cohort at this valuation stands *beside* the reading at the last one rather than correcting it. Both are things the claims system actually held, so closing or superseding either would erase an observation the company made — which is exactly what the engine's own `triangle_touched` refuses, and what an authored grid used to trip on the first carried cohort."}
+          ]
+        },
+        {
+          "kind": "claims.paid_to_date",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_claims",
+          "derive": "multiple_of(claims.incurred_to_date)",
+          "parameter": "reserves.cohort.paid_ratio",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "never-superseded", "detail": "Append-only for the incurred position's reason exactly. Derived off incurred rather than off ultimate so the case reserve the identity needs — incurred less paid — is positive by construction rather than by luck: the span is a fraction of what has been incurred, and a paid figure above the incurred one would be a claims system reporting a payment it never booked. What this diagonal is *not*, stated rather than left to be discovered: a running total across valuations. Each cell is derived from the valuation's own re-struck ultimate, and this cycle re-strikes its cohort ultimates every quarter rather than developing them — which is what makes the grid reconcile to the book exactly — so a cohort's reported position follows its estimate instead of accumulating. A monotone paid ledger needs a developing ultimate, and a developing ultimate cannot also be an exact allocation of a freshly drawn book total."}
+          ]
+        },
+        {
+          "kind": "reserves.ibnr",
+          "value_type": "money",
+          "authority": "confirmed",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_actuarial",
+          "derive": "minus(reserves.ultimate, claims.incurred_to_date)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "Incurred but not reported: the gap between what the actuary carries for this cohort and what the claims system has seen. Subtracted cell by cell, which is what makes the engine's own identity — ultimate = paid + case + IBNR, where case is incurred less paid — hold to the cent per cohort rather than nearly. Positive by construction, because the incurred cell is a fraction of the ultimate cell it was derived from; three independently allocated grids would have satisfied the identity only by luck, and a cohort whose incurred exceeded its own ultimate is not a corpus anyone can read."}
           ]
         },
         {
@@ -330,16 +391,20 @@
           "hour": 11,
           "minute": 0,
           "caused_by": "valuation_basis_confirmed",
-          "summary": "The actuarial central estimate for the long-tail liability book was set at the {period} valuation and allocated across the accident quarters in view; each cohort's previous carrying value was read back off its own row.",
+          "summary": "The actuarial central estimate for the long-tail liability book was set at the {period} valuation and allocated across the accident quarters in view; the claims diagonal was read, each cohort's previous carrying value was read back off its own row, and the development since that valuation was struck.",
           "actors": ["chief_actuary", "reserving_actuary"],
-          "systems": ["sys_actuarial"],
+          "systems": ["sys_actuarial", "sys_claims"],
           "fact_keys": [
             "reserves.central_estimate_total",
             "reserves.ultimate",
+            "claims.incurred_to_date",
+            "claims.paid_to_date",
+            "reserves.ibnr",
             "reserves.ultimate_at_prior_valuation",
+            "reserves.adverse_development",
             "reserves.central_estimate_at_prior_valuation"
           ],
-          "detail": "The grid and its parent are set in one act, because the cells are allocated from the parent rather than summed into it."
+          "detail": "The grid and its parent are set in one act, because the cells are allocated from the parent rather than summed into it — and the diagonal, the IBNR and the development with them. The identity the engine checks (ultimate = paid + case + IBNR) relates facts sharing one valuation moment, so an IBNR minted at a later event would be an IBNR for an estimate nobody was standing on."
         },
         {
           "kind": "committee_recommended",
@@ -395,6 +460,10 @@
             "reserves.central_estimate_total",
             "reserves.ultimate",
             "reserves.ultimate_at_prior_valuation",
+            "reserves.adverse_development",
+            "claims.incurred_to_date",
+            "claims.paid_to_date",
+            "reserves.ibnr",
             "reserves.central_estimate_at_prior_valuation",
             "reserves.committee_recommendation",
             "reserves.booked_total",

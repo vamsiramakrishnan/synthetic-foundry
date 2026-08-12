@@ -814,10 +814,20 @@ _register_kinds([
     FactKind(kind="reserves.attribution_pattern_change", domain="insurance",
              generated_by="generators/reserving.py",
              invariants=("holds-at",), about="The benign pattern-change share."),
+    # The diagonal, and `never-superseded` is not new behaviour here: check (a)
+    # above (`triangle_touched`) has refused a closed or superseded reading of
+    # either kind since this vertical shipped. What was missing was the
+    # *declaration* — so a pack authoring the same diagonal was refused for
+    # claiming a rule the registry did not hold, while the engine enforced that
+    # exact rule two hundred lines up. Declared now, which is what lets an
+    # authored observation grid mint append-only cells (`episodes.run`) instead
+    # of chaining them and then failing check (a).
     FactKind(kind="claims.incurred_to_date", domain="insurance", generated_by="generators/triangles.py",
-             invariants=("holds-at",), about="A cohort's incurred position."),
+             invariants=("holds-at", "never-superseded"),
+             about="A cohort's incurred position, as read at one valuation."),
     FactKind(kind="claims.paid_to_date", domain="insurance", generated_by="generators/triangles.py",
-             invariants=("holds-at",), about="A cohort's paid position."),
+             invariants=("holds-at", "never-superseded"),
+             about="A cohort's paid position, as read at one valuation."),
     FactKind(kind="claims.actual_vs_expected", domain="insurance", generated_by="generators/triangles.py",
              invariants=("holds-at",), about="The quarter's development against the calibrated pattern."),
 ])

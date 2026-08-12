@@ -109,12 +109,25 @@ claim the fact's `period`); and a kind whose invariants exceed what
 `factkinds` registers for it is refused, so a registered kind gaining a roll-up
 needs the registry line first.
 
-**One thing the vocabulary does not have:** per-cell arithmetic between two
-grids. The seven scalar derivations still work, but a grid asked for as a scalar
-is its *roll-up* — so `minus(gridA, gridB)` states the book-level difference in
-every cell, which validates clean and describes nothing. Read a movement off the
-graph instead: a cohort's cells across observations are a supersession pair, and
-`benchmark.py` already asks about it.
+**A derivation takes its shape from its operands.** The seven arithmetic ones
+(`pct_of`, `at_rate`, `percent_of`, `multiple_of`, `plus`, `minus`, `units_of`)
+are scalar over scalars, a grid over grids **on one axis**, and a broadcast over
+a mix — so `minus(reserves.ultimate, reserves.ultimate_at_prior_valuation)` is
+per-cohort adverse development, and a board percentage applied to a triangle is
+one rate and four answers. Grids on *different* axes are refused: nothing pairs
+cell *i* of one origin axis with cell *i* of another. A kind whose derivation
+comes out gridded must declare its `cohort`, or its cells are checked by nothing.
+The pair-reading derivations (`ratio_pct`, `initial`, `supersession_delta`,
+`bps_delta`) and `prior` are not lifted and still refuse a grid — read those
+movements off the graph, where a cohort's cells across observations are a
+supersession pair `benchmark.py` already asks about.
+
+**A grid is a chain or a diagonal, and the invariant decides.** Declare
+`supersedes-prior` (or nothing) and each cell supersedes its own predecessor with
+an exact validity handover — the revalued estimate. Declare `never-superseded`
+and the grid is **append-only**: no predecessor, no closed window, because a
+later reading of a cohort stands beside the earlier one rather than correcting it
+— the paid/incurred triangle diagonal. Declaring both is refused.
 
 **The cascade has no cohort stage yet.** `process.resolve` builds the spec from
 steps, kinds and slots, so an axis is attached after and re-linted by hand —

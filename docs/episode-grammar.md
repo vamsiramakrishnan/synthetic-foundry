@@ -425,13 +425,27 @@ grid:
 |---|---|
 | `derive: allocation_of(K)` | K split across the cells by largest remainder |
 | `derive: prior_in_cohort(K)` | what K held for each cell one observation ago |
+| `derive:` one of the seven arithmetic derivations over gridded operands | the same arithmetic cell by cell — see "Shapes" below |
 | `parameter` | one draw per cell, on the cell's own stream |
 | `amount` or `text` | the same stated value in every cell — a floor or a policy does not vary by vintage just because it is gridded |
 
-Each cell supersedes its own predecessor rather than the grid superseding
-wholesale, which is what keeps a *row* readable: a valuation revises each cohort
-separately, and one grid-level supersession would leave "what did we think this
-cohort was worth last quarter" unanswerable for every cohort but one.
+**The declaration decides whether a grid is a chain or a diagonal**, and this is
+the one place an invariant instructs the runner rather than only the checker:
+
+- `supersedes-prior`, **or neither** (the default, and what every grid authored
+  before this did): each cell supersedes its own predecessor rather than the grid
+  superseding wholesale, which is what keeps a *row* readable — a valuation
+  revises each cohort separately, and one grid-level supersession would leave
+  "what did we think this cohort was worth last quarter" unanswerable for every
+  cohort but one.
+- `never-superseded`: an **append-only observation grid**. No predecessor is
+  linked and no window is closed, because a later reading sits *beside* the
+  earlier one rather than correcting it — a paid or incurred triangle diagonal,
+  where both figures are things the claims system actually held. Until the runner
+  read this declaration, such a grid could be declared, would chain anyway, would
+  lint clean, and would then fail its own rule (`triangle_touched`).
+- Both: lint-refused. They are contradictory instructions, and whichever the
+  runner picked the other check would fail the facts it minted.
 
 ### The two derivations
 
@@ -593,27 +607,64 @@ for the three overlapping cohorts supersede March's, so the row reads as a devel
 history and `world.authoritative(..., period="2025-09")` still returns the
 current view, with no accessor that knows a triangle exists.
 
-**Why there is no `reserves.adverse_emergence` kind, and the trap that would be.**
-The obvious fourth kind is the movement — this valuation's ultimate less the
-prior one, per cohort. Do not write it as
-`minus(reserves.ultimate, reserves.ultimate_at_prior_valuation)`. **The
-arithmetic derivations are scalar.** A grid asked for as a scalar is its
-*roll-up* (that is what makes `rolls-up-to` recomputable at all), so `minus` over
-two grids subtracts one book total from the other and produces one figure — which
-is then fanned across all four cells, because a cohort kind whose value arrives
-as a scalar is stated for every cohort. Four cells each carrying the *book's*
-movement, validating clean, describing nothing. Per-cell arithmetic between two
-grids is not in the derivation vocabulary; nothing here needs it yet, and the
-place to argue for it is a business whose figures cannot be reached another way.
+**The fourth kind is the movement, and it is a grid.**
+`minus(reserves.ultimate, reserves.ultimate_at_prior_valuation)` is per-cohort
+adverse development: two grids on one axis, subtracted cell by cell. This
+paragraph used to say the opposite — *do not write that* — because the seven
+arithmetic derivations were scalar and a grid handed to one was silently its
+roll-up, so the declaration compiled into four cells each carrying the *book's*
+movement: validating clean, describing nothing. The lint then refused it
+outright, which was honest and left the figure a reserving committee actually
+argues about unauthorable, since "which quarter went bad" is exactly what a book
+total cannot say.
 
-The movement is reachable two other ways, and both are better. `benchmark.py`
-reads it: a cohort's cells across valuations are a supersession pair on one
-subject and period, which is a `temporal_state` question ("what were we carrying
-for 2025-Q3 at the March valuation?") and a `numerical_comparison` with no kind
-minted at all. And a document that must *print* a movement column prints the two
-figures it is the difference of — the same discipline every other figure in this
-corpus follows, where a number a reader can subtract is not a number the ledger
-should hold twice.
+A derivation now takes its **shape** from its operands rather than being scalar
+by construction (see "Shapes", below). The trap is gone because the reading that
+made it a trap is gone: `minus` over two grids is a grid.
+
+Two other readings of the same movement remain, and both are still worth
+knowing. `benchmark.py` reads it off the graph: a cohort's cells across
+valuations are a supersession pair on one subject and period, which is a
+`temporal_state` question ("what were we carrying for 2025-Q3 at the March
+valuation?") and a `numerical_comparison` with no kind minted at all. And a
+document that only has to *print* a movement column can print the two figures it
+is the difference of. Mint the movement when something depends on it as a figure
+— an artifact intent needs a fact id, or another kind derives from it; read it
+off the graph when the corpus only has to be able to answer about it. That is
+the same choice `reserves.ultimate_at_prior_valuation` documents one paragraph
+down, and the shipped insurer pack now makes it in both directions.
+
+### Shapes: what a derivation does with a grid
+
+The seven arithmetic derivations — `pct_of`, `at_rate`, `percent_of`,
+`multiple_of`, `plus`, `minus`, `units_of` (`episodes.SHAPED_DERIVATIONS`) —
+infer their shape from their operands. One arithmetic, declared once, applied
+at whatever shape it is handed:
+
+| Operands | Result | Reading |
+|---|---|---|
+| all scalars | a scalar | exactly what it always was, byte for byte |
+| all grids on **one** axis | a grid | the same computation, cell by cell |
+| a mix | a grid | the scalar **broadcasts** across the cells — one board rate, four answers |
+| grids on **two** axes | refused | an accident quarter and an underwriting year are not a couple |
+
+Two rules come with it. A kind whose derivation comes out gridded must
+**declare** `cohort`: completeness, roll-up and cohort sanity all key off it, and
+an undeclared grid's cells are held to nothing while looking exactly like a
+passing corpus. And a drawn factor (`pct_of`, `multiple_of`) is drawn **once per
+kind**, outside the map — a rate applied to a triangle is one rate and four
+answers, not four unrelated draws wearing one kind's name.
+
+The other derivations are *not* lifted, and the boundary is what each reads.
+`ratio_pct`, `initial`, `supersession_delta` and `bps_delta` read a supersession
+**pair** — a two-tuple a grid would be silently mistaken for — and `prior` reads
+one carried value from the period before; each still asks for a `rolls-up-to`
+parent and a derivation from that. `allocation_of` and `prior_in_cohort` are the
+two that *make* a grid and were never scalar.
+
+No verb was added for any of this. `minus` and a `minus_grid` beside it would be
+one subtraction written twice, drifting apart at the first rounding change — a
+shape is not a computation.
 
 **Which leaves the question `reserves.ultimate_at_prior_valuation` answers.** The
 prior value is already in the world — it is the superseded cell — so minting it
@@ -645,10 +696,10 @@ never data).
   close it and does not depend on it.
 - **No cohort × cohort.** One axis per kind. A grid of accident quarter by
   development year is two, and nothing here asks for it yet.
-- **No per-cell arithmetic between grids.** The seven arithmetic derivations are
-  scalar, and a grid asked for as a scalar is its roll-up — see the worked
-  example's trap. Two grids can be compared by reading the graph; they cannot be
-  subtracted into a third.
+- **No arithmetic across two axes.** Per-cell arithmetic *within* one axis is
+  now what the seven arithmetic derivations do (see "Shapes", above); two grids
+  on **different** axes are refused, in the lint and again at run, because
+  nothing pairs cell *i* of one origin axis with cell *i* of another.
 - **No conditional cohorts.** `count` is fixed for the episode. A book that
   genuinely gains a cohort each quarter without losing one is a growing grid, and
   this is a sliding one.
