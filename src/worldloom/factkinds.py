@@ -60,6 +60,12 @@ INVARIANT_HEADS = frozenset({
     "carries-forward-as",
     "reconciles-against",
     "precedes-event",
+    # **rolls-up-to**: the cells of a cohort grid, at one observation, sum to
+    # the named parent kind. Distinct from `sums-to`, which decomposes across
+    # *subjects* at one period; a grid decomposes one subject across *cohort
+    # periods*, and a check that conflated them would look for the breakdown
+    # on the wrong axis and pass vacuously.
+    "rolls-up-to",
 })
 
 _INVARIANT = re.compile(r"^(?P<head>[a-z-]+)(?:\((?P<operands>[^()]*)\))?$")

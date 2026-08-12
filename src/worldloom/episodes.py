@@ -63,7 +63,8 @@ class Invariant(Model):
 
     kind: Literal[
         "sums-to", "supersedes-prior", "holds-at", "carries-forward-as",
-        "reconciles-against", "precedes-event", "standing", "never-superseded"
+        "reconciles-against", "precedes-event", "standing", "never-superseded",
+        "rolls-up-to",
     ]
     """The invariant type. Determines how the validator checks it.
 
@@ -74,6 +75,10 @@ class Invariant(Model):
       has no expiry).
     - **holds-at**: Every fact must have a ``valid_from`` and ``valid_to`` that
       bracket its use in any document. Checked by the temporal validator.
+    - **rolls-up-to**: The cells of a cohort grid, at one observation, sum to
+      the parent kind named in ``operands``. Not ``sums-to``: that decomposes
+      one period across *subjects*, this decomposes one subject across *cohort
+      periods*, and a check looking on the wrong axis passes vacuously.
     - **carries-forward-as**: This kind in period N derives this period N+1 fact
       by the declared rule. Namespace and rule given in ``operands``.
     - **reconciles-against**: This fact must sum to the prior-period balance plus
@@ -94,6 +99,66 @@ class Invariant(Model):
 
     detail: str = Field(default="", min_length=0)
     """Explanation for documentation — why this invariant matters."""
+
+
+class CohortSpec(Model):
+    """A declared origin axis — the grammar's second key, beside the period.
+
+    A loss triangle, a loan book by vintage, hires by starting quarter: all
+    the same shape, a grid of *origin cohort* × *observation date*, where a
+    cell's meaning comes from both coordinates. Until this existed the grammar
+    had one axis and ``prior(K)`` walked it a single step, which is why the
+    reserving episode had to be hand-written Python and why its second
+    valuation could not be authored at all.
+
+    The cohort is carried in the fact's own ``period``, and the observation
+    date in ``valid_from`` plus the supersession chain — which is what
+    ``generators/reserving.py`` already did by hand, so an authored grid and a
+    generated one are the same rows. A ``cohort`` field on ``CanonicalFact``
+    would have been tidier to read and would have serialised ``"cohort": null``
+    into every fact line of every corpus ever built: the byte-identity gate
+    exists to catch exactly that, and it is worth more than the tidiness.
+    """
+
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    """The axis's name, referenced by ``FactKindSpec.cohort``."""
+
+    count: int = Field(ge=1)
+    """How many cohorts each period carries into view."""
+
+    spacing_months: int = Field(ge=1)
+    """Months between consecutive cohorts — 3 for accident quarters."""
+
+    lag_months: int = Field(ge=1)
+    """Months between the newest cohort and the observing period. A quarter
+    that has not finished developing yet has nothing to observe, and a grid
+    that included it would state a figure nobody could have."""
+
+
+def cohort_periods(period: str, spec: CohortSpec) -> tuple[str, ...]:
+    """The cohort periods *period* observes, oldest first.
+
+    Off ``previous_periods`` rather than fresh month arithmetic, because the
+    hand-written insurance scenario computes its accident quarters that way
+    and this must produce the identical grid — ``("2025-03", "2025-06",
+    "2025-09", "2025-12")`` for a 2026-03 valuation over four quarterly
+    cohorts — or an authored triangle and the generated one would disagree
+    about which quarters they are about.
+    """
+    from .generators.finance import previous_periods
+
+    # `previous_periods` returns whole months, oldest first, ending the month
+    # before *period*. The window is one cohort stride per cohort, plus
+    # whatever lag beyond a single stride the axis asks for — so the oldest
+    # month in the window is always the oldest cohort, and the stride walks
+    # forward from it. At the shipped insurance settings (4 cohorts, quarterly,
+    # lagged a quarter) that is a 12-month window sampled at 0/3/6/9, which is
+    # `insurance_scenarios.QuarterlyReserving.run`'s own two lines exactly.
+    months = spec.count * spec.spacing_months + spec.lag_months - spec.spacing_months
+    lookback = previous_periods(period, months)
+    return tuple(
+        lookback[i] for i in range(0, spec.count * spec.spacing_months, spec.spacing_months)
+    )
 
 
 class FactKindSpec(Model):
@@ -168,7 +233,15 @@ class FactKindSpec(Model):
     ``units_of(V, R)`` (the whole units a value V represents at rate R),
     ``prior(K)`` (the prior period's value of K, resolved by a declared
     ``sum``/``derive`` carry-forward; zero in a world's first period, because
-    "nothing was outstanding" is a claim, not an absence).
+    "nothing was outstanding" is a claim, not an absence),
+    ``allocation_of(K)`` (cohort kinds only: K's amount split across this
+    kind's cohorts by largest remainder, so the grid reconciles to its parent
+    by construction rather than by luck — `triangles.py`'s own discipline,
+    "allocated from a book-level total, never drawn and summed"),
+    ``prior_in_cohort(K)`` (cohort kinds only: what K held for *this same
+    cohort* at the previous observation — the diagonal step a triangle is
+    made of, and the one thing `prior(K)` cannot express because it walks
+    periods and a cohort's period does not move).
     Closed for the invariant vocabulary's reason: a derivation the validator
     cannot recompute is a figure nothing checks."""
 
@@ -185,6 +258,18 @@ class FactKindSpec(Model):
 
     source_role: str = ""
     """The role key of the ``source_system`` recorded on the fact."""
+
+    cohort: str = ""
+    """Names a declared ``CohortSpec`` — this kind is a row of the grid.
+
+    A cohort kind mints one fact per cohort each time the episode runs, and
+    each fact's ``period`` is its *cohort's* period rather than the observing
+    one. That is not a shortcut: it is what makes "the same cohort, one
+    valuation earlier" a lookup rather than a convention, and it is the shape
+    ``generators/reserving.py`` already wrote by hand.
+
+    Empty — every kind that existed before this field — mints exactly once,
+    exactly as it did."""
 
     series_days: int = 0
     """When positive, this kind is a business-day series (the series primitive):
@@ -393,6 +478,10 @@ class EpisodeSpec(Model):
     carry_forward: list[CarryForwardSpec] = Field(default_factory=list)
     """Facts that carry from one period to the next."""
 
+    cohorts: list[CohortSpec] = Field(default_factory=list)
+    """Origin axes this episode's fact kinds may be gridded over. Empty for
+    every episode that predates the axis, and an empty list changes nothing."""
+
     phases: list[PhaseSpec] = Field(default_factory=list)
     """The phases this episode goes through."""
 
@@ -594,13 +683,48 @@ def lint(specs: Iterable[EpisodeSpec], *, base: str = "") -> list[str]:
                         " `worldloom pack params`."
                     )
 
+            # -- the cohort axis ------------------------------------------
+            if fk.cohort:
+                if fk.cohort not in {c.name for c in spec.cohorts}:
+                    findings.append(
+                        f"{fk_where}: cohort {fk.cohort!r} names no axis this"
+                        f" episode declares (has: {sorted(c.name for c in spec.cohorts)})."
+                    )
+                if fk.period_scope != "period-keyed":
+                    # A grid with optional cells is a grid with holes, and
+                    # every roll-up over it becomes unanswerable — you cannot
+                    # tell a cohort that reported nothing from one nobody
+                    # asked about. The `rolls-up-to` check depends on this.
+                    findings.append(
+                        f"{fk_where}: a cohort kind must be period-keyed"
+                        f" (is {fk.period_scope!r}) — an absent cell makes the"
+                        " roll-up over the grid unanswerable."
+                    )
+                if fk.series_days:
+                    # Two second axes at once. Refused rather than nested
+                    # until something real needs a daily series per cohort:
+                    # the fact's `period` can carry the cohort or the series
+                    # day, not both, and guessing which would be a silent
+                    # decision about what the row means.
+                    findings.append(
+                        f"{fk_where}: a kind cannot be both a cohort grid and a"
+                        " business-day series — both claim the fact's period."
+                    )
+            elif fk.derive.startswith(("allocation_of", "prior_in_cohort")):
+                findings.append(
+                    f"{fk_where}: derive {fk.derive!r} needs a cohort axis —"
+                    " both derivations are about a cell's place in a grid, and"
+                    " this kind declares no `cohort`."
+                )
+
             if fk.derive:
                 head, _, rest = fk.derive.partition("(")
                 operand_kinds = [p.strip() for p in rest.rstrip(")").split(",") if p.strip()]
                 if head not in ("pct_of", "ratio_pct", "initial",
                                 "supersession_delta", "bps_delta",
                                 "at_rate", "percent_of", "multiple_of",
-                                "plus", "minus", "units_of", "prior"):
+                                "plus", "minus", "units_of", "prior",
+                                "allocation_of", "prior_in_cohort"):
                     findings.append(
                         f"{fk_where}: derive {fk.derive!r} is not in the closed"
                         " derivation vocabulary."
@@ -797,6 +921,18 @@ class RunResult:
     and re-listed in ``facts`` — the caller filters these back out before
     ``world.extend``, exactly as ``QuarterlyCapitalReturn.run`` does."""
 
+    closed_facts: tuple[CanonicalFact, ...] = ()
+    """Cells a *previous* run committed, returned with their windows closed.
+
+    A cohort cell stays open until something replaces it, and what replaces it
+    arrives a quarter later — so its ``valid_to`` is unknowable when it is
+    minted and knowable only now. Handed back rather than appended, because
+    these are amendments to facts the world already holds: the caller
+    substitutes them by id. Without this the two observations of one cohort
+    both claim to hold at the same instant, and "what did we carry for this
+    cohort at time T" has two answers, which is the exact ambiguity this
+    corpus exists not to have."""
+
 
 def _invariant(spec: FactKindSpec, head: str) -> Invariant | None:
     for invariant in spec.invariants:
@@ -949,8 +1085,58 @@ def run(
     def scalar_of(kind: str) -> float:
         value = values[kind]
         if isinstance(value, tuple):
+            if value and value[0] == "cohort":
+                # A grid asked for as a scalar is its roll-up — the parent
+                # figure the cells were split from, recovered by adding them
+                # back. Exact, because largest remainder allocates integers.
+                return sum(value[1].values())
             return value[0]
         return value
+
+    by_cohort_name = {c.name: c for c in spec.cohorts}
+
+    def cohorts_for(fk: FactKindSpec) -> tuple[str, ...]:
+        """This kind's cohort periods, oldest first."""
+        axis = by_cohort_name.get(fk.cohort)
+        if axis is None:
+            raise ValueError(
+                f"{spec.name}: fact kind {fk.kind!r} names cohort axis"
+                f" {fk.cohort!r}, which this episode does not declare"
+            )
+        return cohort_periods(period, axis)
+
+    def _open_cell(kind: str, subject: str, cohort: str) -> CanonicalFact | None:
+        """The cell a new observation of *cohort* supersedes: the latest one
+        nothing has superseded yet.
+
+        Not ``world.authoritative``, which resolves by authority rank and can
+        hand back a cell that a *later* cell in the same run already replaced —
+        chaining onto it leaves two live heads for one cohort, which the
+        insurance estimate-chain check catches as exactly that. A supersession
+        chain has one open end; this finds it.
+        """
+        superseded = {
+            f.supersedes for f in world.facts.where(kind=kind) if f.supersedes
+        }
+        candidates = [
+            f for f in world.facts.where(kind=kind)
+            if f.subject == subject and f.period == cohort and f.id not in superseded
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda f: (f.valid_from, f.id))
+
+    def _cohort_prior(kind: str, subject: str, cohort: str) -> float:
+        """What *kind* held for *cohort* before this run, or zero.
+
+        Scoped to the cohort's own period, which is the whole trick: the
+        lookup that finds "this cohort, last time" is an ordinary
+        period-scoped authoritative read once the cohort *is* the period.
+        """
+        prior = world.authoritative(kind, subject, period=cohort)
+        if prior is None or prior.value is None:
+            return 0
+        return prior.value.amount
 
     def compute(fk: FactKindSpec) -> None:
         kind = fk.kind
@@ -1022,6 +1208,41 @@ def run(
                 # outstanding" indistinguishable from "nobody checked"
                 # (`procurement_cycle.generate`'s own reasoning, kept).
                 values[kind] = prior_values.get(operands[0], 0)
+            elif head == "allocation_of":
+                # The grid, split from its parent by largest remainder rather
+                # than drawn per cell and summed. Drawn cells would miss the
+                # parent by a rounding crumb roughly always, and the corpus
+                # would ship a triangle that does not add up to the book it
+                # describes — `triangles.py` reached the same conclusion for
+                # the same reason, one layer down.
+                grid = cohorts_for(fk)
+                weights = [1.0] * len(grid)
+                if fk.parameter:
+                    # A stream per cell, named for the cohort so a grid is
+                    # reproducible cell by cell and adding a cohort cannot
+                    # renumber the draws of the ones already there.
+                    weights = [
+                        max(float(primitives.level(
+                            physics, fk.parameter, rng.derive(f"kind/{kind}/{cohort}")
+                        )), 1e-9)
+                        for cohort in grid
+                    ]
+                total = scalar_of(operands[0])
+                allocated = primitives.rollup(int(round(total)), weights)
+                values[kind] = ("cohort", dict(zip(grid, allocated)))
+            elif head == "prior_in_cohort":
+                # The diagonal step. `prior(K)` cannot express this: it walks
+                # the period axis, and a cohort's period is exactly what does
+                # not move between observations — March 2025's ultimate is
+                # still March 2025's ultimate a quarter later, at a different
+                # value. Resolved per cell against the world, so the first
+                # observation of a world reads zero for every cohort and the
+                # second reads what the first actually wrote.
+                grid = cohorts_for(fk)
+                values[kind] = ("cohort", {
+                    cohort: _cohort_prior(operands[0], subject_of(fk), cohort)
+                    for cohort in grid
+                })
             else:
                 raise ValueError(f"{kind}: unknown derivation {fk.derive!r}")
             return
@@ -1091,6 +1312,29 @@ def run(
     for fk in spec.fact_kinds:
         sums_to = _invariant(fk, "sums-to")
         compute(fk)
+        # A cohort kind is a grid however its value was reached. The two grid
+        # derivations build one directly; a kind drawn from physics or stating
+        # a constant reaches `compute` as a scalar and is fanned out here —
+        # otherwise declaring `cohort` on a drawn kind would silently mint one
+        # fact and leave a grid with a single cell, which is the failure a
+        # test written against the contract caught before this line existed.
+        if fk.cohort and not isinstance(values.get(fk.kind), tuple):
+            grid = cohorts_for(fk)
+            scalar = values[fk.kind]
+            if fk.parameter:
+                # One draw per cell, on a stream named for the cohort: a grid
+                # must be reproducible cell by cell, and adding a cohort must
+                # not renumber the draws of the cells already there.
+                values[fk.kind] = ("cohort", {
+                    cohort: primitives.level(
+                        physics, fk.parameter, rng.derive(f"kind/{fk.kind}/{cohort}")
+                    ) * fk.scale
+                    for cohort in grid
+                })
+            else:
+                # A stated constant is stated for every cohort — a floor or a
+                # policy does not vary by vintage just because it is gridded.
+                values[fk.kind] = ("cohort", {cohort: scalar for cohort in grid})
         if sums_to is not None and sums_to.operands and sums_to.operands[0] in by_kind:
             compute_children(fk, sums_to.operands[0])
 
@@ -1100,6 +1344,7 @@ def run(
     keys: dict[str, str] = {}
     event_ids: dict[str, str] = {}
     minted: dict[str, list[CanonicalFact]] = {}
+    closed_cells: list[CanonicalFact] = []
     seen_occurrence: dict[str, int] = {}
 
     def resolve_roles(role_keys: list[str], what: str) -> list[str]:
@@ -1196,6 +1441,60 @@ def run(
                 continue
 
             value = values.get(kind)
+            if isinstance(value, tuple) and value and value[0] == "cohort":
+                # One fact per cell, its period the *cohort's* — so "what did
+                # this cohort look like at the last valuation" is a lookup
+                # rather than a convention, and a later observation supersedes
+                # its own predecessor cell by cell rather than wholesale.
+                for cohort, amount in value[1].items():
+                    # A cell supersedes its own previous observation — the one
+                    # this run already minted if the kind mints twice, else the
+                    # one a previous run left in the world. Cell by cell, not
+                    # wholesale: a valuation revises each cohort separately,
+                    # and a single grid-level supersession would make "what did
+                    # we think this cohort was worth last quarter" unanswerable
+                    # for every cohort but one.
+                    in_run = next(
+                        (f for f in minted.get(kind, []) if f.period == cohort), None
+                    )
+                    if in_run is not None:
+                        # Exact validity handover, the series primitive's
+                        # discipline: the cell this one replaces closes at the
+                        # moment this one opens, so "what did this cohort hold
+                        # at time T" has one answer for every T rather than two
+                        # between the two observations. Only reachable for a
+                        # predecessor this run minted — a cell a *previous* run
+                        # committed is history, and rewriting a shipped fact's
+                        # window would edit the record rather than extend it.
+                        closed = in_run.model_copy(update={"valid_to": at})
+                        facts[facts.index(in_run)] = closed
+                        minted[kind][minted[kind].index(in_run)] = closed
+                        in_run = closed
+                    if in_run is None:
+                        # A cell a previous run committed: close its window
+                        # here and hand the amended copy back for the caller
+                        # to substitute (see `EpisodeResult.closed_facts`).
+                        standing = _open_cell(kind, subject_of(fk), cohort)
+                        if standing is not None and standing.valid_to is None:
+                            closed_cells.append(
+                                standing.model_copy(update={"valid_to": at})
+                            )
+                        predecessor = standing
+                    else:
+                        predecessor = in_run
+                    fact = CanonicalFact(
+                        id=minter.next("FACT"), kind=kind, subject=subject_of(fk),
+                        period=cohort,
+                        value=Quantity(amount=amount, unit=unit_for(fk)),
+                        valid_from=at, authority=authority, source_system=source,
+                        event_id=made.id,
+                        supersedes=predecessor.id if predecessor is not None else None,
+                    )
+                    facts.append(fact)
+                    minted.setdefault(kind, []).append(fact)
+                keys.setdefault(f"fact_{kind}", facts[-len(value[1])].id)
+                continue
+
             if isinstance(value, tuple) and value and value[0] == "books":
                 _, per_subject, affected, corrected = value
                 if index == 0:
@@ -1307,6 +1606,7 @@ def run(
         intents=tuple(intents),
         keys=keys,
         reused_fact_ids=tuple(fact.id for fact in reused.values()),
+        closed_facts=tuple(closed_cells),
     )
 
 
@@ -1578,6 +1878,14 @@ class AuthoredEpisode:
             prior_cases=tuple(world._evaluations),
             names=world.entity_names(),
         )
+
+        if result.closed_facts:
+            # Substitution, not addition: these are cells a previous quarter
+            # committed, now closed because this quarter replaced them. Applied
+            # by id against the world's own list so the amendment lands on the
+            # fact itself rather than shipping a second copy of it.
+            amended = {fact.id: fact for fact in result.closed_facts}
+            world = world.replace_facts(amended)
 
         return world.extend(
             events=result.events,

@@ -11,7 +11,7 @@ against, so their shape matters more than their current implementation.
 from __future__ import annotations
 
 import shutil
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -546,6 +546,42 @@ class World:
         Immutable: the world this is called on is unchanged.
         """
         return scenario.run(self)
+
+    def replace_facts(self, amended: Mapping[str, CanonicalFact]) -> World:
+        """A copy of this world with facts substituted by id, in place.
+
+        Deliberately narrow: an amendment may only close a window that was
+        open — ``valid_to`` moving from ``None`` to a moment — because that is
+        the one thing about a fact which is genuinely unknowable when it is
+        minted and knowable later, when its successor arrives. Anything else
+        would be editing the record rather than completing it, and this method
+        exists precisely so that "the cohort grid closes its own cells" cannot
+        become a general licence to rewrite history.
+
+        Order is preserved: the substituted fact keeps its predecessor's
+        position, so a corpus that amends a cell and one that never had to
+        write the same ``facts.jsonl`` in the same sequence.
+        """
+        for fact_id, replacement in amended.items():
+            existing = next((f for f in self._facts if f.id == fact_id), None)
+            if existing is None:
+                raise ValueError(f"cannot amend {fact_id!r}: this world has no such fact")
+            if existing.valid_to is not None:
+                raise ValueError(
+                    f"cannot amend {fact_id!r}: its window already closed at"
+                    f" {existing.valid_to.isoformat()} — an amendment completes"
+                    " a fact, it does not revise one"
+                )
+            if replacement.model_copy(update={"valid_to": None}) != existing:
+                raise ValueError(
+                    f"cannot amend {fact_id!r}: an amendment may only close the"
+                    " fact's window, and this changes other fields"
+                )
+        from dataclasses import replace as _dc_replace
+
+        return _dc_replace(
+            self, _facts=tuple(amended.get(fact.id, fact) for fact in self._facts)
+        )
 
     def extend(
         self,
