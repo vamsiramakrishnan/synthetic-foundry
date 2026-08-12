@@ -23,14 +23,18 @@ Five claims, each pinned where it could silently rot:
   the case that actually exercises the remainder.
 - **A cohort walks its own diagonal.** ``prior_in_cohort(K)`` resolves what
   *this same cohort* held at the previous observation, and zero at the first —
-  the same rule and the same reason as ``prior(K)``.
+  the same rule and the same reason as ``prior(K)``. A second observation of a
+  cohort supersedes the first *and closes its window*, cell by cell, so exactly
+  one number about a cohort ever reads as current.
 - **The lint refuses the four shapes that would make a grid with holes in it**,
   and a spec that declares no cohorts mints byte-for-byte what it minted before.
 
-Deliberately imported as ``episodes.CohortSpec`` at use rather than at the top
-of the file: until the axis lands, a module-level import would collect-error the
-whole suite, and the byte-neutrality pin — the one test that must pass *before*
-the change as well as after — would be lost in the noise.
+The grammar's names are reached as ``episodes.CohortSpec`` at use rather than
+imported at the top of the file. That was load-bearing while the axis was being
+written — a module-level import of a name that did not exist yet would have
+collect-errored the whole file, taking the byte-neutrality pin down with it, and
+that pin is the one test here that has to pass *before* the change as much as
+after. It is kept because it will be load-bearing again for the next axis.
 """
 
 from __future__ import annotations
