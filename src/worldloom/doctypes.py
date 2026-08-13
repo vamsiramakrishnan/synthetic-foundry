@@ -196,6 +196,15 @@ class SectionSpec(DocModel):
     for a document that genuinely has one undivided subject."""
     scope: Literal["group", "unit", "any"] = "any"
     purpose: str = Field(min_length=1)
+    required: bool = True
+    """Whether every document of this type carries this section.
+
+    Default ``True``, which is what every authored type meant before the field
+    existed — so no pack changes shape by being loaded under a newer engine.
+    Setting it ``False`` puts the section into the pool a structural genome may
+    omit; see `worldloom.structure`. Author it ``False`` only where a reader
+    would not find the absence strange, because the section that carried a
+    required fact going missing is a narration rejection, not variety."""
 
     def as_plan(self) -> SectionPlan:
         return SectionPlan(
@@ -203,6 +212,7 @@ class SectionSpec(DocModel):
             kinds=tuple(self.kinds),
             scope=self.scope,
             purpose=self.purpose,
+            required=self.required,
         )
 
 
@@ -333,6 +343,7 @@ def describe(artifact_type: str) -> DocumentType:
                 kinds=list(plan.kinds),
                 scope=plan.scope,  # type: ignore[arg-type]
                 purpose=plan.purpose,
+                required=plan.required,
             )
             for plan in documents._OUTLINES.get(artifact_type, ())
         ],

@@ -423,6 +423,62 @@ def _pack_payload(pack: Any) -> dict[str, Any]:
     return packs.to_recipe(pack)
 
 
+#: Where a structural genome lives on a recipe. Read by `documents._variant_for`
+#: through `structure_of`, which is the whole threading story: the genome is not
+#: a `World` field and not a process global, because the recipe is already the
+#: thing that survives to disk *and* drives replay, and a corpus whose documents
+#: were shaped by a genome the corpus does not record could not be rebuilt.
+STRUCTURE_KEY = "structure"
+
+
+def with_structure(recipe: dict[str, Any], genome: Any) -> dict[str, Any]:
+    """*recipe* with a structural genome recorded on it.
+
+    Written only when the genome actually varies — the same conditional rule
+    every optional key here follows, and for the same measured reason: a key
+    written unconditionally puts a new line in every recipe ever produced for a
+    value that changes nothing, and the default build's byte diff is what
+    catches it. An absent key means `structure.CLASSIC`, which is what every
+    corpus built before this existed *was*.
+    """
+    if not genome.varies:
+        return recipe
+    return {
+        **recipe,
+        STRUCTURE_KEY: {
+            "omission": genome.omission,
+            "floor": genome.floor,
+            "variant_bias": genome.variant_bias,
+        },
+    }
+
+
+def structure_of(recipe: Mapping[str, Any] | None) -> Any:
+    """The structural genome *recipe* was built under.
+
+    Tolerant of a missing recipe and a missing key, because this is called from
+    the document compiler for worlds that arrived every way a world can — built,
+    replayed, loaded from a corpus written before genomes existed, or
+    hand-authored as a fixture with no recipe at all. All four mean classic.
+    """
+    from .structure import CLASSIC, StructuralGenome
+
+    if not recipe:
+        return CLASSIC
+    payload = recipe.get(STRUCTURE_KEY)
+    if not payload:
+        return CLASSIC
+    # Constructed by keyword against the recorded keys rather than splatted, so
+    # that a recipe written by a *newer* worldloom carrying a genome field this
+    # release does not know about fails loudly here instead of silently
+    # producing documents of a shape the recipe did not ask for.
+    return StructuralGenome(
+        omission=int(payload["omission"]),
+        floor=int(payload["floor"]),
+        variant_bias=int(payload["variant_bias"]),
+    )
+
+
 def with_step(recipe: dict[str, Any], scenario: str, **arguments: Any) -> dict[str, Any]:
     """A copy of *recipe* with one scenario step appended.
 

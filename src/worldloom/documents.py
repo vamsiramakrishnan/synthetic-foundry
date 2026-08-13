@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from . import recipe as recipe_module
+from . import structure
 from .ids import Minter
 from .narrative import references
 from .models import (
@@ -1163,6 +1165,19 @@ class SectionPlan:
     structural or one-off has something to actually do.
     """
 
+    required: bool = True
+    """Whether every document of this type must carry this section.
+
+    ``True`` by default, and that default is what makes `structure.py`'s
+    omission safe to enable globally: a type nobody has annotated has no
+    optional sections, so a structural genome cannot strip the section that
+    carried a fact the narration contract requires and turn a valid document
+    into one that trips ``required_fact_omitted``. Marking a section optional is
+    a deliberate statement that a reader would not find its absence strange —
+    an appendix, a standing-exposure note, a "what we are doing about it" that
+    a quiet month genuinely would not have.
+    """
+
 
 _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
     "cfo_variance_memo": (
@@ -1191,6 +1206,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Report whether the close met its committed date and, if not, what stopped it. "
             "Distinguish a calendar impact from a P&L impact explicitly — conflating them "
             "is the most common error in this kind of memo.",
+            required=False,
         ),
         SectionPlan(
             "Recommendation", ("ops.remediation", "ops.root_cause_classification", "ops.mapping_table_owner"), "any",
@@ -1216,6 +1232,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Focus next period", ("metric.",), "any",
             "Name the one or two measures the committee should watch, and why. Forward-"
             "looking, brief, and free of operational detail.",
+            required=False,
         ),
     ),
     "incident_rca": (
@@ -1263,6 +1280,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Contributing factors", ("ops.previous_similar_incident", "ops.workaround"), "any",
             "What made this more likely or harder to catch. Recurrence is the strongest "
             "signal available; if there is precedent, lead with it.",
+            required=False,
         ),
         SectionPlan(
             "Actions", ("ops.remediation",), "any",
@@ -1294,6 +1312,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Next steps", ("ops.cause",), "any",
             "What the team is doing about it right now. Provisional by nature. This page is "
             "never updated, so it must not hedge in a way that would age well.",
+            required=False,
         ),
     ),
     "knowledge_article": (
@@ -1325,6 +1344,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Watch items", ("metric.",), "any",
             "What this unit should watch next period, if the metrics given warrant "
             "anything. One or two sentences; skip gracefully if nothing does.",
+            required=False,
         ),
     ),
     "close_calendar": (
@@ -1345,6 +1365,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "The date moved. State what it moved to and what the standing rule is when it "
             "does. Procedural register — this is read by people looking up a rule, not by "
             "people who want to know how the period went.",
+            required=False,
         ),
     ),
 
@@ -1410,6 +1431,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Precedent, and what it says about whether this scope is enough. If there "
             "is a prior occurrence, lead with it — a fix that did not hold is the "
             "strongest argument available for widening the scope.",
+            required=False,
         ),
     ),
     "peak_trading_review": (
@@ -1545,6 +1567,11 @@ _OUTLINE_VARIANTS: dict[str, tuple[tuple[SectionPlan, ...], ...]] = {}
 def _variant_for(world: Any, intent: ArtifactIntent) -> tuple[SectionPlan, ...]:
     """Which outline this particular document gets.
 
+    Two decisions, in order: which of a type's authored variants, then which of
+    that variant's sections. Both live in `structure.py` — the choosing was
+    here first and moved there so the two compose in one place, and its
+    measurement is worth keeping in front of whoever reads this next.
+
     Chosen by hashing the intent's own id, not by cycling an ordinal. The
     ordinal read beautifully — "rotate the variants over the documents of a
     type, in minted order" — and it aliased to zero at the shipped shape:
@@ -1561,14 +1588,21 @@ def _variant_for(world: Any, intent: ArtifactIntent) -> tuple[SectionPlan, ...]:
     walk order, `crc32` is defined byte-for-byte, and neither knows the clock.
     A document's shape still never moves when a later period adds another of
     its type — its id is already minted.
-    """
-    variants = _OUTLINE_VARIANTS.get(intent.artifact_type)
-    default = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
-    if not variants:
-        return default
-    from zlib import crc32
 
-    return variants[crc32(f"{intent.artifact_type}:{intent.id}".encode()) % len(variants)]
+    The genome comes off the *recipe*, not off a `World` field and not off a
+    process global. The recipe is already the thing that survives to disk and
+    drives replay, so a corpus whose documents were shaped by a genome resolves
+    the same shapes when it is loaded back, and a rebuild reproduces them
+    without anything being threaded through four domain builders.
+    """
+    genome = recipe_module.structure_of(getattr(world, "_recipe", None))
+    key = f"{intent.artifact_type}:{intent.id}"
+    variants = _OUTLINE_VARIANTS.get(intent.artifact_type)
+    if variants:
+        chosen: tuple[SectionPlan, ...] = tuple(structure.choose(variants, key=key, genome=genome))
+    else:
+        chosen = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
+    return structure.derive(chosen, key=key, genome=genome)
 
 
 _MEASURES_ALL = ("financial.revenue.", "financial.gross_profit.",

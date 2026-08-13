@@ -219,6 +219,35 @@ def build(
             "default) rebuilds every existing corpus byte for byte."
         ),
     ),
+    section_omission: int = typer.Option(
+        0, "--section-omission", min=0, max=1000,
+        help=(
+            "Per-mille chance that any one *optional* section is left out of any "
+            "one document, so a type emits a subset of its outline rather than "
+            "all of it every time. This is swarm testing applied to documents: "
+            "sections compete for a reader's attention exactly as test features "
+            "compete for room, and a corpus whose every close pack carries the "
+            "same five headings teaches a retriever the headings. Sections are "
+            "required unless a type says otherwise, so 0 — the default — and an "
+            "un-annotated corpus are both byte-identical to before."
+        ),
+    ),
+    outline_floor: int = typer.Option(
+        1, "--outline-floor", min=1,
+        help=(
+            "The fewest sections a document may end up with. Omission restores "
+            "sections in the order their author wrote them until this is met."
+        ),
+    ),
+    variant_bias: int = typer.Option(
+        0, "--variant-bias", min=0,
+        help=(
+            "Rotate which authored outline variant each document gets. Two "
+            "tenants built from one engine with different biases disagree about "
+            "every document's shape, which is most of what stops a mosaic "
+            "sharing one shape vocabulary."
+        ),
+    ),
     employees: int = typer.Option(None, "--employees", help="Override the archetype's stated headcount."),
     headcount_end: int = typer.Option(
         None,
@@ -1035,6 +1064,29 @@ def build(
             return built
         return built.extend(recipe=with_locale(built.recipe, locale))
 
+    def _shaped(built: Any) -> Any:
+        """*built* with its structural genome recorded on its recipe.
+
+        Applied to the world rather than passed through the spec so that a
+        domain registered outside this repository — which has no reason to know
+        what a structural genome is — still gets one. The recipe is where the
+        document compiler reads it from and where replay reads it back, so this
+        one line is the whole threading.
+
+        A strict no-op on the default path: `with_structure` declines to write
+        the key for a classic genome, so an unflagged build produces the recipe
+        it always did, byte for byte.
+        """
+        from .recipe import with_structure
+        from .structure import StructuralGenome
+
+        genome = StructuralGenome(
+            omission=section_omission, floor=outline_floor, variant_bias=variant_bias
+        )
+        if not genome.varies:
+            return built
+        return built.extend(recipe=with_structure(built.recipe, genome))
+
     def _under_physics(spec: Any) -> Any:
         """*spec* rebound to the requested physics, untouched on the default path.
 
@@ -1123,7 +1175,7 @@ def build(
                    else {"policies": policies or resolution.policies}),
             )
         ))
-        world = _localised_recipe(_localised(builder).build())
+        world = _shaped(_localised_recipe(_localised(builder).build()))
         # The built-in runs unless an authored episode declared itself its
         # stand-in. Announced rather than silent: a skipped episode is a
         # different corpus, and the one thing worse than the collision is a
@@ -1182,7 +1234,7 @@ def build(
             carried_year = getattr(builder, "seasonality", None)
             if carried_year is not None:
                 claimed_calendar.append(carried_year)
-        world = _localised_recipe(_localised(builder).build())
+        world = _shaped(_localised_recipe(_localised(builder).build()))
 
     workforce = None
     workforce_path: tuple[int, ...] | None = None
@@ -3350,6 +3402,16 @@ def diversity(
             "same sentences."
         ),
     ),
+    effective: bool = typer.Option(
+        False, "--effective",
+        help=(
+            "Also report the Vendi score — the *effective* number of distinct "
+            "shapes, which is what a count of distinct shapes overstates. Thirty "
+            "shapes that differ by one section each are closer to four documents "
+            "than to thirty, and only a metric that reads the similarity matrix "
+            "rather than counting equality classes can say so."
+        ),
+    ),
 ) -> None:
     """Fingerprint every compilable artifact and report how structurally varied the batch is.
 
@@ -3412,6 +3474,61 @@ def diversity(
     else:
         batch = report(fingerprints)
         console.print(str(batch))
+
+        if effective:
+            # The count and the effective count are two different readings of
+            # one batch, and the gap between them is the finding.
+            #
+            # `1 - compiler.diversity.distance` is the obvious kernel here and
+            # it is wrong. That blend is a metric in [0, 1], which buys symmetry
+            # and a unit diagonal but *not* positive semi-definiteness — and
+            # `vendi` reads the eigenvalues as a probability distribution, so a
+            # negative one makes the score meaningless rather than imprecise.
+            # Measured on fingerprints shaped the way `stats.census` actually
+            # produces them (empty `layouts`, empty `style_key`, so the
+            # Levenshtein term carries most of the blend): 11 of 400 random
+            # single-type batches and 13 of 400 three-type batches are not PSD,
+            # worst eigenvalue -0.003. It passes on most corpora and raises on
+            # about three in a hundred, which is the worst way for a reading to
+            # be wrong.
+            #
+            # Jaccard over sets *is* PSD by construction, so the kernel is a
+            # feature set instead: the artifact type, the density bucket, the
+            # section count, and the adjacent component pairs. Bigrams for the
+            # reason `compiler.diversity` already gives for `_NGRAM_SIZE = 2` —
+            # the smallest window that sees adjacency — and the three scalar
+            # features so the set is never empty, which would make Jaccard 0/0
+            # for a fingerprint whose composition resolved to nothing.
+            from .vendi import vendi_of
+
+            def features(fp: Fingerprint) -> frozenset[tuple[str, ...]]:
+                pairs = zip(fp.components, fp.components[1:], strict=False)
+                return frozenset(
+                    {
+                        ("type", fp.artifact_type),
+                        ("density", fp.density_bucket),
+                        ("sections", str(fp.section_count)),
+                    }
+                    | {("bigram", a, b) for a, b in pairs}
+                )
+
+            sets = [features(fp) for fp in fingerprints]
+
+            def jaccard(a: frozenset[Any], b: frozenset[Any]) -> float:
+                union = len(a | b)
+                return 1.0 if not union else len(a & b) / union
+
+            score = vendi_of(sets, jaccard)
+            distinct = len({fp.digest() for fp in fingerprints})
+            console.print(
+                f"\neffective shapes: [bold]{score:.1f}[/bold] of {distinct} distinct"
+                f" over {len(fingerprints)} artifacts"
+            )
+            if distinct > 1:
+                console.print(
+                    f"[dim]  {score / distinct:.0%} of the distinct count survives"
+                    " being read as a similarity rather than an equality[/dim]"
+                )
 
         if verbose:
             # `DiversityReport.__str__` already gives a distinct-shape *count* per
