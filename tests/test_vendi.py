@@ -385,13 +385,49 @@ def test_a_non_psd_kernel_is_refused() -> None:
 
 
 def test_noise_scale_negative_eigenvalues_are_clamped_not_refused() -> None:
-    """A genuine kernel whose smallest eigenvalue comes back at -1e-17 must
-    score, not raise. Built rank-deficient on purpose — that is where LAPACK
-    puts the noise."""
+    """A kernel whose smallest eigenvalue is negative at noise scale must score,
+    not raise.
+
+    The negative eigenvalue is *constructed*, not hoped for. This test first
+    built a rank-deficient Gram matrix and asserted ``eigvalsh(...).min() < 0``
+    on the theory that structural zeros come back as negative dust — which is
+    where LAPACK puts them on some builds and not others. It passed locally and
+    failed on CI at ``+6.9e-17``, because the sign of that dust is a property of
+    whichever BLAS the machine linked, not of anything this repository
+    controls. `vendi.py`'s own docstring makes exactly this point about
+    ``eigvalsh`` and it is worth not re-learning.
+
+    ``[[1, 1 + e], [1 + e, 1]]`` has eigenvalues ``2 + e`` and ``-e`` in closed
+    form, so at ``e = 1e-15`` the smallest is negative, inside the noise band,
+    and recovered to within ~2e-16 on any build — the clamp branch is exercised
+    deterministically.
+    """
+    epsilon = 1e-15
+    kernel = np.array([[1.0, 1.0 + epsilon], [1.0 + epsilon, 1.0]])
+    assert float(np.linalg.eigvalsh(kernel).min()) < 0.0
+    assert vendi(kernel) == pytest.approx(1.0)
+
+
+def test_the_structural_zeros_of_a_rank_deficient_kernel_are_flattened() -> None:
+    """The real-world shape of the case above: a sample containing a duplicate.
+
+    Asserted on magnitude rather than sign for the reason the test above
+    records. What matters is that the dust — whichever side of zero this
+    machine's LAPACK puts it on — is inside the band and gets flattened, so
+    ``order=0`` reports the true rank rather than counting numerical noise as
+    structure.
+
+    Four vectors, but they live in the plane, so the Gram matrix is 4x4 of rank
+    **2** and two of its four eigenvalues are structural zeros. That is the
+    density of dust `_EIGENVALUE_NOISE` exists for: without the positive half of
+    the clamp, ``order=0`` here reads 4.
+    """
     vectors = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.6, 0.8]])
     kernel = vectors @ vectors.T
-    assert float(np.linalg.eigvalsh(kernel).min()) < 0.0
+    assert np.linalg.matrix_rank(kernel) == 2
+    assert abs(float(np.linalg.eigvalsh(kernel).min())) <= 1e-12
     assert 1.0 <= vendi(kernel) <= 4.0
+    assert vendi(kernel, order=0) == pytest.approx(2.0)
 
 
 @pytest.mark.parametrize(
