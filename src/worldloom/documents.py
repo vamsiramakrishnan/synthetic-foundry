@@ -1270,6 +1270,13 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "belief examined and ruled out at the time, not as an error — the point is "
             "what the evidence supported then, not blame now. The hypothesis itself is "
             "cited under Root cause; this section owns only the ruling-out.",
+            # Optional because an incident that went straight to its cause has
+            # no false trail to record, and a review without one reads as a
+            # short investigation rather than a truncated document. The
+            # hypothesis it tested is cited under Root cause — which is
+            # required — so dropping this loses the ruling-out and never the
+            # cause.
+            required=False,
         ),
         SectionPlan(
             "Root cause", ("ops.cause", "ops.root_cause_classification", "ops.mapping_table_owner"), "any",
@@ -1325,6 +1332,12 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Cause", ("ops.cause", "ops.mapping_table_owner"), "any",
             "Why it happens, briefly, and who to go to. Enough that the procedure below "
             "makes sense; not a root-cause analysis.",
+            # Optional on the article's own argument: the Procedure below says
+            # a reader "should be able to follow this without understanding the
+            # cause", so an article that is symptom then steps is the ordinary
+            # runbook rather than a defective one. Procedure stays required —
+            # it is what the article is for.
+            required=False,
         ),
         SectionPlan(
             "Procedure", ("ops.workaround",), "any",
@@ -1405,6 +1418,12 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "What is being run in the meantime and on what basis. Provisional register — "
             "this is written while the incident is open and will be read by people "
             "deciding whether to wait.",
+            # Optional because an assessment issued before anybody has a
+            # workaround has no holding position to state, and that is the
+            # normal case for the first hour this document exists to serve.
+            # "What it reaches" — its own purpose calls it the whole point of
+            # the assessment — stays required.
+            required=False,
         ),
     ),
     "remediation_scope_review": (
@@ -1455,6 +1474,12 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "What it says about the plan", ("metric.",), "any",
             "What the peak's own measures imply for the rest of the year. Forward-"
             "looking and short; skip gracefully if the measures given say nothing.",
+            # The purpose already said this: "skip gracefully if the measures
+            # given say nothing" is a section declaring its own conditionality,
+            # the same tell `unit_close_commentary/Watch items` carries. A
+            # forward look is the first thing a review of a month that has
+            # already happened drops.
+            required=False,
         ),
     ),
     "audit_committee_pack": (
@@ -1644,6 +1669,11 @@ _OUTLINE_VARIANTS.update({
                 "Position", _MEASURES_ALL, "unit",
                 "The rest of the month, briefly, for the record. Lines that"
                 " behaved get a clause each.",
+                # A for-the-record trailer, and this variant says so: it leads
+                # with the exception, and "the rest of the month, briefly" is
+                # what a partner cuts when there is nothing else to report.
+                # "What moved" and "Why" carry the argument and stay required.
+                required=False,
             ),
         ),
         (
@@ -1693,6 +1723,13 @@ _OUTLINE_VARIANTS.update({
                                       "ops.workaround"), "any",
                 "What is still true after the fix. This is the section a"
                 " reader six months later is looking for.",
+                # The variant's own "Contributing factors": same fact kinds,
+                # same judgement. An incident with no precedent and no residual
+                # workaround has no standing exposure, and a review that says
+                # so by saying nothing is the one a reader expects. Marked here
+                # as well as in variant 0 so the two arguments about one
+                # incident vary alike rather than one of them being frozen.
+                required=False,
             ),
             SectionPlan(
                 "Actions", ("ops.remediation",), "any",

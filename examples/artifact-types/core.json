@@ -46,7 +46,8 @@
             "reserves.risk_margin_policy_pct"
           ],
           "scope": "any",
-          "purpose": "One paragraph: the standing margin policy this valuation was performed under."
+          "purpose": "One paragraph: the standing margin policy this valuation was performed under.",
+          "required": false
         }
       ]
     },
@@ -386,7 +387,8 @@
             "ops.cause_ruled_out"
           ],
           "scope": "any",
-          "purpose": "State how the initial attribution was closed: the evidence supplied is the refutation, and the belief it tested is implicit in it. Write it as a belief examined and ruled out at the time, not as an error — the point is what the evidence supported then, not blame now. The hypothesis itself is cited under Root cause; this section owns only the ruling-out."
+          "purpose": "State how the initial attribution was closed: the evidence supplied is the refutation, and the belief it tested is implicit in it. Write it as a belief examined and ruled out at the time, not as an error — the point is what the evidence supported then, not blame now. The hypothesis itself is cited under Root cause; this section owns only the ruling-out.",
+          "required": false
         },
         {
           "heading": "Root cause",
@@ -463,7 +465,8 @@
             "capital.collateral_treatment"
           ],
           "scope": "any",
-          "purpose": "What the collateral actually was, against what the working paper assumed."
+          "purpose": "What the collateral actually was, against what the working paper assumed.",
+          "required": false
         },
         {
           "heading": "Remediation",
@@ -479,7 +482,8 @@
             "capital.restatement_reason"
           ],
           "scope": "any",
-          "purpose": "The correction as lodged, in one paragraph, for the committee's record."
+          "purpose": "The correction as lodged, in one paragraph, for the committee's record.",
+          "required": false
         }
       ]
     },
@@ -521,7 +525,8 @@
             "ops.mapping_table_owner"
           ],
           "scope": "any",
-          "purpose": "Why it happens, briefly, and who to go to. Enough that the procedure below makes sense; not a root-cause analysis."
+          "purpose": "Why it happens, briefly, and who to go to. Enough that the procedure below makes sense; not a root-cause analysis.",
+          "required": false
         },
         {
           "heading": "Procedure",
@@ -684,7 +689,8 @@
             "metric."
           ],
           "scope": "any",
-          "purpose": "What the peak's own measures imply for the rest of the year. Forward-looking and short; skip gracefully if the measures given say nothing."
+          "purpose": "What the peak's own measures imply for the rest of the year. Forward-looking and short; skip gracefully if the measures given say nothing.",
+          "required": false
         }
       ]
     },
@@ -811,7 +817,8 @@
             "close."
           ],
           "scope": "any",
-          "purpose": "One line: prepared from the locked ledger for the quarter."
+          "purpose": "One line: prepared from the locked ledger for the quarter.",
+          "required": false
         }
       ]
     },
@@ -857,7 +864,8 @@
             "capital.rwa_total"
           ],
           "scope": "any",
-          "purpose": "The figures the draft return would file if lodged unaltered."
+          "purpose": "The figures the draft return would file if lodged unaltered.",
+          "required": false
         }
       ]
     },
@@ -896,7 +904,8 @@
             "ops.cause"
           ],
           "scope": "any",
-          "purpose": "What is being run in the meantime and on what basis. Provisional register — this is written while the incident is open and will be read by people deciding whether to wait."
+          "purpose": "What is being run in the meantime and on what basis. Provisional register — this is written while the incident is open and will be read by people deciding whether to wait.",
+          "required": false
         }
       ]
     },

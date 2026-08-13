@@ -611,6 +611,12 @@ documents.register_artifact_types(
             SectionPlan(
                 "Basis of preparation", ("close.",), "any",
                 "One line: prepared from the locked ledger for the quarter.",
+                # Standing boilerplate a reader skips: it restates the basis
+                # every working paper in the bank is prepared on. The paper
+                # argues method and position, so nothing about its purpose
+                # rests on the close facts this section is scoped to — the
+                # correction and the position, which do, stay required.
+                required=False,
             ),
         ),
         "second_line_challenge_memo": (
@@ -635,6 +641,13 @@ documents.register_artifact_types(
             SectionPlan(
                 "Position as drafted", ("capital.cet1_ratio", "capital.rwa_total"), "any",
                 "The figures the draft return would file if lodged unaltered.",
+                # Context rather than content. The memo exists to put a
+                # challenge on the record — Finding, Treatment and Status carry
+                # that and stay required — and the drafted position is the
+                # working paper's own statement, quoted here for convenience.
+                # A challenge memo that cites the paper instead of restating it
+                # is the ordinary second-line memo.
+                required=False,
             ),
         ),
         "internal_audit_review": (
@@ -661,6 +674,12 @@ documents.register_artifact_types(
                 "Treatment", ("capital.collateral_treatment",), "any",
                 "What the collateral actually was, against what the working paper "
                 "assumed.",
+                # Evidence for the ruling rather than the ruling. Audit's
+                # finding is the sequence and the cause, both required; a
+                # review that establishes those and leaves the treatment
+                # comparison to the papers it cites is a shorter review, not an
+                # incomplete one.
+                required=False,
             ),
             SectionPlan(
                 "Remediation", ("ops.remediation",), "any",
@@ -671,6 +690,14 @@ documents.register_artifact_types(
                 "Restatement", ("capital.restatement_reason",), "any",
                 "The correction as lodged, in one paragraph, for the committee's "
                 "record.",
+                # What finance then did, not what audit found — the Ruling is
+                # the review's result and it is first and required. Audit
+                # reviews routinely stop at the remediation and leave the
+                # lodgement to the return. Safe under rule 3 as well: the
+                # restatement reason is stated in prose by
+                # `board_risk_committee_summary` too, so dropping it here
+                # cannot take the corpus's only account of the correction.
+                required=False,
             ),
         ),
         "board_risk_committee_summary": (

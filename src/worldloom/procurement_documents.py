@@ -680,6 +680,13 @@ documents.register_artifact_types(
                 "The undelivered balance carried into next month, and that it is a "
                 "commitment rather than an accrual — nothing has been received, so nothing "
                 "is owed for it yet. One short paragraph.",
+                # A "still outstanding" where nothing is. A settlement that
+                # closed the order out has no balance to carry, and the memo
+                # ends on the approval — which is where a memo about an
+                # approval should end. The three sections that make it the
+                # record of a decision (settlement, authority, what the close
+                # carries) stay required.
+                required=False,
             ),
         ),
         "vendor_master_change": (

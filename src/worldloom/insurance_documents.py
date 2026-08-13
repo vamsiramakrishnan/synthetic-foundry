@@ -530,6 +530,13 @@ documents.register_artifact_types(
                 "Basis of valuation", ("reserves.philosophy", "reserves.risk_margin_policy_pct"), "any",
                 "One paragraph: the standing margin policy this valuation was performed "
                 "under.",
+                # The standing policy, restated. It is the same paragraph in
+                # every valuation this actuary signs, and its absence reads as a
+                # report that assumed its reader knows the house philosophy —
+                # not as a report missing a figure. The central estimate, the
+                # attribution and the booked position stay required; they are
+                # what the committee is measured against.
+                required=False,
             ),
         ),
         "margin_decision_memo": (
