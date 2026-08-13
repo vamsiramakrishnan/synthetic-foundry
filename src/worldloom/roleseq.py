@@ -4,8 +4,18 @@
 applied to the 42 shipped outlines it admitted **34 sequences, of which 1 was
 novel**. The cause is vocabulary, not algorithm — 84 distinct headings over 108
 occurrences at the time it was written, only 7 of them appearing in more than one
-outline, and 10 of those occurrences being the policy family's fixed pair. Two outlines can only be
-spliced where they share an element, and these outlines share almost nothing.
+outline, and 10 of those occurrences being the policy family's fixed pair. Two
+outlines can only be spliced where they share an element, and these outlines
+share almost nothing.
+
+The obvious diagnosis — that the policy family's shared pair was one fixed shape
+absorbing the seams — was tested and is wrong. `policies.py` has since given
+each policy area its own two headings, taking the fleet from 84 distinct
+headings to 102 and from 33 distinct sequences to 42, and the same enumerator
+now admits 43 sequences of which **exactly one** is still novel. Eighteen new
+heading strings bought nine more admitted sequences and no new novelty at all.
+Heading text is not a vocabulary that splices, and authoring more of it does not
+make it one.
 
 So this module stops asking what a section is *called* and asks what it is
 *for*. A ``SectionPlan`` already carries ``kinds`` (the fact-kind prefixes it may

@@ -31,18 +31,31 @@ Measured on this repository's own ``documents._OUTLINES``, taking each outline
 as its heading sequence and a bigram-Jaccard kernel over adjacent headings
 (the ``_NGRAM_SIZE = 2`` argument `compiler.diversity` already makes — bigrams
 are the smallest window that sees adjacency, and adjacency is what "the same
-outline every time" repeats): **42 outlines, 33 distinct heading sequences,
-Vendi score 24.19**. Nine of the forty-two are exact repeats and the count
-prices them at zero; the remaining gap between 33 and 24.2 is the near-repeats
-the count cannot see at all.
+outline every time" repeats): **42 outlines, 42 distinct heading sequences,
+Vendi score 41.86**.
+
+That reading is the *result* of this metric being taken seriously, and the
+before is worth keeping because it is what the metric was for. When first
+measured the fleet read **33 distinct and 24.19 effective** — and the useful
+part was not the gap but its cause. The 33 distinct sequences scored *on their
+own* came to 32.86, so they really were 33 different things and near-repeats
+among them cost 0.14. The entire 8.8 was **concentration**: ten of the 42 types
+shared one two-heading outline. A count of distinct shapes cannot express that
+difference, because it prices a shape used ten times exactly as it prices one
+used once. `policies.py` gave each policy area its own vocabulary, and the
+number moved 17.66 — to within 0.14 of the ceiling, which is the same 0.14 as
+before, still those near-repeats.
 
 Worth knowing where that leaves the existing number: the same matrix read at
-Rényi order ``q = 0`` returns **exactly 33**. The distinct-shape count this
-repository already publishes is not a different measurement, it is the most
-generous member of this family — the one that asks how many directions the
-sample occupies and refuses to ask how much of it is in each. ``q = 1`` asks
-the second question and ``q = inf`` (4.20 here) asks only about the dominant
-mode. Quoting a bracket rather than a point is the honest reading.
+Rényi order ``q = 0`` returns **exactly 42**, matching the distinct-shape count
+this repository already publishes. That count is not a different measurement,
+it is the most generous member of this family — the one that asks how many
+directions the sample occupies and refuses to ask how much of it is in each.
+``q = 1`` asks the second question and ``q = inf`` (33.07 here, against 4.20
+when ten types shared one shape) asks only about the dominant mode. Quoting a
+bracket rather than a point is the honest reading, and the bracket is what made
+the concentration visible: 33 / 24.19 / 4.20 says something a single number
+does not.
 
 **The similarity function is an argument, and that is the point.** This
 repository has several defensible notions of "similar" — `similarity.jaccard`
@@ -111,9 +124,18 @@ _SYMMETRY_TOLERANCE = 1e-9
 #: structural zeros scattered across ``±1e-17`` rather than at zero. Clamping
 #: only the negative half leaves the positive dust standing, and ``order=0``,
 #: whose whole definition is "how many eigenvalues are non-zero", then counts
-#: it: measured on this repository's 42 outlines, **38** where the true rank is
-#: 33. The Shannon default hides this (``p log p`` at 1e-17 is nothing), which
-#: is exactly why it is worth a constant and a comment rather than a `> 0`.
+#: it — reading a rank-deficient kernel as full rank.
+#:
+#: How *much* dust, and on which side of zero, is a property of whichever BLAS
+#: the machine linked and not of anything here. An earlier version of this
+#: comment quoted a specific count from one machine; it did not reproduce on
+#: another, and `tests/test_vendi.py` has its own note on the CI failure that
+#: taught us to stop asserting that class of number. What is stable, and what
+#: the tests pin, is the *behaviour*: the clamp must give the true rank
+#: whichever side the dust lands on, which is asserted by forcing it to each
+#: side in turn. The Shannon default hides the whole problem (``p log p`` at
+#: 1e-17 is nothing), which is exactly why this is worth a constant and a
+#: comment rather than a bare ``> 0``.
 _EIGENVALUE_NOISE = 1e-12
 
 #: Orders this close to 1 are computed as Shannon. The general Rényi form

@@ -1,10 +1,14 @@
 """Outline derivation: a document's shape as a function of a genome.
 
 The measured problem. The shipped fleet renders 988 documents from 42 artifact
-types carrying 108 authored sections between them — and those 108 sections
-resolve to **33 distinct heading sequences**, because `documents._OUTLINES` is a
-constant per type. Every close pack in a corpus is the same skeleton with
-different numbers. `documents._OUTLINE_VARIANTS` was the first answer to this and
+types carrying 108 authored sections between them — and when this module was
+written those 108 sections resolved to **33 distinct heading sequences**,
+because `documents._OUTLINES` is a constant per type. Every close pack in a
+corpus is the same skeleton with different numbers. (The 33 is now 42:
+`policies.py` gave each policy area its own vocabulary rather than ten types
+sharing one pair. That closed the *authoring* gap and leaves this module's
+argument exactly where it was — 42 authored shapes is still a constant per
+type, and still one skeleton per close pack.) `documents._OUTLINE_VARIANTS` was the first answer to this and
 it is the right shape, but it is hand-authored: three of forty-two types have
 alternatives, because writing a fourth outline for a type is a person's afternoon
 and there are 42 types times however many tenants.

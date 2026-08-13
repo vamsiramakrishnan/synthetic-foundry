@@ -30,6 +30,16 @@ forty-billion retailer and a two-billion insurer do not share an expense limit.
 Every clause is otherwise a constant: no draw, no clock, so a corpus that opted
 in replays byte-identical like every other.
 
+**Ten documents, ten vocabularies.** A policy has two sections and the reason
+is in `_outline`. It shipped with two *headings* as well, shared by all ten —
+and that one repeat was the largest measured diversity defect in the corpus:
+the fleet's 42 authored outlines hold 33 distinct heading sequences worth
+**24.19** effective ones, where the 33 distinct sequences scored alone come to
+**32.86** (Vendi, bigram-Jaccard over padded heading sequences, q=1). Every
+policy now names its own two sections out of what it actually governs
+(`Sections`), which is authoring rather than mechanism: the count of sections
+is a claim about documents and stays at two.
+
 **Off by default.** ``--policies none`` is the shipped value and a strict
 no-op — the world object comes back untouched — for the reason ``--estate`` and
 ``--master-data`` are opt-in: every corpus built before this module existed must
@@ -53,7 +63,7 @@ from .models import (
 )
 
 __all__ = [
-    "LEVELS", "LIBRARY", "Clause", "PolicySpec", "applied", "areas",
+    "LEVELS", "LIBRARY", "Clause", "PolicySpec", "Sections", "applied", "areas",
     "check_level", "register", "selected",
 ]
 
@@ -108,6 +118,43 @@ class Clause:
 
 
 @dataclass(frozen=True)
+class Sections:
+    """A policy's two sections, in that policy's own words.
+
+    The *roles* are fixed and the *words* are not, which is the whole of this
+    type. `_outline` argues that a policy has two sections — what the
+    provisions table is for, and what a reader must do about it — and that
+    argument is right and survives. What did not survive measurement is that
+    all ten shipped policies also said it in one *pair of words*: the fleet's
+    42 authored outlines hold 33 distinct heading sequences but only **24.19**
+    effective ones (Vendi, bigram-Jaccard over padded heading sequences, q=1),
+    and the 33 distinct sequences scored alone come to **32.86**. Near-repeats
+    among the 33 cost 0.14; the other 8.7 was ten policies sharing
+    ``Purpose and scope | Responsibilities``. The shape vocabulary was varied,
+    its usage was not.
+
+    So the headings and the opening instruction come from what the policy
+    actually governs — a data retention policy's first section is what is kept
+    and for how long, an expense policy's second is who may approve what.
+
+    ``asks`` is the sentence *only this policy* could carry. Everything true of
+    any policy's section — who it binds, that the figures are stated once in
+    the table below, that a rule with no consequence is guidance — stays in
+    `_outline` and is appended there, so an area registered tomorrow inherits
+    those rules instead of retyping them and drifting from them.
+    """
+
+    covers: str
+    """Heading of the section that says what the provisions are *for*."""
+    covers_asks: str
+    """What that section has to establish, in this policy's own subject matter."""
+    requires: str
+    """Heading of the section that says what a reader must do about them."""
+    requires_asks: str
+    """What that section has to establish. Duties, not a restatement of scope."""
+
+
+@dataclass(frozen=True)
 class PolicySpec:
     """One standing document, and everything about it that is a decision.
 
@@ -129,6 +176,15 @@ class PolicySpec:
     approver: str
     purpose: str
     clauses: tuple[Clause, ...]
+    sections: Sections | None = None
+    """What this policy's two sections are called, and what each one asks for.
+
+    ``None`` derives them from the policy's own title rather than falling back
+    to a shared pair — see `_in_its_own_words`. Optional rather than required
+    because an area registered by a pack is a policy library this repository
+    did not author, and refusing to mint it until somebody has written four
+    sentences of section vocabulary would trade a diversity defect for a wall.
+    """
     level: str = "core"
     revised: bool = False
     """Whether this policy has been revised once already.
@@ -193,6 +249,20 @@ _CORPORATE = (
         area="corporate", domain="governance", audience="all_staff",
         owner="cfo", approver="ceo",
         purpose="Who may commit the company to what, and to what value.",
+        sections=Sections(
+            covers="What may be committed, and by whom",
+            covers_asks=
+                "Say what kind of commitment this ladder governs — a purchase,"
+                " a capital item, a settlement, a write-off — and which spends"
+                " answer to a different document entirely.",
+            requires="Staying inside a limit",
+            requires_asks=
+                "Say when the approval has to exist relative to the commitment,"
+                " and what a commitment made without one is. Name the failure"
+                " this document is written against: a purchase split into two"
+                " to sit under a rung is a breach of the ladder and not a"
+                " clever reading of it.",
+        ),
         clauses=(
             # The four rungs, as a fraction of revenue rather than as constants.
             # A ladder is the one thing in this library that has to be a
@@ -223,6 +293,21 @@ _CORPORATE = (
         area="corporate", domain="governance", audience="all_staff",
         owner="ceo", approver="audit",
         purpose="How people here are expected to behave, and what happens when they do not.",
+        sections=Sections(
+            covers="Conduct, conflicts and gifts",
+            covers_asks=
+                "Say what is expected in the situations where conduct is"
+                " actually tested — a supplier's hospitality, a second job, a"
+                " relative bidding for work — rather than in the abstract. A"
+                " code written in the abstract is one nobody can apply on the"
+                " day it matters.",
+            requires="Declaring, and where a concern goes",
+            requires_asks=
+                "Say how somebody declares an interest and where they take a"
+                " concern when their own manager is the subject of it. A route"
+                " that runs only through the line is a route that cannot be"
+                " used against the line.",
+        ),
         clauses=(
             Clause("gift_threshold", "Gifts above this must be declared",
                    unit="currency", share_of_revenue=2.5e-8),
@@ -243,6 +328,20 @@ _CORPORATE = (
         area="corporate", domain="governance", audience="all_staff",
         owner="cio", approver="ceo", level="full",
         purpose="What the company does when it cannot operate normally.",
+        sections=Sections(
+            covers="When normal operations stop",
+            covers_asks=
+                "Say what kind of disruption this is for, and what the company"
+                " undertakes to have back and in what order. A continuity"
+                " policy that treats every service alike has declined to make"
+                " the one decision it exists to make.",
+            requires="Invoking it, and proving it works",
+            requires_asks=
+                "Say who may invoke it, what happens in the first hour, and how"
+                " the arrangements are tested between events. An arrangement"
+                " nobody has tested is a document rather than a capability, and"
+                " the test interval is what tells the two apart.",
+        ),
         clauses=(
             Clause("rto_hours", "Recovery time objective, critical services",
                    unit="hours", amount=4),
@@ -264,6 +363,19 @@ _FINANCE = (
         area="finance", domain="governance", audience="all_staff",
         owner="controller", approver="cfo",
         purpose="What the company reimburses, and what evidence it wants for it.",
+        sections=Sections(
+            covers="What the company pays for",
+            covers_asks=
+                "Say what somebody may spend the company's money on in the"
+                " ordinary course of their work, and what it will not reimburse"
+                " whatever the receipt says.",
+            requires="Who approves a claim, and what evidence it needs",
+            requires_asks=
+                "Say who signs a claim off, by when it has to be submitted, and"
+                " what has to be attached to it. Be plain about what happens to"
+                " a claim that arrives late or unevidenced — a deadline with no"
+                " consequence is a suggestion, and this one is enforced.",
+        ),
         # The one revised policy in the library. Chosen here because an expense
         # threshold is the figure most likely to be asked about and the most
         # plausible to have moved, so "which limit applied in March" is a
@@ -293,6 +405,20 @@ _FINANCE = (
         area="finance", domain="governance", audience="all_staff",
         owner="controller", approver="cfo", level="full",
         purpose="When to travel, how to book it, and what class of everything.",
+        sections=Sections(
+            covers="When a trip is justified",
+            covers_asks=
+                "Say when travel is the right answer at all and what is"
+                " expected to have been tried first. The cheapest trip is the"
+                " one that does not happen, and a travel policy that opens on"
+                " classes of seat has skipped its first decision.",
+            requires="Booking, class and prior approval",
+            requires_asks=
+                "Say through what channel a trip is booked, what class of"
+                " travel and accommodation the traveller is entitled to, and"
+                " who agrees an international trip before it is booked. Say"
+                " what an unapproved booking costs the person who made it.",
+        ),
         clauses=(
             Clause("advance_booking_days", "Book at least this far ahead",
                    unit="days", amount=14),
@@ -312,6 +438,20 @@ _HR = (
         area="hr", domain="governance", audience="all_staff",
         owner="ceo", approver="ceo",
         purpose="What leave people get, and how it is taken.",
+        sections=Sections(
+            covers="What leave people are entitled to",
+            covers_asks=
+                "Say what kinds of leave exist here and what each is for —"
+                " annual, parental, sick — and be clear about which are an"
+                " entitlement somebody accrues rather than a favour they ask"
+                " for. The difference is the whole document to the reader.",
+            requires="Notice, evidence and carry-over",
+            requires_asks=
+                "Say how leave is requested, how much notice a manager is owed"
+                " for a long absence, and when a medical certificate is"
+                " required. Say what happens to leave nobody took, because that"
+                " is the clause people find out about too late.",
+        ),
         clauses=(
             Clause("annual_leave_days", "Annual leave, days per year",
                    unit="days", amount=20,
@@ -334,6 +474,20 @@ _HR = (
         area="hr", domain="governance", audience="all_staff",
         owner="ceo", approver="ceo", level="full",
         purpose="Where people work, and what the company expects of them there.",
+        sections=Sections(
+            covers="Who may work away from a site",
+            covers_asks=
+                "Say which roles this is open to and, as plainly, which are"
+                " tied to a site and are not. A flexible-work policy that lets"
+                " a store or distribution-centre reader think it might apply to"
+                " them is read as unserious by everybody it excludes.",
+            requires="What the company still expects",
+            requires_asks=
+                "Say what does not change when somebody works elsewhere —"
+                " availability, days in an office, a workspace fit to do the"
+                " job in — and what the company pays towards it. Say who agrees"
+                " an arrangement and who may end one.",
+        ),
         clauses=(
             Clause("office_days", "Days per week in an office", unit="days", amount=3),
             Clause("equipment_allowance", "Home equipment allowance",
@@ -353,6 +507,20 @@ _TECHNOLOGY = (
         area="technology", domain="governance", audience="all_staff",
         owner="cio", approver="ceo",
         purpose="How the company protects what it knows, and who answers for it.",
+        sections=Sections(
+            covers="What is protected, and to what standard",
+            covers_asks=
+                "Say what the company treats as sensitive and what protection"
+                " each class of it gets. Name the systems of record"
+                " specifically: the standard that matters is the one applied to"
+                " the data the company answers to somebody else for.",
+            requires="Access, and what to do when something goes wrong",
+            requires_asks=
+                "Say how access is granted, reviewed and removed, and what a"
+                " person does the moment they suspect a compromise. An"
+                " escalation route nobody can recall at two in the morning is"
+                " not one, so state it in the fewest steps it can be stated in.",
+        ),
         clauses=(
             Clause("password_rotation_days", "Password rotation, days",
                    unit="days", amount=90,
@@ -378,6 +546,21 @@ _TECHNOLOGY = (
         area="technology", domain="governance", audience="all_staff",
         owner="cio", approver="audit", level="full",
         purpose="How long the company keeps each kind of record, and why.",
+        sections=Sections(
+            covers="What is kept, and for how long",
+            covers_asks=
+                "Say what classes of record the company holds and what each"
+                " period is counted *from* — a contract's clock starts when it"
+                " expires and not when it was signed, and a reader who gets"
+                " that wrong deletes something they were obliged to hold.",
+            requires="Disposal, and when the clock stops",
+            requires_asks=
+                "Say what happens at the end of a period, who carries it out,"
+                " and what evidence of the disposal survives it. Say who may"
+                " place a legal hold and what it suspends, because a hold that"
+                " is understood as pausing everything is how a company keeps"
+                " what it promised to destroy.",
+        ),
         clauses=(
             Clause("financial_records_years", "Financial records, years",
                    unit="years", amount=7,
@@ -406,6 +589,20 @@ _PROCUREMENT = (
         area="procurement", domain="governance", audience="all_staff",
         owner="cfo", approver="ceo", level="full",
         purpose="How the company buys things, and from whom.",
+        sections=Sections(
+            covers="What has to be tested in the market",
+            covers_asks=
+                "Say which spends have to be competed and how hard, and what"
+                " the company will not buy on a single quote however urgent the"
+                " requester says it is. Urgency is the argument this policy"
+                " hears most often and is the one it exists to answer.",
+            requires="Orders, invoices and payment",
+            requires_asks=
+                "Say what has to exist before a supplier starts work, what"
+                " becomes of an invoice with nothing behind it, and when a"
+                " supplier is paid. A payment term the company states and does"
+                " not meet is worse than one it never stated.",
+        ),
         clauses=(
             Clause("quote_threshold", "Three quotes required above",
                    unit="currency", share_of_revenue=6e-6),
@@ -736,33 +933,75 @@ def applied(world: Any, level: str | None) -> Any:
 # plugin's clothes (`documents.register_artifact_types`).
 
 
+def _in_its_own_words(spec: PolicySpec) -> Sections:
+    """*spec*'s two sections: what it authored, or a pair derived from its title.
+
+    A registered area that has not authored its own vocabulary still gets two
+    headings no other policy carries, because they are derived from the
+    policy's own title. Deliberately *not* a shared constant pair: one shared
+    pair is the defect `Sections` exists to remove, and a fallback that
+    reintroduced it for every pack-registered area would leave the fix applying
+    only to the ten documents that happened to be measured. Derived headings
+    are duller than authored ones and that is the correct trade — a dull
+    heading is a writing problem, a shared one is a corpus-wide diversity
+    problem that no reader can see and no count reports.
+    """
+    if spec.sections is not None:
+        return spec.sections
+    return Sections(
+        covers=f"What the {spec.title} covers",
+        covers_asks=f"Say what this document governs: {spec.purpose}",
+        requires=f"What the {spec.title} requires",
+        requires_asks="Say what a reader has to actually do about it, and who"
+                      " checks that they did.",
+    )
+
+
 def _outline(spec: PolicySpec) -> tuple[Any, ...]:
-    """The two sections a policy document has.
+    """The two sections a policy document has, in that policy's own words.
 
     Deliberately two rather than five. A policy is short, its content is a
     table, and the prose around a table exists to say what the table is *for*
     and what a reader must do about it — a five-section policy would be four
     sections of padding around one grid, which is what makes real policy
     documents unreadable and would make these unretrievable.
+
+    That argument is about the *count* and it holds. What did not hold is that
+    ten policies also shared one pair of *words*: measured over the fleet's 42
+    authored outlines, 33 sequences are distinct but only 24.19 are effective,
+    and the 33 distinct sequences scored on their own come to 32.86 — so
+    near-repeats among genuinely different documents cost 0.14 and this one
+    repeated pair cost the other 8.7. A reader who opened the data retention
+    policy after the travel policy read the same two headings over a different
+    grid, which teaches them the template rather than the rules.
+
+    So the two *roles* stay and `Sections` names them per policy. Only the
+    heading and the opening instruction vary; the three rules that hold for any
+    policy — that it must say who it binds, that the figures are stated once in
+    the table below, and that a rule with no consequence is guidance — are
+    appended here rather than written out ten times, because ten copies of a
+    rule are ten chances for nine of them to go stale.
     """
     from .documents import SectionPlan
 
     prefix = f"policy.{spec.area}."
+    words = _in_its_own_words(spec)
     return (
         SectionPlan(
-            "Purpose and scope", (prefix,), "any",
-            f"{spec.purpose} Say who this applies to and, as pointedly, who it"
-            " does not — a policy that claims to cover everybody covers nobody"
-            " in particular. Do not restate the figures; the provisions table"
-            " below states them and a reader who finds two statements of the"
-            " same limit has to work out which is authoritative.",
+            words.covers, (prefix,), "any",
+            f"{spec.purpose} {words.covers_asks} Say who this binds and, as"
+            " pointedly, who it does not — a policy that claims to cover"
+            " everybody covers nobody in particular. Do not restate the"
+            " figures; the provisions table below states them and a reader who"
+            " finds two statements of the same limit has to work out which is"
+            " authoritative.",
         ),
         SectionPlan(
-            "Responsibilities", (prefix,), "any",
-            "Say what a reader has to actually do, and who checks. Name the"
-            " role rather than the person, because a policy outlives whoever"
-            " holds a post. Be specific about the consequence of not doing it:"
-            " a policy with no consequence is guidance.",
+            words.requires, (prefix,), "any",
+            f"{words.requires_asks} Name the role rather than the person,"
+            " because a policy outlives whoever holds a post. Be specific about"
+            " the consequence of not doing it: a policy with no consequence is"
+            " guidance.",
         ),
     )
 

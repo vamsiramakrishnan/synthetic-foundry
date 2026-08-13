@@ -119,7 +119,13 @@ def test_every_optional_purpose_still_reads_as_a_complete_instruction() -> None:
 def test_the_reachable_space_is_what_the_wave_claims() -> None:
     """The headline figure, pinned so it cannot rot silently.
 
-    49 classic, 70 under ``omission=400``: 19 optional sections across 15 types.
+    49 classic, 71 under ``omission=400``: 20 optional sections across 16 types.
+    The twentieth is `workforce`'s ``onboarding_checklist/Access and security``,
+    annotated when the policy vocabulary was authored: a corpus built without
+    ``--policies`` has no security clauses for it to cite and already ships the
+    start-date-only checklist, so the shorter document is one this repository
+    produces rather than one this annotation invents.
+
     The classic half is the more important assertion of the two — it is the
     byte-identity guarantee stated as a number, because every corpus in this
     repository is built without a genome and CI diffs them. If classic ever
@@ -131,39 +137,50 @@ def test_the_reachable_space_is_what_the_wave_claims() -> None:
     assert classic == len(outlines) == 49
 
     reachable = sum(structure.space(outline, OMISSION) for _, outline in outlines)
-    assert reachable == 70, (
-        f"reachable heading sequences is {reachable}, not 70 — if you have"
+    assert reachable == 71, (
+        f"reachable heading sequences is {reachable}, not 71 — if you have"
         " annotated a section, say so here and in the module's own comment"
     )
-    assert len(optional_sections()) == 19
+    assert len(optional_sections()) == 20
 
 
 def test_the_policy_family_is_deliberately_not_annotated() -> None:
-    """Ten types share ``Purpose and scope | Responsibilities``, and both stay.
+    """Ten types, two sections each, and both of every pair stay required.
 
     Marking either optional across that family produces ten policies that are
-    sometimes half a policy: a policy with no responsibilities names nobody who
-    has to do anything, and one with no purpose and scope is a list of duties
-    that does not say who it binds. Neither absence is one a reader would fail
-    to notice, so neither clears the rule — the answer for this family is *more*
-    sections (a review cycle, an exceptions clause, a related-policies note),
-    which is authoring work in `policies.py` rather than annotation.
+    sometimes half a policy: a policy with no duties names nobody who has to do
+    anything, and one that never says what it governs is a list of duties that
+    does not say who it binds. Neither absence is one a reader would fail to
+    notice, so neither clears the rule.
 
-    Pinned here rather than left as a note, because the next annotator sweeping
-    for two-section types will find this family first and it looks like the
-    easiest twenty shapes on the board. Changing the decision means authoring
-    those sections and then deleting this test, in that order.
+    This test used to identify the family by the pair of headings all ten
+    shared — ``Purpose and scope | Responsibilities`` — and to say that the
+    answer for it was *more* sections. That was half right and the half it got
+    wrong was measured afterwards: the sharing cost the fleet 8.7 of its 32.9
+    effective heading sequences, and the fix was ten *vocabularies* rather than
+    a third section, because the two-section argument in `policies._outline`
+    was never the problem. So the family is now found through
+    ``policies.by_artifact_type()``, which is what it always was, and the
+    surviving assertion is the one about annotation. Their distinctness is
+    `tests/test_policy_vocabulary.py`'s to hold, since that is now a claim
+    about ten documents rather than about one shared tuple.
     """
-    policies = [
+    from worldloom import policies as policy_library
+
+    family = set(policy_library.by_artifact_type())
+    outlines = [
         (artifact_type, outline)
         for artifact_type, outline in installed()
-        if [section.heading for section in outline]
-        == ["Purpose and scope", "Responsibilities"]
+        if artifact_type in family
     ]
-    assert len(policies) == 10
-    for artifact_type, outline in policies:
+    assert len(outlines) == 10
+    for artifact_type, outline in outlines:
+        assert len(outline) == 2, (
+            f"{artifact_type} no longer has two sections; `policies._outline`"
+            " argues for exactly two and this is where that is pinned"
+        )
         for section in outline:
             assert section.required, (
                 f"{artifact_type}/{section.heading}: half a policy is not a"
-                " shorter policy — give the family more sections instead"
+                " shorter policy — vary the words, not the count"
             )

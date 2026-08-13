@@ -1,12 +1,12 @@
 """Sequence synthesis from examples: novel wholes made only of familiar parts.
 
 This repository authors 42 document outlines by hand (``documents._OUTLINES``),
-which hold 33 distinct heading sequences between them. Both numbers are ceilings
-on structural variety, and neither moves without somebody typing another outline.
+holding 42 distinct heading sequences between them. Both numbers are ceilings on
+structural variety, and neither moves without somebody typing another outline.
 The two obvious ways past that ceiling are both wrong. A generator that orders
 sections freely produces documents no company would issue — an RCA that opens on
 "Appendix", a policy whose responsibilities precede its purpose. A generator
-restricted to the 33 produces nothing that was not already authored.
+restricted to the authored 42 produces nothing that was not already authored.
 
 The middle path is Merrell's model synthesis and Gumin's WaveFunctionCollapse:
 accept a sequence exactly when **every local window of it already occurred
@@ -19,14 +19,26 @@ That is the mechanism. What it yields depends entirely on how much local context
 the examples share, and this module reports on that rather than assuming it. On
 the 42 shipped outlines at order 2, the measurement is:
 
-    84 distinct headings across 108 heading occurrences
-    63 distinct bigrams, 33 start windows, 33 end windows
-    34 sequences admitted in total (all lengths), of which 1 is novel
+    102 distinct headings across 108 heading occurrences
+    72 distinct bigrams, 42 start windows, 42 end windows
+    43 sequences admitted in total (all lengths), of which 1 is novel
 
 One. The heading vocabulary is very nearly disjoint across document types — only
-seven headings appear in more than one outline, and ten of those appearances are
-the policy family's shared "Purpose and scope"/"Responsibilities" pair, which
-sits inside a single fixed shape — so there are almost no seams to splice at.
+five headings appear in more than one outline — so there are almost no seams to
+splice at.
+
+**That conclusion survived the vocabulary changing underneath it, which is the
+strongest thing this module has to say.** When first measured, the ten policy
+types shared one "Purpose and scope"/"Responsibilities" pair and the reading was
+84 distinct headings, 63 bigrams, 34 admitted, 1 novel. `policies.py` then gave
+each policy area its own two headings, taking distinct sequences from 33 to 42
+and headings from 84 to 102 — eighteen new heading strings, nine more admitted
+sequences, and **still exactly one novel one**. The obvious diagnosis, that the
+policy family's shared pair was a fixed shape absorbing the only seams, was
+wrong: removing it changed nothing here. Heading text is not a vocabulary that
+splices, and no amount of authoring more of it will make it one. `roleseq.py`
+is what came of that — the same enumerator over ``scope:kind`` symbols admits
+159 novel shapes.
 The mechanism is not at fault and neither is the order: this is a *vocabulary*
 result. Loosening to order 1 does not fix it, it only stops the model meaning
 anything — 47 billion admitted sequences at length 6, essentially all of them
