@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from . import columns as columns_module
 from . import recipe as recipe_module
 from . import structure
 from .ids import Minter
@@ -380,63 +381,61 @@ def _money(amount: float | None, fact_id: str | None = None) -> Cell:
     return Cell(value=amount, fact_id=fact_id)
 
 
-#: The eight P&L columns, and the fact kind each reads.
-#:
-#: `gm_pct_budget` was absent for a long time, and its absence was invisible:
-#: `generators/finance.py` mints `financial.gross_margin_pct.budget` for every
-#: category and unit, `generators/planning.py` puts those facts in the
-#: workbook's required set, and no column here read them — 114 facts a build,
-#: planned into a document and carried by none of it. Nothing complained,
-#: because until `validate.carried_evidence` existed nothing compared what an
-#: intent asked a document to carry against what the compiled document holds.
-#: Budget margin also earns its place on the sheet: a division can beat its
-#: gross-profit budget while missing the rate it was supposed to earn it at,
-#: and with actual margin alone a reader cannot see that.
-_MEASURES: dict[str, str] = {
-    "revenue_budget": "financial.revenue.budget",
-    "revenue_actual": "financial.revenue.actual",
-    "revenue_variance": "financial.revenue.variance",
-    "gp_budget": "financial.gross_profit.budget",
-    "gp_actual": "financial.gross_profit.actual",
-    "gp_variance": "financial.gross_profit.variance",
-    "gm_pct_budget": "financial.gross_margin_pct.budget",
-    "gm_pct_actual": "financial.gross_margin_pct.actual",
-}
+#: How a column's declared unit is spelled to a spreadsheet. The `columns`
+#: module says whether a figure is an amount or a rate — which is what decides
+#: whether it adds up — and this module says how that is written, because a
+#: number format is a rendering decision and the sheet spec is not a renderer.
+_UNIT_FORMAT: dict[str, str] = {"money": MONEY_FORMAT, "percent": PERCENT_FORMAT}
 
-#: Columns computed from the two beside them, and from which. Declared once here
-#: so a category row, a unit subtotal, and the group row all recompute the same
-#: way — a subtotal that pasted its variance while the rows above computed theirs
-#: is exactly the disagreement this project exists to prevent.
-_DERIVED: dict[str, tuple[FormulaKind, list[str]]] = {
-    "revenue_variance": (FormulaKind.DIFFERENCE, ["revenue_actual", "revenue_budget"]),
-    "gp_variance": (FormulaKind.DIFFERENCE, ["gp_actual", "gp_budget"]),
-    "gm_pct_budget": (FormulaKind.RATIO_PCT, ["gp_budget", "revenue_budget"]),
-    "gm_pct_actual": (FormulaKind.RATIO_PCT, ["gp_actual", "revenue_actual"]),
-}
+
+def _columns(sheet: columns_module.Sheet) -> list[Column]:
+    """A declared sheet as the IR's column list."""
+    return [
+        Column(key=column.key, label=column.label,
+               number_format=_UNIT_FORMAT[column.unit])
+        for column in sheet.columns
+    ]
+
+
+# The four tables below were four hand-written constants that had to agree with
+# each other and with three `Column` lists — seven places, and the repo has
+# already paid twice for them disagreeing (`columns.py`'s docstring records both
+# defects with their counts). They are now projections of one declaration,
+# computed at import.
+#
+# They stay module globals, and are not replaced by calls into `columns`, for
+# two reasons. `_measure_row` reads them once per column per row over thousands
+# of rows, so a dict is the right lookup structure and building it once is what
+# "declared spec, compiled table" means. And `tests/test_carried_evidence.py`
+# reproduces the `gm_pct_budget` defect by *mutating* `_MEASURES` and `_DERIVED`
+# in place — the one test that proves a column reading no fact kind is caught —
+# so these names are load-bearing, not vestigial. `Sheet`'s projections return
+# fresh containers on every call precisely so that mutation cannot reach the
+# spec.
+
+#: ``column key -> the fact kind it reads``.
+_MEASURES: dict[str, str] = columns_module.PNL.kinds()
+
+#: Columns computed from the two beside them, and from which. Declared once so
+#: a category row, a unit subtotal, and the group row all recompute the same
+#: way — a subtotal that pasted its variance while the rows above computed
+#: theirs is exactly the disagreement this project exists to prevent.
+_DERIVED: dict[str, tuple[FormulaKind, list[str]]] = columns_module.PNL.derivations()
 
 #: Columns a subtotal must *not* sum, because they do not add up. A margin
 #: percentage is a ratio of totals, never the total of ratios; a variance, by
 #: contrast, is additive, so a subtotal sums its children's variances and shows
 #: which of them the group's miss came from.
-_NOT_ADDITIVE = frozenset({"gm_pct_budget", "gm_pct_actual"})
+_NOT_ADDITIVE = columns_module.PNL.not_summable()
 
 #: The same rule stated over fact *kinds* rather than column keys, for the trend
 #: sheets — which are laid out by period rather than by measure, so they cannot
 #: look a column up in `_NOT_ADDITIVE`.
-_RATE_KINDS = frozenset({"financial.gross_margin_pct.actual", "financial.gross_margin_pct.budget"})
+_RATE_KINDS = columns_module.PNL.rate_kinds()
 
 
 def _pnl_columns() -> list[Column]:
-    return [
-        Column(key="revenue_budget", label="Revenue budget", number_format=MONEY_FORMAT),
-        Column(key="revenue_actual", label="Revenue actual", number_format=MONEY_FORMAT),
-        Column(key="revenue_variance", label="Revenue variance", number_format=MONEY_FORMAT),
-        Column(key="gp_budget", label="GP budget", number_format=MONEY_FORMAT),
-        Column(key="gp_actual", label="GP actual", number_format=MONEY_FORMAT),
-        Column(key="gp_variance", label="GP variance", number_format=MONEY_FORMAT),
-        Column(key="gm_pct_budget", label="GM% budget", number_format=PERCENT_FORMAT),
-        Column(key="gm_pct_actual", label="GM% actual", number_format=PERCENT_FORMAT),
-    ]
+    return _columns(columns_module.PNL)
 
 
 class _Facts:
@@ -780,12 +779,15 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         )
 
     # -- Store performance -------------------------------------------------
+    # Region and format describe the *site*, not its month, so they are built
+    # here rather than declared on the sheet: they read no fact, carry no
+    # `fact_id`, and a subtotal leaves them blank. `columns.STORES` is the money
+    # half — the P&L's first three columns narrowed, not a second declaration of
+    # them.
     store_columns = [
         Column(key="region", label="Region"),
         Column(key="format", label="Format"),
-        Column(key="revenue_budget", label="Revenue budget", number_format=MONEY_FORMAT),
-        Column(key="revenue_actual", label="Revenue actual", number_format=MONEY_FORMAT),
-        Column(key="revenue_variance", label="Revenue variance", number_format=MONEY_FORMAT),
+        *_columns(columns_module.STORES),
     ]
     store_money = [c for c in store_columns if c.key in _MEASURES]
 
@@ -2260,12 +2262,13 @@ def _divisional_summary(
     if len(units) < 2:
         return None
 
-    columns = [
-        Column(key="revenue_budget", label="Revenue budget", number_format=MONEY_FORMAT),
-        Column(key="revenue_actual", label="Revenue actual", number_format=MONEY_FORMAT),
-        Column(key="revenue_variance", label="Variance", number_format=MONEY_FORMAT),
-        Column(key="gm_pct_actual", label="GM% actual", number_format=PERCENT_FORMAT),
-    ]
+    # The fourth copy of the same column decisions, now the same declaration
+    # narrowed and relabelled. `columns.DIVISIONAL`'s own comment records what
+    # `columns.lint` has to say about it: the margin ratio's numerator column is
+    # not on this table, so XLSX emits no formula for it. Latent — the memo is a
+    # Word document — and reported rather than fixed, because both fixes change
+    # what a reader sees.
+    columns = _columns(columns_module.DIVISIONAL)
     rows = [
         _measure_row(index, key=unit.id, label=unit.name, subject=unit.id,
                      period=period, columns=columns)
