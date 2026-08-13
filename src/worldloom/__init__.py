@@ -90,6 +90,14 @@ from . import messiness  # noqa: F401
 # fails loudly in `AuthoredEpisode.run`, not with `unknown scenario` here.
 from . import episodes as _episodes  # noqa: F401
 
+# And for the cohort axis's check group, which is a registration and nothing
+# else. It has to be here rather than reached from `episodes`: the group reads
+# the *installed* specs at check time, so nothing imports it on the way to
+# building a world, and a corpus validated in a fresh process (`worldloom
+# validate <corpus>`) would otherwise have its grids checked by nobody while
+# reporting a clean run — the failure mode `register_domain_checks` names.
+from . import cohorts as _cohorts  # noqa: F401
+
 # And once more for the standing documents. `policies` registers ten artifact
 # types by being imported, and it was reached only from inside a world
 # builder's `build()` — so a process that had not built with `--policies` did

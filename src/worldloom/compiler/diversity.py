@@ -859,7 +859,105 @@ def assign(
     return tuple(chosen)
 
 
+# ---------------------------------------------------------------------------
+# 4. Across corpora
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CrossReport:
+    """How much of a fleet is the same corpus wearing different names.
+
+    The within-corpus report above cannot see this failure: five companies can
+    each score a respectable unique-shape ratio while every one of them holds
+    the *same* shapes — a mosaic whose whole point was contrast, byte-shuffled
+    into five copies of one company. Measured here as it was first noticed:
+    thirty-one benchmark questions asked byte-identically across five mosaic
+    worlds, which no single corpus's report could have flagged.
+
+    Shape-level only, deliberately. Prose-level overlap is a different failure
+    with a different tool (`stats.near_duplicate_clusters` over a pooled
+    passage list — the CLI composes the two); conflating them here would
+    repeat the exact structural-versus-prose confusion `--near-duplicates`'s
+    help text warns about.
+    """
+
+    corpora: tuple[str, ...]
+    """Names in the order given — pair keys below preserve it."""
+
+    counts: Mapping[str, int]
+    """Artifacts fingerprinted per corpus — the denominators."""
+
+    shared_shapes: int
+    """Distinct digests that appear in two or more corpora."""
+
+    shared_share: Mapping[str, float]
+    """Per corpus: the fraction of its artifacts standing on a shape some
+    *other* corpus also has. The number to watch — a corpus at 0.9 here is
+    structurally nine-tenths reproducible from its neighbours."""
+
+    pair_overlap: Mapping[tuple[str, str], float]
+    """Jaccard similarity of digest *sets* per corpus pair: 1.0 is the same
+    shape vocabulary, 0.0 is none in common. Over sets rather than artifact
+    counts so a corpus that repeats a shared shape many times internally
+    (its own report's business) does not double-count as fleet overlap."""
+
+    def __str__(self) -> str:
+        lines = [
+            f"Across {len(self.corpora)} corpora — "
+            f"{self.shared_shapes} shape(s) shared by two or more",
+        ]
+        for name in self.corpora:
+            lines.append(
+                f"  {name:<24} {self.counts[name]:>5} artifact(s), "
+                f"{self.shared_share[name]:>4.0%} on shared shapes"
+            )
+        for (a, b), jaccard in self.pair_overlap.items():
+            lines.append(f"  {a} × {b}: {jaccard:.0%} shape vocabulary in common")
+        return "\n".join(lines)
+
+
+def cross_report(batches: Mapping[str, Sequence[Fingerprint]]) -> CrossReport:
+    """Summarise shape overlap across several corpora's fingerprint batches.
+
+    Iterates *batches* in the order given and nothing else — the same
+    no-``set``-iteration discipline as `report`, because this output lands in
+    CI logs where two runs must diff clean.
+    """
+    names = tuple(batches)
+    digest_sets: dict[str, set[str]] = {
+        name: {fp.digest() for fp in fingerprints} for name, fingerprints in batches.items()
+    }
+    appearance: Counter[str] = Counter()
+    for name in names:
+        appearance.update(digest_sets[name])
+    shared = {digest for digest, corpora in appearance.items() if corpora > 1}
+
+    shared_share = {}
+    for name in names:
+        fingerprints = batches[name]
+        on_shared = sum(1 for fp in fingerprints if fp.digest() in shared)
+        shared_share[name] = (on_shared / len(fingerprints)) if fingerprints else 0.0
+
+    pair_overlap = {}
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            union = digest_sets[a] | digest_sets[b]
+            pair_overlap[(a, b)] = (
+                len(digest_sets[a] & digest_sets[b]) / len(union) if union else 0.0
+            )
+
+    return CrossReport(
+        corpora=names,
+        counts={name: len(batches[name]) for name in names},
+        shared_shapes=len(shared),
+        shared_share=shared_share,
+        pair_overlap=pair_overlap,
+    )
+
+
 __all__ = [
+    "CrossReport",
     "DiversityReport",
     "Fingerprint",
     "QuotaViolation",
@@ -867,6 +965,7 @@ __all__ = [
     "assign",
     "check",
     "collisions",
+    "cross_report",
     "distance",
     "fingerprint",
     "report",

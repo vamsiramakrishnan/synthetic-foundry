@@ -22,6 +22,7 @@ from rich.table import Table
 
 from . import __version__
 from .corpus import CorpusError
+from .validate import ValidationReport
 from .world import World
 
 app = typer.Typer(
@@ -147,8 +148,14 @@ def _compiled(world: World, corpus: str) -> World:
         raise typer.Exit(code=2) from exc
 
 
-def _report(world: World, *, quiet: bool = False) -> bool:
-    report = world.validate()
+def _print_report(report: ValidationReport, *, quiet: bool = False) -> bool:
+    """Print a validation report and say whether it passed.
+
+    Split from `_report` because `validate` needs the report *before* it is
+    printed — it has to catch the corpus errors reconstructing a corpus's own
+    pack can raise, and a helper that validates and prints in one breath gives
+    it nowhere to stand. Every other caller still hands over a world.
+    """
     if report.ok:
         if not quiet:
             console.print(f"[green]✓[/green] coherent — {report.checks_run} checks passed")
@@ -159,6 +166,10 @@ def _report(world: World, *, quiet: bool = False) -> bool:
         for violation in items:
             err.print(f"  [yellow]{violation.code}[/yellow] {violation.subject}: {violation.detail}")
     return False
+
+
+def _report(world: World, *, quiet: bool = False) -> bool:
+    return _print_report(world.validate(), quiet=quiet)
 
 
 @app.command()
@@ -196,6 +207,17 @@ def build(
     incident: bool = typer.Option(
         None, "--incident/--no-incident",
         help="Force the operational incident on or off. Omit to let the seed and lore decide.",
+    ),
+    vary_incidents: bool = typer.Option(
+        False, "--vary-incidents",
+        help=(
+            "Rotate the incident's storyline across periods — a stale FX table one "
+            "month, a duplicated goods receipt the next — instead of the same "
+            "failure retold monthly. Surface only: causality, fact ids and machine "
+            "values are identical either way, and each period's storyline is "
+            "recorded on its recipe step so --replay reproduces it. Off (the "
+            "default) rebuilds every existing corpus byte for byte."
+        ),
     ),
     employees: int = typer.Option(None, "--employees", help="Override the archetype's stated headcount."),
     headcount_end: int = typer.Option(
@@ -246,7 +268,12 @@ def build(
             "own — repeatable. Names an EpisodeSpec the --pack carries under "
             "`episodes` (see the worldloom-process skill for authoring one). This "
             "is how authored sales, legal or project processes ship: the pack "
-            "declares them, this flag runs them, and the recipe replays them."
+            "declares them, this flag runs them, and the recipe replays them. "
+            "Additive unless the episode's spec declares `replaces`, naming the "
+            "built-in episode it stands in for — that one is then not run, "
+            "because two processes minting the same kinds over one period "
+            "collide. It is a property of the episode rather than a flag: an "
+            "authored reserving cycle *is* the reserving cycle in every build."
         ),
     ),
     comparatives: int = typer.Option(
@@ -687,6 +714,14 @@ def build(
     # `packs.archetype_of` installed this pack's specs a few lines up, so a
     # name still missing here is missing everywhere, and failing now beats a
     # world half-built when the second period's step raises.
+    #
+    # Resolved in the same pass: which built-in episode an authored one *stands
+    # in for* (`EpisodeSpec.replaces`). Without it `--episode` is additive — the
+    # domain's own episode runs and then the authored one, over the same period
+    # — and two processes minting the same kinds collide. The decision is the
+    # spec's, never a flag's: that an episode is the reserving cycle is true of
+    # every build that runs it.
+    stands_in_for: dict[str, list[str]] = {}
     if episode:
         from . import episodes as episodes_module
 
@@ -700,6 +735,27 @@ def build(
                     " --pack that declares it."
                 )
                 raise typer.Exit(code=2)
+            replaced = episodes_module.loaded()[episode_name].replaces
+            if replaced:
+                stands_in_for.setdefault(replaced, []).append(episode_name)
+
+    # A substitution this build cannot honour is refused rather than quietly
+    # ignored: the spec says it takes the place of another vertical's episode
+    # (or of a close this loop drives with flags the grammar cannot state), and
+    # building on regardless would run both and report success — the very
+    # collision `replaces` exists to end.
+    built_in_name = (
+        getattr(single_episode, "__name__", "") if single_episode is not None else ""
+    )
+    unhonoured = sorted(name for name in stands_in_for if name != built_in_name)
+    if unhonoured:
+        err.print(
+            f"[red]error:[/red] --episode declares replaces={unhonoured[0]!r}, but this"
+            f" build runs {built_in_name or 'the retail close loop'}; the episode would"
+            " stand in for nothing and both would mint over the same period. Build the"
+            " archetype whose engine owns that episode."
+        )
+        raise typer.Exit(code=2)
 
     # Resolved once, before anything is built, and applied to the builder *and*
     # every episode: the world's organisation and the episode's figures are
@@ -1068,9 +1124,22 @@ def build(
             )
         ))
         world = _localised_recipe(_localised(builder).build())
+        # The built-in runs unless an authored episode declared itself its
+        # stand-in. Announced rather than silent: a skipped episode is a
+        # different corpus, and the one thing worse than the collision is a
+        # build that quietly produced neither what the flag said nor what the
+        # archetype implies. Nothing is recorded on the recipe for it — the
+        # steps that ran *are* the record, so the replay drops the same one.
+        standing_in = stands_in_for.get(built_in_name, [])
+        if standing_in:
+            console.print(
+                f"[dim]episode:[/dim] {', '.join(standing_in)} stands in for"
+                f" {built_in_name}, which is not run\n"
+            )
         for index in range(max(1, periods)):
             stamp = _step_period(period, index, domain.period_step_months)
-            world = world.run(_under_physics(single_episode(stamp)))
+            if not standing_in:
+                world = world.run(_under_physics(single_episode(stamp)))
             for episode_name in episode or []:
                 from .episodes import AuthoredEpisode
 
@@ -1295,6 +1364,19 @@ def build(
     year, month = (int(part) for part in period.split("-"))
     from .actors import ActorProviderError
 
+    # One rotation for the whole build, drawn from the world seed under its
+    # own label: period N is the same storyline on every rebuild of this
+    # world, and a different world's seed deals a different order. Classic
+    # first (see `storyline_rotation`), so a one-period build is byte-equal
+    # with the flag on or off.
+    from .generators import operations as operations_module
+    from .rng import Rng
+
+    storyline_order = (
+        operations_module.storyline_rotation(Rng(seed).derive("incident-storylines"))
+        if vary_incidents else None
+    )
+
     def _close(stamp: str, stated: bool | None, index: int) -> Any:
         return MonthEndClose(
             period=stamp,
@@ -1308,17 +1390,20 @@ def build(
             physics=physics_value,
             # Only when a facet put one on the builder — see `claimed_calendar`.
             **({} if not claimed_calendar else {"seasonality": claimed_calendar[0]}),
+            **({} if storyline_order is None
+               else {"storyline": storyline_order[index % len(storyline_order)]}),
         )
 
-    if periods > 1 and single_episode is not None:
-        err.print(
-            f"[red]error:[/red] --periods {periods} is not supported for {domain.name}."
-            f" Multi-period support for single-episode verticals arrives with the episode"
-            f" grammar (Phase 2, `docs/next-phase-plan.md`), which will define carry-forward"
-            f" as declared slots in the episode specification rather than hand-coded per-vertical."
-            f" For now, build one period per world."
-        )
-        raise typer.Exit(code=2)
+    # No blanket multi-period refusal for single-episode domains any more. The
+    # one that stood here predated the episode grammar it was waiting for, and
+    # it outlived its own justification: carry-forward *is* declared slots now,
+    # the mosaic path has stepped these domains multi-period for as long as it
+    # has existed, and measured today banking runs three consecutive quarters
+    # and P2P six consecutive months, both validating clean. The authority on
+    # whether a *particular* scenario supports a second run is the scenario —
+    # `QuarterlyReserving` refuses its own second quarter, loudly and with the
+    # reason (attribution supersession is increment 2) — and a gate here would
+    # only ever disagree with the code that actually knows.
 
     if timeline is not None and single_episode is None:
         # A history rather than a repetition. Note what is *not* here: no new
@@ -2957,11 +3042,27 @@ def validate(
         help="Emit the report as JSON — violations as data, not prose to parse.",
     ),
 ) -> None:
-    """Check a corpus for coherence violations."""
+    """Check a corpus for coherence violations.
+
+    A corpus built from a pack is checked under its own pack: `validate`
+    reconstructs it from the corpus's recipe and installs it before the checks
+    run, so an authored corpus's authored invariants are verified here and not
+    only in the process that built it. See `validate._under_the_corpus_rules`.
+    """
+    world = _load(corpus)
+    # `_load` maps a corpus that cannot be *read* to exit 2; a corpus whose own
+    # rules cannot be *reconstructed* is the same kind of failure and gets the
+    # same exit, one step later. Not caught inside `_report`, which the build
+    # and render commands share: those hold a world they just built in this
+    # process, where the pack is installed already and this cannot arise.
+    try:
+        report = world.validate()
+    except CorpusError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
     if as_json:
         import json as json_module
 
-        report = _load(corpus).validate()
         typer.echo(json_module.dumps({
             "ok": report.ok,
             "checks": report.checks_run,
@@ -2973,7 +3074,7 @@ def validate(
         if not report.ok:
             raise typer.Exit(code=1)
         return
-    if not _report(_load(corpus)):
+    if not _print_report(report):
         raise typer.Exit(code=1)
 
 
@@ -3239,6 +3340,16 @@ def diversity(
             "say the same sentences in all of them."
         ),
     ),
+    across: list[str] = typer.Option(
+        None, "--across",
+        help=(
+            "Additional corpora to compare against — repeatable. Reports shape "
+            "overlap and cross-corpus prose duplicates over the whole set, the "
+            "failure no single corpus's report can see: five mosaic companies can "
+            "each look varied while all five hold the same shapes and say the "
+            "same sentences."
+        ),
+    ),
 ) -> None:
     """Fingerprint every compilable artifact and report how structurally varied the batch is.
 
@@ -3341,6 +3452,50 @@ def diversity(
             console.print(f"[bold]near-duplicate passage groups[/bold] ({len(groups)})")
             for group in groups[:10]:
                 where = ", ".join(sorted({pool[i].artifact_id for i in group}))
+                console.print(f"  ×{len(group)}  {where}")
+                console.print(f"      [dim]{pool[group[0]].text[:110]}…[/dim]")
+
+    if across:
+        # The fleet-level reading no single corpus can give. Shape overlap
+        # first (structure), then prose duplicates over the pooled passages
+        # (surface) — the same two-failure split `--near-duplicates`'s help
+        # text draws, measured across corpora instead of within one.
+        from .compiler.diversity import cross_report
+        from .stats import near_duplicate_clusters
+
+        batches = {corpus: fingerprints}
+        pool = list(passages(world))
+        origin = [corpus] * len(pool)
+        for other_name in across:
+            other = _load(other_name)
+            if not other.artifact_irs:
+                try:
+                    other = other.compile()
+                except ValueError:
+                    pass
+            batches[other_name] = list(census(other).fingerprints)
+            other_passages = list(passages(other))
+            pool.extend(other_passages)
+            origin.extend([other_name] * len(other_passages))
+
+        console.print("")
+        console.print(str(cross_report(batches)))
+
+        groups = near_duplicate_clusters(pool)
+        spanning = [
+            group for group in groups
+            if len({origin[i] for i in group}) > 1
+        ]
+        if not spanning:
+            console.print("[green]✓[/green] no near-duplicate passages span corpora")
+        else:
+            console.print(
+                f"[bold]near-duplicate passages spanning corpora[/bold] ({len(spanning)})"
+            )
+            for group in spanning[:10]:
+                where = ", ".join(sorted({
+                    f"{origin[i]}:{pool[i].artifact_id}" for i in group
+                })[:6])
                 console.print(f"  ×{len(group)}  {where}")
                 console.print(f"      [dim]{pool[group[0]].text[:110]}…[/dim]")
 

@@ -1,0 +1,562 @@
+{
+  "name": "longtail-insurer",
+  "base": "insurance",
+  "description": "A mid-size general insurer whose quarterly reserving cycle is authored data rather than a generator: four accident quarters on a declared cohort axis, revalued every quarter, with the booked reserve standing below the actuary's central estimate on the record.",
+  "company_name": "Corrimal Mutual General Insurance",
+  "industry": "General insurance",
+  "currency": "AUD",
+  "currency_unit": "millions",
+  "annual_revenue": 1650,
+  "employees": 3200,
+  "units": [
+    {
+      "key": "personal",
+      "name": "Personal Lines",
+      "kind": "personal_lines",
+      "share": 0.52,
+      "categories": [
+        {"name": "Motor", "share": 0.56, "margin": 0.08},
+        {"name": "Home", "share": 0.33, "margin": 0.1},
+        {"name": "Travel", "share": 0.11, "margin": 0.05}
+      ],
+      "site_formats": [
+        {"name": "Service Centre", "count": 6, "revenue_weight": 1.0}
+      ]
+    },
+    {
+      "key": "commercial",
+      "name": "Commercial Lines",
+      "kind": "commercial_lines",
+      "share": 0.38,
+      "categories": [
+        {"name": "Public and Products Liability", "share": 0.42, "margin": 0.03},
+        {"name": "Commercial Property", "share": 0.36, "margin": 0.09},
+        {"name": "Professional Indemnity", "share": 0.22, "margin": 0.04}
+      ],
+      "site_formats": [
+        {"name": "Underwriting Office", "count": 4, "revenue_weight": 1.0}
+      ]
+    },
+    {
+      "key": "investments",
+      "name": "Group Investments",
+      "kind": "investments",
+      "share": 0.1,
+      "categories": []
+    }
+  ],
+  "lore": [
+    {
+      "kind": "norm",
+      "assertion": "The reserving committee is shown the actuary's central estimate in full and decides separately how much of it finance books. The two figures are minuted apart on purpose: a committee that only ever saw the booked number could not tell a policy decision from an estimate.",
+      "effective_from": "2019-04",
+      "constrains": [
+        {
+          "kind": "accountability",
+          "target": "chief_actuary/reserves.central_estimate_total",
+          "effect": "The Chief Actuary answers for the central estimate the valuation states",
+          "magnitude": 2.0
+        },
+        {
+          "kind": "accountability",
+          "target": "cfo/reserves.booked_total",
+          "effect": "The Group CFO answers for what is actually carried on the balance sheet",
+          "magnitude": 2.5
+        }
+      ]
+    },
+    {
+      "kind": "constraint",
+      "assertion": "Risk margin is held at the board's standing percentage of the actuarial central estimate and may only be released against a reserving committee recommendation. A release larger than the standing margin leaves the booked reserve below the central estimate, which is a recorded position rather than an exception.",
+      "effective_from": "2019-04",
+      "constrains": [
+        {
+          "kind": "accountability",
+          "target": "financial_controller/reserves.risk_margin_remaining",
+          "effect": "The Group Financial Controller answers for the margin standing after any release",
+          "magnitude": 3.0
+        }
+      ]
+    }
+  ],
+  "lobs": [
+    {
+      "name": "reserving",
+      "title": "Actuarial Reserving",
+      "purpose": "Value the long-tail liability book each quarter, recommend the movement in full, and answer separately for what finance carries against it.",
+      "engine": "insurance",
+      "roles": [
+        {"key": "ceo", "title": "Group Chief Executive Officer", "function": "Executive", "reports_to": null},
+        {"key": "cfo", "title": "Group Chief Financial Officer", "function": "Finance", "reports_to": "ceo"},
+        {"key": "chief_actuary", "title": "Chief Actuary", "function": "Actuarial", "reports_to": "ceo"},
+        {"key": "reserving_actuary", "title": "Reserving Actuary", "function": "Actuarial", "reports_to": "chief_actuary"},
+        {"key": "financial_controller", "title": "Group Financial Controller", "function": "Finance", "reports_to": "cfo"}
+      ],
+      "responsibilities": [
+        {
+          "role_key": "reserving_actuary",
+          "fact_kinds": ["reserves.ultimate", "reserves.ultimate_at_prior_valuation", "reserves.adverse_development", "reserves.ibnr", "claims.incurred_to_date", "claims.paid_to_date"],
+          "artifact_types": []
+        },
+        {
+          "role_key": "chief_actuary",
+          "fact_kinds": ["reserves.central_estimate_total", "reserves.central_estimate_at_prior_valuation", "reserves.committee_recommendation"],
+          "artifact_types": ["actuarial_valuation_report"]
+        },
+        {
+          "role_key": "cfo",
+          "fact_kinds": ["reserves.margin_released", "reserves.booked_total", "reserves.held_vs_central_gap"],
+          "artifact_types": ["margin_decision_memo"]
+        },
+        {
+          "role_key": "financial_controller",
+          "fact_kinds": ["reserves.philosophy", "reserves.risk_margin_policy_pct", "reserves.risk_margin_standing", "reserves.risk_margin_remaining", "reserves.booked_strengthening"],
+          "artifact_types": []
+        }
+      ],
+      "artifact_filings": ["actuarial_valuation_report"],
+      "episode_contributions": ["QuarterlyValuation"],
+      "slot_bindings": [
+        {"process": "QuarterlyValuation", "slot": "valuer", "role_key": "reserving_actuary"},
+        {"process": "QuarterlyValuation", "slot": "recommender", "role_key": "chief_actuary"},
+        {"process": "QuarterlyValuation", "slot": "booker", "role_key": "cfo"}
+      ]
+    }
+  ],
+  "episodes": [
+    {
+      "name": "QuarterlyValuation",
+      "domain": "insurance",
+      "period": "quarter",
+      "replaces": "QuarterlyReserving",
+      "detail": "One quarterly valuation of the long-tail liability book, on a declared accident-quarter axis. The book's central estimate is drawn; the four cohorts in view are allocated from it, so the triangle reconciles to the book by construction; each cohort's previous carrying value is read back off its own row; the movement since the prior valuation is what the committee recommends booking; and finance books part of it, releasing more margin than it holds, which is what leaves the booked reserve below the central estimate on the record.",
+      "cohorts": [
+        {"name": "accident_quarter", "count": 4, "spacing_months": 3, "lag_months": 3}
+      ],
+      "fact_kinds": [
+        {
+          "kind": "reserves.philosophy",
+          "value_type": "text",
+          "authority": "system_of_record",
+          "period_scope": "standing",
+          "subject_type": "company",
+          "source_role": "sys_general_ledger",
+          "text": "Risk margin is held at the board's standing percentage of the actuarial central estimate, released only against a reserving committee recommendation",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "standing", "detail": "The basis of valuation is not a quarterly decision; every valuation is performed under the one that was in force, and re-minting it each quarter would make 'when did the basis change' unanswerable."}
+          ]
+        },
+        {
+          "kind": "reserves.risk_margin_policy_pct",
+          "value_type": "percent",
+          "authority": "system_of_record",
+          "period_scope": "standing",
+          "subject_type": "company",
+          "source_role": "sys_general_ledger",
+          "amount": 12.0,
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "standing", "detail": "The board's margin percentage stands beside the philosophy it implements; a rate that re-set itself every quarter would be an estimate, not a policy."}
+          ]
+        },
+        {
+          "kind": "reserves.central_estimate_total",
+          "value_type": "money",
+          "authority": "confirmed",
+          "period_scope": "period-keyed",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_actuarial",
+          "parameter": "reserves.cohort.ultimate",
+          "scale": 4,
+          "invariants": [
+            {"kind": "holds-at", "detail": "The actuary's central estimate for the whole long-tail book at this valuation. Drawn at book level and scaled by the cohort count, because the grid is allocated *from* this figure rather than summed *into* it — the direction that makes the roll-up exact."}
+          ]
+        },
+        {
+          "kind": "reserves.ultimate",
+          "value_type": "money",
+          "authority": "confirmed",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_actuarial",
+          "derive": "allocation_of(reserves.central_estimate_total)",
+          "parameter": "reserves.cohort.ultimate",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "rolls-up-to", "operands": ["reserves.central_estimate_total"], "detail": "The four accident quarters in view are the whole book at this valuation. Allocated by largest remainder from the parent, so the reconciliation the reserving committee actually performs comes out exact rather than nearly — and recomputed by the validator anyway, because a check that only passes on correct arithmetic is what catches the arithmetic changing."}
+          ]
+        },
+        {
+          "kind": "reserves.ultimate_at_prior_valuation",
+          "value_type": "money",
+          "authority": "confirmed",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_actuarial",
+          "derive": "prior_in_cohort(reserves.ultimate)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "What this same accident quarter was carried at one valuation ago — the diagonal step, which the period axis cannot take because a cohort's period does not move. Zero at a cohort's first appearance: nothing had emerged yet, which is a claim rather than an absence. Minted as its own fact because the valuation report prints it as a column, and an artifact intent cannot walk a supersession chain to find one."}
+          ]
+        },
+        {
+          "kind": "reserves.adverse_development",
+          "value_type": "money",
+          "authority": "confirmed",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_actuarial",
+          "derive": "minus(reserves.ultimate, reserves.ultimate_at_prior_valuation)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "How far this accident quarter moved since the last valuation — the figure a reserving committee actually argues about, because a book-level movement says a quarter went badly and this says which quarter. Two grids on one axis subtracted cell by cell, which is what a shape-polymorphic `minus` means: the same verb over two book totals is the movement in the central estimate, and over two grids it is development per cohort. At a cohort's first appearance the comparative is zero by declaration, so its whole ultimate reads as development — which is the honest reading of a quarter that had no prior valuation to develop from, and the same claim-not-an-absence rule the comparative itself keeps."}
+          ]
+        },
+        {
+          "kind": "claims.incurred_to_date",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_claims",
+          "derive": "multiple_of(reserves.ultimate)",
+          "parameter": "reserves.cohort.incurred_ratio",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "never-superseded", "detail": "The diagonal, and the reason this pack could not state one until an invariant became an instruction to the runner as well as a rule for the checker: a reading of a cohort at this valuation stands *beside* the reading at the last one rather than correcting it. Both are things the claims system actually held, so closing or superseding either would erase an observation the company made — which is exactly what the engine's own `triangle_touched` refuses, and what an authored grid used to trip on the first carried cohort."}
+          ]
+        },
+        {
+          "kind": "claims.paid_to_date",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_claims",
+          "derive": "multiple_of(claims.incurred_to_date)",
+          "parameter": "reserves.cohort.paid_ratio",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "never-superseded", "detail": "Append-only for the incurred position's reason exactly. Derived off incurred rather than off ultimate so the case reserve the identity needs — incurred less paid — is positive by construction rather than by luck: the span is a fraction of what has been incurred, and a paid figure above the incurred one would be a claims system reporting a payment it never booked. What this diagonal is *not*, stated rather than left to be discovered: a running total across valuations. Each cell is derived from the valuation's own re-struck ultimate, and this cycle re-strikes its cohort ultimates every quarter rather than developing them — which is what makes the grid reconcile to the book exactly — so a cohort's reported position follows its estimate instead of accumulating. A monotone paid ledger needs a developing ultimate, and a developing ultimate cannot also be an exact allocation of a freshly drawn book total."}
+          ]
+        },
+        {
+          "kind": "reserves.ibnr",
+          "value_type": "money",
+          "authority": "confirmed",
+          "period_scope": "period-keyed",
+          "cohort": "accident_quarter",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_actuarial",
+          "derive": "minus(reserves.ultimate, claims.incurred_to_date)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "Incurred but not reported: the gap between what the actuary carries for this cohort and what the claims system has seen. Subtracted cell by cell, which is what makes the engine's own identity — ultimate = paid + case + IBNR, where case is incurred less paid — hold to the cent per cohort rather than nearly. Positive by construction, because the incurred cell is a fraction of the ultimate cell it was derived from; three independently allocated grids would have satisfied the identity only by luck, and a cohort whose incurred exceeded its own ultimate is not a corpus anyone can read."}
+          ]
+        },
+        {
+          "kind": "reserves.central_estimate_at_prior_valuation",
+          "value_type": "money",
+          "authority": "confirmed",
+          "period_scope": "period-keyed",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_actuarial",
+          "amount": 0,
+          "invariants": [
+            {"kind": "holds-at", "detail": "The book's central estimate at the previous valuation — resolved by a `reuse` carry-forward, so a later quarter cites the *earlier quarter's own fact* by id rather than minting a second fact stating the same figure. `prior(K)` was the obvious derivation and is the wrong one here: it mints a copy, and a copy of a figure the ledger already holds is the exact thing this corpus refuses everywhere else (a number a reader can subtract is not a number the ledger should hold twice). The stated amount is what a valuation with no predecessor carries: zero, because there is no prior valuation on this world's record — the same claim-not-an-absence rule `prior(K)` itself keeps."}
+          ]
+        },
+        {
+          "kind": "reserves.committee_recommendation",
+          "value_type": "money",
+          "authority": "confirmed",
+          "period_scope": "period-keyed",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_actuarial",
+          "derive": "minus(reserves.central_estimate_total, reserves.central_estimate_at_prior_valuation)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "The movement in the central estimate since the prior valuation, which is exactly what the committee recommends booking in full. Stated at book level, not per cohort: the arithmetic derivations are scalar, and subtracting two grids would silently subtract their roll-ups and fan one book figure across four cells."}
+          ]
+        },
+        {
+          "kind": "reserves.risk_margin_standing",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_general_ledger",
+          "derive": "percent_of(reserves.central_estimate_total, reserves.risk_margin_policy_pct)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "The margin the board's standing percentage entitles this valuation to hold, before any release. Minted rather than left implicit because the release below is a multiple of it, and a figure something else is a multiple of has to be a figure somebody can read."}
+          ]
+        },
+        {
+          "kind": "reserves.margin_released",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_general_ledger",
+          "derive": "multiple_of(reserves.risk_margin_standing)",
+          "parameter": "reserves.decision.margin_release_multiple",
+          "invariants": [
+            {"kind": "holds-at", "detail": "The release finance takes against the recommendation. The span is above 1.0 by registry construction, so the release always exceeds the margin standing — which is what guarantees, rather than merely risks, that the booked reserve ends below the central estimate."}
+          ]
+        },
+        {
+          "kind": "reserves.risk_margin_remaining",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_general_ledger",
+          "derive": "minus(reserves.risk_margin_standing, reserves.margin_released)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "What margin stands after the release — negative, because the release exceeds it. A negative margin is the honest reading of a deficit and is exactly the quantity the booked total is short by."}
+          ]
+        },
+        {
+          "kind": "reserves.booked_strengthening",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_general_ledger",
+          "derive": "minus(reserves.committee_recommendation, reserves.margin_released)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "The part of the recommendation finance actually put up in cash terms: the recommended movement less what the margin release absorbed."}
+          ]
+        },
+        {
+          "kind": "reserves.booked_total",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_general_ledger",
+          "derive": "plus(reserves.central_estimate_total, reserves.risk_margin_remaining)",
+          "invariants": [
+            {"kind": "holds-at"},
+            {"kind": "never-superseded", "detail": "What was carried at this valuation, permanently. A later valuation states its own booked total beside this one; it does not correct it, because the balance sheet as at this quarter is not something a later quarter gets to rewrite."}
+          ]
+        },
+        {
+          "kind": "reserves.held_vs_central_gap",
+          "value_type": "money",
+          "authority": "system_of_record",
+          "period_scope": "period-keyed",
+          "subject_type": "category",
+          "subject_role": "cat_lt_liability",
+          "source_role": "sys_general_ledger",
+          "derive": "minus(reserves.central_estimate_total, reserves.booked_total)",
+          "invariants": [
+            {"kind": "holds-at", "detail": "The standing disagreement, positive by construction: what the actuary believes less what finance carried. Two authorities that never resolve — the corpus records both and reconciles them only through the margin decision, never by one outranking the other."}
+          ]
+        }
+      ],
+      "events": [
+        {
+          "kind": "valuation_basis_confirmed",
+          "when": "start",
+          "business_day": 8,
+          "hour": 9,
+          "minute": 0,
+          "summary": "The basis of valuation for {period} was confirmed against the standing reserving philosophy and the board's margin percentage.",
+          "actors": ["chief_actuary"],
+          "systems": ["sys_general_ledger"],
+          "fact_keys": ["reserves.philosophy", "reserves.risk_margin_policy_pct"],
+          "detail": "The standing half of the cycle, minted once and reused: every later quarter's valuation cites the same two facts."
+        },
+        {
+          "kind": "central_estimate_set",
+          "when": "start",
+          "business_day": 18,
+          "hour": 11,
+          "minute": 0,
+          "caused_by": "valuation_basis_confirmed",
+          "summary": "The actuarial central estimate for the long-tail liability book was set at the {period} valuation and allocated across the accident quarters in view; the claims diagonal was read, each cohort's previous carrying value was read back off its own row, and the development since that valuation was struck.",
+          "actors": ["chief_actuary", "reserving_actuary"],
+          "systems": ["sys_actuarial", "sys_claims"],
+          "fact_keys": [
+            "reserves.central_estimate_total",
+            "reserves.ultimate",
+            "claims.incurred_to_date",
+            "claims.paid_to_date",
+            "reserves.ibnr",
+            "reserves.ultimate_at_prior_valuation",
+            "reserves.adverse_development",
+            "reserves.central_estimate_at_prior_valuation"
+          ],
+          "detail": "The grid and its parent are set in one act, because the cells are allocated from the parent rather than summed into it — and the diagonal, the IBNR and the development with them. The identity the engine checks (ultimate = paid + case + IBNR) relates facts sharing one valuation moment, so an IBNR minted at a later event would be an IBNR for an estimate nobody was standing on."
+        },
+        {
+          "kind": "committee_recommended",
+          "when": "start",
+          "business_day": 20,
+          "hour": 15,
+          "minute": 0,
+          "caused_by": "central_estimate_set",
+          "summary": "The reserving committee recommended booking the full movement in the central estimate since the prior valuation.",
+          "actors": ["chief_actuary", "cfo", "claims_director"],
+          "fact_keys": ["reserves.committee_recommendation"],
+          "detail": "The committee's recommendation is the movement, in full and without a margin release — which is what makes finance's decision below a decision rather than an arithmetic consequence."
+        },
+        {
+          "kind": "reserves_partially_booked",
+          "when": "start",
+          "business_day": 22,
+          "hour": 11,
+          "minute": 0,
+          "caused_by": "committee_recommended",
+          "summary": "Finance booked part of the recommended strengthening and released risk margin to absorb the rest. The booked reserve now sits below the actuary's central estimate — a standing, recorded disagreement, not an error.",
+          "actors": ["cfo", "chief_actuary"],
+          "systems": ["sys_general_ledger"],
+          "fact_keys": [
+            "reserves.risk_margin_standing",
+            "reserves.margin_released",
+            "reserves.risk_margin_remaining",
+            "reserves.booked_strengthening",
+            "reserves.held_vs_central_gap"
+          ]
+        },
+        {
+          "kind": "booked_total_frozen",
+          "when": "end",
+          "business_day": 23,
+          "hour": 9,
+          "minute": 0,
+          "caused_by": "reserves_partially_booked",
+          "summary": "The {period} booked reserve for the long-tail liability book was posted to the general ledger.",
+          "actors": ["financial_controller"],
+          "systems": ["sys_general_ledger"],
+          "fact_keys": ["reserves.booked_total"],
+          "detail": "Posted after the decision that sized it, which is why the gap fact predates the booked figure it is about."
+        }
+      ],
+      "artifacts": [
+        {
+          "artifact_type": "actuarial_valuation_report",
+          "author_role": "chief_actuary",
+          "audience": "reserving_committee",
+          "domain": "actuarial",
+          "required_facts": [
+            "reserves.central_estimate_total",
+            "reserves.ultimate",
+            "reserves.ultimate_at_prior_valuation",
+            "reserves.adverse_development",
+            "claims.incurred_to_date",
+            "claims.paid_to_date",
+            "reserves.ibnr",
+            "reserves.central_estimate_at_prior_valuation",
+            "reserves.committee_recommendation",
+            "reserves.booked_total",
+            "reserves.philosophy",
+            "reserves.risk_margin_policy_pct"
+          ],
+          "size": "long",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": ["central_estimate_set", "committee_recommended"],
+          "rationale": "The actuary's formal position: the central estimate by accident quarter and in total, each cohort beside what it was carried at one valuation ago, and — stated plainly rather than left to inference — the booked figure the recommendation was not fully carried into."
+        },
+        {
+          "artifact_type": "margin_decision_memo",
+          "author_role": "cfo",
+          "audience": "reserving_committee",
+          "domain": "finance",
+          "required_facts": [
+            "reserves.central_estimate_total",
+            "reserves.central_estimate_at_prior_valuation",
+            "reserves.booked_total",
+            "reserves.booked_strengthening",
+            "reserves.margin_released",
+            "reserves.risk_margin_remaining",
+            "reserves.held_vs_central_gap",
+            "reserves.committee_recommendation",
+            "reserves.philosophy",
+            "reserves.risk_margin_policy_pct"
+          ],
+          "size": "medium",
+          "structured": false,
+          "unstructured": true,
+          "triggered_by_events": ["reserves_partially_booked"],
+          "rationale": "The decision on the record: what the committee recommended in full, what finance booked, and the margin released to cover the difference under the standing philosophy — the one document that explains why the carried reserve is below the central estimate."
+        }
+      ],
+      "carry_forward": [
+        {
+          "from_kind": "reserves.philosophy",
+          "to_kind": "reserves.philosophy",
+          "rule": "reuse",
+          "detail": "The basis of valuation is one fact every quarter cites, never a fresh statement per quarter."
+        },
+        {
+          "from_kind": "reserves.risk_margin_policy_pct",
+          "to_kind": "reserves.risk_margin_policy_pct",
+          "rule": "reuse",
+          "detail": "So is the board's margin percentage."
+        },
+        {
+          "from_kind": "reserves.central_estimate_total",
+          "to_kind": "reserves.central_estimate_at_prior_valuation",
+          "rule": "reuse",
+          "detail": "Reuse, not derive: the prior valuation's central estimate is not a new measurement, it is the previous quarter's own fact, and this quarter's documents cite it by its own id. That is what makes 'what did the actuary say last quarter' land a reader on the paperwork last quarter actually filed, instead of on a second fact that happens to carry the same number."
+        },
+        {
+          "from_kind": "reserves.ultimate",
+          "to_kind": "reserves.ultimate_at_prior_valuation",
+          "rule": "derive",
+          "detail": "The diagonal declared: a cohort's previous carrying value comes from that cohort's own row at the previous observation, which `prior_in_cohort` resolves cell by cell. Declared rather than left implicit because this is where a reader learns the kind has a history at all."
+        }
+      ],
+      "role_slots": [
+        {"slot": "valuer", "required": true, "purpose": "set the central estimate and allocate it across the accident quarters in view"},
+        {"slot": "recommender", "required": true, "purpose": "recommend how much of the movement is booked — never the person who books it"},
+        {"slot": "booker", "required": true, "purpose": "decide the release and post the booked reserve to the ledger"}
+      ],
+      "evaluation": {
+        "detail": "The contest is the whole point: two figures stand at once, at different authorities, and neither supersedes the other. The questions worth authoring are the ones whose confident wrong answer is the other figure.",
+        "emphasis": {"authority_resolution": 2},
+        "families": [
+          {
+            "family": "authority_resolution",
+            "about": ["reserves.booked_total"],
+            "question": "What reserve is actually carried on the balance sheet for the long-tail liability book as at the {period} valuation?",
+            "answer": "{value} — the booked total the ledger holds. The valuation report's central estimate is the actuary's position, not what was carried.",
+            "reasoning": "Two documents state a reserve figure for the same quarter and only one of them is the balance sheet."
+          },
+          {
+            "family": "temporal_state",
+            "about": ["reserves.ultimate_at_prior_valuation"],
+            "question": "What was the long-tail book's oldest accident quarter in view being carried at one valuation before {period}?",
+            "answer": "{value} — the cohort's own previous carrying value, superseded by this valuation's cell rather than corrected by it.",
+            "reasoning": "A cohort's row is a supersession chain; the answer is the link before the current one, not the current one."
+          }
+        ],
+        "abstentions": [
+          {
+            "question": "What development factors did the actuary fit to project the long-tail book to ultimate?",
+            "reasoning": "No development factor is anywhere in this corpus: the central estimate is stated at book level and allocated across the accident quarters in view, and nothing here fits a chain ladder."
+          }
+        ]
+      }
+    }
+  ]
+}

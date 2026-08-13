@@ -525,6 +525,21 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     periods = sorted({
         period for (kind, period) in current if kind == "p2p.ordered_quantity" and period
     })
+    # Which month a purchase order is *for*, read off the period-keyed facts it
+    # cites. A manifest entry carries no period of its own, and check (h) needs
+    # one: "an order they raised themselves" is a claim about this month's
+    # order, and a corpus of twelve months holds eleven other people's. Built
+    # once, over the orders only, so a month's check is a membership test rather
+    # than a rescan of the manifest.
+    order_periods: dict[str, set[str]] = {}
+    fact_periods = {f.id: f.period for f in facts if f.period}
+    for entry in world.artifacts:
+        if entry.artifact_type != "purchase_order":
+            continue
+        order_periods[entry.id] = {
+            fact_periods[fact_id] for fact_id in entry.supporting_fact_ids
+            if fact_id in fact_periods
+        }
 
     for period in periods:
         rates = at("p2p.contract_rate", None)
@@ -711,9 +726,18 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                          " p2p.exception_approved_by fact naming who cleared it")
                 else:
                     checks += 1
+                    # This month's orders, not the corpus's. The unscoped
+                    # reading was the same figure while a corpus held one
+                    # cycle, and two wrong things at twelve: a buyer who raised
+                    # January's order and cleared an unrelated exception in
+                    # August was reported as a breach they did not commit, and
+                    # a real breach named whichever order sorted first in the
+                    # manifest rather than the one the approver actually
+                    # raised — an accusation citing the wrong evidence.
                     orders = [a for a in world.artifacts
                               if a.artifact_type == "purchase_order"
-                              and a.author_id == approver.subject]
+                              and a.author_id == approver.subject
+                              and period in order_periods.get(a.id, ())]
                     if orders:
                         fail("segregation_of_duties_breached", approver.id,
                              f"{approver.subject} approved an above-tolerance exception on an"
