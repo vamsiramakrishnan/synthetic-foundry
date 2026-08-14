@@ -16,15 +16,19 @@ reconciliation constraints everything else is checked against.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from . import columns as columns_module
+from . import domains
 from . import recipe as recipe_module
+from . import roleseq
 from . import structure
 from .ids import Minter
+from .rng import Rng
 from .narrative import references
 from .models import (
     FlowNode,
@@ -46,6 +50,7 @@ from .models import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .adjacency import Adjacency
     from .world import World
 
 MONEY_FORMAT = "#,##0;(#,##0)"
@@ -1629,7 +1634,228 @@ def _variant_for(world: Any, intent: ArtifactIntent) -> tuple[SectionPlan, ...]:
         chosen: tuple[SectionPlan, ...] = tuple(structure.choose(variants, key=key, genome=genome))
     else:
         chosen = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
-    return structure.derive(chosen, key=key, genome=genome)
+    authored = structure.derive(chosen, key=key, genome=genome)
+    if not structure.attempts(key, genome):
+        return authored
+    return synthesised(world, intent, authored, key=key, genome=genome).sections
+
+
+def _in_scope(fact: CanonicalFact, scope: str, *, company_id: str, unit_ids: set[str]) -> bool:
+    """Whether *fact*'s subject is what a ``group``/``unit``/``any`` section is about."""
+    if scope == "group":
+        return fact.subject == company_id
+    if scope == "unit":
+        return fact.subject in unit_ids
+    return True
+
+
+def _assigned(
+    facts: Sequence[CanonicalFact],
+    step: SectionPlan,
+    *,
+    company_id: str,
+    unit_ids: set[str],
+) -> list[str]:
+    """Which of *facts* the section *step* is handed, in the order they arrived.
+
+    One function rather than a rule spelled out at each site that needs it, and
+    that is load-bearing rather than tidy: `outline` uses it to *build* the
+    document, and `synthesised`'s two predicates use it to decide whether a
+    synthesised outline may be used at all. If the two ever disagreed, the
+    coverage test would be vouching for a document other than the one that gets
+    compiled — which is a check that reports success for work it never looked at.
+    """
+    return [
+        fact.id
+        for fact in facts
+        if _in_scope(fact, step.scope, company_id=company_id, unit_ids=unit_ids)
+        and any(fact.kind.startswith(prefix) for prefix in step.kinds)
+    ]
+
+
+def _outlines_of(artifact_type: str) -> tuple[tuple[SectionPlan, ...], ...]:
+    """Every outline a document of *artifact_type* can actually be built from.
+
+    Variants when the type has them, its plain outline otherwise — the same
+    enumeration `tests/test_optional_sections.installed` walks, and for the same
+    reason: `_variant_for` reads the variant table first, so a type with variants
+    is not also reachable through `_OUTLINES`.
+
+    A type with neither is **not** given `_DEFAULT_OUTLINE` here, and that is a
+    decision rather than an oversight. The default outline is one section,
+    ``kinds=("",)`` — "every fact I was given" — so admitting it to the role
+    catalogue would let synthesis satisfy any coverage test at all by dumping a
+    document's whole fact set into one generic "Summary". The types that fall
+    through to it are the ones no author gave an outline; they are exactly the
+    ones synthesis has nothing to say about, and they fall back.
+    """
+    variants = _OUTLINE_VARIANTS.get(artifact_type)
+    if variants:
+        return variants
+    plain = _OUTLINES.get(artifact_type)
+    return (plain,) if plain else ()
+
+
+def _vertical_of(world: Any) -> str:
+    """Which engine's company this is — `roleseq`'s tag — or ``""`` if unknown.
+
+    Off the **recipe**, through the domain registry, and each half of that is the
+    only honest source available.
+
+    *The registry, not a table.* `roleseq`'s cross-vertical guard is structural:
+    a symbol carries its tag, so two sections with the same role under different
+    tags can never be adjacent, and a caller who passes a tag the catalogue has
+    never seen gets nothing rather than a splice. That guard is worth exactly as
+    much as the tag is true, so the tag is the name of the domain that *owns this
+    world's archetype* — `domains.for_archetype`, the same lookup the CLI's build
+    dispatch and the recipe rebuilder resolve through. Naming the vertical any
+    other way in core would be core naming a vertical, which this repository
+    forbids for reasons `domains.py` states at length.
+
+    *The recipe, not `world._archetype`.* The archetype object is generator state
+    and is absent on a world loaded from disk (`world.py` says so beside the
+    field); the recipe's ``archetype`` key survives the round trip. It is also
+    where `structure_of` reads the genome from two lines earlier, so both halves
+    of "was this corpus synthesised, and as what" come off one record — a world
+    that can answer the second question but not the first could not replay.
+    """
+    key = (getattr(world, "_recipe", None) or {}).get("archetype") or ""
+    domain = domains.for_archetype(key) if key else None
+    return domain.name if domain else ""
+
+
+@lru_cache(maxsize=8)
+def _role_model(
+    tag: str, examples: tuple[tuple[SectionPlan, ...], ...]
+) -> tuple[Adjacency, roleseq.Catalogue]:
+    """The adjacency model and section catalogue *examples* imply, memoised.
+
+    Keyed on the outlines themselves rather than on the world or on the list of
+    artifact types, because `_OUTLINES` is a process-global registry a pack
+    installs into and never uninstalls from — the signature
+    `tests/test_roleseq.engine_outlines` documents at length. A cache keyed on
+    "retail, these twenty type names" would serve one tenant's outlines to the
+    next tenant that happened to plan the same types. `SectionPlan` is a frozen
+    dataclass, so keying on content costs a hash and cannot go stale.
+
+    Small, because the key is a whole fleet: a mosaic builds worlds one at a
+    time and eight is more than any single build needs.
+    """
+    grouped = {tag: list(examples)}
+    return roleseq.learn_roles(grouped), roleseq.catalogue(grouped)
+
+
+def synthesised(
+    world: Any,
+    intent: ArtifactIntent,
+    authored: tuple[SectionPlan, ...],
+    *,
+    key: str,
+    genome: Any,
+) -> structure.Synthesis:
+    """*authored* replaced by a synthesised outline, where one covers the intent.
+
+    The world-shaped half of `structure.synthesise`: this resolves who the
+    company is, which outlines it issues, and what "carries a fact" means, and
+    that function does the drawing and the refusing. Returns the whole
+    `Synthesis` rather than only its sections so that a caller measuring a corpus
+    can tally outcomes — `_variant_for` takes `.sections` and drops the rest.
+
+    **The examples are the outlines this world's own plan issues**, not the
+    fleet's. That is the cross-vertical guard's own argument taken one step
+    further than a tag can take it: `roleseq.refused` measures 217 of 412 pooled
+    shapes as splices no single *company* issues, and a world knows precisely
+    which document types it planned, so the partition is derived here rather than
+    read off a table somebody maintains. It also means a pack's authored types
+    join the vocabulary on the day the pack is built with, and a retailer that
+    runs no hiring round never borrows an offer letter's sections.
+
+    Every draw comes from a stream derived by this document's key, so a document
+    keeps its shape when a later period adds another of its type, and no
+    document's shape depends on how hard its predecessor was to find.
+    """
+    tag = _vertical_of(world)
+    if not tag:
+        # An archetype no domain claims — a fixture, or a world hand-built
+        # without a recipe. There is no honest tag to learn under, and an
+        # invented one would make the guard vouch for splices nobody checked.
+        return structure.Synthesis(sections=authored, outcome="no_shape")
+
+    examples = tuple(
+        outline
+        for artifact_type in sorted({i.artifact_type for i in world.artifact_intents})
+        for outline in _outlines_of(artifact_type)
+    )
+    if not examples:
+        return structure.Synthesis(sections=authored, outcome="no_shape")
+    model, catalogue = _role_model(tag, examples)
+
+    facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
+    company_id = world.company.id
+    unit_ids = {unit.id for unit in world.business_units}
+
+    def carried(plan: Sequence[SectionPlan]) -> frozenset[str]:
+        return frozenset(
+            fact_id
+            for step in plan
+            for fact_id in _assigned(facts, step, company_id=company_id, unit_ids=unit_ids)
+        )
+
+    def argument(plan: Sequence[SectionPlan]) -> tuple[str, ...]:
+        """The ordered semantic roles the *compiled* document would carry.
+
+        Only the sections that get facts, because `outline` drops the rest — so
+        this is the sequence `compose` will actually see, not the one drawn.
+        """
+        from .compiler.compose import infer_semantic_role
+
+        return tuple(
+            infer_semantic_role(step.heading, step.kinds)
+            for step in plan
+            if _assigned(facts, step, company_id=company_id, unit_ids=unit_ids)
+        )
+
+    wanted_argument = argument(authored)
+
+    def grammatical(plan: Sequence[SectionPlan]) -> bool:
+        """Whether *plan* argues this document the way its type is allowed to.
+
+        **Identical to the authored role sequence, not merely grammatical.** The
+        temptation is to run `compiler.grammar.check` here, and it is wrong twice
+        over. It would be a second account of a rule that already exists — the
+        grammar checks a sequence of *component ids*, which do not exist until
+        `compose` has fitted one to each beat, so anything checkable from here
+        would be a re-implementation that can drift. And it would be checking the
+        wrong thing: `compose`'s constraints are not only the grammar's — the
+        size-class cap, the density profile and the per-component row fits all
+        read the same sequence, and a candidate can satisfy `GRAMMARS` and still
+        be a document no format can lay out.
+
+        Requiring the drawn outline to make the *same argument in the same
+        order* as the one the engine ships settles all of them at once, by an
+        argument rather than by a list: whatever `compose` accepted for the
+        authored outline it accepts for this one, because every check it runs
+        over the sequence sees the same sequence. What synthesis is then free to
+        change is which sections make that argument — a `position` written for a
+        divisional commentary opening a variance memo — which is the
+        recombination `roleseq` measured, and is exactly the thing a retriever
+        can see and a grammar cannot.
+        """
+        return argument(plan) == wanted_argument
+
+    return structure.synthesise(
+        authored,
+        key=key,
+        genome=genome,
+        model=model,
+        catalogue=catalogue,
+        tag=tag,
+        # Derived by the document's own key off the world seed, which is the
+        # only stream in this repository that is neither a clock nor a global.
+        rng=Rng(world.seed or 0).derive(f"structure/synthesis/{key}"),
+        carried=carried,
+        grammatical=grammatical,
+    )
 
 
 _MEASURES_ALL = ("financial.revenue.", "financial.gross_profit.",
@@ -1947,13 +2173,6 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     unit_ids = {unit.id for unit in world.business_units}
     names = world.entity_names()
 
-    def in_scope(fact: CanonicalFact, scope: str) -> bool:
-        if scope == "group":
-            return fact.subject == world.company.id
-        if scope == "unit":
-            return fact.subject in unit_ids
-        return True
-
     supporting = Table(
         key="supporting_facts",
         title="Supporting facts",
@@ -1984,12 +2203,7 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
 
     sections: list[ArtifactSection] = _planned_sections(world, intent, facts)
     for step in plan if not sections else ():
-        assigned = [
-            fact.id
-            for fact in facts
-            if in_scope(fact, step.scope)
-            and any(fact.kind.startswith(prefix) for prefix in step.kinds)
-        ]
+        assigned = _assigned(facts, step, company_id=world.company.id, unit_ids=unit_ids)
         # A section with nothing to say does not belong in the document. The plan
         # follows the episode, so a close without an incident gets no incident
         # sections rather than an empty heading.

@@ -443,14 +443,20 @@ def with_structure(recipe: dict[str, Any], genome: Any) -> dict[str, Any]:
     """
     if not genome.varies:
         return recipe
-    return {
-        **recipe,
-        STRUCTURE_KEY: {
-            "omission": genome.omission,
-            "floor": genome.floor,
-            "variant_bias": genome.variant_bias,
-        },
+    payload = {
+        "omission": genome.omission,
+        "floor": genome.floor,
+        "variant_bias": genome.variant_bias,
     }
+    # `synthesis` is written only when it is on, which is the same conditional
+    # rule as the key itself and applied for the same measured reason one level
+    # down: the three fields above are the genome every recipe carrying this key
+    # has ever carried, and writing a fourth unconditionally would put a new line
+    # into the recipe of every already-built omission corpus for a value that
+    # changes nothing about it. `structure_of` reads it back as absent-means-off.
+    if genome.synthesis:
+        payload["synthesis"] = genome.synthesis
+    return {**recipe, STRUCTURE_KEY: payload}
 
 
 def structure_of(recipe: Mapping[str, Any] | None) -> Any:
@@ -476,6 +482,14 @@ def structure_of(recipe: Mapping[str, Any] | None) -> Any:
         omission=int(payload["omission"]),
         floor=int(payload["floor"]),
         variant_bias=int(payload["variant_bias"]),
+        # Defaulted where the three above are not, and the asymmetry is the
+        # point rather than an inconsistency. A recipe missing `omission` was
+        # written by something that did not understand this key at all and
+        # should say so loudly. A recipe missing `synthesis` was written before
+        # synthesis existed — a *dated* recipe, not an unknown one — and zero is
+        # precisely the genome that corpus was built under, so defaulting it is
+        # what makes it replay byte-for-byte rather than what hides a mismatch.
+        synthesis=int(payload.get("synthesis", 0)),
     )
 
 

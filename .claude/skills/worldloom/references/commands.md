@@ -83,6 +83,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--narrate` | Generate prose with the built-in deterministic provider (no network, no key). |
 | `--out`, `-o` | Directory to write the corpus into. |
 | `--outline-floor` | The fewest sections a document may end up with. Omission restores sections in the order their author wrote them until this is met. |
+| `--outline-synthesis` | Per-mille chance that any one document's outline is *synthesised* — a shape drawn from what this company's own document types have in common, rather than the one its type was authored with. Recombination, never inflation: a synthesised outline must carry at least what the authored one carries, in no more sections, arguing the document the way its type argues it, and falls back to the authored outline when no draw does. Measured at 1000 on a six-period retail build: 89% of documents synthesised, 40 distinct shapes becoming 62. 0 — the default — is byte-identical to before. |
 | `--overwrite` | Replace the destination if it exists. |
 | `--pack` | Build from an industry pack: a JSON file carrying the company shape, lore, and name. See `worldloom pack template` to start one and `worldloom pack check` to lint it. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
