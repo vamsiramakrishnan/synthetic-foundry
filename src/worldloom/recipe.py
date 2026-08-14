@@ -840,6 +840,30 @@ def rebuild(
     if recipe.get(LOCALE_KEY) is not None and not localised:
         world = world.extend(recipe={**world.recipe, LOCALE_KEY: recipe[LOCALE_KEY]})
 
+    # The structural genome, re-attached for the locale's reason one field along
+    # — and unconditionally, because unlike the locale there is no spec field it
+    # could have travelled in on. `build_recipe` never writes this key; only
+    # `with_structure` does, from the CLI, after the world is built.
+    #
+    # **Before the steps, not after**, and that ordering is the whole fix: every
+    # step below compiles documents, and `documents._variant_for` reads the
+    # genome off `world._recipe` at compile time. A genome attached afterwards
+    # would be recorded on a corpus whose documents were shaped without it —
+    # a recipe that lies about its own output, which is worse than one that
+    # forgets.
+    #
+    # The measured defect this closes: a corpus built with `--outline-synthesis
+    # 1000` and rebuilt through *this* function came back with no `structure`
+    # key at all, so `structure_of` returned `CLASSIC` and the rebuild compiled
+    # different outlines from the corpus it was rebuilding. It went unnoticed
+    # because the proof used for every genome so far was `worldloom build
+    # --replay`, and that path re-supplies the same command-line flags, so
+    # `cli._shaped` reconstructed the genome from the flags rather than from the
+    # record. The flags are the thing the recipe exists to make unnecessary; a
+    # replay proof that passes them is not testing the recording.
+    if recipe.get(STRUCTURE_KEY) is not None:
+        world = world.extend(recipe={**world.recipe, STRUCTURE_KEY: recipe[STRUCTURE_KEY]})
+
     for step in recipe.get("steps", ()):
         name = step.get("scenario")
         if name == "MonthEndClose":
