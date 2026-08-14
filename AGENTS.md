@@ -43,7 +43,13 @@ worldloom build --seed 8128 --incident --out ./corpus
 #     Without this every document of a type carries the same headings forever,
 #     which is a shape a retriever can learn instead of the content. Off by
 #     default, recorded on the recipe, and replays byte-for-byte.
-worldloom build --seed 8128 --section-omission 400 --variant-bias 1 --out ./corpus
+#
+#     --section-omission drops optional sections; --outline-synthesis draws a
+#     shape from what this company's own document types have in common. Neither
+#     can make a document say less than it did: a synthesised outline must carry
+#     at least what the authored one carried, and falls back when no draw does.
+worldloom build --seed 8128 --section-omission 400 --variant-bias 1 \
+    --outline-synthesis 600 --out ./corpus
 
 # 1b. Optional: choose each document's shape before writing any of it. Without
 #     this, structure comes from a fixed outline and every memo looks the same.
@@ -257,6 +263,30 @@ three periods, which is exactly what it had never done.
 reports the axes a fleet *never varied at all* before it lists the combinations
 it missed, because one unvaried axis is a hundred holes with a single cause, and
 a list that does not say so reads as a hundred separate failures.
+
+### The four commands are one loop
+
+They close on each other, and the closing is the point:
+
+```bash
+worldloom spaces --cover -t 2 > plan.jsonl    # what should exist
+worldloom build --outline-synthesis 600 ...   # make one of them
+worldloom diversity ./corpus --effective      # is what came out actually varied
+worldloom spaces --holes fleet.jsonl          # what still does not exist
+```
+
+Plan, build, measure, then ask what is missing and plan again against the
+answer. What makes it a loop rather than a pipeline is that both readings report
+a **denominator**: `--effective` prices a shape used ten times differently from
+one used once, and `--holes` divides by the combinations that exist rather than
+the ones you happened to try. "We built two hundred corpora" becomes "we covered
+41% of the pairs and never varied five of the twelve axes at all", which is a
+sentence you can act on.
+
+Both readings are *readings* and neither may be fed back into a build. A
+generator that branched on an effective-diversity score would make a corpus's
+bytes depend on which BLAS the machine linked; a fleet planner may consume
+`--holes`, but the world builder may not.
 
 Each world lands in `./mosaic/world-NN/` with its own recipe, so any one of them
 rebuilds alone. `mosaic.json` records the plan. Measured on five worlds: five

@@ -123,12 +123,12 @@ thousand documents rendered a few dozen shapes and twelve monthly close packs
 were twelve renderings of one skeleton. A retriever can learn that shape instead
 of the content.
 
-The outline is now a function of a **structural genome** — three integers
+The outline is now a function of a **structural genome** — a handful of integers
 recorded on the recipe, so a corpus resolves the same shapes when it is loaded
 back and a rebuild reproduces them.
 
 ```bash
-worldloom build --section-omission 400 --variant-bias 1 --out ./corpus
+worldloom build --section-omission 400 --variant-bias 1 --outline-synthesis 600 --out ./corpus
 worldloom diversity ./corpus --effective
 ```
 
@@ -136,6 +136,21 @@ worldloom diversity ./corpus --effective
 *subset* of its type's optional sections rather than all of them every time.
 Sections are required unless a type says otherwise, so the default build is
 byte-identical to what it always was.
+
+`--outline-synthesis` goes further and *draws* a shape rather than subsetting
+one — from what this company's own document types have in common, projected onto
+the roles their sections play rather than the words in their headings. It is
+recombination and never inflation: a synthesised outline has to carry at least
+what the authored one carried, in no more sections, arguing the document the way
+its type argues it, and falls back to the authored outline when no draw does.
+Measured on a six-period retail corpus, 40 distinct rendered shapes become 62
+with no document losing a line of prose.
+
+Why roles rather than headings is a measured answer, not a preference. Splicing
+on heading text admits exactly **one** novel outline across the whole fleet,
+because only a handful of headings appear in more than one document type — and
+that stayed true after ten policy types were given entirely new headings, which
+is how we know the vocabulary was never the fixable part.
 
 `--effective` is the reading that made the case for the work. A count of
 distinct shapes prices a shape used ten times exactly as it prices one used
@@ -156,6 +171,30 @@ build. The complement matters more: pointed at the shipped determinism gate,
 `--holes` reported that it covered 24% of pairs and had **never once built a
 bank running more than one period** — a gap the gate could not see, because a
 sampler knows where its points landed and not which combinations nobody reached.
+
+### These are one loop, not five features
+
+Each command above answers a different question, and they close on each other:
+
+```bash
+worldloom spaces --cover -t 2 > plan.jsonl    # what should exist
+worldloom build --outline-synthesis 600 ...   # make one of them
+worldloom diversity ./corpus --effective      # is it actually varied
+worldloom spaces --holes fleet.jsonl          # what still does not exist
+```
+
+Plan the space, build into it, measure what came out, and ask what is still
+missing — then plan again against the answer. The measurement is what makes it a
+loop rather than a pipeline: `--effective` and `--holes` both report a
+*denominator*, so "we built two hundred corpora" becomes "we covered 41% of the
+pairs and never varied five of the twelve axes at all".
+
+One step is deliberately library-only. `worldloom.archive` keeps one champion per
+structural niche rather than the best *n* overall — on a measured population it
+spanned 33 of 36 niches where best-*n* spanned 20 — and it composes with
+`spaces.archive_of` today, but selecting a shipped fleet with it is a decision
+about what to keep, not a reading. It gets a command when there is a fleet big
+enough for the choice to matter.
 
 ## Quickstart: one coherent enterprise
 
