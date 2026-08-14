@@ -747,6 +747,20 @@ register_domain(Domain(
     # banking's is: three consecutive `--periods` runs step March, June,
     # September.
     period_step_months=3,
+    # One run only, and now said out loud. `QuarterlyReserving` raises on a
+    # second consecutive valuation because phase 2 — attribution supersession,
+    # gap closure, the retrospective finding — is unimplemented; that refusal
+    # was reachable only by building a corpus and reading the traceback, so
+    # every planner in the repository assumed *all* single-episode verticals
+    # were capped and skipped multi-period banking and procurement too.
+    #
+    # This is a limit of the *built-in* episode, not of the engine. An authored
+    # episode runs the same vertical for as many quarters as it likes:
+    # `worldloom build --pack examples/packs/longtail-insurer.json --episode
+    # QuarterlyValuation --periods 4` builds four consecutive accident-quarter
+    # valuations, validates coherent, and replays byte-for-byte. Lifting this to
+    # `None` means implementing phase 2 here, not relaxing a check.
+    max_periods=1,
     consulted_targets=CONSULTED_TARGETS,
     system_slots=(
         ("policy_admin", "policy administration system"),

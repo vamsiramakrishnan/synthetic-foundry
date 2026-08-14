@@ -108,9 +108,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import columns as columns_module
 from . import documents
 from .documents import FilingPlan, SectionPlan
-from .models import Authority, Lifecycle
+from .models import Authority, FormulaKind, Lifecycle
 from .roles import parse_unit_role
 from . import templating
 
@@ -287,6 +288,93 @@ class DocumentTypes(DocModel):
 
 
 # ---------------------------------------------------------------------------
+# Sheets
+# ---------------------------------------------------------------------------
+#
+# The same port, one layer over. A ``columns.Sheet`` is a frozen dataclass of
+# frozen dataclasses with no callable anywhere in it — the data/code line that
+# ``_COMPILERS`` draws for document types does not even come up here, because a
+# sheet has no code half. So the schema below is a straight transcription, and
+# the interesting decisions are all in what ``install_sheets`` refuses.
+#
+# ``ColumnSpec`` shares its name with ``columns.ColumnSpec`` on purpose: it is
+# that dataclass's JSON face and nothing else, so a second name would be two
+# words for one idea. Both are always module-qualified at the seam between them.
+
+
+class DerivationSpec(DocModel):
+    """How one column recomputes from two others — ``columns.Derivation``."""
+
+    formula: Literal[FormulaKind.DIFFERENCE, FormulaKind.RATIO_PCT]
+    """The verb, from the two ``FormulaKind`` members a *column* can be. The
+    other two are not column derivations: ``SUM`` is within-column over rows
+    (that is ``summable``) and ``REFERENCE`` addresses another table."""
+    operands: list[str] = Field(min_length=1)
+    """Column keys on the same sheet, in order — ``a - b`` and ``a / b`` are not
+    commutative. Arity is checked by ``columns.lint`` rather than by the schema,
+    because the finding says what a wrong count *does* (``render.xlsx._formula``
+    emits nothing at all) and a bare ``min_length=2`` would not."""
+
+    def as_derivation(self) -> columns_module.Derivation:
+        return columns_module.Derivation(kind=self.formula, operands=tuple(self.operands))
+
+
+class ColumnSpec(DocModel):
+    """One column of an authored sheet — a ``columns.ColumnSpec`` as JSON."""
+
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    """The cell key. Not free: ``columns.BOUND_KEYS`` names the ones
+    ``documents`` writes by hand, and an authored sheet must carry all of
+    them — see ``install_sheets``."""
+    label: str = Field(min_length=1)
+    """The heading a reader sees, in Word, Excel, PDF and Markdown alike. The
+    field this whole layer exists for: it is why an authored insurer's month-end
+    model can stop calling its written premium "Revenue actual"."""
+    kind: str = Field(min_length=1)
+    """The fact kind this column reads, per subject and per period. Never empty,
+    for the reason ``columns.ColumnSpec`` refuses an empty one at construction:
+    the value *and* the ``fact_id`` that ``validate.carried_evidence`` reads come
+    from the ledger even on a column that also derives."""
+    unit: Literal["money", "percent"] = "money"
+    derive: DerivationSpec | None = None
+    summable: bool = True
+    """Whether a subtotal row may sum this column over its children. Leave it
+    ``True`` on a percentage and ``install_sheets`` refuses the pack — that is
+    the defect this schema is gated on, and the one nothing else in the
+    repository can see."""
+
+    def as_column(self) -> columns_module.ColumnSpec:
+        return columns_module.ColumnSpec(
+            key=self.key,
+            label=self.label,
+            kind=self.kind,
+            unit=self.unit,
+            derive=None if self.derive is None else self.derive.as_derivation(),
+            summable=self.summable,
+        )
+
+
+class SheetSpec(DocModel):
+    """One workbook sheet, authored rather than written in Python.
+
+    Mirrors ``SectionSpec`` above: a pydantic face over an engine value, with
+    ``as_sheet`` as the port and every rule that needs to *say something* left to
+    the lint rather than encoded as a constraint nobody can read the reason for.
+    """
+
+    name: str = Field(default=columns_module.AUTHORABLE, pattern=r"^[a-z][a-z0-9_]*$")
+    """Which sheet this replaces. Only ``pnl`` is authorable — the estate sheet
+    and the memo's divisional table are cuts of it. Defaulted, because a pack
+    author writing their company's one workbook should not have to know that."""
+    columns: list[ColumnSpec] = Field(min_length=1)
+
+    def as_sheet(self) -> columns_module.Sheet:
+        return columns_module.Sheet(
+            name=self.name, columns=tuple(c.as_column() for c in self.columns)
+        )
+
+
+# ---------------------------------------------------------------------------
 # Loading
 # ---------------------------------------------------------------------------
 
@@ -444,9 +532,94 @@ def install(types: Sequence[DocumentType]) -> None:
         _INSTALLED[spec.key] = spec
 
 
+def install_sheets(
+    sheets: Sequence[SheetSpec],
+    owner: str,
+    *,
+    extra_kinds: frozenset[str] | set[str] = frozenset(),
+) -> None:
+    """Register *sheets* as the workbook a world built from *owner* compiles with.
+
+    ``install``'s sibling, called from the same place — ``packs.archetype_of``,
+    the one function between any ``Pack`` and a world built from it — and
+    *after* ``episodes.install``, deliberately: a sheet may read a fact kind the
+    pack's own process mints, and ``extra_kinds`` is how it is told about them.
+
+    **It refuses on findings**, which is the difference between this and
+    ``install`` above. A document type's lint is advisory because every one of
+    its findings describes a document that is merely thinner than intended; a
+    sheet's is not, because ``columns.lint``'s rules describe a workbook that
+    *disagrees with itself across formats* — the summable margin percentage that
+    prints 24.52 in Word, computes 75.15 in Excel and passes ``worldloom
+    validate`` clean. There is no reader of that corpus, and no check in this
+    repository, that could tell which number was meant. A pack declaring one
+    must not build.
+
+    ``columns.refusals`` comes first and separately: those name a sheet the
+    compiler cannot use at all, and reporting "your percentage is summable"
+    about a sheet that is missing the column the Summary table indexes would be
+    answering the second question.
+    """
+    if not sheets:
+        return
+    prepared: list[columns_module.Sheet] = []
+    for index, spec in enumerate(sheets):
+        where = f"sheets[{index}] ({spec.name})"
+        sheet = spec.as_sheet()  # raises on a duplicated column key
+        refused = columns_module.refusals(sheet)
+        if refused:
+            raise ValueError(f"{where}: " + "\n".join(refused))
+        findings = columns_module.lint(sheet, extra_kinds=extra_kinds)
+        if findings:
+            raise ValueError(
+                f"{where}: the sheet lints with"
+                f" {len(findings)} finding(s), and a sheet is refused on them"
+                " rather than warned about — every rule `columns.lint` states is a"
+                " workbook that renders one number in Word and computes another in"
+                " Excel with nothing between them to notice by:\n"
+                + "\n".join(f"  - {finding}" for finding in findings)
+            )
+        prepared.append(sheet)
+    # Installed only once every sheet has passed, so a pack with a good sheet
+    # and a bad one leaves the process holding neither — `install` above is
+    # all-or-nothing for the same reason.
+    columns_module.install(owner, prepared)
+
+
 # ---------------------------------------------------------------------------
 # The lint
 # ---------------------------------------------------------------------------
+
+
+def lint_sheets(
+    sheets: Iterable[SheetSpec],
+    *,
+    extra_kinds: frozenset[str] | set[str] = frozenset(),
+) -> list[str]:
+    """Findings about a pack's authored sheets, for ``packs.lint``.
+
+    Every one of these is fatal at install — see ``install_sheets`` — and naming
+    them here anyway is the argument ``lint`` above already makes about the
+    rules ``register_artifact_types`` refuses: it is the difference between an
+    author reading their mistake in ``worldloom pack check`` and hitting it
+    half-way through a build. Nothing here raises, including on a sheet so
+    malformed that ``as_sheet`` does — a duplicated column key is reported as a
+    finding like the rest rather than as a traceback out of a lint.
+    """
+    findings: list[str] = []
+    for index, spec in enumerate(sheets):
+        where = f"sheets[{index}] ({spec.name})"
+        try:
+            sheet = spec.as_sheet()
+        except ValueError as exc:
+            findings.append(f"{where}: {exc}")
+            continue
+        findings.extend(f"{where}: {refusal}" for refusal in columns_module.refusals(sheet))
+        findings.extend(
+            f"{where}: {finding}"
+            for finding in columns_module.lint(sheet, extra_kinds=extra_kinds)
+        )
+    return findings
 
 
 def _valid_variable_names() -> frozenset[str]:
@@ -855,7 +1028,8 @@ def to_document(types: Iterable[DocumentType]) -> dict[str, Any]:
 
 
 __all__ = [
-    "ACCESS_CLASSES", "DocumentType", "DocumentTypes", "FILING_LAG_CEILING",
-    "FilingSpec", "Lag", "RESERVED_HEADINGS", "SectionSpec", "audit", "describe",
-    "install", "installed", "lint", "load", "to_document",
+    "ACCESS_CLASSES", "ColumnSpec", "DerivationSpec", "DocumentType", "DocumentTypes",
+    "FILING_LAG_CEILING", "FilingSpec", "Lag", "RESERVED_HEADINGS", "SectionSpec",
+    "SheetSpec", "audit", "describe", "install", "install_sheets", "installed",
+    "lint", "lint_sheets", "load", "to_document",
 ]

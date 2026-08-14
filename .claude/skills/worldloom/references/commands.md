@@ -582,6 +582,17 @@ worldloom series <CORPUS>
 | `--kind` | Fact kind to read. Default: the longest series in the corpus. |
 | `--subject` | Entity id the series is about. Default: whichever has the most periods. |
 
+### `worldloom spaces`
+
+The build-configuration space: what a fleet could vary, and what one did.
+
+| Option | Purpose |
+| --- | --- |
+| `--cover` | Emit the planned fleet — one JSON object per line, one per configuration — instead of describing the space. Builds nothing. |
+| `--holes` | A fleet, as the JSON-lines this command's --cover emits. Reports what that fleet never covered rather than what a plan would. |
+| `--json` | Machine-readable output. |
+| `--strength`, `-t` | Interaction strength. t=2 covers every pair of axis values, t=3 every triple. The row count grows with the product of the t widest axes, not with the whole space. |
+
 ### `worldloom stats`
 
 Report what the corpus actually contains: no invented benchmark, just numbers.

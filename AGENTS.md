@@ -39,6 +39,12 @@ below assumes those decisions are already made.
 # 1. Build a world. Same seed, same world, every time.
 worldloom build --seed 8128 --incident --out ./corpus
 
+# 1a. Optional: let each document's *outline* be derived rather than looked up.
+#     Without this every document of a type carries the same headings forever,
+#     which is a shape a retriever can learn instead of the content. Off by
+#     default, recorded on the recipe, and replays byte-for-byte.
+worldloom build --seed 8128 --section-omission 400 --variant-bias 1 --out ./corpus
+
 # 1b. Optional: choose each document's shape before writing any of it. Without
 #     this, structure comes from a fixed outline and every memo looks the same.
 worldloom plan requests ./corpus -o plans.json
@@ -228,6 +234,29 @@ length and how bad the news the actuary has to deliver is. Only the retail
 engine varies a trading year, because `finance.generate` is the one generator
 that reads one. Estate size is an axis for all three, so a mosaic of banks spans
 9 to 101 nodes and the corpus can be asked what has a blast radius.
+
+### Planning a fleet rather than sampling one
+
+`mosaic` and the determinism gate both *choose* configurations, and neither can
+say what it missed — a sampler knows where its points landed and not which
+combinations nobody reached. `spaces` gives that answer:
+
+```bash
+worldloom spaces                                  # every axis, and how few rows cover it
+worldloom spaces --cover -t 2 > plan.jsonl        # the planned fleet, building nothing
+worldloom spaces --holes plan.jsonl               # what a fleet you already built missed
+```
+
+Twelve axes, **3,732,480 configurations exhaustive, 39 rows to cover every
+pair** — because a covering array grows with the two widest axes rather than
+with the space. That is a different guarantee from `mosaic`'s: dispersion
+spreads points evenly through a cube and can still never once pair a bank with
+three periods, which is exactly what it had never done.
+
+`--holes` is the reading worth running against a fleet you already have. It
+reports the axes a fleet *never varied at all* before it lists the combinations
+it missed, because one unvaried axis is a hundred holes with a single cause, and
+a list that does not say so reads as a hundred separate failures.
 
 Each world lands in `./mosaic/world-NN/` with its own recipe, so any one of them
 rebuilds alone. `mosaic.json` records the plan. Measured on five worlds: five

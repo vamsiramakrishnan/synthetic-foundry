@@ -63,13 +63,34 @@ something the compiler assumes silently or something a renderer degrades on
 rather than refuses — ``render.xlsx._formula`` returns ``None`` for a
 ``RATIO_PCT`` whose operand column is not on the table, so the cell renders as a
 pasted value and no check anywhere says the declared computation went missing.
+
+**And a sheet is authorable.** Everything above described one declaration with
+one instance, which left the workbook the last thing a pack could not say: a
+pack could give its company a name, divisions, books, voices, its own document
+types, its own processes and its own fact kinds, and every one of those
+companies filed the same eight columns reading ``financial.*`` under the same
+eight English headings. An insurer's month-end model called its written premium
+"Revenue actual". ``install`` and ``for_world`` below close that, through the
+seam ``doctypes`` already established — declared in the pack, installed on the
+one path from a ``Pack`` to a world, replayed because the pack rides the recipe
+— with one addition that layer did not need: the registry is keyed by *owner*,
+because an authored type adds a name to the vocabulary while an authored sheet
+replaces ``pnl``, and a name-keyed table would hand one pack's workbook to the
+next stock world built in the same process.
+
+What a pack may say is narrower than "a workbook", and ``BOUND_KEYS`` states
+exactly how much narrower and why. The lint is what makes the seam worth having
+rather than the schema: ``install`` refuses on findings, so the summable margin
+percentage this module was written for — Word printing 24.52 while Excel
+computes 75.15, ``worldloom validate`` clean across twenty-one thousand checks —
+cannot be authored into a pack at all.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Literal
+from typing import Any, Literal
 
 from . import factkinds
 from .models import FormulaKind
@@ -286,7 +307,9 @@ class Sheet:
 # ---------------------------------------------------------------------------
 
 
-def lint(sheet: Sheet) -> list[str]:
+def lint(
+    sheet: Sheet, *, extra_kinds: frozenset[str] | set[str] = frozenset()
+) -> list[str]:
     """Findings an author should read before a sheet reaches a renderer.
 
     Same contract as ``doctypes.lint`` and for the same reason: a list of
@@ -300,15 +323,24 @@ def lint(sheet: Sheet) -> list[str]:
     table makes ``render.xlsx._formula`` return ``None``, and the cell renders
     as a pasted literal with no formula and no complaint — indistinguishable
     from a column that never declared one.
+
+    ``extra_kinds`` is the same escape hatch ``doctypes.lint``'s
+    ``episode_kinds`` is, added for the same measured reason. A pack's authored
+    episodes mint fact kinds that ``episodes.install`` does *not* put in the
+    ``factkinds`` registry — only a vertical module registers there — so a pack
+    whose sheet reads its own process's figures would otherwise be refused for
+    reading a kind that exists. ``packs.lint`` passes the pack's episode kinds
+    the way it already does one layer up.
     """
     findings: list[str] = []
     present = set(sheet.keys())
+    extra = frozenset(extra_kinds)
 
     for index, column in enumerate(sheet.columns):
         at = f"{sheet.name}.columns[{index}] ({column.key!r})"
 
         # -- the fact kind ------------------------------------------------
-        if not factkinds.resolvable(column.kind):
+        if column.kind not in extra and not factkinds.resolvable(column.kind):
             findings.append(
                 f"{at}: reads fact kind {column.kind!r}, which no generator in"
                 " this process declares. `_measure_row` looks it up per row and"
@@ -476,13 +508,34 @@ PNL = Sheet(
     ),
 )
 
+#: How the two smaller sheets are cut from the P&L: the keys they keep, and the
+#: headings they rename. Data rather than two ``select`` calls because the cut
+#: has to be repeatable against a P&L this module did not write — an authored
+#: sheet (``install`` below) gets the same two narrowings from its own columns,
+#: so a pack that renames "Revenue actual" renames it on the estate sheet and in
+#: the memo's divisional table too, without declaring either.
+_CUTS: Mapping[str, tuple[tuple[str, ...], Mapping[str, str]]] = {
+    "stores": (("revenue_budget", "revenue_actual", "revenue_variance"), {}),
+    "divisions": (
+        ("revenue_budget", "revenue_actual", "revenue_variance", "gm_pct_actual"),
+        # The memo's table is already titled by division, so "Revenue variance"
+        # on every heading is noise a reader of a memo does not need.
+        {"revenue_variance": "Variance"},
+    ),
+}
+
+
+def cut(pnl: Sheet, name: str) -> Sheet:
+    """The named narrowing of *pnl* — ``stores`` or ``divisions``."""
+    keys, labels = _CUTS[name]
+    return pnl.select(*keys, name=name).relabel(dict(labels))
+
+
 #: The store sheet's money columns. A distribution centre books no turnover and
 #: a store's gross profit is not booked at site level at all, so the estate is
 #: read on revenue alone — the same three decisions as the P&L's first three
 #: columns, narrowed rather than restated.
-STORES = PNL.select(
-    "revenue_budget", "revenue_actual", "revenue_variance", name="stores"
-)
+STORES = cut(PNL, "stores")
 
 #: The variance memo's divisional table: revenue in full, plus the margin rate,
 #: under the memo's own heading for the variance column.
@@ -495,10 +548,7 @@ STORES = PNL.select(
 #: subject of an XLSX render), and both fixes — adding the column, or dropping
 #: the derivation for this sheet — change what a reader sees. So it is reported
 #: here and left standing, which is what a lint is for.
-DIVISIONAL = PNL.select(
-    "revenue_budget", "revenue_actual", "revenue_variance", "gm_pct_actual",
-    name="divisions",
-).relabel({"revenue_variance": "Variance"})
+DIVISIONAL = cut(PNL, "divisions")
 
 
 def sheets() -> Sequence[Sheet]:
@@ -515,8 +565,190 @@ def findings(over: Iterable[Sheet] | None = None) -> dict[str, list[str]]:
     return {sheet.name: lint(sheet) for sheet in (over if over is not None else sheets())}
 
 
+def default(name: str) -> Sheet:
+    """The engine's own sheet of that name — ``documents``' three constants.
+
+    Derived from ``sheets()`` on every call rather than from a table built at
+    import, for two reasons. A fourth sheet added to this module becomes
+    resolvable where it is declared rather than where somebody remembers to name
+    it, which is ``doctypes.audit``'s argument. And
+    ``tests/test_columns.py`` rebinds ``columns.PNL`` to prove the consumption
+    in ``documents`` is real — an import-time table would make this resolver the
+    one place that quietly disagreed with it.
+    """
+    return {sheet.name: sheet for sheet in sheets()}[name]
+
+
+# ---------------------------------------------------------------------------
+# Authored sheets
+# ---------------------------------------------------------------------------
+
+#: Column keys ``documents`` names by hand, outside any sheet declaration.
+#:
+#: This is the honest boundary of "a pack may author the workbook". A sheet
+#: decides what each column reads, what a reader sees it called, how it
+#: recomputes and whether it adds up, and it may carry columns of its own — but
+#: it may not *drop* these. Five of them are written into the month-end
+#: model's *Summary* table (``summary_row("revenue_actual", …)``, which indexes
+#: the group row's cells and raises ``KeyError`` on a missing one) and five into
+#: its three charts (``Chart.series``, where a missing key is a
+#: ``chart_series_missing`` violation from ``validate`` rather than a crash).
+#: An authored sheet dropping one of them therefore does not produce a smaller
+#: workbook; it produces a build that dies in the compiler, or a corpus that
+#: fails its own validator, a long way from the declaration that caused it. So
+#: ``install`` refuses it *at the declaration*, which is the whole posture of
+#: this module.
+#:
+#: ``gp_budget`` is deliberately absent: nothing outside the sheet names it, and
+#: a sheet that drops it while keeping ``gm_pct_budget``'s ratio is already
+#: caught by ``lint``'s missing-operand rule, which says the same thing better.
+BOUND_KEYS: frozenset[str] = frozenset({
+    "revenue_budget", "revenue_actual", "revenue_variance",
+    "gp_actual", "gp_variance", "gm_pct_budget", "gm_pct_actual",
+})
+
+#: The one sheet a pack declares. See ``install``.
+AUTHORABLE = "pnl"
+
+#: ``(owner, sheet name) -> Sheet``, for every authored sheet this process holds.
+#:
+#: Keyed by *owner* — the archetype key a pack derives, ``pack:<name>`` — rather
+#: than by sheet name alone, and that is the difference between this registry
+#: and ``doctypes._INSTALLED``. An authored document type *adds* a name to the
+#: engine's vocabulary and can be made not to collide; an authored sheet
+#: **replaces** ``pnl``, so a name-keyed table would hand one pack's workbook to
+#: the next stock world built in the same process — the contamination
+#: ``tests/test_doctypes.py::test_an_authored_type_does_not_reach_the_next_world_built``
+#: had to argue away, here made structurally impossible instead. A stock
+#: archetype key is never ``pack:``-prefixed, so it can never hit a row.
+_INSTALLED: dict[tuple[str, str], Sheet] = {}
+
+
+def installed() -> dict[tuple[str, str], Sheet]:
+    """The authored sheets this process holds. A copy — see ``doctypes.installed``."""
+    return dict(_INSTALLED)
+
+
+def refusals(sheet: Sheet) -> list[str]:
+    """Why *sheet* may not be installed at all, if anything.
+
+    Separate from ``lint`` because the two say different things and a caller
+    needs both. ``lint`` names a sheet that will *render* wrong; this names one
+    the compiler cannot use — and unlike a lint finding, neither of these is a
+    judgement call, so ``install`` raises on them. Published as a list rather
+    than only as an exception so ``doctypes.lint_sheets`` can report them beside
+    the lint's, which is the difference between an author reading their mistake
+    in ``worldloom pack check`` and hitting it half-way through a build.
+    """
+    found: list[str] = []
+    if sheet.name != AUTHORABLE:
+        found.append(
+            f"sheet {sheet.name!r} is not authorable: a pack declares"
+            f" {AUTHORABLE!r} and nothing else. The estate sheet and the memo's"
+            f" divisional table are *cuts* of the P&L ({', '.join(sorted(_CUTS))}),"
+            " computed from it — declaring one separately is how the seven tables"
+            " this module replaced came to disagree in the first place."
+        )
+    missing = sorted(BOUND_KEYS - set(sheet.keys()))
+    if missing:
+        found.append(
+            f"sheet {sheet.name!r} does not carry {', '.join(repr(k) for k in missing)}."
+            " `documents` names those keys by hand outside the sheet — in the"
+            " month-end model's Summary table, which indexes the group row's cells"
+            " and raises `KeyError` on a missing one, and in its charts, where a"
+            " missing key is a `chart_series_missing` violation. An authored sheet"
+            " may re-point, re-label and re-derive these columns; it may not drop"
+            " them."
+        )
+    return found
+
+
+def install(owner: str, declared: Sequence[Sheet]) -> None:
+    """Register *declared* as the sheets a world built from *owner* compiles with.
+
+    *owner* is the archetype key the pack derives (``packs.archetype_of``), and
+    is the only thing a built world still carries about where its shape came
+    from — ``World._archetype``. Called from ``packs.archetype_of``, the one
+    function between any ``Pack`` and a world built from it, for exactly the
+    reason ``doctypes.install`` is called there: a corpus must never be compiled
+    with the sheet its own pack declared missing, and ``packs.load`` is the
+    wrong home because ``worldloom pack check`` loads a pack it is only
+    inspecting.
+
+    **Only ``pnl`` may be declared.** ``stores`` and ``divisions`` are cut from
+    it here, by the same ``_CUTS`` the engine's own two are, because they are
+    narrowings and not sheets: this module exists because those three were once
+    three hand-written column lists that had to agree, and letting a pack author
+    them separately would put the disagreement back one layer up — a ``stores``
+    sheet declaring a different fact kind for ``revenue_actual`` than the P&L
+    does is silently ignored, since ``documents._MEASURES`` is the P&L's table.
+
+    Re-installing an identical sheet is a no-op; a *different* sheet under one
+    owner is refused, ``episodes.install``'s rule and for its reason.
+    """
+    for sheet in declared:
+        found = refusals(sheet)
+        if found:
+            raise ValueError("\n".join(found))
+        existing = _INSTALLED.get((owner, sheet.name))
+        if existing is not None and existing != sheet:
+            raise ValueError(
+                f"sheet {sheet.name!r} is already installed for {owner!r} with"
+                " different columns — a sheet may not be redefined, because two"
+                " declarations disagreeing about what a column reads would make a"
+                " workbook depend on load order."
+            )
+        # The cuts are materialised now rather than resolved on demand, so that
+        # `for_world` is a lookup with no failure mode: `BOUND_KEYS` above is a
+        # superset of every key `_CUTS` selects, so neither `select` can raise
+        # by the time it runs.
+        _INSTALLED[(owner, sheet.name)] = sheet
+        for name in sorted(_CUTS):
+            _INSTALLED[(owner, name)] = cut(sheet, name)
+
+
+def for_archetype(key: str, name: str = AUTHORABLE) -> Sheet:
+    """The sheet a world built from archetype *key* compiles *name* with.
+
+    The pack's if it declared one, the engine's otherwise — and the engine's is
+    the path every corpus already took, so a build with no pack in it resolves
+    the same three module constants it always read.
+
+    A composed key is walked back one suffix at a time. ``divisions.widen``
+    mints ``pack:foo+8div`` and ``vocabulary.spoken`` composes qualifiers the
+    same way, so an exact-match lookup would hand an eight-division pack world
+    the engine's sheet and report success — the silent-fallback failure this
+    wave exists to stop, not to reproduce.
+    """
+    candidate = key
+    while True:
+        found = _INSTALLED.get((candidate, name))
+        if found is not None:
+            return found
+        if "+" not in candidate:
+            return default(name)
+        candidate = candidate.rsplit("+", 1)[0]
+
+
+def for_world(world: Any, name: str = AUTHORABLE) -> Sheet:
+    """The sheet *world* compiles *name* with.
+
+    ``Any`` rather than ``World``: this module is imported by ``documents``, and
+    ``documents`` is what a world's compile step *is*, so a type-level import
+    either cycles or has to be quoted into a lie. Reading ``_archetype``
+    defensively is the same posture ``compose.industry_of`` and
+    ``timeline``'s scheduler already take — it is generator state, present on a
+    world built from a seed and absent on one loaded from disk, and a loaded
+    world has its IR on disk and never reaches a sheet.
+    """
+    archetype = getattr(world, "_archetype", None)
+    return for_archetype(getattr(archetype, "key", "") or "", name)
+
+
 __all__ = [
     "ARITY",
+    "AUTHORABLE",
+    "BOUND_KEYS",
     "ColumnFormula",
     "ColumnSpec",
     "DIVISIONAL",
@@ -525,7 +757,14 @@ __all__ = [
     "STORES",
     "Sheet",
     "Unit",
+    "cut",
+    "default",
     "findings",
+    "for_archetype",
+    "for_world",
+    "install",
+    "installed",
     "lint",
+    "refusals",
     "sheets",
 ]

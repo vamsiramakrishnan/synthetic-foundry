@@ -147,8 +147,13 @@ def axes() -> tuple[Axis, ...]:
              about="The trading year. Only the retail builder reads one, so"
                    " every other engine refuses a non-default value rather than"
                    " carrying it inert."),
-        Axis("periods", (1, 2, 3),
-             about="Consecutive episodes on one world."),
+        Axis("periods", (1, 2, 3, 12),
+             about="Consecutive episodes on one world. 12 is here because the"
+                   " axis stopped at 3 and the region it never reached — a full"
+                   " trading year, so seasonality, a trend, and twelve copies of"
+                   " one shape — is the one most likely to hold a carry-forward"
+                   " or aliasing defect. A domain that caps its built-in episode"
+                   " is clamped back down to what it declares."),
         Axis("messiness", (None, *sorted(messiness.PROFILES)),
              about="How well the archive is kept."),
         Axis("surface", ("flags", "spec"),
@@ -357,9 +362,23 @@ def _config(coordinates: Sequence[float], *, seed: int,
     if estate is not None and engine not in landscape.LANDSCAPES:
         estate, _ = None, notes.append(
             f"{engine}: no estate vocabulary in `landscape.LANDSCAPES`")
-    # `--periods N` on a single-episode vertical is refused by the CLI itself.
-    if periods > 1 and domain.single_episode is not None:
-        periods, _ = 1, notes.append(f"{engine}: single-episode vertical takes --periods 1")
+    # Clamped to what the domain says its built-in episode supports, not to
+    # what a single-episode domain was once assumed to support.
+    #
+    # This read "`--periods N` on a single-episode vertical is refused by the
+    # CLI itself" and collapsed every one of them to 1. The CLI stopped refusing
+    # it — `cli.py` runs `for index in range(max(1, periods))` on that branch —
+    # and the assumption outlived the refusal by long enough that this sweep has
+    # never once compared two builds of a bank running more than a quarter.
+    # Measured after the fact: banking validates clean at three and four
+    # consecutive runs (4,237 and 5,525 checks), procurement likewise (2,672 and
+    # 3,463). Only insurance is genuinely capped, and it now says so on its own
+    # `Domain` rather than raising from inside the scenario where no planner
+    # could see it.
+    limit = domain.max_periods
+    if limit is not None and periods > limit:
+        periods, _ = limit, notes.append(
+            f"{engine}: built-in episode supports --periods {limit}")
     # A facet implies roles, and they are appended to the engine's own table. An
     # engine with no shipped table has nothing to append to — the CLI says so
     # and exits 2.

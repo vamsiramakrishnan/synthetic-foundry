@@ -116,6 +116,47 @@ changes what happens.
 The corpus directory is plain files. Worldloom is needed to build and validate it,
 not to read it.
 
+### Structure is derived, not looked up
+
+A document's outline used to be a constant per artifact type, so a corpus of a
+thousand documents rendered a few dozen shapes and twelve monthly close packs
+were twelve renderings of one skeleton. A retriever can learn that shape instead
+of the content.
+
+The outline is now a function of a **structural genome** — three integers
+recorded on the recipe, so a corpus resolves the same shapes when it is loaded
+back and a rebuild reproduces them.
+
+```bash
+worldloom build --section-omission 400 --variant-bias 1 --out ./corpus
+worldloom diversity ./corpus --effective
+```
+
+`--section-omission` is swarm testing applied to documents: a document emits a
+*subset* of its type's optional sections rather than all of them every time.
+Sections are required unless a type says otherwise, so the default build is
+byte-identical to what it always was.
+
+`--effective` is the reading that made the case for the work. A count of
+distinct shapes prices a shape used ten times exactly as it prices one used
+once; the Vendi score reports the **effective** number, and the gap between the
+two is where the monotony hides.
+
+### Planning a fleet, not sampling one
+
+```bash
+worldloom spaces                              # 12 axes, 3,732,480 configurations
+worldloom spaces --cover -t 2 > plan.jsonl    # 39 rows cover every pair
+worldloom spaces --holes plan.jsonl           # what a fleet you built missed
+```
+
+A covering array grows with the two widest axes rather than with the space, so
+every pairwise interaction is reachable in a fleet a person would actually
+build. The complement matters more: pointed at the shipped determinism gate,
+`--holes` reported that it covered 24% of pairs and had **never once built a
+bank running more than one period** — a gap the gate could not see, because a
+sampler knows where its points landed and not which combinations nobody reached.
+
 ## Quickstart: one coherent enterprise
 
 ```bash

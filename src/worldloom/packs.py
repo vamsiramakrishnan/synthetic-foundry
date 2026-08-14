@@ -43,7 +43,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .archetypes import Archetype
-from .doctypes import DocumentType
+from .doctypes import DocumentType, SheetSpec
 from .episodes import EpisodeSpec
 from .generators.hierarchy import CategorySpec, SiteFormat, UnitSpec
 from .lob import Lob
@@ -315,6 +315,30 @@ class Pack(PackModel):
     compiler stays code.
     """
 
+    sheets: list[SheetSpec] = Field(default_factory=list)
+    """The company's own month-end workbook, as columns.
+
+    The seventh thing a pack authors, and the last table in the corpus that was
+    still the engine's whatever the pack said the company was. A pack could name
+    the company, its divisions, their books, its voices, its document types, its
+    processes and the fact kinds those mint — and the workbook every one of
+    those companies filed had the same eight columns reading ``financial.*``
+    under the same eight English headings, so a pack-authored insurer's
+    month-end model called its written premium "Revenue actual" and its loss
+    ratio "GM% actual".
+
+    One entry, named ``pnl``: the estate sheet and the memo's divisional table
+    are *cuts* of it and are computed rather than declared, which is the whole
+    argument ``worldloom.columns`` was extracted on. Empty keeps
+    ``columns.PNL``, so every corpus built before this existed is byte-for-byte
+    what it was.
+
+    Refused rather than warned about — see ``doctypes.install_sheets``. Every
+    other authored layer lints advisory, because its findings describe something
+    thinner than intended; a sheet's findings describe a workbook that prints
+    one number in Word and computes another in Excel while ``worldloom
+    validate`` passes clean, and nothing downstream can tell which was meant."""
+
     episodes: list[EpisodeSpec] = Field(default_factory=list)
     """Business processes this company runs that the engine does not ship.
 
@@ -386,6 +410,31 @@ def seasonality_of(pack: Pack) -> Any:
     return profiles.from_document(pack.seasonality)
 
 
+def archetype_key(pack: Pack) -> str:
+    """The archetype key ``archetype_of`` derives for *pack*.
+
+    Published because a second thing now needs it: ``columns._INSTALLED`` is
+    keyed by the archetype key, since that string is the only thing a *built*
+    world still carries about where its shape came from (``World._archetype``).
+    Two spellings of one convention is how the sheet a pack installs and the
+    sheet its world resolves would come to be different sheets, so there is one.
+    """
+    return f"pack:{pack.name}"
+
+
+def episode_kinds(pack: Pack) -> frozenset[str]:
+    """The fact kinds this pack's own processes mint.
+
+    ``episodes.install`` registers a spec into the episode grammar and does not
+    register its kinds with ``factkinds`` — only a vertical module registers
+    there — so every lint that asks "does anything generate this kind" needs
+    telling about a pack's own. ``lint`` already computed this inline for the
+    doctypes lint; the sheet lint is the second caller, which is one more than a
+    comprehension in an argument list should have.
+    """
+    return frozenset(fk.kind for spec in pack.episodes for fk in spec.fact_kinds)
+
+
 def archetype_of(pack: Pack) -> Archetype:
     """The pack's company shape, as the engine's own archetype type.
 
@@ -411,6 +460,17 @@ def archetype_of(pack: Pack) -> Archetype:
     from . import doctypes, episodes as episodes_module, lob as lob_module
 
     doctypes.install(pack.artifact_types)
+    # The workbook, under the key this function is about to return. A sheet
+    # replaces `pnl` rather than adding a name to a vocabulary, so unlike the
+    # three installs around it this one is *owner-scoped* — see
+    # `columns._INSTALLED`. `episode_kinds` for the reason `packs.lint` passes
+    # them to the doctypes lint: `episodes.install` does not register a fact
+    # kind with `factkinds` (only a vertical module does), so without them a
+    # sheet reading its own company's process would be refused for reading a
+    # kind that exists.
+    doctypes.install_sheets(
+        pack.sheets, archetype_key(pack), extra_kinds=episode_kinds(pack)
+    )
     # The other two authored layers, on the same one-function path and for the
     # same reason: this is the only function between *any* Pack — file, recipe
     # rebuild, or SDK — and a world built from it. Installing here is what
@@ -421,7 +481,7 @@ def archetype_of(pack: Pack) -> Archetype:
     episodes_module.install(pack.episodes)
     lob_module.install(pack.lobs)
     return Archetype(
-        key=f"pack:{pack.name}",
+        key=archetype_key(pack),
         authored=True,
         label=pack.description or pack.name,
         industry=pack.industry,
@@ -619,15 +679,19 @@ def lint(pack: Pack) -> list[str]:
         # cannot see one field over, and without these it reports a section an
         # episode feeds as "written about nothing" and an episode-planned type
         # as inert.
-        episode_kinds=frozenset(
-            fk.kind for spec in pack.episodes for fk in spec.fact_kinds
-        ),
+        episode_kinds=episode_kinds(pack),
         episode_planned=frozenset(
             artifact.artifact_type
             for spec in pack.episodes
             for artifact in spec.artifacts
         ),
     ))
+    # The workbook. Every finding here is fatal at install rather than advisory
+    # — `doctypes.install_sheets` says why — so this is the surface that lets an
+    # author read it in `worldloom pack check` instead of hitting it part-way
+    # through a build.
+    findings.extend(doctypes.lint_sheets(pack.sheets, extra_kinds=episode_kinds(pack)))
+
     authored = {spec.key for spec in pack.artifact_types}
 
     # The other two authored layers, against the registries *plus this pack*:
@@ -777,6 +841,7 @@ def to_recipe(pack: Pack) -> dict[str, Any]:
 
 
 __all__ = [
-    "PLACEHOLDER", "Pack", "PackCommitment", "PackNamePools", "PackVoice", "archetype_of",
-    "lint", "load", "lore_of", "persona_id_for", "placeholders", "to_recipe",
+    "PLACEHOLDER", "Pack", "PackCommitment", "PackNamePools", "PackVoice",
+    "archetype_key", "archetype_of", "episode_kinds", "lint", "load", "lore_of",
+    "persona_id_for", "placeholders", "to_recipe",
 ]

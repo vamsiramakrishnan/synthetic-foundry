@@ -5024,5 +5024,109 @@ def present_lint(
             console.print(f"    {knob:12} {value}")
 
 
+@app.command()
+def spaces(
+    strength: int = typer.Option(
+        2, "--strength", "-t", min=1,
+        help="Interaction strength. t=2 covers every pair of axis values, t=3"
+             " every triple. The row count grows with the product of the t"
+             " widest axes, not with the whole space.",
+    ),
+    cover_plan: bool = typer.Option(
+        False, "--cover",
+        help="Emit the planned fleet — one JSON object per line, one per"
+             " configuration — instead of describing the space. Builds nothing.",
+    ),
+    against: Path = typer.Option(
+        None, "--holes",
+        help="A fleet, as the JSON-lines this command's --cover emits. Reports"
+             " what that fleet never covered rather than what a plan would.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
+) -> None:
+    """The build-configuration space: what a fleet could vary, and what one did.
+
+    `mosaic` and `tools/sweep.py` both choose configurations, and neither can
+    say what it failed to reach — a sampler has no denominator. This does:
+    every axis `worldloom build` actually accepts, the exhaustive product, and
+    a covering array that reaches every t-way combination in a number of rows
+    that grows with the widest axes rather than with the space.
+
+    Read `spaces.py` for why a covering array is a different guarantee from
+    `dispersion.halton`'s spread: Halton fills a continuous cube evenly and can
+    still never once pair a bank with three periods.
+    """
+    import json as _json
+
+    from . import spaces as spaces_module
+
+    space = spaces_module.build_space()
+
+    if against is not None:
+        rows = [
+            _json.loads(line)
+            for line in Path(against).read_text().splitlines()
+            if line.strip()
+        ]
+        got = spaces_module.coverage(space, rows, strength=strength)
+        missing = spaces_module.holes(space, rows, strength=strength)
+        never = spaces_module.unvaried(space, rows)
+        if as_json:
+            console.print_json(data={
+                "configurations": len(rows),
+                "strength": strength,
+                "coverage": got,
+                "combinations": space.size_at(strength),
+                "holes": [list(map(list, hole)) for hole in missing],
+                "unvaried_axes": list(never),
+            })
+            return
+        console.print(
+            f"{len(rows)} configuration(s) cover [bold]{got:.1%}[/bold] of"
+            f" {space.size_at(strength)} {strength}-way combinations"
+        )
+        if never:
+            # Printed before the holes, because it is their cause. A fleet that
+            # never varied five axes has hundreds of holes with one explanation,
+            # and listing them without this reads as a hundred separate failures.
+            console.print(
+                f"[yellow]![/yellow] never varied at all: {', '.join(never)}"
+            )
+        for hole in missing[:20]:
+            console.print("  " + ", ".join(f"{name}={value}" for name, value in hole))
+        if len(missing) > 20:
+            console.print(f"  [dim]+{len(missing) - 20} more[/dim]")
+        return
+
+    if cover_plan:
+        for row in spaces_module.cover(space, strength=strength):
+            # One object per line rather than one array, so a fleet runner can
+            # stream it and `--holes` can read back exactly what it wrote.
+            print(_json.dumps(row, sort_keys=True))
+        return
+
+    rows = spaces_module.cover(space, strength=strength)
+    if as_json:
+        console.print_json(data={
+            "axes": {axis.name: list(axis.values) for axis in space.axes},
+            "exhaustive": space.exhaustive,
+            "strength": strength,
+            "combinations": space.size_at(strength),
+            "rows": len(rows),
+        })
+        return
+    console.print(
+        f"[bold]{len(space.axes)}[/bold] axes, [bold]{space.exhaustive:,}[/bold]"
+        f" configurations exhaustive\n"
+    )
+    for axis in space.axes:
+        console.print(f"  {axis.name:14} {len(axis.values):>3}  {', '.join(axis.values)}")
+    console.print(
+        f"\nt={strength}: [bold]{len(rows)}[/bold] rows cover all"
+        f" {space.size_at(strength):,} combinations"
+        f" — {space.exhaustive // max(1, len(rows)):,}x smaller than exhaustive"
+    )
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()
