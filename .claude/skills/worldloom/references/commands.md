@@ -627,6 +627,21 @@ worldloom render <CORPUS>
 | `--out`, `-o` | Write here instead of back into the corpus. |
 | `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
 
+### `worldloom search`
+
+Rank the corpus's own passages against a query, BM25, deterministic.
+
+```
+worldloom search <CORPUS> <QUERY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--as-of` | ISO date or datetime; only passages from artifacts created at or before this moment are searched. This is the temporal-cutoff rule the narration contract already imposes on facts, applied to retrieval: an author amending a document in March may only lean on what existed in March. |
+| `--include-hidden` | Search hidden sections (lineage appendices) too. Off by default for `evaluate`'s reason: machinery is not something a reader would have found. |
+| `--json` | Emit ranked passages as JSON, full text included. |
+| `-k`, `--limit` | How many passages to return. |
+
 ### `worldloom series`
 
 Decompose a period-keyed fact series into trend, season, and what is left.

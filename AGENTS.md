@@ -1180,6 +1180,27 @@ argues: lead with the position, group what belongs together, say what it means.
 Sections partition the facts deliberately — a section headed "By business unit"
 was given unit figures precisely so it does not restate the group position.
 
+### Reading what the corpus already says
+
+```bash
+worldloom search ./corpus "operational incident stock loss" -k 3
+worldloom search ./corpus "margin" --as-of 2026-03-31 --json
+```
+
+Ranks the corpus's own passages against a query — the same passage index and
+the same BM25 ranking `evaluate` scores retrievers with, so what you retrieve
+while writing is exactly what the benchmark's baseline retriever will see when
+the corpus is judged. Use it before writing a document that leans on earlier
+ones: how the incident memo phrased the outage, which sections already carry a
+figure, what a summary should echo rather than restate. `--as-of` applies the
+temporal-cutoff rule to retrieval — an author amending in March may only lean
+on what existed in March.
+
+What it is not: a fact source. The facts-only rule above stands unchanged — if
+a fact is not in the request, you may not use it, however prominently a search
+hit displays it. Search informs *how* you write (register, continuity, what to
+echo); the request alone governs *what* you may claim.
+
 ---
 
 ## What the harness will not let you do

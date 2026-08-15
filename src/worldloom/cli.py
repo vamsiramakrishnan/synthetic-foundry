@@ -12,6 +12,7 @@ themselves, and adds no capability the library lacks::
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -3864,6 +3865,119 @@ def evaluate(
             mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
             console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
             console.print(f"      {outcome.detail}")
+
+
+@app.command()
+def search(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    query: str = typer.Argument(..., help="What to look for, in plain words."),
+    limit: int = typer.Option(5, "-k", "--limit", help="How many passages to return."),
+    as_of: str = typer.Option(
+        "", "--as-of",
+        help=(
+            "ISO date or datetime; only passages from artifacts created at or "
+            "before this moment are searched. This is the temporal-cutoff rule "
+            "the narration contract already imposes on facts, applied to "
+            "retrieval: an author amending a document in March may only lean "
+            "on what existed in March."
+        ),
+    ),
+    include_hidden: bool = typer.Option(
+        False, "--include-hidden",
+        help=(
+            "Search hidden sections (lineage appendices) too. Off by default "
+            "for `evaluate`'s reason: machinery is not something a reader "
+            "would have found."
+        ),
+    ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit ranked passages as JSON, full text included.",
+    ),
+) -> None:
+    """Rank the corpus's own passages against a query, BM25, deterministic.
+
+    The retrieval half of self-referential narration: before writing a document
+    that amends, summarises or contradicts earlier ones, ask the corpus what it
+    already says. This is the same passage index and the same ranking
+    `evaluate` scores retrievers with — so what the harness retrieves here is
+    exactly what the benchmark's baseline retriever would have seen, and a
+    corpus searched while it is being written is searched the way it will be
+    judged. Read-only: nothing here writes a byte.
+    """
+    from datetime import datetime
+
+    from .evaluate.bm25 import Bm25
+    from .evaluate.index import passages as index_passages
+
+    if not query.strip():
+        err.print("[red]error:[/red] an empty query ranks every passage equally; say what you are looking for")
+        raise typer.Exit(code=2)
+    cutoff = None
+    if as_of:
+        try:
+            cutoff = datetime.fromisoformat(as_of)
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] --as-of {as_of!r} is not an ISO date: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        if cutoff.tzinfo is None:
+            # Corpus timestamps are timezone-aware UTC throughout; a bare
+            # `--as-of 2026-03-01` would otherwise crash on the comparison.
+            # Reading it as UTC matches what every timestamp in the corpus
+            # means, rather than what the caller's machine is set to.
+            cutoff = cutoff.replace(tzinfo=UTC)
+
+    world = _compiled(_load(corpus), corpus)
+    found = index_passages(world, include_hidden=include_hidden)
+    if cutoff is not None:
+        found = [passage for passage in found if passage.created_at <= cutoff]
+    if not found:
+        # An empty index is a state of the corpus, not a poor query, so it is
+        # an error rather than a zero-result success — and it names the flag
+        # that caused it when one did.
+        reason = (
+            f"no artifact existed at or before {cutoff.isoformat()}" if cutoff is not None
+            else "this corpus has no retrievable passages"
+        )
+        err.print(f"[red]error:[/red] nothing to search: {reason}")
+        raise typer.Exit(code=2)
+
+    index = Bm25([passage.text for passage in found])
+    ranked = index.rank(query, limit=max(1, limit))
+    hits = [
+        {
+            "passage_id": found[position].id,
+            "artifact_id": found[position].artifact_id,
+            "heading": found[position].heading,
+            "created_at": found[position].created_at.isoformat(),
+            "authority": found[position].authority.value,
+            "score": score,
+            "fact_ids": sorted(found[position].fact_ids),
+            "text": found[position].text,
+        }
+        for position, score in ranked
+        if score > 0.0
+        # Zero-score passages share no term with the query; returning them
+        # would pad the list with whatever document order put first and call
+        # it a ranking.
+    ]
+
+    if as_json:
+        typer.echo(json.dumps({"query": query, "searched": len(found), "hits": hits}, indent=2))
+        return
+    if not hits:
+        console.print(f"no passage shares a term with {query!r} ({len(found)} searched)")
+        return
+    console.print(f"[bold]{len(hits)}[/bold] of {len(found)} passages, best first\n")
+    for hit in hits:
+        snippet = " ".join(str(hit["text"]).split())
+        if len(snippet) > 220:
+            snippet = snippet[:220] + "…"
+        console.print(
+            f"  [cyan]{hit['passage_id']}[/cyan]  {hit['heading']}"
+            f"  [dim]{hit['created_at']} · {hit['authority']} · {hit['score']:.3f}[/dim]"
+        )
+        console.print(f"      {escape(snippet)}\n")
 
 
 @app.command()
