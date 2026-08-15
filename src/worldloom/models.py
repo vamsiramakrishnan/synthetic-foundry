@@ -150,6 +150,21 @@ class ErrorType(StrEnum):
     OUTDATED_OWNER = "outdated_owner"
     MISSING_FIELD = "missing_field"
     TIMEZONE_DISCREPANCY = "timezone_discrepancy"
+    HARDCODED_VALUE = "hardcoded_value"
+    """A workbook cell carries a typed-in number where the formula belongs.
+
+    The first *mechanical* kind: every kind above it is editorial — a stale
+    page, a wrong first hypothesis — while this one is a spreadsheet failure
+    mode, a paste-over that severed a cell from its derivation. For this kind
+    and ``SHORT_RANGE``, ``IntentionalError.observed_value`` is the bare
+    reading of the wrong figure rather than a prose account, because two
+    subsystems parse it back: ``compiler.mechanical`` types it into the cell,
+    and ``validate.intentional`` compares the compiled cell against it."""
+    SHORT_RANGE = "short_range"
+    """A SUM whose range stops one row early, so the total misses a member.
+
+    Mechanical, like ``HARDCODED_VALUE``, and carrying the same bare-reading
+    ``observed_value`` contract for the same two parsers."""
 
 
 # ---------------------------------------------------------------------------

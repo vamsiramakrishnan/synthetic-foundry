@@ -83,6 +83,25 @@ class BankOrganisation:
     founding_facts: tuple[CanonicalFact, ...]
 
 
+#: ``--access strict``'s moves for this engine — see the retail table
+#: (``generators/organisation.py``) for the shared contract: deterministic by
+#: artifact type, target audiences resolving against this module's own policy
+#: labels, author and approver kept inside (checked at apply time).
+#:
+#: Banking plans no all-staff document, so strict tightens the widest gate it
+#: has instead: ``capital_return`` sits under "Prudential regulator", whose
+#: allow list is the whole Executive function beside the preparing lines. A
+#: strict bank limits the filing to the teams that prepare, challenge and
+#: audit it — "finance_and_risk" resolves to "Finance and risk" by exact
+#: label, which keeps the author (regulatory reporting manager, Finance), the
+#: approver (CFO, Finance) and the third line (Audit, whose read access
+#: ``banking._checks`` asserts on every filing) while dropping the divisional
+#: MDs, who are Executive and on nobody's named-exception list.
+STRICT_ACCESS: dict[str, str] = {
+    "capital_return": "finance_and_risk",
+}
+
+
 #: The people a capital-return episode needs, in reporting order. The first
 #: line prepares and files, the second line challenges, the third line rules —
 #: the table is the topology the episode exercises, so the lines are labelled.

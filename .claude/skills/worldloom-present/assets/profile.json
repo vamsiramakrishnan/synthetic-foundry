@@ -1,0 +1,11 @@
+{
+  "name": "house",
+  "appendix": "omit",
+  "provenance": "properties",
+  "magnitudes": "scaled",
+  "table_fit": "measured",
+  "about": "What we hand to a customer. Citations recorded, never printed.",
+  "overrides": {
+    "incident_rca": { "appendix": "append" }
+  }
+}

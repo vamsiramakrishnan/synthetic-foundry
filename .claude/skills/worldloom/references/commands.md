@@ -62,6 +62,7 @@ Generate a world deterministically from a seed, then validate it.
 
 | Option | Purpose |
 | --- | --- |
+| `--access` | How much of the corpus is gated: `open`, `standard` or `strict`. `standard` is the engines' own mapping, records nothing, and every existing corpus is byte-identical. `open` puts every document under the all-staff policy; `strict` moves the artifact classes each engine's STRICT_ACCESS table names under its function-restricted policies — deterministically by artifact type, never by draw. A build the level cannot act on is refused with the reason rather than shipped unchanged. Rides the recipe as an `AccessProfile` step, so a gated corpus replays byte-for-byte. |
 | `--actors` | Let employees produce the incident's records by calling tools on what they observed. `scripted` runs the built-in deterministic actor (no network, no key); `agent` leaves every decision for you to make through `worldloom act`. |
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--business-units-end` | Exact active business-unit count in the final period. |
@@ -202,6 +203,19 @@ worldloom evaluate <CORPUS>
 | `--verbose`, `-v` | Show every question. |
 | `-k` | How many passages a retriever may return. |
 
+### `worldloom evolve`
+
+Evolve build configurations: propose, build, measure, select, vary.
+
+| Option | Purpose |
+| --- | --- |
+| `--generations`, `-g` | How many generations to run, the dispersed generation 0 included. |
+| `--json` | Emit the run manifest as JSON instead of a summary. |
+| `--out`, `-o` | Directory the generations are built into: gen0/, gen1/, ... each with its own manifest beside fleet's. |
+| `--population`, `-n` | Configurations proposed and built per generation. |
+| `--purpose` | What the fleet is being admitted for: challenge (it will be used to challenge a retrieval or assistant system) or counterfactual (controlled comparison against a shared frame). 'naturalistic' is refused, naming the reference data it would need. |
+| `--seed`, `-s` | Run seed. The same seed reruns the same evolution byte for byte. |
+
 ### `worldloom fleet`
 
 Admission control for a fleet of worlds: qualify it for a purpose, curate its champions.
@@ -283,6 +297,20 @@ Build several companies at once, as unlike each other as the rules allow.
 | `--seed`, `-s` | Base seed. World N uses seed+N-1. |
 | `--shard-count` | Deterministic number of batch shards. |
 | `--shard-index` | Zero-based shard owned by this worker. |
+
+### `worldloom mutate`
+
+Apply interventions to a recipe and write the mutated recipe — no build.
+
+```
+worldloom mutate <CORPUS_OR_RECIPE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | File to write the mutated recipe to. |
+| `--overwrite` | Replace the destination if it exists. |
+| `--set` | PATH=VALUE: one recorded recipe value to replace; repeat for several. Same slash-separated grammar as `twin`, because physics names are dotted — e.g. physics/retail.margin.erosion/high=0.06, steps/0/trend_pct=0.008. VALUE is parsed as JSON, falling back to a bare string. |
 
 ### `worldloom narrate`
 
@@ -598,6 +626,21 @@ worldloom render <CORPUS>
 | `--format`, `-f` | Formats to render. Repeatable. |
 | `--out`, `-o` | Write here instead of back into the corpus. |
 | `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
+
+### `worldloom search`
+
+Rank the corpus's own passages against a query, BM25, deterministic.
+
+```
+worldloom search <CORPUS> <QUERY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--as-of` | ISO date or datetime; only passages from artifacts created at or before this moment are searched. This is the temporal-cutoff rule the narration contract already imposes on facts, applied to retrieval: an author amending a document in March may only lean on what existed in March. |
+| `--include-hidden` | Search hidden sections (lineage appendices) too. Off by default for `evaluate`'s reason: machinery is not something a reader would have found. |
+| `--json` | Emit ranked passages as JSON, full text included. |
+| `-k`, `--limit` | How many passages to return. |
 
 ### `worldloom series`
 

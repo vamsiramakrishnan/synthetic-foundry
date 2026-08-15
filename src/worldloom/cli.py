@@ -12,6 +12,7 @@ themselves, and adds no capability the library lacks::
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -554,6 +555,20 @@ def build(
             "purpose, so a benchmark scored against it is measuring recency and "
             "provenance reasoning as well as retrieval. `pristine` is the "
             "default and writes nothing at all."
+        ),
+    ),
+    access: str = typer.Option(
+        "standard", "--access",
+        help=(
+            "How much of the corpus is gated: `open`, `standard` or `strict`. "
+            "`standard` is the engines' own mapping, records nothing, and every "
+            "existing corpus is byte-identical. `open` puts every document under "
+            "the all-staff policy; `strict` moves the artifact classes each "
+            "engine's STRICT_ACCESS table names under its function-restricted "
+            "policies — deterministically by artifact type, never by draw. A "
+            "build the level cannot act on is refused with the reason rather "
+            "than shipped unchanged. Rides the recipe as an `AccessProfile` "
+            "step, so a gated corpus replays byte-for-byte."
         ),
     ),
     timeline: str = typer.Option(
@@ -1480,6 +1495,36 @@ def build(
         )
         raise typer.Exit(code=2)
 
+    # Refused here, not merely validated inside the step at the end of the
+    # build: an unknown level should cost nothing, and the two combinations
+    # below fail structurally — `--actors agent` exports before any document
+    # is planned, and a knowledge ledger records who read what under the
+    # access map that existed when it was derived, so re-gating afterwards
+    # would leave observations of documents the manifest now denies to their
+    # observers. `AccessProfile.run` refuses both anyway; this says it before
+    # a world is built, in terms of the flags the caller actually typed.
+    from .scenarios import ACCESS_LEVELS
+
+    if access not in ACCESS_LEVELS:
+        err.print(
+            f"[red]error:[/red] unknown access level {access!r}; expected one "
+            f"of {', '.join(ACCESS_LEVELS)}"
+        )
+        raise typer.Exit(code=2)
+    if access != "standard" and actors == "agent":
+        err.print(
+            "[red]error:[/red] --access re-gates documents the episode has not "
+            "planned yet; --actors agent exports before that episode has run"
+        )
+        raise typer.Exit(code=2)
+    if access != "standard" and (conversations or actors is not None):
+        err.print(
+            "[red]error:[/red] --access cannot re-gate a corpus whose knowledge "
+            "ledger was derived under the standard map; it is refused beside "
+            "--conversations and --actors"
+        )
+        raise typer.Exit(code=2)
+
     # A sampled history is a *schedule*, and an actor episode is a handshake that
     # resumes from the ledger one decision at a time. Combining them would mean
     # the resumption had to know which of several closes it was inside, and the
@@ -1764,6 +1809,15 @@ def build(
                                 " both carried",
                 "orphaning": "needs an author who has left, which only a departure"
                              " produces — build with --timeline or --periods > 1",
+                # The mechanical kind corrupts a copy of a compiled workbook,
+                # so its ceiling is per corruptible workbook —
+                # `compiler.mechanical.CORRUPTIBLE` names which types qualify.
+                # Every named profile keeps this budget at zero, so today the
+                # entry is defensive; the KeyError it prevents would otherwise
+                # arrive with the first profile or spec that asks for more
+                # mechanical errors than a world's workbooks can carry.
+                "mechanical": "needs a workbook this engine can corrupt a copy"
+                              " of — the retail month-end model today",
             }
             for kind, (want, ceiling) in short.items():
                 console.print(
@@ -1771,6 +1825,29 @@ def build(
                     f" world supports at most {ceiling}: it {reasons[kind]}"
                 )
             console.print()
+
+    # After every pass that plans or copies a document — episodes, workforce
+    # rounds, distractors, messiness — and before narrate/render, because the
+    # manifest reads each intent's audience at compile time and a level applied
+    # later would be recorded on a corpus gated without it. `standard` is an
+    # identity inside the step, so the guard here is only to keep the default
+    # build's console output byte-identical too.
+    if access != "standard":
+        from .scenarios import AccessProfile
+
+        before = {i.id: i.audience for i in world.artifact_intents}
+        try:
+            world = world.run(AccessProfile(level=access))
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        moved = sum(
+            1 for i in world.artifact_intents if before.get(i.id) != i.audience
+        )
+        console.print(
+            f"[dim]access:[/dim] {access} — {moved} of"
+            f" {len(world.artifact_intents)} document(s) re-gated\n"
+        )
 
     if narrate or replay is not None:
         from . import recipe as recipe_module
@@ -3475,6 +3552,83 @@ def fleet_curate(
     )
 
 
+@app.command("evolve")
+def evolve_run(
+    generations: int = typer.Option(
+        3, "--generations", "-g",
+        help="How many generations to run, the dispersed generation 0 included.",
+    ),
+    population: int = typer.Option(
+        6, "--population", "-n",
+        help="Configurations proposed and built per generation.",
+    ),
+    seed: int = typer.Option(
+        8128, "--seed", "-s",
+        help="Run seed. The same seed reruns the same evolution byte for byte.",
+    ),
+    purpose: str = typer.Option("challenge", "--purpose", help=_FLEET_PURPOSE_HELP),
+    out: Path = typer.Option(
+        ..., "--out", "-o",
+        help="Directory the generations are built into: gen0/, gen1/, ... each"
+             " with its own manifest beside fleet's.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the run manifest as JSON instead of a summary."
+    ),
+) -> None:
+    """Evolve build configurations: propose, build, measure, select, vary.
+
+    Generation 0 is a dispersed sample of the build-configuration space;
+    every later generation is single-axis variations of the previous
+    generation's champions, exactly as `fleet curate` kept them. Fitness and
+    selection are fleet's own — integer-gated, vendi reported and never
+    gating — and a purpose fleet refuses ('naturalistic') is refused here at
+    the door with the same reason. Deterministic throughout: rerunning the
+    same seed resumes an interrupted run and rewrites byte-identical
+    manifests.
+    """
+    from . import evolve as evolve_module
+    from . import fleet as fleet_module
+    from . import spaces as spaces_module
+
+    space = spaces_module.build_space()
+    # Narrowed as a visible act, never silently inside the loop: `evolve`
+    # refuses a space carrying an axis it cannot drive, so each exclusion is
+    # printed with its reason (`surface` above all — a spec is resolved and
+    # never recorded, so selection could not see that axis move).
+    undrivable = evolve_module.excluded(space)
+    for name, reason in sorted(undrivable.items()):
+        err.print(f"[yellow]axis {name} not evolved:[/yellow] {escape(reason)}")
+    space = space.select([n for n in space.names if n not in undrivable])
+    try:
+        run = evolve_module.evolve(
+            space, seed=seed, generations=generations, population=population,
+            out_dir=out, purpose=purpose,  # type: ignore[arg-type]
+        )
+    except (evolve_module.EvolveError, fleet_module.FleetError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    if as_json:
+        typer.echo(run.manifest(), nl=False)
+        return
+    for generation in run.generations:
+        champions = ", ".join(generation.champions) or "none"
+        variations = ", ".join(
+            f"{member.label} {member.axis}->{member.to_value}"
+            for member in generation.members if member.axis
+        )
+        console.print(
+            f"[bold]gen{generation.index}[/bold]: {len(generation.members)} built,"
+            f" champion(s): {champions}"
+            + (f" — varied {variations}" if variations else " — dispersed sample")
+        )
+    console.print(
+        f"[dim]{evolve_module.RUN_MANIFEST_NAME} and"
+        f" gen*/{evolve_module.GENERATION_MANIFEST_NAME} record the run under {out}.[/dim]"
+    )
+
+
 @evals_app.command("export")
 def evals_export(
     corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
@@ -3711,6 +3865,119 @@ def evaluate(
             mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
             console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
             console.print(f"      {outcome.detail}")
+
+
+@app.command()
+def search(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    query: str = typer.Argument(..., help="What to look for, in plain words."),
+    limit: int = typer.Option(5, "-k", "--limit", help="How many passages to return."),
+    as_of: str = typer.Option(
+        "", "--as-of",
+        help=(
+            "ISO date or datetime; only passages from artifacts created at or "
+            "before this moment are searched. This is the temporal-cutoff rule "
+            "the narration contract already imposes on facts, applied to "
+            "retrieval: an author amending a document in March may only lean "
+            "on what existed in March."
+        ),
+    ),
+    include_hidden: bool = typer.Option(
+        False, "--include-hidden",
+        help=(
+            "Search hidden sections (lineage appendices) too. Off by default "
+            "for `evaluate`'s reason: machinery is not something a reader "
+            "would have found."
+        ),
+    ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit ranked passages as JSON, full text included.",
+    ),
+) -> None:
+    """Rank the corpus's own passages against a query, BM25, deterministic.
+
+    The retrieval half of self-referential narration: before writing a document
+    that amends, summarises or contradicts earlier ones, ask the corpus what it
+    already says. This is the same passage index and the same ranking
+    `evaluate` scores retrievers with — so what the harness retrieves here is
+    exactly what the benchmark's baseline retriever would have seen, and a
+    corpus searched while it is being written is searched the way it will be
+    judged. Read-only: nothing here writes a byte.
+    """
+    from datetime import datetime
+
+    from .evaluate.bm25 import Bm25
+    from .evaluate.index import passages as index_passages
+
+    if not query.strip():
+        err.print("[red]error:[/red] an empty query ranks every passage equally; say what you are looking for")
+        raise typer.Exit(code=2)
+    cutoff = None
+    if as_of:
+        try:
+            cutoff = datetime.fromisoformat(as_of)
+        except ValueError as exc:
+            err.print(f"[red]error:[/red] --as-of {as_of!r} is not an ISO date: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        if cutoff.tzinfo is None:
+            # Corpus timestamps are timezone-aware UTC throughout; a bare
+            # `--as-of 2026-03-01` would otherwise crash on the comparison.
+            # Reading it as UTC matches what every timestamp in the corpus
+            # means, rather than what the caller's machine is set to.
+            cutoff = cutoff.replace(tzinfo=UTC)
+
+    world = _compiled(_load(corpus), corpus)
+    found = index_passages(world, include_hidden=include_hidden)
+    if cutoff is not None:
+        found = [passage for passage in found if passage.created_at <= cutoff]
+    if not found:
+        # An empty index is a state of the corpus, not a poor query, so it is
+        # an error rather than a zero-result success — and it names the flag
+        # that caused it when one did.
+        reason = (
+            f"no artifact existed at or before {cutoff.isoformat()}" if cutoff is not None
+            else "this corpus has no retrievable passages"
+        )
+        err.print(f"[red]error:[/red] nothing to search: {reason}")
+        raise typer.Exit(code=2)
+
+    index = Bm25([passage.text for passage in found])
+    ranked = index.rank(query, limit=max(1, limit))
+    hits = [
+        {
+            "passage_id": found[position].id,
+            "artifact_id": found[position].artifact_id,
+            "heading": found[position].heading,
+            "created_at": found[position].created_at.isoformat(),
+            "authority": found[position].authority.value,
+            "score": score,
+            "fact_ids": sorted(found[position].fact_ids),
+            "text": found[position].text,
+        }
+        for position, score in ranked
+        if score > 0.0
+        # Zero-score passages share no term with the query; returning them
+        # would pad the list with whatever document order put first and call
+        # it a ranking.
+    ]
+
+    if as_json:
+        typer.echo(json.dumps({"query": query, "searched": len(found), "hits": hits}, indent=2))
+        return
+    if not hits:
+        console.print(f"no passage shares a term with {query!r} ({len(found)} searched)")
+        return
+    console.print(f"[bold]{len(hits)}[/bold] of {len(found)} passages, best first\n")
+    for hit in hits:
+        snippet = " ".join(str(hit["text"]).split())
+        if len(snippet) > 220:
+            snippet = snippet[:220] + "…"
+        console.print(
+            f"  [cyan]{hit['passage_id']}[/cyan]  {hit['heading']}"
+            f"  [dim]{hit['created_at']} · {hit['authority']} · {hit['score']:.3f}[/dim]"
+        )
+        console.print(f"      {escape(snippet)}\n")
 
 
 @app.command()
@@ -4367,6 +4634,113 @@ def twin(
 
     if manifest.refused is not None:
         raise typer.Exit(code=3)
+
+
+@app.command()
+def mutate(
+    corpus_or_recipe: str = typer.Argument(
+        ..., help="Corpus name or path, or a recipe JSON file."
+    ),
+    set_: list[str] = typer.Option(
+        ..., "--set",
+        help="PATH=VALUE: one recorded recipe value to replace; repeat for"
+             " several. Same slash-separated grammar as `twin`, because"
+             " physics names are dotted — e.g."
+             " physics/retail.margin.erosion/high=0.06, steps/0/trend_pct=0.008."
+             " VALUE is parsed as JSON, falling back to a bare string.",
+    ),
+    out: Path = typer.Option(
+        ..., "--out", "-o", help="File to write the mutated recipe to."
+    ),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", help="Replace the destination if it exists."
+    ),
+) -> None:
+    """Apply interventions to a recipe and write the mutated recipe — no build.
+
+    `twin` applies one intervention and pays for two builds to measure the
+    delta; this applies N and pays for none, so a harness can fan out
+    structural candidates cheaply and buy builds only for winners. The output
+    is an ordinary recipe: `worldloom build --replay`-able, `twin`-able, and
+    accepted back here as CORPUS_OR_RECIPE for a further round.
+
+    Every refusal `twin` makes survives the missing build, on `twin`'s own
+    exit taxonomy: an unrecorded path is a caller error (exit 2); a path that
+    decides what exists rather than what is true about it — a policy level,
+    an incident flag, a headcount — is refused (exit 3), because rebuilding
+    it would reshuffle sequentially-minted ids and break the alignment every
+    delta depends on; and two --set values for one path are an error naming
+    the path, since last write winning would hide a fan-out bug until a build
+    exposed it. See `worldloom.twins.mutated`.
+    """
+    from . import twins as twins_module
+    from .recipe import RecipeError
+
+    interventions = []
+    for entry in set_:
+        if "=" not in entry:
+            err.print(f"[red]error:[/red] --set takes PATH=VALUE, got {escape(entry)!r}")
+            raise typer.Exit(code=2)
+        raw_path, _, raw_value = entry.partition("=")
+        try:
+            value = json.loads(raw_value)
+        except json.JSONDecodeError:
+            # Same fallback as `twin`, for the same reason: quoting JSON
+            # strings through a shell is misery, and no recipe value is
+            # ambiguous between "the string full" and anything else.
+            value = raw_value
+        interventions.append(twins_module.Intervention(raw_path.strip(), value))
+
+    source = Path(corpus_or_recipe)
+    if source.is_file():
+        # A bare recipe file — what a previous `mutate --out` wrote, or a
+        # recipe lifted from a corpus header. The fan-out case: candidates
+        # exist as recipes precisely because no corpus was built for them.
+        try:
+            recipe_document = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            err.print(f"[red]error:[/red] {corpus_or_recipe}: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        if not isinstance(recipe_document, dict):
+            err.print(
+                f"[red]error:[/red] {corpus_or_recipe} does not hold a recipe object"
+            )
+            raise typer.Exit(code=2)
+    else:
+        world = _load(corpus_or_recipe)
+        recipe_document = world.recipe
+        if not recipe_document:
+            err.print(
+                "[red]error:[/red] this corpus carries no recipe, so there is"
+                " nothing to mutate — a mutation is an edit to the record."
+            )
+            raise typer.Exit(code=2)
+
+    try:
+        result = twins_module.mutated(recipe_document, interventions)
+    except twins_module.MutationRefused as exc:
+        err.print(f"[red]refused:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=3) from exc
+    except (twins_module.TwinError, RecipeError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    if out.exists() and not overwrite:
+        err.print(f"[red]error:[/red] {out} exists; pass --overwrite to replace it")
+        raise typer.Exit(code=2)
+    out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+
+    for intervention in interventions:
+        # The before is read off the source recipe for display, exactly as
+        # `twin` states it — safe to walk without the grammar's own errors
+        # because `mutated` already resolved every path or raised above.
+        node: Any = recipe_document
+        for segment in intervention.path.split("/"):
+            node = node[int(segment) if isinstance(node, list) else segment]
+        console.print(
+            f"[bold]{intervention.path}[/bold]: {node!r} -> {intervention.value!r}"
+        )
+    console.print(f"Mutated recipe written to [bold]{out}[/bold]")
 
 
 def _for_stats(name: str) -> World:

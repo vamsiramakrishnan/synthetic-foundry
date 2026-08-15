@@ -1631,6 +1631,50 @@ class _Validator:
                     f" {fact.id} states {canonical!r}",
                 )
 
+        self._mechanical()
+
+    def _mechanical(self) -> None:
+        """A mechanical label must be true of the compiled sheet, cell for cell.
+
+        The canonical check above holds a label to the *ledger*; the mechanical
+        kinds (`hardcoded_value`, `short_range`) additionally claim something
+        about a *page* — that a named workbook cell carries a specific wrong
+        reading in a specific wrong way — and a page-shaped claim has to be
+        checked against the IR or the corpus is vouching for a disagreement it
+        cannot show. `compiler.mechanical.unsubstantiated` is the single
+        implementation of "which cell, wrong how", shared with the compiler
+        that writes the corruption, so this check and the corruption cannot
+        drift into two accounts of one cell.
+
+        This is also why no ordinary formula check needs loosening: the
+        corrupted cell keeps its `fact_id` and a stated value (so
+        `carried_evidence` and `empty_cell_cites_a_fact` pass on their own
+        terms), and everything specific to the corruption is recognised here,
+        via the ledgered record, rather than exempted anywhere else.
+
+        Skipped, per error, only when there is nothing compiled to read —
+        `compiled_evidence` owns the "plan-only corpus" argument — and skipped
+        per artifact when the parity check there has already said the IR is
+        missing, once, rather than once per label.
+        """
+        if not self.world._artifact_irs:
+            return
+        from .compiler import mechanical as _mechanical
+
+        by_intent = {ir.intent_id: ir for ir in self.world.artifact_irs}
+        for error in self.world.intentional_errors:
+            if error.error_type not in _mechanical.MECHANICAL_KINDS:
+                continue
+            ir = by_intent.get(error.artifact_id)
+            if ir is None:
+                continue
+            self.checks += 1
+            problem = _mechanical.unsubstantiated(
+                ir, error, self._facts.get(error.canonical_fact_id or "")
+            )
+            if problem:
+                self.fail("intentional", "mechanical_unsubstantiated", error.id, problem)
+
 
     # -- actors ------------------------------------------------------------
 
