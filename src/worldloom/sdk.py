@@ -52,6 +52,7 @@ import itertools
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from dataclasses import field as _field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -61,9 +62,9 @@ from .parameters import DEFAULT, Parameters, Span
 from .roles import from_shape, to_rows
 
 __all__ = [
-    "Blueprint", "Built", "banking", "built", "companies", "cross", "described",
-    "dispersed", "company", "engine", "insurance", "mosaic_of", "outcome_selected",
-    "probe_of", "retail", "sweep",
+    "Blueprint", "Built", "as_fleet", "banking", "built", "companies", "cross",
+    "described", "dispersed", "company", "engine", "insurance", "mosaic_of",
+    "outcome_selected", "probe_of", "retail", "sweep",
 ]
 
 
@@ -753,6 +754,118 @@ class Built:
         rendered = world.render(*formats)
         return rendered.export(Path(out) if out else Path("."), overwrite=True)
 
+    def search(
+        self, query: str, *, limit: int = 5,
+        as_of: datetime | str | None = None, include_hidden: bool = False,
+    ) -> tuple[dict[str, Any], ...]:
+        """Rank this corpus's own passages against *query* — `worldloom search`
+        as a method, same index, same BM25, same rules.
+
+        The CLI command and this method must never drift into two retrievers,
+        so both refuse the same things for the same reasons: an empty query
+        ranks every passage equally, an empty index is a state of the corpus
+        rather than a poor query, and a zero-score passage shares no term with
+        the query — returning it would present document order as a ranking.
+        *as_of* is the narration contract's temporal cutoff applied to
+        retrieval; a naive datetime is read as UTC because that is what every
+        timestamp in a corpus means.
+        """
+        from .evaluate.bm25 import Bm25
+        from .evaluate.index import passages
+
+        if not query.strip():
+            raise ValueError(
+                "an empty query ranks every passage equally; say what you are looking for"
+            )
+        cutoff = None
+        if as_of is not None:
+            cutoff = datetime.fromisoformat(as_of) if isinstance(as_of, str) else as_of
+            if cutoff.tzinfo is None:
+                cutoff = cutoff.replace(tzinfo=UTC)
+
+        world = self.world if self.world.artifact_irs else self.world.compile()
+        found = passages(world, include_hidden=include_hidden)
+        if cutoff is not None:
+            found = [passage for passage in found if passage.created_at <= cutoff]
+        if not found:
+            reason = (
+                f"no artifact existed at or before {cutoff.isoformat()}"
+                if cutoff is not None else "this corpus has no retrievable passages"
+            )
+            raise ValueError(f"nothing to search: {reason}")
+
+        index = Bm25([passage.text for passage in found])
+        return tuple(
+            {
+                "passage_id": found[position].id,
+                "artifact_id": found[position].artifact_id,
+                "heading": found[position].heading,
+                "created_at": found[position].created_at,
+                "authority": found[position].authority.value,
+                "score": score,
+                "fact_ids": sorted(found[position].fact_ids),
+                "text": found[position].text,
+            }
+            for position, score in index.rank(query, limit=max(1, limit))
+            if score > 0.0
+        )
+
+    def mutated(self, interventions: Mapping[str, Any]) -> Built:
+        """This corpus rebuilt with *interventions* patched into its recipe.
+
+        ``twins.mutated`` then ``recipe.rebuild``, in memory — the loop shape
+        the CLI pair `mutate` + `build --recipe` serves, without the disk
+        round-trip. Every refusal survives: an unrecorded path raises
+        ``TwinError``, an existence-deciding path raises ``MutationRefused``.
+        The blueprint is carried over unchanged because it describes what was
+        *asked*; the recipe records what was made, and it is the recipe that
+        was patched — reading ``.blueprint`` off a mutated Built tells you the
+        ancestor, which is what a fan-out loop wants to know.
+        """
+        from .recipe import rebuild
+        from .twins import Intervention
+        from .twins import mutated as mutate_recipe
+
+        record = self.world.recipe
+        if not record:
+            raise ValueError(
+                "this world carries no recipe, so it cannot be rebuilt —"
+                " mutations are patches of recorded values"
+            )
+        # A mapping's insertion order is the application order, which is the
+        # order a literal reads in — the same promise the CLI's repeated
+        # `--set` makes.
+        patched = mutate_recipe(
+            record,
+            tuple(Intervention(path, value) for path, value in interventions.items()),
+        )
+        return Built(
+            blueprint=self.blueprint,
+            world=rebuild(patched, ledger=tuple(self.world._ledger)),
+        )
+
+    def twin(self, path: str, value: Any) -> Any:
+        """The counterfactual one intervention away, measured — `worldloom twin`
+        as a method.
+
+        Returns ``twins.TwinResult``: both sides rebuilt from the record (never
+        from this in-memory world, for the reason ``twins.twin`` gives — a
+        caller-built base may have been built by a path that re-supplied what
+        the recipe never recorded), and the delta manifest with causal locality
+        by byte-diff. A cardinality-changing intervention is a *measurement*
+        whose result is the refusal on the manifest, not an exception.
+        """
+        from .twins import Intervention
+        from .twins import twin as measure_twin
+
+        record = self.world.recipe
+        if not record:
+            raise ValueError(
+                "this world carries no recipe, so it cannot be rebuilt — twins"
+                " are measured between two rebuilds of the record"
+            )
+        return measure_twin(record, tuple(self.world._ledger), Intervention(path, value))
+
 
 def _step(period: str, index: int, months: int) -> str:
     year, month = (int(part) for part in period.split("-"))
@@ -1061,6 +1174,32 @@ def mosaic_of(count: int, *, engine: str = "retail", seed: int = 8128) -> tuple[
     from . import mosaic as mosaic_module
 
     return tuple(_from_variant(v) for v in mosaic_module.field(count, seed=seed, engine=engine))
+
+
+def as_fleet(builts: Iterable[Built], out: str | Path) -> Path:
+    """Export *builts* in the layout ``fleet qualify``/``curate`` admit.
+
+    The fleet admission controller reads a directory of member corpora
+    (``world-NN/`` each carrying a world header), and a loop that built its
+    worlds in memory has no such directory. This writes one — members in
+    iteration order, numbered from zero the way ``mosaic`` numbers them — and
+    returns the path for ``fleet.qualify(path, purpose)`` to judge.
+
+    Deliberately *not* a wrapper that also qualifies: qualification's verdict
+    belongs to ``fleet`` and its purposes, and a convenience that fused export
+    with judgment would grow a second door into the one controller the fleet
+    module exists to keep singular. No ``mosaic.json`` is written, because
+    there was no plan — ``fleet._members`` treats a planless directory as the
+    hand-assembled shape it is.
+    """
+    members = tuple(builts)
+    if not members:
+        raise ValueError("an empty fleet cannot be exported; build something first")
+    root = Path(out)
+    root.mkdir(parents=True, exist_ok=True)
+    for index, member in enumerate(members):
+        member.export(root / f"world-{index:02d}", overwrite=True)
+    return root
 
 
 def probe_of(session: Any, count: int, *, engine: str = "retail",

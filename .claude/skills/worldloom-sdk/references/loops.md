@@ -33,6 +33,8 @@ rich = [
 
 `Built.measure()` gives people, titles, facts, artifacts, evaluations, graph
 nodes, chokepoints and longest chain. `Built.topology()` is the graph subset.
+`Built.search`, `Built.mutated` and `Built.twin` close the loop on a built
+world — see `references/corpus-loop.md`.
 `Built.ok` is the coherence gate. `sdk.built(blueprints)` builds lazily, so a
 loop that stops early does not mint the rest.
 

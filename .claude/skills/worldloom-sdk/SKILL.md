@@ -69,3 +69,7 @@ loop, a filter, or a product.
 - `references/loops.md` — cross, sweep, dispersed (and why `dispersed` is the
   one people get wrong), measuring and filtering `Built` worlds, the mosaic and
   probe bridges.
+- `references/corpus-loop.md` — the built world asked about itself:
+  `built.search` (BM25 self-retrieval), `built.mutated`/`built.twin`
+  (recipe patches and measured counterfactuals), `sdk.as_fleet` into
+  `fleet.qualify`, access gating and `evolve` from Python.
