@@ -359,9 +359,9 @@ def generate(
                      money_unit=money_unit)
 
     # -- the corporate cost base, decomposed twice ---------------------------
-    group_overhead = int(round(
+    group_overhead = round(
         group_revenue * physics.number("retail.overhead.cost_pct", rng.derive("overhead"))
-    ))
+    )
     centre_ids = [centre.id for centre in cost_centres]
     recharged = [unit for unit in units if revenue_by_subject.get(unit.id, 0) > 0]
 
@@ -438,10 +438,10 @@ def generate(
         # unit and `cartons_thousands * currency-per-carton` lands back in
         # thousands of currency. Both divisions are exact in the sense that
         # matters: the figure minted is the figure allocated.
-        cartons = int(round(revenue_by_subject[unit.id] * density / 1000))
+        cartons = round(revenue_by_subject[unit.id] * density / 1000)
         if cartons <= 0:
             continue
-        cost = int(round(cartons * unit_rate))
+        cost = round(cartons * unit_rate)
         unit_cartons[unit.id] = cartons
         unit_cost[unit.id] = cost
 

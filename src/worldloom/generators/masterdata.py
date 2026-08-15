@@ -48,11 +48,12 @@ from __future__ import annotations
 import json
 import unicodedata
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..rng import Rng
 
 #: The component pools, read once at import — `locales._vocabulary_pack`'s

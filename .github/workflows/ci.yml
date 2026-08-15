@@ -14,6 +14,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Lint and types, blocking. This repository's stated position is that a
+  # gate that is skipped is not a gate — so neither of these is advisory:
+  # `ruff check` must exit 0 (config and per-rule rationale in
+  # pyproject.toml), and `mypy` must exit 0 against the honest scope
+  # pyproject.toml declares (104 of 163 modules held clean today, the rest on
+  # a named debt list that is only allowed to shrink).
+  #
+  # Both tools are pinned exactly, unlike the library floors in pyproject: a
+  # new ruff release enables new rules and a new mypy release finds new
+  # errors, and either would turn an unrelated PR red. Bumping these pins is
+  # a deliberate PR that fixes whatever the newer tool finds.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # The project itself is installed because mypy follows imports into the
+      # installed environment — pydantic's types are half the signal.
+      - name: Install
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]" \
+            ruff==0.15.8 mypy==2.3.1
+
+      - name: Lint gates
+        run: ruff check
+
+      - name: Type gate
+        run: mypy
+
   dispersed-replay:
     # One interpreter, one small rotating sample.  This is deliberately not in
     # the three-version pytest matrix: byte identity is the property under test,
@@ -27,8 +62,14 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # uv rather than pip for the repo installs (verified to resolve this
+      # project locally before the switch); the `package` job below keeps
+      # pip/pipx deliberately, because it proves the wheel under the
+      # installer users actually run.
       - name: Install
-        run: pip install -e .
+        run: |
+          pip install uv
+          uv pip install --system -e .
 
       - name: Dispersed byte-identity replay
         run: >-
@@ -52,10 +93,24 @@ jobs:
           cache: pip
 
       - name: Install
-        run: pip install -e ".[dev,polars,xlsx,docx,pdf,pptx]"
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]"
 
       - name: Tests
+        if: matrix.python-version != '3.12'
         run: pytest -q
+
+      # One leg measures coverage and prints it in the job log. Report-only
+      # is deliberate and is not a skipped gate: a coverage *threshold* is a
+      # proxy gate that invites test theatre — tests written to move a number
+      # rather than to catch anything. Visibility is the product here; the
+      # suite's pass/fail is the gate.
+      - name: Tests (with coverage read-out)
+        if: matrix.python-version == '3.12'
+        run: |
+          uv pip install --system pytest-cov
+          pytest -q --cov=worldloom --cov-report=term
 
       # The agent-facing documents must describe the harness that exists. These
       # are what an agent reads before it knows anything, so a stale flag there

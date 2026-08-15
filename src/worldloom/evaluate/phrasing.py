@@ -168,7 +168,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ..dispersion import farthest_first
 from ..generators.episode_text import fields_of

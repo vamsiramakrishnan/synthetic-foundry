@@ -342,7 +342,6 @@ def test_the_validator_catches_a_doctored_ledger(spoken: World, code: str, tampe
     A validator nobody has seen fail is a validator nobody has tested.
     """
     from dataclasses import replace
-
     from datetime import timedelta
 
     observations = list(spoken.observations)

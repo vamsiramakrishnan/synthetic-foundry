@@ -225,7 +225,6 @@ def test_an_abstention_case_stays_unanswerable_as_the_corpus_grows(corpus: World
     workbook and the case silently became wrong. So no abstention question may
     name a dimension the corpus now models.
     """
-    modelled = {"store", "stores", "category", "categories", "revenue", "margin", "close"}
     for case in corpus.evaluations:
         if not case.expects_abstention:
             continue

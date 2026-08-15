@@ -13,6 +13,8 @@ about.
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
 from worldloom import RetailWorld, World, series
@@ -70,7 +72,7 @@ def test_persistence_makes_a_run_of_surprises_more_likely_than_independence() ->
     something about the next one."""
     def sign_runs(values: tuple[float, ...]) -> int:
         centred = [v - 100.0 for v in values]
-        return sum(1 for a, b in zip(centred, centred[1:]) if a * b > 0)
+        return sum(1 for a, b in itertools.pairwise(centred) if a * b > 0)
 
     independent = series.project(Rng(SEED, "i"), periods=60, level=100.0, noise_pct=0.3)
     sticky = series.project(Rng(SEED, "i"), periods=60, level=100.0, noise_pct=0.3,

@@ -16,17 +16,17 @@ from __future__ import annotations
 
 import argparse
 import os
-from dataclasses import dataclass
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Sequence, TypeVar
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TypeVar
 
 from worldloom import domains, facets, landscape, locales
 from worldloom.dispersion import farthest_first, halton, manhattan
-
 
 PERIODS = (1, 2, 3)
 POOL_SIZE = 1_024

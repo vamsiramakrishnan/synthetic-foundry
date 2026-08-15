@@ -826,7 +826,8 @@ def _register() -> None:
         },
     )
 
-    from .factkinds import FactKind, register as register_kinds
+    from .factkinds import FactKind
+    from .factkinds import register as register_kinds
 
     register_kinds([
         FactKind(kind="people.requisition.grade", domain="core",

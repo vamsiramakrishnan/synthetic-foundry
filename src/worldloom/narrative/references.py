@@ -37,8 +37,10 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
-from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, scale_money, suffix_for
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION
+from ..presentation import Presentation, scale_money, suffix_for
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact

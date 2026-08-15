@@ -111,6 +111,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
+
 #: A declared table, and why it is in here rather than being a registration
 #: registry like the other 25.
 @dataclass(frozen=True)

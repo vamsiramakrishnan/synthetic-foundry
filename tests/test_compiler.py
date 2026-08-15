@@ -18,8 +18,8 @@ import pytest
 
 from worldloom import MonthEndClose, RetailWorld, World
 from worldloom.compiler import ArtifactPlan, EvidenceRef, NarrativeBeat
-from worldloom.compiler.components import REGISTRY, component, compatible, roles_for
-from worldloom.compiler.compose import Composition, compose, plan_for
+from worldloom.compiler.components import REGISTRY, compatible, component, roles_for
+from worldloom.compiler.compose import compose, plan_for
 from worldloom.compiler.grammar import check
 from worldloom.documents import _DEFAULT_OUTLINE, _OUTLINES
 
@@ -352,7 +352,7 @@ def test_unknown_artifact_type_is_unconstrained_by_design() -> None:
 
 
 def test_component_lookup_of_an_unknown_id_names_what_was_asked_for() -> None:
-    with pytest.raises(KeyError, match="not.a.component"):
+    with pytest.raises(KeyError, match=r"not\.a\.component"):
         component("not.a.component")
 
 

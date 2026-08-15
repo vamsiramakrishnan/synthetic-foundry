@@ -37,6 +37,7 @@ would be wrong for the first quarterly consumer.
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -100,7 +101,7 @@ def close(opening: int, inflows: Sequence[int], outflows: Sequence[int],
 
 def verify(
     spec: StockFlowSpec,
-    facts: Iterable["CanonicalFact"],
+    facts: Iterable[CanonicalFact],
     *,
     subjects: Sequence[str] | None = None,
 ) -> tuple[list[Break], int]:
@@ -208,7 +209,7 @@ def verify(
         # correctly so: continuity is a claim about two observations, and the
         # single period's own movement was already held to the identity above,
         # so nothing checkable goes unchecked.
-        for earlier, later in zip(periods, periods[1:]):
+        for earlier, later in itertools.pairwise(periods):
             if (subject, earlier) not in closing or (subject, later) not in opening:
                 continue  # already broken above; one gap, one report
             checks += 1

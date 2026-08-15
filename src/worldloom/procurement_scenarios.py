@@ -300,7 +300,7 @@ class PurchaseToPayCycle:
 # `recipe.register_step` — the seam insurance paid for and this vertical is
 # the first to get for free. `recipe.py` never learns this name, and
 # `tests/test_procurement.py` pins that it has not.
-from . import recipe as _recipe  # noqa: E402
+from . import recipe as _recipe
 
 _recipe.register_step("PurchaseToPayCycle", ("period",), PurchaseToPayCycle)
 

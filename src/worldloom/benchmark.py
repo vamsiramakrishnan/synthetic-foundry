@@ -56,7 +56,7 @@ from __future__ import annotations
 
 import string
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -1325,7 +1325,7 @@ class _RegistrySpec:
     """
 
     fact_kinds: tuple[Any, ...]
-    evaluation: EvalSpec = EvalSpec()
+    evaluation: EvalSpec = field(default_factory=EvalSpec)
 
 
 

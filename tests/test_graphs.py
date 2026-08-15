@@ -168,10 +168,10 @@ def test_topology_defaults_to_the_current_estate_and_keeps_history_queryable() -
         len(base.business_units), len(base.sites),
         initial_systems + 2, initial_services + 3,
     ))
-    growth_at = [
+    growth_at = next(
         event.occurred_at for event in changed.events
         if event.kind == "structural_estate_changed"
-    ][0]
+    )
     changed = changed.run(MonthEndClose("2026-02", include_operational_incident=False))
     changed = changed.run(StructuralChange(
         "2026-02",

@@ -939,7 +939,9 @@ def spend_and_commitment_ir(world, intent: ArtifactIntent, minter: Minter) -> Ar
 # Registration
 # ---------------------------------------------------------------------------
 
-from .render import docx as _docx, markdown as _markdown, xlsx as _xlsx  # noqa: E402
+from .render import docx as _docx
+from .render import markdown as _markdown
+from .render import xlsx as _xlsx
 
 _xlsx.register("purchase_order", "goods_receipt_note", "supplier_invoice",
                "spend_and_commitment_workbook")

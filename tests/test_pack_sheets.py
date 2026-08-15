@@ -53,7 +53,7 @@ from __future__ import annotations
 import io
 import json
 import pathlib
-from typing import Any
+from typing import Any, ClassVar
 
 import openpyxl
 import pytest
@@ -735,7 +735,7 @@ def test_a_pack_whose_base_names_no_domain_has_no_tag() -> None:
     from worldloom import documents
 
     class _Loose:
-        _recipe = {"archetype": "pack:whatever", "pack": {"base": "aviation"}}
+        _recipe: ClassVar[dict] = {"archetype": "pack:whatever", "pack": {"base": "aviation"}}
 
     assert documents._vertical_of(_Loose()) == ""
     assert documents._vertical_of(type("_Bare", (), {"_recipe": {}})()) == ""

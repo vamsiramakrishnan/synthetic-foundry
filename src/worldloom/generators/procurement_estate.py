@@ -66,7 +66,8 @@ from ..models import Authority, CanonicalFact, Category, Quantity, Site
 from ..parameters import DEFAULT, Parameters, Span
 from ..rng import Rng
 from .finance import allocate
-from .stockflow import StockFlowSpec, close as movement_close
+from .stockflow import StockFlowSpec
+from .stockflow import close as movement_close
 
 #: What a site's format makes it, in this vertical's own words.
 DELIVERS = "delivers"

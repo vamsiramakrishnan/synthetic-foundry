@@ -30,8 +30,9 @@ Registered here:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
@@ -134,7 +135,8 @@ def citation_sidecars(world: World) -> list[Rendered]:
         intent = world.artifact_intents.by_id(ir.intent_id)
         if profile.for_doctype(intent.artifact_type).appendix != "sidecar":
             continue
-        hidden = [section for section in ir.sections if section.hidden and section.table]
+        hidden = [(section, section.table)
+                  for section in ir.sections if section.hidden and section.table]
         if not hidden:
             continue
         lines = [f"# {ir.title} — supporting facts", "",
@@ -142,8 +144,7 @@ def citation_sidecars(world: World) -> list[Rendered]:
                  " and validity the ledger holds. Kept beside the document"
                  " rather than inside it; the document is unchanged by its"
                  " presence.", ""]
-        for section in hidden:
-            table = section.table
+        for section, table in hidden:
             lines.append(f"## {section.heading}")
             lines.append("")
             header = [table.title] + [column.label for column in table.columns]

@@ -80,13 +80,51 @@ def test_high_density_strictly_grows_the_evaluation_set() -> None:
 
 @pytest.mark.slow
 def test_low_density_shrinks_the_optional_fan_out_without_losing_questions() -> None:
-    """`low` trims documents (`scenarios.py`'s lore-override), but every
-    question the standard corpus already answers must still be answerable —
-    none of today's cases depend on the optional documents this removes."""
+    """`low` trims documents (`scenarios.py`'s lore-override), and a question
+    may vanish with the document it interrogates — never on its own.
+
+    This originally asserted the two evaluation sets were *equal*: "none of
+    today's cases depend on the optional documents this removes." That claim
+    aged out unwitnessed — the suite was deselected and ran nowhere — and the
+    first real run caught it: the approval-provenance family (added later,
+    with the Approval blocks) mints two questions per divisional close
+    commentary, which is precisely a document the low build trims. Those
+    questions *should* go with their document; a corpus asking who approved a
+    commentary it does not contain would be incoherent. So the invariant is
+    now the honest half of the original: every lost question must name a
+    trimmed document as required reading, and losing a question whose
+    documents all survive is still a failure.
+
+    Cases are matched by question text, not id — fewer intents reshuffle the
+    sequential ids, and an id-keyed diff would report every case changed
+    (`twins.py` refuses interventions for exactly this reason).
+    """
     default = _build(eval_density=1.0)
     minimal = _build(eval_density=0.0)
 
     assert len(minimal.artifact_intents) < len(default.artifact_intents)
-    assert len(minimal.evaluations) == len(default.evaluations)
+
+    default_by_question = {case.question: case for case in default.evaluations}
+    minimal_by_question = {case.question: case for case in minimal.evaluations}
+    # Trimming may only remove questions, never invent them.
+    assert set(minimal_by_question) <= set(default_by_question)
+
+    from collections import Counter
+
+    default_counts = Counter(i.artifact_type for i in default.artifact_intents)
+    minimal_counts = Counter(i.artifact_type for i in minimal.artifact_intents)
+    trimmed_types = {t for t in default_counts if minimal_counts[t] < default_counts[t]}
+
+    lost = [case for question, case in default_by_question.items()
+            if question not in minimal_by_question]
+    for case in lost:
+        required_types = {
+            default.artifact_intents.by_id(a).artifact_type
+            for a in case.required_artifact_ids
+        }
+        assert required_types & trimmed_types, (
+            f"{case.id} was lost but every document it requires survives the"
+            f" trim: {case.question!r} (requires {sorted(required_types)})"
+        )
     report = minimal.validate()
     assert report.ok, report.violations[:5]

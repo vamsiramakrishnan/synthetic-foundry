@@ -63,7 +63,9 @@ from typing import Any
 from ..ids import Minter
 from ..models import ArtifactIntent, CanonicalFact, EvaluationCase, EvaluationType
 from . import episode_text
-from .cases import CaseBuilder, adverse as _adverse, answerable, fmt as _fmt
+from .cases import CaseBuilder, answerable
+from .cases import adverse as _adverse
+from .cases import fmt as _fmt
 from .operations import CloseEpisode
 from .org_builder import ACCOUNTABILITY_KIND
 

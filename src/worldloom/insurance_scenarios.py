@@ -15,7 +15,7 @@ reserving cycle itself, which lives in ``generators/reserving.py`` and
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from .parameters import DEFAULT, Parameters
@@ -68,7 +68,12 @@ class QuarterlyReserving:
 
     def run(self, world: World) -> World:
         from . import insurance_documents
-        from .generators import insurance_book, insurance_evaluation, reserving, triangles
+        from .generators import (
+            insurance_book,
+            insurance_evaluation,
+            reserving,
+            triangles,
+        )
         from .generators.finance import previous_periods
         from .generators.operations import business_days_after, period_end
 
@@ -174,7 +179,7 @@ class QuarterlyReserving:
             period_end(self.period), 5, locale_of(world.recipe)
         )
         recorded_at = datetime(
-            settled.year, settled.month, settled.day, 8, 30, tzinfo=timezone.utc
+            settled.year, settled.month, settled.day, 8, 30, tzinfo=UTC
         )
         book = insurance_book.generate(
             rng.derive("book"), minter,
@@ -242,7 +247,7 @@ class QuarterlyReserving:
 # registry rather than adding to what it replaces. Same calling convention
 # as banking's: the scenario class itself is the builder,
 # `QuarterlyReserving(period=...)`.
-from . import recipe as _recipe  # noqa: E402
+from . import recipe as _recipe
 
 _recipe.register_step("QuarterlyReserving", ("period",), QuarterlyReserving)
 

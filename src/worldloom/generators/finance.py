@@ -378,8 +378,8 @@ def generate(
                 unit_id, physics.number("retail.margin.budget", margin_rng)
             )
             erosion = physics.number("retail.margin.erosion", margin_rng)
-            gp_budget[key] = int(round(budget[key] * budget_margin))
-            gp_actual[key] = int(round(actual[key] * (budget_margin - erosion)))
+            gp_budget[key] = round(budget[key] * budget_margin)
+            gp_actual[key] = round(actual[key] * (budget_margin - erosion))
 
             members = cats_of.get(unit_id, [])
             if not members:

@@ -453,7 +453,7 @@ def diff(a: Stats, b: Stats, *, a_label: str = "a", b_label: str = "b") -> str:
     width = max(len(label) for label, _, _ in rows)
     lines = [f"  {'metric'.ljust(width)}  {a_label:>16}  {b_label:>16}", "─" * (width + 38)]
     for label, a_value, b_value in rows:
-        lines.append(f"  {label.ljust(width)}  {str(a_value):>16}  {str(b_value):>16}")
+        lines.append(f"  {label.ljust(width)}  {a_value!s:>16}  {b_value!s:>16}")
     return "\n".join(lines)
 
 

@@ -69,12 +69,48 @@ caller who builds a ``Parameters`` from a literal dict of its own.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from typing import Any
 
 from . import archetypes as archetype_registry
+from . import parameters as _parameters_module
+
+# Imported for its side effects: registering procurement's artifact types with
+# the document compiler, and registering its physics parameters. Kept at module
+# scope so that importing `worldloom.procurement` — which `worldloom/__init__`
+# always does — is sufficient for a corpus loaded in a fresh process to compile,
+# validate, and access procurement's parameters identically everywhere.
+from . import procurement_documents  # noqa: F401  (registration)
 from . import validate as validate_module
 from .archetypes import MIDSIZE_INFRASTRUCTURE_SERVICES, Archetype
+from .generators import stockflow as _stockflow
+from .generators.procurement_estate import (
+    COMMITMENT as _COMMITMENT,
+)
+from .generators.procurement_estate import (
+    COMMITMENT_ROLES as _COMMITMENT_ROLES,
+)
+from .generators.procurement_estate import (
+    MATERIALS as _MATERIALS,
+)
+from .generators.procurement_estate import (
+    MATERIALS_ROLES as _MATERIALS_ROLES,
+)
+from .generators.procurement_estate import (
+    MOVEMENT as _MOVEMENT,
+)
+from .generators.procurement_estate import SPANS as _ESTATE_SPANS
+from .generators.procurement_estate import (
+    SPEND as _SPEND,
+)
+from .generators.procurement_estate import (
+    SPEND_ROLES as _SPEND_ROLES,
+)
+from .generators.procurement_estate import (
+    role_of as _role_of,
+)
+from .generators.procurement_match import SPANS as _PROCUREMENT_SPANS
 from .ids import Minter
 from .models import (
     ConstraintKind,
@@ -86,27 +122,6 @@ from .parameters import DEFAULT, Parameters
 from .rng import Rng
 from .validate import RECONCILIATION_TOLERANCE, Violation
 from .world import World, extend_lore
-
-# Imported for its side effects: registering procurement's artifact types with
-# the document compiler, and registering its physics parameters. Kept at module
-# scope so that importing `worldloom.procurement` — which `worldloom/__init__`
-# always does — is sufficient for a corpus loaded in a fresh process to compile,
-# validate, and access procurement's parameters identically everywhere.
-from . import procurement_documents  # noqa: F401  (registration)
-from .generators import stockflow as _stockflow
-from .generators.procurement_estate import (
-    COMMITMENT as _COMMITMENT,
-    COMMITMENT_ROLES as _COMMITMENT_ROLES,
-    MATERIALS as _MATERIALS,
-    MATERIALS_ROLES as _MATERIALS_ROLES,
-    MOVEMENT as _MOVEMENT,
-    SPEND as _SPEND,
-    SPEND_ROLES as _SPEND_ROLES,
-    role_of as _role_of,
-)
-from .generators.procurement_estate import SPANS as _ESTATE_SPANS
-from .generators.procurement_match import SPANS as _PROCUREMENT_SPANS
-from . import parameters as _parameters_module
 
 _parameters_module.register(_PROCUREMENT_SPANS)
 # The estate's own ranges, registered beside the match's rather than folded into
@@ -865,7 +880,7 @@ def _checks(world: World) -> tuple[list[Violation], int]:
         if len(live) != 1:
             fail("exception_status_not_singular", f"{kind}/{subject}/{period}",
                  f"{len(live)} open status facts, expected exactly 1")
-        for earlier, later in zip(ordered_links, ordered_links[1:]):
+        for earlier, later in itertools.pairwise(ordered_links):
             checks += 1
             if earlier.valid_to != later.valid_from or later.supersedes != earlier.id:
                 fail("exception_status_torn", earlier.id,
@@ -1008,13 +1023,6 @@ validate_module.register_domain_checks("procurement", _checks)
 
 # The domain registry entry: how the CLI and the recipe rebuilder find this
 # vertical from an archetype key, without either naming procurement in core.
-from .domains import Domain, register_domain  # noqa: E402
-from .procurement_scenarios import PurchaseToPayCycle  # noqa: E402
-
-from .generators.procurement_cycle import TEXT as _PROCUREMENT_TEXT  # noqa: E402
-from .generators.procurement_evaluation import EVAL_TEXT as _PROCUREMENT_EVAL_TEXT  # noqa: E402
-from .generators.procurement_org import _ROLES as _PROCUREMENT_ROLES  # noqa: E402
-
 # The mosaic axes: what varies across a field of contractor groups. Without
 # this registration `worldloom mosaic -e procurement` was refused while the
 # other three engines built — the one gap between "procurement is a complete
@@ -1035,6 +1043,13 @@ from .generators.procurement_org import _ROLES as _PROCUREMENT_ROLES  # noqa: E4
 #   document the disagreement lives in — price disputes argue on the invoice,
 #   delivery shortfalls on the receipt.
 from . import mosaic as _mosaic_module
+from .domains import Domain, register_domain
+from .generators.procurement_cycle import TEXT as _PROCUREMENT_TEXT
+from .generators.procurement_evaluation import (
+    EVAL_TEXT as _PROCUREMENT_EVAL_TEXT,
+)
+from .generators.procurement_org import _ROLES as _PROCUREMENT_ROLES
+from .procurement_scenarios import PurchaseToPayCycle
 
 # Structure minus the estate axis: `ProcureToPayWorld` refuses `estate=` by
 # design — `landscape.LANDSCAPES` is a closed core table with no registration
@@ -1095,7 +1110,8 @@ register_domain(Domain(
 # so it is where `carries-forward-as(derive)` is a measured fact rather than a
 # design intention. `financial.accrual.grni` is registered here, not by retail,
 # despite the prefix: the procurement cycle mints it and answers for it.
-from .factkinds import FactKind, register as _register_kinds  # noqa: E402
+from .factkinds import FactKind
+from .factkinds import register as _register_kinds
 
 _register_kinds([
     FactKind(kind="p2p.contract_rate", domain="procurement",

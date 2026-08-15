@@ -42,16 +42,21 @@ from typing import TYPE_CHECKING
 
 from ..compiler.compose import compose, plan_from_ir
 from ..compiler.style import StyleGenome, genome
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import ArtifactIR, CanonicalFact, Chart, ChartKind, Row, Table
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..narrative import references
-from ..rng import Rng
-from . import Rendered, RenderError, ooxml, slug_for
 from ..presentation import (
     DEFAULT as DEFAULT_PRESENTATION,
+)
+from ..presentation import (
     Presentation as PresentationProfile,
+)
+from ..presentation import (
     of as presentation_of,
 )
+from ..rng import Rng
+from . import Rendered, RenderError, ooxml, slug_for
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -749,7 +754,6 @@ def _apply_cell_borders(cell, policy: str, weight_pt: float) -> None:  # type: i
     never modeled.
     """
     from lxml import etree
-
     from pptx.oxml.ns import qn
 
     edges = {"all": ("lnL", "lnR", "lnT", "lnB"), "horizontal": ("lnT", "lnB"), "none": ()}[policy]

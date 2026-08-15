@@ -46,7 +46,13 @@ import pathlib
 import pytest
 
 from worldloom import (
-    RetailWorld, World, columns, doctypes, documents, packs, registries,
+    RetailWorld,
+    World,
+    columns,
+    doctypes,
+    documents,
+    packs,
+    registries,
 )
 from worldloom.render import docx as docx_render
 from worldloom.scenarios import MonthEndClose

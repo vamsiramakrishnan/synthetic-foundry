@@ -18,12 +18,12 @@ topology, and ``persona_trait`` adjusts how specific people write.
 from __future__ import annotations
 
 from collections.abc import Sequence
-
 from dataclasses import dataclass
 from typing import Any
 
 from ..ids import Minter
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import (
     AccessPolicy,
     BusinessUnit,
@@ -44,8 +44,8 @@ from ..rng import Rng
 from ..roles import UnitRole, parse_unit_role, unit_role_key
 from . import hierarchy, names
 from .org_builder import (
-    apply_traits,
     accountability_facts,
+    apply_traits,
     form_units,
     founding_milestones,
     mint_people,

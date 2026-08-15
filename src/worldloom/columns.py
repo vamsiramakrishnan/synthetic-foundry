@@ -92,8 +92,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
-from . import factkinds
-from . import registries
+from . import factkinds, registries
 from .models import FormulaKind
 
 #: The formulas a *column* may declare. Closed for ``ConstraintKind``'s reason:

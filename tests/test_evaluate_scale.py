@@ -32,11 +32,10 @@ import pytest
 
 from worldloom import RetailWorld
 from worldloom.evaluate import RETRIEVERS, Bm25, TfIdf, passages, score
-from worldloom.evaluate.bm25 import B, K1, tokens
+from worldloom.evaluate.bm25 import K1, B, tokens
 from worldloom.narrative import DeterministicProvider
 from worldloom.scenarios import MonthEndClose
 from worldloom.world import World
-
 
 # ---------------------------------------------------------------------------
 # The reference scans

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -16,7 +16,7 @@ def world() -> World:
 
 
 def utc(text: str) -> datetime:
-    return datetime.fromisoformat(text).replace(tzinfo=timezone.utc)
+    return datetime.fromisoformat(text).replace(tzinfo=UTC)
 
 
 # -- Gate A: coherence -------------------------------------------------------

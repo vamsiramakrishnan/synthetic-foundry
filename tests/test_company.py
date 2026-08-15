@@ -26,7 +26,6 @@ import pytest
 from worldloom import archetypes, company, domains, facets, packs, recipe, roles, sdk
 from worldloom.parameters import DEFAULTS
 
-
 # ---------------------------------------------------------------------------
 # The document itself
 # ---------------------------------------------------------------------------

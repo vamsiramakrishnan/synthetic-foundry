@@ -48,7 +48,8 @@ look load-bearing while changing nothing, which is the exact failure
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field as _field
+from dataclasses import dataclass
+from dataclasses import field as _field
 from typing import Any
 
 from .ids import Minter
@@ -827,7 +828,6 @@ def resolve(**chosen: str) -> Resolved:
     calendar: str | None = None
     calendar_from = ""
     estate: str | None = None
-    estate_from = ""
 
     for name in FACETS:                     # registry order, never keyword order
         value = settled.get(name)
@@ -894,7 +894,7 @@ def resolve(**chosen: str) -> Resolved:
             # mutually exclusive for no reason.
             order = ("small", "medium", "large")
             if estate is None or order.index(implied.estate) > order.index(estate):
-                estate, estate_from = implied.estate, f"{name}:{value}"
+                estate = implied.estate
 
     return Resolved(
         chosen=settled, physics=physics, claims=tuple(lore_claims),

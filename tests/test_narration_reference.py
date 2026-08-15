@@ -14,6 +14,7 @@ below are where that shows up.
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -100,7 +101,7 @@ def test_any_currency_renders_as_money_not_only_the_four_somebody_listed() -> No
     of `AED 240,900 thousands` — and silently dropped the ` adverse` suffix that
     tells a reader a negative variance is bad news.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from worldloom.models import Authority, CanonicalFact, Quantity
     from worldloom.narrative.references import render_value
@@ -109,7 +110,7 @@ def test_any_currency_renders_as_money_not_only_the_four_somebody_listed() -> No
         return CanonicalFact(
             id="FACT-0001", kind="financial.revenue.actual", subject="BU-0001",
             value=Quantity(amount=amount, unit=unit),
-            valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
             authority=Authority.SYSTEM_OF_RECORD,
         )
 
@@ -121,7 +122,7 @@ def test_any_currency_renders_as_money_not_only_the_four_somebody_listed() -> No
 def test_a_unit_that_is_not_a_currency_is_not_rendered_as_one() -> None:
     """ISO 4217 is three uppercase letters and nothing else this corpus mints
     resembles that — but the shape test has to be narrow enough to prove it."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from worldloom.models import Authority, CanonicalFact, Quantity
     from worldloom.narrative.references import render_value
@@ -130,7 +131,7 @@ def test_a_unit_that_is_not_a_currency_is_not_rendered_as_one() -> None:
         return CanonicalFact(
             id="FACT-0001", kind="k", subject="s",
             value=Quantity(amount=12, unit=unit),
-            valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
             authority=Authority.SYSTEM_OF_RECORD,
         )
 

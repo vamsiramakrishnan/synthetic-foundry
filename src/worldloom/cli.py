@@ -955,7 +955,7 @@ def build(
             + (
                 ""
                 if said_it
-                else f" Nothing named an estate directly: it is implied by the"
+                else " Nothing named an estate directly: it is implied by the"
                 " facets this build resolved."
             )
         )
@@ -1729,9 +1729,8 @@ def build(
     # meant to be, and a profile whose counts are later revised replays as the
     # profile that was asked for.
     if messiness is not None:
-        from .messiness import Imperfections
-
         from .generators.distractors import messiness_ceilings
+        from .messiness import Imperfections
         from .messiness import from_document as _messiness_profile
 
         before = len(world.artifact_intents)
@@ -2834,8 +2833,8 @@ def mosaic(
     first call — deciding whether five worlds are worth the wait should not
     require generating five worlds.
     """
-    from . import mosaic as mosaic_module
     from . import batch as batch_module
+    from . import mosaic as mosaic_module
 
     if describe:
         try:
@@ -3080,7 +3079,7 @@ def mosaic(
         + f"\n[dim]{spread['distinct_shapes']} distinct organisation shape(s);"
         f" headcounts {spread['headcounts']}; estates {spread['estates']}."
         + (f" {narrated_sections} section(s) of prose written." if narrate else "")
-        + f" The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
+        + " The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
     )
     # Said at the end, where a reader stops, and said as a warning rather than
     # as a count. `--no-narrate` is a legitimate request and this does not
@@ -4298,8 +4297,8 @@ def twin(
     the cause rather than diffed; exit code 3 says "refused", so a loop can tell
     a refusal from a failure without parsing prose. See `worldloom.twins`.
     """
-    from .recipe import RecipeError
     from . import twins as twins_module
+    from .recipe import RecipeError
 
     if "=" not in set_:
         err.print("[red]error:[/red] --set takes PATH=VALUE")
@@ -5297,7 +5296,7 @@ def workspace(
 
     try:
         world = World.load(corpus)
-    except Exception as exc:  # noqa: BLE001 — surfaced, not swallowed
+    except Exception as exc:
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
     try:
@@ -5394,7 +5393,8 @@ def present_describe() -> None:
     The same argument `mosaic --describe` makes: deciding whether a profile is
     the one you want should not require rendering a corpus to find out.
     """
-    from .presentation import KNOBS, PROFILES, describe as describe_profile
+    from .presentation import KNOBS, PROFILES
+    from .presentation import describe as describe_profile
 
     table = Table(title="Presentation profiles", box=None)
     table.add_column("profile")
@@ -5462,7 +5462,8 @@ def present_lint(
     fixing one knob per round trip pays a turn per rule it could not see.
     """
     from .cascade import load as load_seed
-    from .presentation import PresentationSeed, register as register_profile, resolve, review
+    from .presentation import PresentationSeed, resolve, review
+    from .presentation import register as register_profile
 
     doctypes: tuple[str, ...] = ()
     if corpus:
@@ -5471,7 +5472,7 @@ def present_lint(
 
     try:
         seed = load_seed(spec, PresentationSeed)
-    except Exception as exc:  # noqa: BLE001 - pydantic and json raise differently
+    except Exception as exc:
         err.print(f"[red]refused:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 

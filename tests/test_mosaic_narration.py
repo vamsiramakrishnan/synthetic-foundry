@@ -259,7 +259,7 @@ def _same(first: Path, second: Path) -> None:
     """
     files = sorted(p.name for p in first.iterdir() if p.is_file())
     assert files == sorted(p.name for p in second.iterdir() if p.is_file())
-    match, mismatch, errors = filecmp.cmpfiles(first, second, files, shallow=False)
+    _match, mismatch, errors = filecmp.cmpfiles(first, second, files, shallow=False)
     assert not mismatch and not errors, f"{mismatch} differ, {errors} unreadable"
 
 

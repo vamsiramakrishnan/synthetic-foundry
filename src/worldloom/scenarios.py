@@ -12,11 +12,12 @@ build-order step 7, once IT services has shown which parts actually repeat.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from . import documents
+from . import profiles as _profiles
 from .generators.operations import business_days_after, period_end
-from . import documents, profiles as _profiles
 from .models import Authority, Lifecycle
 from .parameters import DEFAULT, Parameters
 from .recipe import locale_of
@@ -51,7 +52,7 @@ def _period_boundary(period: str) -> datetime:
     and `finance.previous_periods` — no clock, so replay stays byte-identical.
     """
     day = business_days_after(period_end(period), 8)
-    return datetime(day.year, day.month, day.day, 23, 59, 59, tzinfo=timezone.utc)
+    return datetime(day.year, day.month, day.day, 23, 59, 59, tzinfo=UTC)
 
 
 def lore_index(world: World) -> dict[str, list[str]]:
@@ -570,6 +571,7 @@ class MonthEndClose:
             }
 
         from . import graphs
+
         # Imported here rather than at module scope for the reason `graphs` is:
         # `evaluate` pulls in the render layer through its index, and a
         # scenario is imported by everything that builds anything.
@@ -824,7 +826,13 @@ class WorkforceChange:
     headcount: int
 
     def run(self, world: World) -> World:
-        from .models import ArtifactIntent, Authority, CanonicalFact, EnterpriseEvent, Quantity
+        from .models import (
+            ArtifactIntent,
+            Authority,
+            CanonicalFact,
+            EnterpriseEvent,
+            Quantity,
+        )
         from .recipe import with_step
 
         if world._minter is None:

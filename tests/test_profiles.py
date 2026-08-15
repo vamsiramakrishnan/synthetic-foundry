@@ -7,12 +7,12 @@ import pathlib
 
 import pytest
 
-from worldloom import packs, profiles, recipe as recipe_module
+from worldloom import packs, profiles
+from worldloom import recipe as recipe_module
 from worldloom.generators import finance
 from worldloom.profiles import MONTHS, Seasonality
 from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose
-
 
 # ---------------------------------------------------------------------------
 # The invariant

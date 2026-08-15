@@ -25,7 +25,6 @@ import pytest
 from worldloom import vendi as vendi_module
 from worldloom.vendi import effective_count, vendi, vendi_of
 
-
 # ---------------------------------------------------------------------------
 # Kernels to score things with
 # ---------------------------------------------------------------------------
@@ -49,7 +48,7 @@ def bigram_jaccard(a: tuple[str, ...], b: tuple[str, ...]) -> float:
     """
     def grams(sequence: tuple[str, ...]) -> frozenset[tuple[str, str]]:
         padded = ("\x02", *sequence, "\x03")
-        return frozenset(zip(padded, padded[1:], strict=False))
+        return frozenset(itertools.pairwise(padded))
 
     left, right = grams(a), grams(b)
     return len(left & right) / len(left | right)

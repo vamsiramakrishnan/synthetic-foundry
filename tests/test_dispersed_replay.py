@@ -18,11 +18,10 @@ so the two cannot drift again without this file failing.
 
 from __future__ import annotations
 
-from pathlib import Path
 import runpy
+from pathlib import Path
 
 from worldloom import domains
-
 
 SCRIPT = Path(__file__).parents[1] / ".github" / "scripts" / "dispersed_replay.py"
 

@@ -48,9 +48,11 @@ be byte-for-byte what it was.
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace as _replace
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from dataclasses import replace as _replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .ids import Minter
@@ -755,7 +757,7 @@ def _ladder_holds(spec: PolicySpec, values: Mapping[str, float]) -> list[str]:
     rungs = ["manager_limit", "director_limit", "executive_limit", "board_threshold"]
     present = [key for key in rungs if key in values]
     found = []
-    for lower, higher in zip(present, present[1:]):
+    for lower, higher in itertools.pairwise(present):
         if not values[higher] > values[lower]:
             found.append(
                 f"{spec.name}: {higher} ({values[higher]:,.0f}) does not sit"
@@ -906,7 +908,7 @@ def applied(world: Any, level: str | None) -> Any:
     # fail it intermittently, which is the worst kind.
     anchor = max(
         (fact.valid_from for fact in world._facts),
-        default=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        default=datetime(2026, 1, 1, tzinfo=UTC),
     )
     facts: list[CanonicalFact] = []
     intents: list[ArtifactIntent] = []
@@ -1103,7 +1105,7 @@ def _provisions(world: Any, intent: ArtifactIntent, minter: Minter) -> Any:
 # See `documents.EXTENDS_OUTLINE`: this compiler calls `outline` and inserts one
 # block into what comes back, so the outline registered beside it is live data
 # and not the dead weight a from-scratch compiler's would be.
-setattr(_provisions, "worldloom_extends_outline", True)
+_provisions.worldloom_extends_outline = True
 
 
 def _section(**kwargs: Any) -> Any:
@@ -1144,7 +1146,8 @@ def _register() -> None:
     # Registered here rather than per engine because a policy is not a
     # vertical's: an expense threshold is `policy.finance.expense.approval_threshold`
     # whether the company sells groceries or underwrites motor claims.
-    from .factkinds import FactKind, register as register_kinds
+    from .factkinds import FactKind
+    from .factkinds import register as register_kinds
 
     kinds = []
     for area in LIBRARY:

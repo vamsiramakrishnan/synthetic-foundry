@@ -40,12 +40,23 @@ from xml.sax.saxutils import escape as _escape
 from ..compiler.compose import compose, plan_from_ir
 from ..compiler.grammar import GrammarViolation
 from ..compiler.plan import SizeClass
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
-from ..models import ArtifactIR, ArtifactSection, CanonicalFact, FlowDiagram, MagnitudeBand, Quotation, Table
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
+from ..models import (
+    ArtifactIR,
+    ArtifactSection,
+    CanonicalFact,
+    FlowDiagram,
+    MagnitudeBand,
+    Quotation,
+    Table,
+)
 from ..narrative import references
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION
+from ..presentation import Presentation
+from ..presentation import of as presentation_of
 from . import Rendered, RenderError, ooxml, slug_for
 from .docx import HANDLES
-from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -372,9 +383,8 @@ def _table_flowable(table: Table, frame_width: float, styles: dict,
     them.
     """
     from reportlab.lib import colors
-    from reportlab.platypus import Paragraph
+    from reportlab.platypus import Paragraph, TableStyle
     from reportlab.platypus import Table as PlatypusTable
-    from reportlab.platypus import TableStyle
 
     cell_pt = _CELL_PT
     if presentation.table_fit == "measured":
@@ -604,9 +614,8 @@ def _figure_flowables(chart, table: Table, frame_width: float, styles: dict, loc
     and does not depend on what a font happens to map a codepoint to.
     """
     from reportlab.lib import colors
-    from reportlab.platypus import Flowable, Paragraph
+    from reportlab.platypus import Flowable, Paragraph, TableStyle
     from reportlab.platypus import Table as PlatypusTable
-    from reportlab.platypus import TableStyle
 
     class _Bar(Flowable):
         """A single proportional bar, vector-drawn to a fixed height."""

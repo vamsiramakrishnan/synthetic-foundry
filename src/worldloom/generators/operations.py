@@ -13,14 +13,21 @@ than overwritten.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Protocol
 
 from .. import locales
 from ..ids import Minter
-from ..models import Authority, CanonicalFact, EnterpriseEvent, FiscalPeriod, Quantity, fiscal_period
+from ..models import (
+    Authority,
+    CanonicalFact,
+    EnterpriseEvent,
+    FiscalPeriod,
+    Quantity,
+    fiscal_period,
+)
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import episode_text
@@ -566,7 +573,7 @@ def period_end(period: str) -> date:
 
 
 def _at(day: date, hour: int, minute: int) -> datetime:
-    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=timezone.utc)
+    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=UTC)
 
 
 def _text(minter: Minter, kind: str, subject: str, text: str, *, at: datetime,
@@ -763,12 +770,13 @@ def _incident_chain(
     # format belongs to the ticketing system, not to the world's physics.
     incident_ref = f"INC{rng.integer(10_000, 99_999):07d}"
 
-    def event(kind: str, at: datetime, summary: str, *, actors: list[str], services: list[str] = [],
-              systems: list[str] = [], units: list[str] = [], caused_by: list[str] = [],
-              lore: list[str] = []) -> EnterpriseEvent:
+    def event(kind: str, at: datetime, summary: str, *, actors: list[str], services: Sequence[str] = (),
+              systems: Sequence[str] = (), units: Sequence[str] = (), caused_by: Sequence[str] = (),
+              lore: Sequence[str] = ()) -> EnterpriseEvent:
         made = EnterpriseEvent(id=minter.next("EV"), kind=kind, occurred_at=at, summary=summary,
-                               actors=actors, services=services, systems=systems,
-                               business_units=units, caused_by=caused_by, lore_ids=lore)
+                               actors=actors, services=list(services), systems=list(systems),
+                               business_units=list(units), caused_by=list(caused_by),
+                               lore_ids=list(lore))
         events.append(made)
         return made
 

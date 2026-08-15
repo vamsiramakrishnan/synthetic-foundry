@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from worldloom import MonthEndClose, RetailWorld, World
-from worldloom.models import Chart, ChartKind, Column, Row, Cell, Table
+from worldloom.models import Cell, Chart, ChartKind, Column, Row, Table
 from worldloom.render import html
 
 PERIOD = "2026-03"
@@ -447,4 +447,4 @@ def test_svg_viewport_invariant(rendered: World) -> None:
                         f"extends to {rect_y + rect_height}, exceeds svg height {svg_height}"
                     )
 
-    assert not violations, f"SVG viewport violations found:\n" + "\n".join(violations)
+    assert not violations, "SVG viewport violations found:\n" + "\n".join(violations)

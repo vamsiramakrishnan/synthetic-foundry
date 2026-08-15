@@ -37,7 +37,7 @@ class Domain:
 
     name: str
     archetype_keys: frozenset[str]
-    world: type
+    world: type[Any]
     """The world builder — ``RetailWorld``, ``BankingWorld`` — accepting
     ``(seed, archetype, employees, annual_revenue)`` keyword arguments."""
     single_episode: Callable[[str], Any] | None = None

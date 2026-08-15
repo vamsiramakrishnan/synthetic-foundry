@@ -83,7 +83,7 @@ def same_bytes(first, second, tmp_path, label, ignoring=()):  # type: ignore[no-
     files = sorted(p.name for p in a.iterdir())
     assert files == sorted(p.name for p in b.iterdir())
     files = [name for name in files if name not in ignoring]
-    match, mismatch, errors = filecmp.cmpfiles(a, b, files, shallow=False)
+    _match, mismatch, errors = filecmp.cmpfiles(a, b, files, shallow=False)
     assert not mismatch and not errors, f"{label}: {mismatch} differ, {errors} unreadable"
 
 

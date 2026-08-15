@@ -23,17 +23,10 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from . import columns as columns_module
-from . import domains
+from . import domains, roleseq, structure
 from . import recipe as recipe_module
-from . import roleseq
-from . import structure
 from .ids import Minter
-from .rng import Rng
-from .narrative import references
 from .models import (
-    FlowNode,
-    FlowEdge,
-    FlowDiagram,
     ArtifactIntent,
     ArtifactIR,
     ArtifactSection,
@@ -43,11 +36,16 @@ from .models import (
     Chart,
     ChartKind,
     Column,
+    FlowDiagram,
+    FlowEdge,
+    FlowNode,
     FormulaKind,
     Lifecycle,
     Row,
     Table,
 )
+from .narrative import references
+from .rng import Rng
 
 if TYPE_CHECKING:  # pragma: no cover
     from .adjacency import Adjacency
@@ -310,11 +308,11 @@ def declared_types() -> frozenset[str]:
 def register_artifact_types(
     *,
     standing: dict[str, tuple[Authority, Lifecycle]] | None = None,
-    lags: dict[str, "timedelta"] | None = None,
-    outlines: dict[str, tuple["SectionPlan", ...]] | None = None,
+    lags: dict[str, timedelta] | None = None,
+    outlines: dict[str, tuple[SectionPlan, ...]] | None = None,
     compilers: dict[str, Any] | None = None,
     filings: dict[str, FilingPlan] | None = None,
-    variants: dict[str, tuple[tuple["SectionPlan", ...], ...]] | None = None,
+    variants: dict[str, tuple[tuple[SectionPlan, ...], ...]] | None = None,
 ) -> None:
     """Add a domain module's artifact types to the compiler's tables.
 
@@ -478,7 +476,7 @@ class _Bound:
     column per row over thousands of rows.
     """
 
-    __slots__ = ("sheet", "_measures", "_derived", "_not_additive", "_rate_kinds")
+    __slots__ = ("_derived", "_measures", "_not_additive", "_rate_kinds", "sheet")
 
     def __init__(self, sheet: columns_module.Sheet | None) -> None:
         self.sheet = sheet
@@ -2574,8 +2572,8 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             # what a section is *for*; a composer reading "Commitment" downstream
             # can only guess, and guessed wrong often enough to be worth removing
             # from the path.
-            from .compiler.compose import infer_semantic_role
             from . import templating
+            from .compiler.compose import infer_semantic_role
 
             # Resolve {{var:...}} variables in heading and purpose from the world.
             # Variables-of-variables are refused (they contain {{var:...}} after
@@ -2891,6 +2889,7 @@ def _divisional_summary(
 #: because they are mechanism any vertical plans — a projection of an event
 #: and its facts, with no domain vocabulary of their own.
 from .generators.communications import MESSAGE_LAG, MINUTES_LAG, minutes_ir, thread_ir
+
 
 def company_timeline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     """The company's own past, as the dated table the lore already witnesses.

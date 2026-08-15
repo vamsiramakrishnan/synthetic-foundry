@@ -39,9 +39,12 @@ after. It is kept because it will be load-bearing again for the next axis.
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
-from worldloom import InsuranceWorld, episodes, validate as validate_module
+from worldloom import InsuranceWorld, episodes
+from worldloom import validate as validate_module
 
 SEED = 8128
 
@@ -461,7 +464,7 @@ def test_a_later_observation_closes_the_cell_it_replaces() -> None:
             chain.sort(key=lambda f: f.valid_from)
             open_now = [f for f in chain if f.valid_to is None]
             assert len(open_now) == 1, (kind, subject, cohort, len(open_now))
-            for earlier, later in zip(chain, chain[1:]):
+            for earlier, later in itertools.pairwise(chain):
                 assert later.supersedes == earlier.id, (kind, cohort)
                 assert earlier.valid_to == later.valid_from, (kind, cohort)
                 revalued += 1

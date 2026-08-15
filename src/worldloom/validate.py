@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Iterator
+from collections.abc import Set as AbstractSet
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -173,11 +174,11 @@ class CoherenceError(Exception):
 #: Each group is a callable ``world -> (violations, checks_run)`` and must
 #: return quickly with no violations on a world its domain never touched —
 #: the same early-return contract ``_Validator.actors`` follows.
-_DOMAIN_CHECKS: dict[str, Callable[["World"], tuple[list[Violation], int]]] = {}
+_DOMAIN_CHECKS: dict[str, Callable[[World], tuple[list[Violation], int]]] = {}
 
 
 def register_domain_checks(
-    name: str, checks: Callable[["World"], tuple[list[Violation], int]]
+    name: str, checks: Callable[[World], tuple[list[Violation], int]]
 ) -> None:
     """Register a domain-owned check group under *name*.
 
@@ -492,7 +493,7 @@ class _Validator:
         self.advisories.extend(self.violations[at:])
         del self.violations[at:]
 
-    def check_ref(self, subject: str, field_name: str, value: str | None, *, expect: str | set[str] | None = None) -> None:
+    def check_ref(self, subject: str, field_name: str, value: str | None, *, expect: str | AbstractSet[str] | None = None) -> None:
         """Check that *value* resolves, and optionally that its prefix is expected."""
         self.checks += 1
         if value is None:
@@ -514,7 +515,7 @@ class _Validator:
                     f"{field_name}={value} is a {actual}, expected one of {sorted(expected)}",
                 )
 
-    def check_refs(self, subject: str, field_name: str, values: list[str], *, expect: str | set[str] | None = None) -> None:
+    def check_refs(self, subject: str, field_name: str, values: list[str], *, expect: str | AbstractSet[str] | None = None) -> None:
         for value in values:
             self.check_ref(subject, field_name, value, expect=expect)
 
@@ -2102,7 +2103,7 @@ class _Validator:
                 continue
             carried = set(ir.fact_ids())
             missing = [f for f in intent.required_fact_ids if f not in carried]
-            for fact_id in intent.required_fact_ids:
+            for _fact_id in intent.required_fact_ids:
                 self.checks += 1
             if missing:
                 self.fail(

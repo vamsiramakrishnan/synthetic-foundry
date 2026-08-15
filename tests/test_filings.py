@@ -30,8 +30,15 @@ from collections import Counter
 
 import pytest
 
-from worldloom import MonthEndClose, RetailWorld, World, facets, profiles, scenarios
-from worldloom import documents
+from worldloom import (
+    MonthEndClose,
+    RetailWorld,
+    World,
+    documents,
+    facets,
+    profiles,
+    scenarios,
+)
 from worldloom.generators import planning
 
 PERIOD = "2026-03"

@@ -10,12 +10,13 @@ report card.
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
 from worldloom.compiler.components import component
 from worldloom.compiler.style import (
     CONTRAST_FLOOR,
-    StyleGenome,
     contrast_ratio,
     genome,
     genomes,
@@ -114,7 +115,9 @@ def test_the_contrast_floor_holds_across_every_curated_fill_palette_too() -> Non
     directly, including the archetypes that bias away from a uniform pick,
     so a palette entry added later that happens to be rare under `Rng.choice`
     cannot go unchecked."""
-    from worldloom.compiler.style import _FILL_PALETTES  # the module's own data, not re-derived
+    from worldloom.compiler.style import (
+        _FILL_PALETTES,  # the module's own data, not re-derived
+    )
 
     for index in range(len(_FILL_PALETTES)):
         # Force each palette by sampling until `Rng.choice` lands on it —
@@ -139,13 +142,13 @@ def test_the_contrast_floor_holds_across_every_curated_fill_palette_too() -> Non
 def test_type_scale_is_strictly_decreasing_in_every_sampled_genome() -> None:
     for candidate in genomes(_SAMPLE_SIZE, seed=42):
         sizes = candidate.type_scale
-        assert all(a > b for a, b in zip(sizes, sizes[1:])), (candidate.key, sizes)
+        assert all(a > b for a, b in itertools.pairwise(sizes)), (candidate.key, sizes)
 
 
 def test_spacing_scale_is_non_increasing_in_every_sampled_genome() -> None:
     for candidate in genomes(_SAMPLE_SIZE, seed=42):
         spacing = candidate.spacing_scale
-        assert all(a >= b for a, b in zip(spacing, spacing[1:])), (candidate.key, spacing)
+        assert all(a >= b for a, b in itertools.pairwise(spacing)), (candidate.key, spacing)
 
 
 # ---------------------------------------------------------------------------

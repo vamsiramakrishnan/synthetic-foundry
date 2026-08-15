@@ -24,7 +24,7 @@ vertical's, so nothing here passes because a domain module helped.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from worldloom.generators.stockflow import Break, StockFlowSpec, close, verify
 from worldloom.models import Authority, CanonicalFact, Quantity
@@ -54,7 +54,7 @@ def fact(kind: str, subject: str, period: str, amount: float) -> CanonicalFact:
         subject=subject,
         period=period,
         value=Quantity(amount=amount, unit="units"),
-        valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        valid_from=datetime(2026, 1, 1, tzinfo=UTC),
         authority=Authority.SYSTEM_OF_RECORD,
     )
 

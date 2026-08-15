@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from ..parameters import DEFAULT, Parameters
+from ..parameters import Parameters
 from ..rng import Rng
 from .finance import allocate
 from .operations import CALENDAR, Calendar
@@ -120,9 +120,9 @@ def supersession_pair(
     shape. A spec replaying the banking episode through this primitive gets an
     understatement that differs in its last digit, and the byte-diff says so.
     """
-    initial = int(round(float(level(physics, parameter, rng.derive("base"))) * scale))
+    initial = round(float(level(physics, parameter, rng.derive("base"))) * scale)
     error = float(level(physics, error_parameter, rng.derive("error")))
-    corrected = initial + int(round(initial * error))
+    corrected = initial + round(initial * error)
     return initial, corrected
 
 

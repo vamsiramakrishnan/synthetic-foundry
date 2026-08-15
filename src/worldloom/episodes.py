@@ -28,7 +28,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field as _dataclass_field
+from dataclasses import dataclass
+from dataclasses import field as _dataclass_field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -39,8 +40,8 @@ from . import benchmark as benchmark_module
 from . import detail as detail_module
 from . import validate as validate_module
 from .benchmark import EvalSpec, QuestionFamily  # re-exported: a spec's own vocabulary
-from .models import Authority, CanonicalFact, EnterpriseEvent, Quantity
 from .models import ArtifactIntent as ArtifactIntentModel
+from .models import Authority, CanonicalFact, EnterpriseEvent, Quantity
 
 if TYPE_CHECKING:  # pragma: no cover
     from .ids import Minter
@@ -1424,7 +1425,7 @@ def run(
             if head == "pct_of":
                 pct = primitives.level(physics, fk.parameter, rng.derive(f"kind/{kind}"))
                 values[kind] = shaped(
-                    kind, operands, lambda a: int(round(a * float(pct) / 100)),
+                    kind, operands, lambda a: round(a * float(pct) / 100),
                 )
             elif head == "ratio_pct":
                 a, b = operands
@@ -1472,7 +1473,7 @@ def run(
                 values[kind] = shaped(kind, operands, lambda a, b: round(a - b, 2))
             elif head == "units_of":
                 values[kind] = shaped(
-                    kind, operands, lambda v, r: int(round(v * 1000 / r)),
+                    kind, operands, lambda v, r: round(v * 1000 / r),
                 )
             elif head == "prior":
                 # Zero when no prior period holds the slot — minted, not
@@ -1507,7 +1508,7 @@ def run(
                 # rediscovered: it is arbitrary between cohorts of equal
                 # weight, and the only thing that matters is that it is the
                 # same arbitrary choice every rebuild makes.
-                allocated = primitives.rollup(int(round(total)), weights)
+                allocated = primitives.rollup(round(total), weights)
                 values[kind] = ("cohort", dict(zip(grid, allocated)))
             elif head == "prior_in_cohort":
                 # The diagonal step. `prior(K)` cannot express this: it walks
@@ -2201,7 +2202,7 @@ class AuthoredEpisode:
 
 # The recipe verb, registered from this module exactly as each vertical's
 # scenario registers its own — an authored episode's replay costs core nothing.
-from . import recipe as _recipe  # noqa: E402
+from . import recipe as _recipe
 
 _recipe.register_step("AuthoredEpisode", ("episode", "period"), AuthoredEpisode)
 

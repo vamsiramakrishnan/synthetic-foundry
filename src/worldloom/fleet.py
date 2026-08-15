@@ -227,7 +227,7 @@ def _replayed(world: Any, facts_digest: str, plan_digest: str) -> tuple[bool, st
             rebuilt = recipe_module.rebuild(world.recipe, ledger=world._ledger)
             rebuilt_facts = _digest(rebuilt.facts)
             rebuilt_plan = _digest(rebuilt.artifact_intents)
-    except Exception as exc:  # noqa: BLE001 — see below
+    except Exception as exc:
         # Broad on purpose: a tampered or truncated recipe raises whatever it
         # raises (`RecipeError`, `KeyError`, a pydantic error), and an admission
         # controller's job is to *name the member* that cannot be rebuilt, not

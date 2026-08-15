@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from ..models import Authority
 from . import Rendered
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -149,7 +148,6 @@ def render_jira(world: World) -> list[Rendered]:
         return []
 
     intent = intents[0]
-    facts = {f.id: f for f in world.facts}
     scope = next((f for f in world.facts if f.kind == "ops.remediation_addresses"), None)
     classification = next((f for f in world.facts if f.kind == "ops.root_cause_classification"), None)
     owner_fact = next((f for f in world.facts if f.kind == "ops.mapping_table_owner"), None)

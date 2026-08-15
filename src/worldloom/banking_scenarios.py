@@ -244,7 +244,7 @@ class QuarterlyCapitalReturn:
 # a vertical's scenario name never has to be taught to core a second time.
 # `QuarterlyCapitalReturn(period=...)` is the same call `with_step`'s
 # stored arguments already reconstruct, so the class itself is the builder.
-from . import recipe as _recipe  # noqa: E402
+from . import recipe as _recipe
 
 _recipe.register_step("QuarterlyCapitalReturn", ("period",), QuarterlyCapitalReturn)
 

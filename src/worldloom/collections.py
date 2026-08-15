@@ -8,7 +8,7 @@ are shorthand for whole sets, not a second query language.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Self, TypeVar
 
 from .models import Model
 
@@ -28,7 +28,7 @@ def _resolve(item: object, path: str) -> object:
 class Collection(Sequence[T], Generic[T]):
     """An immutable, filterable sequence of thin-waist models."""
 
-    __slots__ = ("_items", "_label", "_by_id")
+    __slots__ = ("_by_id", "_items", "_label")
 
     def __init__(self, items: Iterable[T], *, label: str | None = None) -> None:
         self._items: tuple[T, ...] = tuple(items)
@@ -61,7 +61,7 @@ class Collection(Sequence[T], Generic[T]):
 
     # -- Filtering ---------------------------------------------------------
 
-    def where(self, **criteria: Any) -> Collection[T]:
+    def where(self, **criteria: Any) -> Self:
         """Filter by attribute equality, or by membership when given a list/set.
 
         Supports dotted paths, so ``where(value__unit=...)`` is spelled
@@ -93,11 +93,11 @@ class Collection(Sequence[T], Generic[T]):
 
         return type(self)((i for i in self._items if matches(i)), label=self._label)
 
-    def filter(self, predicate: Callable[[T], bool]) -> Collection[T]:
+    def filter(self, predicate: Callable[[T], bool]) -> Self:
         """Filter by an arbitrary predicate, for cases ``where()`` cannot express."""
         return type(self)((i for i in self._items if predicate(i)), label=self._label)
 
-    def sort_by(self, path: str, *, reverse: bool = False) -> Collection[T]:
+    def sort_by(self, path: str, *, reverse: bool = False) -> Self:
         """Sort by an attribute path."""
         ordered = sorted(self._items, key=lambda i: (_resolve(i, path) is None, _resolve(i, path)), reverse=reverse)
         return type(self)(ordered, label=self._label)
@@ -106,7 +106,7 @@ class Collection(Sequence[T], Generic[T]):
 
     def ids(self) -> list[str]:
         """The ``id`` of every member."""
-        return [getattr(i, "id") for i in self._items]
+        return [i.id for i in self._items]
 
     def by_id(self, identifier: str) -> T:
         """Look up one member by ID, raising ``KeyError`` if absent.
@@ -242,7 +242,7 @@ class EventCollection(Collection):
 
     def chronological(self) -> EventCollection:
         """Sorted by when they happened."""
-        return self.sort_by("occurred_at")  # type: ignore[return-value]
+        return self.sort_by("occurred_at")
 
 
 class ArtifactCollection(Collection):

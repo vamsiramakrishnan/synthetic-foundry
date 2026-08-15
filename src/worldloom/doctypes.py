@@ -109,12 +109,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import columns as columns_module
-from . import documents
-from . import registries
+from . import documents, registries, templating
 from .documents import FilingPlan, SectionPlan
 from .models import Authority, FormulaKind, Lifecycle
 from .roles import parse_unit_role
-from . import templating
 
 #: Headings ``outline()`` appends itself, after the authored sections.
 #:
@@ -1064,7 +1062,8 @@ def audit() -> list[str]:
     it takes no argument: a check that has to be pointed at the thing it checks
     gets pointed at the wrong thing.
     """
-    from .render import docx as docx_render, markdown as markdown_render
+    from .render import docx as docx_render
+    from .render import markdown as markdown_render
 
     findings: list[str] = []
     for artifact_type in sorted(documents.declared_types()):

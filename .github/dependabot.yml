@@ -1,0 +1,42 @@
+# Dependency bumps, surfaced as PRs instead of discovered as drift.
+#
+# Byte-identity is this repository's central claim, and half of it rests on
+# renderer-library behaviour: `ci.yml`'s own comments record that python-pptx
+# stamps zip entry timestamps and reportlab derives /CreationDate and the /ID
+# digest from the clock unless told not to. A silent renderer bump is exactly
+# the change the nightly determinism sweep catches only *after* it ships to a
+# user. Weekly grouped PRs make every such bump a diff that runs the full CI
+# gate — replay diffs included — before it can reach anyone.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # The four libraries whose serialisation quirks the replay gate exists
+      # to catch. Grouped so one PR runs the byte-identity checks against the
+      # whole rendering surface at once.
+      renderers:
+        patterns:
+          - openpyxl
+          - python-docx
+          - reportlab
+          - python-pptx
+      # The numeric/graph substrate. numpy and networkx are core deps
+      # (pyproject.toml documents why); polars/pandas/pyarrow are the tabular
+      # export extras. pyproject pins numpy to elementwise arithmetic
+      # ("bit-identical everywhere") — a major bump is where that promise
+      # would quietly change.
+      data:
+        patterns:
+          - numpy
+          - networkx
+          - polars
+          - pandas
+          - pyarrow
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

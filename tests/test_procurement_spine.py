@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import replace
+from datetime import UTC
 
 import pytest
 
@@ -467,7 +468,7 @@ def test_a_book_too_heavy_for_the_target_runs_down_rather_than_cancelling(
     down to opening less receipts, still closing exactly. Exercised by seed
     8128 at twelve periods (one month places zero) and pinned here directly so
     it does not depend on which seed happens to reach the branch."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from worldloom.generators import procurement_estate
     from worldloom.generators.stockflow import close
@@ -489,7 +490,7 @@ def test_a_book_too_heavy_for_the_target_runs_down_rather_than_cancelling(
         finance_cost_centre_id=roles["cc_finance"],
         annual_revenue=world._annual_revenue,
         money_unit="AUD_thousands",
-        at=datetime(2030, 2, 4, tzinfo=timezone.utc),
+        at=datetime(2030, 2, 4, tzinfo=UTC),
         event_id="EV-0001",
         procure_system_id=roles["sys_procure"],
         receipting_system_id=roles["sys_receipting"],

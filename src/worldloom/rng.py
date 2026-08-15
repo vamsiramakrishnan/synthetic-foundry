@@ -29,7 +29,7 @@ T = TypeVar("T")
 class Rng:
     """A named, reproducible random stream."""
 
-    __slots__ = ("seed", "label", "_random")
+    __slots__ = ("_random", "label", "seed")
 
     def __init__(self, seed: int, label: str = "root") -> None:
         self.seed = seed

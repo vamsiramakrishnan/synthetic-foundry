@@ -20,6 +20,7 @@ minutes; these are the properties that make the minutes worth spending, and
 
 from __future__ import annotations
 
+import itertools
 import json
 import sys
 from pathlib import Path
@@ -68,7 +69,7 @@ def test_consecutive_seeds_take_disjoint_halton_windows() -> None:
     pool = sweep.POOL
     windows = [range(sweep.window(seed, pool), sweep.window(seed, pool) + pool)
                for seed in (1, 2, 3)]
-    for earlier, later in zip(windows, windows[1:]):
+    for earlier, later in itertools.pairwise(windows):
         assert set(earlier).isdisjoint(later)
 
 
@@ -84,9 +85,8 @@ def test_an_id_survives_a_fresh_process() -> None:
 
     printed = subprocess.run(
         [sys.executable, "-c",
-         "import sys; sys.path.insert(0, %r); import sweep;"
-         " print(sweep.field_of(1, seed=8128, pool=256).configs[0].id)"
-         % str(ROOT / "tools")],
+         "import sys; sys.path.insert(0, {!r}); import sweep;"
+         " print(sweep.field_of(1, seed=8128, pool=256).configs[0].id)".format(str(ROOT / "tools"))],
         capture_output=True, text=True, check=True,
     ).stdout.strip()
     assert printed == config.id

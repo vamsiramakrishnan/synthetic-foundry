@@ -34,9 +34,8 @@ names every commitment whose constraints all miss.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
@@ -46,11 +45,10 @@ from .archetypes import Archetype
 from .doctypes import DocumentType, SheetSpec
 from .episodes import EpisodeSpec
 from .generators.hierarchy import CategorySpec, SiteFormat, UnitSpec
-from .lob import Lob
 from .ids import Minter
+from .lob import Lob
 from .models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind
 from .roles import parse_unit_role
-
 
 #: The marker a *derived* pack leaves where it refused to invent something.
 #:
@@ -457,7 +455,9 @@ def archetype_of(pack: Pack) -> Archetype:
     check`` loads a pack it is only inspecting, and linting a document must not
     change the process that lints it.
     """
-    from . import doctypes, episodes as episodes_module, lob as lob_module
+    from . import doctypes
+    from . import episodes as episodes_module
+    from . import lob as lob_module
 
     doctypes.install(pack.artifact_types)
     # The workbook, under the key this function is about to return. A sheet
@@ -643,7 +643,8 @@ def lint(pack: Pack) -> list[str]:
     # default pool too. The count matches `org_builder.sorted_roles`'s role
     # table exactly: the engine's fixed roles plus one row per unit per
     # unit-role suffix — see `retail.py`/`banking.py`'s registration.
-    from .generators.names import FAMILY as _DEFAULT_FAMILY, GIVEN as _DEFAULT_GIVEN
+    from .generators.names import FAMILY as _DEFAULT_FAMILY
+    from .generators.names import GIVEN as _DEFAULT_GIVEN
 
     required_people = len(domain.role_keys) + len(pack.units) * len(domain.unit_role_suffixes)
     for label, pool, default_pool in (
@@ -699,7 +700,8 @@ def lint(pack: Pack) -> list[str]:
     # into an episode shipping beside it — checking either against the process
     # registries alone would refuse exactly the self-contained pack this seam
     # exists for.
-    from . import episodes as episodes_module, lob as lob_module
+    from . import episodes as episodes_module
+    from . import lob as lob_module
 
     findings.extend(episodes_module.lint(pack.episodes, base=pack.base))
     for lob_spec in pack.lobs:

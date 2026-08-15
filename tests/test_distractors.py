@@ -30,7 +30,13 @@ from __future__ import annotations
 
 import pytest
 
-from worldloom import BankingWorld, MonthEndClose, QuarterlyCapitalReturn, RetailWorld, World
+from worldloom import (
+    BankingWorld,
+    MonthEndClose,
+    QuarterlyCapitalReturn,
+    RetailWorld,
+    World,
+)
 from worldloom.generators import distractors
 from worldloom.models import ArtifactIntent, Lifecycle
 
@@ -236,7 +242,7 @@ def test_a_narrated_and_rendered_corpus_with_distractors_validates(before: World
 
     world = distractors.apply(before, count=20)
     world = world.narrate(DeterministicProvider())
-    calls, replayed, rejected = world._narration
+    _calls, _replayed, rejected = world._narration
     assert rejected == 0, "the deterministic provider rejected a distractor's own request"
     world = world.render("markdown")
     report = world.validate()

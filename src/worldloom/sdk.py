@@ -50,7 +50,8 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field as _field, replace
+from dataclasses import dataclass, replace
+from dataclasses import field as _field
 from pathlib import Path
 from typing import Any
 
@@ -413,7 +414,8 @@ class Blueprint:
         omitted rather than reported empty, so the dict reads as the answer to
         "who shows up", not as a roster of everyone asked.
         """
-        from . import episodes, lob as lob_module
+        from . import episodes
+        from . import lob as lob_module
 
         if hasattr(process, "fact_kinds"):
             spec = process

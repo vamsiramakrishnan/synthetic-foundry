@@ -24,12 +24,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..compiler.style import StyleGenome, genome
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import ArtifactIR, ArtifactSection, CanonicalFact, Chart, ChartKind, Table
 from ..narrative import references
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION
+from ..presentation import Presentation
+from ..presentation import of as presentation_of
 from ..rng import Rng
 from . import Rendered, RenderError, ooxml, slug_for
-from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover

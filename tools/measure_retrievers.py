@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from worldloom.evaluate import (  # noqa: E402
+from worldloom.evaluate import (
     LEXICAL_RETRIEVERS,
     RETRIEVERS,
     Scorecard,
@@ -48,7 +48,7 @@ from worldloom.evaluate import (  # noqa: E402
     render_difficulty,
     score,
 )
-from worldloom.evaluate.across import load as load_mosaic  # noqa: E402
+from worldloom.evaluate.across import load as load_mosaic
 
 
 def _register(pins: list[str], vectors: Path | None) -> list[str]:
@@ -151,7 +151,10 @@ def main() -> int:
     dense = _register(pins, vectors)
     names = list(LEXICAL_RETRIEVERS) + dense
 
-    from worldloom.cli import _compiled, _load  # a corpus on disk is the CLI's job to open
+    from worldloom.cli import (  # a corpus on disk is the CLI's job to open
+        _compiled,
+        _load,
+    )
 
     if arguments.mosaic:
         worlds = [(entry.name, entry.world) for entry in load_mosaic(arguments.corpus)]

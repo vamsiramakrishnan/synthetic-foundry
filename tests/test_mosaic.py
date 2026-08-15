@@ -277,8 +277,9 @@ def test_no_axis_generates_a_span_its_generator_would_refuse(engine: str) -> Non
 def test_an_engines_extremes_actually_build(engine: str) -> None:
     """Walking the corners of the space, not the middle of it. A guard that
     only fires at an extreme is a guard that fires in production."""
-    from worldloom import archetypes, domains
     from dataclasses import replace
+
+    from worldloom import archetypes, domains
 
     names = {"retail": "omnichannel_retailer", "banking": "midsize_adi",
              "insurance": "midsize_general_insurer",

@@ -469,7 +469,7 @@ def test_empty_rows_means_every_row_that_is_not_a_subtotal() -> None:
     """`Chart.rows`'s own docstring: a chart that included the subtotal would
     double every bar. This is the defect the old ASCII-bar `_figure` had —
     `rows=[]` fell through to *every* row, subtotal included."""
-    payload, table, chart = _rendered_chart(ChartKind.COLUMN, rows=[])
+    payload, _table, _chart = _rendered_chart(ChartKind.COLUMN, rows=[])
     chart_xml = _chart_parts(payload)[0]
     assert "Food" in chart_xml and "Apparel" in chart_xml
     assert "Group" not in chart_xml, "the subtotal row should not be plotted"
@@ -478,7 +478,7 @@ def test_empty_rows_means_every_row_that_is_not_a_subtotal() -> None:
 def test_by_row_reads_rows_as_series_and_columns_as_categories() -> None:
     """`Chart.by_row`'s own docstring: read the wrong way round, this renders
     without complaint as one point per series instead of one line per row."""
-    payload, table, chart = _rendered_chart(ChartKind.COLUMN, by_row=True, rows=["food", "apparel"])
+    payload, _table, _chart = _rendered_chart(ChartKind.COLUMN, by_row=True, rows=["food", "apparel"])
     chart_xml = _chart_parts(payload)[0]
     # Series names are now the row labels, not the column labels.
     assert "<c:v>Food</c:v>" in chart_xml and "<c:v>Apparel</c:v>" in chart_xml
@@ -583,6 +583,6 @@ def test_two_charts_in_one_document_get_distinct_drawing_ids() -> None:
 
 
 def test_a_chart_document_renders_twice_byte_identical() -> None:
-    payload_a, table, chart = _rendered_chart(ChartKind.LINE, by_row=True, rows=["food", "apparel"])
+    payload_a, _table, _chart = _rendered_chart(ChartKind.LINE, by_row=True, rows=["food", "apparel"])
     payload_b, _, _ = _rendered_chart(ChartKind.LINE, by_row=True, rows=["food", "apparel"])
     assert payload_a == payload_b
