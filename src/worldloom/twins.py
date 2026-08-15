@@ -47,6 +47,13 @@ Two measured surprises worth knowing before writing an intervention:
   error, not a refusal — the intervention did not produce a buildable world, so
   there is nothing to measure. The twinnable unit is the whole ``index``
   mapping, re-normalised by the caller.
+
+``mutated`` is the build-free half of the same machinery: N interventions in,
+a patched *recipe* out, and no world on either side. It exists for fan-out —
+mutate a recipe per structural candidate, run the cheap readings, and spend
+builds only on winners — and it keeps every refusal ``twin`` makes, traded
+from measured to static where the missing build forces the trade (see
+``MutationRefused``).
 """
 
 from __future__ import annotations
@@ -72,6 +79,29 @@ class TwinError(Exception):
     change what exists. A ``TwinError`` means no second world was built at all —
     the path does not resolve, or the segment grammar is wrong — which is a
     caller error, not a finding about the intervention class.
+    """
+
+
+class MutationRefused(Exception):
+    """Raised when ``mutated`` refuses an intervention it can classify statically.
+
+    ``twin`` refuses a cardinality-changing intervention *after measuring it*:
+    both worlds are built, the id sequences are compared, and the refusal lands
+    on the manifest with the measured counts. ``mutated`` builds nothing — that
+    is its whole value — so it cannot measure; what it can do is refuse the
+    recipe paths whose existence-deciding nature is already established (by
+    ``twin``'s own measurements, or by what the path *is*: a step count, a
+    policy level, an org table). The reasoning is ``twin``'s verbatim — a
+    mutated recipe that silently changed stream shapes would reshuffle
+    sequentially-minted ids on rebuild, and every delta measured against the
+    base would label unrelated changes as caused — applied before the build
+    instead of after it, because discovering the reshuffle at build time is
+    exactly the cost ``mutate`` exists to avoid.
+
+    A separate class from ``TwinError`` because the CLI must keep ``twin``'s
+    exit taxonomy: a path that does not resolve is a caller error (exit 2), a
+    stated-and-refused intervention is a refusal (exit 3), and a loop fanning
+    out candidates needs to tell those apart without parsing prose.
     """
 
 
@@ -282,6 +312,168 @@ def _patched(recipe: dict[str, Any], intervention: Intervention) -> tuple[Any, d
     return before, patched
 
 
+#: Top-level recipe keys that decide what EXISTS rather than what is true
+#: about it, each with the argument for why. ``mutated`` refuses these paths
+#: (and everything under them) without a build — see ``MutationRefused`` for
+#: why refusing on a static table is honest where diffing without a build
+#: would not be. Closed vocabulary, like ``recipe.STEPS``: a key absent from
+#: both this table and the step-argument one is treated as a value path, and
+#: if a rebuild proves that wrong the fix is a row here with the measurement
+#: in its reason, not a looser gate.
+_EXISTENCE_KEYS: dict[str, str] = {
+    "archetype": "it names the shape every stream is minted from — a different"
+                 " archetype is a different company, not a different value",
+    "pack": "a pack is identity: its units, books and divisions decide what"
+            " exists. A value inside one may be safe, but telling which costs"
+            " exactly the build mutate exists to avoid — measure it with twin",
+    "employees": "headcount mints people: 23 -> 429 leaves facts, documents and"
+                 " questions untouched and adds four hundred entity rows, which"
+                 " reshuffles the entity stream all the same",
+    "estate": "an estate size adds services and systems — new entity rows,"
+              " new blast-radius questions",
+    "role_table": "an authored organisation decides who exists and how many",
+    "master_data": "the recorded counts are row counts by definition",
+    "policies": "a policy level adds standing documents, their parameter facts"
+                " and their questions (measured: core -> full moves facts"
+                " 631 -> 652 and reshuffles every artifact id after the"
+                " insertion point)",
+    "lore_claims": "facet lore is an input to the organisation: it mints roles"
+                   " and decides artifact density, so a claim added or removed"
+                   " changes what gets written, not what it says",
+}
+
+#: Step arguments with the same existence-deciding nature, refused under
+#: ``steps/<n>/<argument>``. The step's *verb* and the step list itself are
+#: refused in ``_existence_reason`` directly: adding, removing or re-verbing a
+#: step is the existence change, whatever its arguments say.
+_EXISTENCE_STEP_ARGS: dict[str, str] = {
+    "scenario": "the verb decides which events, facts and documents a step"
+                " mints at all",
+    "incident": "an incident switched on or off adds or removes an episode's"
+                " spine — its events, facts, documents and questions",
+    "comparatives": "each comparative month is a block of facts",
+    "actors": "an actor-driven step appends an execution ledger the scripted"
+              " build does not",
+    "conversations": "the knowledge ledger and messages are whole record"
+                     " streams this flag mints",
+    "eval_density": "density multiplies how many evaluation cases exist",
+    "count": "a count of vacancies or distractors is a count of documents",
+    "pairs": "each review pair is two performance records",
+    "headcount": "a workforce change mints or retires people",
+    "business_units": "an exact estate target adds or closes entity rows",
+    "sites": "an exact estate target adds or closes entity rows",
+    "systems": "an exact estate target adds or closes entity rows",
+    "services": "an exact estate target adds or closes entity rows",
+    "ledger_key": "it names which authored composition applies — a different"
+                  " key is a different estate, entity rows and all",
+}
+
+
+def _existence_reason(path: str) -> str | None:
+    """Why *path* decides what exists, or ``None`` for a value path.
+
+    Static classification, not measurement — the trade ``mutated`` makes, and
+    ``MutationRefused``'s docstring owns it. Anything under a refused key is
+    refused with it (``master_data/vendors`` is still a row count), because a
+    subtree whose root decides existence has no value-only leaves this table
+    could vouch for.
+    """
+    segments = path.split("/")
+    reason = _EXISTENCE_KEYS.get(segments[0])
+    if reason is not None:
+        return f"{segments[0]!r} decides what exists: {reason}"
+    if segments[0] == "steps":
+        if len(segments) <= 2:
+            return ("the step list decides what exists: every step mints its"
+                    " own events, facts and documents, so replacing a whole"
+                    " step (or the list) is not a value intervention")
+        argument = segments[2]
+        step_reason = _EXISTENCE_STEP_ARGS.get(argument)
+        if step_reason is not None:
+            return f"step argument {argument!r} decides what exists: {step_reason}"
+    return None
+
+
+def mutated(
+    recipe: dict[str, Any],
+    interventions: Any,
+) -> dict[str, Any]:
+    """Apply *interventions* to *recipe*, in order, building nothing.
+
+    ``twin`` applies one intervention and pays for two builds to measure the
+    delta. This applies N and pays for none, which is what a fan-out harness
+    needs: mutate a recipe per candidate, read the cheap measurements, and
+    spend builds only on winners. The output is an ordinary recipe — the same
+    ``recipe.rebuild`` path ``twin`` uses rebuilds it, deterministically,
+    because nothing here is anything but a patch of recorded values.
+
+    Every refusal ``twin`` makes survives the missing build:
+
+    * an unrecorded path raises ``TwinError`` from the same ``_patched``
+      grammar ``twin`` resolves through — an intervention is a claim about a
+      value the record holds, and mutate may not invent keys any more than
+      twin may;
+    * an existence-deciding path raises ``MutationRefused`` (see its
+      docstring for why that classification is static here and measured in
+      ``twin``);
+    * two interventions naming one path raise ``TwinError`` naming it. Last
+      write winning would be a silent answer to a question the caller did not
+      know they asked: a fan-out harness that sends two values for one gene
+      has a bug, and absorbing it here costs a build to discover downstream.
+
+    Zero interventions return the recipe unchanged (as a copy), not a
+    refusal. That follows from what ``twin`` already holds: the identity
+    intervention is deliberately not special-cased (patch a value with itself,
+    measure zero) and a null delta ``is_null`` is *named a finding*. Applying
+    an empty patch list is the same null, one step earlier — folding zero
+    patches over a recipe is the recipe, and refusing the fold's identity
+    would special-case exactly what twin refuses to.
+
+    **No provenance note is written, and that was investigated rather than
+    skipped.** The recipe has no slot for one: ``recipe.build_recipe`` writes
+    a closed set of conditionally-written keys, and ``recipe.rebuild``
+    re-derives the recipe from the spec it constructs, so a foreign top-level
+    key would be shed on the first rebuild — a note that does not survive its
+    own round trip makes the recipe file disagree with the corpus built from
+    it, which is worse than no note. The mutation *is* recorded, in the only
+    place that round-trips: the patched values themselves.
+    """
+    stated = tuple(interventions)
+    seen: dict[str, int] = {}
+    for intervention in stated:
+        seen[intervention.path] = seen.get(intervention.path, 0) + 1
+    duplicates = sorted(path for path, count in seen.items() if count > 1)
+    if duplicates:
+        raise TwinError(
+            "one path, several values: "
+            + ", ".join(repr(path) for path in duplicates)
+            + " — last write winning would hide a fan-out bug until a build"
+            " exposed it; send one value per path"
+        )
+
+    # A copy even on the empty path, so the caller's recipe is never aliased
+    # by the result — `_patched` already guarantees that for N >= 1.
+    result = copy.deepcopy(recipe)
+    for intervention in stated:
+        # Resolve before classifying, so an unrecorded path is an error even
+        # when it names an existence key — `twin` orders it the same way: a
+        # `policies` intervention on a recipe that never recorded one is a
+        # caller error, not a refusal about the policies class.
+        _, patched = _patched(result, intervention)
+        reason = _existence_reason(intervention.path)
+        if reason is not None:
+            raise MutationRefused(
+                f"path {intervention.path!r} refused: {reason}. Ids are minted"
+                " sequentially, so a rebuild of this mutation would reshuffle"
+                " them, and any delta measured against the base would label"
+                " unrelated changes as caused — the same reasoning `twin`'s"
+                " refusal states after building, applied here before the build"
+                " a mutate exists to avoid."
+            )
+        result = patched
+    return result
+
+
 def _grouped(world: World) -> dict[str, list[tuple[str, str]]]:
     """Every persisted row of *world*, grouped and in stream order: (id, line)."""
     grouped: dict[str, list[tuple[str, str]]] = {}
@@ -386,4 +578,7 @@ def twin(
     )
 
 
-__all__ = ["DeltaManifest", "Intervention", "TwinError", "TwinResult", "twin"]
+__all__ = [
+    "DeltaManifest", "Intervention", "MutationRefused", "TwinError",
+    "TwinResult", "mutated", "twin",
+]
