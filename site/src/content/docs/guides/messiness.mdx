@@ -1,0 +1,77 @@
+---
+title: Messiness and noise
+description: Content messiness and filesystem noise are different failures.
+---
+
+A corpus that is perfectly kept has never tested recency or provenance
+reasoning. Worldloom makes a corpus imperfect in two separate, recorded ways.
+Content messiness lives in the documents. Filesystem noise lives in the drive
+layout. They fail differently, and a realistic archive wants both.
+
+## Content messiness: `build --messiness`
+
+```bash
+worldloom pack messiness
+worldloom build --seed 8128 --messiness lived_in --out ./corpus
+```
+
+Four profiles grade how well the archive is kept. Each profile is a budget of
+three imperfection kinds:
+
+| Profile | Staleness | Disagreement | Orphaning |
+| --- | --- | --- | --- |
+| `pristine` (default) | 0 | 0 | 0 |
+| `well_run` | low | low | low |
+| `lived_in` | 2 | 2 | 3 |
+| `neglected` | 5 | 4 | 8 |
+
+The three kinds: a document that missed a correction it postdates, two live
+documents disagreeing with a ledger that says which is right, and an author
+who has left with nobody named in their place.
+
+One invariant does not relax: no document may contradict the ledger. Every
+imperfection is recorded in `intentional-errors.jsonl`, so a reader holding
+only the corpus can establish mechanically that the stale page is stale and
+what the current position is. That record is what keeps this a corpus rather
+than noise.
+
+### Delivered versus asked
+
+The counts are a budget, not a quota. A small world has fewer corrections to
+be stale about, so the pass takes what the world supports and reports what it
+delivered against what the profile asked. Read the build summary's
+"labelled imperfections" line rather than assuming the budget landed in full.
+
+## Filesystem noise: `workspace --noise`
+
+```bash
+worldloom workspace ./corpus -o ./drive --noise neglected
+```
+
+This makes the drive untidy the way real drives are: `Copy of X`, a document
+dragged into `Shared/` or `_Inbox/`, somebody's `X FINAL` beside the real one,
+an `_Archive/` leftover.
+
+Every extra file is a byte-identical copy of real corpus content, never
+invented text. A drive's junk is not fabricated documents. It is the same
+documents saved again in the wrong place under the wrong name. That is what
+makes it hard: a retriever cannot tell the copy from the original by reading
+it. A copy carries the permissions of what it copies, so a misfiling lands
+where nobody would look and stays readable only by the original's readers.
+
+Every junk file is labelled in `permissions.jsonl` with its kind and what it
+duplicates. The label is the whole difference between this and making a mess.
+A benchmark scored against a drive it cannot account for cannot tell "the
+assistant found the wrong copy" from "the assistant was wrong". Those are
+different failures.
+
+## Which one you want
+
+- Testing recency and provenance reasoning: `--messiness`.
+- Testing retrieval against a realistic drive, and access control:
+  `workspace --noise`.
+- A realistic archive benchmark: both.
+
+Content messiness changes what documents say, so it is a build flag and rides
+the recipe. Filesystem noise changes where copies sit, so it is a workspace
+flag and touches the corpus not at all.

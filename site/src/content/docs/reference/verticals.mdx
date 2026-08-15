@@ -1,0 +1,85 @@
+---
+title: Verticals
+description: The four engines, the episode each one models, and where volume comes from.
+---
+
+A vertical owns a causal episode: its fact kinds, its documents, its
+invariants, and its benchmark. A [pack](/guides/authoring/) changes the
+company running an existing episode. A new vertical changes what happens.
+
+## The four engines
+
+| Vertical | Episode | What it models |
+| --- | --- | --- |
+| Retail | `MonthEndClose` | Financial reconciliation, operational incidents, multi-period histories, workforce and estate trajectories. |
+| Banking | `QuarterlyCapitalReturn` | Second-line challenge, equal-authority conflict, filing under a lodgement norm, restatement. |
+| Insurance | `QuarterlyReserving` | Triangle development, emergence, held versus central estimates, authority-sensitive answers. |
+| Procurement | `PurchaseToPayCycle` | Purchase-to-pay controls, three-way matching, exceptions, carried shortfalls. |
+
+The banking episode is worth spelling out. A capital return is challenged by
+the second line, filed anyway, invalidated by a reconciliation break the daily
+liquidity cadence catches, and corrected by a restatement: a new lodgement
+that leaves the original on the record. Restatement is the one relationship
+`revises` and `supersedes` both may not express.
+
+## What each vertical measures
+
+Each vertical measures what its own vocabulary owns: deposits, lending, and
+front-line FTE by branch; written premium by underwriting office and claims by
+claims centre; spend, commitment, and materials by depot, project office, and
+yard. Every split goes through a largest-remainder allocator, so roll-ups
+reconcile exactly, and a rate is never summed.
+
+## Where volume comes from
+
+Volume scales with the estate, not with a multiplier. Three of the four
+verticals once declared full organisations that no fact named: a bank with
+133 branches mentioned none of them, and its corpus was 58 facts. Every one of
+those corpora passed validation, because coherence and thinness are different
+properties. Closing the [reachability](/concepts/validation/) reading produced
+the volume:
+
+| Vertical | Facts, one period | Documents |
+| --- | --- | --- |
+| Retail | 588 | 7 |
+| Banking | 58 → 744 | 11 → 12 |
+| Insurance | 62 → 219 | 4 → 8 |
+| Procurement | 52 → 217 | 6 → 7 |
+
+Counts move with flags. A retail build with `--incident` mints 615 facts and
+16 documents. A banking build at `--periods 3` mints 2,220 facts, verified:
+
+```bash
+worldloom build --seed 8128 --archetype midsize_adi --periods 3 --out ./bank3
+wc -l bank3/facts.jsonl
+# 2220
+```
+
+## Period support is explicit
+
+- **Retail** runs multi-period histories with workforce and estate
+  trajectories: `--periods`, `--timeline`, `--headcount-end`, `--sites-end`.
+- **Banking and procurement** run consecutive periods, each episode chained
+  onto the last, without retail's trajectories. Banking steps three months at
+  a time.
+- **Insurance** declares `max_periods=1`. A second consecutive valuation
+  quarter is phase two of that engine. `--periods 2` is refused at plan time,
+  naming the cap, rather than building a world and failing inside the episode.
+
+No flag is silently ignored to simulate a history a vertical does not
+implement. Retail-only flags (`--incident`, `--comparatives`, `--actors`) are
+refused on the other engines rather than dropped.
+
+## Choosing one
+
+```bash
+worldloom archetypes
+worldloom build --seed 8128 --out ./retail
+worldloom build --seed 8128 --archetype midsize_adi --out ./bank
+worldloom build --seed 8128 --archetype midsize_general_insurer --out ./insurer
+```
+
+The archetype picks the company shape, and the shape picks the engine. For an
+industry none of the four models, author an industry pack over the nearest
+engine, or register a new vertical through the extension seams. The
+`worldloom-vertical` skill in the repository walks that path.

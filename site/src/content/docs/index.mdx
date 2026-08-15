@@ -1,0 +1,64 @@
+---
+title: Worldloom
+description: A deterministic compiler for coherent synthetic enterprise corpora.
+template: splash
+hero:
+  tagline: A deterministic compiler for coherent synthetic enterprise corpora.
+  actions:
+    - text: Get started
+      link: /getting-started/quickstart/
+      variant: primary
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+import Mermaid from '../../components/Mermaid.astro';
+
+Worldloom generates the enterprise before it generates the files. It builds a
+company, its people, its systems, and its facts from a seed. It then projects
+that state into XLSX, DOCX, PDF, PPTX, Markdown, and business-system bundles.
+Every document in the corpus can be checked against the same fact ledger.
+
+<Mermaid
+  code={`flowchart LR
+  A["Authoring inputs
+spec · pack · facets
+seed · locale · lore
+physics · org shape"] --> W["Deterministic world
+company · people · estate
+events · facts · access
+recipe · eval ground truth"]
+  W --> I["Artifact intents
+author · audience
+type · facts · time"]
+  I -- "propose → validate → accept" --> IR["ArtifactIR
+tables · sections
+claims · lineage"]
+  IR --> X["XLSX"]
+  IR --> D["DOCX · PDF"]
+  IR --> P["PPTX · Markdown"]
+  IR --> B["Jira · Confluence · ServiceNow"]
+  classDef accent stroke:#e85d1f,stroke-width:2px;
+  class IR accent`}
+/>
+
+The renderers never decide what is true. Each one reads a single resolved
+`ArtifactIR` and spells it in a different file grammar. That is why the PDF
+and the workbook agree without coordinating.
+
+<CardGrid>
+  <LinkCard
+    title="Quickstart"
+    description="Build, narrate, render, and validate one corpus in eight steps."
+    href="/getting-started/quickstart/"
+  />
+  <LinkCard
+    title="Architecture"
+    description="Facts precede prose. How the pipeline enforces that order."
+    href="/concepts/architecture/"
+  />
+  <LinkCard
+    title="Narration"
+    description="The request and accept handshake your agent writes prose through."
+    href="/guides/narration/"
+  />
+</CardGrid>

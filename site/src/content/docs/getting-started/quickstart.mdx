@@ -1,0 +1,93 @@
+---
+title: Quickstart
+description: Build, narrate, render, validate, and evaluate one corpus.
+---
+
+This page runs the whole loop once. You build a world, write its prose, render
+its files, and measure the result. Every command below was run against
+Worldloom 0.1.0.
+
+## 1. Build a world
+
+```bash
+worldloom build --seed 8128 --incident --out ./corpus
+```
+
+The same seed builds the same world, every time. This one is a mid-size
+omnichannel retailer with a month-end close and an operational incident. The
+build mints 615 facts, 16 artifact intents, and 51 evaluation cases, then
+validates its own output.
+
+## 2. Ask what prose is needed
+
+```bash
+worldloom narrate requests ./corpus -o requests.json
+```
+
+This writes 35 requests. Each request names an author, a voice, an audience, a
+target length, a knowledge cutoff, and the facts the section may use.
+
+## 3. Write responses
+
+Read `requests.json`. Write `responses.json`: one entry per request, prose plus
+the facts each claim rests on. This step is yours. The
+[narration guide](/guides/narration/) covers the rules and the JSON shapes.
+
+## 4. Submit
+
+```bash
+worldloom narrate accept ./corpus --from responses.json --model-id your-model
+```
+
+Acceptance is transactional. Every response is checked, every violation comes
+back as data, and nothing commits until all of it passes. Expect rejections on
+the first pass. Fix the named violation and resubmit.
+
+## 5. Render
+
+```bash
+worldloom render ./corpus -f xlsx -f docx -f markdown
+```
+
+Add `-f jira -f confluence -f servicenow` for the business-system bundles. See
+[Rendering](/guides/rendering/) for what each format carries.
+
+## 6. Validate
+
+```bash
+worldloom validate ./corpus
+```
+
+On this corpus the validator passes 8,877 checks. It fails on any total that
+does not sum, any citation of a fact that did not yet exist, any reference to
+an entity that does not. See [Validation](/concepts/validation/).
+
+## 7. Measure hardness
+
+```bash
+worldloom evaluate ./corpus
+```
+
+The BM25 baseline scores 26 of 51 on this corpus. It passes every direct
+lookup and fails every abstention case. That shape is the intended result:
+the corpus is hard where hardness was designed in. See
+[Evaluation](/concepts/evaluation/).
+
+## 8. Lay it out as a drive
+
+```bash
+worldloom workspace ./corpus -o ./drive
+```
+
+This writes the folder tree an enterprise assistant would index: documents
+shelved by owning function, filenames a person would have typed, and
+`permissions.jsonl` with one row per file.
+
+## If you lose your place
+
+```bash
+worldloom status ./corpus
+```
+
+`status` names the stage the corpus is at and prints the exact next command.
+Resume from that, not from memory.

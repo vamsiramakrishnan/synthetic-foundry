@@ -1,0 +1,113 @@
+---
+title: Rendering
+description: The formats, the presentation profiles, and the workspace layout.
+---
+
+```bash
+worldloom formats
+worldloom render ./corpus -f xlsx -f docx -f markdown -f jira -f confluence -f servicenow
+```
+
+`worldloom formats` lists what your installation registered. A full install
+lists nine: `confluence`, `docx`, `html`, `jira`, `markdown`, `pdf`, `pptx`,
+`servicenow`, `xlsx`. The Office formats need their
+[extras](/getting-started/installation/); the rest need nothing.
+
+## The IR is the contract
+
+Every document renderer reads one thing: the artifact's resolved `ArtifactIR`.
+No renderer touches the world, the fact ledger, or another renderer's output.
+Two formats of one artifact agree because they are two projections of one
+structure.
+
+Formulas and charts are declared in the IR, never invented by a renderer. A
+cell that should sum its rows carries `FormulaKind.SUM` and the row keys. A
+renderer decides how to spell that: `=SUM(C4:C6)` in Excel, a shaded row in
+Word, a plain number in Markdown. A chart never introduces a number; every
+value it plots is a cell in the table beside it.
+
+## What each format carries
+
+**`xlsx`** — the finance workbook. Totals are live formulas, so the sheet
+recomputes itself when opened. Charts draw from a hidden data sheet of
+cross-sheet references. Named ranges mark the headline figures.
+
+**`docx`** — narrative artifacts as Word documents. A4 page setup, a running
+header, live `PAGE` and `TOC` fields rather than typed text. Negative figures
+are parenthesised and coloured, with the parenthesis as the signal that
+survives black-and-white printing.
+
+**`pdf`, `pptx`, `html`** — the same IR as fixed pages, slides, and web
+pages. PPTX charts are native chart parts with the embedded workbook OOXML
+requires.
+
+**`markdown`** — the fallback that keeps every artifact readable whatever is
+installed, and the cheapest to diff. An artifact still awaiting narration
+renders here and says so.
+
+**`jira`, `confluence`, `servicenow`** — portable bundles: a JSON header plus
+JSONL, not an API call. These are record sets, so they render from the world's
+facts and events directly. The ServiceNow incident carries the full triage
+timeline, including the hypothesis later ruled out. Jira raises two
+remediation issues, because closing a detection gap and fixing an ownership
+failure are different questions. Confluence marks a page stale when a fact it
+quotes has been superseded, and leaves it as written.
+
+## Who the documents are for
+
+Every artifact is a traceability record and a document at once. Which one the
+rendered file serves is a decision:
+
+```bash
+worldloom present describe
+worldloom render ./corpus -f docx -f pdf --profile reader
+```
+
+| | `audit` | `reader` | `filing` |
+| --- | --- | --- | --- |
+| Supporting-fact appendix | printed | omitted | sibling `.citations.md` |
+| Author voice and persona | in the document | file metadata | file metadata |
+| Money figures | `AUD 5,372,800 thousands` | `AUD 5,372.8m` | `AUD 5,372.8m` |
+
+`audit` is the default. Nothing a profile omits is lost: every section and
+`fact_ids` list stays in `artifact-ir.jsonl` under every profile. A profile
+decides how a value is shown and may never change it; `worldloom present lint`
+refuses any scaling that cannot multiply back to the ledger value exactly.
+
+## Laying the corpus out as a drive
+
+```bash
+worldloom workspace ./corpus -o ./drive
+```
+
+A corpus exports as one flat `artifacts/` folder, which suits the harness and
+not the corpus's purpose. An enterprise assistant indexes folders, titles,
+owners, and sharing. `workspace` writes that tree: documents shelved by the
+function that owns them (`Finance/`, `Policies/`, `Executive/`), periodic
+documents filed under their period, filenames a person would have typed. A
+superseded policy sits beside its replacement, marked.
+
+`permissions.jsonl` holds one row per file: the owner and every address
+permitted to open it. A tree with no permission table tests retrieval and
+cannot test access. Nothing is invented; every folder, title, owner, and
+reader is derived from the manifest, the roster, and the access policies.
+
+```bash
+worldloom workspace ./corpus -o ./drive --noise neglected
+```
+
+`--noise` makes the drive untidy the way real drives are. Every extra file is
+a byte-identical copy of real corpus content, labelled in `permissions.jsonl`
+with what it duplicates. See
+[Messiness and noise](/guides/messiness/) for why the label matters.
+
+## Validate after every render
+
+```bash
+worldloom validate ./corpus
+```
+
+Rendering adds its own checks: manifest paths that exist, charts that do not
+double-count, rendered figures that trace to facts. A misdrawn chart is as
+much a defect as a bad number, and this is the only step positioned to catch
+it.

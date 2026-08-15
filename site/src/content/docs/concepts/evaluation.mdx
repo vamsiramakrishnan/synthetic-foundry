@@ -1,0 +1,95 @@
+---
+title: Evaluation
+description: Question families, retriever baselines, and what "hard" means here.
+---
+
+`worldloom validate` answers "does the corpus agree with itself".
+`worldloom evaluate` answers a different question: is it hard to retrieve
+from.
+
+```bash
+worldloom evaluate ./corpus
+```
+
+Every world generates its own evaluation set from its own facts. A case can
+carry expected fact IDs, required artifacts, explicit distractors, a temporal
+cutoff, and an abstention expectation. Grading is mechanical: did the
+retrieved passages carry the needed fact IDs, did the top hit predate the
+cutoff, did its authority rank hold up. There is no judge model anywhere in
+the scorer, so the score is reproducible.
+
+## The question families
+
+A seed-8128 retail build mints 51 cases across eight families. Each family
+demands a capability plain keyword overlap does not have.
+
+| Family | Cases | What it demands |
+| --- | --- | --- |
+| `direct_lookup` | 9 | One fact, one document. The floor: a baseline should pass. |
+| `numerical_comparison` | 8 | Several values read together, from more than one passage. |
+| `citation_required` | 8 | The answer paired with where it is recorded. |
+| `authority_resolution` | 6 | Several documents state the same thing; only one is the current record. |
+| `cross_artifact` | 4 | Facts in documents of different types, read jointly. |
+| `causal_multi_hop` | 3 | Failure, cause, and consequence strung together. |
+| `temporal_state` | 3 | What was believed at time T, before the correction. |
+| `expected_abstention` | 10 | Questions the corpus does not answer. The right response is silence. |
+
+## The baselines
+
+BM25 is the default retriever: under a hundred lines, untuned, no notion of
+time, authority, or provenance. It exists to fail informatively. On the corpus
+above it scores 26 of 51: every direct lookup, and zero of ten abstentions,
+zero of three temporal-state cases, zero of six authority cases.
+
+That shape is the result, not a caveat. A baseline that passes the lookups and
+fails the temporal, authority, and abstention families is the corpus working
+as designed. A rising baseline score is bad news: unless someone improved the
+retriever, it means the corpus got easier. CI asserts the hard families stay
+hard.
+
+## Two lexical retrievers
+
+```bash
+worldloom evaluate ./corpus --retriever both
+```
+
+TF-IDF cosine is a genuinely different ranking family from BM25, not the same
+formula with new constants. `both` runs them side by side and reports, per
+family, whether the corpus is consistently hard, consistently easy, or the two
+disagree. A family both fail is hard for the whole word-overlap idea, not for
+one heuristic's blind spot.
+
+## Lexical against semantic
+
+```bash
+worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
+```
+
+BM25 and TF-IDF are two families and one idea: relevance is word overlap.
+`all` adds a dense retriever and names, per family, one of four readings:
+
+- **genuinely hard** — lexical and semantic both fail. The result worth
+  having.
+- **lexical trap** — the semantic retriever solves it. The family was never
+  difficulty, and a corpus card counting it overstates itself.
+- **semantic blind spot** — an exact token a dense vector smooths away.
+- **solved by everything** — the floor families, as expected.
+
+The dense retriever needs `pip install "worldloom[embeddings]"`. Without it
+the dense column is skipped with a message. Its vectors are pinned to a model
+revision and cached as quantised integers, so the measurement
+[replays offline](/concepts/determinism/).
+
+## Exporting the answer key
+
+```bash
+worldloom evals export ./corpus -o evals.jsonl
+worldloom stats ./corpus
+```
+
+`evals export` writes one case per line, sorted keys: the format to score an
+external retrieval system against. `stats` reports what the corpus contains —
+document counts, lengths, vocabulary, citation graph, near-duplicate rate —
+and compares it against nothing. There is no published, auditable figure for
+"a real enterprise corpus", so `stats` reports rather than grades. The one
+comparison it makes is `--against` a second corpus that also exists.
