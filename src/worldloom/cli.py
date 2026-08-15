@@ -155,17 +155,33 @@ def _print_report(report: ValidationReport, *, quiet: bool = False) -> bool:
     printed — it has to catch the corpus errors reconstructing a corpus's own
     pack can raise, and a helper that validates and prints in one breath gives
     it nowhere to stand. Every other caller still hands over a world.
+
+    Advisories print on both paths and change neither the return value nor the
+    exit code. `validate` owns pass/fail, and this is the posture `topology`
+    already takes one layer up — it prints the cycles it finds and exits zero.
+    What is different, and the reason this is here rather than behind a command
+    of its own, is that somebody who builds a company should be told its estate
+    is decorative without having to know a check for that exists.
     """
     if report.ok:
         if not quiet:
             console.print(f"[green]✓[/green] coherent — {report.checks_run} checks passed")
-        return True
-    err.print(f"[red]✗[/red] {len(report.violations)} violation(s) across {report.checks_run} checks")
-    for group, items in sorted(report.by_group().items()):
-        err.print(f"\n[bold]{group}[/bold]")
-        for violation in items:
-            err.print(f"  [yellow]{violation.code}[/yellow] {violation.subject}: {violation.detail}")
-    return False
+    else:
+        err.print(f"[red]✗[/red] {len(report.violations)} violation(s) across {report.checks_run} checks")
+        for group, items in sorted(report.by_group().items()):
+            err.print(f"\n[bold]{group}[/bold]")
+            for violation in items:
+                err.print(f"  [yellow]{violation.code}[/yellow] {violation.subject}: {violation.detail}")
+    if report.advisories and not quiet:
+        console.print(
+            f"\n[bold]organisation[/bold] — {len(report.advisories)} reading(s),"
+            " not counted against coherence"
+        )
+        for advisory in report.advisories:
+            console.print(
+                f"  [yellow]{advisory.code}[/yellow] {advisory.subject}: {advisory.detail}"
+            )
+    return report.ok
 
 
 def _report(world: World, *, quiet: bool = False) -> bool:
@@ -3213,6 +3229,13 @@ def validate(
             "violations": [
                 {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
                 for v in report.violations
+            ],
+            # Beside `violations` rather than merged into it, for the reason the
+            # channel exists: a caller filtering on `violations` is asking what
+            # makes this corpus incoherent, and an advisory is not that.
+            "advisories": [
+                {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
+                for v in report.advisories
             ],
         }, indent=2))
         if not report.ok:

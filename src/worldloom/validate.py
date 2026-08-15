@@ -25,6 +25,9 @@ organisation
     Every entity the company declares reaches something. The dual of
     ``carried_evidence``, and the one direction this module never looked in —
     see ``_Validator.reachability`` for the measurement that prompted it.
+    **Reported as advisories, not violations**: it is the only group here that
+    does not answer "do the artifacts agree", and ``ValidationReport.advisories``
+    carries the argument and the measurement for why that is not a hedge.
 
 A violation is an error unless it is explained by a registered
 ``IntentionalError`` — that is the whole point of labelling deliberate mess.
@@ -94,9 +97,35 @@ class ValidationReport:
     violations: list[Violation] = field(default_factory=list)
     checks_run: int = 0
 
+    advisories: list[Violation] = field(default_factory=list)
+    """Findings that ran, are reported, and do not decide pass/fail.
+
+    A second severity exists because this module answers exactly one question —
+    do the artifacts agree — and there is a class of finding that is certainly
+    true, certainly worth acting on, and *not an answer to that question*. The
+    worked case is ``reachability``: a bank that declares 133 branches no fact
+    names is thin, not incoherent, and nothing in it disagrees with anything
+    else in it. Filed as a violation it made 67 tests in this repository fail
+    and made ``worldloom validate`` red on every corpus the engine can build,
+    which is a gate people turn off. Filed nowhere at all — where it lived
+    before — it was invisible to anyone who did not already know the check
+    existed, which is the same defect wearing the opposite face.
+
+    So the honest shape is ``worldloom topology``'s, one layer in: a *reading*
+    beside the verdict. ``ok`` and ``by_group`` deliberately ignore this list —
+    an advisory that could fail a build is a violation, and a report whose
+    ``ok`` depended on which severity a group happened to file under would make
+    the distinction meaningless. ``checks_run`` deliberately does **not** ignore
+    it: those checks ran, and a count that hid them would understate the work.
+    """
+
     @property
     def ok(self) -> bool:
-        """Whether the world is coherent."""
+        """Whether the world is coherent.
+
+        Advisories are not consulted, and that is the definition of the word
+        rather than an oversight — see the field's own docstring.
+        """
         return not self.violations
 
     def by_group(self) -> dict[str, list[Violation]]:
@@ -342,6 +371,7 @@ class _Validator:
     def __init__(self, world: World) -> None:
         self.world = world
         self.violations: list[Violation] = []
+        self.advisories: list[Violation] = []
         self.checks = 0
         self._known: dict[str, set[str]] = {}
         # The collections a check resolves *by id* while looping over another
@@ -404,6 +434,24 @@ class _Validator:
 
     def fail(self, group: str, code: str, subject: str, detail: str) -> None:
         self.violations.append(Violation(group, code, subject, detail))
+
+    def as_advisory(self, group: Callable[[], None]) -> None:
+        """Run a check group and file what it found as a reading, not a verdict.
+
+        The group itself is unchanged and unaware — it calls ``fail`` like every
+        other, and ``reachability`` is still the standalone verdict that
+        ``reachability(world)`` returns and that the ratchet in
+        ``tests/test_reachability.py`` asserts against. One check with two
+        severities depending on the caller is a check whose findings could drift
+        apart; re-filing them here is the whole of the difference, in one place.
+
+        ``self.checks`` is deliberately left alone: the checks ran, whichever
+        list their findings landed in.
+        """
+        at = len(self.violations)
+        group()
+        self.advisories.extend(self.violations[at:])
+        del self.violations[at:]
 
     def check_ref(self, subject: str, field_name: str, value: str | None, *, expect: str | set[str] | None = None) -> None:
         """Check that *value* resolves, and optionally that its prefix is expected."""
@@ -2194,7 +2242,14 @@ class _Validator:
         Runs only on a corpus with compiled documents, ``compiled_evidence``'s
         early return and for its reason: a plan-only corpus has no readable
         surface, so nothing can be missing from one. ``examples/retail-close``
-        is exactly that corpus and is checked here zero times.
+        is exactly that corpus and is checked here zero times — which is also
+        why running this from ``run`` left that corpus's count at 1,283, the
+        figure ``tests/test_validate_packs.py`` pins as ``PACKLESS_CHECKS``.
+
+        ``run`` files what this finds through ``as_advisory`` rather than as
+        violations; the module-level ``reachability`` function is the same
+        measurement returned as a verdict, and carries the argument for the
+        split.
         """
         if not self.world._artifact_irs:
             return
@@ -2306,13 +2361,25 @@ class _Validator:
         self.actors()
         self.evaluation()
         self.carried_evidence()
+        # Beside its dual, and as a reading rather than a verdict. Measured
+        # both ways before choosing: filed as violations this fails 67 tests in
+        # this repository and turns `worldloom validate` red on every corpus
+        # the engine can build — including on `person`, `service` and `system`,
+        # which `reachability`'s own docstring argues are not defects at all.
+        # Filed here, the whole suite passes unedited and somebody who builds a
+        # company is still told its estate is decorative.
+        self.as_advisory(self.reachability)
         # Domain groups last, in name order so the report is stable however
         # registration happened to be sequenced.
         for name in sorted(_DOMAIN_CHECKS):
             found, ran = _DOMAIN_CHECKS[name](self.world)
             self.violations.extend(found)
             self.checks += ran
-        return ValidationReport(violations=self.violations, checks_run=self.checks)
+        return ValidationReport(
+            violations=self.violations,
+            checks_run=self.checks,
+            advisories=self.advisories,
+        )
 
 
 def _quantity_matches(amount: float, stated: str) -> bool:
@@ -2479,30 +2546,56 @@ def _under_the_corpus_rules(world: World) -> Iterator[None]:
 def reachability(world: World) -> ValidationReport:
     """Report every entity *world* declares and reaches nothing with.
 
-    **Why this is not in ``validate`` yet, stated rather than left to be
-    noticed.** It is a finished check, not a draft: run it on any corpus this
-    repository builds and it returns the list at the head of
-    ``_Validator.reachability``. Putting it in ``run`` today would make
-    ``worldloom validate`` fail on three of the four shipped verticals and on
-    the retail default too — 400-odd entities across them — which is the correct
-    verdict and an untrue statement about *coherence*, the thing that command
-    answers. Every one of those corpora is internally consistent; what they are
-    is thin.
+    This is the group's **verdict**, returned as violations, and it is what
+    ``tests/test_reachability.py`` ratchets against on every build path this
+    repository offers. ``run`` reports the same findings as *advisories*, and
+    the two callers exist for the reason below.
 
-    So it is enforced from ``tests/test_reachability.py`` as a ratchet — the
-    measured refusals are pinned as a ceiling per vertical, and a build that
-    reaches fewer entities than today fails — and it joins ``run``'s group list
-    the moment the count reaches its floor. That promotion is one line:
+    **Why the verdict is not what ``worldloom validate`` fails on.** It was
+    tried, on this branch, and the price is measured rather than guessed: filed
+    as violations, 67 tests in this repository fail and every corpus the engine
+    can build reports incoherent. Almost all of that is ``person``, ``service``
+    and ``system`` — and ``_Validator.reachability``'s own docstring already
+    argues those are not defects. A system is the *provenance* of a figure, a
+    service is that one layer down, and an unreached person is a roster entry
+    with no accountability fact. None of the three is a dimension any shipped
+    company declares itself cut by, so a corpus that leaves them unreached
+    contradicts nothing it says about itself. There is no build of this engine
+    that clears them, so a hard check here is not a gate that is currently red;
+    it is a command that answers "no" forever.
 
-        self.reachability()
+    **Why the old answer — leave it out entirely — is no longer good enough.**
+    That position was written when all four shipped verticals refused on their
+    reporting spine, and the argument was that promoting it would state
+    something untrue about coherence. Three engines then made their estates
+    load-bearing, and what is left of the spine is one engine's. But leaving
+    the check outside ``run`` means the only thing enforcing it is a test file,
+    and the question a user actually asks — *will the company I just built have
+    this problem?* — is asked from the command line, where a test file cannot
+    answer. A check nobody can reach without knowing it exists has the same
+    practical value as no check.
 
-    beside ``self.carried_evidence()``. Nothing else changes; the group, the
-    codes and the exemptions are already what they will be.
+    So it runs in ``run`` and reports without ruling, which is the posture
+    ``worldloom topology`` and ``worldloom series`` already take one layer up:
+    they print structural defects and exit zero, "because ``validate`` owns
+    pass/fail". Here the same seam runs *inside* ``validate``, so the reading
+    arrives without anyone having to know to ask for it, and ``ok`` still means
+    exactly what it has always meant.
 
-    A gate wired in before the thing it gates is fixed is a gate somebody
-    disables in the first hour, and a disabled gate is worse than a pinned one:
-    the ratchet cannot be satisfied by turning it off, because the number it
-    asserts is the number of *failures*.
+    **What would make part of it a violation, and why that is now a real
+    question rather than a deferral.** The violation text already partitions
+    itself: a refusal quotes ``axes.shape_of(industry)`` when — and only when —
+    the company declares a populated axis over that kind of entity. A grocer
+    that declares a ``store`` axis and says nothing about 44 of its stores is
+    not thin, it is a corpus disagreeing with its own declared shape, which is
+    coherence in the strict sense this module means it. That subset is a
+    legitimate hard check and the old "it is not about coherence" argument does
+    not cover it. It is not promoted here only because two build paths still
+    refuse it — ``australian_grocery`` and ``trading-retailer.json``, both the
+    retail engine, both being closed as this lands — and a gate wired in before
+    the thing it gates is a gate somebody disables in the first hour. The
+    ratchet cannot be disabled that way, because the number it asserts is the
+    number of *failures*.
     """
     validator = _Validator(world)
     validator.reachability()
