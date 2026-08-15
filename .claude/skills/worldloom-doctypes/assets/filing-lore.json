@@ -1,0 +1,13 @@
+{
+  "kind": "norm",
+  "assertion": "Every franchisee receives a monthly trading statement, because the franchise agreement computes their fee off the group's reported figures and gives them a right to see them.",
+  "effective_from": "2019-04",
+  "constrains": [
+    {
+      "kind": "artifact_density",
+      "target": "filing/franchisee_trading_statement",
+      "effect": "The network is sent a statement of the month every period",
+      "magnitude": 1.0
+    }
+  ]
+}
