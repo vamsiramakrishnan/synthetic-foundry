@@ -311,6 +311,39 @@ generator that branched on an effective-diversity score would make a corpus's
 bytes depend on which BLAS the machine linked; a fleet planner may consume
 `--holes`, but the world builder may not.
 
+### Admitting a fleet, rather than shipping whatever was generated
+
+Every reading above measures and none of them rules: a fleet is generated,
+measured six ways, and then all of it ships. `fleet` composes the readings
+into a verdict and a keep list:
+
+```bash
+worldloom fleet qualify ./mosaic --purpose challenge   # measure, verdict; exit 1 if not qualified
+worldloom fleet curate ./mosaic --purpose challenge    # champions per niche, rejects, empty niches
+```
+
+`qualify` checks that every member coheres (`validate`), rebuilds from its own
+recipe and ledger into the same fact ledger and artifact plan, and holds the
+floors its purpose requires — a challenge fleet must mint questions and must
+not contain the same world twice; a counterfactual fleet must share one
+archetype, so a difference in outcome attributes to the varied input rather
+than to being a different company. The record also reports the fleet's
+pairwise coverage of the configuration space, the axes it never varied, the
+reachable-spine share, the questions restated across worlds, and effective
+diversity — that last clearly labelled non-gating, for the BLAS reason above.
+
+`curate` keeps one champion per niche of a small behaviour grid (deterministic
+integer features of the measured corpora — never an eigendecomposition), lists
+every reject with the champion that displaced it and why, and writes
+`fleet-manifest.json`, byte-for-byte stable, whose empty niches are the next
+generation's worklist. A curator is downstream of generation: nothing it emits
+feeds back into a build.
+
+There is no `naturalistic` purpose. Qualifying a fleet as resembling real
+enterprise populations needs reference data this repository does not have, so
+that purpose is refused naming the data it would take — offering it would
+convert "we don't claim realism" into a fake claim.
+
 Each world lands in `./mosaic/world-NN/` with its own recipe, so any one of them
 rebuilds alone. `mosaic.json` records the plan. Measured on five worlds: five
 distinct organisation shapes, five distinct title sets, mean title overlap 0.72

@@ -202,6 +202,37 @@ worldloom evaluate <CORPUS>
 | `--verbose`, `-v` | Show every question. |
 | `-k` | How many passages a retriever may return. |
 
+### `worldloom fleet`
+
+Admission control for a fleet of worlds: qualify it for a purpose, curate its champions.
+
+### `worldloom fleet curate`
+
+Keep one champion per niche; name every reject and every empty niche.
+
+```
+worldloom fleet curate <FLEET_DIR>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the manifest as JSON instead of a table. |
+| `--purpose` | What the fleet is being admitted for: challenge (it will be used to challenge a retrieval or assistant system) or counterfactual (controlled comparison against a shared frame). 'naturalistic' is refused, naming the reference data it would need. |
+
+### `worldloom fleet qualify`
+
+Measure a fleet and rule on whether it is qualified for its purpose.
+
+```
+worldloom fleet qualify <FLEET_DIR>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the full qualification record as JSON. |
+| `--out`, `-o` | Also write the record here — byte-stable, so it can be checked in and diffed. |
+| `--purpose` | What the fleet is being admitted for: challenge (it will be used to challenge a retrieval or assistant system) or counterfactual (controlled comparison against a shared frame). 'naturalistic' is refused, naming the reference data it would need. |
+
 ### `worldloom formats`
 
 List the renderers this installation has.

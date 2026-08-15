@@ -67,6 +67,11 @@ present_app = typer.Typer(
     help="Decide who a corpus's documents are for, and check a profile you wrote.",
 )
 app.add_typer(present_app, name="present")
+fleet_app = typer.Typer(
+    no_args_is_help=True,
+    help="Admission control for a fleet of worlds: qualify it for a purpose, curate its champions.",
+)
+app.add_typer(fleet_app, name="fleet")
 
 console = Console()
 err = Console(stderr=True)
@@ -3345,6 +3350,130 @@ def validate(
         return
     if not _print_report(report):
         raise typer.Exit(code=1)
+
+
+#: One help string for both fleet verbs, because the refusal is part of the
+#: contract: "naturalistic" is not a hidden value waiting to be typed, it is a
+#: purpose `worldloom.fleet` refuses with the reference data it would need.
+_FLEET_PURPOSE_HELP = (
+    "What the fleet is being admitted for: challenge (it will be used to "
+    "challenge a retrieval or assistant system) or counterfactual (controlled "
+    "comparison against a shared frame). 'naturalistic' is refused, naming "
+    "the reference data it would need."
+)
+
+
+@fleet_app.command("qualify")
+def fleet_qualify(
+    fleet_dir: str = typer.Argument(
+        ..., help="A directory of member corpora — a mosaic out dir, or any directory of builds."
+    ),
+    purpose: str = typer.Option("challenge", "--purpose", help=_FLEET_PURPOSE_HELP),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the full qualification record as JSON."
+    ),
+    out: Path = typer.Option(
+        None, "--out", "-o",
+        help="Also write the record here — byte-stable, so it can be checked in and diffed.",
+    ),
+) -> None:
+    """Measure a fleet and rule on whether it is qualified for its purpose.
+
+    Exit 1 when the fleet is not qualified, with every failed floor named —
+    the same posture `worldloom validate` takes one level down: the exit code
+    is the verdict and the text is the reason.
+    """
+    from . import fleet as fleet_module
+
+    try:
+        record = fleet_module.qualify(fleet_dir, purpose)  # type: ignore[arg-type]
+    except fleet_module.FleetError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(record.manifest(), encoding="utf-8")
+
+    if as_json:
+        typer.echo(record.manifest(), nl=False)
+        if not record.qualified:
+            raise typer.Exit(code=1)
+        return
+
+    table = Table(title=f"fleet {record.fleet} — {record.purpose}",
+                  title_style="bold", box=None)
+    table.add_column("world", style="bold")
+    table.add_column("coherent")
+    table.add_column("replays")
+    table.add_column("questions", justify="right")
+    for world in record.worlds:
+        table.add_row(
+            world.name,
+            "[green]yes[/green]" if world.ok else f"[red]no ({world.violations})[/red]",
+            "[green]yes[/green]" if world.replay_verified else "[red]no[/red]",
+            str(world.questions),
+        )
+    console.print(table)
+    console.print(
+        f"[dim]coverage {record.coverage['share']:.0%} of {record.coverage['combinations']}"
+        f" pair(s); unvaried: {', '.join(record.unvaried) or 'none'};"
+        f" spine {record.spine['share']}; questions restated across worlds"
+        f" {record.questions['cross_world_restated_share']:.0%};"
+        f" effective diversity {record.effective_diversity['vendi_questions']}"
+        f" (reported, non-gating)[/dim]"
+    )
+    if record.qualified:
+        console.print(f"[green]✓[/green] qualified for [bold]{record.purpose}[/bold]")
+        return
+    for name in record.failed:
+        err.print(f"[red]✗[/red] {name}: {escape(record.floors[name]['detail'])}")
+    raise typer.Exit(code=1)
+
+
+@fleet_app.command("curate")
+def fleet_curate(
+    fleet_dir: str = typer.Argument(
+        ..., help="A directory of member corpora — a mosaic out dir, or any directory of builds."
+    ),
+    purpose: str = typer.Option("challenge", "--purpose", help=_FLEET_PURPOSE_HELP),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the manifest as JSON instead of a table."
+    ),
+) -> None:
+    """Keep one champion per niche; name every reject and every empty niche.
+
+    Writes `fleet-manifest.json` at the fleet root, byte-for-byte stable for
+    the same fleet. Exit 0 either way: a curation is a keep list, not a gate —
+    `fleet qualify` owns pass/fail.
+    """
+    from . import fleet as fleet_module
+
+    try:
+        curation = fleet_module.curate(fleet_dir, purpose)  # type: ignore[arg-type]
+    except fleet_module.FleetError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    if as_json:
+        typer.echo(curation.manifest(), nl=False)
+        return
+
+    for champion in curation.champions:
+        niche = ", ".join(f"{key}={champion.niche[key]}" for key in sorted(champion.niche))
+        console.print(f"[green]✓[/green] [bold]{champion.world}[/bold] holds"
+                      f" ({niche}) at {curation.fitness_metric}={champion.fitness}")
+    for reject in curation.rejects:
+        displaced = f" — displaced by {reject.displaced_by}" if reject.displaced_by else ""
+        console.print(f"[yellow]-[/yellow] {reject.world}: {escape(reject.reason)}{displaced}")
+    for hole in curation.holes:
+        niche = ", ".join(f"{key}={hole[key]}" for key in sorted(hole))
+        console.print(f"[dim]· empty niche ({niche}) — next generation's worklist[/dim]")
+    console.print(
+        f"[dim]{len(curation.champions)} champion(s), {len(curation.rejects)} reject(s),"
+        f" {len(curation.holes)} empty niche(s)."
+        f" The manifest is in {fleet_module.MANIFEST_NAME}.[/dim]"
+    )
 
 
 @evals_app.command("export")
