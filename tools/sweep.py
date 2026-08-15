@@ -51,6 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -813,17 +814,43 @@ def run_one(config: Config, workspace: Path, *, mode: str, formats: Sequence[str
     return result
 
 
+#: An exception's own line, as Python and Rich both render it: ``ValueError: …``.
+#:
+#: Anchored and requiring the colon, so a sentence in a refusal message that
+#: happens to contain the word "Error" is not mistaken for a traceback's summary.
+_RAISED = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*(Error|Exception|Exit):")
+
+
 def _one_line(text: str) -> str:
     """The most useful single line of a failed build's output.
 
-    The last non-empty line is usually a summary banner; the first line naming a
-    refusal or a violation is what a reader needs. Preferring the marked line
-    and falling back to the last is a heuristic, and it is stated as one — the
-    full output is kept in the JSON report either way.
+    Three tiers, and the middle one was missing. A refusal the CLI prints marks
+    itself with ``error`` or ``✗``; an *exception* marks itself with
+    ``TypeError:``-style prefix and nothing else; and the last non-empty line is
+    the fallback.
+
+    Without the middle tier a Rich-rendered traceback matched nothing, so the
+    reported reason was whatever fragment the message happened to wrap onto —
+    or, worse, an unrelated line of stdout printed *before* the failure. Both
+    were observed in one eight-row run: two builds that died on the same
+    procurement estate error were reported as ``build failed: that consults
+    it).`` and ``build failed: ProcureToPayWorld has no `seasonality` field``,
+    the second of which is an `unmet:` line the build printed on its way past.
+
+    This is the nightly determinism gate, so whoever triages it reads this line
+    first. A heuristic that names the wrong cause costs more than one that says
+    nothing — the full output is in the JSON report either way.
     """
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     marked = [line for line in lines if line.startswith(("error", "✗")) or "violation" in line]
-    return (marked[0] if marked else lines[-1] if lines else "no output")[:200]
+    if marked:
+        return marked[0][:200]
+    # Last rather than first: a chained traceback prints the original cause
+    # above the one that actually stopped the build.
+    raised = [line for line in lines if _RAISED.match(line)]
+    if raised:
+        return raised[-1][:200]
+    return (lines[-1] if lines else "no output")[:200]
 
 
 # ---------------------------------------------------------------------------

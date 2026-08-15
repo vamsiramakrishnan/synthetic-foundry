@@ -855,6 +855,49 @@ def _quoting_secondary(
     return None
 
 
+def _orphanable(
+    world: World, facts: dict[str, CanonicalFact],
+) -> list[tuple[Any, CanonicalFact]]:
+    """``(intent, departure)`` for every document its author has already left.
+
+    The selection, split out from `_orphaned` so that *counting* these cannot
+    mint. `_orphaned` takes a `Minter` and calls `next("ERR")` per finding —
+    its docstring's "mints nothing" is about canonical facts, not ids — so
+    `messiness_ceilings` calling it to measure advanced the id sequence and the
+    next build step produced different ids. Caught by a replay test:
+    `intentional-errors.jsonl` stopped matching between a build and its own
+    replay, which is the sharpest failure this repository has and it was one
+    measurement call away.
+    """
+    departures: dict[str, CanonicalFact] = {}
+    for person in sorted(world._people, key=lambda p: p.id):
+        if person.left is None:
+            continue
+        candidates = [
+            fact for fact in world._facts
+            if fact.subject == person.id and fact.valid_from >= person.left
+        ]
+        if candidates:
+            departures[person.id] = min(candidates, key=lambda f: (f.valid_from, f.id))
+
+    already = {
+        error.artifact_id for error in world._intentional_errors
+        if error.error_type is ErrorType.OUTDATED_OWNER
+    }
+    found: list[tuple[Any, CanonicalFact]] = []
+    for intent in sorted(world._artifact_intents, key=lambda i: i.id):
+        departure = departures.get(intent.author_id)
+        if departure is None or intent.id in already:
+            continue
+        # A document written after its author left is a different defect
+        # entirely — `temporal.author_not_employed` catches it — and calling it
+        # an orphan would launder a real incoherence as a deliberate one.
+        if documents.written_at(intent, facts) >= departure.valid_from:
+            continue
+        found.append((intent, departure))
+    return found
+
+
 def _orphaned(
     world: World, facts: dict[str, CanonicalFact], minter: Minter,
 ) -> list[IntentionalError]:
@@ -872,31 +915,8 @@ def _orphaned(
     orphaning, and it carries the succession, so the label is a pointer to the
     corpus's own answer rather than a second copy of it.
     """
-    departures: dict[str, CanonicalFact] = {}
-    for person in sorted(world._people, key=lambda p: p.id):
-        if person.left is None:
-            continue
-        candidates = [
-            fact for fact in world._facts
-            if fact.subject == person.id and fact.valid_from >= person.left
-        ]
-        if candidates:
-            departures[person.id] = min(candidates, key=lambda f: (f.valid_from, f.id))
-
-    already = {
-        error.artifact_id for error in world._intentional_errors
-        if error.error_type is ErrorType.OUTDATED_OWNER
-    }
     found: list[IntentionalError] = []
-    for intent in sorted(world._artifact_intents, key=lambda i: i.id):
-        departure = departures.get(intent.author_id)
-        if departure is None or intent.id in already:
-            continue
-        # A document written after its author left is a different defect
-        # entirely — `temporal.author_not_employed` catches it — and calling it
-        # an orphan would launder a real incoherence as a deliberate one.
-        if documents.written_at(intent, facts) >= departure.valid_from:
-            continue
+    for intent, departure in _orphanable(world, facts):
         author = world.people.get(intent.author_id)
         found.append(
             IntentionalError(
@@ -919,6 +939,44 @@ def _orphaned(
             )
         )
     return found
+
+
+def messiness_ceilings(world: World) -> dict[str, int]:
+    """The most each kind of imperfection *world* could support, by kind.
+
+    "Budget, not quota" is `apply_messiness`' stated contract and it is the
+    right one — this pass may never invent a figure to be wrong about. What was
+    missing is any way for a caller to learn how much of its budget went
+    unspent, and the silence was total: `--messiness neglected` asks for 17
+    imperfections and a default retail build delivers **zero**, prints
+    "0 recorded imperfection(s)", and exits green. Someone asking for a corpus
+    that resembles a real archive got a pristine one and a tick.
+
+    The ceilings are structural, not unlucky. Staleness and disagreement both
+    need a superseded fact that some document cites, and retail mints exactly
+    two corrections per incident and none without one. Orphaning needs an author
+    whose `left` is set, which only a `Departure` produces — so on any
+    single-period build it is zero, and that is 8 of `neglected`'s 17 before
+    anything else is considered.
+
+    Computed from the same three helpers the pass itself uses, so this cannot
+    drift into describing a different rule. Approximate in one direction only,
+    and stated: staleness and disagreement draw on one pool of corrections and
+    the pass will not spend a correction twice, so their ceilings overlap and
+    the *sum* is an over-estimate while each alone is exact.
+    """
+    corrections = _corrections(world)
+    citations = _citations(world)
+    cited = [
+        (old, new) for old, new in corrections
+        if citations.get(old.id) and citations.get(new.id)
+    ]
+    orphanable = len(_orphanable(world, _facts_by_id(world)))
+    return {
+        "staleness": len([1 for old, _ in corrections if citations.get(old.id)]),
+        "disagreement": len(cited),
+        "orphaning": orphanable,
+    }
 
 
 def apply_messiness(

@@ -917,7 +917,44 @@ def build(
 
     # Estate: an explicit `--estate` beats a facet's, because the caller said it
     # and the facet only implied it. Same rule the SDK's `.facets()` states.
+    said_it = estate is not None
     estate = estate if estate is not None else facet_estate
+
+    # Refused here, before the world is built, and naming where the estate came
+    # from. `landscape.LANDSCAPES` is a registry this file can read at plan
+    # time, so a vertical with no landscape vocabulary is knowable before any
+    # work happens — the same shape as reading `Domain.max_periods` for
+    # `--periods`.
+    #
+    # It mattered most for the estate nobody asked for. Three facet values imply
+    # `estate=large` — `maturity=legacy`, `scale=enterprise`,
+    # `scale=multinational`, one of which appears in AGENTS.md's own example —
+    # and on procurement that reached `ProcureToPayWorld.build` and died with an
+    # unhandled `ValueError` whose remediation was "build without `--estate`", a
+    # flag the caller had not typed. Every other vertical-inapplicable flag on
+    # this branch prints a clean `error:` line; this one printed a stack.
+    from . import landscape
+
+    if estate is not None and domain is not None and domain.name not in landscape.LANDSCAPES:
+        source = (
+            "--estate" if said_it
+            else "--spec" if resolution is not None
+            else "a facet"
+        )
+        err.print(
+            f"[red]error:[/red] {source} asks for an estate and the"
+            f" {domain.name} vertical has no landscape vocabulary — only"
+            f" {', '.join(sorted(landscape.LANDSCAPES))} name one. A"
+            f" {domain.name} landscape built from another vertical's words"
+            " would be worse than none, so this refuses rather than borrows."
+            + (
+                ""
+                if said_it
+                else f" Nothing named an estate directly: it is implied by the"
+                " facets this build resolved."
+            )
+        )
+        raise typer.Exit(code=2)
 
     physics_value = _DEFAULT_PHYSICS
     overrides: dict[str, Any] = dict(facet_overrides)
@@ -1138,6 +1175,37 @@ def build(
             )
             raise typer.Exit(code=2) from exc
 
+    def _rounds(world: World, stamp: str) -> World:
+        """The engine-neutral steps that run in *stamp*, after its episode.
+
+        Hiring, performance reviews and authored episodes. All three are strict
+        no-ops when unasked, and each runs *after* whatever episode the period
+        already ran, so a corpus built without them keeps every id it had and
+        one built with them only ever gains ids at the end of a period.
+
+        **One function because three copies is how this broke.** This block
+        lived only inside the plain retail loop, so `--hiring`, `--reviews` and
+        `--episode` were accepted and silently discarded on banking, insurance
+        and procurement, and on every `--timeline` build — producing a
+        byte-identical corpus with no warning, while five neighbouring flags on
+        the same command refused with a stated reason. Measured, the rounds work
+        on all three verticals and validate clean: banking goes from 12 artifact
+        intents to 29 and 744 facts to 784. Nothing was missing but the call.
+        """
+        if hiring > 0:
+            from .workforce import HiringRound
+
+            world = world.run(HiringRound(period=stamp, count=hiring))
+        if reviews > 0:
+            from .workforce import PerformanceCycle
+
+            world = world.run(PerformanceCycle(period=stamp, pairs=reviews))
+        for episode_name in episode or []:
+            from .episodes import AuthoredEpisode
+
+            world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
+        return world
+
     if single_episode is not None:
         refused = [
             flag for flag, given in (
@@ -1149,6 +1217,14 @@ def build(
                 # for a corpus that gained nothing.
                 ("--conversations", conversations),
                 ("--incident/--no-incident", incident is not None),
+                # Beside `--incident` because it is that flag's companion: it
+                # rotates the storyline of the incident `--incident` schedules,
+                # and a vertical that takes no incident has no storyline to
+                # rotate. It was accepted and silently ignored here while its
+                # own companion one line up was refused with a reason, which is
+                # the inconsistency rather than the harm — nothing was lost, but
+                # a caller had no way to learn the flag did nothing.
+                ("--vary-incidents", vary_incidents),
                 ("--comparatives", comparatives > 0),
                 # Same reasoning as its neighbour: the trend shapes retail's
                 # comparative history, and a single-episode vertical has none.
@@ -1192,11 +1268,15 @@ def build(
                 # outside this repository, which may have no such field, keeps
                 # building exactly as it did.
                 **({} if annual_revenue is None else {"annual_revenue": annual_revenue}),
-                # Every vertical has its own landscape vocabulary now
-                # (`worldloom.landscape`), so this is no longer refused. It was
-                # refused rather than mis-served for as long as the only pools
-                # were retail's: a bank whose landscape is called
-                # `click-collect-api` is worse than a bank with no landscape.
+                # Reaches here only for a vertical that names a landscape —
+                # `landscape.LANDSCAPES` is checked at plan time, above, where a
+                # vertical without one is refused with the source of the estate
+                # named. This comment used to claim every vertical had its own
+                # vocabulary "now", which was three of four: procurement has
+                # none, and the claim is what let a facet-implied estate reach
+                # `ProcureToPayWorld.build` and raise. The original reasoning
+                # still holds for the three that do — a bank whose landscape is
+                # called `click-collect-api` is worse than a bank with none.
                 **({} if estate is None else {"estate": estate}),
                 # Conditional for `estate`'s reason one line up: a domain
                 # registered outside this repository may have no such field,
@@ -1253,10 +1333,7 @@ def build(
             stamp = _step_period(period, index, domain.period_step_months)
             if not standing_in:
                 world = world.run(_under_physics(single_episode(stamp)))
-            for episode_name in episode or []:
-                from .episodes import AuthoredEpisode
-
-                world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
+            world = _rounds(world, stamp)
     else:
         builder = _under_physics(
             RetailWorld.from_pack(pack_obj, seed=seed)
@@ -1566,31 +1643,22 @@ def build(
         except timeline_module.TimelineError as exc:
             err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
+        # After the whole history rather than interleaved into it, which is the
+        # one place these rounds do not sit inside their own period's loop. The
+        # sampler owns the schedule — it decides which months hold an incident,
+        # a departure or a reorganisation — and reaching into it to run a hiring
+        # round mid-history would make this command a second author of a
+        # timeline that already has one. Appending per period afterwards keeps
+        # the schedule's own ART sequence untouched, which is the same
+        # id-stability rule `_rounds` follows everywhere else.
+        for stamp in stamps:
+            world = _rounds(world, stamp)
     else:
         for index in range(max(1, periods) if single_episode is None else 0):
             stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
             try:
                 world = world.run(_close(stamp, incident, index))
-                # After the close, so the ART sequence a close mints is
-                # untouched: a corpus built without these rounds keeps every id
-                # it had, and one built with them only ever gains ids at the
-                # end of each period. Both are strict no-ops at zero.
-                if hiring > 0:
-                    from .workforce import HiringRound
-
-                    world = world.run(HiringRound(period=stamp, count=hiring))
-                if reviews > 0:
-                    from .workforce import PerformanceCycle
-
-                    world = world.run(PerformanceCycle(period=stamp, pairs=reviews))
-                # Authored processes run after the engine's own steps for the
-                # id-stability reason the workforce rounds do: a corpus built
-                # without `--episode` keeps every id it had, and one built with
-                # it only ever gains ids at the end of each period.
-                for episode_name in episode or []:
-                    from .episodes import AuthoredEpisode
-
-                    world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
+                world = _rounds(world, stamp)
                 if (
                     workforce_path is not None
                     and index + 1 < len(workforce_path)
@@ -1658,13 +1726,47 @@ def build(
     if messiness is not None:
         from .messiness import Imperfections
 
+        from .generators.distractors import messiness_ceilings
+        from .messiness import from_document as _messiness_profile
+
         before = len(world.artifact_intents)
+        # Measured before the pass runs: it spends what it finds, so the ceiling
+        # is a property of the world it was handed.
+        ceilings = messiness_ceilings(world)
+        asked = _messiness_profile(messiness)
         world = world.run(Imperfections(profile=messiness))
+        delivered = len(world.intentional_errors)
+        wanted = sum(asked[kind] for kind in ceilings)
         console.print(
             f"[dim]messiness:[/dim] {messiness} —"
             f" {len(world.artifact_intents) - before} document(s) added,"
-            f" {len(world.intentional_errors)} recorded imperfection(s) in total\n"
+            f" {delivered} of {wanted} imperfection(s) delivered\n"
         )
+        # A shortfall is stated, with the reason, and it is the whole point of
+        # this block. "Budget, not quota" is the documented contract and it is
+        # correct — this pass may never invent a figure to be wrong about — but
+        # a 0-of-17 delivery reported as success is a corpus that is not what
+        # was asked for and says nothing about it. On a default retail build
+        # that is exactly what happened.
+        short = {
+            kind: (asked[kind], ceilings[kind])
+            for kind in sorted(ceilings)
+            if asked[kind] > ceilings[kind]
+        }
+        if short:
+            reasons = {
+                "staleness": "needs a corrected figure some document cites",
+                "disagreement": "needs a correction whose old and new figures are"
+                                " both carried",
+                "orphaning": "needs an author who has left, which only a departure"
+                             " produces — build with --timeline or --periods > 1",
+            }
+            for kind, (want, ceiling) in short.items():
+                console.print(
+                    f"[yellow]unmet:[/yellow] {kind} — asked for {want}, this"
+                    f" world supports at most {ceiling}: it {reasons[kind]}"
+                )
+            console.print()
 
     if narrate or replay is not None:
         from . import recipe as recipe_module
@@ -5014,7 +5116,21 @@ def docs(
     current = generator.reference()
 
     if check:
-        existing = target.read_text() if target.exists() else ""
+        # Absent and out-of-date are different findings, and the remedy for one
+        # of them is not `worldloom docs`. `REFERENCE_PATH` is relative to the
+        # working directory, so running this from anywhere but a checkout found
+        # no file, compared against `""`, and reported a file that does not
+        # exist as *stale* — sending the reader to a command that would write a
+        # reference into whatever directory they happened to be standing in.
+        if not target.exists():
+            console.print(
+                f"[red]✗[/red] {target} does not exist. This path is relative to"
+                " the working directory; `--check` compares a checked-in"
+                " reference against this CLI, so run it from the repository"
+                " root."
+            )
+            raise typer.Exit(code=1)
+        existing = target.read_text()
         if existing == current:
             console.print(f"[green]✓[/green] {target} is current")
             return

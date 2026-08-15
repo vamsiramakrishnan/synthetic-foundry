@@ -125,18 +125,23 @@ def _candidates() -> tuple[Configuration, ...]:
         # ``estate=None`` rather than silently serving another vertical's names.
         if candidate.estate is not None and candidate.engine not in landscape.LANDSCAPES:
             continue
-        # ``worldloom build`` currently accepts multi-period histories only for
-        # the retail close.  Registered single-episode verticals deliberately
-        # refuse ``--periods > 1`` until their carry-forward grammar exists.
-        # Sampling commands the CLI promises to reject tests argument
-        # validation, not replay determinism, and can fail before a corpus is
-        # available to compare.
+        # Skip only what the engine itself says it cannot build. Sampling a
+        # command the CLI promises to reject tests argument validation, not
+        # replay determinism, and can fail before there is a corpus to compare.
+        #
+        # This read ``single_episode is not None`` — every registered vertical
+        # but retail — citing a blanket CLI refusal of ``--periods > 1``. That
+        # refusal no longer exists: only insurance declares a cap, and banking
+        # and procurement build, validate and replay byte-for-byte at 3 and at
+        # 12 periods. So **this gate had never once compared two builds of a
+        # bank beyond a single period**, which is the one property it exists to
+        # check. ``tools/sweep.py`` was corrected for exactly this and the fix
+        # was not carried here; reading ``max_periods`` is what keeps the two
+        # from drifting again, since it is the same declaration the CLI refuses
+        # on.
         registered = domains.by_name(candidate.engine)
-        if (
-            registered is not None
-            and registered.single_episode is not None
-            and candidate.periods > 1
-        ):
+        cap = registered.max_periods if registered is not None else None
+        if cap is not None and candidate.periods > cap:
             continue
         if candidate not in seen:
             seen.add(candidate)
