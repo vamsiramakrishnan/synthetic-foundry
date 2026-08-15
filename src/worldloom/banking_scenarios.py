@@ -58,7 +58,13 @@ class QuarterlyCapitalReturn:
 
     def run(self, world: World) -> World:
         from . import banking_documents
-        from .generators import banking_evaluation, capital, liquidity, regulatory
+        from .generators import (
+            banking_evaluation,
+            banking_network,
+            capital,
+            liquidity,
+            regulatory,
+        )
 
         if world.seed is None:
             raise ValueError(
@@ -153,8 +159,44 @@ class QuarterlyCapitalReturn:
             calendar=calendar,
         )
 
+        # The other half of the quarter's conversation: what the divisions and
+        # the branch network did, and what the shared services cost. Minted
+        # after the episode, so every `FACT` id the capital return already
+        # carries keeps its number; `Minter` counts per prefix, so the `ART`
+        # ids below are untouched either way.
+        #
+        # The balance sheet is derived *from* the filed RWA rather than drawn
+        # beside it — see `banking_network.generate` — so the branch lending
+        # book and the capital held against it are one number seen twice, and a
+        # restatement that moves RWA cannot leave the network reporting a book
+        # that never existed.
+        close_finalised = next(e for e in episode.events if e.kind == "close_finalised")
+        network = banking_network.generate(
+            rng.derive("network"), minter,
+            period=self.period,
+            company_id=world.company.id,
+            units=tuple(world.business_units),
+            sites=tuple(world.sites),
+            cost_centres=tuple(world.cost_centres),
+            unit_share_of=unit_share_of,
+            rwa_total=position.rwa_filed,
+            # The company's own stated income and headcount, not the
+            # archetype's: `--employees` and a pack both move these, and a
+            # network sized from the archetype would ignore both.
+            annual_income=world._annual_revenue,
+            employees_total=world.company.employees_total,
+            # Known when the ledger locks, and attributed to the close that
+            # locked it: a divisional performance figure is a read of the
+            # general ledger, not of the return that is prepared from it.
+            at=close_finalised.occurred_at,
+            event_id=close_finalised.id,
+            source_system=roles["sys_core_banking"],
+            money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            physics=self.physics,
+        )
+
         intents, errors = banking_documents.artifact_intents(
-            minter, episode=episode, roles=roles,
+            minter, episode=episode, roles=roles, network=network,
         )
         cases = banking_evaluation.evaluation_cases(
             minter, episode=episode, intents=intents, period=self.period,
@@ -180,6 +222,11 @@ class QuarterlyCapitalReturn:
         # exists to avoid.
         known_fact_ids = set(world.facts.ids())
         new_facts = tuple(f for f in episode.facts if f.id not in known_fact_ids)
+        # The network's facts are all newly minted — nothing in it is standing
+        # the way `capital.minimum_cet1_requirement` is — so they need no such
+        # filter, and appending them after the episode's keeps the ledger in
+        # mint order.
+        new_facts = new_facts + network.facts
 
         return world.extend(
             events=episode.events,

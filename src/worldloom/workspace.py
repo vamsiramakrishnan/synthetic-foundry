@@ -130,6 +130,10 @@ SHELVES: dict[str, str] = {
     # -- the other verticals --------------------------------------------
     "capital_return": "Finance/Regulatory",
     "rwa_working_paper": "Finance/Regulatory/Working Papers",
+    # Not Regulatory: the divisional pack reports how the bank traded, not what
+    # it told the regulator, and a reader looking for branch numbers is not the
+    # reader looking for the return.
+    "divisional_performance_pack": "Finance/Performance",
     "second_line_challenge_memo": "Risk",
     "reserve_triangle_workbook": "Actuarial",
     "claims_emergence_note": "Actuarial/Working Papers",
@@ -141,6 +145,10 @@ SHELVES: dict[str, str] = {
     "match_exception_report": "Procurement/Exceptions",
     "payment_approval_memo": "Procurement/Exceptions",
     "vendor_master_change": "Procurement/Vendor Master",
+    # Shelved with the orders rather than under Finance: it is the order book's
+    # own position — what has been committed and not yet received — and the
+    # person who goes looking for it is the person who raised the orders.
+    "spend_and_commitment_workbook": "Procurement/Orders",
 }
 
 #: Types filed under the period they report on, inside their shelf.
@@ -157,10 +165,12 @@ PERIODIC: frozenset[str] = frozenset({
     "audit_committee_pack", "sponsor_pack", "member_report",
     "ministerial_brief", "board_risk_committee_summary",
     "internal_audit_review", "capital_return", "rwa_working_paper",
+    "divisional_performance_pack",
     "second_line_challenge_memo", "reserve_triangle_workbook",
     "claims_emergence_note", "actuarial_valuation_report",
     "margin_decision_memo", "purchase_order", "goods_receipt_note",
     "supplier_invoice", "match_exception_report", "payment_approval_memo",
+    "spend_and_commitment_workbook",
     "job_requisition", "offer_letter", "onboarding_checklist",
     "performance_review", "one_to_one_note",
 })

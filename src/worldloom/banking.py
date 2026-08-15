@@ -70,6 +70,17 @@ from .world import World, extend_lore
 # in a fresh process to compile and validate identically everywhere.
 from . import banking_documents  # noqa: F401  (registration)
 
+# The branch network's physics, in the global registry, through the seam
+# `procurement.py` opened: `parameters.py` is core and stays retail vocabulary,
+# so a vertical's ranges are declared beside its generator and registered from
+# its own domain module. Without this a pack could not tune how large the bank's
+# loan book is and `worldloom pack params` could not show that it decides
+# anything.
+from . import parameters as _parameters_module
+from .generators.banking_network import SPANS as _BANKING_NETWORK_SPANS
+
+_parameters_module.register(_BANKING_NETWORK_SPANS)
+
 #: Archetype keys that build a ``BankingWorld``. The recipe rebuilder and the
 #: CLI dispatch on this — a corpus whose recipe names a banking archetype must
 #: rebuild through this module, not retail's.
@@ -828,6 +839,112 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                  "an as-filed record is the permanent statement of what was lodged;"
                  " closing or superseding it erases what the bank believed and when")
 
+    # -- (h) the branch network reconciles, exactly -------------------------
+    # `validate.financial` is the same check and cannot be this one: it reads
+    # kinds beginning `financial.`, which is retail vocabulary and correctly
+    # stays in core. Banking's own roll-up therefore lives here, in banking's
+    # check group, and it is the reason the branch network can be trusted at
+    # all — before it there was nothing to reconcile, because a bank's three
+    # divisions and its 133 branches were named by no fact.
+    #
+    # "Nearly" is not a passing answer. `banking_network` allocates by largest
+    # remainder from a total drawn once, so the parts sum to the whole by
+    # construction; any drift is a defect in the allocation rather than a
+    # rounding note, and the tolerance is the core's own.
+    network_kinds = (
+        "banking.deposits.balance", "banking.lending.balance",
+        "banking.lending.settled", "banking.net_operating_income",
+        "banking.network.fte",
+    )
+    stated_by: dict[tuple[str, str | None], dict[str, float]] = {}
+    for fact in facts:
+        if fact.value is None or not fact.kind.startswith("banking."):
+            continue
+        if fact.is_superseded:
+            continue
+        stated_by.setdefault((fact.kind, fact.period), {})[fact.subject] = fact.value.amount
+
+    company_id = world.company.id
+    rollups: list[tuple[str, str, list[str]]] = [
+        ("divisions", company_id, [u.id for u in world.business_units])
+    ]
+    for unit in world.business_units:
+        estate = [s.id for s in world.sites if s.business_unit_id == unit.id]
+        if estate:
+            rollups.append((f"sites of {unit.name}", unit.id, estate))
+
+    for (kind, period), subjects in sorted(
+        ((key, value) for key, value in stated_by.items() if key[0] in network_kinds),
+        key=lambda item: (item[0][0], item[0][1] or ""),
+    ):
+        for label, parent, children in rollups:
+            if parent not in subjects:
+                continue
+            parts = [subjects[child] for child in children if child in subjects]
+            if not parts:
+                continue
+            checks += 1
+            total = sum(parts)
+            if abs(total - subjects[parent]) > RECONCILIATION_TOLERANCE:
+                fail("network_does_not_reconcile", f"{kind}/{period}/{parent}",
+                     f"{label} sum to {total:,.2f} but {parent} states"
+                     f" {subjects[parent]:,.2f} (difference {total - subjects[parent]:,.2f})")
+
+    # The rate, recomputed from the amounts it describes — the same discipline
+    # `ratio_disagrees_with_amounts` applies to the CET1 ratio, and the reason
+    # this kind is excluded from the roll-up above: a group loan-to-deposit
+    # ratio is group lending over group deposits, never the total of three
+    # divisional ratios.
+    for (kind, period), subjects in sorted(
+        ((key, value) for key, value in stated_by.items()
+         if key[0] == "banking.loan_to_deposit_pct"),
+        key=lambda item: item[0][1] or "",
+    ):
+        lending = stated_by.get(("banking.lending.balance", period), {})
+        deposits = stated_by.get(("banking.deposits.balance", period), {})
+        for subject, ratio in sorted(subjects.items()):
+            if subject not in lending or not deposits.get(subject):
+                continue
+            checks += 1
+            derived = round(lending[subject] / deposits[subject] * 100, 2)
+            if abs(derived - ratio) > 0.01:
+                fail("loan_to_deposit_disagrees_with_balances", f"{period}/{subject}",
+                     f"states {ratio:.2f}% but {lending[subject]:,.0f} /"
+                     f" {deposits[subject]:,.0f} = {derived:.2f}%")
+
+    # Shared services, decomposed twice. The cost centres that *incur* the cost
+    # and the divisions that *carry* it are different sets of entities summing
+    # to one number, so each is a check on the other — two independent
+    # decompositions of one total are a cross-check, where two independently
+    # drawn ones would be two contradictions (`finance.generate`'s argument for
+    # allocating a store estate rather than drawing it).
+    centre_ids = [centre.id for centre in world.cost_centres]
+    unit_ids = [unit.id for unit in world.business_units]
+    for (kind, period), subjects in sorted(
+        ((key, value) for key, value in stated_by.items()
+         if key[0] == "banking.shared_services_cost"),
+        key=lambda item: item[0][1] or "",
+    ):
+        if company_id not in subjects:
+            continue
+        group_cost = subjects[company_id]
+        incurred = [subjects[c] for c in centre_ids if c in subjects]
+        if incurred:
+            checks += 1
+            if abs(sum(incurred) - group_cost) > RECONCILIATION_TOLERANCE:
+                fail("shared_services_does_not_reconcile", f"{period}/{company_id}",
+                     f"cost centres sum to {sum(incurred):,.2f} but the group states"
+                     f" {group_cost:,.2f}")
+        recharge = stated_by.get(("banking.shared_services_recharge", period), {})
+        carried = [recharge[u] for u in unit_ids if u in recharge]
+        if carried:
+            checks += 1
+            if abs(sum(carried) - group_cost) > RECONCILIATION_TOLERANCE:
+                fail("shared_services_recharge_does_not_reconcile", f"{period}/{company_id}",
+                     f"divisions carry {sum(carried):,.2f} of a shared-services base of"
+                     f" {group_cost:,.2f} — every dollar incurred is recharged to"
+                     " somebody, so the two decompositions state one number")
+
     # -- the third line can read what it audits -----------------------------
     # Audit's independence is charter lore, but its *access* is mechanical:
     # every filing's policy must admit the Audit function without putting
@@ -957,6 +1074,60 @@ _register_kinds([
              generated_by="generators/regulatory.py",
              invariants=("holds-at",),
              about="Who owns the revaluation schedule — 'unassigned' is the control failure."),
+    # The branch network. Every one of these decomposes group → division →
+    # branch by largest remainder, so `sums-to` is the invariant that matters
+    # and check group (h) in `_checks` above is what enforces it, refusing as
+    # `network_does_not_reconcile`. The kind is
+    # its own child kind because the decomposition runs across *subjects* at one
+    # period, exactly as retail's `financial.revenue.actual` does — unlike
+    # `capital.rwa_total`, whose children are a different kind because a book is
+    # not a smaller bank.
+    FactKind(kind="banking.deposits.balance", domain="banking",
+             generated_by="generators/banking_network.py",
+             invariants=("holds-at", "sums-to(banking.deposits.balance)"),
+             about="Customer deposit balances at quarter end. Branches sum to their"
+                   " division and divisions to the group, exactly; a division with no"
+                   " branch network states none."),
+    FactKind(kind="banking.lending.balance", domain="banking",
+             generated_by="generators/banking_network.py",
+             invariants=("holds-at", "sums-to(banking.lending.balance)"),
+             about="Lending balances at quarter end, derived from the quarter's filed"
+                   " RWA at an average risk weight so the book and the capital held"
+                   " against it are one number seen twice."),
+    FactKind(kind="banking.lending.settled", domain="banking",
+             generated_by="generators/banking_network.py",
+             invariants=("holds-at", "sums-to(banking.lending.settled)"),
+             about="New lending settled during the quarter — the flow beside the"
+                   " balance, allocated on the same lending weights."),
+    FactKind(kind="banking.net_operating_income", domain="banking",
+             generated_by="generators/banking_network.py",
+             invariants=("holds-at", "sums-to(banking.net_operating_income)"),
+             about="The quarter's net operating income by division and branch. Every"
+                   " division states one, including those with no estate."),
+    FactKind(kind="banking.network.fte", domain="banking",
+             generated_by="generators/banking_network.py",
+             invariants=("holds-at", "sums-to(banking.network.fte)"),
+             about="Front-line headcount. The one measure a site that trades nothing"
+                   " still carries — an operations centre holds work, not income."),
+    FactKind(kind="banking.loan_to_deposit_pct", domain="banking",
+             generated_by="generators/banking_network.py",
+             invariants=("holds-at",
+                         "reconciles-against(banking.lending.balance,"
+                         " banking.deposits.balance)"),
+             about="Lending over deposits, derived from the rounded amounts it"
+                   " describes. A rate: it is stated at group and division and never"
+                   " summed, because a group ratio is not the total of three."),
+    FactKind(kind="banking.shared_services_cost", domain="banking",
+             generated_by="generators/banking_network.py",
+             invariants=("holds-at", "sums-to(banking.shared_services_cost)"),
+             about="What finance, treasury, risk and the data platform cost, by the"
+                   " cost centre that incurs it. The centres sum to the group figure."),
+    FactKind(kind="banking.shared_services_recharge", domain="banking",
+             generated_by="generators/banking_network.py",
+             invariants=("holds-at", "sums-to(banking.shared_services_cost)"),
+             about="The same total carried by the divisions it is recharged to — a"
+                   " second decomposition of one number across a different set of"
+                   " entities, which is what makes either of them checkable."),
 ])
 
 

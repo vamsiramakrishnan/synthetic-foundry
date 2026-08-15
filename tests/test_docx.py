@@ -402,6 +402,12 @@ def _table_and_chart(kind: ChartKind, *, by_row: bool = False, rows: list[str] |
     return table, chart
 
 
+#: A fixed "written at" stamp for the byte-identity helpers below. Any value
+#: will do; what matters is that it is the *same* value on both renders, so
+#: the comparison is about the renderer rather than about the clock.
+_CREATED = "2026-04-01T07:00:00+00:00"
+
+
 def _rendered_chart(kind: ChartKind, **kwargs):  # type: ignore[no-untyped-def]
     from itertools import count
 
@@ -424,9 +430,21 @@ def _rendered_chart(kind: ChartKind, **kwargs):  # type: ignore[no-untyped-def]
     # duly passed for months and then failed in CI on a slower runner, in the
     # template-derived parts (theme, fonts, settings) that happened to cross
     # the second boundary. `render` applies exactly this call.
+    # And `normalise` alone is not it either, which is the same lesson one level
+    # deeper. Without a *created* stamp it fixes archive entry dates and leaves
+    # every XML timestamp exactly where it was — deliberately, pinned by
+    # `test_ooxml.test_without_a_created_stamp_only_the_archive_entries_are_fixed`.
+    # A chart embeds a data-source workbook that `xlsxwriter` stamps with
+    # `datetime.now(timezone.utc)`, so an un-stamped normalise still leaves a
+    # live clock nested two containers down. Measured on the PPTX sibling of
+    # this helper: two renders 2.2s apart differ by one byte, inside
+    # `ppt/embeddings/Microsoft_Excel_Sheet1.xlsx`, and the test passes or fails
+    # on whether the two saves land in the same second — which is why it only
+    # ever failed under a loaded machine. A determinism test has to pin every
+    # clock, not most of them.
     from worldloom.render import ooxml
 
-    return ooxml.normalise(buffer.getvalue()), table, chart
+    return ooxml.normalise(buffer.getvalue(), created=_CREATED), table, chart
 
 
 @pytest.mark.parametrize("kind", [ChartKind.COLUMN, ChartKind.BAR, ChartKind.LINE, ChartKind.PIE])

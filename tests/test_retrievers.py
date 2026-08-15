@@ -128,13 +128,26 @@ def test_bm25_numbers_are_pinned_exactly(corpus: World) -> None:
     milestone in the question's own words, and a keyword baseline finding it is
     the corpus finally supporting the family, not the benchmark going soft —
     authority, temporal and abstention all still read zero.
+
+    citation_required then moved 8/8 → 7/8 and the totals to 26 of 51 when the
+    month-end model gained its Corporate Cost Base, Shared Services Recharge and
+    Distribution Network tabs (`generators/retail_estate`, closing the cost
+    centres and the zero-weight estate that `validate.reachability` reported as
+    reaching nothing). The case that fell out is EVAL-0028 — "what evidence
+    ruled out the initial explanation" — and nothing about it or the document
+    holding its answer changed: the workbook is one long passage and it got
+    longer, so the RCA passage carrying FACT-0004 ranks sixth instead of fifth.
+    This is the signature-block move again, for the same reason and in the same
+    direction: the corpus got harder for a keyword baseline by getting more like
+    a real archive, and the three families it exists to keep hard are still at
+    zero.
     """
     card = score(corpus)
-    assert card.passed == 27
+    assert card.passed == 26
     assert card.by_type() == {
         EvaluationType.AUTHORITY_RESOLUTION: (0, 6),
         EvaluationType.CAUSAL_MULTI_HOP: (1, 3),
-        EvaluationType.CITATION_REQUIRED: (8, 8),
+        EvaluationType.CITATION_REQUIRED: (7, 8),
         EvaluationType.CROSS_ARTIFACT: (4, 4),
         EvaluationType.DIRECT_LOOKUP: (9, 9),
         EvaluationType.EXPECTED_ABSTENTION: (0, 10),

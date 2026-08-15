@@ -23,6 +23,26 @@ the syllabus:
   the actuary called for*. Similarity between the two documents cannot
   separate "what did the actuary estimate" from "what is booked" — only
   reading which document's own authority answers which question can.
+
+Two more arrived with ``generators/insurance_book.py``, and they are here for a
+measured reason rather than for volume. The four above are one argument about
+one long-tail book, and between them they named **no business unit, no branch,
+no claims centre, no underwriting office, no cost centre and no system** — a
+whole insurer's organisation declared in the archetype, minted into the world,
+and carried by nothing anybody could open:
+
+* the **underwriting performance pack** is the quarter's book on one grid:
+  written premium by unit, by line of business and by office; the policy book
+  behind it; claims handled by claims centre; operating expense by cost centre;
+  and what each system of record actually holds. It is the artifact that makes
+  the estate *reachable* — a fact minted onto a branch that no document carries
+  reproduces, one layer along, the exact defect ``validate.carried_evidence``
+  exists to refuse.
+* the **underwriting result commentary** fans out per business unit, argued and
+  signed by that unit's own managing director. Those MD posts were minted by
+  ``insurance_org._UNIT_ROLES`` for every unit and authored nothing; this is
+  the one document in the vertical that scales with the company rather than
+  with this file, which is what retail's divisional close commentary is for.
 """
 
 from __future__ import annotations
@@ -31,6 +51,7 @@ from datetime import timedelta
 
 from . import documents
 from .documents import SectionPlan
+from .generators.insurance_book import UnderwritingBook
 from .generators.reserving import ReservingEpisode
 from .ids import Minter
 from .models import (
@@ -39,6 +60,8 @@ from .models import (
     ArtifactSection,
     Authority,
     Cell,
+    Chart,
+    ChartKind,
     Column,
     ErrorType,
     FormulaKind,
@@ -64,10 +87,19 @@ MONEY_FORMAT = "#,##0;(#,##0)"
 #: before any committee has seen it, which is the same argument banking's RWA
 #: working paper makes: a signature would raise its authority against the
 #: report it is meant to lose to.
+#:
+#: The **underwriting performance pack** is signed by the CFO: it is the
+#: quarter's book as the ledger states it, and the controller who assembles it
+#: is not the person who answers for it. The per-unit **commentary** is the one
+#: signature in this vertical that a table keyed by type cannot express — each
+#: division's is signed by the CEO its managing director reports to — so it
+#: passes ``role_key`` to ``documents.approver_of`` instead, exactly as retail's
+#: divisional close commentary does.
 _APPROVED_BY: dict[str, str] = {
     "reserve_triangle_workbook": "chief_actuary",
     "actuarial_valuation_report": "cfo",
     "margin_decision_memo": "chief_actuary",
+    "underwriting_performance_pack": "cfo",
 }
 
 
@@ -76,12 +108,21 @@ def artifact_intents(
     *,
     episode: ReservingEpisode,
     roles: dict[str, str],
+    book: UnderwritingBook,
+    units: tuple[tuple[str, str, str], ...],
 ) -> tuple[tuple[ArtifactIntent, ...], tuple[IntentionalError, ...]]:
-    """Plan the four artifacts of one phase-1 valuation, and label its lies.
+    """Plan the artifacts of one phase-1 valuation, and label its lies.
 
     Order is identity: these mint ``ART`` ids, so a new artifact may only
     ever be appended after the fourth — inserting one would renumber
-    everything a checked-in narration cites.
+    everything a checked-in narration cites. The book's own documents are
+    therefore planned in a block at the end, below the fan-out comment, the
+    same discipline ``generators/planning.py`` states for retail's.
+
+    ``units`` is ``(unit_key, unit_id, unit_name)`` per business unit, in the
+    archetype's own order. Passed rather than read off a world because this
+    function has no world: the fan-out has to be stable across a replay, and
+    the archetype's declared order is the only ordering here that is.
     """
     k = episode.keys
     cohort_periods = sorted(
@@ -91,7 +132,8 @@ def artifact_intents(
 
     def intent(artifact_type: str, domain: str, audience: str, author: str,
                facts: list[str], events: list[str], size: str, rationale: str,
-               *, derived_from: list[str] | None = None) -> ArtifactIntent:
+               *, derived_from: list[str] | None = None,
+               approver_role: str | None = None) -> ArtifactIntent:
         made = ArtifactIntent(
             id=minter.next("ART"),
             artifact_type=artifact_type,
@@ -99,7 +141,7 @@ def artifact_intents(
             audience=audience,
             author_id=author,
             approver_id=documents.approver_of(
-                roles, artifact_type, author, _APPROVED_BY
+                roles, artifact_type, author, _APPROVED_BY, role_key=approver_role
             ),
             triggered_by=events,
             required_fact_ids=facts,
@@ -201,6 +243,65 @@ def artifact_intents(
         "difference under the standing combined-ratio target.",
         derived_from=[report.id],
     )
+
+    # ------------------------------------------------------------------
+    # The book block. Appended strictly after everything above, because ART
+    # order is identity: the four intents above are cited by id in checked-in
+    # narration and in the evaluation cases, and an intent inserted before
+    # them would renumber every one. Anything added here in future goes below
+    # this comment, never above it.
+    # ------------------------------------------------------------------
+
+    # 5 — the underwriting performance pack. Every subject the book cut, on one
+    # grid. This is the artifact that makes the estate reachable rather than
+    # merely minted: `validate.carried_evidence`'s dual is a subject that
+    # exists and reaches nothing, and a branch fact carried by no document is
+    # exactly that.
+    pack_facts = book.ids_for(
+        "financial.revenue.budget", "financial.revenue.actual",
+        "financial.revenue.variance", "portfolio.policies_in_force",
+        "claims_ops.notified_count", "claims_ops.settled_count",
+        "expense.operating", "data.records_of_record",
+    )
+    intent(
+        "underwriting_performance_pack", "finance", "all_staff",
+        roles["financial_controller"], pack_facts,
+        [book.keys["event_book_position_recorded"]], "long",
+        "The quarter's book as the ledger states it: written premium by unit, by line "
+        "of business and by office, the policy book behind it, claims handled by "
+        "claims centre, operating expense by cost centre, and what each system of "
+        "record holds.",
+    )
+
+    # 6..n — one commentary per business unit, argued and signed inside the
+    # unit. The fan-out that scales with the company rather than with this
+    # file: widen the archetype to six lines of business and six different
+    # managing directors write six different documents.
+    for unit_key, unit_id, unit_name in units:
+        own = book.ids_for(
+            "financial.revenue.budget", "financial.revenue.actual",
+            "financial.revenue.variance", "portfolio.policies_in_force",
+            "claims_ops.notified_count", "claims_ops.settled_count",
+            subjects=(unit_id,),
+        )
+        if not own:
+            # A unit the book measured nothing for gets no page. Retail's
+            # fan-out skips on the same predicate and for the same reason: a
+            # commentary with no figures in it is a heading.
+            continue
+        author = roles.get(f"{unit_key}_md")
+        if author is None:
+            continue
+        intent(
+            "underwriting_result_commentary", "finance", "all_staff", author,
+            own, [book.keys["event_book_position_recorded"]], "small",
+            "Each division's quarter is argued by the managing director who answers "
+            "for it, not only summed by the centre.",
+            # Signed one level up, by the CEO the MD reports to — the one
+            # approval in this vertical that fans out with the company, which
+            # is why it goes through `role_key` rather than `_APPROVED_BY`.
+            approver_role="ceo",
+        )
 
     # The canonical figure a labelled imperfection cites has to be the fact's
     # own value in the form `validate.intentional`'s `_quantity_matches`
@@ -446,6 +547,338 @@ def reserve_triangle_ir(world, intent: ArtifactIntent, minter: Minter) -> Artifa
     )
 
 
+# ---------------------------------------------------------------------------
+# The underwriting performance pack
+# ---------------------------------------------------------------------------
+
+
+def underwriting_pack_ir(world, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:  # type: ignore[no-untyped-def]
+    """The quarter's book, on the six grids the organisation is cut into.
+
+    Every subtotal is declared as a ``FormulaKind.SUM`` of the rows above it and
+    every variance as a ``DIFFERENCE`` of two columns, so a reader who
+    recalculates the sheet gets the same answer and a renderer that supports
+    formulas emits them rather than pasting values — ``documents.
+    finance_workbook``'s argument, applied to an insurer's cut.
+
+    **No ratio column anywhere.** A loss ratio and an expense ratio are the two
+    numbers an insurance reader would reach for first and both are ratios of
+    totals; a subtotal row summing its children's rates would state a group
+    expense ratio three times any cost centre's. The rule
+    ``columns.not_summable`` and ``documents._RATE_KINDS`` already carry, kept
+    here by not minting the column at all rather than by remembering to mark it.
+    """
+    facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
+    company = world.company
+    money = f"{company.currency} {company.currency_unit}"
+
+    # The pack's *own* facts decide which quarter it reports, never
+    # `world.period`. Reaching for the world's period is the mistake that
+    # rendered the finance workbook with every cell empty and validated clean,
+    # and `reserve_triangle_ir`'s `_latest_of` carries the same warning one
+    # function up: in a locale build the world stands at one period and the
+    # episode reports another.
+    periods = sorted({f.period for f in facts if f.period})
+    period = periods[-1] if periods else (world.period or "")
+
+    held: dict[tuple[str, str], object] = {}
+    for f in facts:
+        if f.period == period:
+            held[(f.kind, f.subject)] = f
+
+    def cell(kind: str, subject: str, **extra) -> Cell:  # type: ignore[no-untyped-def]
+        found = held.get((kind, subject))
+        if found is None:
+            return Cell(value=None)
+        return Cell(value=found.value.amount if found.value else found.text_value,
+                    fact_id=found.id, **extra)
+
+    def has(kind: str, subject: str) -> bool:
+        return (kind, subject) in held
+
+    def money_row(key: str, label: str, subject: str, *, children: list[str] | None = None,
+                  emphasis: bool = False) -> Row:
+        """One premium row: budget, actual, and the variance between them.
+
+        The variance cell is a ``DIFFERENCE`` of this row's own two money
+        columns rather than a second sum of the children, because the facts are
+        built that way — the generator allocates actual and budget separately
+        and states the variance as their difference, so any other declaration
+        here would be a second, disagreeing account of one subtraction.
+        """
+        summing = {} if children is None else {
+            "formula": FormulaKind.SUM, "operands": list(children)
+        }
+        return Row(key=key, label=label, emphasis=emphasis, cells={
+            "budget": cell("financial.revenue.budget", subject, **summing),
+            "actual": cell("financial.revenue.actual", subject, **summing),
+            "variance": cell("financial.revenue.variance", subject,
+                             formula=FormulaKind.DIFFERENCE,
+                             operands=["actual", "budget"]),
+        })
+
+    money_columns = [
+        Column(key="budget", label="Written premium, plan", number_format=MONEY_FORMAT),
+        Column(key="actual", label="Written premium, actual", number_format=MONEY_FORMAT),
+        Column(key="variance", label="Variance", number_format=MONEY_FORMAT),
+    ]
+
+    units = [u for u in world.business_units
+             if has("financial.revenue.actual", u.id)]
+    sections: list[ArtifactSection] = []
+
+    # -- by business unit ---------------------------------------------------
+    if units:
+        rows = [money_row(u.id, u.name, u.id) for u in units]
+        group = money_row(company.id, "Group", company.id,
+                          children=[u.id for u in units], emphasis=True)
+        rows.append(group)
+        # The policy book beside the premium it was written on. Its own operand
+        # list, not the row's: a unit that writes no premium book — an
+        # investment function — has no policies either, and a group cell
+        # declaring it as a child of the sum would name a blank cell as a part
+        # of a total. The `policies` column therefore sums only the units that
+        # state one, while the money columns sum all three.
+        holders = [u for u in units if has("portfolio.policies_in_force", u.id)]
+        for row, unit in zip(rows, units):
+            row.cells["policies"] = cell("portfolio.policies_in_force", unit.id)
+        group.cells["policies"] = cell(
+            "portfolio.policies_in_force", company.id,
+            formula=FormulaKind.SUM, operands=[u.id for u in holders],
+        )
+        sections.append(ArtifactSection(
+            heading="Written premium by business unit",
+            table=Table(
+                key="units", title="Written premium by business unit",
+                columns=[*money_columns,
+                         Column(key="policies", label="Policies in force",
+                                number_format="#,##0")],
+                rows=rows,
+                note=(
+                    f"{company.name} · {period} · {money}. Group is the sum of the "
+                    "business units above. The two underwriting units book gross "
+                    "written premium and Group Investments books investment income, "
+                    "so the group line is total revenue rather than premium — and "
+                    "carries no policy book, which is why that column is short of a "
+                    "row rather than short of a figure."
+                ),
+            ),
+            charts=[Chart(
+                key="unit_premium",
+                title="Written premium against plan by business unit",
+                kind=ChartKind.COLUMN, table="units",
+                series=["budget", "actual"],
+                # The unit rows only. Plotting the group beside them draws the
+                # same money twice — `validate.charts` refuses it outright, and
+                # it would dwarf every other bar even if it did not.
+                rows=[u.id for u in units],
+                category_axis="Business unit", value_axis=money,
+            )],
+        ))
+
+    # -- by line of business ------------------------------------------------
+    line_rows: list[Row] = []
+    subtotals: list[str] = []
+    for unit in units:
+        members = [c for c in world.categories
+                   if c.business_unit_id == unit.id
+                   and has("financial.revenue.actual", c.id)]
+        if not members:
+            continue
+        for line in members:
+            line_rows.append(money_row(line.id, f"{unit.name} · {line.name}", line.id))
+        line_rows.append(money_row(unit.id, f"{unit.name} total", unit.id,
+                                   children=[c.id for c in members], emphasis=True))
+        subtotals.append(unit.id)
+    if line_rows:
+        sections.append(ArtifactSection(
+            heading="Written premium by line of business",
+            table=Table(
+                key="lines", title="Written premium by line of business",
+                columns=money_columns, rows=line_rows,
+                note=(
+                    "Lines sum to their business unit. No group row: Group Investments "
+                    "writes no premium and is not decomposed by book, so a row headed "
+                    "'Group' here would name a total these lines do not reach."
+                ),
+            ),
+        ))
+
+    # -- by underwriting office and branch ----------------------------------
+    office_columns = [
+        Column(key="region", label="Region"),
+        Column(key="format", label="Format"),
+        *money_columns,
+        Column(key="policies", label="Policies in force", number_format="#,##0"),
+    ]
+    blank = {"region": Cell(value=""), "format": Cell(value="")}
+    office_rows: list[Row] = []
+    for unit in units:
+        estate = [s for s in world.sites
+                  if s.business_unit_id == unit.id
+                  and has("financial.revenue.actual", s.id)]
+        if not estate:
+            continue
+        for site in estate:
+            row = money_row(site.id, site.name, site.id)
+            row.cells["region"] = Cell(value=site.region)
+            row.cells["format"] = Cell(value=site.format)
+            row.cells["policies"] = cell("portfolio.policies_in_force", site.id)
+            office_rows.append(row)
+        total = money_row(unit.id, f"{unit.name} total", unit.id,
+                          children=[s.id for s in estate], emphasis=True)
+        total.cells.update(blank)
+        total.cells["policies"] = cell(
+            "portfolio.policies_in_force", unit.id,
+            formula=FormulaKind.SUM, operands=[s.id for s in estate],
+        )
+        office_rows.append(total)
+    if office_rows:
+        sections.append(ArtifactSection(
+            heading="Written premium by office",
+            table=Table(
+                key="offices", title="Written premium by underwriting office",
+                columns=office_columns, rows=office_rows,
+                note=(
+                    "Offices decompose the same unit premium the lines of business do, "
+                    "so both sheets reach the same unit total by different routes. "
+                    "Claims centres process claims and write no premium, so they are "
+                    "not listed here — they have their own sheet below."
+                ),
+            ),
+        ))
+
+    # -- claims handled, by claims centre -----------------------------------
+    claims_columns = [
+        Column(key="notified", label="Claims notified", number_format="#,##0"),
+        Column(key="settled", label="Claims settled", number_format="#,##0"),
+    ]
+
+    def claims_row(key: str, label: str, subject: str, *, children: list[str] | None = None,
+                   emphasis: bool = False) -> Row:
+        summing = {} if children is None else {
+            "formula": FormulaKind.SUM, "operands": list(children)
+        }
+        return Row(key=key, label=label, emphasis=emphasis, cells={
+            "notified": cell("claims_ops.notified_count", subject, **summing),
+            "settled": cell("claims_ops.settled_count", subject, **summing),
+        })
+
+    claims_rows: list[Row] = []
+    handling_units = [u for u in world.business_units
+                      if has("claims_ops.notified_count", u.id)]
+    for unit in handling_units:
+        centres = [s for s in world.sites
+                   if s.business_unit_id == unit.id
+                   and has("claims_ops.notified_count", s.id)]
+        for centre in centres:
+            claims_rows.append(claims_row(centre.id, centre.name, centre.id))
+        claims_rows.append(claims_row(
+            unit.id, f"{unit.name} total", unit.id,
+            children=[c.id for c in centres] or None, emphasis=True,
+        ))
+    if claims_rows:
+        claims_rows.append(claims_row(
+            company.id, "Group", company.id,
+            children=[u.id for u in handling_units], emphasis=True,
+        ))
+        sections.append(ArtifactSection(
+            heading="Claims handled by claims centre",
+            table=Table(
+                key="claims", title="Claims notified and settled",
+                columns=claims_columns, rows=claims_rows,
+                note=(
+                    "Operational counts for the quarter, not reserves: what the claims "
+                    "function opened and closed. What those claims will ultimately cost "
+                    "is cut by accident cohort in the reserve triangle workbook and is "
+                    "deliberately not cut by site — a claim belongs to the quarter it "
+                    "happened in, not to the office that logged it. A unit with no "
+                    "dedicated claims centre states its total and no breakdown."
+                ),
+            ),
+        ))
+
+    # -- operating expense, by cost centre ----------------------------------
+    centres = [c for c in world.cost_centres if has("expense.operating", c.id)]
+    if centres:
+        expense_rows = [
+            Row(key=c.id, label=c.name,
+                cells={"amount": cell("expense.operating", c.id)})
+            for c in centres
+        ]
+        expense_rows.append(Row(
+            key=company.id, label="Group operating expense", emphasis=True,
+            cells={"amount": cell("expense.operating", company.id,
+                                  formula=FormulaKind.SUM,
+                                  operands=[c.id for c in centres])},
+        ))
+        sections.append(ArtifactSection(
+            heading="Operating expense by cost centre",
+            table=Table(
+                key="expense", title="Operating expense by cost centre",
+                columns=[Column(key="amount", label=f"Amount ({money})",
+                                number_format=MONEY_FORMAT)],
+                rows=expense_rows,
+                note=(
+                    "Cost centres sum to the group. The expense ratio this implies is "
+                    "left to the reader to divide: a ratio of totals is never the total "
+                    "of ratios, so a rate column here would give the group a figure no "
+                    "cost centre recognises."
+                ),
+            ),
+        ))
+
+    # -- what each system of record holds -----------------------------------
+    of_record = [s for s in world.systems if has("data.records_of_record", s.id)]
+    if of_record:
+        sections.append(ArtifactSection(
+            heading="Systems of record",
+            table=Table(
+                key="systems", title="Records held by system of record",
+                columns=[
+                    Column(key="records_for", label="System of record for"),
+                    Column(key="records", label="Records held", number_format="#,##0"),
+                ],
+                rows=[
+                    Row(key=s.id, label=s.name, cells={
+                        "records_for": Cell(value=", ".join(s.is_system_of_record_for)),
+                        "records": cell("data.records_of_record", s.id),
+                    })
+                    for s in of_record
+                ],
+                note=(
+                    "No total: five systems of record for five different things do not "
+                    "add up to a number anybody would report. `System."
+                    "is_system_of_record_for` is what each row is counting."
+                ),
+            ),
+        ))
+
+    author = world.people.by_id(intent.author_id)
+    persona = world.personas.get(author.persona_id) if author.persona_id else None
+    return ArtifactIR(
+        id=intent.id,
+        intent_id=intent.id,
+        title=f"{company.name} — Underwriting Performance Pack",
+        subtitle=f"{period} · {money}",
+        sections=sections,
+        metadata={
+            "worldloom_synthetic": "true",
+            "worldloom_seed": str(world.seed),
+            "worldloom_period": period,
+            "worldloom_created": documents.written_at(
+                intent, {f.id: f for f in facts}
+            ).isoformat(),
+            "company": company.name,
+            "author": author.name,
+            "author_title": author.title,
+            "persona": persona.label if persona else "",
+            "voice": persona.voice if persona else "",
+            "note": "Synthetic corpus generated by Worldloom. Not a real company or insurer.",
+        },
+    )
+
+
 def _earliest(facts, kind: str, period: str | None):  # type: ignore[no-untyped-def]
     found = sorted((f for f in facts if f.kind == kind and f.period == period), key=lambda f: f.valid_from)
     return found[0] if found else None
@@ -474,12 +907,13 @@ def _latest_of(facts, kind: str):  # type: ignore[no-untyped-def]
 
 from .render import docx as _docx, markdown as _markdown, xlsx as _xlsx  # noqa: E402
 
-_xlsx.register("reserve_triangle_workbook")
-_markdown.own_elsewhere("reserve_triangle_workbook")
+_xlsx.register("reserve_triangle_workbook", "underwriting_performance_pack")
+_markdown.own_elsewhere("reserve_triangle_workbook", "underwriting_performance_pack")
 _docx.register(
     "claims_emergence_note",
     "actuarial_valuation_report",
     "margin_decision_memo",
+    "underwriting_result_commentary",
 )
 
 documents.register_artifact_types(
@@ -488,12 +922,22 @@ documents.register_artifact_types(
         "claims_emergence_note": (Authority.WORKING_DOCUMENT, Lifecycle.DRAFT),
         "actuarial_valuation_report": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
         "margin_decision_memo": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
+        # The pack is the ledger's own statement of the quarter's book, so it
+        # is SYSTEM_OF_RECORD beside the triangle. The commentary is an
+        # approved report *about* the pack, one authority below it: when a
+        # managing director's page and the pack disagree, the pack wins.
+        "underwriting_performance_pack": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
+        "underwriting_result_commentary": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
     },
     lags={
         "reserve_triangle_workbook": timedelta(hours=1),
         "claims_emergence_note": timedelta(hours=4),
         "actuarial_valuation_report": timedelta(days=1),
         "margin_decision_memo": timedelta(days=1, hours=6),
+        "underwriting_performance_pack": timedelta(hours=2),
+        # After the pack it argues from, and by more than the pack's own lag,
+        # so a commentary can never be dated before the grid it reads.
+        "underwriting_result_commentary": timedelta(days=1, hours=2),
     },
     outlines={
         "claims_emergence_note": (
@@ -530,6 +974,36 @@ documents.register_artifact_types(
                 "Basis of valuation", ("reserves.philosophy", "reserves.risk_margin_policy_pct"), "any",
                 "One paragraph: the standing margin policy this valuation was performed "
                 "under.",
+                # The standing policy, restated. It is the same paragraph in
+                # every valuation this actuary signs, and its absence reads as a
+                # report that assumed its reader knows the house philosophy —
+                # not as a report missing a figure. The central estimate, the
+                # attribution and the booked position stay required; they are
+                # what the committee is measured against.
+                required=False,
+            ),
+        ),
+        "underwriting_result_commentary": (
+            SectionPlan(
+                "The quarter against plan", ("financial.revenue.",), "unit",
+                "State this division's written premium against its own plan and say "
+                "plainly whether the quarter was acceptable. Lead with the position, "
+                "not with the first figure in the list — the reader runs the division "
+                "and already knows its shape.",
+            ),
+            SectionPlan(
+                "The book and the claims behind it",
+                ("portfolio.policies_in_force", "claims_ops."), "unit",
+                "Connect the policy book to the claims coming off it: whether the "
+                "division is writing more business, and whether its claims function is "
+                "closing what it opens. Not every division has a claims operation of "
+                "its own; do not invent one for a division whose figures are absent.",
+                # An investment function has no policy book and notifies no
+                # claims, and a division that genuinely has neither should not
+                # carry an empty heading. `outline` drops a section with no
+                # facts assigned; marking it optional is what says that is
+                # intended rather than a section somebody lost.
+                required=False,
             ),
         ),
         "margin_decision_memo": (
@@ -553,5 +1027,8 @@ documents.register_artifact_types(
             ),
         ),
     },
-    compilers={"reserve_triangle_workbook": reserve_triangle_ir},
+    compilers={
+        "reserve_triangle_workbook": reserve_triangle_ir,
+        "underwriting_performance_pack": underwriting_pack_ir,
+    },
 )

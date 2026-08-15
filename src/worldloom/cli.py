@@ -155,17 +155,33 @@ def _print_report(report: ValidationReport, *, quiet: bool = False) -> bool:
     printed — it has to catch the corpus errors reconstructing a corpus's own
     pack can raise, and a helper that validates and prints in one breath gives
     it nowhere to stand. Every other caller still hands over a world.
+
+    Advisories print on both paths and change neither the return value nor the
+    exit code. `validate` owns pass/fail, and this is the posture `topology`
+    already takes one layer up — it prints the cycles it finds and exits zero.
+    What is different, and the reason this is here rather than behind a command
+    of its own, is that somebody who builds a company should be told its estate
+    is decorative without having to know a check for that exists.
     """
     if report.ok:
         if not quiet:
             console.print(f"[green]✓[/green] coherent — {report.checks_run} checks passed")
-        return True
-    err.print(f"[red]✗[/red] {len(report.violations)} violation(s) across {report.checks_run} checks")
-    for group, items in sorted(report.by_group().items()):
-        err.print(f"\n[bold]{group}[/bold]")
-        for violation in items:
-            err.print(f"  [yellow]{violation.code}[/yellow] {violation.subject}: {violation.detail}")
-    return False
+    else:
+        err.print(f"[red]✗[/red] {len(report.violations)} violation(s) across {report.checks_run} checks")
+        for group, items in sorted(report.by_group().items()):
+            err.print(f"\n[bold]{group}[/bold]")
+            for violation in items:
+                err.print(f"  [yellow]{violation.code}[/yellow] {violation.subject}: {violation.detail}")
+    if report.advisories and not quiet:
+        console.print(
+            f"\n[bold]organisation[/bold] — {len(report.advisories)} reading(s),"
+            " not counted against coherence"
+        )
+        for advisory in report.advisories:
+            console.print(
+                f"  [yellow]{advisory.code}[/yellow] {advisory.subject}: {advisory.detail}"
+            )
+    return report.ok
 
 
 def _report(world: World, *, quiet: bool = False) -> bool:
@@ -217,6 +233,49 @@ def build(
             "values are identical either way, and each period's storyline is "
             "recorded on its recipe step so --replay reproduces it. Off (the "
             "default) rebuilds every existing corpus byte for byte."
+        ),
+    ),
+    section_omission: int = typer.Option(
+        0, "--section-omission", min=0, max=1000,
+        help=(
+            "Per-mille chance that any one *optional* section is left out of any "
+            "one document, so a type emits a subset of its outline rather than "
+            "all of it every time. This is swarm testing applied to documents: "
+            "sections compete for a reader's attention exactly as test features "
+            "compete for room, and a corpus whose every close pack carries the "
+            "same five headings teaches a retriever the headings. Sections are "
+            "required unless a type says otherwise, so 0 — the default — and an "
+            "un-annotated corpus are both byte-identical to before."
+        ),
+    ),
+    outline_floor: int = typer.Option(
+        1, "--outline-floor", min=1,
+        help=(
+            "The fewest sections a document may end up with. Omission restores "
+            "sections in the order their author wrote them until this is met."
+        ),
+    ),
+    outline_synthesis: int = typer.Option(
+        0, "--outline-synthesis", min=0, max=1000,
+        help=(
+            "Per-mille chance that any one document's outline is *synthesised* — "
+            "a shape drawn from what this company's own document types have in "
+            "common, rather than the one its type was authored with. "
+            "Recombination, never inflation: a synthesised outline must carry at "
+            "least what the authored one carries, in no more sections, arguing "
+            "the document the way its type argues it, and falls back to the "
+            "authored outline when no draw does. Measured at 1000 on a "
+            "six-period retail build: 89% of documents synthesised, 40 distinct "
+            "shapes becoming 62. 0 — the default — is byte-identical to before."
+        ),
+    ),
+    variant_bias: int = typer.Option(
+        0, "--variant-bias", min=0,
+        help=(
+            "Rotate which authored outline variant each document gets. Two "
+            "tenants built from one engine with different biases disagree about "
+            "every document's shape, which is most of what stops a mosaic "
+            "sharing one shape vocabulary."
         ),
     ),
     employees: int = typer.Option(None, "--employees", help="Override the archetype's stated headcount."),
@@ -858,7 +917,44 @@ def build(
 
     # Estate: an explicit `--estate` beats a facet's, because the caller said it
     # and the facet only implied it. Same rule the SDK's `.facets()` states.
+    said_it = estate is not None
     estate = estate if estate is not None else facet_estate
+
+    # Refused here, before the world is built, and naming where the estate came
+    # from. `landscape.LANDSCAPES` is a registry this file can read at plan
+    # time, so a vertical with no landscape vocabulary is knowable before any
+    # work happens — the same shape as reading `Domain.max_periods` for
+    # `--periods`.
+    #
+    # It mattered most for the estate nobody asked for. Three facet values imply
+    # `estate=large` — `maturity=legacy`, `scale=enterprise`,
+    # `scale=multinational`, one of which appears in AGENTS.md's own example —
+    # and on procurement that reached `ProcureToPayWorld.build` and died with an
+    # unhandled `ValueError` whose remediation was "build without `--estate`", a
+    # flag the caller had not typed. Every other vertical-inapplicable flag on
+    # this branch prints a clean `error:` line; this one printed a stack.
+    from . import landscape
+
+    if estate is not None and domain is not None and domain.name not in landscape.LANDSCAPES:
+        source = (
+            "--estate" if said_it
+            else "--spec" if resolution is not None
+            else "a facet"
+        )
+        err.print(
+            f"[red]error:[/red] {source} asks for an estate and the"
+            f" {domain.name} vertical has no landscape vocabulary — only"
+            f" {', '.join(sorted(landscape.LANDSCAPES))} name one. A"
+            f" {domain.name} landscape built from another vertical's words"
+            " would be worse than none, so this refuses rather than borrows."
+            + (
+                ""
+                if said_it
+                else f" Nothing named an estate directly: it is implied by the"
+                " facets this build resolved."
+            )
+        )
+        raise typer.Exit(code=2)
 
     physics_value = _DEFAULT_PHYSICS
     overrides: dict[str, Any] = dict(facet_overrides)
@@ -1035,6 +1131,30 @@ def build(
             return built
         return built.extend(recipe=with_locale(built.recipe, locale))
 
+    def _shaped(built: Any) -> Any:
+        """*built* with its structural genome recorded on its recipe.
+
+        Applied to the world rather than passed through the spec so that a
+        domain registered outside this repository — which has no reason to know
+        what a structural genome is — still gets one. The recipe is where the
+        document compiler reads it from and where replay reads it back, so this
+        one line is the whole threading.
+
+        A strict no-op on the default path: `with_structure` declines to write
+        the key for a classic genome, so an unflagged build produces the recipe
+        it always did, byte for byte.
+        """
+        from .recipe import with_structure
+        from .structure import StructuralGenome
+
+        genome = StructuralGenome(
+            omission=section_omission, floor=outline_floor, variant_bias=variant_bias,
+            synthesis=outline_synthesis,
+        )
+        if not genome.varies:
+            return built
+        return built.extend(recipe=with_structure(built.recipe, genome))
+
     def _under_physics(spec: Any) -> Any:
         """*spec* rebound to the requested physics, untouched on the default path.
 
@@ -1055,6 +1175,37 @@ def build(
             )
             raise typer.Exit(code=2) from exc
 
+    def _rounds(world: World, stamp: str) -> World:
+        """The engine-neutral steps that run in *stamp*, after its episode.
+
+        Hiring, performance reviews and authored episodes. All three are strict
+        no-ops when unasked, and each runs *after* whatever episode the period
+        already ran, so a corpus built without them keeps every id it had and
+        one built with them only ever gains ids at the end of a period.
+
+        **One function because three copies is how this broke.** This block
+        lived only inside the plain retail loop, so `--hiring`, `--reviews` and
+        `--episode` were accepted and silently discarded on banking, insurance
+        and procurement, and on every `--timeline` build — producing a
+        byte-identical corpus with no warning, while five neighbouring flags on
+        the same command refused with a stated reason. Measured, the rounds work
+        on all three verticals and validate clean: banking goes from 12 artifact
+        intents to 29 and 744 facts to 784. Nothing was missing but the call.
+        """
+        if hiring > 0:
+            from .workforce import HiringRound
+
+            world = world.run(HiringRound(period=stamp, count=hiring))
+        if reviews > 0:
+            from .workforce import PerformanceCycle
+
+            world = world.run(PerformanceCycle(period=stamp, pairs=reviews))
+        for episode_name in episode or []:
+            from .episodes import AuthoredEpisode
+
+            world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
+        return world
+
     if single_episode is not None:
         refused = [
             flag for flag, given in (
@@ -1066,6 +1217,14 @@ def build(
                 # for a corpus that gained nothing.
                 ("--conversations", conversations),
                 ("--incident/--no-incident", incident is not None),
+                # Beside `--incident` because it is that flag's companion: it
+                # rotates the storyline of the incident `--incident` schedules,
+                # and a vertical that takes no incident has no storyline to
+                # rotate. It was accepted and silently ignored here while its
+                # own companion one line up was refused with a reason, which is
+                # the inconsistency rather than the harm — nothing was lost, but
+                # a caller had no way to learn the flag did nothing.
+                ("--vary-incidents", vary_incidents),
                 ("--comparatives", comparatives > 0),
                 # Same reasoning as its neighbour: the trend shapes retail's
                 # comparative history, and a single-episode vertical has none.
@@ -1109,11 +1268,15 @@ def build(
                 # outside this repository, which may have no such field, keeps
                 # building exactly as it did.
                 **({} if annual_revenue is None else {"annual_revenue": annual_revenue}),
-                # Every vertical has its own landscape vocabulary now
-                # (`worldloom.landscape`), so this is no longer refused. It was
-                # refused rather than mis-served for as long as the only pools
-                # were retail's: a bank whose landscape is called
-                # `click-collect-api` is worse than a bank with no landscape.
+                # Reaches here only for a vertical that names a landscape —
+                # `landscape.LANDSCAPES` is checked at plan time, above, where a
+                # vertical without one is refused with the source of the estate
+                # named. This comment used to claim every vertical had its own
+                # vocabulary "now", which was three of four: procurement has
+                # none, and the claim is what let a facet-implied estate reach
+                # `ProcureToPayWorld.build` and raise. The original reasoning
+                # still holds for the three that do — a bank whose landscape is
+                # called `click-collect-api` is worse than a bank with none.
                 **({} if estate is None else {"estate": estate}),
                 # Conditional for `estate`'s reason one line up: a domain
                 # registered outside this repository may have no such field,
@@ -1123,7 +1286,7 @@ def build(
                    else {"policies": policies or resolution.policies}),
             )
         ))
-        world = _localised_recipe(_localised(builder).build())
+        world = _shaped(_localised_recipe(_localised(builder).build()))
         # The built-in runs unless an authored episode declared itself its
         # stand-in. Announced rather than silent: a skipped episode is a
         # different corpus, and the one thing worse than the collision is a
@@ -1136,14 +1299,41 @@ def build(
                 f"[dim]episode:[/dim] {', '.join(standing_in)} stands in for"
                 f" {built_in_name}, which is not run\n"
             )
+        # Refused here, before a single episode runs, because the engine's own
+        # refusal arrives too late to be one. `QuarterlyReserving` raises on its
+        # second consecutive run — correctly, phase 2 is not implemented — but
+        # by then the world is built and the traceback reaches the terminal raw,
+        # so `--periods 3` against the insurer printed a `ValueError` and no
+        # corpus. The cap is already declared on the domain for the sweep's
+        # benefit (`tools/sweep.py` clamps its periods axis by it), and reading
+        # the same declaration here is what makes it a stated limit rather than
+        # two places that happen to agree.
+        #
+        # `max_periods=None` means uncapped, which is the honest default: a
+        # domain that has not measured its own limit should not assert one, and
+        # banking and procurement both run at 3 and 12.
+        #
+        # Skipped when something stands in for the built-in, and that is not a
+        # loophole — it is what the cap actually means. `max_periods` is a
+        # statement about *this engine's own episode*: `QuarterlyReserving`
+        # implements phase 1 and cannot run twice. An authored `--episode` that
+        # replaces it is a different grammar with its own limits, and the
+        # shipped one runs four consecutive valuation quarters. Capping by
+        # vertical rather than by the episode being run refused that build,
+        # which is how this was found.
+        cap = domain.max_periods
+        if cap is not None and periods > cap and not standing_in:
+            err.print(
+                f"[red]error:[/red] {domain.name} builds at most {cap} period(s)"
+                f" per corpus, and --periods {periods} was asked for. Build one"
+                " at a time, or use a vertical whose episode carries a history."
+            )
+            raise typer.Exit(code=2)
         for index in range(max(1, periods)):
             stamp = _step_period(period, index, domain.period_step_months)
             if not standing_in:
                 world = world.run(_under_physics(single_episode(stamp)))
-            for episode_name in episode or []:
-                from .episodes import AuthoredEpisode
-
-                world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
+            world = _rounds(world, stamp)
     else:
         builder = _under_physics(
             RetailWorld.from_pack(pack_obj, seed=seed)
@@ -1182,7 +1372,7 @@ def build(
             carried_year = getattr(builder, "seasonality", None)
             if carried_year is not None:
                 claimed_calendar.append(carried_year)
-        world = _localised_recipe(_localised(builder).build())
+        world = _shaped(_localised_recipe(_localised(builder).build()))
 
     workforce = None
     workforce_path: tuple[int, ...] | None = None
@@ -1453,31 +1643,22 @@ def build(
         except timeline_module.TimelineError as exc:
             err.print(f"[red]error:[/red] {escape(str(exc))}")
             raise typer.Exit(code=2) from exc
+        # After the whole history rather than interleaved into it, which is the
+        # one place these rounds do not sit inside their own period's loop. The
+        # sampler owns the schedule — it decides which months hold an incident,
+        # a departure or a reorganisation — and reaching into it to run a hiring
+        # round mid-history would make this command a second author of a
+        # timeline that already has one. Appending per period afterwards keeps
+        # the schedule's own ART sequence untouched, which is the same
+        # id-stability rule `_rounds` follows everywhere else.
+        for stamp in stamps:
+            world = _rounds(world, stamp)
     else:
         for index in range(max(1, periods) if single_episode is None else 0):
             stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
             try:
                 world = world.run(_close(stamp, incident, index))
-                # After the close, so the ART sequence a close mints is
-                # untouched: a corpus built without these rounds keeps every id
-                # it had, and one built with them only ever gains ids at the
-                # end of each period. Both are strict no-ops at zero.
-                if hiring > 0:
-                    from .workforce import HiringRound
-
-                    world = world.run(HiringRound(period=stamp, count=hiring))
-                if reviews > 0:
-                    from .workforce import PerformanceCycle
-
-                    world = world.run(PerformanceCycle(period=stamp, pairs=reviews))
-                # Authored processes run after the engine's own steps for the
-                # id-stability reason the workforce rounds do: a corpus built
-                # without `--episode` keeps every id it had, and one built with
-                # it only ever gains ids at the end of each period.
-                for episode_name in episode or []:
-                    from .episodes import AuthoredEpisode
-
-                    world = world.run(AuthoredEpisode(episode=episode_name, period=stamp))
+                world = _rounds(world, stamp)
                 if (
                     workforce_path is not None
                     and index + 1 < len(workforce_path)
@@ -1545,15 +1726,50 @@ def build(
     if messiness is not None:
         from .messiness import Imperfections
 
+        from .generators.distractors import messiness_ceilings
+        from .messiness import from_document as _messiness_profile
+
         before = len(world.artifact_intents)
+        # Measured before the pass runs: it spends what it finds, so the ceiling
+        # is a property of the world it was handed.
+        ceilings = messiness_ceilings(world)
+        asked = _messiness_profile(messiness)
         world = world.run(Imperfections(profile=messiness))
+        delivered = len(world.intentional_errors)
+        wanted = sum(asked[kind] for kind in ceilings)
         console.print(
             f"[dim]messiness:[/dim] {messiness} —"
             f" {len(world.artifact_intents) - before} document(s) added,"
-            f" {len(world.intentional_errors)} recorded imperfection(s) in total\n"
+            f" {delivered} of {wanted} imperfection(s) delivered\n"
         )
+        # A shortfall is stated, with the reason, and it is the whole point of
+        # this block. "Budget, not quota" is the documented contract and it is
+        # correct — this pass may never invent a figure to be wrong about — but
+        # a 0-of-17 delivery reported as success is a corpus that is not what
+        # was asked for and says nothing about it. On a default retail build
+        # that is exactly what happened.
+        short = {
+            kind: (asked[kind], ceilings[kind])
+            for kind in sorted(ceilings)
+            if asked[kind] > ceilings[kind]
+        }
+        if short:
+            reasons = {
+                "staleness": "needs a corrected figure some document cites",
+                "disagreement": "needs a correction whose old and new figures are"
+                                " both carried",
+                "orphaning": "needs an author who has left, which only a departure"
+                             " produces — build with --timeline or --periods > 1",
+            }
+            for kind, (want, ceiling) in short.items():
+                console.print(
+                    f"[yellow]unmet:[/yellow] {kind} — asked for {want}, this"
+                    f" world supports at most {ceiling}: it {reasons[kind]}"
+                )
+            console.print()
 
     if narrate or replay is not None:
+        from . import recipe as recipe_module
         from .narrative import DeterministicProvider, ProviderError, UnreachableProvider
 
         ledger = ()
@@ -1563,6 +1779,52 @@ def build(
             ledger = source._ledger
             if not ledger:
                 err.print(f"[red]error:[/red] {replay} carries no generation ledger to replay")
+                raise typer.Exit(code=2)
+            # The world being narrated must be the world the ledger was recorded
+            # for, and this says so up front instead of letting it emerge.
+            #
+            # `--replay` does not rebuild the world — it replays prose into
+            # whatever the other flags built — so `worldloom build --replay
+            # <a-banking-corpus>` with no `--archetype` narrates the *default
+            # retail* world from a bank's ledger. Every key misses, and the
+            # failure surfaces from inside `narrate` as "no ledger entry for
+            # ART-0001/Commitment", which names an artifact the user never
+            # asked for and says nothing about the mistake they actually made.
+            #
+            # Recipes rather than archetype-and-seed, because the ways to build
+            # the wrong world are not enumerable: `--periods`, `--messiness`,
+            # `--distractors` and `--facet` all change what there is to narrate.
+            # And a divergence that leaves the *sections* intact is the worse
+            # one, not the milder — replaying under a different `--annual-
+            # revenue` would succeed and file prose quoting last world's figures
+            # beside this world's tables, which is the cross-format defect this
+            # repository has already paid for once.
+            #
+            # `presentation` is excluded because a profile decides who a
+            # document is for and nothing about the world; `worldloom render`
+            # writes one onto an existing corpus, so a corpus rendered after it
+            # was narrated would otherwise refuse to replay itself.
+            def _world_only(document: dict[str, Any]) -> dict[str, Any]:
+                return {
+                    key: value
+                    for key, value in document.items()
+                    if key != recipe_module.PRESENTATION_KEY
+                }
+
+            here, there = _world_only(world.recipe), _world_only(source.recipe)
+            if here != there:
+                differs = sorted(
+                    key for key in set(here) | set(there)
+                    if here.get(key) != there.get(key)
+                )
+                err.print(
+                    f"[red]error:[/red] {replay} recorded a different world;"
+                    f" its recipe and this build's disagree on"
+                    f" {', '.join(differs)}. A replay reproduces a corpus, so"
+                    " the flags that built it have to be the flags that build"
+                    f" this one; {replay}/world.json records the recipe it was"
+                    " built from."
+                )
                 raise typer.Exit(code=2)
             # Unreachable on purpose: a replay that quietly falls back to
             # generating would not be a replay. Its id comes from what the
@@ -3070,6 +3332,13 @@ def validate(
                 {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
                 for v in report.violations
             ],
+            # Beside `violations` rather than merged into it, for the reason the
+            # channel exists: a caller filtering on `violations` is asking what
+            # makes this corpus incoherent, and an advisory is not that.
+            "advisories": [
+                {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
+                for v in report.advisories
+            ],
         }, indent=2))
         if not report.ok:
             raise typer.Exit(code=1)
@@ -3350,6 +3619,16 @@ def diversity(
             "same sentences."
         ),
     ),
+    effective: bool = typer.Option(
+        False, "--effective",
+        help=(
+            "Also report the Vendi score — the *effective* number of distinct "
+            "shapes, which is what a count of distinct shapes overstates. Thirty "
+            "shapes that differ by one section each are closer to four documents "
+            "than to thirty, and only a metric that reads the similarity matrix "
+            "rather than counting equality classes can say so."
+        ),
+    ),
 ) -> None:
     """Fingerprint every compilable artifact and report how structurally varied the batch is.
 
@@ -3412,6 +3691,61 @@ def diversity(
     else:
         batch = report(fingerprints)
         console.print(str(batch))
+
+        if effective:
+            # The count and the effective count are two different readings of
+            # one batch, and the gap between them is the finding.
+            #
+            # `1 - compiler.diversity.distance` is the obvious kernel here and
+            # it is wrong. That blend is a metric in [0, 1], which buys symmetry
+            # and a unit diagonal but *not* positive semi-definiteness — and
+            # `vendi` reads the eigenvalues as a probability distribution, so a
+            # negative one makes the score meaningless rather than imprecise.
+            # Measured on fingerprints shaped the way `stats.census` actually
+            # produces them (empty `layouts`, empty `style_key`, so the
+            # Levenshtein term carries most of the blend): 11 of 400 random
+            # single-type batches and 13 of 400 three-type batches are not PSD,
+            # worst eigenvalue -0.003. It passes on most corpora and raises on
+            # about three in a hundred, which is the worst way for a reading to
+            # be wrong.
+            #
+            # Jaccard over sets *is* PSD by construction, so the kernel is a
+            # feature set instead: the artifact type, the density bucket, the
+            # section count, and the adjacent component pairs. Bigrams for the
+            # reason `compiler.diversity` already gives for `_NGRAM_SIZE = 2` —
+            # the smallest window that sees adjacency — and the three scalar
+            # features so the set is never empty, which would make Jaccard 0/0
+            # for a fingerprint whose composition resolved to nothing.
+            from .vendi import vendi_of
+
+            def features(fp: Fingerprint) -> frozenset[tuple[str, ...]]:
+                pairs = zip(fp.components, fp.components[1:], strict=False)
+                return frozenset(
+                    {
+                        ("type", fp.artifact_type),
+                        ("density", fp.density_bucket),
+                        ("sections", str(fp.section_count)),
+                    }
+                    | {("bigram", a, b) for a, b in pairs}
+                )
+
+            sets = [features(fp) for fp in fingerprints]
+
+            def jaccard(a: frozenset[Any], b: frozenset[Any]) -> float:
+                union = len(a | b)
+                return 1.0 if not union else len(a & b) / union
+
+            score = vendi_of(sets, jaccard)
+            distinct = len({fp.digest() for fp in fingerprints})
+            console.print(
+                f"\neffective shapes: [bold]{score:.1f}[/bold] of {distinct} distinct"
+                f" over {len(fingerprints)} artifacts"
+            )
+            if distinct > 1:
+                console.print(
+                    f"[dim]  {score / distinct:.0%} of the distinct count survives"
+                    " being read as a similarity rather than an equality[/dim]"
+                )
 
         if verbose:
             # `DiversityReport.__str__` already gives a distinct-shape *count* per
@@ -4782,7 +5116,21 @@ def docs(
     current = generator.reference()
 
     if check:
-        existing = target.read_text() if target.exists() else ""
+        # Absent and out-of-date are different findings, and the remedy for one
+        # of them is not `worldloom docs`. `REFERENCE_PATH` is relative to the
+        # working directory, so running this from anywhere but a checkout found
+        # no file, compared against `""`, and reported a file that does not
+        # exist as *stale* — sending the reader to a command that would write a
+        # reference into whatever directory they happened to be standing in.
+        if not target.exists():
+            console.print(
+                f"[red]✗[/red] {target} does not exist. This path is relative to"
+                " the working directory; `--check` compares a checked-in"
+                " reference against this CLI, so run it from the repository"
+                " root."
+            )
+            raise typer.Exit(code=1)
+        existing = target.read_text()
         if existing == current:
             console.print(f"[green]✓[/green] {target} is current")
             return
@@ -4905,6 +5253,110 @@ def present_lint(
     for knob, value in sorted(profile.__dict__.items()):
         if knob not in ("name", "overrides"):
             console.print(f"    {knob:12} {value}")
+
+
+@app.command()
+def spaces(
+    strength: int = typer.Option(
+        2, "--strength", "-t", min=1,
+        help="Interaction strength. t=2 covers every pair of axis values, t=3"
+             " every triple. The row count grows with the product of the t"
+             " widest axes, not with the whole space.",
+    ),
+    cover_plan: bool = typer.Option(
+        False, "--cover",
+        help="Emit the planned fleet — one JSON object per line, one per"
+             " configuration — instead of describing the space. Builds nothing.",
+    ),
+    against: Path = typer.Option(
+        None, "--holes",
+        help="A fleet, as the JSON-lines this command's --cover emits. Reports"
+             " what that fleet never covered rather than what a plan would.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
+) -> None:
+    """The build-configuration space: what a fleet could vary, and what one did.
+
+    `mosaic` and `tools/sweep.py` both choose configurations, and neither can
+    say what it failed to reach — a sampler has no denominator. This does:
+    every axis `worldloom build` actually accepts, the exhaustive product, and
+    a covering array that reaches every t-way combination in a number of rows
+    that grows with the widest axes rather than with the space.
+
+    Read `spaces.py` for why a covering array is a different guarantee from
+    `dispersion.halton`'s spread: Halton fills a continuous cube evenly and can
+    still never once pair a bank with three periods.
+    """
+    import json as _json
+
+    from . import spaces as spaces_module
+
+    space = spaces_module.build_space()
+
+    if against is not None:
+        rows = [
+            _json.loads(line)
+            for line in Path(against).read_text().splitlines()
+            if line.strip()
+        ]
+        got = spaces_module.coverage(space, rows, strength=strength)
+        missing = spaces_module.holes(space, rows, strength=strength)
+        never = spaces_module.unvaried(space, rows)
+        if as_json:
+            console.print_json(data={
+                "configurations": len(rows),
+                "strength": strength,
+                "coverage": got,
+                "combinations": space.size_at(strength),
+                "holes": [list(map(list, hole)) for hole in missing],
+                "unvaried_axes": list(never),
+            })
+            return
+        console.print(
+            f"{len(rows)} configuration(s) cover [bold]{got:.1%}[/bold] of"
+            f" {space.size_at(strength)} {strength}-way combinations"
+        )
+        if never:
+            # Printed before the holes, because it is their cause. A fleet that
+            # never varied five axes has hundreds of holes with one explanation,
+            # and listing them without this reads as a hundred separate failures.
+            console.print(
+                f"[yellow]![/yellow] never varied at all: {', '.join(never)}"
+            )
+        for hole in missing[:20]:
+            console.print("  " + ", ".join(f"{name}={value}" for name, value in hole))
+        if len(missing) > 20:
+            console.print(f"  [dim]+{len(missing) - 20} more[/dim]")
+        return
+
+    if cover_plan:
+        for row in spaces_module.cover(space, strength=strength):
+            # One object per line rather than one array, so a fleet runner can
+            # stream it and `--holes` can read back exactly what it wrote.
+            print(_json.dumps(row, sort_keys=True))
+        return
+
+    rows = spaces_module.cover(space, strength=strength)
+    if as_json:
+        console.print_json(data={
+            "axes": {axis.name: list(axis.values) for axis in space.axes},
+            "exhaustive": space.exhaustive,
+            "strength": strength,
+            "combinations": space.size_at(strength),
+            "rows": len(rows),
+        })
+        return
+    console.print(
+        f"[bold]{len(space.axes)}[/bold] axes, [bold]{space.exhaustive:,}[/bold]"
+        f" configurations exhaustive\n"
+    )
+    for axis in space.axes:
+        console.print(f"  {axis.name:14} {len(axis.values):>3}  {', '.join(axis.values)}")
+    console.print(
+        f"\nt={strength}: [bold]{len(rows)}[/bold] rows cover all"
+        f" {space.size_at(strength):,} combinations"
+        f" — {space.exhaustive // max(1, len(rows)):,}x smaller than exhaustive"
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

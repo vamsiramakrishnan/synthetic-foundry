@@ -15,6 +15,7 @@ reserving cycle itself, which lives in ``generators/reserving.py`` and
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from .parameters import DEFAULT, Parameters
@@ -29,7 +30,16 @@ if TYPE_CHECKING:  # pragma: no cover
 @dataclass(frozen=True)
 class QuarterlyReserving:
     """One quarterly reserving cycle: triangle refresh, emergence, attribution,
-    strengthening, and a partial-booking decision that opens a standing gap.
+    strengthening, and a partial-booking decision that opens a standing gap —
+    and, beside it, the quarter's book cut by the organisation that wrote it.
+
+    The second half is not part of the reserving argument and is deliberately
+    not entangled with it. It exists because the reserving cycle is about one
+    long-tail book and named no business unit, no branch, no claims centre, no
+    underwriting office, no cost centre and no system: a whole insurer declared
+    in the archetype and reaching nothing. ``generators/insurance_book.py``
+    states the measures each of those places actually owns, and why
+    ``reserves.*`` is not one of them.
 
     ``period`` is the valuation quarter-end month as ``YYYY-MM`` — the same
     ``period_end``/``previous_periods`` arithmetic every other scenario uses,
@@ -58,8 +68,9 @@ class QuarterlyReserving:
 
     def run(self, world: World) -> World:
         from . import insurance_documents
-        from .generators import insurance_evaluation, reserving, triangles
+        from .generators import insurance_book, insurance_evaluation, reserving, triangles
         from .generators.finance import previous_periods
+        from .generators.operations import business_days_after, period_end
 
         if world.seed is None:
             raise ValueError(
@@ -145,8 +156,56 @@ class QuarterlyReserving:
             physics=self.physics,
         )
 
+        # The book, cut by the organisation that wrote it. Run *after* the
+        # reserving cycle rather than before it for two reasons, and both are
+        # about identity rather than taste. `Minter` is sequential, so putting
+        # this first would renumber every FACT and EV id the reserving episode
+        # mints and detach the checked-in narration from the facts it cites.
+        # And the ordering is also the truth: the valuation reads a closed
+        # quarter, so the quarter's own book position is a fact of the close and
+        # not of the valuation — which is why its facts are dated to the working
+        # day after the ledger locked (`bd(5)`) rather than to the valuation.
+        archetype = world._archetype
+        # Pure arithmetic on the period string and on this corpus's own working
+        # week — `scenarios.finalised_at`'s style exactly, and no clock, so
+        # replay stays byte-identical. Five working days after the quarter end
+        # is one day after the ledger locks (`reserving.generate`'s `bd(4)`).
+        settled = business_days_after(
+            period_end(self.period), 5, locale_of(world.recipe)
+        )
+        recorded_at = datetime(
+            settled.year, settled.month, settled.day, 8, 30, tzinfo=timezone.utc
+        )
+        book = insurance_book.generate(
+            rng.derive("book"), minter,
+            period=self.period,
+            company_id=world.company.id,
+            unit_ids={unit.key: roles[f"unit_{unit.key}"] for unit in archetype.units},
+            unit_shares={unit.key: unit.share for unit in archetype.units},
+            categories=tuple(world.categories),
+            sites=tuple(world.sites),
+            cost_centres=tuple(world.cost_centres),
+            systems=tuple(world.systems),
+            # A quarter of the archetype's declared annual figure. How many
+            # periods a year holds is this scenario's arithmetic — `Domain.
+            # period_step_months` is 3 here — and not the generator's.
+            quarterly_revenue=world._annual_revenue // 4,
+            money_unit=f"{world.company.currency}_{world.company.currency_unit}",
+            recorded_at=recorded_at,
+            caused_by=[episode.keys["event_close_finalised"]],
+            lore_by_target=index,
+            policy_admin_id=roles["sys_policy_admin"],
+            claims_system_id=roles["sys_claims"],
+            general_ledger_id=roles["sys_general_ledger"],
+            physics=self.physics,
+        )
+
         intents, errors = insurance_documents.artifact_intents(
-            minter, episode=episode, roles=roles,
+            minter, episode=episode, roles=roles, book=book,
+            units=tuple(
+                (unit.key, roles[f"unit_{unit.key}"], unit.name)
+                for unit in archetype.units
+            ),
         )
         cases = insurance_evaluation.evaluation_cases(
             minter, episode=episode, intents=intents, period=self.period,
@@ -165,8 +224,8 @@ class QuarterlyReserving:
         new_facts = tuple(f for f in episode.facts if f.id not in known_fact_ids)
 
         return world.extend(
-            events=episode.events,
-            facts=new_facts,
+            events=(*episode.events, *book.events),
+            facts=(*new_facts, *book.facts),
             artifact_intents=intents,
             intentional_errors=errors,
             evaluations=cases,

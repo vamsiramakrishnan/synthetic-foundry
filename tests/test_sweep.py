@@ -133,7 +133,14 @@ def test_selected_configurations_respect_what_each_engine_has() -> None:
             assert "seasonality" in fields
             assert config.surface == "spec"          # there is no --calendar flag
         if config.periods > 1:
-            assert domain.single_episode is None
+            # Against what the domain *declares*, not against whether it runs a
+            # single built-in episode. This asserted `single_episode is None`,
+            # which was the sweep's own stale assumption written down twice: the
+            # CLI stopped refusing `--periods N` on those domains, and two of the
+            # three build and validate clean at three and four consecutive runs.
+            # Only a domain that says `max_periods` is capped, and the assertion
+            # now reads that rather than inferring it — see `domains.Domain`.
+            assert domain.max_periods is None or config.periods <= domain.max_periods
         if config.estate is not None:
             assert config.engine in landscape.LANDSCAPES
         if config.data == "master_data":

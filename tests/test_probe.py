@@ -805,27 +805,45 @@ def objectives_graph(key: str = "gm_md_revenue", *, unit: str = "percent") -> Gr
 
 
 def test_the_measure_vocabulary_is_computed_rather_than_maintained():
-    """`probe.MEASURES` is exactly the numeric fact kinds the three shipped
-    engines mint in their default episodes.
+    """`probe.MEASURES` is exactly the numeric fact kinds *every* shipped engine
+    mints in its default episode.
 
     Hand-kept, it would be wrong within a month and wrong *silently*: the
     failure is a model being told a perfectly good measure does not exist,
     which it has no way to argue with. Same mechanism as `roles.SPINE`.
+
+    This test used to name three engines while the repository shipped four, and
+    so it passed on a tuple missing all 23 of procurement's numeric kinds — a
+    derivation computed over a subset is a hand-kept list wearing a derivation,
+    and it fails silently in precisely the direction above. The engines are now
+    enumerated from `domains` rather than imported one by one, so a fifth
+    vertical is covered by registering itself. Retail is the stated exception
+    and the registry says why: it declares `single_episode=None` because its
+    build loops closes and threads incident flags through them.
     """
-    from worldloom.banking import BankingWorld
-    from worldloom.banking_scenarios import QuarterlyCapitalReturn
-    from worldloom.insurance import InsuranceWorld, QuarterlyReserving
+    from worldloom import archetypes, domains
     from worldloom.retail import RetailWorld
     from worldloom.scenarios import MonthEndClose
 
-    episodes = (
+    built = [
         RetailWorld(seed=8128).build().run(
             MonthEndClose(period="2026-03", include_operational_incident=True)),
-        BankingWorld(seed=8128).build().run(QuarterlyCapitalReturn(period="2026-03")),
-        InsuranceWorld(seed=8128).build().run(QuarterlyReserving(period="2026-03")),
-    )
-    minted = {f.kind for world in episodes for f in world.facts if f.value is not None}
+    ]
+    for name in sorted(domains.names()):
+        domain = domains.by_name(name)
+        if domain is None or domain.single_episode is None:
+            continue
+        world = domain.world(
+            seed=8128, archetype=archetypes.get(domain.default_archetype),
+        ).build()
+        built.append(world.run(domain.single_episode("2026-03")))
+
+    minted = {f.kind for world in built for f in world.facts if f.value is not None}
     assert set(probe.MEASURES) == minted
+    # The regression this closes, stated so it cannot come back quietly: at
+    # least one measure from each shipped vertical's own vocabulary is present.
+    for prefix in ("financial.", "capital.", "reserves.", "p2p."):
+        assert any(m.startswith(prefix) for m in probe.MEASURES), prefix
 
 
 def test_an_objective_leaf_resolves_to_an_accountability_and_not_to_a_span():

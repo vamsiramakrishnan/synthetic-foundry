@@ -46,7 +46,8 @@
             "reserves.risk_margin_policy_pct"
           ],
           "scope": "any",
-          "purpose": "One paragraph: the standing margin policy this valuation was performed under."
+          "purpose": "One paragraph: the standing margin policy this valuation was performed under.",
+          "required": false
         }
       ]
     },
@@ -190,7 +191,8 @@
             "financial.incident_pl_impact"
           ],
           "scope": "any",
-          "purpose": "Report whether the close met its committed date and, if not, what stopped it. Distinguish a calendar impact from a P&L impact explicitly — conflating them is the most common error in this kind of memo."
+          "purpose": "Report whether the close met its committed date and, if not, what stopped it. Distinguish a calendar impact from a P&L impact explicitly — conflating them is the most common error in this kind of memo.",
+          "required": false
         },
         {
           "heading": "Recommendation",
@@ -251,7 +253,8 @@
             "close.revised_date"
           ],
           "scope": "any",
-          "purpose": "The date moved. State what it moved to and what the standing rule is when it does. Procedural register — this is read by people looking up a rule, not by people who want to know how the period went."
+          "purpose": "The date moved. State what it moved to and what the standing rule is when it does. Procedural register — this is read by people looking up a rule, not by people who want to know how the period went.",
+          "required": false
         }
       ]
     },
@@ -281,7 +284,8 @@
             "ops.cause"
           ],
           "scope": "any",
-          "purpose": "What the team is doing about it right now. Provisional by nature. This page is never updated, so it must not hedge in a way that would age well."
+          "purpose": "What the team is doing about it right now. Provisional by nature. This page is never updated, so it must not hedge in a way that would age well.",
+          "required": false
         }
       ]
     },
@@ -331,7 +335,8 @@
             "metric."
           ],
           "scope": "any",
-          "purpose": "Name the one or two measures the committee should watch, and why. Forward-looking, brief, and free of operational detail."
+          "purpose": "Name the one or two measures the committee should watch, and why. Forward-looking, brief, and free of operational detail.",
+          "required": false
         }
       ]
     },
@@ -382,7 +387,8 @@
             "ops.cause_ruled_out"
           ],
           "scope": "any",
-          "purpose": "State how the initial attribution was closed: the evidence supplied is the refutation, and the belief it tested is implicit in it. Write it as a belief examined and ruled out at the time, not as an error — the point is what the evidence supported then, not blame now. The hypothesis itself is cited under Root cause; this section owns only the ruling-out."
+          "purpose": "State how the initial attribution was closed: the evidence supplied is the refutation, and the belief it tested is implicit in it. Write it as a belief examined and ruled out at the time, not as an error — the point is what the evidence supported then, not blame now. The hypothesis itself is cited under Root cause; this section owns only the ruling-out.",
+          "required": false
         },
         {
           "heading": "Root cause",
@@ -401,7 +407,8 @@
             "ops.workaround"
           ],
           "scope": "any",
-          "purpose": "What made this more likely or harder to catch. Recurrence is the strongest signal available; if there is precedent, lead with it."
+          "purpose": "What made this more likely or harder to catch. Recurrence is the strongest signal available; if there is precedent, lead with it.",
+          "required": false
         },
         {
           "heading": "Actions",
@@ -458,7 +465,8 @@
             "capital.collateral_treatment"
           ],
           "scope": "any",
-          "purpose": "What the collateral actually was, against what the working paper assumed."
+          "purpose": "What the collateral actually was, against what the working paper assumed.",
+          "required": false
         },
         {
           "heading": "Remediation",
@@ -474,7 +482,8 @@
             "capital.restatement_reason"
           ],
           "scope": "any",
-          "purpose": "The correction as lodged, in one paragraph, for the committee's record."
+          "purpose": "The correction as lodged, in one paragraph, for the committee's record.",
+          "required": false
         }
       ]
     },
@@ -516,7 +525,8 @@
             "ops.mapping_table_owner"
           ],
           "scope": "any",
-          "purpose": "Why it happens, briefly, and who to go to. Enough that the procedure below makes sense; not a root-cause analysis."
+          "purpose": "Why it happens, briefly, and who to go to. Enough that the procedure below makes sense; not a root-cause analysis.",
+          "required": false
         },
         {
           "heading": "Procedure",
@@ -679,7 +689,8 @@
             "metric."
           ],
           "scope": "any",
-          "purpose": "What the peak's own measures imply for the rest of the year. Forward-looking and short; skip gracefully if the measures given say nothing."
+          "purpose": "What the peak's own measures imply for the rest of the year. Forward-looking and short; skip gracefully if the measures given say nothing.",
+          "required": false
         }
       ]
     },
@@ -725,7 +736,8 @@
             "ops.previous_similar_incident"
           ],
           "scope": "any",
-          "purpose": "Precedent, and what it says about whether this scope is enough. If there is a prior occurrence, lead with it — a fix that did not hold is the strongest argument available for widening the scope."
+          "purpose": "Precedent, and what it says about whether this scope is enough. If there is a prior occurrence, lead with it — a fix that did not hold is the strongest argument available for widening the scope.",
+          "required": false
         }
       ]
     },
@@ -805,7 +817,8 @@
             "close."
           ],
           "scope": "any",
-          "purpose": "One line: prepared from the locked ledger for the quarter."
+          "purpose": "One line: prepared from the locked ledger for the quarter.",
+          "required": false
         }
       ]
     },
@@ -851,7 +864,8 @@
             "capital.rwa_total"
           ],
           "scope": "any",
-          "purpose": "The figures the draft return would file if lodged unaltered."
+          "purpose": "The figures the draft return would file if lodged unaltered.",
+          "required": false
         }
       ]
     },
@@ -890,7 +904,8 @@
             "ops.cause"
           ],
           "scope": "any",
-          "purpose": "What is being run in the meantime and on what basis. Provisional register — this is written while the incident is open and will be read by people deciding whether to wait."
+          "purpose": "What is being run in the meantime and on what basis. Provisional register — this is written while the incident is open and will be read by people deciding whether to wait.",
+          "required": false
         }
       ]
     },
@@ -974,7 +989,8 @@
             "metric."
           ],
           "scope": "any",
-          "purpose": "What this unit should watch next period, if the metrics given warrant anything. One or two sentences; skip gracefully if nothing does."
+          "purpose": "What this unit should watch next period, if the metrics given warrant anything. One or two sentences; skip gracefully if nothing does.",
+          "required": false
         }
       ]
     },

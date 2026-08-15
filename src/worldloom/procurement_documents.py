@@ -5,7 +5,9 @@ The procure-to-pay counterpart of ``banking_documents.py`` and
 through ``documents.register_artifact_types`` so the core compiler's own
 tables stay retail vocabulary (build-order §7a).
 
-Six artifacts, and the relationships between them are the syllabus:
+Seven artifacts, and the relationships between them are the syllabus. The first
+six are one purchase cycle's paperwork; the seventh is the company that cycle
+happened inside:
 
 * the **purchase order**, the **goods receipt note** and the **supplier
   invoice** are the three-way match, drawn as three documents. Each states
@@ -34,6 +36,17 @@ Six artifacts, and the relationships between them are the syllabus:
   supplier's remittance details; that is the segregation the dual-approval
   norm is about, and an ``AccessPolicy`` that admitted everybody would make
   the access checks decoration.
+
+* the **spend and commitment workbook** is the seventh, and it is the one that
+  reports the *company* rather than one order. The six above are the paperwork
+  of a single purchase cycle, and a corpus of only those had three business
+  units, eighty-one depots and project offices and two cost centres that no
+  document mentioned — an estate that was scenery. This is where the divisions,
+  the spend categories, the delivery points, the project offices, the materials
+  yards and both cost centres carry a figure somebody could argue with, and it
+  is a workbook rather than a memo for the reason the retail month-end model is:
+  a hundred and forty rows of allocation is a sheet, and prose about it would be
+  a paraphrase of a table.
 """
 
 from __future__ import annotations
@@ -43,6 +56,12 @@ from datetime import timedelta
 from . import documents
 from .documents import SectionPlan
 from .generators.procurement_cycle import ProcurementEpisode
+from .generators.procurement_estate import (
+    COMMITMENT,
+    MATERIALS,
+    SPEND,
+    EstatePosition,
+)
 from .ids import Minter
 from .models import (
     ArtifactIntent,
@@ -52,6 +71,7 @@ from .models import (
     Cell,
     Column,
     ErrorType,
+    FormulaKind,
     IntentionalError,
     Lifecycle,
     Row,
@@ -81,6 +101,13 @@ _APPROVED_BY: dict[str, str] = {
     "match_exception_report": "chief_procurement",
     "payment_approval_memo": "chief_procurement",
     "vendor_master_change": "financial_controller",
+    # The one signature in this vertical that leaves Procurement. The workbook
+    # states the group's committed position and the accrual behind it, which is
+    # a working-capital number: the CPO prepares it and the CFO answers for it.
+    # `procurement_org` put those two under different executives on purpose, so
+    # this is the same two-reporting-lines argument the three-way match rests
+    # on, applied to the position rather than to one order.
+    "spend_and_commitment_workbook": "cfo",
 }
 COUNT_FORMAT = "#,##0"
 RATE_FORMAT = "#,##0"
@@ -90,6 +117,7 @@ def artifact_intents(
     minter: Minter,
     *,
     episode: ProcurementEpisode,
+    estate: EstatePosition,
     roles: dict[str, str],
     mint_vendor_change: bool,
 ) -> tuple[tuple[ArtifactIntent, ...], tuple[IntentionalError, ...]]:
@@ -238,6 +266,27 @@ def artifact_intents(
             "Finance approver. Read under the one policy in this corpus that excludes "
             "Operations, which is the point of the norm it is held under.",
         )
+
+    # 7 — the spend and commitment workbook. Planned after the conditional
+    # document rather than before it, which is the rule this function's
+    # docstring states read the only way it can be: a new artifact is appended
+    # after the last, never inserted, because inserting would renumber the
+    # `ART` id of a document somebody has already narrated against.
+    #
+    # Every estate fact is required and every one of them lands in a cell —
+    # `validate.carried_evidence` compares this list against the compiled IR
+    # per intent, so a workbook that quietly stopped reporting the yards would
+    # be a violation rather than a smaller sheet nobody noticed.
+    intent(
+        "spend_and_commitment_workbook", "procurement", "procurement_and_finance",
+        roles["chief_procurement"], [fact.id for fact in estate.facts],
+        [k["event_close_finalised"]], "medium",
+        "The group's third-party position at close: what each division bought in, "
+        "what it has committed and not yet received, and what is sitting in the "
+        "yards — cut by spend category, by delivery point and by the cost centre "
+        "the commitment is coded to. The order documents report one cycle; this "
+        "reports the company the cycle happened inside.",
+    )
 
     # The canonical figure a labelled imperfection cites has to be the fact's
     # own value in the form `validate.intentional`'s `_quantity_matches`
@@ -587,13 +636,275 @@ def _supplier_of(facts) -> str:  # type: ignore[no-untyped-def]
 
 
 # ---------------------------------------------------------------------------
+# The workbook: the company the cycle happened inside
+# ---------------------------------------------------------------------------
+
+
+def _figure(resolved, subject: str, children: list[str] | None = None) -> Cell:  # type: ignore[no-untyped-def]
+    """One money cell, stated where the ledger states it and summed where it totals.
+
+    A subject the ledger has no figure for gets an empty cell carrying **no**
+    ``fact_id``: a project office takes no delivery and a materials yard buys
+    nothing in, so those cells are blank by construction rather than by
+    omission. The distinction is checked — ``validate.carried_evidence`` fails a
+    cell that names a fact and states nothing, which is the signature of the
+    workbook defect this repository has already paid for twice.
+    """
+    fact = resolved.get(subject)
+    if fact is None or fact.value is None:
+        return Cell(value=None)
+    if children:
+        return Cell(value=fact.value.amount, fact_id=fact.id,
+                    formula=FormulaKind.SUM, operands=children)
+    return Cell(value=fact.value.amount, fact_id=fact.id)
+
+
+def _present(resolved, keys: list[str]) -> list[str]:  # type: ignore[no-untyped-def]
+    """Of *keys*, the ones the ledger actually states — a subtotal's operands.
+
+    Per column rather than per row, because the estate's three measures have
+    three different populations: a unit's spend total sums its delivery points,
+    its commitment sums those *and* its project offices, and its materials sum
+    its yards. One operand list for the whole row would have made every subtotal
+    sum the whole estate and counted every blank cell as a zero somebody agreed
+    to.
+    """
+    return [key for key in keys if key in resolved]
+
+
+def spend_and_commitment_ir(world, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:  # type: ignore[no-untyped-def]
+    """The group's third-party position: divisions, categories, estate, cost centres.
+
+    Five tables, and each one is a decomposition of a figure stated above it
+    rather than an independent count. That is what makes the workbook checkable
+    against itself: delete a depot's row and the divisional total moves, because
+    the total is a formula over the rows and not a number pasted beside them.
+    """
+    facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
+    company = world.company
+    money = f"{company.currency} {company.currency_unit}"
+    spend = _by_kind(facts, SPEND)
+    commitment = _by_kind(facts, COMMITMENT)
+    materials = _by_kind(facts, MATERIALS)
+
+    def column(key: str, label: str) -> Column:
+        return Column(key=key, label=f"{label} ({money})", number_format=MONEY_FORMAT)
+
+    spend_column = column("spend", "Third-party spend")
+    commitment_column = column("commitment", "Open commitment")
+    materials_column = column("materials", "Materials on hand")
+
+    units = [unit for unit in world.business_units if unit.id in spend or unit.id in commitment]
+    unit_keys = [unit.id for unit in units]
+
+    # A company with no materials yard anywhere states no holding at all, so
+    # the column and its row come off the sheet rather than printing blank.
+    # `_contract_section` above makes the same call for the same reason: an
+    # absent section is honest and an empty one is not.
+    money_columns = [spend_column, commitment_column]
+    if materials:
+        money_columns.append(materials_column)
+
+    # -- the position ------------------------------------------------------
+    def headline(key: str, label: str, resolved) -> Row:  # type: ignore[no-untyped-def]
+        cell = _figure(resolved, company.id)
+        return Row(key=key, label=label, cells={"amount": Cell(
+            value=cell.value, fact_id=cell.fact_id,
+            formula=FormulaKind.REFERENCE, operands=[f"division:{company.id}:{key}"],
+        )})
+
+    position_rows = [
+        headline("spend", "Third-party spend received in the period", spend),
+        headline("commitment", "Purchase-order commitment open at close", commitment),
+    ]
+    if materials:
+        position_rows.append(
+            headline("materials", "Materials held in the yards", materials)
+        )
+    position = Table(
+        key="position", title="Procurement position",
+        columns=[Column(key="amount", label="Amount", number_format=MONEY_FORMAT)],
+        rows=position_rows,
+        note=(
+            f"{company.name} · {world.period or ''} · {money}. Spend is a flow and the "
+            "other two are balances: the first is what arrived this month, the second is "
+            "what has been ordered and not yet arrived, and the third is what arrived "
+            "earlier and has not yet been used."
+        ),
+    )
+
+    # -- by division -------------------------------------------------------
+    division_rows = [
+        Row(key=unit.id, label=unit.name, cells={
+            "spend": _figure(spend, unit.id),
+            "commitment": _figure(commitment, unit.id),
+            "materials": _figure(materials, unit.id),
+        })
+        for unit in units
+    ]
+    division_rows.append(Row(key=company.id, label="Group", emphasis=True, cells={
+        "spend": _figure(spend, company.id, _present(spend, unit_keys)),
+        "commitment": _figure(commitment, company.id, _present(commitment, unit_keys)),
+        "materials": _figure(materials, company.id, _present(materials, unit_keys)),
+    }))
+    division = Table(
+        key="division", title="By division",
+        columns=money_columns,
+        rows=division_rows,
+        note=(
+            "Group is the sum of the divisions above, in every column. A division with "
+            "no materials row has no yard to hold anything in — which is a different "
+            "statement from holding nothing, and is why the cell is blank rather than "
+            "zero."
+        ),
+    )
+
+    # -- by spend category -------------------------------------------------
+    category_rows: list[Row] = []
+    category_subtotals: list[str] = []
+    for unit in units:
+        members = [
+            category for category in world.categories
+            if category.business_unit_id == unit.id and category.id in spend
+        ]
+        if not members:
+            continue
+        for category in members:
+            category_rows.append(Row(
+                key=category.id, label=f"{unit.name} · {category.name}",
+                cells={"spend": _figure(spend, category.id)},
+            ))
+        category_rows.append(Row(
+            key=unit.id, label=f"{unit.name} total", emphasis=True,
+            cells={"spend": _figure(spend, unit.id, [c.id for c in members])},
+        ))
+        category_subtotals.append(unit.id)
+    category_rows.append(Row(
+        key=company.id, label="Group", emphasis=True,
+        cells={"spend": _figure(spend, company.id, category_subtotals)},
+    ))
+    category = Table(
+        key="category", title="By spend category",
+        columns=[spend_column],
+        rows=category_rows,
+        note=(
+            "The same divisional figures the estate sheet decomposes, cut the other "
+            "way. Two decompositions that both reconcile to the division are a "
+            "cross-check; two that were drawn independently would be two "
+            "contradictions."
+        ),
+    )
+
+    # -- the estate --------------------------------------------------------
+    estate_rows: list[Row] = []
+    estate_subtotals: list[str] = []
+    for unit in units:
+        places = [site for site in world.sites if site.business_unit_id == unit.id]
+        if not places:
+            continue
+        for site in places:
+            estate_rows.append(Row(key=site.id, label=site.name, cells={
+                "region": Cell(value=site.region),
+                "format": Cell(value=site.format),
+                "spend": _figure(spend, site.id),
+                "commitment": _figure(commitment, site.id),
+                "materials": _figure(materials, site.id),
+            }))
+        keys = [site.id for site in places]
+        estate_rows.append(Row(
+            key=unit.id, label=f"{unit.name} total", emphasis=True, cells={
+                "region": Cell(value=""), "format": Cell(value=""),
+                "spend": _figure(spend, unit.id, _present(spend, keys)),
+                "commitment": _figure(commitment, unit.id, _present(commitment, keys)),
+                "materials": _figure(materials, unit.id, _present(materials, keys)),
+            },
+        ))
+        estate_subtotals.append(unit.id)
+    estate_rows.append(Row(key=company.id, label="Group", emphasis=True, cells={
+        "region": Cell(value=""), "format": Cell(value=""),
+        "spend": _figure(spend, company.id, _present(spend, estate_subtotals)),
+        "commitment": _figure(commitment, company.id, _present(commitment, estate_subtotals)),
+        "materials": _figure(materials, company.id, _present(materials, estate_subtotals)),
+    }))
+    estate = Table(
+        # Thirty-one characters is a worksheet name's limit and the renderer
+        # truncates rather than refusing, so a longer title would have shipped a
+        # tab reading "By depot, project office and ya". The section heading
+        # below says it in full.
+        key="estate", title="By depot, office and yard",
+        columns=[
+            Column(key="region", label="Region"),
+            Column(key="format", label="Format"),
+            *money_columns,
+        ],
+        rows=estate_rows,
+        note=(
+            "Three kinds of place and three different measures. A depot takes delivery, "
+            "so it carries spend and the order book behind it. A project office raises "
+            "commitment and has no gate, so its spend cell is empty. A materials yard "
+            "buys nothing in and holds what was bought — which is why the archetype "
+            "gives it no revenue weight at all."
+        ),
+    )
+
+    # -- by cost centre ----------------------------------------------------
+    centres = [centre for centre in world.cost_centres if centre.id in commitment]
+    centre_rows = [
+        Row(key=centre.id, label=centre.name,
+            cells={"commitment": _figure(commitment, centre.id)})
+        for centre in centres
+    ]
+    centre_rows.append(Row(key=company.id, label="Group", emphasis=True, cells={
+        "commitment": _figure(commitment, company.id, [centre.id for centre in centres]),
+    }))
+    cost_centre = Table(
+        key="cost_centre", title="Commitment by cost centre",
+        columns=[commitment_column],
+        rows=centre_rows,
+        note=(
+            "Where the commitment is coded, which is not where it is managed: the "
+            "estate sheet says which depot ordered it and this says which centre wears "
+            "it. A delegation of authority that cannot separate direct project spend "
+            "from corporate services is one nobody can review."
+        ),
+    )
+
+    # A cut with nothing under it gets no heading at all. A pack that declares
+    # no estate, or no spend categories, would otherwise file a workbook whose
+    # sheets are one "Group" row apiece — a document that says nothing while
+    # looking like it says something, which is the shape every check in this
+    # repository's `carried_evidence` family exists to refuse.
+    sections = [
+        ArtifactSection(heading="Procurement position", table=position),
+        ArtifactSection(heading="By division", table=division),
+    ]
+    if category_subtotals:
+        sections.append(ArtifactSection(heading="By spend category", table=category))
+    if estate_subtotals:
+        sections.append(
+            ArtifactSection(heading="By depot, project office and yard", table=estate)
+        )
+    if centres:
+        sections.append(ArtifactSection(heading="Commitment by cost centre", table=cost_centre))
+
+    return _framed(
+        world, intent, facts,
+        f"{company.name} — Spend and Commitment Workbook",
+        f"Third-party position at close · {money}",
+        sections,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
 from .render import docx as _docx, markdown as _markdown, xlsx as _xlsx  # noqa: E402
 
-_xlsx.register("purchase_order", "goods_receipt_note", "supplier_invoice")
-_markdown.own_elsewhere("purchase_order", "goods_receipt_note", "supplier_invoice")
+_xlsx.register("purchase_order", "goods_receipt_note", "supplier_invoice",
+               "spend_and_commitment_workbook")
+_markdown.own_elsewhere("purchase_order", "goods_receipt_note", "supplier_invoice",
+                        "spend_and_commitment_workbook")
 _docx.register(
     "match_exception_report",
     "payment_approval_memo",
@@ -617,6 +928,11 @@ documents.register_artifact_types(
         # it: a change nobody has countersigned is a draft, whatever the vendor
         # master screen shows.
         "vendor_master_change": (Authority.WORKING_DOCUMENT, Lifecycle.DRAFT),
+        # A workbook off the order book, the receipting system and the ledger,
+        # published at close — the same standing the retail month-end model has,
+        # and for the same reason: it restates no third party's claim, it
+        # reports what three systems of record hold.
+        "spend_and_commitment_workbook": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
     },
     lags={
         "purchase_order": timedelta(hours=1),
@@ -625,6 +941,9 @@ documents.register_artifact_types(
         "match_exception_report": timedelta(hours=4),
         "payment_approval_memo": timedelta(days=1),
         "vendor_master_change": timedelta(hours=3),
+        # Longer than any of the six above: the position is assembled after the
+        # ledger locks, not while the cycle is running.
+        "spend_and_commitment_workbook": timedelta(days=1, hours=6),
     },
     outlines={
         "match_exception_report": (
@@ -680,6 +999,13 @@ documents.register_artifact_types(
                 "The undelivered balance carried into next month, and that it is a "
                 "commitment rather than an accrual — nothing has been received, so nothing "
                 "is owed for it yet. One short paragraph.",
+                # A "still outstanding" where nothing is. A settlement that
+                # closed the order out has no balance to carry, and the memo
+                # ends on the approval — which is where a memo about an
+                # approval should end. The three sections that make it the
+                # record of a decision (settlement, authority, what the close
+                # carries) stay required.
+                required=False,
             ),
         ),
         "vendor_master_change": (
@@ -701,5 +1027,6 @@ documents.register_artifact_types(
         "purchase_order": purchase_order_ir,
         "goods_receipt_note": goods_receipt_ir,
         "supplier_invoice": supplier_invoice_ir,
+        "spend_and_commitment_workbook": spend_and_commitment_ir,
     },
 )

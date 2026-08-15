@@ -282,7 +282,7 @@ class MonthEndClose:
 
         The world passed in is not mutated.
         """
-        from .generators import evaluation, finance, operations, planning
+        from .generators import evaluation, finance, operations, planning, retail_estate
 
         if world.seed is None:
             raise ValueError("a scenario needs a seeded world; use RetailWorld(seed=...).build()")
@@ -408,6 +408,39 @@ class MonthEndClose:
         )
         financial_facts = financials.headline
 
+        # The corporate centre and the distribution network, after the P&L and
+        # from it. Retail declared two cost centres that no fact named and, on
+        # any archetype with warehouses, an estate of zero-weight sites the
+        # store P&L correctly refuses to give turnover to and nothing else said
+        # anything about at all — `generators/retail_estate` opens with the
+        # measurement. It runs *after* `finance.generate` for two reasons that
+        # are both load-bearing: the recharge basis is the actual revenue the
+        # workbook states rather than the archetype's declared share, and
+        # appending its facts leaves every FACT id minted before it exactly
+        # where it was, which is what `examples/grocery-close/narration.json` is
+        # keyed to (see `planning.artifact_intents`' note on the same hazard for
+        # ART ids).
+        estate_costs = retail_estate.generate(
+            rng.derive("estate_costs"), minter,
+            period=self.period,
+            company_id=world.company.id,
+            units=tuple(world.business_units_at(episode.finalised_at)),
+            sites=tuple(world.sites_at(episode.finalised_at)),
+            cost_centres=tuple(world.cost_centres),
+            revenue_by_subject={
+                fact.subject: int(fact.value.amount)
+                for fact in financials.facts
+                if fact.kind == "financial.revenue.actual"
+                and fact.period == self.period and fact.value
+            },
+            at=episode.finalised_at,
+            event_id=episode.close_event_id,
+            erp_id=roles["sys_erp"],
+            money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            currency=world._archetype.currency,
+            physics=self.physics,
+        )
+
         # Built once, for both the planner (which categories does a high
         # `eval_density` argue below unit level) and the taxonomy's `Subjects`
         # below — the same grouping, so a category that got a commentary
@@ -448,7 +481,14 @@ class MonthEndClose:
             financial_facts=financial_facts,
             period=self.period,
             density=artifact_density,
-            workbook_facts=financials.facts,
+            # The overhead and distribution figures ride the workbook's detail
+            # set rather than the memo's `financial_facts`. Deliberate on both
+            # counts: the month-end model is where a reconciliation of the
+            # corporate cost base belongs, and `financial_facts` is the bounded
+            # list every narration request for the variance memo is built from,
+            # so widening it would change what an agent is handed for prose that
+            # `examples/grocery-close/narration.json` has already written.
+            workbook_facts=(*financials.facts, *estate_costs.facts),
             prior_intents=world._artifact_intents,
             actor_authored=self.actors is not None,
             categories_by_unit=categories_by_unit,
@@ -488,7 +528,7 @@ class MonthEndClose:
         prior_intents = world._artifact_intents
         advanced = world.extend(
             events=episode.events,
-            facts=(*episode.facts, *financials.facts),
+            facts=(*episode.facts, *financials.facts, *estate_costs.facts),
             artifact_intents=intents,
             period=self.period,
         )

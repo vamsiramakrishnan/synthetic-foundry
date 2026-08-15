@@ -49,6 +49,29 @@ class Domain:
     the thin-waist ratchet test forbids "quarter" in core code — so the
     stepping arithmetic is generic and each domain states its own cadence
     here; banking registers 3."""
+    max_periods: int | None = None
+    """The most consecutive runs this domain's built-in episode supports, or
+    ``None`` for no limit.
+
+    Declared rather than discovered by crashing, which is what this replaced.
+    One shipped domain's episode raises on a second consecutive run because the
+    half of it that supersedes the first run's estimates is unimplemented — and
+    that refusal lived only inside the scenario, so the single thing a *planner*
+    needed to know was reachable only by building a corpus and reading a
+    traceback. ``tools/sweep.py`` responded the way anything would: it collapsed
+    ``--periods`` to 1 for **every** single-episode domain, citing a CLI refusal
+    that no longer exists.
+
+    The cost of that was measured, not theoretical. Two of the three
+    single-episode domains build and validate clean at three and four
+    consecutive runs — between 2,672 and 5,525 checks — and the determinism
+    sweep has never once compared two builds of either beyond a single period,
+    which is precisely where a carry-forward defect would live.
+
+    The scenario still enforces its own limit; this is the declaration that lets
+    a planner read it, and it is the domain's to state for the same reason
+    ``period_step_months`` is. A domain that raises without declaring is the bug
+    this field exists to make impossible to reintroduce quietly."""
     default_archetype: str = ""
     """Which of ``archetype_keys`` this domain builds when a caller names the
     *domain* rather than an archetype — what ``worldloom mosaic --engine`` picks.

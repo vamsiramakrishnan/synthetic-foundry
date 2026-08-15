@@ -103,6 +103,40 @@ The vertical owns the causal episode, its fact kinds, documents, invariants, and
 benchmark. A pack changes the company using an existing episode. A new vertical
 changes what happens.
 
+#### The organisation is load-bearing, and that is where volume comes from
+
+A company declares business units, sites, cost centres and categories. Whether
+anything *reports* on them is a separate question, and for three of the four
+verticals the answer used to be no: a bank with three divisions and 133 branches
+mentioned none of them in any fact or any document, and its corpus was 58 facts
+about capital ratios. Every one of those corpora passed `worldloom validate`,
+because coherence and thinness are different properties.
+
+`validate.reachability` asks the question directly — an entity is *reached* when
+a fact names it and a compiled document carries that fact on its readable
+surface, appendices excluded. Closing it is what produced the volume:
+
+| Vertical | Facts, one period | Documents | `validate` checks |
+| --- | --- | --- | --- |
+| Retail | 588 | 7 | 7,787 |
+| Banking | 58 → **744** | 11 → **12** | 1,661 → **9,249** |
+| Insurance | 62 → **219** | 4 → **8** | 1,155 → **3,088** |
+| Procurement | 52 → **217** | 6 → **7** | 1,090 → **3,332** |
+
+Each vertical measures what its own vocabulary owns: deposits, lending and
+front-line FTE by branch; written premium by underwriting office and claims by
+claims centre; spend, commitment and materials by depot, project office and
+yard. Every split goes through a largest-remainder allocator, so roll-ups
+reconcile exactly rather than nearly, and a rate is never summed. Volume scales
+with the estate rather than with a multiplier — banking at `--periods 3` mints
+2,220 facts.
+
+The check ships as a ratchet rather than as part of `worldloom validate`: what
+it reports is true and is not a statement about coherence, which is the question
+`validate` answers. What it still refuses is a different class and is named as
+such — a system of record is the *provenance* of every figure in these corpora,
+not the subject of one.
+
 ### Structured and unstructured outputs
 
 | Layer | Outputs |
@@ -115,6 +149,86 @@ changes what happens.
 
 The corpus directory is plain files. Worldloom is needed to build and validate it,
 not to read it.
+
+### Structure is derived, not looked up
+
+A document's outline used to be a constant per artifact type, so a corpus of a
+thousand documents rendered a few dozen shapes and twelve monthly close packs
+were twelve renderings of one skeleton. A retriever can learn that shape instead
+of the content.
+
+The outline is now a function of a **structural genome** — a handful of integers
+recorded on the recipe, so a corpus resolves the same shapes when it is loaded
+back and a rebuild reproduces them.
+
+```bash
+worldloom build --section-omission 400 --variant-bias 1 --outline-synthesis 600 --out ./corpus
+worldloom diversity ./corpus --effective
+```
+
+`--section-omission` is swarm testing applied to documents: a document emits a
+*subset* of its type's optional sections rather than all of them every time.
+Sections are required unless a type says otherwise, so the default build is
+byte-identical to what it always was.
+
+`--outline-synthesis` goes further and *draws* a shape rather than subsetting
+one — from what this company's own document types have in common, projected onto
+the roles their sections play rather than the words in their headings. It is
+recombination and never inflation: a synthesised outline has to carry at least
+what the authored one carried, in no more sections, arguing the document the way
+its type argues it, and falls back to the authored outline when no draw does.
+Measured on a six-period retail corpus, 40 distinct rendered shapes become 62
+with no document losing a line of prose.
+
+Why roles rather than headings is a measured answer, not a preference. Splicing
+on heading text admits exactly **one** novel outline across the whole fleet,
+because only a handful of headings appear in more than one document type — and
+that stayed true after ten policy types were given entirely new headings, which
+is how we know the vocabulary was never the fixable part.
+
+`--effective` is the reading that made the case for the work. A count of
+distinct shapes prices a shape used ten times exactly as it prices one used
+once; the Vendi score reports the **effective** number, and the gap between the
+two is where the monotony hides.
+
+### Planning a fleet, not sampling one
+
+```bash
+worldloom spaces                              # 12 axes, 3,732,480 configurations
+worldloom spaces --cover -t 2 > plan.jsonl    # 39 rows cover every pair
+worldloom spaces --holes plan.jsonl           # what a fleet you built missed
+```
+
+A covering array grows with the two widest axes rather than with the space, so
+every pairwise interaction is reachable in a fleet a person would actually
+build. The complement matters more: pointed at the shipped determinism gate,
+`--holes` reported that it covered 24% of pairs and had **never once built a
+bank running more than one period** — a gap the gate could not see, because a
+sampler knows where its points landed and not which combinations nobody reached.
+
+### These are one loop, not five features
+
+Each command above answers a different question, and they close on each other:
+
+```bash
+worldloom spaces --cover -t 2 > plan.jsonl    # what should exist
+worldloom build --outline-synthesis 600 ...   # make one of them
+worldloom diversity ./corpus --effective      # is it actually varied
+worldloom spaces --holes fleet.jsonl          # what still does not exist
+```
+
+Plan the space, build into it, measure what came out, and ask what is still
+missing — then plan again against the answer. The measurement is what makes it a
+loop rather than a pipeline: `--effective` and `--holes` both report a
+*denominator*, so "we built two hundred corpora" becomes "we covered 41% of the
+pairs and never varied five of the twelve axes at all".
+
+One step is deliberately library-only. `worldloom.archive` keeps one champion per
+structural niche rather than the best *n* overall — on a measured population it
+spanned 33 of 36 niches where best-*n* spanned 20 — and it composes with
+`spaces.archive_of` today, but selecting a shipped fleet with it is a decision
+about what to keep, not a reading. It gets a command when there is a fleet big
+enough for the choice to matter.
 
 ## Quickstart: one coherent enterprise
 
@@ -219,9 +333,14 @@ lifecycle window instead of deleting the entity. Targets below dependency-safe,
 role-safe, or category-safe floors are refused.
 
 Current CLI scope is explicit: time-varying workforce and structural trajectories
-are multi-period retail capabilities. Banking, insurance, and procurement are
-single-episode CLI verticals today; no flag is silently ignored to simulate a
-history they do not implement.
+are multi-period retail capabilities. Banking and procurement run consecutive
+periods — `--periods 3` validates at 27,001 and 9,398 checks respectively —
+without the workforce and estate trajectories retail carries. Insurance declares
+`max_periods=1`, because a second consecutive valuation quarter is phase 2 of
+that engine and phase 1 is what ships; `--periods 2` is refused at plan time
+naming the cap, rather than building a world and then failing inside the
+episode. No flag is silently ignored to simulate a history a vertical does not
+implement.
 
 For the operational runbook, see [Generating an enterprise corpus](docs/enterprise-corpus.md).
 

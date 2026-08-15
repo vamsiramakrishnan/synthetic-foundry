@@ -27,6 +27,17 @@ corpus without ``--policies`` still hires — the requisition falls back to the
 chief executive and says so — which is the honest degradation rather than a
 refusal, because a company with no written delegation still hires people.
 
+**Its section vocabulary was read and left alone**, which is worth recording
+because the sweep that fixed `policies.py` came here next and found nothing to
+fix. Five types produce **eight heading sequences across base outlines and
+variants, all eight distinct**, and exactly one heading — ``Running note`` — is
+shared with anything else in the fleet. The policy family's defect was ten
+documents opening on one pair of words; nothing here opens on anybody else's.
+The two second sections that look generic from outside are the two that carry
+the most: ``Level of approval required`` is one end of the corpus's only
+cross-layer approval check, and ``Access and security`` is where the checklist
+cites the security policy rather than restating it.
+
 Deterministic like everything else: who is picked, what they are graded and
 what they are paid all come off the world's own seed under a stream of this
 module's own, so a corpus that ran a hiring round replays byte-identical.
@@ -677,6 +688,17 @@ def _register() -> None:
             " security policy rather than restating it — a checklist that"
             " paraphrases a policy is a second version of that policy, and the"
             " day they disagree nobody knows which one applies.",
+            # The one annotation this module earns, and the engine already
+            # makes the argument for it: a corpus built without `--policies`
+            # has no security clauses to cite, `documents.outline` drops a
+            # section with nothing assigned, and the comment on this type's
+            # `required_fact_ids` calls the resulting start-date-only checklist
+            # "honest". So the shorter document is one this repository already
+            # ships and no reader has found strange; annotating it only lets
+            # the two shapes coexist in one corpus instead of one per build
+            # flag. "Before the first day" is what the checklist is *for* and
+            # stays required.
+            required=False,
         ),
     )
     review = (

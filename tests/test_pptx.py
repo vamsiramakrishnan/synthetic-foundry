@@ -570,7 +570,17 @@ def test_a_chart_deck_renders_twice_byte_identical() -> None:
         pptx_renderer._draw_content(presentation, plan, slide_plan, {})
         buffer = io.BytesIO()
         presentation.save(buffer)
-        return ooxml.normalise(buffer.getvalue())
+        # A fixed stamp, not an omitted one. Without `created`, `normalise`
+        # fixes archive entry dates and leaves every XML timestamp alone —
+        # deliberately, and pinned by `test_ooxml`. A chart embeds a
+        # data-source workbook that `xlsxwriter` stamps with
+        # `datetime.now(timezone.utc)`, so an un-stamped normalise still
+        # leaves a live clock two containers down: measured, two renders
+        # 2.2s apart differed by one byte inside
+        # `ppt/embeddings/Microsoft_Excel_Sheet1.xlsx`. This test therefore
+        # passed or failed on whether both saves landed in the same second,
+        # which is why it only ever failed on a loaded machine.
+        return ooxml.normalise(buffer.getvalue(), created="2026-04-01T07:00:00+00:00")
 
     assert build() == build()
 

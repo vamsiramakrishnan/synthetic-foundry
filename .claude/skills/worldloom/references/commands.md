@@ -82,6 +82,8 @@ Generate a world deterministically from a seed, then validate it.
 | `--messiness` | How well the archive is kept: `pristine`, `well_run`, `lived_in` or `neglected` (`worldloom pack messiness`). Every Worldloom corpus so far has been almost perfectly kept, and a retriever that has only ever seen a tidy archive has not been tested against anything. What this does *not* relax is the invariant: every imperfection is recorded, so a reader holding only the corpus can establish mechanically that the stale page is stale and what the current position is. Costs: the corpus gains documents that are wrong on purpose, so a benchmark scored against it is measuring recency and provenance reasoning as well as retrieval. `pristine` is the default and writes nothing at all. |
 | `--narrate` | Generate prose with the built-in deterministic provider (no network, no key). |
 | `--out`, `-o` | Directory to write the corpus into. |
+| `--outline-floor` | The fewest sections a document may end up with. Omission restores sections in the order their author wrote them until this is met. |
+| `--outline-synthesis` | Per-mille chance that any one document's outline is *synthesised* — a shape drawn from what this company's own document types have in common, rather than the one its type was authored with. Recombination, never inflation: a synthesised outline must carry at least what the authored one carries, in no more sections, arguing the document the way its type argues it, and falls back to the authored outline when no draw does. Measured at 1000 on a six-period retail build: 89% of documents synthesised, 40 distinct shapes becoming 62. 0 — the default — is byte-identical to before. |
 | `--overwrite` | Replace the destination if it exists. |
 | `--pack` | Build from an industry pack: a JSON file carrying the company shape, lore, and name. See `worldloom pack template` to start one and `worldloom pack check` to lint it. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
@@ -90,6 +92,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--policies` | Give the company its standing documents: core or full. These are the papers a company *has* rather than produces — a delegation of authority, an expense policy, a leave policy, an information security policy — as opposed to what a close or an incident emits. Without it an assistant asked what the approval threshold is has nothing to find, because the company has no rules. Money provisions scale off the company's own revenue, so two archetypes do not share a limit. Omit it and every existing corpus is byte-identical. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--reviews` | Review this many people per period. Each is a signed performance review countersigned by the manager's own manager, plus the running one-to-one note that fed it — at a lower authority, and saying something slightly different. |
+| `--section-omission` | Per-mille chance that any one *optional* section is left out of any one document, so a type emits a subset of its outline rather than all of it every time. This is swarm testing applied to documents: sections compete for a reader's attention exactly as test features compete for room, and a corpus whose every close pack carries the same five headings teaches a retriever the headings. Sections are required unless a type says otherwise, so 0 — the default — and an un-annotated corpus are both byte-identical to before. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
 | `--services-end` | Exact active service count in the final period. |
 | `--sites-end` | Exact active site count in the final period. |
@@ -97,6 +100,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--systems-end` | Exact active system count in the final period. |
 | `--timeline` | Sample a history rather than repeating a month: `quiet`, `steady` or `turbulent`. `--periods 6` runs six closes signed by the same twenty-three people, drawn from the same distribution — six identical months with the dates changed. A density schedules incidents and org changes across those periods instead, so a controller who departs in period 2 means periods 3-6 are signed by their successor and "which month went wrong" becomes answerable from the corpus. Needs --periods to have room to work in. Costs: the schedule states incidents in *both* directions once it schedules any, so it and --incident cannot both decide; and hires are not sampled, because a new post's title is a business decision and a sampler inventing one would write the least plausible sentence in the corpus. |
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
+| `--variant-bias` | Rotate which authored outline variant each document gets. Two tenants built from one engine with different biases disagree about every document's shape, which is most of what stops a mosaic sharing one shape vocabulary. |
 | `--vary-incidents` | Rotate the incident's storyline across periods — a stale FX table one month, a duplicated goods receipt the next — instead of the same failure retold monthly. Surface only: causality, fact ids and machine values are identical either way, and each period's storyline is recorded on its recipe step so --replay reproduces it. Off (the default) rebuilds every existing corpus byte for byte. |
 
 ### `worldloom compose`
@@ -154,6 +158,7 @@ worldloom diversity <CORPUS>
 | --- | --- |
 | `--across` | Additional corpora to compare against — repeatable. Reports shape overlap and cross-corpus prose duplicates over the whole set, the failure no single corpus's report can see: five mosaic companies can each look varied while all five hold the same shapes and say the same sentences. |
 | `--check-quotas` | Exit non-zero if the batch fails a declared Quotas threshold (see compiler/diversity.py). For CI: assert the corpus does not get more monotonous over time. |
+| `--effective` | Also report the Vendi score — the *effective* number of distinct shapes, which is what a count of distinct shapes overstates. Thirty shapes that differ by one section each are closer to four documents than to thirty, and only a metric that reads the similarity matrix rather than counting equality classes can say so. |
 | `--near-duplicates` | Also group passages whose prose is near-identical, and name which artifacts they belong to. Structural sameness and prose sameness are different failures — a batch can carry twenty distinct shapes and still say the same sentences in all of them. |
 | `--verbose`, `-v` | Show the per-artifact-type breakdown and every distinct shape within it. |
 
@@ -577,6 +582,17 @@ worldloom series <CORPUS>
 | `--json` | Emit the decomposition as JSON — stable keys and ordering. |
 | `--kind` | Fact kind to read. Default: the longest series in the corpus. |
 | `--subject` | Entity id the series is about. Default: whichever has the most periods. |
+
+### `worldloom spaces`
+
+The build-configuration space: what a fleet could vary, and what one did.
+
+| Option | Purpose |
+| --- | --- |
+| `--cover` | Emit the planned fleet — one JSON object per line, one per configuration — instead of describing the space. Builds nothing. |
+| `--holes` | A fleet, as the JSON-lines this command's --cover emits. Reports what that fleet never covered rather than what a plan would. |
+| `--json` | Machine-readable output. |
+| `--strength`, `-t` | Interaction strength. t=2 covers every pair of axis values, t=3 every triple. The row count grows with the product of the t widest axes, not with the whole space. |
 
 ### `worldloom stats`
 

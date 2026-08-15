@@ -423,6 +423,76 @@ def _pack_payload(pack: Any) -> dict[str, Any]:
     return packs.to_recipe(pack)
 
 
+#: Where a structural genome lives on a recipe. Read by `documents._variant_for`
+#: through `structure_of`, which is the whole threading story: the genome is not
+#: a `World` field and not a process global, because the recipe is already the
+#: thing that survives to disk *and* drives replay, and a corpus whose documents
+#: were shaped by a genome the corpus does not record could not be rebuilt.
+STRUCTURE_KEY = "structure"
+
+
+def with_structure(recipe: dict[str, Any], genome: Any) -> dict[str, Any]:
+    """*recipe* with a structural genome recorded on it.
+
+    Written only when the genome actually varies — the same conditional rule
+    every optional key here follows, and for the same measured reason: a key
+    written unconditionally puts a new line in every recipe ever produced for a
+    value that changes nothing, and the default build's byte diff is what
+    catches it. An absent key means `structure.CLASSIC`, which is what every
+    corpus built before this existed *was*.
+    """
+    if not genome.varies:
+        return recipe
+    payload = {
+        "omission": genome.omission,
+        "floor": genome.floor,
+        "variant_bias": genome.variant_bias,
+    }
+    # `synthesis` is written only when it is on, which is the same conditional
+    # rule as the key itself and applied for the same measured reason one level
+    # down: the three fields above are the genome every recipe carrying this key
+    # has ever carried, and writing a fourth unconditionally would put a new line
+    # into the recipe of every already-built omission corpus for a value that
+    # changes nothing about it. `structure_of` reads it back as absent-means-off.
+    if genome.synthesis:
+        payload["synthesis"] = genome.synthesis
+    return {**recipe, STRUCTURE_KEY: payload}
+
+
+def structure_of(recipe: Mapping[str, Any] | None) -> Any:
+    """The structural genome *recipe* was built under.
+
+    Tolerant of a missing recipe and a missing key, because this is called from
+    the document compiler for worlds that arrived every way a world can — built,
+    replayed, loaded from a corpus written before genomes existed, or
+    hand-authored as a fixture with no recipe at all. All four mean classic.
+    """
+    from .structure import CLASSIC, StructuralGenome
+
+    if not recipe:
+        return CLASSIC
+    payload = recipe.get(STRUCTURE_KEY)
+    if not payload:
+        return CLASSIC
+    # Constructed by keyword against the recorded keys rather than splatted, so
+    # that a recipe written by a *newer* worldloom carrying a genome field this
+    # release does not know about fails loudly here instead of silently
+    # producing documents of a shape the recipe did not ask for.
+    return StructuralGenome(
+        omission=int(payload["omission"]),
+        floor=int(payload["floor"]),
+        variant_bias=int(payload["variant_bias"]),
+        # Defaulted where the three above are not, and the asymmetry is the
+        # point rather than an inconsistency. A recipe missing `omission` was
+        # written by something that did not understand this key at all and
+        # should say so loudly. A recipe missing `synthesis` was written before
+        # synthesis existed — a *dated* recipe, not an unknown one — and zero is
+        # precisely the genome that corpus was built under, so defaulting it is
+        # what makes it replay byte-for-byte rather than what hides a mismatch.
+        synthesis=int(payload.get("synthesis", 0)),
+    )
+
+
 def with_step(recipe: dict[str, Any], scenario: str, **arguments: Any) -> dict[str, Any]:
     """A copy of *recipe* with one scenario step appended.
 
@@ -769,6 +839,30 @@ def rebuild(
     # it was given, never the resolved `Locale`.
     if recipe.get(LOCALE_KEY) is not None and not localised:
         world = world.extend(recipe={**world.recipe, LOCALE_KEY: recipe[LOCALE_KEY]})
+
+    # The structural genome, re-attached for the locale's reason one field along
+    # — and unconditionally, because unlike the locale there is no spec field it
+    # could have travelled in on. `build_recipe` never writes this key; only
+    # `with_structure` does, from the CLI, after the world is built.
+    #
+    # **Before the steps, not after**, and that ordering is the whole fix: every
+    # step below compiles documents, and `documents._variant_for` reads the
+    # genome off `world._recipe` at compile time. A genome attached afterwards
+    # would be recorded on a corpus whose documents were shaped without it —
+    # a recipe that lies about its own output, which is worse than one that
+    # forgets.
+    #
+    # The measured defect this closes: a corpus built with `--outline-synthesis
+    # 1000` and rebuilt through *this* function came back with no `structure`
+    # key at all, so `structure_of` returned `CLASSIC` and the rebuild compiled
+    # different outlines from the corpus it was rebuilding. It went unnoticed
+    # because the proof used for every genome so far was `worldloom build
+    # --replay`, and that path re-supplies the same command-line flags, so
+    # `cli._shaped` reconstructed the genome from the flags rather than from the
+    # record. The flags are the thing the recipe exists to make unnecessary; a
+    # replay proof that passes them is not testing the recording.
+    if recipe.get(STRUCTURE_KEY) is not None:
+        world = world.extend(recipe={**world.recipe, STRUCTURE_KEY: recipe[STRUCTURE_KEY]})
 
     for step in recipe.get("steps", ()):
         name = step.get("scenario")

@@ -16,12 +16,19 @@ reconciliation constraints everything else is checked against.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
+from . import columns as columns_module
+from . import domains
+from . import recipe as recipe_module
+from . import roleseq
+from . import structure
 from .ids import Minter
+from .rng import Rng
 from .narrative import references
 from .models import (
     FlowNode,
@@ -43,6 +50,7 @@ from .models import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .adjacency import Adjacency
     from .world import World
 
 MONEY_FORMAT = "#,##0;(#,##0)"
@@ -378,63 +386,161 @@ def _money(amount: float | None, fact_id: str | None = None) -> Cell:
     return Cell(value=amount, fact_id=fact_id)
 
 
-#: The eight P&L columns, and the fact kind each reads.
-#:
-#: `gm_pct_budget` was absent for a long time, and its absence was invisible:
-#: `generators/finance.py` mints `financial.gross_margin_pct.budget` for every
-#: category and unit, `generators/planning.py` puts those facts in the
-#: workbook's required set, and no column here read them — 114 facts a build,
-#: planned into a document and carried by none of it. Nothing complained,
-#: because until `validate.carried_evidence` existed nothing compared what an
-#: intent asked a document to carry against what the compiled document holds.
-#: Budget margin also earns its place on the sheet: a division can beat its
-#: gross-profit budget while missing the rate it was supposed to earn it at,
-#: and with actual margin alone a reader cannot see that.
-_MEASURES: dict[str, str] = {
-    "revenue_budget": "financial.revenue.budget",
-    "revenue_actual": "financial.revenue.actual",
-    "revenue_variance": "financial.revenue.variance",
-    "gp_budget": "financial.gross_profit.budget",
-    "gp_actual": "financial.gross_profit.actual",
-    "gp_variance": "financial.gross_profit.variance",
-    "gm_pct_budget": "financial.gross_margin_pct.budget",
-    "gm_pct_actual": "financial.gross_margin_pct.actual",
-}
+#: How a column's declared unit is spelled to a spreadsheet. The `columns`
+#: module says whether a figure is an amount or a rate — which is what decides
+#: whether it adds up — and this module says how that is written, because a
+#: number format is a rendering decision and the sheet spec is not a renderer.
+_UNIT_FORMAT: dict[str, str] = {"money": MONEY_FORMAT, "percent": PERCENT_FORMAT}
 
-#: Columns computed from the two beside them, and from which. Declared once here
-#: so a category row, a unit subtotal, and the group row all recompute the same
-#: way — a subtotal that pasted its variance while the rows above computed theirs
-#: is exactly the disagreement this project exists to prevent.
-_DERIVED: dict[str, tuple[FormulaKind, list[str]]] = {
-    "revenue_variance": (FormulaKind.DIFFERENCE, ["revenue_actual", "revenue_budget"]),
-    "gp_variance": (FormulaKind.DIFFERENCE, ["gp_actual", "gp_budget"]),
-    "gm_pct_budget": (FormulaKind.RATIO_PCT, ["gp_budget", "revenue_budget"]),
-    "gm_pct_actual": (FormulaKind.RATIO_PCT, ["gp_actual", "revenue_actual"]),
-}
+
+def _columns(sheet: columns_module.Sheet) -> list[Column]:
+    """A declared sheet as the IR's column list."""
+    return [
+        Column(key=column.key, label=column.label,
+               number_format=_UNIT_FORMAT[column.unit])
+        for column in sheet.columns
+    ]
+
+
+# The four tables below were four hand-written constants that had to agree with
+# each other and with three `Column` lists — seven places, and the repo has
+# already paid twice for them disagreeing (`columns.py`'s docstring records both
+# defects with their counts). They are now projections of one declaration,
+# computed at import.
+#
+# They stay module globals, and are not replaced by calls into `columns`, for
+# two reasons. `_measure_row` reads them once per column per row over thousands
+# of rows, so a dict is the right lookup structure and building it once is what
+# "declared spec, compiled table" means. And `tests/test_carried_evidence.py`
+# reproduces the `gm_pct_budget` defect by *mutating* `_MEASURES` and `_DERIVED`
+# in place — the one test that proves a column reading no fact kind is caught —
+# so these names are load-bearing, not vestigial. `Sheet`'s projections return
+# fresh containers on every call precisely so that mutation cannot reach the
+# spec.
+#
+# What they are *not*, since a pack could author a workbook, is the whole
+# answer: they are the **default**, the sheet a world with no pack compiles.
+# `_Bound` below is the same four tables for the sheet one world resolved, and
+# every call site with a `World` in scope reads that instead. These four names
+# are what it falls back to, by name and at call time, so both tests above
+# still reach the compiler through them.
+
+#: ``column key -> the fact kind it reads``.
+_MEASURES: dict[str, str] = columns_module.PNL.kinds()
+
+#: Columns computed from the two beside them, and from which. Declared once so
+#: a category row, a unit subtotal, and the group row all recompute the same
+#: way — a subtotal that pasted its variance while the rows above computed
+#: theirs is exactly the disagreement this project exists to prevent.
+_DERIVED: dict[str, tuple[FormulaKind, list[str]]] = columns_module.PNL.derivations()
 
 #: Columns a subtotal must *not* sum, because they do not add up. A margin
 #: percentage is a ratio of totals, never the total of ratios; a variance, by
 #: contrast, is additive, so a subtotal sums its children's variances and shows
 #: which of them the group's miss came from.
-_NOT_ADDITIVE = frozenset({"gm_pct_budget", "gm_pct_actual"})
+_NOT_ADDITIVE = columns_module.PNL.not_summable()
 
 #: The same rule stated over fact *kinds* rather than column keys, for the trend
 #: sheets — which are laid out by period rather than by measure, so they cannot
 #: look a column up in `_NOT_ADDITIVE`.
-_RATE_KINDS = frozenset({"financial.gross_margin_pct.actual", "financial.gross_margin_pct.budget"})
+_RATE_KINDS = columns_module.PNL.rate_kinds()
 
 
 def _pnl_columns() -> list[Column]:
-    return [
-        Column(key="revenue_budget", label="Revenue budget", number_format=MONEY_FORMAT),
-        Column(key="revenue_actual", label="Revenue actual", number_format=MONEY_FORMAT),
-        Column(key="revenue_variance", label="Revenue variance", number_format=MONEY_FORMAT),
-        Column(key="gp_budget", label="GP budget", number_format=MONEY_FORMAT),
-        Column(key="gp_actual", label="GP actual", number_format=MONEY_FORMAT),
-        Column(key="gp_variance", label="GP variance", number_format=MONEY_FORMAT),
-        Column(key="gm_pct_budget", label="GM% budget", number_format=PERCENT_FORMAT),
-        Column(key="gm_pct_actual", label="GM% actual", number_format=PERCENT_FORMAT),
-    ]
+    return _columns(columns_module.PNL)
+
+
+class _Bound:
+    """The four tables above, for the sheet *one world* actually compiles with.
+
+    A pack may declare its own workbook: ``doctypes.install_sheets`` validates it
+    and ``columns.for_world`` resolves it. Until this class existed nothing
+    between those two and the page — ``documents`` read the module globals above
+    and nothing else, so an insurer whose pack re-headed every column still filed
+    a month-end model reading "Revenue actual". A declared, linted, installed
+    sheet compiled to the engine's eight columns and no check anywhere compared
+    the two, which is this repository's own definition of a silent degradation.
+
+    ``sheet is None`` means *the engine's own*, and it is not the same thing as
+    ``_Bound(columns_module.PNL)``. The globals are read **by name, at call
+    time**, because two tests reach the compiler through them and must keep
+    doing so: ``tests/test_carried_evidence.py`` reproduces the
+    ``gm_pct_budget`` defect by *mutating* ``_MEASURES`` and ``_DERIVED`` in
+    place and by replacing ``_pnl_columns`` itself, and
+    ``tests/test_columns.py`` rebinds ``_NOT_ADDITIVE`` to measure what a
+    summable margin does to a real corpus. A bundle that captured either at
+    import would leave both tests green against a compiler they no longer
+    reach.
+
+    An authored sheet's tables are built once, here, rather than per row:
+    ``Sheet``'s projections return fresh containers on every call (deliberately
+    — see its docstring), and ``_measure_row`` reads the kind table once per
+    column per row over thousands of rows.
+    """
+
+    __slots__ = ("sheet", "_measures", "_derived", "_not_additive", "_rate_kinds")
+
+    def __init__(self, sheet: columns_module.Sheet | None) -> None:
+        self.sheet = sheet
+        self._measures = None if sheet is None else sheet.kinds()
+        self._derived = None if sheet is None else sheet.derivations()
+        self._not_additive = None if sheet is None else sheet.not_summable()
+        self._rate_kinds = None if sheet is None else sheet.rate_kinds()
+
+    @property
+    def measures(self) -> Mapping[str, str]:
+        return _MEASURES if self._measures is None else self._measures
+
+    @property
+    def derived(self) -> Mapping[str, tuple[FormulaKind, list[str]]]:
+        return _DERIVED if self._derived is None else self._derived
+
+    @property
+    def not_additive(self) -> frozenset[str]:
+        return _NOT_ADDITIVE if self._not_additive is None else self._not_additive
+
+    @property
+    def rate_kinds(self) -> frozenset[str]:
+        return _RATE_KINDS if self._rate_kinds is None else self._rate_kinds
+
+    def columns(self) -> list[Column]:
+        # `_pnl_columns()` rather than `_columns(columns_module.PNL)` on the
+        # default path: `tests/test_carried_evidence.py` swaps the *function*
+        # out for one that drops a column, and calls it with no arguments.
+        return _pnl_columns() if self.sheet is None else _columns(self.sheet)
+
+
+#: The engine's own sheet, as every call site read it before a pack could author
+#: one. Safe as a default argument because it holds nothing: every table it
+#: returns is a fresh look at the module globals.
+_ENGINE = _Bound(None)
+
+
+def _bind(world: World) -> _Bound:
+    """The sheet *world* compiles its measure tables with.
+
+    Identity against ``columns.default`` rather than equality, and the question
+    it asks is "did this world resolve the engine's *own* sheet" — ``default``
+    returns the module constant itself, so a world with no pack yields
+    ``_ENGINE`` and keeps reading the globals live. A pack that authored a sheet
+    identical to the engine's is still bound to its own object, which costs one
+    dict build per compile and keeps `_bind` from having an answer that depends
+    on what a pack happened to write.
+    """
+    sheet = columns_module.for_world(world)
+    return _ENGINE if sheet is columns_module.default(columns_module.AUTHORABLE) else _Bound(sheet)
+
+
+def _cut_columns(world: World, name: str) -> list[Column]:
+    """The IR column list for a *narrowing* of the world's P&L.
+
+    ``stores`` and ``divisions`` are cuts rather than sheets — ``columns.cut``
+    takes them from whichever P&L the world resolved — so a pack that renames a
+    column renames it on the estate sheet and in the memo's divisional table
+    without declaring either. The rows those columns carry are still measured
+    through the P&L's own bound tables, because a cut keeps its parent's keys.
+    """
+    return _columns(columns_module.for_world(world, name))
 
 
 class _Facts:
@@ -470,20 +576,29 @@ def _measure_row(
     children: list[str] | None = None,
     emphasis: bool = False,
     extra: dict[str, Cell] | None = None,
+    bound: _Bound = _ENGINE,
 ) -> Row:
     """One P&L row: stated where the ledger states it, computed where it derives.
 
     ``children`` makes the row a subtotal, summing the named rows rather than
     restating a figure — so a reader who deletes a category sees the unit total
     move.
+
+    ``bound`` is the sheet the caller's world compiles with; the default is the
+    engine's, which is what every caller with no world in scope has to pass.
+    ``columns`` stays a separate argument because it is narrower than the bound
+    sheet on two tables — the store sheet's money columns and the memo's
+    divisional cut — while the kinds, derivations and non-summing rule are the
+    P&L's throughout, keyed by the same column keys.
     """
     cells: dict[str, Cell] = {}
+    measures, derivations, not_additive = bound.measures, bound.derived, bound.not_additive
     for column in columns:
-        fact = index.get(_MEASURES[column.key], subject, period)
+        fact = index.get(measures[column.key], subject, period)
         value = fact.value.amount if fact and fact.value else None
         fact_id = fact.id if fact else None
-        derived = _DERIVED.get(column.key)
-        if children and column.key not in _NOT_ADDITIVE:
+        derived = derivations.get(column.key)
+        if children and column.key not in not_additive:
             cells[column.key] = Cell(
                 value=value, fact_id=fact_id, formula=FormulaKind.SUM, operands=children
             )
@@ -507,6 +622,7 @@ def _sum_row(
     children: list[str],
     source: list[Row],
     extra: dict[str, Cell] | None = None,
+    bound: _Bound = _ENGINE,
 ) -> Row:
     """A total that reports the rows above it rather than a figure from the ledger.
 
@@ -519,8 +635,9 @@ def _sum_row(
     """
     lookup = {row.key: row for row in source}
     cells: dict[str, Cell] = {}
+    not_additive = bound.not_additive
     for column in columns:
-        if column.key in _NOT_ADDITIVE:
+        if column.key in not_additive:
             continue
         total = sum(
             (lookup[child].cells[column.key].value or 0.0)
@@ -529,8 +646,8 @@ def _sum_row(
         )
         cells[column.key] = Cell(value=total, formula=FormulaKind.SUM, operands=children)
     for column in columns:
-        derived = _DERIVED.get(column.key)
-        if derived is None or column.key not in _NOT_ADDITIVE:
+        derived = bound.derived.get(column.key)
+        if derived is None or column.key not in not_additive:
             continue
         formula, operands = derived
         left = cells.get(operands[0])
@@ -588,6 +705,14 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     period = (periods[-1] if periods else "") or world.period or ""
     company = world.company
 
+    # The sheet this world compiles with — the pack's if it declared one, the
+    # engine's otherwise. Bound once here and threaded through every row builder
+    # below rather than read from the module globals at each of them: this is
+    # the one function with a `World` in scope, and a call site resolving it for
+    # itself would be a second answer to "which workbook is this company's".
+    bound = _bind(world)
+    measures = bound.measures
+
     # A business unit the finance generator booked no month for does not get a
     # P&L row. This is the same rule `sites_of` applies below, for the same
     # reason, and it was missing here: `world.business_units` unfiltered meant a
@@ -600,9 +725,11 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # recurring one function later.
     #
     # The predicate is "any measured column resolves", not "revenue resolves":
-    # a unit carried on gross profit alone is still a unit that closed.
+    # a unit carried on gross profit alone is still a unit that closed — and the
+    # columns are the sheet's, so a pack that re-points them is still asking
+    # about its own measures rather than the engine's.
     def measured(unit_id: str) -> bool:
-        return any(index.get(kind, unit_id, period) is not None for kind in _MEASURES.values())
+        return any(index.get(kind, unit_id, period) is not None for kind in measures.values())
 
     units = [unit for unit in world.business_units if measured(unit.id)]
     # A workbook whose every unit fails the test is a workbook with no month in
@@ -613,7 +740,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         units = list(world.business_units)
 
     unit_keys = [unit.id for unit in units]
-    columns = _pnl_columns()
+    columns = bound.columns()
 
     categories_of = {
         unit.id: [c for c in world.categories if c.business_unit_id == unit.id]
@@ -622,12 +749,19 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # A site with no revenue fact is a site the finance generator did not book
     # turnover for — a distribution centre. It belongs on a property register, not
     # on a store P&L.
+    #
+    # The kind comes from the sheet's own `revenue_actual` column rather than
+    # being named here. Both spell `financial.revenue.actual` on the engine's
+    # sheet; a pack that re-points the column and leaves this literal gets an
+    # estate sheet that is silently absent, which is the "empty Store
+    # Performance tab" this function's own docstring argues against.
+    revenue_actual = measures["revenue_actual"]
     sites_of = {
         unit.id: [
             s
             for s in world.sites
             if s.business_unit_id == unit.id
-            and index.get("financial.revenue.actual", s.id, period) is not None
+            and index.get(revenue_actual, s.id, period) is not None
         ]
         for unit in units
     }
@@ -635,12 +769,12 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # -- Business Unit P&L -------------------------------------------------
     rows = [
         _measure_row(index, key=unit.id, label=unit.name, subject=unit.id,
-                     period=period, columns=columns)
+                     period=period, columns=columns, bound=bound)
         for unit in units
     ]
     rows.append(
         _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
-                     columns=columns, children=unit_keys, emphasis=True)
+                     columns=columns, children=unit_keys, emphasis=True, bound=bound)
     )
 
     pnl = Table(
@@ -724,12 +858,12 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         for category in members:
             category_rows.append(
                 _measure_row(index, key=category.id, label=f"{unit.name} · {category.name}",
-                             subject=category.id, period=period, columns=columns)
+                             subject=category.id, period=period, columns=columns, bound=bound)
             )
         category_rows.append(
             _measure_row(index, key=unit.id, label=f"{unit.name} total", subject=unit.id,
                          period=period, columns=columns,
-                         children=[c.id for c in members], emphasis=True)
+                         children=[c.id for c in members], emphasis=True, bound=bound)
         )
         subtotal_keys.append(unit.id)
 
@@ -738,10 +872,10 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         covers_group = len(subtotal_keys) == len(units)
         category_rows.append(
             _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
-                         columns=columns, children=subtotal_keys, emphasis=True)
+                         columns=columns, children=subtotal_keys, emphasis=True, bound=bound)
             if covers_group
             else _sum_row(company.id, "Total, categorised units", columns=columns,
-                          children=subtotal_keys, source=category_rows)
+                          children=subtotal_keys, source=category_rows, bound=bound)
         )
         category_table = Table(
             key="category",
@@ -778,14 +912,17 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         )
 
     # -- Store performance -------------------------------------------------
+    # Region and format describe the *site*, not its month, so they are built
+    # here rather than declared on the sheet: they read no fact, carry no
+    # `fact_id`, and a subtotal leaves them blank. `columns.STORES` is the money
+    # half — the P&L's first three columns narrowed, not a second declaration of
+    # them.
     store_columns = [
         Column(key="region", label="Region"),
         Column(key="format", label="Format"),
-        Column(key="revenue_budget", label="Revenue budget", number_format=MONEY_FORMAT),
-        Column(key="revenue_actual", label="Revenue actual", number_format=MONEY_FORMAT),
-        Column(key="revenue_variance", label="Revenue variance", number_format=MONEY_FORMAT),
+        *_cut_columns(world, "stores"),
     ]
-    store_money = [c for c in store_columns if c.key in _MEASURES]
+    store_money = [c for c in store_columns if c.key in measures]
 
     store_rows: list[Row] = []
     store_subtotals: list[str] = []
@@ -795,14 +932,14 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             continue
         for site in estate:
             row = _measure_row(index, key=site.id, label=site.name, subject=site.id,
-                               period=period, columns=store_money,
+                               period=period, columns=store_money, bound=bound,
                                extra={"region": Cell(value=site.region),
                                       "format": Cell(value=site.format)})
             store_rows.append(row)
         store_rows.append(
             _measure_row(index, key=unit.id, label=f"{unit.name} total", subject=unit.id,
                          period=period, columns=store_money,
-                         children=[s.id for s in estate], emphasis=True,
+                         children=[s.id for s in estate], emphasis=True, bound=bound,
                          extra={"region": Cell(value=""), "format": Cell(value="")})
         )
         store_subtotals.append(unit.id)
@@ -813,10 +950,11 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         covers_group = len(store_subtotals) == len(units)
         store_rows.append(
             _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
-                         columns=store_money, children=store_subtotals, emphasis=True, extra=blank)
+                         columns=store_money, children=store_subtotals, emphasis=True,
+                         extra=blank, bound=bound)
             if covers_group
             else _sum_row(company.id, "Total, trading stores", columns=store_money,
-                          children=store_subtotals, source=store_rows, extra=blank)
+                          children=store_subtotals, source=store_rows, extra=blank, bound=bound)
         )
         store_table = Table(
             key="stores",
@@ -831,6 +969,190 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         )
         sections.append(ArtifactSection(heading="Store Performance", table=store_table))
 
+    # -- Corporate cost base and the distribution network ------------------
+    # Two tabs that exist because `validate.reachability` measured this
+    # vertical's own organisation as decorative. Retail declared two cost
+    # centres that no fact named and no document carried — on every archetype
+    # and both shipped retail packs — and, on any archetype with warehouses, an
+    # estate of zero-weight sites that the Store Performance sheet above
+    # correctly refuses turnover to and that nothing else said anything about
+    # at all: 44 of the grocer's 1,607 and 5 of `trading-retailer.json`'s 173.
+    #
+    # `generators/retail_estate.py` mints the figures and argues the modelling;
+    # what belongs here is why they are on *this* document. The month-end model
+    # is the corpus's system of record and the one artifact every other one
+    # reconciles against, so a decomposition of the corporate cost base that
+    # lived anywhere else would be a second account of a number the workbook
+    # does not carry. And the facts have to reach a *visible* table rather than
+    # the supporting-fact appendix: an appendix row is one per
+    # `required_fact_ids`, so satisfying the gate with one would be measuring
+    # the plan and reporting on the corpus — `validate._readable_surface`'s
+    # own argument, and the failure mode this whole wave exists to close, moved
+    # one layer along.
+    #
+    # Built with local row helpers rather than through `_measure_row`, and that
+    # is not laziness: that function resolves a column's fact kind through
+    # `bound.measures`, which is the P&L sheet's eight keys. These columns are
+    # not on that sheet and must not be — a corporate recharge has no budget and
+    # no variance, so declaring it there would put a figure into the machinery
+    # that derives both. `banking_documents.divisional_performance_ir` reaches
+    # the same conclusion for the same reason.
+    from .generators import retail_estate as _estate
+
+    def _stated(kind: str, subject: str, children: list[str] | None = None) -> Cell:
+        """One measure for one subject, stated where the ledger states it.
+
+        ``children`` makes it a subtotal. The literal value stays the ledger's
+        own figure rather than a Python sum of the rows above — the two are
+        equal by construction, because `retail_estate` allocates by largest
+        remainder from a total drawn once, and stating the fact is what lets
+        `validate.reconciliation` compare a declared sum against the figure it
+        claims to be. No `fact_id` where there is no fact: a cell that names one
+        and states nothing is `validate.empty_cell_cites_a_fact`.
+        """
+        fact = index.get(kind, subject, period)
+        value = fact.value.amount if fact and fact.value else None
+        fact_id = fact.id if fact else None
+        if children:
+            return Cell(value=value, fact_id=fact_id,
+                        formula=FormulaKind.SUM, operands=children)
+        return Cell(value=value, fact_id=fact_id)
+
+    centres = [c for c in world.cost_centres
+               if index.get(_estate.SHARED_COST, c.id, period) is not None]
+    if centres:
+        centre_keys = [centre.id for centre in centres]
+        sections.append(ArtifactSection(
+            heading="Corporate Cost Base",
+            table=Table(
+                key="cost_centres",
+                title="Corporate Cost Base",
+                columns=[Column(key="cost", label="Cost", number_format=MONEY_FORMAT)],
+                rows=[
+                    *[Row(key=centre.id, label=centre.name,
+                          cells={"cost": _stated(_estate.SHARED_COST, centre.id)})
+                      for centre in centres],
+                    Row(key=company.id, label="Total corporate cost", emphasis=True,
+                        cells={"cost": _stated(_estate.SHARED_COST, company.id,
+                                               centre_keys)}),
+                ],
+                note=(
+                    "Where the cost is incurred. The centres sum to the group total, "
+                    "which the next sheet decomposes again over the divisions that "
+                    "carry it — two cuts of one figure, over different entities."
+                ),
+            ),
+        ))
+
+    recharged = [u for u in units
+                 if index.get(_estate.SHARED_RECHARGE, u.id, period) is not None]
+    if recharged:
+        recharge_keys = [unit.id for unit in recharged]
+
+        def recharge_row(key: str, label: str, subject: str, *,
+                         children: list[str] | None = None,
+                         emphasis: bool = False) -> Row:
+            return Row(key=key, label=label, emphasis=emphasis, cells={
+                "recharge": _stated(_estate.SHARED_RECHARGE, subject, children),
+                "revenue": _stated(revenue_actual, subject, children),
+                # Never `children`. Group recovery is the group's own recharge
+                # over the group's own revenue, never the total of three
+                # divisional percentages — `columns.not_summable`'s rule, which
+                # this repository has already paid for twice, on a sheet whose
+                # columns are not the P&L's and so cannot inherit it.
+                "recovery": _stated(_estate.SHARED_RECOVERY, subject),
+            })
+
+        sections.append(ArtifactSection(
+            heading="Shared Services Recharge",
+            table=Table(
+                key="recharge",
+                title="Shared Services Recharge",
+                columns=[
+                    Column(key="recharge", label="Recharge", number_format=MONEY_FORMAT),
+                    Column(key="revenue", label="Revenue", number_format=MONEY_FORMAT),
+                    Column(key="recovery", label="Recovery (%)",
+                           number_format=RATE_FORMAT),
+                ],
+                rows=[
+                    *[recharge_row(u.id, u.name, u.id) for u in recharged],
+                    recharge_row(company.id, "Group", company.id,
+                                 children=recharge_keys, emphasis=True),
+                ],
+                note=(
+                    "Recharged on turnover, so the revenue column is the same figure "
+                    "the P&L states and recovery is the two columns beside it "
+                    "divided. Recovery is a rate and does not sum: the group rate is "
+                    "the group's own two amounts, not the total of the divisions'."
+                ),
+            ),
+        ))
+
+    network_rows: list[Row] = []
+    network_subtotals: list[str] = []
+    blank_extra = {"region": Cell(value=""), "format": Cell(value="")}
+
+    def network_row(key: str, label: str, subject: str, *,
+                    children: list[str] | None = None, emphasis: bool = False,
+                    extra: dict[str, Cell] | None = None) -> Row:
+        cells = {
+            "cartons": _stated(_estate.THROUGHPUT, subject, children),
+            "cost_to_serve": _stated(_estate.COST_TO_SERVE, subject, children),
+            # A rate, so never a sum — see `recharge_row` above.
+            "cost_per_carton": _stated(_estate.COST_PER_CARTON, subject),
+        }
+        cells.update(extra or blank_extra)
+        return Row(key=key, label=label, cells=cells, emphasis=emphasis)
+
+    for unit in units:
+        estate = [
+            site for site in _estate.distribution_estate(
+                [s for s in world.sites if s.business_unit_id == unit.id])
+            if index.get(_estate.THROUGHPUT, site.id, period) is not None
+        ]
+        if not estate:
+            continue
+        for site in estate:
+            network_rows.append(network_row(
+                site.id, site.name, site.id,
+                extra={"region": Cell(value=site.region),
+                       "format": Cell(value=site.format)},
+            ))
+        network_rows.append(network_row(
+            unit.id, f"{unit.name} total", unit.id,
+            children=[s.id for s in estate], emphasis=True))
+        network_subtotals.append(unit.id)
+
+    if network_rows:
+        network_rows.append(network_row(
+            company.id, "Distribution network", company.id,
+            children=network_subtotals, emphasis=True))
+        sections.append(ArtifactSection(
+            heading="Distribution Network",
+            table=Table(
+                key="distribution",
+                title="Distribution Network",
+                columns=[
+                    Column(key="region", label="Region"),
+                    Column(key="format", label="Format"),
+                    Column(key="cartons", label="Cartons dispatched",
+                           number_format=MONEY_FORMAT),
+                    Column(key="cost_to_serve", label="Cost to serve",
+                           number_format=MONEY_FORMAT),
+                    Column(key="cost_per_carton", label="Cost per carton",
+                           number_format=RATE_FORMAT),
+                ],
+                rows=network_rows,
+                note=(
+                    "The sites the Store Performance sheet leaves out, and the "
+                    "measures they own. A distribution centre holds stock and books "
+                    "no turnover, so it has no line on a store P&L and a volume and "
+                    "a cost of its own here. The network total is the sum of the "
+                    "divisions that have one, not of every division."
+                ),
+            ),
+        ))
+
     # -- Trend, by measure -------------------------------------------------
     # Three sheets, not one, and the second and third are not decoration. The
     # planner hands this workbook actuals for every comparative month across
@@ -844,12 +1166,32 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # revenue climbs every month while its margin rate slides is the most
     # ordinary story in retail and the one a revenue-only trend hides
     # completely.
-    _TRENDS: tuple[tuple[str, str, str, str], ...] = (
-        ("trend", "Revenue Trend", "financial.revenue.actual", MONEY_FORMAT),
-        ("trend_gp", "Gross Profit Trend", "financial.gross_profit.actual", MONEY_FORMAT),
-        ("trend_margin", "Margin Trend", "financial.gross_margin_pct.actual", PERCENT_FORMAT),
+    #
+    # The kind and the number format come from the sheet's own three "actual"
+    # columns rather than being named again here — the fifth and sixth places
+    # that would have had to agree with it. On the engine's sheet they resolve
+    # to exactly the three `financial.*` kinds this tuple used to spell; on an
+    # authored one they follow the pack, and `columns.BOUND_KEYS` is what
+    # guarantees all three columns are still there to read. A literal here
+    # would give a pack that re-points its columns three trend tabs of empty
+    # cells, which is the defect recorded above arriving by a second route.
+    #
+    # The *headings* stay the engine's English. They title a tab rather than a
+    # column, a pack has no field for them, and a tab called "Written premium
+    # actual Trend" is not what the missing field would have said anyway.
+    formats = {column.key: column.number_format for column in columns}
+    _TRENDS: tuple[tuple[str, str, str, str], ...] = tuple(
+        (table_key, heading, measures[column_key], formats[column_key])
+        for table_key, heading, column_key in (
+            ("trend", "Revenue Trend", "revenue_actual"),
+            ("trend_gp", "Gross Profit Trend", "gp_actual"),
+            ("trend_margin", "Margin Trend", "gm_pct_actual"),
+        )
     )
     if len(periods) > 1:
+        # Stated over fact *kinds* rather than column keys, because a trend
+        # sheet is laid out one column per period and has no column key to test.
+        rate_kinds = bound.rate_kinds
 
         def trend_row(kind: str, key: str, label: str, subject: str, *,
                       children: list[str] | None = None, emphasis: bool = False) -> Row:
@@ -864,8 +1206,8 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                     # columns. A subtotal row on the margin sheet therefore
                     # states its own fact and declares no formula, while the
                     # money sheets sum their children.
-                    formula=(FormulaKind.SUM if children and kind not in _RATE_KINDS else None),
-                    operands=(children or [] if kind not in _RATE_KINDS else []),
+                    formula=(FormulaKind.SUM if children and kind not in rate_kinds else None),
+                    operands=(children or [] if kind not in rate_kinds else []),
                 )
             return Row(key=key, label=label, cells=cells, emphasis=emphasis)
 
@@ -1066,11 +1408,17 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             )
         )
 
+    # Every `stated` figure is read through the sheet's own column, for the
+    # reason the note under this table gives: it compares the workbook against
+    # the *ledger* rather than against itself. A hardcoded kind beside a
+    # re-pointed column would compare the sum of one measure against the stated
+    # total of another — or, more likely, against nothing at all, and a `None`
+    # stated value makes the difference `None` and the check vacuous.
     pnl_rows = {row.key: row for row in pnl.rows}
     check("revenue_units_to_group", "Unit revenue sums to group revenue", "pnl", "revenue_actual",
-          unit_keys, index.get("financial.revenue.actual", company.id, period), pnl_rows)
+          unit_keys, index.get(revenue_actual, company.id, period), pnl_rows)
     check("gp_units_to_group", "Unit gross profit sums to group gross profit", "pnl", "gp_actual",
-          unit_keys, index.get("financial.gross_profit.actual", company.id, period), pnl_rows)
+          unit_keys, index.get(measures["gp_actual"], company.id, period), pnl_rows)
 
     if category_table is not None:
         category_lookup = {row.key: row for row in category_table.rows}
@@ -1080,7 +1428,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                 continue
             check(f"categories_to_{unit.id}", f"{unit.name} categories sum to the unit",
                   "category", "revenue_actual", [c.id for c in members],
-                  index.get("financial.revenue.actual", unit.id, period), category_lookup)
+                  index.get(revenue_actual, unit.id, period), category_lookup)
 
     if store_table is not None:
         store_lookup = {row.key: row for row in store_table.rows}
@@ -1090,7 +1438,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                 continue
             check(f"stores_to_{unit.id}", f"{unit.name} stores sum to the unit",
                   "stores", "revenue_actual", [s.id for s in estate],
-                  index.get("financial.revenue.actual", unit.id, period), store_lookup)
+                  index.get(revenue_actual, unit.id, period), store_lookup)
 
     reconciliation = Table(
         key="reconciliation",
@@ -1163,6 +1511,19 @@ class SectionPlan:
     structural or one-off has something to actually do.
     """
 
+    required: bool = True
+    """Whether every document of this type must carry this section.
+
+    ``True`` by default, and that default is what makes `structure.py`'s
+    omission safe to enable globally: a type nobody has annotated has no
+    optional sections, so a structural genome cannot strip the section that
+    carried a fact the narration contract requires and turn a valid document
+    into one that trips ``required_fact_omitted``. Marking a section optional is
+    a deliberate statement that a reader would not find its absence strange —
+    an appendix, a standing-exposure note, a "what we are doing about it" that
+    a quiet month genuinely would not have.
+    """
+
 
 _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
     "cfo_variance_memo": (
@@ -1191,6 +1552,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Report whether the close met its committed date and, if not, what stopped it. "
             "Distinguish a calendar impact from a P&L impact explicitly — conflating them "
             "is the most common error in this kind of memo.",
+            required=False,
         ),
         SectionPlan(
             "Recommendation", ("ops.remediation", "ops.root_cause_classification", "ops.mapping_table_owner"), "any",
@@ -1216,6 +1578,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Focus next period", ("metric.",), "any",
             "Name the one or two measures the committee should watch, and why. Forward-"
             "looking, brief, and free of operational detail.",
+            required=False,
         ),
     ),
     "incident_rca": (
@@ -1253,6 +1616,13 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "belief examined and ruled out at the time, not as an error — the point is "
             "what the evidence supported then, not blame now. The hypothesis itself is "
             "cited under Root cause; this section owns only the ruling-out.",
+            # Optional because an incident that went straight to its cause has
+            # no false trail to record, and a review without one reads as a
+            # short investigation rather than a truncated document. The
+            # hypothesis it tested is cited under Root cause — which is
+            # required — so dropping this loses the ruling-out and never the
+            # cause.
+            required=False,
         ),
         SectionPlan(
             "Root cause", ("ops.cause", "ops.root_cause_classification", "ops.mapping_table_owner"), "any",
@@ -1263,6 +1633,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Contributing factors", ("ops.previous_similar_incident", "ops.workaround"), "any",
             "What made this more likely or harder to catch. Recurrence is the strongest "
             "signal available; if there is precedent, lead with it.",
+            required=False,
         ),
         SectionPlan(
             "Actions", ("ops.remediation",), "any",
@@ -1294,6 +1665,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Next steps", ("ops.cause",), "any",
             "What the team is doing about it right now. Provisional by nature. This page is "
             "never updated, so it must not hedge in a way that would age well.",
+            required=False,
         ),
     ),
     "knowledge_article": (
@@ -1306,6 +1678,12 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Cause", ("ops.cause", "ops.mapping_table_owner"), "any",
             "Why it happens, briefly, and who to go to. Enough that the procedure below "
             "makes sense; not a root-cause analysis.",
+            # Optional on the article's own argument: the Procedure below says
+            # a reader "should be able to follow this without understanding the
+            # cause", so an article that is symptom then steps is the ordinary
+            # runbook rather than a defective one. Procedure stays required —
+            # it is what the article is for.
+            required=False,
         ),
         SectionPlan(
             "Procedure", ("ops.workaround",), "any",
@@ -1325,6 +1703,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Watch items", ("metric.",), "any",
             "What this unit should watch next period, if the metrics given warrant "
             "anything. One or two sentences; skip gracefully if nothing does.",
+            required=False,
         ),
     ),
     "close_calendar": (
@@ -1345,6 +1724,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "The date moved. State what it moved to and what the standing rule is when it "
             "does. Procedural register — this is read by people looking up a rule, not by "
             "people who want to know how the period went.",
+            required=False,
         ),
     ),
 
@@ -1384,6 +1764,12 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "What is being run in the meantime and on what basis. Provisional register — "
             "this is written while the incident is open and will be read by people "
             "deciding whether to wait.",
+            # Optional because an assessment issued before anybody has a
+            # workaround has no holding position to state, and that is the
+            # normal case for the first hour this document exists to serve.
+            # "What it reaches" — its own purpose calls it the whole point of
+            # the assessment — stays required.
+            required=False,
         ),
     ),
     "remediation_scope_review": (
@@ -1410,6 +1796,7 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "Precedent, and what it says about whether this scope is enough. If there "
             "is a prior occurrence, lead with it — a fix that did not hold is the "
             "strongest argument available for widening the scope.",
+            required=False,
         ),
     ),
     "peak_trading_review": (
@@ -1433,6 +1820,12 @@ _OUTLINES: dict[str, tuple[SectionPlan, ...]] = {
             "What it says about the plan", ("metric.",), "any",
             "What the peak's own measures imply for the rest of the year. Forward-"
             "looking and short; skip gracefully if the measures given say nothing.",
+            # The purpose already said this: "skip gracefully if the measures
+            # given say nothing" is a section declaring its own conditionality,
+            # the same tell `unit_close_commentary/Watch items` carries. A
+            # forward look is the first thing a review of a month that has
+            # already happened drops.
+            required=False,
         ),
     ),
     "audit_committee_pack": (
@@ -1545,6 +1938,11 @@ _OUTLINE_VARIANTS: dict[str, tuple[tuple[SectionPlan, ...], ...]] = {}
 def _variant_for(world: Any, intent: ArtifactIntent) -> tuple[SectionPlan, ...]:
     """Which outline this particular document gets.
 
+    Two decisions, in order: which of a type's authored variants, then which of
+    that variant's sections. Both live in `structure.py` — the choosing was
+    here first and moved there so the two compose in one place, and its
+    measurement is worth keeping in front of whoever reads this next.
+
     Chosen by hashing the intent's own id, not by cycling an ordinal. The
     ordinal read beautifully — "rotate the variants over the documents of a
     type, in minted order" — and it aliased to zero at the shipped shape:
@@ -1561,14 +1959,264 @@ def _variant_for(world: Any, intent: ArtifactIntent) -> tuple[SectionPlan, ...]:
     walk order, `crc32` is defined byte-for-byte, and neither knows the clock.
     A document's shape still never moves when a later period adds another of
     its type — its id is already minted.
-    """
-    variants = _OUTLINE_VARIANTS.get(intent.artifact_type)
-    default = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
-    if not variants:
-        return default
-    from zlib import crc32
 
-    return variants[crc32(f"{intent.artifact_type}:{intent.id}".encode()) % len(variants)]
+    The genome comes off the *recipe*, not off a `World` field and not off a
+    process global. The recipe is already the thing that survives to disk and
+    drives replay, so a corpus whose documents were shaped by a genome resolves
+    the same shapes when it is loaded back, and a rebuild reproduces them
+    without anything being threaded through four domain builders.
+    """
+    genome = recipe_module.structure_of(getattr(world, "_recipe", None))
+    key = f"{intent.artifact_type}:{intent.id}"
+    variants = _OUTLINE_VARIANTS.get(intent.artifact_type)
+    if variants:
+        chosen: tuple[SectionPlan, ...] = tuple(structure.choose(variants, key=key, genome=genome))
+    else:
+        chosen = _OUTLINES.get(intent.artifact_type, _DEFAULT_OUTLINE)
+    authored = structure.derive(chosen, key=key, genome=genome)
+    if not structure.attempts(key, genome):
+        return authored
+    return synthesised(world, intent, authored, key=key, genome=genome).sections
+
+
+def _in_scope(fact: CanonicalFact, scope: str, *, company_id: str, unit_ids: set[str]) -> bool:
+    """Whether *fact*'s subject is what a ``group``/``unit``/``any`` section is about."""
+    if scope == "group":
+        return fact.subject == company_id
+    if scope == "unit":
+        return fact.subject in unit_ids
+    return True
+
+
+def _assigned(
+    facts: Sequence[CanonicalFact],
+    step: SectionPlan,
+    *,
+    company_id: str,
+    unit_ids: set[str],
+) -> list[str]:
+    """Which of *facts* the section *step* is handed, in the order they arrived.
+
+    One function rather than a rule spelled out at each site that needs it, and
+    that is load-bearing rather than tidy: `outline` uses it to *build* the
+    document, and `synthesised`'s two predicates use it to decide whether a
+    synthesised outline may be used at all. If the two ever disagreed, the
+    coverage test would be vouching for a document other than the one that gets
+    compiled — which is a check that reports success for work it never looked at.
+    """
+    return [
+        fact.id
+        for fact in facts
+        if _in_scope(fact, step.scope, company_id=company_id, unit_ids=unit_ids)
+        and any(fact.kind.startswith(prefix) for prefix in step.kinds)
+    ]
+
+
+def _outlines_of(artifact_type: str) -> tuple[tuple[SectionPlan, ...], ...]:
+    """Every outline a document of *artifact_type* can actually be built from.
+
+    Variants when the type has them, its plain outline otherwise — the same
+    enumeration `tests/test_optional_sections.installed` walks, and for the same
+    reason: `_variant_for` reads the variant table first, so a type with variants
+    is not also reachable through `_OUTLINES`.
+
+    A type with neither is **not** given `_DEFAULT_OUTLINE` here, and that is a
+    decision rather than an oversight. The default outline is one section,
+    ``kinds=("",)`` — "every fact I was given" — so admitting it to the role
+    catalogue would let synthesis satisfy any coverage test at all by dumping a
+    document's whole fact set into one generic "Summary". The types that fall
+    through to it are the ones no author gave an outline; they are exactly the
+    ones synthesis has nothing to say about, and they fall back.
+    """
+    variants = _OUTLINE_VARIANTS.get(artifact_type)
+    if variants:
+        return variants
+    plain = _OUTLINES.get(artifact_type)
+    return (plain,) if plain else ()
+
+
+def _vertical_of(world: Any) -> str:
+    """Which engine's company this is — `roleseq`'s tag — or ``""`` if unknown.
+
+    Off the **recipe**, through the domain registry, and each half of that is the
+    only honest source available.
+
+    *The registry, not a table.* `roleseq`'s cross-vertical guard is structural:
+    a symbol carries its tag, so two sections with the same role under different
+    tags can never be adjacent, and a caller who passes a tag the catalogue has
+    never seen gets nothing rather than a splice. That guard is worth exactly as
+    much as the tag is true, so the tag is the name of the domain that *owns this
+    world's archetype* — `domains.for_archetype`, the same lookup the CLI's build
+    dispatch and the recipe rebuilder resolve through. Naming the vertical any
+    other way in core would be core naming a vertical, which this repository
+    forbids for reasons `domains.py` states at length.
+
+    *The recipe, not `world._archetype`.* The archetype object is generator state
+    and is absent on a world loaded from disk (`world.py` says so beside the
+    field); the recipe's ``archetype`` key survives the round trip. It is also
+    where `structure_of` reads the genome from two lines earlier, so both halves
+    of "was this corpus synthesised, and as what" come off one record — a world
+    that can answer the second question but not the first could not replay.
+
+    *And a pack has no archetype anybody owns.* `packs.archetype_key` mints
+    ``pack:<name>``, deliberately never registered — so `for_archetype` returned
+    ``None`` for **every** ``--pack`` build, the tag came back empty, and
+    `synthesised` took its `no_shape` branch every time: `--outline-synthesis`
+    was silently a no-op on exactly the corpora a pack exists to make different.
+    A pack's ``base`` is the engine it runs on and is the honest answer — its
+    documents *are* that engine's outlines, which is what the tag has to be true
+    about — and it is reachable from the same record, because `to_recipe` embeds
+    the pack verbatim.
+
+    Note ``by_name`` rather than ``for_archetype`` for that half. ``base`` is a
+    domain *name* (``"retail"``, ``"insurance"``), not an archetype key, so
+    `for_archetype("insurance")` is ``None`` too — a fix reaching for it would
+    keep returning nothing and look like it worked, because the fallback here is
+    silent by design. A base naming no registered domain still returns ``""``:
+    the empty tag is right whenever there is no honest answer, and it was only
+    the ``pack:`` case that was wrong.
+    """
+    recipe = getattr(world, "_recipe", None) or {}
+    key = recipe.get("archetype") or ""
+    domain = domains.for_archetype(key) if key else None
+    if domain is None:
+        base = (recipe.get("pack") or {}).get("base") or ""
+        domain = domains.by_name(base) if base else None
+    return domain.name if domain else ""
+
+
+@lru_cache(maxsize=8)
+def _role_model(
+    tag: str, examples: tuple[tuple[SectionPlan, ...], ...]
+) -> tuple[Adjacency, roleseq.Catalogue]:
+    """The adjacency model and section catalogue *examples* imply, memoised.
+
+    Keyed on the outlines themselves rather than on the world or on the list of
+    artifact types, because `_OUTLINES` is a process-global registry a pack
+    installs into and never uninstalls from — the signature
+    `tests/test_roleseq.engine_outlines` documents at length. A cache keyed on
+    "retail, these twenty type names" would serve one tenant's outlines to the
+    next tenant that happened to plan the same types. `SectionPlan` is a frozen
+    dataclass, so keying on content costs a hash and cannot go stale.
+
+    Small, because the key is a whole fleet: a mosaic builds worlds one at a
+    time and eight is more than any single build needs.
+    """
+    grouped = {tag: list(examples)}
+    return roleseq.learn_roles(grouped), roleseq.catalogue(grouped)
+
+
+def synthesised(
+    world: Any,
+    intent: ArtifactIntent,
+    authored: tuple[SectionPlan, ...],
+    *,
+    key: str,
+    genome: Any,
+) -> structure.Synthesis:
+    """*authored* replaced by a synthesised outline, where one covers the intent.
+
+    The world-shaped half of `structure.synthesise`: this resolves who the
+    company is, which outlines it issues, and what "carries a fact" means, and
+    that function does the drawing and the refusing. Returns the whole
+    `Synthesis` rather than only its sections so that a caller measuring a corpus
+    can tally outcomes — `_variant_for` takes `.sections` and drops the rest.
+
+    **The examples are the outlines this world's own plan issues**, not the
+    fleet's. That is the cross-vertical guard's own argument taken one step
+    further than a tag can take it: `roleseq.refused` measures 217 of 412 pooled
+    shapes as splices no single *company* issues, and a world knows precisely
+    which document types it planned, so the partition is derived here rather than
+    read off a table somebody maintains. It also means a pack's authored types
+    join the vocabulary on the day the pack is built with, and a retailer that
+    runs no hiring round never borrows an offer letter's sections.
+
+    Every draw comes from a stream derived by this document's key, so a document
+    keeps its shape when a later period adds another of its type, and no
+    document's shape depends on how hard its predecessor was to find.
+    """
+    tag = _vertical_of(world)
+    if not tag:
+        # An archetype no domain claims — a fixture, or a world hand-built
+        # without a recipe. There is no honest tag to learn under, and an
+        # invented one would make the guard vouch for splices nobody checked.
+        return structure.Synthesis(sections=authored, outcome="no_shape")
+
+    examples = tuple(
+        outline
+        for artifact_type in sorted({i.artifact_type for i in world.artifact_intents})
+        for outline in _outlines_of(artifact_type)
+    )
+    if not examples:
+        return structure.Synthesis(sections=authored, outcome="no_shape")
+    model, catalogue = _role_model(tag, examples)
+
+    facts = [world.facts.by_id(f) for f in intent.required_fact_ids]
+    company_id = world.company.id
+    unit_ids = {unit.id for unit in world.business_units}
+
+    def carried(plan: Sequence[SectionPlan]) -> frozenset[str]:
+        return frozenset(
+            fact_id
+            for step in plan
+            for fact_id in _assigned(facts, step, company_id=company_id, unit_ids=unit_ids)
+        )
+
+    def argument(plan: Sequence[SectionPlan]) -> tuple[str, ...]:
+        """The ordered semantic roles the *compiled* document would carry.
+
+        Only the sections that get facts, because `outline` drops the rest — so
+        this is the sequence `compose` will actually see, not the one drawn.
+        """
+        from .compiler.compose import infer_semantic_role
+
+        return tuple(
+            infer_semantic_role(step.heading, step.kinds)
+            for step in plan
+            if _assigned(facts, step, company_id=company_id, unit_ids=unit_ids)
+        )
+
+    wanted_argument = argument(authored)
+
+    def grammatical(plan: Sequence[SectionPlan]) -> bool:
+        """Whether *plan* argues this document the way its type is allowed to.
+
+        **Identical to the authored role sequence, not merely grammatical.** The
+        temptation is to run `compiler.grammar.check` here, and it is wrong twice
+        over. It would be a second account of a rule that already exists — the
+        grammar checks a sequence of *component ids*, which do not exist until
+        `compose` has fitted one to each beat, so anything checkable from here
+        would be a re-implementation that can drift. And it would be checking the
+        wrong thing: `compose`'s constraints are not only the grammar's — the
+        size-class cap, the density profile and the per-component row fits all
+        read the same sequence, and a candidate can satisfy `GRAMMARS` and still
+        be a document no format can lay out.
+
+        Requiring the drawn outline to make the *same argument in the same
+        order* as the one the engine ships settles all of them at once, by an
+        argument rather than by a list: whatever `compose` accepted for the
+        authored outline it accepts for this one, because every check it runs
+        over the sequence sees the same sequence. What synthesis is then free to
+        change is which sections make that argument — a `position` written for a
+        divisional commentary opening a variance memo — which is the
+        recombination `roleseq` measured, and is exactly the thing a retriever
+        can see and a grammar cannot.
+        """
+        return argument(plan) == wanted_argument
+
+    return structure.synthesise(
+        authored,
+        key=key,
+        genome=genome,
+        model=model,
+        catalogue=catalogue,
+        tag=tag,
+        # Derived by the document's own key off the world seed, which is the
+        # only stream in this repository that is neither a clock nor a global.
+        rng=Rng(world.seed or 0).derive(f"structure/synthesis/{key}"),
+        carried=carried,
+        grammatical=grammatical,
+    )
 
 
 _MEASURES_ALL = ("financial.revenue.", "financial.gross_profit.",
@@ -1610,6 +2258,11 @@ _OUTLINE_VARIANTS.update({
                 "Position", _MEASURES_ALL, "unit",
                 "The rest of the month, briefly, for the record. Lines that"
                 " behaved get a clause each.",
+                # A for-the-record trailer, and this variant says so: it leads
+                # with the exception, and "the rest of the month, briefly" is
+                # what a partner cuts when there is nothing else to report.
+                # "What moved" and "Why" carry the argument and stay required.
+                required=False,
             ),
         ),
         (
@@ -1659,6 +2312,13 @@ _OUTLINE_VARIANTS.update({
                                       "ops.workaround"), "any",
                 "What is still true after the fix. This is the section a"
                 " reader six months later is looking for.",
+                # The variant's own "Contributing factors": same fact kinds,
+                # same judgement. An incident with no precedent and no residual
+                # workaround has no standing exposure, and a review that says
+                # so by saying nothing is the one a reader expects. Marked here
+                # as well as in variant 0 so the two arguments about one
+                # incident vary alike rather than one of them being frozen.
+                required=False,
             ),
             SectionPlan(
                 "Actions", ("ops.remediation",), "any",
@@ -1874,13 +2534,6 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     unit_ids = {unit.id for unit in world.business_units}
     names = world.entity_names()
 
-    def in_scope(fact: CanonicalFact, scope: str) -> bool:
-        if scope == "group":
-            return fact.subject == world.company.id
-        if scope == "unit":
-            return fact.subject in unit_ids
-        return True
-
     supporting = Table(
         key="supporting_facts",
         title="Supporting facts",
@@ -1911,12 +2564,7 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
 
     sections: list[ArtifactSection] = _planned_sections(world, intent, facts)
     for step in plan if not sections else ():
-        assigned = [
-            fact.id
-            for fact in facts
-            if in_scope(fact, step.scope)
-            and any(fact.kind.startswith(prefix) for prefix in step.kinds)
-        ]
+        assigned = _assigned(facts, step, company_id=world.company.id, unit_ids=unit_ids)
         # A section with nothing to say does not belong in the document. The plan
         # follows the episode, so a close without an incident gets no incident
         # sections rather than an empty heading.
@@ -2182,22 +2830,28 @@ def _divisional_summary(
 
     period = next((f.period for f in facts if f.period), world.period or "")
     index = _Facts(facts)
+    # The memo's table is a *cut* of this world's P&L, so which kind says "a
+    # division traded this month" is the sheet's answer rather than a literal
+    # here. On a pack that re-points the column, the literal would find nothing
+    # and the memo would silently lose its only table.
+    bound = _bind(world)
     units = [
         unit for unit in world.business_units
-        if index.get("financial.revenue.actual", unit.id, period) is not None
+        if index.get(bound.measures["revenue_actual"], unit.id, period) is not None
     ]
     if len(units) < 2:
         return None
 
-    columns = [
-        Column(key="revenue_budget", label="Revenue budget", number_format=MONEY_FORMAT),
-        Column(key="revenue_actual", label="Revenue actual", number_format=MONEY_FORMAT),
-        Column(key="revenue_variance", label="Variance", number_format=MONEY_FORMAT),
-        Column(key="gm_pct_actual", label="GM% actual", number_format=PERCENT_FORMAT),
-    ]
+    # The fourth copy of the same column decisions, now the same declaration
+    # narrowed and relabelled. `columns.DIVISIONAL`'s own comment records what
+    # `columns.lint` has to say about it: the margin ratio's numerator column is
+    # not on this table, so XLSX emits no formula for it. Latent — the memo is a
+    # Word document — and reported rather than fixed, because both fixes change
+    # what a reader sees.
+    columns = _cut_columns(world, "divisions")
     rows = [
         _measure_row(index, key=unit.id, label=unit.name, subject=unit.id,
-                     period=period, columns=columns)
+                     period=period, columns=columns, bound=bound)
         for unit in units
     ]
 

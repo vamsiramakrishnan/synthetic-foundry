@@ -21,6 +21,13 @@ actors
     Nobody cited what they had not observed, nobody exceeded their authority,
     every mutation has exactly one accepted tool call behind it, and a rejected
     call left nothing behind.
+organisation
+    Every entity the company declares reaches something. The dual of
+    ``carried_evidence``, and the one direction this module never looked in —
+    see ``_Validator.reachability`` for the measurement that prompted it.
+    **Reported as advisories, not violations**: it is the only group here that
+    does not answer "do the artifacts agree", and ``ValidationReport.advisories``
+    carries the argument and the measurement for why that is not a hedge.
 
 A violation is an error unless it is explained by a registered
 ``IntentionalError`` — that is the whole point of labelling deliberate mess.
@@ -39,6 +46,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from . import registries
 from .corpus import CorpusError
 from .ids import id_prefix, is_id
 from .models import Authority, ErrorType, FormulaKind, Lifecycle
@@ -90,9 +98,35 @@ class ValidationReport:
     violations: list[Violation] = field(default_factory=list)
     checks_run: int = 0
 
+    advisories: list[Violation] = field(default_factory=list)
+    """Findings that ran, are reported, and do not decide pass/fail.
+
+    A second severity exists because this module answers exactly one question —
+    do the artifacts agree — and there is a class of finding that is certainly
+    true, certainly worth acting on, and *not an answer to that question*. The
+    worked case is ``reachability``: a bank that declares 133 branches no fact
+    names is thin, not incoherent, and nothing in it disagrees with anything
+    else in it. Filed as a violation it made 67 tests in this repository fail
+    and made ``worldloom validate`` red on every corpus the engine can build,
+    which is a gate people turn off. Filed nowhere at all — where it lived
+    before — it was invisible to anyone who did not already know the check
+    existed, which is the same defect wearing the opposite face.
+
+    So the honest shape is ``worldloom topology``'s, one layer in: a *reading*
+    beside the verdict. ``ok`` and ``by_group`` deliberately ignore this list —
+    an advisory that could fail a build is a violation, and a report whose
+    ``ok`` depended on which severity a group happened to file under would make
+    the distinction meaningless. ``checks_run`` deliberately does **not** ignore
+    it: those checks ran, and a count that hid them would understate the work.
+    """
+
     @property
     def ok(self) -> bool:
-        """Whether the world is coherent."""
+        """Whether the world is coherent.
+
+        Advisories are not consulted, and that is the definition of the word
+        rather than an oversight — see the field's own docstring.
+        """
         return not self.violations
 
     def by_group(self) -> dict[str, list[Violation]]:
@@ -157,12 +191,226 @@ def register_domain_checks(
     _DOMAIN_CHECKS[name] = checks
 
 
+# Declared where it is written, `registries`' rule, even though this is the
+# module that also restores. The two roles are separate and keeping them so is
+# the point: `_pack_registries` asks what has been declared, and a table that
+# answered only because the restorer happened to remember it is the drift that
+# left `columns._INSTALLED` out of the old hand-written tuple for as long as it
+# existed.
+#
+# Imported at module scope rather than inside a function, unlike everything else
+# here: `registries` imports nothing from this package until first read, so this
+# is the one direction that does not close the cycle `_pack_registries`
+# documents.
+registries.declare(
+    lambda: _DOMAIN_CHECKS,
+    owner="validate",
+    name="validate._DOMAIN_CHECKS",
+    why="a corpus's authored check group outlives it and is then run against"
+    " every later world — measured: one authored episode takes `validate"
+    " retail-close` from 1,283 checks and coherent to a violation",
+)
+
+
+# ---------------------------------------------------------------------------
+# Entities that legitimately reach nothing
+# ---------------------------------------------------------------------------
+
+#: The marker that separates a corpus contradicting itself from one that is thin.
+#:
+#: ``reachability`` writes this into a finding when — and only when — the company
+#: declares a populated ``axes.Shape`` axis over the kind of entity that reaches
+#: nothing, and ``run`` reads it back to decide whether the finding is a
+#: violation or an advisory. Declaring a ``store`` axis and saying nothing about
+#: 44 stores is the corpus disagreeing with its own declaration; leaving a cost
+#: centre unreached is the corpus being thin about something it never claimed to
+#: cut by, and only the first is a coherence defect.
+#:
+#: A constant rather than the literal in both places, because the two places are
+#: a message and the predicate that classifies it: written twice, an edit to the
+#: wording would silently demote every contradiction to an advisory and nothing
+#: would fail. `test_the_marker_is_what_run_classifies_on` asserts the round trip
+#: rather than the string.
+DECLARATION_QUOTED = "`axes.shape_of("
+
+#: The entity collections ``reachability`` holds to reaching something, and the
+#: order it reports them in.
+#:
+#: Sorted, and that is load-bearing rather than tidy: the group emits one
+#: violation per kind and a report whose line order followed ``World``'s
+#: attribute order would reshuffle the first time a collection was added.
+REACHABLE_KINDS: tuple[str, ...] = (
+    "business_units",
+    "categories",
+    "cost_centres",
+    "people",
+    "services",
+    "sites",
+    "systems",
+)
+
+#: What a member of each kind is called in a violation, and which
+#: ``axes.Source`` supplies that kind's members.
+#:
+#: The second half is what turns "this site reaches nothing" from an opinion of
+#: this module into a contradiction of the *company's own declaration*: every
+#: shipped industry declares a populated axis over ``sites`` — ``branch`` for a
+#: bank, ``office`` for an insurer, ``depot`` for a contractor, ``store`` for a
+#: grocer — which is the company saying it is cut that way. An estate declared
+#: as a dimension and named by no fact is the declaration and the corpus
+#: disagreeing, and the violation says so by quoting the axis back.
+#:
+#: ``None`` where no axis describes the kind at all. A cost centre is not a cut
+#: of performance, it is where a charge lands, and no registered shape declares
+#: one — so the violation for a cost centre cannot cite a contradicted
+#: declaration and does not pretend to.
+_KIND_LABELS: dict[str, tuple[str, str | None]] = {
+    "business_units": ("business unit", "units"),
+    "categories": ("category", "categories"),
+    "cost_centres": ("cost centre", None),
+    "people": ("person", "roster"),
+    "services": ("service", "estate"),
+    "sites": ("site", "sites"),
+    "systems": ("system", "estate"),
+}
+
+
+@dataclass(frozen=True)
+class Structural:
+    """A class of entity that exists to be structure, and reaches nothing on purpose.
+
+    A holding company that trades through its subsidiaries; a warehouse that
+    holds stock and sells nothing. Both are real, both are unreachable by
+    construction, and a check with no way to say so is a check somebody
+    eventually turns off.
+
+    What this deliberately is **not** is a list of ids. An allowlist keyed on
+    ``SITE-0114`` shuts the gate up about the entity that is in it and tells a
+    reader nothing about the next one, so the next decorative entity arrives
+    silently — which is the failure mode this whole group exists to close, one
+    layer along. Three fields keep it a declaration instead:
+
+    * ``holds`` is a predicate over the entity's **own declared fields**, so the
+      exemption cites a claim the model already makes rather than inventing one.
+      The worked example reads ``Site.revenue_weight == 0``, whose meaning is
+      already stated on the field: "zero for a site that holds stock but sells
+      nothing".
+    * ``reason`` is a sentence a reader can *disagree with*. That is the test of
+      whether an exemption is honest: "a distribution centre sells nothing and
+      this engine cuts nothing else by site" is an argument about the corpus,
+      and somebody who thinks throughput belongs in it can say so. "SITE-0114 is
+      fine" is not an argument at all.
+    * ``industry`` scopes it to the businesses it is true of. It is the field
+      that stops an exemption from being a blanket: three insurance claims
+      centres and five procurement materials yards also carry
+      ``revenue_weight == 0``, a claims centre owns a claims count and a
+      materials yard owns committed spend, and both stay refused because
+      neither industry declares this exemption.
+
+    ``axes.Shape``'s posture, at entity scale: a gap is declared, carries its
+    ``about``, and is reported as a gap rather than shipped as a capability.
+    """
+
+    kind: str
+    """One of ``REACHABLE_KINDS``."""
+
+    industry: str
+    """The ``Company.industry`` this is declared for. ``""`` means every industry
+    — which is a much larger claim than it looks, and nothing ships with it."""
+
+    holds: Callable[[Any], bool]
+    """Whether this exemption covers a given entity. Over the entity's declared
+    fields only: a predicate that reached for the world would be a second
+    reachability computation beside the one it is exempting from."""
+
+    reason: str
+    declared_by: str
+    """The module and field whose declaration ``holds`` reads, as a path a
+    reader can open. ``factkinds.FactKind.generated_by``'s rule — documentation,
+    not dispatch."""
+
+    def covers(self, kind: str, industry: str, entity: Any) -> bool:
+        """Whether this exemption covers *entity*, a member of *kind*.
+
+        ``kind`` is compared first and is not a convenience. ``holds`` reads a
+        field that exists on one collection, so running a site's predicate over
+        a cost centre raises rather than returning ``False`` — which is how this
+        signature came to have a ``kind`` in it at all.
+        """
+        if kind != self.kind:
+            return False
+        if self.industry and self.industry != industry:
+            return False
+        return self.holds(entity)
+
+
+#: Declared exemptions, keyed by what they claim so a module reload is a no-op.
+#:
+#: **Ships empty, and that is a decision rather than an omission.** There is a
+#: real exemption waiting to be written — a supermarket group's distribution
+#: centres, 44 of a 1,607-site estate, which its own archetype declares sell
+#: nothing by giving them a zero revenue weight — and it does not go here.
+#: Registering it from this module would put one engine's industry name in core
+#: code, which is precisely the coupling ``tests/test_thin_waist.py`` ratchets
+#: against; the sentence justifying it belongs beside the generator that mints
+#: those sites, and is that engine's to write.
+#:
+#: So this is module state and a registry rather than a literal tuple, for
+#: ``_DOMAIN_CHECKS``' reason: a vertical's claim about its own estate is
+#: declared by that vertical, at import, and core never learns what a
+#: distribution centre is. ``tests/test_reachability.py`` registers that
+#: exemption itself, against the real estate, so the mechanism is exercised by
+#: something other than a fixture.
+_STRUCTURAL: dict[tuple[str, str, str], Structural] = {}
+
+
+def register_structural(exemption: Structural) -> None:
+    """Declare that a class of entity legitimately reaches nothing.
+
+    Idempotent for the same claim. Two *different* declarations of one claim —
+    same kind, same industry, same reason, different source — is refused rather
+    than merged: an exemption is only worth anything if a reader can follow
+    ``declared_by`` to the declaration it reads, and two answers to that means
+    whichever module imported last decides what the corpus is allowed to leave
+    unreachable.
+    """
+    if exemption.kind not in REACHABLE_KINDS:
+        raise ValueError(
+            f"{exemption.kind!r} is not an entity kind reachability checks"
+            f" ({', '.join(REACHABLE_KINDS)}). An exemption from a check that"
+            " does not run is a sentence nothing reads."
+        )
+    if not exemption.reason.strip():
+        raise ValueError(
+            "a structural exemption must carry a reason a reader can evaluate —"
+            " an exemption with no argument behind it is an allowlist entry"
+        )
+    key = (exemption.kind, exemption.industry, exemption.reason)
+    existing = _STRUCTURAL.get(key)
+    if existing is not None and existing.declared_by != exemption.declared_by:
+        raise ValueError(
+            f"{exemption.kind}/{exemption.industry or 'every industry'} is already"
+            f" exempted for this reason by {existing.declared_by!r}"
+        )
+    _STRUCTURAL[key] = exemption
+
+
+def structural_exemptions() -> tuple[Structural, ...]:
+    """Every declared exemption, in a stable order.
+
+    Sorted by what it claims rather than by registration, because registration
+    order is import order and this tuple reaches a report.
+    """
+    return tuple(_STRUCTURAL[key] for key in sorted(_STRUCTURAL))
+
+
 class _Validator:
     """Runs every check against one world."""
 
     def __init__(self, world: World) -> None:
         self.world = world
         self.violations: list[Violation] = []
+        self.advisories: list[Violation] = []
         self.checks = 0
         self._known: dict[str, set[str]] = {}
         # The collections a check resolves *by id* while looping over another
@@ -185,6 +433,11 @@ class _Validator:
         self._events = world.events
         self._artifacts = world.artifacts
         self._intents = world.artifact_intents
+        # The interval the corpus's facts span, or None for a factless world.
+        # Bound once for `_outside_the_window`, which would otherwise walk every
+        # fact once per entity — 1,607 sites × 5,013 facts on a grocery build.
+        starts = [fact.valid_from for fact in self._facts]
+        self._fact_window = (min(starts), max(starts)) if starts else None
         self._build_index()
 
     # -- helpers -----------------------------------------------------------
@@ -220,6 +473,24 @@ class _Validator:
 
     def fail(self, group: str, code: str, subject: str, detail: str) -> None:
         self.violations.append(Violation(group, code, subject, detail))
+
+    def as_advisory(self, group: Callable[[], None]) -> None:
+        """Run a check group and file what it found as a reading, not a verdict.
+
+        The group itself is unchanged and unaware — it calls ``fail`` like every
+        other, and ``reachability`` is still the standalone verdict that
+        ``reachability(world)`` returns and that the ratchet in
+        ``tests/test_reachability.py`` asserts against. One check with two
+        severities depending on the caller is a check whose findings could drift
+        apart; re-filing them here is the whole of the difference, in one place.
+
+        ``self.checks`` is deliberately left alone: the checks ran, whichever
+        list their findings landed in.
+        """
+        at = len(self.violations)
+        group()
+        self.advisories.extend(self.violations[at:])
+        del self.violations[at:]
 
     def check_ref(self, subject: str, field_name: str, value: str | None, *, expect: str | set[str] | None = None) -> None:
         """Check that *value* resolves, and optionally that its prefix is expected."""
@@ -1862,6 +2133,256 @@ class _Validator:
                                 f"{cell.fact_id} and states nothing",
                             )
 
+    # -- organisation ------------------------------------------------------
+
+    def _readable_surface(self) -> set[str]:
+        """Every fact id a reader of a compiled document actually meets.
+
+        **Which citations count, and why this is the whole check.**
+        ``carried_evidence``'s docstring records the shape of failure this
+        module keeps rediscovering: two absent things agree. The supporting-fact
+        appendix is that failure waiting to happen here, because it is built by
+        ``documents.outline`` as one row per ``intent.required_fact_ids`` —
+        *every* fact the document was handed, whatever its prose and tables did
+        with them. Count an appendix citation as "reached" and this group stops
+        measuring what a corpus says about its estate and starts measuring
+        ``required_fact_ids``, which is precisely the weaker question
+        ``compiled_evidence`` already asks.
+
+        So the line is ``ArtifactSection.hidden``, whose own definition is
+        "present in the artifact but not part of its readable surface" — the
+        same line ``evaluate/index.passages`` draws, and it takes the appendix
+        along with ``documents``' Lineage and Reconciliation grids, which are
+        equally derived from the handed fact list rather than being a document
+        reporting on an entity.
+
+        Measured before it was believed, because "the appendix would hide
+        everything" is the kind of claim that is obviously true and quietly
+        false. On one-period builds of the four shipped verticals, excluding
+        hidden sections changes **no entity's verdict at all**: the appendix
+        carries exactly one fact no visible section does in banking
+        (``capital.cet1_ratio_as_filed`` about the company) and three in
+        procurement (two ``p2p.match_total_variance`` and one
+        ``p2p.exception_status``), and every one of those subjects is reached by
+        some other fact on the surface anyway. The door is open and nobody has
+        walked through it yet. It is shut here because the walk is one line of a
+        generator away: a vertical that adds site facts to an intent's
+        ``required_fact_ids`` without a visible table gets a green gate and an
+        estate no reader ever sees, which is this wave's defect reproduced one
+        layer along.
+        """
+        surface: set[str] = set()
+        for ir in self.world.artifact_irs:
+            for section in ir.sections:
+                if section.hidden:
+                    continue
+                surface.update(section.fact_ids)
+                if section.table is None:
+                    continue
+                for row in section.table.rows:
+                    # `Row.cells` is a dict. Iterating it yields column keys, so
+                    # `for cell in row.cells` reads every `fact_id` off a string
+                    # and finds none — an audit written that way reported
+                    # retail's entire 160-site estate as unreachable when it is
+                    # fully connected. `ArtifactIR.fact_ids` gets this right;
+                    # this loop cannot call it, because it must skip the hidden
+                    # sections that method deliberately includes.
+                    for cell in row.cells.values():
+                        if cell.fact_id:
+                            surface.add(cell.fact_id)
+        return surface
+
+    def _outside_the_window(self, entity: Any) -> bool:
+        """Whether *entity*'s own dates put it outside the corpus's fact window.
+
+        Not a ``Structural`` and deliberately not registrable: this is not a
+        claim anybody authors, it is arithmetic on fields the entity already
+        carries. A store closed before the first fact was true, a system retired
+        before the corpus opens, an employee who left before it begins — each of
+        them reaches nothing because it was not there, and the entity said so
+        itself.
+
+        The four end fields and four start fields are the ones ``models`` gives
+        these collections; an entity carrying none of them is never exempted,
+        which is the right default — silence about when something existed is not
+        a claim that it did not.
+
+        Exempts zero entities in every shipped vertical today, and the start
+        side is still exercised: ``Employee.joined`` and ``BusinessUnit.formed``
+        are set on every person and unit of all four, timezone-aware exactly as
+        ``CanonicalFact.valid_from`` is, so the comparison is real and none of
+        them falls outside. It is here because ``World.sites_at`` and
+        ``business_units_at`` exist — a corpus with a closed site is a corpus
+        this repository already builds — and the first one to appear must not be
+        reported as a hole in the organisation.
+        """
+        if not self._fact_window:
+            return False
+        opens, closes = self._fact_window
+        for field_name in ("dissolved", "closed_at", "retired", "left"):
+            ended = getattr(entity, field_name, None)
+            if ended is not None and ended < opens:
+                return True
+        for field_name in ("formed", "activated_at", "introduced", "joined"):
+            began = getattr(entity, field_name, None)
+            if began is not None and began > closes:
+                return True
+        return False
+
+    def reachability(self) -> None:
+        """Every entity the company declares reaches something.
+
+        The dual of ``carried_evidence``, and the direction nothing here ever
+        looked in. That check asks whether a *fact* reaches a document; this
+        asks whether an *entity* reaches a fact — and the second question had no
+        answer anywhere, so an organisation could be declared in full and used
+        for nothing.
+
+        Measured on one-period builds of the four shipped verticals, seed 8128,
+        each vertical's default archetype and no optional flags:
+
+        ```
+        retail       588 facts   7 docs   units ✓3  sites ✓160  categories ✓8
+        banking       58 facts  11 docs   units ✗3  sites ✗133  systems ✗4
+        insurance     62 facts   4 docs   units ✗3  sites ✗ 29  systems ✗5
+        procurement   52 facts   6 docs   units ✗3  sites ✗ 81  systems ✗5
+        ```
+
+        Retail's row does not move with the flags — ``--incident`` takes it to
+        604 facts and 16 documents and its units, sites and categories stay
+        fully reached — and neither does anyone else's estate, because the flags
+        that add documents to the other three add filings, not branches.
+
+        A bank with three divisions and 133 branches that no fact and no
+        document mentions is not a bank with an estate; it is 58 facts about
+        capital ratios with scenery behind them. That is also why retail
+        produces an order of magnitude more facts from one period: its estate is
+        load-bearing, and the volume is a *consequence* of that rather than a
+        separate dial.
+
+        **Reached means a fact names it as subject and a compiled document
+        carries that fact on its readable surface** — a conjunction, where the
+        brief said "or". The disjunction is a tautology: a document can only
+        carry a fact *about* an entity if a fact about that entity exists, so
+        the second clause can never be the one that saves anybody and the check
+        reduces to "some fact mentions it". A gate in that shape is satisfied by
+        minting a site fact no artifact carries, which is this wave's defect
+        moved one layer along rather than closed. The conjunction costs nothing
+        to adopt: on all four verticals the two readings refuse **exactly the
+        same entities** today, so it tightens the door without moving anybody's
+        target.
+
+        A person is reached differently, and it is not a special case so much as
+        the same rule read correctly: people are not measured, they act. So
+        authoring or approving a compiled document counts, alongside being a
+        fact's subject — which some are, since ``lore`` mints accountability
+        facts whose subject is a person.
+
+        Runs only on a corpus with compiled documents, ``compiled_evidence``'s
+        early return and for its reason: a plan-only corpus has no readable
+        surface, so nothing can be missing from one. ``examples/retail-close``
+        is exactly that corpus and is checked here zero times — which is also
+        why running this from ``run`` left that corpus's count at 1,283, the
+        figure ``tests/test_validate_packs.py`` pins as ``PACKLESS_CHECKS``.
+
+        ``run`` files what this finds through ``as_advisory`` rather than as
+        violations; the module-level ``reachability`` function is the same
+        measurement returned as a verdict, and carries the argument for the
+        split.
+        """
+        if not self.world._artifact_irs:
+            return
+
+        surface = self._readable_surface()
+        # Subjects, not facts: a fact reaches the surface, and what this group
+        # cares about is the entity behind it.
+        reached = {
+            fact.subject
+            for fact in self._facts
+            if fact.id in surface
+        }
+        compiled = {ir.intent_id for ir in self.world.artifact_irs}
+        for intent in self._intents:
+            if intent.id not in compiled:
+                continue
+            reached.add(intent.author_id)
+            if intent.approver_id:
+                reached.add(intent.approver_id)
+
+        industry = self.world.company.industry
+        declared = self._declared_axes(industry)
+
+        for kind in REACHABLE_KINDS:
+            label, source = _KIND_LABELS[kind]
+            entities = list(getattr(self.world, kind))
+            exemptions = [x for x in structural_exemptions() if x.kind == kind]
+            unreached: list[Any] = []
+            for entity in entities:
+                self.checks += 1
+                if entity.id in reached or self._outside_the_window(entity):
+                    continue
+                if any(x.covers(kind, industry, entity) for x in exemptions):
+                    continue
+                unreached.append(entity)
+            if not unreached:
+                continue
+
+            # One violation per kind rather than per entity, `required_fact_
+            # not_carried`'s shape. 133 branches reaching nothing is one finding
+            # with one cause, and 133 lines of it would bury the other six kinds
+            # under a wall of identical text while telling a reader nothing the
+            # count does not.
+            named = ", ".join(e.name for e in unreached[:5])
+            axis = declared.get(source or "", ())
+            says = (
+                f" This company's declared shape is cut by "
+                f"{', '.join(repr(name) for name in axis)} — see"
+                f" {DECLARATION_QUOTED}{industry!r})` — so the declaration and"
+                " the corpus disagree about whether that dimension exists."
+                if axis
+                else ""
+            )
+            self.fail(
+                "organisation",
+                f"{label.replace(' ', '_')}_reaches_nothing",
+                self.world.company.id,
+                f"{len(unreached)} of {len(entities)} {label}(s) are named as the"
+                " subject of no fact that any compiled document carries on its"
+                f" readable surface: {named}"
+                + (" …" if len(unreached) > 5 else "")
+                + "."
+                + says
+                + " Declare the ones that are structural with"
+                " `validate.register_structural`, giving the reason; the rest"
+                " are an organisation nothing uses.",
+            )
+
+    def _declared_axes(self, industry: str) -> dict[str, tuple[str, ...]]:
+        """The populated axis names this industry declares, by ``axes.Source``.
+
+        Imported inside the method rather than at module scope, and it is the
+        same cycle ``_pack_registries`` documents: ``axes`` imports ``episodes``
+        and ``episodes`` imports this module to reach ``register_domain_checks``,
+        so a top-level import here would close the ring.
+
+        Read by ``Company.industry`` rather than by resolving the archetype,
+        because that is the key ``axes._REGISTRY`` is already keyed on and it
+        works identically for a pack-built world, which has no archetype key to
+        resolve. An unregistered industry gets an empty mapping and the
+        violations simply do not quote a declaration — an absent shape is not
+        evidence of anything, and inventing "your industry declares no axes" as
+        a finding here would duplicate ``axes.lint``.
+        """
+        from . import axes
+
+        shape = axes.shape_of(industry)
+        if shape is None:
+            return {}
+        by_source: dict[str, list[str]] = defaultdict(list)
+        for axis in shape.populated:
+            by_source[axis.source].append(axis.name)
+        return {source: tuple(names) for source, names in by_source.items()}
+
     def run(self) -> ValidationReport:
         self.referential()
         self.workforce()
@@ -1879,13 +2400,45 @@ class _Validator:
         self.actors()
         self.evaluation()
         self.carried_evidence()
+        # Beside its dual, and as a reading rather than a verdict. Measured
+        # both ways before choosing: filed as violations this fails 67 tests in
+        # this repository and turns `worldloom validate` red on every corpus
+        # the engine can build — including on `person`, `service` and `system`,
+        # which `reachability`'s own docstring argues are not defects at all.
+        # Filed here, the whole suite passes unedited and somebody who builds a
+        # company is still told its estate is decorative.
+        # Advisory, including the contradicting subset — and that subset was
+        # promoted to a violation here and reverted, which is worth a sentence
+        # because the reverting is the finding.
+        #
+        # The condition for promoting it was "no build path still contradicts
+        # its own declared shape", and the retail engine met it. Promoted, the
+        # suite lost nine tests across four files: every one an *authored pack*
+        # that declares the General insurance shape — `segment`,
+        # `class_of_business`, `office` — and models only reserving. None is a
+        # shipped corpus, and none was in the enumeration the condition was
+        # measured over.
+        #
+        # They are not false positives; those corpora really do declare three
+        # dimensions and report on none. But the rule that catches them is
+        # "a pack that names a shape must populate every axis of it", and
+        # enforcing that from `validate` taxes the wrong person at the wrong
+        # time: it is a claim about an authored *pack*, checkable by
+        # `packs.lint` when the pack is written, not about a corpus, discovered
+        # after one is built. So the condition was necessary and not sufficient,
+        # and the honest precondition is a lint at authoring time.
+        self.as_advisory(self.reachability)
         # Domain groups last, in name order so the report is stable however
         # registration happened to be sequenced.
         for name in sorted(_DOMAIN_CHECKS):
             found, ran = _DOMAIN_CHECKS[name](self.world)
             self.violations.extend(found)
             self.checks += ran
-        return ValidationReport(violations=self.violations, checks_run=self.checks)
+        return ValidationReport(
+            violations=self.violations,
+            checks_run=self.checks,
+            advisories=self.advisories,
+        )
 
 
 def _quantity_matches(amount: float, stated: str) -> bool:
@@ -1912,12 +2465,24 @@ def _quantity_matches(amount: float, stated: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _pack_registries() -> tuple[dict[str, Any], ...]:
+def _pack_registries() -> tuple[Any, ...]:
     """Every process-global registry a pack install writes into.
 
-    Named here rather than reached for at each use so the snapshot below can
-    never drift from what ``packs.archetype_of`` actually installs: a seventh
-    authored layer joining a pack adds one line here and stays contained.
+    Read from ``registries.containers()`` rather than listed, and the list it
+    replaced is the argument for reading it. Its docstring claimed to name
+    "every" such registry and omitted ``columns._INSTALLED``, with a measured
+    consequence: validating a corpus built from a sheet-carrying pack left the
+    sheet installed, so a later build of that same pack revised was *refused
+    because something had been validated earlier*. A list that has to be
+    remembered is a list that will be wrong, which is the whole of
+    ``registries``' case.
+
+    So the declaration now sits beside the write — ``doctypes`` declares the
+    four ``documents`` tables and the Word renderer's handle map because
+    ``doctypes.install`` is what writes them — and this function asks for
+    whatever has been declared. A seventh authored layer joining a pack adds
+    its ``registries.declare`` next to its own writer and arrives here for
+    free.
 
     Imported inside the function, not at module scope, because this module sits
     *under* the ones that install: ``episodes`` imports it to reach
@@ -1925,20 +2490,9 @@ def _pack_registries() -> tuple[dict[str, Any], ...]:
     top-level import here would close the cycle. It is the same late import
     ``cohorts`` makes of ``episodes``, for the same reason.
     """
-    from . import doctypes, episodes, lob
+    from . import registries
 
-    return (
-        doctypes._INSTALLED,
-        episodes._LOADED,
-        # The derived-check cache is keyed by *spec name*, so it has to be
-        # restored alongside `_LOADED` rather than left as a harmless cache:
-        # two corpora may each author an episode called `QuarterlyValuation`,
-        # and a cache that outlived the first would hand the second corpus the
-        # first one's checks under its own episode's name.
-        episodes._REGISTERED_CHECKS,
-        lob._INSTALLED,
-        _DOMAIN_CHECKS,
-    )
+    return registries.containers()
 
 
 def _embedded_pack(world: World) -> Any:
@@ -2024,10 +2578,17 @@ def _under_the_corpus_rules(world: World) -> Iterator[None]:
         yield
         return
 
-    from . import episodes, packs
+    from . import episodes, packs, registries
 
-    saved = [(registry, dict(registry)) for registry in _pack_registries()]
-    try:
+    # `registries.scoped()` rather than a snapshot written here, and the reason
+    # is the defect that motivated that module. The loop this replaced did
+    # `dict(registry)` over a hand-written tuple, which quietly encoded two
+    # assumptions: that the tuple was complete, and that every entry was a
+    # mapping. Both were wrong. It omitted `columns._INSTALLED` — so validating
+    # a sheet-carrying corpus left the sheet installed and *a later build of
+    # that pack was refused because something had been validated earlier* — and
+    # one of the tables an install writes is a set, which `dict()` cannot copy.
+    with registries.scoped():
         try:
             packs.archetype_of(pack)
             for spec in pack.episodes:
@@ -2043,10 +2604,85 @@ def _under_the_corpus_rules(world: World) -> Iterator[None]:
                 f"this corpus's own rules could not be installed: {exc}"
             ) from exc
         yield
-    finally:
-        for registry, original in saved:
-            registry.clear()
-            registry.update(original)
+
+
+def contradicts_declared_shape(violation: Violation) -> bool:
+    """Whether a reachability finding is a contradiction rather than thinness.
+
+    ``run`` classifies on this: true and the finding is a violation, false and
+    it is an advisory. The distinction is the company's own declaration — a
+    grocer that declares a ``store`` axis and reports on none of 44 stores has
+    said two incompatible things about itself, and that is incoherence in the
+    strict sense this module means. A cost centre nobody reports on is a thin
+    corpus, which is a different complaint and not one ``validate`` owns.
+
+    Read off the message rather than recomputed, and the choice is deliberate:
+    a predicate that re-derived the axis could disagree with the sentence the
+    reader is shown, and then the report would say one thing while the exit code
+    meant another. The marker is `DECLARATION_QUOTED`, used by the writer and by
+    this reader, so the two cannot drift apart without failing the round-trip
+    test rather than silently demoting every contradiction.
+    """
+    return DECLARATION_QUOTED in violation.detail
+
+
+def reachability(world: World) -> ValidationReport:
+    """Report every entity *world* declares and reaches nothing with.
+
+    This is the group's **verdict**, returned as violations, and it is what
+    ``tests/test_reachability.py`` ratchets against on every build path this
+    repository offers. ``run`` reports the same findings as *advisories*, and
+    the two callers exist for the reason below.
+
+    **Why the verdict is not what ``worldloom validate`` fails on.** It was
+    tried, on this branch, and the price is measured rather than guessed: filed
+    as violations, 67 tests in this repository fail and every corpus the engine
+    can build reports incoherent. Almost all of that is ``person``, ``service``
+    and ``system`` — and ``_Validator.reachability``'s own docstring already
+    argues those are not defects. A system is the *provenance* of a figure, a
+    service is that one layer down, and an unreached person is a roster entry
+    with no accountability fact. None of the three is a dimension any shipped
+    company declares itself cut by, so a corpus that leaves them unreached
+    contradicts nothing it says about itself. There is no build of this engine
+    that clears them, so a hard check here is not a gate that is currently red;
+    it is a command that answers "no" forever.
+
+    **Why the old answer — leave it out entirely — is no longer good enough.**
+    That position was written when all four shipped verticals refused on their
+    reporting spine, and the argument was that promoting it would state
+    something untrue about coherence. Three engines then made their estates
+    load-bearing, and what is left of the spine is one engine's. But leaving
+    the check outside ``run`` means the only thing enforcing it is a test file,
+    and the question a user actually asks — *will the company I just built have
+    this problem?* — is asked from the command line, where a test file cannot
+    answer. A check nobody can reach without knowing it exists has the same
+    practical value as no check.
+
+    So it runs in ``run`` and reports without ruling, which is the posture
+    ``worldloom topology`` and ``worldloom series`` already take one layer up:
+    they print structural defects and exit zero, "because ``validate`` owns
+    pass/fail". Here the same seam runs *inside* ``validate``, so the reading
+    arrives without anyone having to know to ask for it, and ``ok`` still means
+    exactly what it has always meant.
+
+    **What would make part of it a violation, and why that is now a real
+    question rather than a deferral.** The violation text already partitions
+    itself: a refusal quotes ``axes.shape_of(industry)`` when — and only when —
+    the company declares a populated axis over that kind of entity. A grocer
+    that declares a ``store`` axis and says nothing about 44 of its stores is
+    not thin, it is a corpus disagreeing with its own declared shape, which is
+    coherence in the strict sense this module means it. That subset is a
+    legitimate hard check and the old "it is not about coherence" argument does
+    not cover it. It is not promoted here only because two build paths still
+    refuse it — ``australian_grocery`` and ``trading-retailer.json``, both the
+    retail engine, both being closed as this lands — and a gate wired in before
+    the thing it gates is a gate somebody disables in the first hour. The
+    ratchet cannot be disabled that way, because the number it asserts is the
+    number of *failures*.
+    """
+    validator = _Validator(world)
+    validator.reachability()
+    return ValidationReport(violations=validator.violations, checks_run=validator.checks)
 
 
 def validate(world: World) -> ValidationReport:

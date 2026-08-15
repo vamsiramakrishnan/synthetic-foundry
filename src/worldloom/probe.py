@@ -328,8 +328,15 @@ KINDS = ("free", "scales", "complements", "at_most")
 # Accountabilities — the other thing a leaf may bind to
 # ---------------------------------------------------------------------------
 
-#: Every measure a person may be held to: the fact kinds the three shipped
-#: engines mint *with a number attached*, in their default episodes.
+#: Every measure a person may be held to: the fact kinds **every** shipped
+#: engine mints *with a number attached*, in its default episode.
+#:
+#: "Every" is load-bearing and was not always true. This read "the three shipped
+#: engines" while the repository shipped four, so all 23 of procurement's
+#: numeric kinds were absent and a category manager could not be held to the
+#: spend they run. A vocabulary that is computed over a subset is a hand-kept
+#: list wearing a derivation, and it fails in exactly the direction the comment
+#: below warns about.
 #:
 #: The membership rule is not a matter of taste. An accountability says a
 #: person answers for a figure within a band, so it is only checkable if the
@@ -346,6 +353,19 @@ KINDS = ("free", "scales", "complements", "at_most")
 #: perfectly good measure does not exist, which it cannot argue with. Same
 #: mechanism, and same reason, as `roles.SPINE`.
 MEASURES: tuple[str, ...] = (
+    # The bank's branch network. A division's deposits and a branch's headcount
+    # are the figures a bank actually holds a managing director to, and until
+    # `generators/banking_network` existed there were none — the whole
+    # organisation reached nothing, so an accountability naming a division had
+    # no number to be checked against.
+    "banking.deposits.balance",
+    "banking.lending.balance",
+    "banking.lending.settled",
+    "banking.loan_to_deposit_pct",
+    "banking.net_operating_income",
+    "banking.network.fte",
+    "banking.shared_services_cost",
+    "banking.shared_services_recharge",
     "capital.cet1_capital",
     "capital.cet1_delta",
     "capital.cet1_ratio",
@@ -357,7 +377,12 @@ MEASURES: tuple[str, ...] = (
     "claims.actual_vs_expected",
     "claims.incurred_to_date",
     "claims.paid_to_date",
+    "claims_ops.notified_count",
+    "claims_ops.settled_count",
     "close.delay",
+    "data.records_of_record",
+    "expense.operating",
+    "financial.accrual.grni",
     "financial.gross_margin_pct.actual",
     "financial.gross_margin_pct.budget",
     "financial.gross_profit.actual",
@@ -373,6 +398,49 @@ MEASURES: tuple[str, ...] = (
     "metric.online_conversion_rate.forecast",
     "metric.promotional_depth_margin_impact",
     "ops.affected_records",
+    # Retail's corporate cost base. Added for the reason the banking block at
+    # the top of this tuple was: until `generators/retail_estate` existed, both
+    # of a retailer's cost centres were named by no fact at all, so an
+    # accountability aimed at the controller who runs one had no number to be
+    # checked against. The distribution network's three `logistics.*` kinds are
+    # deliberately *not* here and the omission is the rule working: the tuple is
+    # the union over each engine's **default** episode, and
+    # `omnichannel_retailer` declares no warehouses, so nothing mints them on
+    # the build this vocabulary is computed from. A grocer's does — which is a
+    # reason to widen the derivation's input if anyone wants those measures
+    # accountable, never to hand-add the names here.
+    "overhead.shared_services.cost",
+    "overhead.shared_services.recharge",
+    "overhead.shared_services.recovery_pct",
+    # Procurement, and the whole vertical was missing until this line. The
+    # tuple's rule is mechanical — every numeric fact kind a shipped engine's
+    # default episode mints — and it was computed over three engines while the
+    # repository shipped four, so a category manager could not be held to the
+    # spend they actually run. That is the tuple's own stated failure, verbatim:
+    # a model told a perfectly good measure does not exist cannot argue back.
+    "p2p.approval_tolerance",
+    "p2p.approval_tolerance_pct",
+    "p2p.approved_payment_value",
+    "p2p.contract_rate",
+    "p2p.credit_note_value",
+    "p2p.invoiced_quantity",
+    "p2p.invoiced_unit_price",
+    "p2p.invoiced_value",
+    "p2p.match_price_variance",
+    "p2p.match_quantity_variance",
+    "p2p.match_total_variance",
+    "p2p.materials_on_hand",
+    "p2p.open_commitment",
+    "p2p.open_shortfall_quantity",
+    "p2p.open_shortfall_value",
+    "p2p.ordered_quantity",
+    "p2p.ordered_value",
+    "p2p.received_quantity",
+    "p2p.received_value",
+    "p2p.shortfall_released_quantity",
+    "p2p.shortfall_released_value",
+    "p2p.third_party_spend",
+    "portfolio.policies_in_force",
     "reserves.attribution_deterioration",
     "reserves.attribution_pattern_change",
     "reserves.booked_strengthening",

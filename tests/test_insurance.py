@@ -65,13 +65,26 @@ def test_the_episode_is_coherent(compiled: World) -> None:
 
 
 def test_the_shape_of_the_episode(world: World) -> None:
-    """Four artifacts, one labelled imperfection, and all three mutation
-    disciplines' fact kinds on the record."""
-    assert len(world.artifact_intents) == 4
+    """The valuation's four artifacts plus the book's, one labelled
+    imperfection, and all three mutation disciplines' fact kinds on the record.
+
+    The count is ``4 + 1 + one per business unit``: the four the valuation
+    warrants, the underwriting performance pack, and a commentary per division.
+    Written as arithmetic rather than as ``8`` because the last term is a
+    fan-out — widen the archetype and the right answer moves, which is the
+    whole point of it (``insurance_documents``' own docstring).
+    """
+    units = len(world.business_units)
+    assert len(world.artifact_intents) == 4 + 1 + units
     assert {i.artifact_type for i in world.artifact_intents} == {
         "reserve_triangle_workbook", "claims_emergence_note",
         "actuarial_valuation_report", "margin_decision_memo",
+        "underwriting_performance_pack", "underwriting_result_commentary",
     }
+    assert [i.artifact_type for i in world.artifact_intents][:4] == [
+        "reserve_triangle_workbook", "claims_emergence_note",
+        "actuarial_valuation_report", "margin_decision_memo",
+    ], "ART order is identity; the book's documents are appended, never inserted"
     assert len(world.intentional_errors) == 1
     kinds = {f.kind for f in world.facts}
     assert {"close.due_date", "close.status", "close.delay"} <= kinds
@@ -286,18 +299,53 @@ def test_a_second_quarter_refuses_naming_increment_2(world: World) -> None:
 
 
 def test_cli_second_period_refuses_cleanly(tmp_path) -> None:
+    """Refused before the first episode runs, and printed rather than raised.
+
+    This test is older than the behaviour it now asserts, and the comment it
+    used to carry is worth keeping as a record: the guard raised from inside
+    `insurance_scenarios` on the *second* run, the CLI let it propagate, and so
+    `CliRunner` found it on `result.exception` with `result.output` empty —
+    a `ValueError` traceback in the terminal and no corpus. The test passed,
+    because "refuses" and "refuses cleanly" are not the same claim and only one
+    of them was being checked.
+
+    `build` now reads the cap the domain already declares — `Domain.max_periods`,
+    which existed for `tools/sweep.py` to clamp its periods axis by — so the
+    refusal happens at plan time and names the limit. Asserted on `output` with
+    `exception` explicitly absent, since that distinction is the entire fix.
+    """
     result = runner.invoke(app, [
         "build", "--seed", str(SEED), "--period", PERIOD,
         "--archetype", "midsize_general_insurer", "--periods", "2",
         "--out", str(tmp_path / "x"),
     ])
-    assert result.exit_code != 0
-    # The guard raises inside the episode (`insurance_scenarios`), which the
-    # CLI's `build` command lets propagate rather than translating into a
-    # printed message — `CliRunner` records that as `result.exception`, not
-    # `result.output`, which stays empty because nothing was printed before
-    # the exception.
-    assert "increment 1 implements phase 1 only" in str(result.exception)
+    assert result.exit_code == 2
+    assert "builds at most 1 period(s)" in result.output
+    assert not isinstance(result.exception, ValueError)
+    # Nothing was written: a refusal that leaves a half-built corpus behind is
+    # the thing a plan-time check exists to avoid.
+    assert not (tmp_path / "x").exists()
+
+
+def test_the_cap_is_read_from_the_domain_not_written_into_the_cli() -> None:
+    """The declaration is the single source, which is why the message can quote it.
+
+    A CLI that hardcoded "insurance is capped at 1" would be a second place to
+    update when increment 2 lands, and the failure mode is a tool that refuses
+    a period the engine has learned to build. `tools/sweep.py` reads the same
+    field for the same reason.
+    """
+    from worldloom import domains
+
+    assert domains.for_archetype("midsize_general_insurer").max_periods == 1
+    # And the verticals that carry a history declare no cap, rather than a
+    # large one — an unmeasured limit is not a limit.
+    for key in ("midsize_adi", "midsize_infrastructure_services"):
+        assert domains.for_archetype(key).max_periods is None
+    # The cap is about `QuarterlyReserving` and not about insurance, which is
+    # `test_episode_replaces.py`'s four-quarter build: an authored
+    # `QuarterlyValuation` standing in for the built-in is a different grammar
+    # with its own limits, and it is not bound by this one.
 
 
 def test_cli_still_refuses_the_retail_only_flags_for_insurance(tmp_path) -> None:

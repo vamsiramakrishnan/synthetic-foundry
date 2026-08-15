@@ -39,6 +39,18 @@ below assumes those decisions are already made.
 # 1. Build a world. Same seed, same world, every time.
 worldloom build --seed 8128 --incident --out ./corpus
 
+# 1a. Optional: let each document's *outline* be derived rather than looked up.
+#     Without this every document of a type carries the same headings forever,
+#     which is a shape a retriever can learn instead of the content. Off by
+#     default, recorded on the recipe, and replays byte-for-byte.
+#
+#     --section-omission drops optional sections; --outline-synthesis draws a
+#     shape from what this company's own document types have in common. Neither
+#     can make a document say less than it did: a synthesised outline must carry
+#     at least what the authored one carried, and falls back when no draw does.
+worldloom build --seed 8128 --section-omission 400 --variant-bias 1 \
+    --outline-synthesis 600 --out ./corpus
+
 # 1b. Optional: choose each document's shape before writing any of it. Without
 #     this, structure comes from a fixed outline and every memo looks the same.
 worldloom plan requests ./corpus -o plans.json
@@ -229,6 +241,53 @@ engine varies a trading year, because `finance.generate` is the one generator
 that reads one. Estate size is an axis for all three, so a mosaic of banks spans
 9 to 101 nodes and the corpus can be asked what has a blast radius.
 
+### Planning a fleet rather than sampling one
+
+`mosaic` and the determinism gate both *choose* configurations, and neither can
+say what it missed — a sampler knows where its points landed and not which
+combinations nobody reached. `spaces` gives that answer:
+
+```bash
+worldloom spaces                                  # every axis, and how few rows cover it
+worldloom spaces --cover -t 2 > plan.jsonl        # the planned fleet, building nothing
+worldloom spaces --holes plan.jsonl               # what a fleet you already built missed
+```
+
+Twelve axes, **3,732,480 configurations exhaustive, 39 rows to cover every
+pair** — because a covering array grows with the two widest axes rather than
+with the space. That is a different guarantee from `mosaic`'s: dispersion
+spreads points evenly through a cube and can still never once pair a bank with
+three periods, which is exactly what it had never done.
+
+`--holes` is the reading worth running against a fleet you already have. It
+reports the axes a fleet *never varied at all* before it lists the combinations
+it missed, because one unvaried axis is a hundred holes with a single cause, and
+a list that does not say so reads as a hundred separate failures.
+
+### The four commands are one loop
+
+They close on each other, and the closing is the point:
+
+```bash
+worldloom spaces --cover -t 2 > plan.jsonl    # what should exist
+worldloom build --outline-synthesis 600 ...   # make one of them
+worldloom diversity ./corpus --effective      # is what came out actually varied
+worldloom spaces --holes fleet.jsonl          # what still does not exist
+```
+
+Plan, build, measure, then ask what is missing and plan again against the
+answer. What makes it a loop rather than a pipeline is that both readings report
+a **denominator**: `--effective` prices a shape used ten times differently from
+one used once, and `--holes` divides by the combinations that exist rather than
+the ones you happened to try. "We built two hundred corpora" becomes "we covered
+41% of the pairs and never varied five of the twelve axes at all", which is a
+sentence you can act on.
+
+Both readings are *readings* and neither may be fed back into a build. A
+generator that branched on an effective-diversity score would make a corpus's
+bytes depend on which BLAS the machine linked; a fleet planner may consume
+`--holes`, but the world builder may not.
+
 Each world lands in `./mosaic/world-NN/` with its own recipe, so any one of them
 rebuilds alone. `mosaic.json` records the plan. Measured on five worlds: five
 distinct organisation shapes, five distinct title sets, mean title overlap 0.72
@@ -393,6 +452,21 @@ for the reason `vocabulary.spoken` qualified its own key: the key is the only
 thing a recipe records about the shape, so a width carried anywhere else would
 rebuild a three-division company from an eight-division corpus and report
 success.
+
+The same principle decides the other three verticals, and it is worth knowing
+which way round it works before reaching for a flag. Structure only makes a
+corpus bigger where something *reports* on the structure. Banking, insurance and
+procurement each declared a full organisation that no fact named and no document
+carried — 243 sites, 9 business units and 6 cost centres between them — so
+widening any of them changed nothing, and their corpora were 52 to 62 facts
+against retail's 588. Now that their estates carry facts, one period of banking
+is 744 and three is 2,220.
+
+`validate.reachability` is the reading that answers this for a corpus you have:
+it reports declared entities that no compiled document says anything about, per
+kind, and an entity kind it names is a knob that will not turn. It is not part
+of `worldloom validate`, because what it reports is true and is not a statement
+about coherence.
 
 ## Saying what kind of company it is, one attribute at a time
 

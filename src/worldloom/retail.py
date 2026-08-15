@@ -445,6 +445,18 @@ class RetailWorld:
 # flattening them into the shared interface.
 from .domains import Domain, register_domain
 
+# This vertical's other physics, declared beside the generator that draws them
+# and registered here — `parameters.register`'s seam, used exactly as
+# `banking.py` uses it for `banking_network.SPANS`. Registered at import so the
+# ranges exist before any world is built: a span that appeared only when some
+# module happened to have been imported would make a corpus's figures depend on
+# import order, which is a determinism bug wearing a plugin's clothes.
+from . import parameters as _parameters_module
+
+from .generators.retail_estate import SPANS as _RETAIL_ESTATE_SPANS
+
+_parameters_module.register(_RETAIL_ESTATE_SPANS)
+
 from .generators.evaluation import EVAL_TEXT as _RETAIL_EVAL_TEXT
 from .generators.operations import TEXT as _RETAIL_TEXT
 from .generators.organisation import _ROLES as _RETAIL_ROLES
@@ -558,7 +570,224 @@ _register_kinds([
     FactKind(kind="ops.affected_records", domain="retail",
              generated_by="generators/operations.py (reused by banking's regulatory.py)",
              invariants=("holds-at",), about="The blast radius the ticket quotes."),
+    # The corporate centre and the distribution network. Both blocks exist
+    # because `validate.reachability` measured this vertical's own organisation
+    # as decorative: two cost centres declared by every retail company and named
+    # by no fact, and — on any archetype with warehouses — an estate of
+    # zero-weight sites the store P&L correctly refuses turnover to and nothing
+    # else said anything about. `generators/retail_estate.py` opens with the
+    # counts.
+    FactKind(kind="overhead.shared_services.cost", domain="retail",
+             generated_by="generators/retail_estate.py",
+             invariants=("holds-at", "sums-to(overhead.shared_services.cost)"),
+             about="The corporate cost base, by the cost centre that incurs it;"
+                   " the centres sum to the group figure exactly."),
+    FactKind(kind="overhead.shared_services.recharge", domain="retail",
+             generated_by="generators/retail_estate.py",
+             invariants=("holds-at", "sums-to(overhead.shared_services.recharge)"),
+             about="The same base, by the division it is recharged to. A second"
+                   " decomposition of one figure over a different set of"
+                   " entities, which is what makes either checkable."),
+    FactKind(kind="overhead.shared_services.recovery_pct", domain="retail",
+             generated_by="generators/retail_estate.py",
+             invariants=("holds-at",
+                         "reconciles-against(overhead.shared_services.recharge,"
+                         " financial.revenue.actual)"),
+             about="Recharge as a share of the subject's own revenue. A rate:"
+                   " stated at every level it is read at and summed at none."),
+    FactKind(kind="logistics.throughput", domain="retail",
+             generated_by="generators/retail_estate.py",
+             invariants=("holds-at", "sums-to(logistics.throughput)"),
+             about="Cartons dispatched through a distribution centre. The"
+                   " measure a site that sells nothing actually owns."),
+    FactKind(kind="logistics.cost_to_serve", domain="retail",
+             generated_by="generators/retail_estate.py",
+             invariants=("holds-at", "sums-to(logistics.cost_to_serve)"),
+             about="What moving that volume cost, by the centre that moved it."),
+    FactKind(kind="logistics.cost_per_carton", domain="retail",
+             generated_by="generators/retail_estate.py",
+             invariants=("holds-at",
+                         "reconciles-against(logistics.cost_to_serve,"
+                         " logistics.throughput)"),
+             about="Cost over volume at the level it is stated. A rate — the"
+                   " network's figure is its own two amounts divided, never the"
+                   " total of its centres' rates."),
 ])
+
+
+# ---------------------------------------------------------------------------
+# Retail's own check group
+# ---------------------------------------------------------------------------
+
+
+def _checks(world: World) -> tuple[list[Any], int]:
+    """The roll-ups `validate.financial` structurally cannot perform.
+
+    That check reads kinds beginning ``financial.`` and rolls them up through
+    the reporting hierarchy — group ← units ← categories and stores. Neither of
+    the two decompositions this module's generator adds fits that shape:
+
+    * shared-services **cost** rolls up over *cost centres*, which are not in
+      any reporting hierarchy at all — a cost centre is where a charge lands,
+      not a cut of performance, which is why ``validate._KIND_LABELS`` maps it
+      to no axis;
+    * shared-services **recharge** and the two logistics measures roll up over
+      units and sites, but ``financial.``-prefixed kinds are the only ones that
+      check reads, and naming these ``financial.*`` to get inside it would put a
+      figure with no budget and no variance into the machinery that derives
+      both.
+
+    So retail's own roll-up lives here, in retail's check group, exactly as
+    banking's branch network lives in ``banking._checks`` and for the reason
+    that function states.
+
+    **Exact, with no tolerance, and that is the point.** ``retail_estate``
+    allocates every one of these from a total drawn once, by largest remainder,
+    so the parts sum to the whole *by construction*; any drift at all is a
+    defect in the allocation rather than a rounding note.
+    ``RECONCILIATION_TOLERANCE`` would absorb the difference and let a later
+    slide back to round-and-hope pass — which is precisely how a workbook comes
+    to disagree with the memo quoting it.
+    """
+    from .generators import retail_estate as _estate
+    from .validate import Violation
+
+    violations: list[Violation] = []
+    checks = 0
+
+    def fail(code: str, subject: str, detail: str) -> None:
+        violations.append(Violation(
+            group="retail", code=code, subject=subject, detail=detail))
+
+    stated: dict[tuple[str, str | None], dict[str, float]] = {}
+    for fact in world.facts:
+        if fact.value is None or fact.is_superseded:
+            continue
+        if fact.kind not in _estate.ADDITIVE and fact.kind not in _estate.RATES:
+            continue
+        stated.setdefault((fact.kind, fact.period), {})[fact.subject] = fact.value.amount
+
+    company_id = world.company.id
+    unit_ids = [unit.id for unit in world.business_units]
+    centre_ids = [centre.id for centre in world.cost_centres]
+
+    # -- the corporate base, decomposed twice --------------------------------
+    # The centres that *incur* the cost and the divisions that *carry* it are
+    # different sets of entities summing to one number, so each is a check on
+    # the other. Two independent decompositions of one total are a cross-check;
+    # two independently drawn ones would be two contradictions — the argument
+    # `finance.generate` makes for allocating a store estate rather than
+    # drawing it.
+    for (kind, period), subjects in sorted(
+        ((key, value) for key, value in stated.items()
+         if key[0] == _estate.SHARED_COST),
+        key=lambda item: item[0][1] or "",
+    ):
+        if company_id not in subjects:
+            continue
+        group = subjects[company_id]
+        incurred = [subjects[c] for c in centre_ids if c in subjects]
+        if incurred:
+            checks += 1
+            if sum(incurred) != group:
+                fail("shared_services_does_not_reconcile", f"{period}/{company_id}",
+                     f"cost centres sum to {sum(incurred):,.2f} but the group states"
+                     f" {group:,.2f} (difference {sum(incurred) - group:,.2f})")
+        recharge = stated.get((_estate.SHARED_RECHARGE, period), {})
+        carried = [recharge[u] for u in unit_ids if u in recharge]
+        if carried:
+            checks += 1
+            if sum(carried) != group:
+                fail("shared_services_recharge_does_not_reconcile",
+                     f"{period}/{company_id}",
+                     f"divisions carry {sum(carried):,.2f} of a corporate base of"
+                     f" {group:,.2f} — every dollar incurred is recharged to"
+                     " somebody, so the two decompositions state one number")
+
+    # -- the distribution network --------------------------------------------
+    # Only over the divisions that *have* one: a company total derived from a
+    # subset of divisions is `documents._sum_row`'s case, and asserting the
+    # group against every unit would refuse a corpus whose digital division
+    # ships from a third party.
+    network_of = {
+        unit.id: [s.id for s in _estate.distribution_estate(
+            [s for s in world.sites if s.business_unit_id == unit.id])]
+        for unit in world.business_units
+    }
+    for kind in (_estate.THROUGHPUT, _estate.COST_TO_SERVE):
+        for (fact_kind, period), subjects in sorted(
+            ((key, value) for key, value in stated.items() if key[0] == kind),
+            key=lambda item: item[0][1] or "",
+        ):
+            for unit_id, estate in sorted(network_of.items()):
+                if unit_id not in subjects or not estate:
+                    continue
+                parts = [subjects[s] for s in estate if s in subjects]
+                if not parts:
+                    continue
+                checks += 1
+                if sum(parts) != subjects[unit_id]:
+                    fail("distribution_network_does_not_reconcile",
+                         f"{fact_kind}/{period}/{unit_id}",
+                         f"its centres sum to {sum(parts):,.2f} but the division"
+                         f" states {subjects[unit_id]:,.2f}")
+            if company_id not in subjects:
+                continue
+            divisions = [subjects[u] for u in unit_ids if u in subjects]
+            if not divisions:
+                continue
+            checks += 1
+            if sum(divisions) != subjects[company_id]:
+                fail("distribution_network_does_not_reconcile",
+                     f"{fact_kind}/{period}/{company_id}",
+                     f"divisions sum to {sum(divisions):,.2f} but the network"
+                     f" states {subjects[company_id]:,.2f}")
+
+    # -- the two rates are their own amounts divided -------------------------
+    # `banking._checks`' `loan_to_deposit_disagrees_with_balances`, twice. A
+    # reader who divides the two columns on the sheet must get the number the
+    # sheet states, and a rate carried down from its draw would not survive the
+    # rounding the allocation already did.
+    for rate_kind, numerator_kind, denominator_kind, scale in (
+        (_estate.SHARED_RECOVERY, _estate.SHARED_RECHARGE,
+         "financial.revenue.actual", 100.0),
+        (_estate.COST_PER_CARTON, _estate.COST_TO_SERVE, _estate.THROUGHPUT, 1.0),
+    ):
+        # Overhead recovery divides by a `financial.` kind, which `stated` does
+        # not hold — it is indexed over this module's own measures only, so the
+        # denominator has to be gathered from the ledger. Gathered here rather
+        # than folded into `stated` above so the roll-up loops keep reading a
+        # dictionary that contains nothing but what this generator minted.
+        denominators = stated
+        if denominator_kind not in _estate.ADDITIVE:
+            denominators = {}
+            for fact in world.facts:
+                if fact.kind != denominator_kind or fact.value is None or fact.is_superseded:
+                    continue
+                denominators.setdefault((denominator_kind, fact.period), {})[
+                    fact.subject] = fact.value.amount
+        for (_, period), subjects in sorted(
+            ((key, value) for key, value in stated.items() if key[0] == rate_kind),
+            key=lambda item: item[0][1] or "",
+        ):
+            top = stated.get((numerator_kind, period), {})
+            bottom = denominators.get((denominator_kind, period), {})
+            for subject, rate in sorted(subjects.items()):
+                if subject not in top or not bottom.get(subject):
+                    continue
+                checks += 1
+                derived = round(top[subject] * scale / bottom[subject], 2)
+                if abs(derived - rate) > 0.01:
+                    fail("rate_disagrees_with_its_amounts", f"{rate_kind}/{period}/{subject}",
+                         f"states {rate:.2f} but {top[subject]:,.0f} /"
+                         f" {bottom[subject]:,.0f} = {derived:.2f}")
+
+    return violations, checks
+
+
+from . import validate as _validate_module  # noqa: E402
+
+_validate_module.register_domain_checks("retail", _checks)
 
 
 __all__ = [
