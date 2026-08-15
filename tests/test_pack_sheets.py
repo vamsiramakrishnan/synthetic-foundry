@@ -9,7 +9,7 @@ shipped `regional-insurer` pack names its company, its books, its voices and
 its backstory, and files a month-end model that calls its written premium
 "Revenue actual".
 
-These tests hold four things about the seam that now exists.
+These tests hold five things about the seam that now exists.
 
 **It is authorable.** A pack declares `sheets`, `packs.archetype_of` installs
 them under the archetype key it is about to mint, and `columns.for_world`
@@ -32,20 +32,38 @@ vocabulary, an authored sheet **replaces** `pnl`.
 **It replays.** The sheets ride the pack, the pack rides the recipe verbatim,
 so a corpus carrying an authored workbook rebuilds with it in any process with
 no pack file on hand.
+
+**And it reaches the page**, which is the one of the five that was not true
+when the rest were. `documents` bound its four column tables from `columns.PNL`
+at import and never called `for_world`, so a pack could declare a workbook,
+have it linted, refused on its findings and installed under its own archetype
+key — and still compile the engine's eight columns. Measured on the fixture
+below at the commit before this: the insurer's rendered XLSX carried "Revenue
+budget" across a sheet its pack had headed "Written premium budget", and no
+check in this repository compared the two. The rendered-workbook tests at the
+end of this file are the ones that would have failed then and are the reason
+`documents._Bound` exists.
+
+The last two tests are about a *second* thing a pack's archetype key was inert
+for, and their own section says why they are in this file.
 """
 
 from __future__ import annotations
 
+import io
 import json
 import pathlib
 from typing import Any
 
+import openpyxl
 import pytest
 
 from worldloom import RetailWorld, columns, doctypes, packs
+from worldloom.scenarios import MonthEndClose
 
 PACKS = pathlib.Path(__file__).resolve().parents[1] / "examples" / "packs"
 INSURER = PACKS / "regional-insurer.json"
+PERIOD = "2026-03"
 
 
 @pytest.fixture(autouse=True)
@@ -490,3 +508,222 @@ def test_the_shipped_sheet_round_trips_through_the_schema() -> None:
         ],
     }
     assert doctypes.SheetSpec.model_validate(document).as_sheet() == columns.PNL
+
+
+# ---------------------------------------------------------------------------
+# The sheet reaches the page
+# ---------------------------------------------------------------------------
+
+
+def _closed(world: Any) -> Any:
+    """The month-end close, run and compiled — the workbook's own episode."""
+    return world.build().run(MonthEndClose(period=PERIOD))
+
+
+def _headings(world: Any, sheet: str) -> list[str]:
+    """The header row of one tab of the rendered XLSX.
+
+    Read out of the file rather than off the IR on purpose. The IR is what this
+    change threads a sheet through; the spreadsheet is what a reader opens, and
+    between them sit the renderer's own column widths, freeze panes and header
+    styling. A pack's workbook is only authored if it is authored *there*.
+    """
+    item = next(r for r in world.render("xlsx")._rendered if r.path.endswith(".xlsx"))
+    book = openpyxl.load_workbook(io.BytesIO(item.payload))
+    # Row 3: the renderer puts the document title and its subtitle above the
+    # table, and the first cell of the header row is the table's own name.
+    header = next(book[sheet].iter_rows(min_row=3, max_row=3, values_only=True))
+    return [value for value in header[1:] if value is not None]
+
+
+def test_the_packs_own_headings_reach_the_rendered_workbook() -> None:
+    """The claim the whole seam was declared for, measured where a reader is.
+
+    At the commit before `documents._Bound`, this test read the engine's eight
+    headings off a workbook whose pack had declared eight others — `documents`
+    bound its tables from `columns.PNL` at import and never called `for_world`,
+    so a declared, linted and installed sheet compiled to nothing at all. The
+    negative half is the half that was wrong: no engine heading may survive.
+    """
+    world = _closed(RetailWorld.from_pack(_pack(), seed=8128))
+    headings = _headings(world, "Business Unit P&L")
+
+    assert headings == list(INSURER_LABELS.values())
+    engine = {column.label for column in columns.PNL.columns}
+    assert not (set(headings) & engine), headings
+
+
+def test_the_cuts_reach_the_page_from_the_same_declaration() -> None:
+    """One declared sheet, three tables, and the pack declared one of them.
+
+    The estate sheet is a narrowing of the P&L rather than a sheet, so a pack
+    that renames its revenue columns renames the store tab without saying so —
+    and the two descriptive columns the compiler adds by hand (a site's region
+    and its format) are untouched, because they read no fact and belong to the
+    site rather than to its month.
+    """
+    world = _closed(RetailWorld.from_pack(_pack(), seed=8128))
+    assert _headings(world, "Store Performance") == [
+        "Region", "Format",
+        "Written premium budget", "Written premium actual", "Written premium variance",
+    ]
+
+
+def test_the_memo_table_is_cut_from_the_authored_sheet_too() -> None:
+    """The fourth table, in a Word document rather than a workbook.
+
+    `_divisional_summary` built its columns from the module constant, so the
+    memo's table was the one place an authored sheet could not reach even after
+    the workbook did. The memo's own heading for the variance column still wins
+    — the cut is data, and a pack overrides what a column is called, not what
+    this table calls it.
+    """
+    world = _closed(RetailWorld.from_pack(_pack(), seed=8128)).compile()
+    tables = [
+        section.table
+        for ir in world.artifact_irs
+        for section in ir.sections
+        if section.table is not None and section.table.key == "divisions"
+    ]
+    assert tables, "the fixture must plan a memo with a divisional table"
+    for table in tables:
+        assert [column.label for column in table.columns] == [
+            "Written premium budget", "Written premium actual", "Variance",
+            "Underwriting margin actual",
+        ]
+
+
+def test_a_world_with_no_pack_still_compiles_the_engines_sheet() -> None:
+    """The control, and the reason the module globals were left where they are.
+
+    The default path is not "resolve a sheet that happens to equal `PNL`" — it
+    is the same module tables the compiler read before any of this, reached by
+    name at call time, which is what keeps `tests/test_carried_evidence.py` and
+    `tests/test_columns.py` pointed at the compiler they mutate.
+    """
+    from worldloom import documents
+
+    world = _closed(RetailWorld(seed=8128))
+    assert _headings(world, "Business Unit P&L") == [
+        column.label for column in columns.PNL.columns
+    ]
+    assert documents._bind(world) is documents._ENGINE
+
+
+def test_a_repointed_column_reads_the_kind_it_names() -> None:
+    """Not only the labels: the kind table is the world's too.
+
+    A relabel is what a pack can express today through the lint, so the label
+    tests above cannot tell a threaded kind table from a threaded column list.
+    This installs a sheet whose budget column reads the *actual* gross-profit
+    kind — refused by nothing, since the kind exists — and asserts the compiled
+    cell carries the actual fact. Read off the IR rather than the page because
+    the claim is about which fact was resolved, and `fact_id` is what a
+    workbook's lineage sheet and `validate.carried_evidence` both read.
+    """
+    from dataclasses import replace
+
+    pack = _pack()
+    built = RetailWorld.from_pack(pack, seed=8128).build()
+    # Written into the registry after the build rather than declared in the
+    # pack: `install` refuses a second, different sheet under one owner, and
+    # `from_pack` installs the pack's own on the way through.
+    key = packs.archetype_key(pack)
+    authored = columns.for_archetype(key)
+    columns._INSTALLED[(key, "pnl")] = replace(
+        authored,
+        columns=tuple(
+            replace(column, kind="financial.gross_profit.actual")
+            if column.key == "gp_budget" else column
+            for column in authored.columns
+        ),
+    )
+
+    world = built.run(MonthEndClose(period=PERIOD)).compile()
+    rows = [
+        row
+        for ir in world.artifact_irs
+        for section in ir.sections
+        if section.table is not None and section.table.key == "pnl"
+        for row in section.table.rows
+    ]
+    assert rows, "the fixture must compile a Business Unit P&L"
+    for row in rows:
+        assert row.cells["gp_budget"].fact_id == row.cells["gp_actual"].fact_id
+        assert row.cells["gp_budget"].value == row.cells["gp_actual"].value
+    # Not vacuous: two empty cells agree, which is the shape of every defect
+    # this file's neighbours were written after.
+    assert any(row.cells["gp_budget"].fact_id for row in rows), rows[0].cells
+
+
+def test_the_authored_corpus_validates_and_renders_the_same_bytes_twice() -> None:
+    """Coherent, and reproducible — the two gates a corpus has to pass.
+
+    A workbook whose columns moved is exactly where a roll-up would stop
+    reconciling, so `validate` is the check that the threading did not quietly
+    take the reconciliation rows with it: they compare the sheet's sums against
+    the *ledger*, through the same column the sheet reads.
+    """
+    first = _closed(RetailWorld.from_pack(_pack(), seed=8128)).compile()
+    report = first.validate()
+    assert report.ok, report.violations[:5]
+
+    payload = next(
+        r for r in first.render("xlsx")._rendered if r.path.endswith(".xlsx")
+    ).payload
+    again = _closed(RetailWorld.from_pack(_pack(), seed=8128))
+    assert payload == next(
+        r for r in again.render("xlsx")._rendered if r.path.endswith(".xlsx")
+    ).payload
+
+
+# ---------------------------------------------------------------------------
+# The other thing a pack's archetype key was inert for
+# ---------------------------------------------------------------------------
+#
+# Not about the workbook, and here because this is the file about what a pack
+# reaches. `_vertical_of` resolves the tag `roleseq` learns under, and it
+# resolved it through `domains.for_archetype` alone — which no `pack:<name>`
+# key is ever registered under, by design. So `synthesised` took its `no_shape`
+# branch for every `--pack` build and `--outline-synthesis` did nothing at all
+# on precisely the corpora a pack exists to make different. Measured on a
+# three-period build of the fixture below: 0 of 10 documents synthesised before,
+# 6 of 10 after, against 14 of 18 for the stock retailer.
+#
+# The natural home for these two is `tests/test_structure.py`, which owns the
+# genome; they are here because this session's lane owns this file and not that
+# one.
+
+
+def test_a_pack_build_resolves_the_vertical_its_engine_names() -> None:
+    """Through the pack's `base`, and through `by_name` because that is a name.
+
+    `base` is a domain name rather than an archetype key, so the plausible fix
+    — `domains.for_archetype(pack.base)` — returns `None` for every pack too and
+    looks like it worked, because the fallback is silent. This pins the route
+    rather than only the answer.
+    """
+    from worldloom import documents
+
+    pack = _pack()
+    world = RetailWorld.from_pack(pack, seed=8128).build()
+    assert packs.archetype_key(pack).startswith("pack:")
+    assert documents._vertical_of(world) == "retail"
+    # The half that must not become a guess.
+    assert documents._vertical_of(RetailWorld(seed=8128).build()) == "retail"
+
+
+def test_a_pack_whose_base_names_no_domain_has_no_tag() -> None:
+    """An empty tag is the right answer when there is no honest one.
+
+    `roleseq`'s cross-vertical guard is worth exactly what the tag is true, so a
+    world that cannot say which engine's outlines it issues must get nothing
+    rather than the nearest registered name. Only the `pack:` case was wrong.
+    """
+    from worldloom import documents
+
+    class _Loose:
+        _recipe = {"archetype": "pack:whatever", "pack": {"base": "aviation"}}
+
+    assert documents._vertical_of(_Loose()) == ""
+    assert documents._vertical_of(type("_Bare", (), {"_recipe": {}})()) == ""

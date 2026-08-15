@@ -303,6 +303,26 @@ class Shape:
         and reads as "book and maturity bucket" here."""
         return tuple(axis for axis in self.axes if axis.cuts(line))
 
+    def cut_by(self, line: str, source: Source) -> tuple[Axis, ...]:
+        """The *populated* axes of *source* that cut a line of business *line*.
+
+        The reading a generator takes. ``for_line`` answers "how is this desk
+        described"; this answers "which members must I mint for it, from which
+        seam" — so the unpopulated axes are excluded here and only here, because
+        a gap is a thing to report and not a thing to build.
+
+        A tuple rather than an ``Axis | None`` even though one is the only
+        sensible count. Two ``categories`` axes cutting one line is a shape that
+        constructs fine, lints clean (the names differ, so ``__post_init__``
+        has nothing to refuse) and means the same member set twice; returning
+        the second silently would make which one wins depend on declaration
+        order, and returning ``None`` would hide it. The caller counts.
+        """
+        return tuple(
+            axis for axis in self.axes
+            if axis.populated and axis.source == source and axis.cuts(line)
+        )
+
     # -- structure -------------------------------------------------------
 
     def chain(self, name: str) -> tuple[str, ...]:
@@ -788,6 +808,23 @@ _BANK_LENDING = frozenset({
     "retail_banking", "business_banking", "cards", "institutional_banking",
 })
 
+#: Every line of business that *underwrites*, which is not the same set as every
+#: line an insurer runs — ``investments`` is the third one and it is cut by asset
+#: class instead.
+#:
+#: Both ``divisions.POOLS`` entries were missing here until
+#: ``hierarchy.generate`` started reading this module and refused to drop their
+#: categories on the floor. ``specialty`` writes Inwards Reinsurance and
+#: Financial Lines and ``health_travel`` writes Private Health and Travel; those
+#: are classes of business by any reading, so the omission was an oversight
+#: rather than a claim, and its only symptom was that a widened insurer's four
+#: extra categories were described as belonging to no axis at all. ``lint`` could
+#: not have caught it: it checks that every line named here exists, never that
+#: every line that exists is named somewhere.
+_INSURANCE_UNDERWRITING = frozenset({
+    "personal_lines", "commercial_lines", "specialty", "health_travel",
+})
+
 #: The retail cut, shared by the two retail archetypes rather than declared
 #: twice. ``omnichannel_retailer`` and ``australian_grocery`` carry different
 #: ``industry`` strings — "Omnichannel retail" and "Supermarkets and omnichannel
@@ -876,6 +913,24 @@ register(Shape(industry="Banking", axes=(
         applies_to=_BANK_LENDING,
     ),
     Axis(
+        name="service_line", label="Service line", source="categories",
+        populated_by="generators/hierarchy.py", nests_under="book",
+        rollup="sums-to", subject_type="category",
+        applies_to=frozenset({"wealth"}),
+        about="Financial Advice, Superannuation Administration, Platform"
+              " Administration. The same `UnitSpec.categories` seam `portfolio`"
+              " reads, under the word that is actually true of it: a wealth"
+              " arm's books are fee-earning service lines, and calling them"
+              " portfolios would repeat inside this module the conflation the"
+              " module exists to name. Declared because"
+              " `hierarchy.generate(shape=...)` refused to build"
+              " `customer_owned_bank` without it — the shape said a wealth arm"
+              " was cut by nothing below the book while the archetype handed"
+              " over two categories for it, and the generator will drop no"
+              " member a company declares. `divisions.POOLS['Banking']` ships a"
+              " wealth division too, so every widened bank had the same hole.",
+    ),
+    Axis(
         name="branch", label="Branch", source="sites",
         populated_by="generators/hierarchy.py", nests_under="book",
         rollup="sums-to", subject_type="any",
@@ -944,7 +999,7 @@ register(Shape(industry="General insurance", axes=(
         name="class_of_business", label="Class of business", source="categories",
         populated_by="generators/hierarchy.py", nests_under="segment",
         rollup="sums-to", subject_type="category",
-        applies_to=frozenset({"personal_lines", "commercial_lines"}),
+        applies_to=_INSURANCE_UNDERWRITING,
         about="Motor, Home, Travel, Public and Products Liability. Carried in"
               " `UnitSpec.categories`, so each one declares a gross margin — an"
               " insurer has a loss ratio and an expense ratio instead, and the"

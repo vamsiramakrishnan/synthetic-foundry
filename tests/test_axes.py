@@ -17,6 +17,9 @@ import pytest
 
 from worldloom import archetypes, axes, factkinds
 from worldloom.episodes import CohortSpec, FactKindSpec, Invariant
+from worldloom.generators import hierarchy
+from worldloom.ids import Minter
+from worldloom.rng import Rng
 
 #: The four shipped verticals, one archetype each. `australian_grocery` and
 #: `customer_owned_bank` are second archetypes of two of these verticals and are
@@ -129,7 +132,14 @@ def test_two_banks_in_one_industry_differ_by_their_lines_of_business():
     adi, mutual = shape("midsize_adi"), shape("customer_owned_bank")
     assert archetypes.get("midsize_adi").industry == archetypes.get(
         "customer_owned_bank").industry == "Banking"
-    assert set(adi.names()) ^ set(mutual.names()) == {"maturity_bucket"}
+    # Each brings its own. The `service_line` half of this arrived when
+    # `hierarchy.generate` started consuming the shape and refused to build the
+    # mutual: the wealth arm carries two categories and no axis cut them, so the
+    # declaration had been saying a financial-advice business is cut by nothing
+    # below the book. Before that the mutual's difference from the ADI was
+    # purely an absence, which is the weaker of the two readings.
+    assert set(adi.names()) ^ set(mutual.names()) == {"maturity_bucket", "service_line"}
+    assert "service_line" in mutual.names()
 
 
 def test_scale_does_not_change_shape():
@@ -199,8 +209,12 @@ def test_the_library_partitions_into_populated_and_not_and_reports_both():
     library = axes.library()
     populated = [axis for axis in library if axis.populated]
     gaps = [axis for axis in library if not axis.populated]
-    assert len(library) == 35
-    assert len(populated) == 24
+    # 35/24/11 when the library was declared and nothing read it. The
+    # twenty-fifth populated axis is `service_line`, which the first consumer
+    # required; the eleven gaps are unmoved, because consuming a shape closes no
+    # gap — it only makes the engine say, per build, which ones it did not cut.
+    assert len(library) == 36
+    assert len(populated) == 25
     assert len(gaps) == 11
     # Every gap names the axis it is, and none of them pretends to a generator.
     assert all(axis.populated_by == "" for axis in gaps)
@@ -495,3 +509,234 @@ def test_the_library_is_ordered_by_industry_and_deduplicated_by_value():
     library = axes.library()
     assert len(library) == len(set(library))
     assert library[:5] == axes.LEGACY.axes
+
+
+# ---------------------------------------------------------------------------
+# Consumption — does the declaration reach the build
+#
+# The section that decides whether the module above is a description or a
+# capability. `hierarchy.generate` takes an optional `shape`; if passing one
+# produced the same `Dimensions` for every shipped archetype, a parameter would
+# have been added and nothing else. So these tests measure the difference, name
+# the archetypes where there is none and why, and pin the four refusals — which
+# are the load-bearing half, because a shape may drop no member a company
+# declares.
+# ---------------------------------------------------------------------------
+
+
+def _cut(key: str, shaped: bool = True) -> hierarchy.Dimensions:
+    """Run `hierarchy.generate` for an archetype, with or without its shape.
+
+    Ids are handed in rather than minted from an organisation, for `plan`'s own
+    reason: the cut is settled from `UnitSpec` alone, so measuring it needs no
+    world. Same rng seed and same minter sequence on both sides, so any
+    difference is the shape's.
+    """
+    archetype = archetypes.get(key)
+    unit_ids = {unit.key: f"BU-{i:03d}" for i, unit in enumerate(archetype.units)}
+    return hierarchy.generate(
+        Rng(8128).derive("hierarchy"), Minter(),
+        units=archetype.units, unit_ids=unit_ids, buyers=unit_ids,
+        shape=axes.for_company(archetype) if shaped else None,
+    )
+
+
+def test_no_shape_is_the_cut_the_engine_has_always_performed():
+    """`None` is not "some default shape" — it is the five-axis cut, unchanged.
+
+    Every corpus this repository has built was cut that way, so the parameter
+    has to be a strict no-op when absent. The whole-corpus proof is a build
+    diff; this is the same claim at the generator.
+    """
+    for key in archetypes.available():
+        assert _cut(key, shaped=False).gaps == ()
+
+
+def test_the_declared_shape_changes_three_of_the_four_verticals():
+    """The measurement that says this is a capability rather than a parameter.
+
+    Retail is the one that does *not* move, and that is the correct answer
+    rather than a hole: `LEGACY` is a grocer's cut written down, and the retail
+    shape declares the same nesting — division → format → store — so a shape
+    faithful to the engine must reproduce it byte for byte. The other three all
+    declare their site axis directly under the unit, and say why in the axis's
+    own `about`: an operations centre is not a smaller branch, a claims centre
+    is not a smaller branch, a materials yard is not a smaller depot.
+    """
+    moved = {}
+    for key in archetypes.available():
+        plain, shaped = _cut(key, shaped=False), _cut(key)
+        assert len(plain.sites) == len(shaped.sites), key
+        assert len(plain.categories) == len(shaped.categories), key
+        moved[key] = sum(
+            1 for before, after in zip(plain.sites, shaped.sites)
+            if (before.name, before.region) != (after.name, after.region)
+        )
+    assert moved == {
+        # Cut by format, as the engine always was.
+        "australian_grocery": 0,
+        "omnichannel_retailer": 0,
+        # Not cut by format: the estate is one sequence under the book, so
+        # every site after the first format takes a different ordinal and a
+        # different point in the region cycle.
+        "customer_owned_bank": 1,           # the operations centre
+        "midsize_adi": 1,                   # the operations centre
+        "midsize_general_insurer": 3,       # three claims centres
+        "midsize_infrastructure_services": 17,  # 12 project offices, 5 yards
+    }
+
+
+def test_a_bank_numbers_its_estate_by_book_and_a_grocer_by_format():
+    """The difference above, read as the sentence it is.
+
+    A bank's single operations centre is the 119th site of its retail book, not
+    the first site of a format of one — and it is placed where the region cycle
+    had reached rather than always at the head of the pool, which is what made
+    every non-retail company's odd formats pile into the first region.
+    """
+    adi = {site.id: site for site in _cut("midsize_adi").sites}
+    centre = next(s for s in adi.values() if s.format == "Operations Centre")
+    assert centre.name == "Operations Centre ACT 119"
+    assert next(s for s in _cut("midsize_adi", shaped=False).sites
+                if s.format == "Operations Centre").name == "Operations Centre NSW 001"
+
+    store = next(s for s in _cut("australian_grocery").sites if s.format == "Metro")
+    assert store.name == "Metro NSW 001"  # a format is a cut here, so it restarts
+
+
+def test_the_cut_names_the_axes_it_did_not_perform():
+    """"Not an empty dimension" — the contractor's `project` axis mints no
+    members and is not silently absent either."""
+    assert _cut("midsize_infrastructure_services").gaps == (
+        "project", "contract_type", "project_vintage",
+    )
+    # Two kinds of absence, and the insurer carries both. `peril` and
+    # `asset_class` are gaps in the engine; `accident_quarter` and `valuation`
+    # are populated — by `generators/triangles.py` and `generators/reserving.py`
+    # — and are listed because *this* generator did not cut them, which is how a
+    # reader learns the company has a dimension from somewhere else.
+    insurer = _cut("midsize_general_insurer")
+    resolved = shape("midsize_general_insurer")
+    assert insurer.gaps == (
+        "accident_quarter", "valuation", "peril", "reinsurance_layer", "asset_class",
+    )
+    assert {axis.name for axis in resolved.unpopulated} < set(insurer.gaps)
+
+
+def test_a_shape_may_not_drop_a_member_the_company_declares():
+    """The refusal that paid for the exercise.
+
+    Silently dropping a unit's categories removes every fact, document and
+    question they own and reports success — the failure mode `validate`'s "fewer
+    compiled documents than the plan asked for" exists for, one layer earlier.
+    So the shape that omits the mutual's wealth arm raises, naming the members.
+    """
+    mutual = archetypes.get("customer_owned_bank")
+    without = axes.Shape(
+        industry="Banking",
+        axes=tuple(a for a in axes.for_company(mutual).axes if a.name != "service_line"),
+    )
+    with pytest.raises(ValueError, match="Financial Advice"):
+        hierarchy.plan(mutual.units, without)
+
+
+def test_a_shape_may_not_drop_an_estate_either():
+    grocer = archetypes.get("omnichannel_retailer")
+    without = axes.Shape(
+        industry="Omnichannel retail",
+        axes=tuple(a for a in axes.for_company(grocer).axes
+                   if a.name not in ("store", "region", "comparability")),
+    )
+    with pytest.raises(ValueError, match="cuts that line of business by site"):
+        hierarchy.plan(grocer.units, without)
+
+
+def test_a_site_with_no_region_is_refused_rather_than_placed_nowhere():
+    """`models.Site.region` is required, so this is a shape the thin waist has
+    no entity for. Named, rather than filled in with an empty string that would
+    render as a site nobody can place — one of the answers to "what would a
+    non-three-axis company break downstream"."""
+    grocer = archetypes.get("omnichannel_retailer")
+    without = axes.Shape(
+        industry="Omnichannel retail",
+        axes=tuple(a for a in axes.for_company(grocer).axes if a.name != "region"),
+    )
+    with pytest.raises(ValueError, match="cut by site and not by region"):
+        hierarchy.plan(grocer.units, without)
+
+
+def test_an_axis_claiming_this_generator_for_a_source_it_cannot_mint_is_refused():
+    """`populated_by` is documentation and not dispatch, so nothing keeps it
+    honest but this. An axis naming `hierarchy.py` while sourcing its members
+    from the roster is a cut the library promises and nobody performs."""
+    grocer = archetypes.get("omnichannel_retailer")
+    wrong = axes.Shape(industry="Omnichannel retail", axes=(
+        *axes.for_company(grocer).axes,
+        _axis("headcount", source="roster", populated_by="generators/hierarchy.py",
+              nests_under="division"),
+    ))
+    with pytest.raises(ValueError, match="no branch for"):
+        hierarchy.plan(grocer.units, wrong)
+
+
+def test_two_axes_on_one_source_are_refused_rather_than_ordered():
+    """Both name the same member set, and which one the cut is reported under
+    would depend on declaration order."""
+    grocer = archetypes.get("omnichannel_retailer")
+    twice = axes.Shape(industry="Omnichannel retail", axes=(
+        *axes.for_company(grocer).axes,
+        _axis("subcategory", source="categories",
+              populated_by="generators/hierarchy.py", nests_under="division",
+              subject_type="category"),
+    ))
+    with pytest.raises(ValueError, match="axes drawing on 'categories'"):
+        hierarchy.plan(grocer.units, twice)
+
+
+def test_a_gap_is_reported_and_never_refused():
+    """Every shipped shape names axes nothing populates — eleven of thirty-six,
+    by design, each already reported by `lint`. Raising on one would refuse all
+    four verticals, so the parameter would be unusable on every company this
+    repository ships. `plan` accepts them and `Cut.gaps` names them."""
+    for key in archetypes.available():
+        archetype = archetypes.get(key)
+        resolved = axes.for_company(archetype)
+        assert resolved.unpopulated, key  # every vertical declares at least one
+        cut = hierarchy.plan(archetype.units, resolved)
+        assert {axis.name for axis in resolved.unpopulated} <= set(cut.gaps), key
+
+
+def test_every_member_the_registry_declares_is_cut_by_a_populated_axis():
+    """The check `lint` cannot make, and the one that found `service_line` and
+    the insurer's two missing classes of business.
+
+    `lint` asserts that every line of business an axis *names* exists; nothing
+    asserted the reverse, so a line no axis named was described as uncut — and,
+    once anything consumed the shape, refused. Division pools are included
+    because a widened company's extra divisions reach the same generator, and
+    both holes were in a pool: `POOLS['Banking']` ships a wealth division and
+    `POOLS['General insurance']` ships specialty and health.
+
+    Members, not lines. A treasury desk declares no categories and no estate and
+    is cut below the book by `maturity_bucket` alone, which nothing populates —
+    that is a stated gap and not a hole, and asserting on lines rather than on
+    declared members would have to call it one.
+    """
+    from worldloom import divisions
+
+    for industry in axes.declared():
+        declaration = axes.shape_of(industry)
+        units = (*_an_archetype_in(industry).units, *divisions.POOLS.get(industry, ()))
+        for unit in units:
+            # `sites` rather than `site_formats` for the estate, and that is the
+            # nesting difference stated as a lookup: three of the four verticals
+            # declare no format axis at all because a claims centre is not a
+            # smaller branch, so the axis their `site_formats` members land on
+            # is the site axis directly.
+            for source, members in (("categories", unit.categories),
+                                    ("sites", unit.site_formats)):
+                if not members:
+                    continue
+                assert declaration.cut_by(unit.kind, source), (
+                    industry, unit.key, unit.kind, source,
+                )

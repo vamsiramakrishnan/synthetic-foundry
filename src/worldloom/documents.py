@@ -417,6 +417,13 @@ def _columns(sheet: columns_module.Sheet) -> list[Column]:
 # so these names are load-bearing, not vestigial. `Sheet`'s projections return
 # fresh containers on every call precisely so that mutation cannot reach the
 # spec.
+#
+# What they are *not*, since a pack could author a workbook, is the whole
+# answer: they are the **default**, the sheet a world with no pack compiles.
+# `_Bound` below is the same four tables for the sheet one world resolved, and
+# every call site with a `World` in scope reads that instead. These four names
+# are what it falls back to, by name and at call time, so both tests above
+# still reach the compiler through them.
 
 #: ``column key -> the fact kind it reads``.
 _MEASURES: dict[str, str] = columns_module.PNL.kinds()
@@ -441,6 +448,99 @@ _RATE_KINDS = columns_module.PNL.rate_kinds()
 
 def _pnl_columns() -> list[Column]:
     return _columns(columns_module.PNL)
+
+
+class _Bound:
+    """The four tables above, for the sheet *one world* actually compiles with.
+
+    A pack may declare its own workbook: ``doctypes.install_sheets`` validates it
+    and ``columns.for_world`` resolves it. Until this class existed nothing
+    between those two and the page — ``documents`` read the module globals above
+    and nothing else, so an insurer whose pack re-headed every column still filed
+    a month-end model reading "Revenue actual". A declared, linted, installed
+    sheet compiled to the engine's eight columns and no check anywhere compared
+    the two, which is this repository's own definition of a silent degradation.
+
+    ``sheet is None`` means *the engine's own*, and it is not the same thing as
+    ``_Bound(columns_module.PNL)``. The globals are read **by name, at call
+    time**, because two tests reach the compiler through them and must keep
+    doing so: ``tests/test_carried_evidence.py`` reproduces the
+    ``gm_pct_budget`` defect by *mutating* ``_MEASURES`` and ``_DERIVED`` in
+    place and by replacing ``_pnl_columns`` itself, and
+    ``tests/test_columns.py`` rebinds ``_NOT_ADDITIVE`` to measure what a
+    summable margin does to a real corpus. A bundle that captured either at
+    import would leave both tests green against a compiler they no longer
+    reach.
+
+    An authored sheet's tables are built once, here, rather than per row:
+    ``Sheet``'s projections return fresh containers on every call (deliberately
+    — see its docstring), and ``_measure_row`` reads the kind table once per
+    column per row over thousands of rows.
+    """
+
+    __slots__ = ("sheet", "_measures", "_derived", "_not_additive", "_rate_kinds")
+
+    def __init__(self, sheet: columns_module.Sheet | None) -> None:
+        self.sheet = sheet
+        self._measures = None if sheet is None else sheet.kinds()
+        self._derived = None if sheet is None else sheet.derivations()
+        self._not_additive = None if sheet is None else sheet.not_summable()
+        self._rate_kinds = None if sheet is None else sheet.rate_kinds()
+
+    @property
+    def measures(self) -> Mapping[str, str]:
+        return _MEASURES if self._measures is None else self._measures
+
+    @property
+    def derived(self) -> Mapping[str, tuple[FormulaKind, list[str]]]:
+        return _DERIVED if self._derived is None else self._derived
+
+    @property
+    def not_additive(self) -> frozenset[str]:
+        return _NOT_ADDITIVE if self._not_additive is None else self._not_additive
+
+    @property
+    def rate_kinds(self) -> frozenset[str]:
+        return _RATE_KINDS if self._rate_kinds is None else self._rate_kinds
+
+    def columns(self) -> list[Column]:
+        # `_pnl_columns()` rather than `_columns(columns_module.PNL)` on the
+        # default path: `tests/test_carried_evidence.py` swaps the *function*
+        # out for one that drops a column, and calls it with no arguments.
+        return _pnl_columns() if self.sheet is None else _columns(self.sheet)
+
+
+#: The engine's own sheet, as every call site read it before a pack could author
+#: one. Safe as a default argument because it holds nothing: every table it
+#: returns is a fresh look at the module globals.
+_ENGINE = _Bound(None)
+
+
+def _bind(world: World) -> _Bound:
+    """The sheet *world* compiles its measure tables with.
+
+    Identity against ``columns.default`` rather than equality, and the question
+    it asks is "did this world resolve the engine's *own* sheet" — ``default``
+    returns the module constant itself, so a world with no pack yields
+    ``_ENGINE`` and keeps reading the globals live. A pack that authored a sheet
+    identical to the engine's is still bound to its own object, which costs one
+    dict build per compile and keeps `_bind` from having an answer that depends
+    on what a pack happened to write.
+    """
+    sheet = columns_module.for_world(world)
+    return _ENGINE if sheet is columns_module.default(columns_module.AUTHORABLE) else _Bound(sheet)
+
+
+def _cut_columns(world: World, name: str) -> list[Column]:
+    """The IR column list for a *narrowing* of the world's P&L.
+
+    ``stores`` and ``divisions`` are cuts rather than sheets — ``columns.cut``
+    takes them from whichever P&L the world resolved — so a pack that renames a
+    column renames it on the estate sheet and in the memo's divisional table
+    without declaring either. The rows those columns carry are still measured
+    through the P&L's own bound tables, because a cut keeps its parent's keys.
+    """
+    return _columns(columns_module.for_world(world, name))
 
 
 class _Facts:
@@ -476,20 +576,29 @@ def _measure_row(
     children: list[str] | None = None,
     emphasis: bool = False,
     extra: dict[str, Cell] | None = None,
+    bound: _Bound = _ENGINE,
 ) -> Row:
     """One P&L row: stated where the ledger states it, computed where it derives.
 
     ``children`` makes the row a subtotal, summing the named rows rather than
     restating a figure — so a reader who deletes a category sees the unit total
     move.
+
+    ``bound`` is the sheet the caller's world compiles with; the default is the
+    engine's, which is what every caller with no world in scope has to pass.
+    ``columns`` stays a separate argument because it is narrower than the bound
+    sheet on two tables — the store sheet's money columns and the memo's
+    divisional cut — while the kinds, derivations and non-summing rule are the
+    P&L's throughout, keyed by the same column keys.
     """
     cells: dict[str, Cell] = {}
+    measures, derivations, not_additive = bound.measures, bound.derived, bound.not_additive
     for column in columns:
-        fact = index.get(_MEASURES[column.key], subject, period)
+        fact = index.get(measures[column.key], subject, period)
         value = fact.value.amount if fact and fact.value else None
         fact_id = fact.id if fact else None
-        derived = _DERIVED.get(column.key)
-        if children and column.key not in _NOT_ADDITIVE:
+        derived = derivations.get(column.key)
+        if children and column.key not in not_additive:
             cells[column.key] = Cell(
                 value=value, fact_id=fact_id, formula=FormulaKind.SUM, operands=children
             )
@@ -513,6 +622,7 @@ def _sum_row(
     children: list[str],
     source: list[Row],
     extra: dict[str, Cell] | None = None,
+    bound: _Bound = _ENGINE,
 ) -> Row:
     """A total that reports the rows above it rather than a figure from the ledger.
 
@@ -525,8 +635,9 @@ def _sum_row(
     """
     lookup = {row.key: row for row in source}
     cells: dict[str, Cell] = {}
+    not_additive = bound.not_additive
     for column in columns:
-        if column.key in _NOT_ADDITIVE:
+        if column.key in not_additive:
             continue
         total = sum(
             (lookup[child].cells[column.key].value or 0.0)
@@ -535,8 +646,8 @@ def _sum_row(
         )
         cells[column.key] = Cell(value=total, formula=FormulaKind.SUM, operands=children)
     for column in columns:
-        derived = _DERIVED.get(column.key)
-        if derived is None or column.key not in _NOT_ADDITIVE:
+        derived = bound.derived.get(column.key)
+        if derived is None or column.key not in not_additive:
             continue
         formula, operands = derived
         left = cells.get(operands[0])
@@ -594,6 +705,14 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     period = (periods[-1] if periods else "") or world.period or ""
     company = world.company
 
+    # The sheet this world compiles with — the pack's if it declared one, the
+    # engine's otherwise. Bound once here and threaded through every row builder
+    # below rather than read from the module globals at each of them: this is
+    # the one function with a `World` in scope, and a call site resolving it for
+    # itself would be a second answer to "which workbook is this company's".
+    bound = _bind(world)
+    measures = bound.measures
+
     # A business unit the finance generator booked no month for does not get a
     # P&L row. This is the same rule `sites_of` applies below, for the same
     # reason, and it was missing here: `world.business_units` unfiltered meant a
@@ -606,9 +725,11 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # recurring one function later.
     #
     # The predicate is "any measured column resolves", not "revenue resolves":
-    # a unit carried on gross profit alone is still a unit that closed.
+    # a unit carried on gross profit alone is still a unit that closed — and the
+    # columns are the sheet's, so a pack that re-points them is still asking
+    # about its own measures rather than the engine's.
     def measured(unit_id: str) -> bool:
-        return any(index.get(kind, unit_id, period) is not None for kind in _MEASURES.values())
+        return any(index.get(kind, unit_id, period) is not None for kind in measures.values())
 
     units = [unit for unit in world.business_units if measured(unit.id)]
     # A workbook whose every unit fails the test is a workbook with no month in
@@ -619,7 +740,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         units = list(world.business_units)
 
     unit_keys = [unit.id for unit in units]
-    columns = _pnl_columns()
+    columns = bound.columns()
 
     categories_of = {
         unit.id: [c for c in world.categories if c.business_unit_id == unit.id]
@@ -628,12 +749,19 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # A site with no revenue fact is a site the finance generator did not book
     # turnover for — a distribution centre. It belongs on a property register, not
     # on a store P&L.
+    #
+    # The kind comes from the sheet's own `revenue_actual` column rather than
+    # being named here. Both spell `financial.revenue.actual` on the engine's
+    # sheet; a pack that re-points the column and leaves this literal gets an
+    # estate sheet that is silently absent, which is the "empty Store
+    # Performance tab" this function's own docstring argues against.
+    revenue_actual = measures["revenue_actual"]
     sites_of = {
         unit.id: [
             s
             for s in world.sites
             if s.business_unit_id == unit.id
-            and index.get("financial.revenue.actual", s.id, period) is not None
+            and index.get(revenue_actual, s.id, period) is not None
         ]
         for unit in units
     }
@@ -641,12 +769,12 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # -- Business Unit P&L -------------------------------------------------
     rows = [
         _measure_row(index, key=unit.id, label=unit.name, subject=unit.id,
-                     period=period, columns=columns)
+                     period=period, columns=columns, bound=bound)
         for unit in units
     ]
     rows.append(
         _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
-                     columns=columns, children=unit_keys, emphasis=True)
+                     columns=columns, children=unit_keys, emphasis=True, bound=bound)
     )
 
     pnl = Table(
@@ -730,12 +858,12 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         for category in members:
             category_rows.append(
                 _measure_row(index, key=category.id, label=f"{unit.name} · {category.name}",
-                             subject=category.id, period=period, columns=columns)
+                             subject=category.id, period=period, columns=columns, bound=bound)
             )
         category_rows.append(
             _measure_row(index, key=unit.id, label=f"{unit.name} total", subject=unit.id,
                          period=period, columns=columns,
-                         children=[c.id for c in members], emphasis=True)
+                         children=[c.id for c in members], emphasis=True, bound=bound)
         )
         subtotal_keys.append(unit.id)
 
@@ -744,10 +872,10 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         covers_group = len(subtotal_keys) == len(units)
         category_rows.append(
             _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
-                         columns=columns, children=subtotal_keys, emphasis=True)
+                         columns=columns, children=subtotal_keys, emphasis=True, bound=bound)
             if covers_group
             else _sum_row(company.id, "Total, categorised units", columns=columns,
-                          children=subtotal_keys, source=category_rows)
+                          children=subtotal_keys, source=category_rows, bound=bound)
         )
         category_table = Table(
             key="category",
@@ -792,9 +920,9 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     store_columns = [
         Column(key="region", label="Region"),
         Column(key="format", label="Format"),
-        *_columns(columns_module.STORES),
+        *_cut_columns(world, "stores"),
     ]
-    store_money = [c for c in store_columns if c.key in _MEASURES]
+    store_money = [c for c in store_columns if c.key in measures]
 
     store_rows: list[Row] = []
     store_subtotals: list[str] = []
@@ -804,14 +932,14 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             continue
         for site in estate:
             row = _measure_row(index, key=site.id, label=site.name, subject=site.id,
-                               period=period, columns=store_money,
+                               period=period, columns=store_money, bound=bound,
                                extra={"region": Cell(value=site.region),
                                       "format": Cell(value=site.format)})
             store_rows.append(row)
         store_rows.append(
             _measure_row(index, key=unit.id, label=f"{unit.name} total", subject=unit.id,
                          period=period, columns=store_money,
-                         children=[s.id for s in estate], emphasis=True,
+                         children=[s.id for s in estate], emphasis=True, bound=bound,
                          extra={"region": Cell(value=""), "format": Cell(value="")})
         )
         store_subtotals.append(unit.id)
@@ -822,10 +950,11 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         covers_group = len(store_subtotals) == len(units)
         store_rows.append(
             _measure_row(index, key=company.id, label="Group", subject=company.id, period=period,
-                         columns=store_money, children=store_subtotals, emphasis=True, extra=blank)
+                         columns=store_money, children=store_subtotals, emphasis=True,
+                         extra=blank, bound=bound)
             if covers_group
             else _sum_row(company.id, "Total, trading stores", columns=store_money,
-                          children=store_subtotals, source=store_rows, extra=blank)
+                          children=store_subtotals, source=store_rows, extra=blank, bound=bound)
         )
         store_table = Table(
             key="stores",
@@ -853,12 +982,32 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
     # revenue climbs every month while its margin rate slides is the most
     # ordinary story in retail and the one a revenue-only trend hides
     # completely.
-    _TRENDS: tuple[tuple[str, str, str, str], ...] = (
-        ("trend", "Revenue Trend", "financial.revenue.actual", MONEY_FORMAT),
-        ("trend_gp", "Gross Profit Trend", "financial.gross_profit.actual", MONEY_FORMAT),
-        ("trend_margin", "Margin Trend", "financial.gross_margin_pct.actual", PERCENT_FORMAT),
+    #
+    # The kind and the number format come from the sheet's own three "actual"
+    # columns rather than being named again here — the fifth and sixth places
+    # that would have had to agree with it. On the engine's sheet they resolve
+    # to exactly the three `financial.*` kinds this tuple used to spell; on an
+    # authored one they follow the pack, and `columns.BOUND_KEYS` is what
+    # guarantees all three columns are still there to read. A literal here
+    # would give a pack that re-points its columns three trend tabs of empty
+    # cells, which is the defect recorded above arriving by a second route.
+    #
+    # The *headings* stay the engine's English. They title a tab rather than a
+    # column, a pack has no field for them, and a tab called "Written premium
+    # actual Trend" is not what the missing field would have said anyway.
+    formats = {column.key: column.number_format for column in columns}
+    _TRENDS: tuple[tuple[str, str, str, str], ...] = tuple(
+        (table_key, heading, measures[column_key], formats[column_key])
+        for table_key, heading, column_key in (
+            ("trend", "Revenue Trend", "revenue_actual"),
+            ("trend_gp", "Gross Profit Trend", "gp_actual"),
+            ("trend_margin", "Margin Trend", "gm_pct_actual"),
+        )
     )
     if len(periods) > 1:
+        # Stated over fact *kinds* rather than column keys, because a trend
+        # sheet is laid out one column per period and has no column key to test.
+        rate_kinds = bound.rate_kinds
 
         def trend_row(kind: str, key: str, label: str, subject: str, *,
                       children: list[str] | None = None, emphasis: bool = False) -> Row:
@@ -873,8 +1022,8 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                     # columns. A subtotal row on the margin sheet therefore
                     # states its own fact and declares no formula, while the
                     # money sheets sum their children.
-                    formula=(FormulaKind.SUM if children and kind not in _RATE_KINDS else None),
-                    operands=(children or [] if kind not in _RATE_KINDS else []),
+                    formula=(FormulaKind.SUM if children and kind not in rate_kinds else None),
+                    operands=(children or [] if kind not in rate_kinds else []),
                 )
             return Row(key=key, label=label, cells=cells, emphasis=emphasis)
 
@@ -1075,11 +1224,17 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
             )
         )
 
+    # Every `stated` figure is read through the sheet's own column, for the
+    # reason the note under this table gives: it compares the workbook against
+    # the *ledger* rather than against itself. A hardcoded kind beside a
+    # re-pointed column would compare the sum of one measure against the stated
+    # total of another — or, more likely, against nothing at all, and a `None`
+    # stated value makes the difference `None` and the check vacuous.
     pnl_rows = {row.key: row for row in pnl.rows}
     check("revenue_units_to_group", "Unit revenue sums to group revenue", "pnl", "revenue_actual",
-          unit_keys, index.get("financial.revenue.actual", company.id, period), pnl_rows)
+          unit_keys, index.get(revenue_actual, company.id, period), pnl_rows)
     check("gp_units_to_group", "Unit gross profit sums to group gross profit", "pnl", "gp_actual",
-          unit_keys, index.get("financial.gross_profit.actual", company.id, period), pnl_rows)
+          unit_keys, index.get(measures["gp_actual"], company.id, period), pnl_rows)
 
     if category_table is not None:
         category_lookup = {row.key: row for row in category_table.rows}
@@ -1089,7 +1244,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                 continue
             check(f"categories_to_{unit.id}", f"{unit.name} categories sum to the unit",
                   "category", "revenue_actual", [c.id for c in members],
-                  index.get("financial.revenue.actual", unit.id, period), category_lookup)
+                  index.get(revenue_actual, unit.id, period), category_lookup)
 
     if store_table is not None:
         store_lookup = {row.key: row for row in store_table.rows}
@@ -1099,7 +1254,7 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
                 continue
             check(f"stores_to_{unit.id}", f"{unit.name} stores sum to the unit",
                   "stores", "revenue_actual", [s.id for s in estate],
-                  index.get("financial.revenue.actual", unit.id, period), store_lookup)
+                  index.get(revenue_actual, unit.id, period), store_lookup)
 
     reconciliation = Table(
         key="reconciliation",
@@ -1718,9 +1873,31 @@ def _vertical_of(world: Any) -> str:
     where `structure_of` reads the genome from two lines earlier, so both halves
     of "was this corpus synthesised, and as what" come off one record — a world
     that can answer the second question but not the first could not replay.
+
+    *And a pack has no archetype anybody owns.* `packs.archetype_key` mints
+    ``pack:<name>``, deliberately never registered — so `for_archetype` returned
+    ``None`` for **every** ``--pack`` build, the tag came back empty, and
+    `synthesised` took its `no_shape` branch every time: `--outline-synthesis`
+    was silently a no-op on exactly the corpora a pack exists to make different.
+    A pack's ``base`` is the engine it runs on and is the honest answer — its
+    documents *are* that engine's outlines, which is what the tag has to be true
+    about — and it is reachable from the same record, because `to_recipe` embeds
+    the pack verbatim.
+
+    Note ``by_name`` rather than ``for_archetype`` for that half. ``base`` is a
+    domain *name* (``"retail"``, ``"insurance"``), not an archetype key, so
+    `for_archetype("insurance")` is ``None`` too — a fix reaching for it would
+    keep returning nothing and look like it worked, because the fallback here is
+    silent by design. A base naming no registered domain still returns ``""``:
+    the empty tag is right whenever there is no honest answer, and it was only
+    the ``pack:`` case that was wrong.
     """
-    key = (getattr(world, "_recipe", None) or {}).get("archetype") or ""
+    recipe = getattr(world, "_recipe", None) or {}
+    key = recipe.get("archetype") or ""
     domain = domains.for_archetype(key) if key else None
+    if domain is None:
+        base = (recipe.get("pack") or {}).get("base") or ""
+        domain = domains.by_name(base) if base else None
     return domain.name if domain else ""
 
 
@@ -2469,9 +2646,14 @@ def _divisional_summary(
 
     period = next((f.period for f in facts if f.period), world.period or "")
     index = _Facts(facts)
+    # The memo's table is a *cut* of this world's P&L, so which kind says "a
+    # division traded this month" is the sheet's answer rather than a literal
+    # here. On a pack that re-points the column, the literal would find nothing
+    # and the memo would silently lose its only table.
+    bound = _bind(world)
     units = [
         unit for unit in world.business_units
-        if index.get("financial.revenue.actual", unit.id, period) is not None
+        if index.get(bound.measures["revenue_actual"], unit.id, period) is not None
     ]
     if len(units) < 2:
         return None
@@ -2482,10 +2664,10 @@ def _divisional_summary(
     # not on this table, so XLSX emits no formula for it. Latent — the memo is a
     # Word document — and reported rather than fixed, because both fixes change
     # what a reader sees.
-    columns = _columns(columns_module.DIVISIONAL)
+    columns = _cut_columns(world, "divisions")
     rows = [
         _measure_row(index, key=unit.id, label=unit.name, subject=unit.id,
-                     period=period, columns=columns)
+                     period=period, columns=columns, bound=bound)
         for unit in units
     ]
 
