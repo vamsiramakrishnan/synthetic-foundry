@@ -229,11 +229,19 @@ two, which is enough room for a splice to exceed both of its parents."""
 #: to `policies.py` look like a defect in `roleseq.py`. What is worth asserting
 #: about the control is a *ratio*, and `test_roles_beat_headings_by_two_orders`
 #: asserts that instead.
+#: The four kind-bearing rows moved when `policies.kind_of` put the policy's
+#: own name in the fact kind (leave and remote work were one role without it);
+#: the three coarse rows collapse below the policy name and did not. The
+#: `scope+kind` novel count *rose*, 196/159 → 225/183, and the rise is hollow
+#: on purpose: it is sixty unrealisable per-policy self-loop runs replacing
+#: thirty realisable area-wide ones — roleseq.py's docstring carries the full
+#: account, and `test_two_policies_of_one_function_are_now_distinct_roles`
+#: below pins the part of it that was the point.
 TABLE: dict[str, tuple[int, int, int, int]] = {
-    "kinds": (72, 63, 114, 76),
-    "scope+kinds": (73, 64, 85, 47),
-    "kind": (54, 59, 265, 229),
-    "scope+kind": (56, 60, 196, 159),
+    "kinds": (78, 68, 143, 100),
+    "scope+kinds": (79, 69, 114, 71),
+    "kind": (60, 64, 294, 253),
+    "scope+kind": (62, 65, 225, 183),
     "domain": (15, 27, 1089, 1060),
     "scope+domain": (18, 30, 836, 806),
     "scope": (3, 8, 282, 268),
@@ -408,7 +416,7 @@ def test_roles_beat_headings_by_two_orders(shipped: dict[str, list[tuple]]) -> N
 def test_the_cross_vertical_guard_refuses_more_than_it_keeps(
     shipped: dict[str, list[tuple]],
 ) -> None:
-    """218 refused against 196 kept, and the refusals are the interesting half.
+    """218 refused against 225 kept, and the refusals are the interesting half.
 
     A splice whose windows are each real and whose whole is issued by no company
     is exactly the defect the last wave's report named. Asserting the guard bites
@@ -587,19 +595,23 @@ def test_admitted_respects_its_bound(shipped: dict[str, list[tuple]]) -> None:
     assert roleseq.admitted(model, max_length=0) == ()
 
 
-def test_two_policies_of_one_function_are_one_role(shipped: dict[str, list[tuple]]) -> None:
-    """A known limit of the projection, fenced so that fixing it is noticed.
+def test_two_policies_of_one_function_are_now_distinct_roles(
+    shipped: dict[str, list[tuple]],
+) -> None:
+    """The fence this test used to be, flipped into the invariant it fenced.
 
-    Every section of every HR policy carries the prefix `policy.hr.`, so leave
-    and remote work project to the same symbol at *every* projection this module
-    offers, including the full kind tuple. The model will therefore splice a
-    leave heading and a remote-work heading into one outline: locally each window
-    is real, and a company issues them as two documents.
-
-    That is not fixable here. It needs the policy *area* inside the fact kind —
-    `policy.hr.leave.` against `policy.hr.remote_work.` — which is
-    `policies.py` and `factkinds.py`, neither of which this lane owns. When
-    somebody does it, this test fails, and deleting it is the right response.
+    Until `policies.kind_of` carried the policy's own name, every section of
+    every HR policy shared the prefix `policy.hr.`, so leave and remote work
+    projected to one symbol at every kind-bearing projection and the model
+    would splice a leave heading and a remote-work heading into one outline —
+    locally real at every window, issued by no company as one document. This
+    test asserted that merge (`len(symbols) == 1`) so that closing the debt
+    would be noticed rather than silently improving a number. The prefix is now
+    per policy — `policy.hr.leave.` against `policy.hr.remote_work.` — so the
+    assertion is the separation, plus the consequence that made the separation
+    worth having: no admitted, realisable outline can mix the two policies'
+    headings, because each symbol owns exactly its own policy's pair and
+    `realise` never uses a heading twice.
     """
     leave, remote = _OUTLINES["leave_policy"], _OUTLINES["remote_work_policy"]
     for projection in ("kinds", "scope+kinds", "kind", "scope+kind"):
@@ -608,7 +620,32 @@ def test_two_policies_of_one_function_are_one_role(shipped: dict[str, list[tuple
             for outline in (leave, remote)
             for section in outline
         }
-        assert len(symbols) == 1, f"{projection} now separates leave from remote work"
+        assert len(symbols) == 2, (
+            f"{projection} merges leave and remote work again — the per-policy"
+            " kind prefix in `policies.kind_of` is what keeps them apart"
+        )
+
+    # And the consequence: a run of one HR symbol cannot realise past the two
+    # headings that policy owns, so the leave/remote chimera the old projection
+    # produced (`any:policy.hr` ×3 realised across both policies) is not
+    # reachable at all.
+    catalogue = roleseq.catalogue(shipped)
+    model = roleseq.learn_roles(shipped)
+    for key in ("leave_policy", "remote_work_policy"):
+        sym = roleseq.symbol(_OUTLINES[key][0], tag="retail")  # type: ignore[arg-type]
+        assert adjacency.admits(model, (sym, sym))
+        assert roleseq.realise((sym,) * 3, catalogue, rng=Rng(8128, "hr")) is None
+    both = {
+        roleseq.symbol(section, tag="retail")  # type: ignore[arg-type]
+        for key in ("leave_policy", "remote_work_policy")
+        for section in _OUTLINES[key]
+    }
+    assert len(both) == 2
+    a, b = sorted(both)
+    assert not adjacency.admits(model, (a, b)), (
+        "no authored outline adjoins two HR policies, so the model must not"
+        " vouch for a document that does"
+    )
 
 
 def test_untag_inverts_the_tag(shipped: dict[str, list[tuple]]) -> None:

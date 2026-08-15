@@ -203,9 +203,12 @@ def test_the_cuts_are_taken_from_the_authored_sheet() -> None:
     divisions = columns.for_archetype(key, "divisions")
     # The memo's own heading for its variance column survives the authoring:
     # the cut is data (`columns._CUTS`), not two `select` calls in this module.
+    # `gp_actual` rides along under the pack's name for it since the cut gained
+    # the margin ratio's operand column — an authored world's memo gets the
+    # computable ratio for free, which is the whole point of the cut being data.
     assert [c.label for c in divisions.columns] == [
         "Written premium budget", "Written premium actual", "Variance",
-        "Underwriting margin actual",
+        "Underwriting result actual", "Underwriting margin actual",
     ]
 
 
@@ -593,9 +596,12 @@ def test_the_memo_table_is_cut_from_the_authored_sheet_too() -> None:
     ]
     assert tables, "the fixture must plan a memo with a divisional table"
     for table in tables:
+        # Including the pack's name for `gp_actual`, which the cut carries so
+        # the margin column is a ratio a spreadsheet can recompute rather than
+        # the pasted literal `columns.lint` used to report against it.
         assert [column.label for column in table.columns] == [
             "Written premium budget", "Written premium actual", "Variance",
-            "Underwriting margin actual",
+            "Underwriting result actual", "Underwriting margin actual",
         ]
 
 

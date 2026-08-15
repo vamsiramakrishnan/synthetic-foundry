@@ -95,10 +95,15 @@ def test_the_compiled_column_lists_are_unchanged() -> None:
         ("revenue_actual", "Revenue actual", "#,##0;(#,##0)"),
         ("revenue_variance", "Revenue variance", "#,##0;(#,##0)"),
     ]
+    # `gp_actual` arrived when the divisional cut's margin ratio was given its
+    # numerator back — see `test_the_memo_margin_ratio_is_computable_again` —
+    # so this list is the pre-extraction literal plus that one deliberate
+    # column, in operand-before-ratio order.
     assert [(c.key, c.label, c.number_format) for c in documents._columns(columns.DIVISIONAL)] == [
         ("revenue_budget", "Revenue budget", "#,##0;(#,##0)"),
         ("revenue_actual", "Revenue actual", "#,##0;(#,##0)"),
         ("revenue_variance", "Variance", "#,##0;(#,##0)"),
+        ("gp_actual", "GP actual", "#,##0;(#,##0)"),
         ("gm_pct_actual", "GM% actual", "0.00%"),
     ]
 
@@ -124,20 +129,24 @@ def test_the_shipped_sheets_lint_clean() -> None:
     assert columns.lint(columns.STORES) == []
 
 
-def test_the_memo_table_declares_a_ratio_it_cannot_compute() -> None:
-    """A real finding on shipped code, pinned rather than fixed.
+def test_the_memo_margin_ratio_is_computable_again() -> None:
+    """The expected-finding pin this test used to be, flipped to no finding.
 
-    The variance memo's divisional table carries `gm_pct_actual` and not
-    `gp_actual`, so the ratio's numerator resolves to no address and
-    `render.xlsx._formula` returns `None` — the cell has rendered as a pasted
-    literal since the table was written. Latent, because the memo is a Word
-    document and this table is never the subject of an XLSX render, and both
-    fixes (carry the column, or drop the derivation here) change what a reader
-    sees. Reported and left standing, which is what a lint is for.
+    The divisional cut shipped carrying `gm_pct_actual` without `gp_actual`, so
+    the ratio's numerator resolved to no address, `render.xlsx._formula`
+    returned `None`, and the margin cell rendered as a pasted literal from the
+    day the table was written — a number Word prints and Excel cannot
+    recompute, the defect class this whole lint exists to catch. This test
+    pinned that as an *expected* finding until `columns._CUTS` gained the
+    operand column; now the sheet lints clean and the derivation is asserted
+    whole, so the cut losing its numerator again is a failure here rather than
+    a finding somebody re-pins.
     """
-    findings = columns.lint(columns.DIVISIONAL)
-    assert len(findings) == 1, findings
-    assert "gm_pct_actual" in findings[0] and "'gp_actual'" in findings[0]
+    assert columns.lint(columns.DIVISIONAL) == []
+    ratio = columns.DIVISIONAL.get("gm_pct_actual")
+    assert ratio is not None and ratio.derive is not None
+    assert ratio.derive.kind is FormulaKind.RATIO_PCT
+    assert set(ratio.derive.operands) <= set(columns.DIVISIONAL.keys())
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +348,9 @@ def test_every_declared_sheet_is_linted_by_something_that_takes_no_argument() ->
     """
     report = columns.findings()
     assert set(report) == {sheet.name for sheet in columns.sheets()}
-    assert [name for name, found in report.items() if found] == ["divisions"]
+    # Empty since the divisional cut's margin ratio got its numerator column —
+    # `divisions` was the one shipped sheet with a standing finding.
+    assert [name for name, found in report.items() if found] == []
 
 
 def test_documents_still_builds_the_pnl_columns_from_the_declaration() -> None:

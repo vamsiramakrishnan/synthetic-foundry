@@ -2843,11 +2843,12 @@ def _divisional_summary(
         return None
 
     # The fourth copy of the same column decisions, now the same declaration
-    # narrowed and relabelled. `columns.DIVISIONAL`'s own comment records what
-    # `columns.lint` has to say about it: the margin ratio's numerator column is
-    # not on this table, so XLSX emits no formula for it. Latent — the memo is a
-    # Word document — and reported rather than fixed, because both fixes change
-    # what a reader sees.
+    # narrowed and relabelled. The cut carries `gp_actual` so that
+    # `gm_pct_actual` is a ratio a spreadsheet can recompute: without it the
+    # numerator resolved to no address, XLSX emitted no formula, and the margin
+    # cell was a pasted literal from the day the table was written —
+    # `columns.lint` reported exactly that for as long as the finding stood,
+    # and `columns._CUTS` keeps the account now that it is fixed.
     columns = _cut_columns(world, "divisions")
     rows = [
         _measure_row(index, key=unit.id, label=unit.name, subject=unit.id,

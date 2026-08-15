@@ -689,13 +689,26 @@ def selected(level: str) -> tuple[PolicySpec, ...]:
 
 
 def kind_of(spec: PolicySpec, clause: Clause) -> str:
-    """The fact kind one clause mints: ``policy.<area>.<clause>``.
+    """The fact kind one clause mints: ``policy.<area>.<policy>.<clause>``.
 
-    Three parts rather than two, so a reader of the ledger can tell an expense
-    threshold from a procurement one without knowing either document, and so a
-    section outline can select a whole area with one prefix.
+    Four parts rather than three, and the fourth is the policy's own name. The
+    three-part kind (``policy.<area>.<clause>``) could tell an expense threshold
+    from a procurement one, but it made every policy of one area a single role
+    under every projection ``roleseq`` offers — the kind is what a section
+    declares, so leave and remote work were one symbol and the sequence model
+    would splice a leave heading and a remote-work heading into one document a
+    company issues as two. Measured before the fix: 36 of the 159 novel
+    ``scope+kind`` shapes touched a policy symbol that conflated the area's
+    policies. The kind prefix is the taxonomy, and the taxonomy is the layer
+    that matters: the same wave measured that renaming *headings* (84 to 104
+    strings) bought exactly zero new novelty, because heading text does not
+    recombine — see ``roleseq``'s docstring.
+
+    An outline can still select a whole area with ``policy.<area>.`` — a prefix
+    is a prefix — which is what ``workforce``'s onboarding checklist section
+    does for ``policy.technology.``.
     """
-    return f"policy.{spec.area}.{clause.key}"
+    return f"policy.{spec.area}.{spec.name}.{clause.key}"
 
 
 #: How far before the corpus's own period a policy took effect, and how far
@@ -984,7 +997,12 @@ def _outline(spec: PolicySpec) -> tuple[Any, ...]:
     """
     from .documents import SectionPlan
 
-    prefix = f"policy.{spec.area}."
+    # Per policy, not per area, matching `kind_of`: with an area-wide prefix,
+    # leave and remote work carried one kind and were therefore one role at
+    # every `roleseq` projection, so a synthesised outline could splice two
+    # policies a company issues separately. `tests/test_roleseq.py`
+    # fenced the defect until this prefix closed it.
+    prefix = f"policy.{spec.area}.{spec.name}."
     words = _in_its_own_words(spec)
     return (
         SectionPlan(
@@ -1124,7 +1142,7 @@ def _register() -> None:
     # The fact kinds these documents answer for, in the process-global registry
     # (`worldloom.factkinds`) — the same seam each vertical uses for its own.
     # Registered here rather than per engine because a policy is not a
-    # vertical's: an expense threshold is `policy.finance.approval_threshold`
+    # vertical's: an expense threshold is `policy.finance.expense.approval_threshold`
     # whether the company sells groceries or underwrites motor claims.
     from .factkinds import FactKind, register as register_kinds
 
