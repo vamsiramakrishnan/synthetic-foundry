@@ -48,7 +48,7 @@ Four stages, each with a narrow output.
 
 1. **Authoring inputs** say what kind of company this is. A seed, and
    optionally a [specification, pack, facets, locale, or physics
-   file](/guides/authoring/).
+   file](/synthetic-foundry/guides/authoring/).
 2. **The deterministic world** is everything that is true: the company, its
    people and reporting lines, its systems and services, its events, its
    facts, and its access policies. No model call happens here.
@@ -62,7 +62,7 @@ Four stages, each with a narrow output.
 
 You supply judgement and language. Worldloom supplies truth, structure,
 lineage, and refusal. The library imports no LLM SDK. Your agent writes prose
-through a [checked handshake](/guides/narration/): requests out as JSON,
+through a [checked handshake](/synthetic-foundry/guides/narration/): requests out as JSON,
 responses back as JSON, every violation returned as data.
 
 ## The compiler contract
@@ -80,4 +80,4 @@ is advisory. The contract is executable, and it is renderer-independent.
 Every subsystem speaks the types in `src/worldloom/models.py`. Generators own
 deterministic state. Scenarios append events and facts. Compilers consume
 intents. Renderers consume IR. Validators stay independent of the code that
-produced the data, so they can [refuse it](/concepts/validation/).
+produced the data, so they can [refuse it](/synthetic-foundry/concepts/validation/).

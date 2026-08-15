@@ -6,8 +6,13 @@ import starlightLinksValidator from 'starlight-links-validator';
 
 // `site` is required by starlight-llms-txt: llms.txt links are absolute.
 // It matches the GitHub Pages origin for vamsiramakrishnan/synthetic-foundry.
+// `base` is required because this is a *project* Pages site, served under
+// /synthetic-foundry/ — without it every asset and internal link resolves
+// against the origin root and 404s. `site` includes the base so sitemap and
+// llms.txt links are absolute to the real deployed pages.
 export default defineConfig({
-  site: 'https://vamsiramakrishnan.github.io',
+  site: 'https://vamsiramakrishnan.github.io/synthetic-foundry',
+  base: '/synthetic-foundry',
   integrations: [
     starlight({
       title: 'Worldloom',

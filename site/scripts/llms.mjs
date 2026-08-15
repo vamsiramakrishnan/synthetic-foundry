@@ -12,7 +12,9 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(fileURLToPath(import.meta.url));
 const docs = join(root, '..', 'src', 'content', 'docs');
 const dist = join(root, '..', 'dist');
-const site = 'https://vamsiramakrishnan.github.io';
+// Includes the /synthetic-foundry base: this is a project Pages site, and
+// an llms.txt link without the base points at a page that does not exist.
+const site = 'https://vamsiramakrishnan.github.io/synthetic-foundry';
 
 const order = [
   'index.mdx',
