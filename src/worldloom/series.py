@@ -49,6 +49,7 @@ this module, which is the operation that would not be.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -187,7 +188,7 @@ def project(
         return ()
     if rng is None and noise_pct:
         raise ValueError("a noisy series needs an Rng; pass one or set noise_pct=0")
-    shocks = np.zeros(periods, dtype=float)
+    shocks: Any = np.zeros(periods, dtype=float)
     if rng is not None and noise_pct:
         previous = 0.0
         for index in range(periods):
@@ -198,13 +199,13 @@ def project(
             previous = persistence * previous + (1.0 - persistence) * draw
             shocks[index] = previous
 
-    positions = np.arange(periods, dtype=float)
+    positions: Any = np.arange(periods, dtype=float)
     trend = level * np.power(1.0 + trend_pct, positions)
     season = np.array(
         [seasonal[index % len(seasonal)] if seasonal else 1.0 for index in range(periods)],
         dtype=float,
     )
-    step = np.ones(periods, dtype=float)
+    step: Any = np.ones(periods, dtype=float)
     if regime_at is not None and 0 <= regime_at < periods:
         step[regime_at:] = 1.0 + regime_pct
     return tuple(trend * season * step * (1.0 + noise_pct * shocks))

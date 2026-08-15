@@ -94,7 +94,7 @@ import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 
@@ -561,7 +561,7 @@ class Embedding:
         # embed a query it has nothing to compare against.
         if not len(self._matrix):
             return []
-        vector = self._vectors([query])[0].astype(np.int32)
+        vector: Any = self._vectors([query])[0].astype(np.int32)
         dots = self._matrix @ vector
         query_norm = float(np.sqrt(np.square(vector.astype(np.int64)).sum()))
         if query_norm == 0.0:
@@ -591,7 +591,7 @@ class Embedding:
         """
         if not len(self._matrix) or limit <= 0:
             return []
-        vector = self._vectors([query])[0].astype(np.int32)
+        vector: Any = self._vectors([query])[0].astype(np.int32)
         query_norm = float(np.sqrt(np.square(vector.astype(np.int64)).sum()))
         if query_norm == 0.0:
             return []

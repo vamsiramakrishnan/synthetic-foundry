@@ -202,6 +202,20 @@ pretty = false
 # Third-party packages that ship no stubs (and the optional extras, which CI
 # legs may not have installed at all). Named individually rather than a global
 # ignore_missing_imports, so a typo'd first-party import still fails.
+# numpy is skipped entirely, not merely excused missing stubs, and the
+# distinction is load-bearing. The lint leg runs Python 3.12, where the
+# resolver takes numpy 2.5+ — whose bundled stubs use PEP 695 `type`
+# statements that a `python_version = "3.11"` check refuses to parse, killing
+# the whole run ("errors prevented further checking"). 3.11 stays the target
+# because it is this package's floor; numpy 2.5 ships no 3.11 wheels, so the
+# clash is structural, not a version pin away. The cost is numpy names typing
+# as Any at the boundary, and pyproject's own dependency comment prices that:
+# worldloom uses numpy for elementwise and integer arithmetic only.
+[[tool.mypy.overrides]]
+module = ["numpy.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = [
     "anyio.*",

@@ -90,7 +90,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -298,7 +298,7 @@ def vendi_of(
     for them would make it unfalsifiable.
     """
     n = len(items)
-    matrix = np.empty((n, n), dtype=float)
+    matrix: Any = np.empty((n, n), dtype=float)
     for i, left in enumerate(items):
         for j, right in enumerate(items):
             matrix[i, j] = similarity_fn(left, right)
