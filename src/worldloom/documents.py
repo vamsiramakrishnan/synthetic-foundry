@@ -969,6 +969,190 @@ def finance_workbook(world: World, intent: ArtifactIntent, minter: Minter) -> Ar
         )
         sections.append(ArtifactSection(heading="Store Performance", table=store_table))
 
+    # -- Corporate cost base and the distribution network ------------------
+    # Two tabs that exist because `validate.reachability` measured this
+    # vertical's own organisation as decorative. Retail declared two cost
+    # centres that no fact named and no document carried — on every archetype
+    # and both shipped retail packs — and, on any archetype with warehouses, an
+    # estate of zero-weight sites that the Store Performance sheet above
+    # correctly refuses turnover to and that nothing else said anything about
+    # at all: 44 of the grocer's 1,607 and 5 of `trading-retailer.json`'s 173.
+    #
+    # `generators/retail_estate.py` mints the figures and argues the modelling;
+    # what belongs here is why they are on *this* document. The month-end model
+    # is the corpus's system of record and the one artifact every other one
+    # reconciles against, so a decomposition of the corporate cost base that
+    # lived anywhere else would be a second account of a number the workbook
+    # does not carry. And the facts have to reach a *visible* table rather than
+    # the supporting-fact appendix: an appendix row is one per
+    # `required_fact_ids`, so satisfying the gate with one would be measuring
+    # the plan and reporting on the corpus — `validate._readable_surface`'s
+    # own argument, and the failure mode this whole wave exists to close, moved
+    # one layer along.
+    #
+    # Built with local row helpers rather than through `_measure_row`, and that
+    # is not laziness: that function resolves a column's fact kind through
+    # `bound.measures`, which is the P&L sheet's eight keys. These columns are
+    # not on that sheet and must not be — a corporate recharge has no budget and
+    # no variance, so declaring it there would put a figure into the machinery
+    # that derives both. `banking_documents.divisional_performance_ir` reaches
+    # the same conclusion for the same reason.
+    from .generators import retail_estate as _estate
+
+    def _stated(kind: str, subject: str, children: list[str] | None = None) -> Cell:
+        """One measure for one subject, stated where the ledger states it.
+
+        ``children`` makes it a subtotal. The literal value stays the ledger's
+        own figure rather than a Python sum of the rows above — the two are
+        equal by construction, because `retail_estate` allocates by largest
+        remainder from a total drawn once, and stating the fact is what lets
+        `validate.reconciliation` compare a declared sum against the figure it
+        claims to be. No `fact_id` where there is no fact: a cell that names one
+        and states nothing is `validate.empty_cell_cites_a_fact`.
+        """
+        fact = index.get(kind, subject, period)
+        value = fact.value.amount if fact and fact.value else None
+        fact_id = fact.id if fact else None
+        if children:
+            return Cell(value=value, fact_id=fact_id,
+                        formula=FormulaKind.SUM, operands=children)
+        return Cell(value=value, fact_id=fact_id)
+
+    centres = [c for c in world.cost_centres
+               if index.get(_estate.SHARED_COST, c.id, period) is not None]
+    if centres:
+        centre_keys = [centre.id for centre in centres]
+        sections.append(ArtifactSection(
+            heading="Corporate Cost Base",
+            table=Table(
+                key="cost_centres",
+                title="Corporate Cost Base",
+                columns=[Column(key="cost", label="Cost", number_format=MONEY_FORMAT)],
+                rows=[
+                    *[Row(key=centre.id, label=centre.name,
+                          cells={"cost": _stated(_estate.SHARED_COST, centre.id)})
+                      for centre in centres],
+                    Row(key=company.id, label="Total corporate cost", emphasis=True,
+                        cells={"cost": _stated(_estate.SHARED_COST, company.id,
+                                               centre_keys)}),
+                ],
+                note=(
+                    "Where the cost is incurred. The centres sum to the group total, "
+                    "which the next sheet decomposes again over the divisions that "
+                    "carry it — two cuts of one figure, over different entities."
+                ),
+            ),
+        ))
+
+    recharged = [u for u in units
+                 if index.get(_estate.SHARED_RECHARGE, u.id, period) is not None]
+    if recharged:
+        recharge_keys = [unit.id for unit in recharged]
+
+        def recharge_row(key: str, label: str, subject: str, *,
+                         children: list[str] | None = None,
+                         emphasis: bool = False) -> Row:
+            return Row(key=key, label=label, emphasis=emphasis, cells={
+                "recharge": _stated(_estate.SHARED_RECHARGE, subject, children),
+                "revenue": _stated(revenue_actual, subject, children),
+                # Never `children`. Group recovery is the group's own recharge
+                # over the group's own revenue, never the total of three
+                # divisional percentages — `columns.not_summable`'s rule, which
+                # this repository has already paid for twice, on a sheet whose
+                # columns are not the P&L's and so cannot inherit it.
+                "recovery": _stated(_estate.SHARED_RECOVERY, subject),
+            })
+
+        sections.append(ArtifactSection(
+            heading="Shared Services Recharge",
+            table=Table(
+                key="recharge",
+                title="Shared Services Recharge",
+                columns=[
+                    Column(key="recharge", label="Recharge", number_format=MONEY_FORMAT),
+                    Column(key="revenue", label="Revenue", number_format=MONEY_FORMAT),
+                    Column(key="recovery", label="Recovery (%)",
+                           number_format=RATE_FORMAT),
+                ],
+                rows=[
+                    *[recharge_row(u.id, u.name, u.id) for u in recharged],
+                    recharge_row(company.id, "Group", company.id,
+                                 children=recharge_keys, emphasis=True),
+                ],
+                note=(
+                    "Recharged on turnover, so the revenue column is the same figure "
+                    "the P&L states and recovery is the two columns beside it "
+                    "divided. Recovery is a rate and does not sum: the group rate is "
+                    "the group's own two amounts, not the total of the divisions'."
+                ),
+            ),
+        ))
+
+    network_rows: list[Row] = []
+    network_subtotals: list[str] = []
+    blank_extra = {"region": Cell(value=""), "format": Cell(value="")}
+
+    def network_row(key: str, label: str, subject: str, *,
+                    children: list[str] | None = None, emphasis: bool = False,
+                    extra: dict[str, Cell] | None = None) -> Row:
+        cells = {
+            "cartons": _stated(_estate.THROUGHPUT, subject, children),
+            "cost_to_serve": _stated(_estate.COST_TO_SERVE, subject, children),
+            # A rate, so never a sum — see `recharge_row` above.
+            "cost_per_carton": _stated(_estate.COST_PER_CARTON, subject),
+        }
+        cells.update(extra or blank_extra)
+        return Row(key=key, label=label, cells=cells, emphasis=emphasis)
+
+    for unit in units:
+        estate = [
+            site for site in _estate.distribution_estate(
+                [s for s in world.sites if s.business_unit_id == unit.id])
+            if index.get(_estate.THROUGHPUT, site.id, period) is not None
+        ]
+        if not estate:
+            continue
+        for site in estate:
+            network_rows.append(network_row(
+                site.id, site.name, site.id,
+                extra={"region": Cell(value=site.region),
+                       "format": Cell(value=site.format)},
+            ))
+        network_rows.append(network_row(
+            unit.id, f"{unit.name} total", unit.id,
+            children=[s.id for s in estate], emphasis=True))
+        network_subtotals.append(unit.id)
+
+    if network_rows:
+        network_rows.append(network_row(
+            company.id, "Distribution network", company.id,
+            children=network_subtotals, emphasis=True))
+        sections.append(ArtifactSection(
+            heading="Distribution Network",
+            table=Table(
+                key="distribution",
+                title="Distribution Network",
+                columns=[
+                    Column(key="region", label="Region"),
+                    Column(key="format", label="Format"),
+                    Column(key="cartons", label="Cartons dispatched",
+                           number_format=MONEY_FORMAT),
+                    Column(key="cost_to_serve", label="Cost to serve",
+                           number_format=MONEY_FORMAT),
+                    Column(key="cost_per_carton", label="Cost per carton",
+                           number_format=RATE_FORMAT),
+                ],
+                rows=network_rows,
+                note=(
+                    "The sites the Store Performance sheet leaves out, and the "
+                    "measures they own. A distribution centre holds stock and books "
+                    "no turnover, so it has no line on a store P&L and a volume and "
+                    "a cost of its own here. The network total is the sum of the "
+                    "divisions that have one, not of every division."
+                ),
+            ),
+        ))
+
     # -- Trend, by measure -------------------------------------------------
     # Three sheets, not one, and the second and third are not decoration. The
     # planner hands this workbook actuals for every comparative month across

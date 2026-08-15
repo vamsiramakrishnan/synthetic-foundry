@@ -58,7 +58,7 @@ from typing import Any
 import openpyxl
 import pytest
 
-from worldloom import RetailWorld, columns, doctypes, packs
+from worldloom import RetailWorld, columns, doctypes, packs, registries
 from worldloom.scenarios import MonthEndClose
 
 PACKS = pathlib.Path(__file__).resolve().parents[1] / "examples" / "packs"
@@ -70,15 +70,21 @@ PERIOD = "2026-03"
 def _isolate_the_registry() -> Any:
     """`columns._INSTALLED` is process-global, like every other install seam.
 
-    Snapshotted and restored around each test so a pack installed here cannot
-    decide what a later test in this session resolves — which is the same
-    contamination the owner key exists to prevent between *worlds*, applied to
-    the test file that keeps installing things.
+    Restored around each test so a pack installed here cannot decide what a
+    later test in this session resolves — the same contamination the owner key
+    exists to prevent between *worlds*, applied to the test file that keeps
+    installing things.
+
+    This used to snapshot `columns._INSTALLED` by hand, and it was the third of
+    seven files doing that with three different lists of what to put back.
+    `registries.scoped()` is the one list, declared beside each `install` rather
+    than restated in each caller — so this fixture now also covers the five
+    tables `doctypes.install` writes, which a hand-rolled copy of
+    `columns._INSTALLED` never did and which the tests below reach through
+    `packs.archetype_of`.
     """
-    before = columns.installed()
-    yield
-    columns._INSTALLED.clear()
-    columns._INSTALLED.update(before)
+    with registries.scoped():
+        yield
 
 
 # ---------------------------------------------------------------------------

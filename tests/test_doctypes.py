@@ -42,7 +42,9 @@ from datetime import timedelta
 
 import pytest
 
-from worldloom import MonthEndClose, RetailWorld, World, doctypes, documents, packs
+from worldloom import (
+    MonthEndClose, RetailWorld, World, doctypes, documents, packs, registries,
+)
 from worldloom.generators import planning
 from worldloom.render import docx as docx_render, markdown as markdown_render
 
@@ -55,6 +57,36 @@ PERIOD = "2026-03"
 
 #: The one authored type the shipped example declares.
 STATEMENT = "franchisee_trading_statement"
+
+
+@pytest.fixture(autouse=True)
+def _restore_the_registries():
+    """This file installs authored types; nothing here may outlive its test.
+
+    It had no cleanup at all, and that is the leak this repository has hit four
+    times. `doctypes.install` writes five tables it does not own —
+    `documents._STANDING`, `_LAG`, `_OUTLINES`, `_FILINGS` and
+    `render.docx.HANDLES` — so a type installed here was declared for every test
+    that ran afterwards. Measured consequence, on a pack whose LOB names
+    document types nothing declares: `packs.lint` reports 5 findings in a cold
+    process and **0** once anything has installed a type, so the lint that
+    exists to catch "an edge to a document that will never be planned" goes
+    quiet because a different company's paperwork is loaded.
+
+    `registries.scoped()` rather than a hand-rolled snapshot, and the difference
+    is not style. The six other files that hand-roll one restore between three
+    and five registries each, and every one of those lists is a copy of what an
+    installer writes rather than the installer's own account of it — which is
+    how `validate._pack_registries` came to omit `columns._INSTALLED`, and how
+    restoring `doctypes._INSTALLED` alone came to leave `documents` still
+    holding the types while `doctypes.installed()` reported none.
+
+    Per test rather than per module, `tests/test_cohorts.py`'s reason verbatim:
+    a type installed by one test is not visible to the next, so no test in this
+    file can come to depend on another having run first.
+    """
+    with registries.scoped():
+        yield
 
 
 def _pack_world(source: pathlib.Path = AUTHORED) -> World:

@@ -398,6 +398,20 @@ MEASURES: tuple[str, ...] = (
     "metric.online_conversion_rate.forecast",
     "metric.promotional_depth_margin_impact",
     "ops.affected_records",
+    # Retail's corporate cost base. Added for the reason the banking block at
+    # the top of this tuple was: until `generators/retail_estate` existed, both
+    # of a retailer's cost centres were named by no fact at all, so an
+    # accountability aimed at the controller who runs one had no number to be
+    # checked against. The distribution network's three `logistics.*` kinds are
+    # deliberately *not* here and the omission is the rule working: the tuple is
+    # the union over each engine's **default** episode, and
+    # `omnichannel_retailer` declares no warehouses, so nothing mints them on
+    # the build this vocabulary is computed from. A grocer's does — which is a
+    # reason to widen the derivation's input if anyone wants those measures
+    # accountable, never to hand-add the names here.
+    "overhead.shared_services.cost",
+    "overhead.shared_services.recharge",
+    "overhead.shared_services.recovery_pct",
     # Procurement, and the whole vertical was missing until this line. The
     # tuple's rule is mechanical — every numeric fact kind a shipped engine's
     # default episode mints — and it was computed over three engines while the

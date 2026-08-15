@@ -93,6 +93,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from . import factkinds
+from . import registries
 from .models import FormulaKind
 
 #: The formulas a *column* may declare. Closed for ``ConstraintKind``'s reason:
@@ -627,6 +628,34 @@ _INSTALLED: dict[tuple[str, str], Sheet] = {}
 def installed() -> dict[tuple[str, str], Sheet]:
     """The authored sheets this process holds. A copy — see ``doctypes.installed``."""
     return dict(_INSTALLED)
+
+
+# The owner key makes a pack's sheet unreachable from *another* company's world,
+# which is what the comment above claims and what it delivers. It does not make
+# the row unreachable from the *same* company's next world, and that gap was
+# reproduced: `validate._under_the_corpus_rules` installs the corpus's own pack
+# and restores "every process-global registry a pack install writes into" — a
+# list written in `validate.py` that does not name this one. So
+#
+#     worldloom validate ./corpus-built-from-acme-v1
+#     build --pack acme-v2.json
+#         → "sheet 'pnl' is already installed for 'pack:acme' with different
+#            columns"
+#
+# and a build fails because something was *validated* earlier in the process.
+# The refusal itself is right and is not loosened here: `for_archetype` is read
+# at compile time, so letting the second declaration replace the first would
+# compile an already-built v1 world with v2's columns — silently, since a
+# relabelled column reconciles against the same facts. What is wrong is the
+# scope, so the scope is what this declaration fixes.
+registries.declare(
+    lambda: _INSTALLED,
+    owner="columns",
+    name="columns._INSTALLED",
+    why="a sheet installed for `pack:X` refuses the next build of a revised"
+    " `pack:X` in the same process, including one that only a `validate` run"
+    " installed",
+)
 
 
 def refusals(sheet: Sheet) -> list[str]:

@@ -985,3 +985,25 @@ _HR = Lob(
     artifact_filings=["job_requisition"],
     episode_contributions=["Hire"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Scoping
+# ---------------------------------------------------------------------------
+#
+# `registries`' argument, and the measurement behind it is this module's own
+# `lint`: it answers "an edge to a document that will never be planned" by
+# asking `documents.declared_types()`, which is process-global. Measured — one
+# pack linted at 5 findings, then a *different* pack was built in the same
+# process, and the first linted at 0. A pack passing `worldloom pack check`
+# because another company's paperwork happens to be loaded is the lint saying
+# nothing while reporting success.
+from . import registries as _registries
+
+_registries.declare(
+    lambda: _INSTALLED,
+    owner="lob",
+    name="lob._INSTALLED",
+    why="an authored line of business outlives its corpus, and `lint` reads the"
+    " registry whole — so one company's LOBs silence another company's findings",
+)

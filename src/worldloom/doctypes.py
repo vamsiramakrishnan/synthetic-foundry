@@ -110,6 +110,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from . import columns as columns_module
 from . import documents
+from . import registries
 from .documents import FilingPlan, SectionPlan
 from .models import Authority, FormulaKind, Lifecycle
 from .roles import parse_unit_role
@@ -466,6 +467,77 @@ def installed() -> dict[str, DocumentType]:
     """The authored types this process holds. A copy: the registry is not a
     surface anything outside this module may edit."""
     return dict(_INSTALLED)
+
+
+# --- What `install` below writes, declared beside the code that writes it ----
+#
+# `_INSTALLED` is this module's *record* of an installation. The installation
+# itself lands in five tables owned by two other modules, and that distinction
+# is not pedantry — it is a reproduced defect. `validate._under_the_corpus_rules`
+# restores `_INSTALLED` and nothing else, so after it runs:
+#
+#     doctypes.installed()        → 0 types
+#     documents.declared_types()  → still holds all five of the pack's types
+#     doctypes.install(same pack, revised)
+#         → "artifact type 'trade_pipeline_review' is already declared by a
+#            module"
+#
+# No module declared it. Undoing the record while leaving the effect produces a
+# state no code path can reach honestly and an error that names a cause which
+# does not exist. So the tables are declared here, next to the `install` that
+# writes them, rather than listed in whichever module wants to restore them —
+# `registries`' whole argument, and leak 3 in its docstring is this paragraph
+# with the measurement attached.
+registries.declare(
+    lambda: _INSTALLED,
+    owner="doctypes",
+    name="doctypes._INSTALLED",
+    why="a pack's authored types outlive the world that declared them",
+)
+registries.declare(
+    lambda: documents._STANDING,
+    owner="doctypes",
+    name="documents._STANDING",
+    why="`standing()` falls back for an unknown type, so a leftover entry gives"
+    " another world's document an authority nobody chose",
+)
+registries.declare(
+    lambda: documents._LAG,
+    owner="doctypes",
+    name="documents._LAG",
+    why="`written_at` reads it, so a leftover entry dates another world's document",
+)
+registries.declare(
+    lambda: documents._OUTLINES,
+    owner="doctypes",
+    name="documents._OUTLINES",
+    why="`documents.declared_types()` is read by `lob.lint`, `packs.lint` and"
+    " `facets.unmet`; measured, a leftover entry takes `worldloom pack check`"
+    " from 5 findings to 0 on a pack that names document types nothing declares",
+)
+registries.declare(
+    lambda: documents._FILINGS,
+    owner="doctypes",
+    name="documents._FILINGS",
+    why="`generators.planning`'s authored-filing block is a no-op only while this"
+    " is empty, which it is in every build that loads no pack",
+)
+registries.declare(
+    # Resolved on call, not imported at module scope: `render.docx` pulls in the
+    # renderer stack, and `install` below already reaches it lazily for that
+    # reason.
+    lambda: _docx_handles(),
+    owner="doctypes",
+    name="render.docx.HANDLES",
+    why="a leftover name makes Word and PDF claim a type nothing in this world"
+    " can build",
+)
+
+
+def _docx_handles() -> set[str]:
+    from .render import docx as docx_render
+
+    return docx_render.HANDLES
 
 
 def install(types: Sequence[DocumentType]) -> None:

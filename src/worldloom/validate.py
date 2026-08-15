@@ -46,6 +46,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from . import registries
 from .corpus import CorpusError
 from .ids import id_prefix, is_id
 from .models import Authority, ErrorType, FormulaKind, Lifecycle
@@ -190,9 +191,47 @@ def register_domain_checks(
     _DOMAIN_CHECKS[name] = checks
 
 
+# Declared where it is written, `registries`' rule, even though this is the
+# module that also restores. The two roles are separate and keeping them so is
+# the point: `_pack_registries` asks what has been declared, and a table that
+# answered only because the restorer happened to remember it is the drift that
+# left `columns._INSTALLED` out of the old hand-written tuple for as long as it
+# existed.
+#
+# Imported at module scope rather than inside a function, unlike everything else
+# here: `registries` imports nothing from this package until first read, so this
+# is the one direction that does not close the cycle `_pack_registries`
+# documents.
+registries.declare(
+    lambda: _DOMAIN_CHECKS,
+    owner="validate",
+    name="validate._DOMAIN_CHECKS",
+    why="a corpus's authored check group outlives it and is then run against"
+    " every later world — measured: one authored episode takes `validate"
+    " retail-close` from 1,283 checks and coherent to a violation",
+)
+
+
 # ---------------------------------------------------------------------------
 # Entities that legitimately reach nothing
 # ---------------------------------------------------------------------------
+
+#: The marker that separates a corpus contradicting itself from one that is thin.
+#:
+#: ``reachability`` writes this into a finding when — and only when — the company
+#: declares a populated ``axes.Shape`` axis over the kind of entity that reaches
+#: nothing, and ``run`` reads it back to decide whether the finding is a
+#: violation or an advisory. Declaring a ``store`` axis and saying nothing about
+#: 44 stores is the corpus disagreeing with its own declaration; leaving a cost
+#: centre unreached is the corpus being thin about something it never claimed to
+#: cut by, and only the first is a coherence defect.
+#:
+#: A constant rather than the literal in both places, because the two places are
+#: a message and the predicate that classifies it: written twice, an edit to the
+#: wording would silently demote every contradiction to an advisory and nothing
+#: would fail. `test_the_marker_is_what_run_classifies_on` asserts the round trip
+#: rather than the string.
+DECLARATION_QUOTED = "`axes.shape_of("
 
 #: The entity collections ``reachability`` holds to reaching something, and the
 #: order it reports them in.
@@ -2298,8 +2337,8 @@ class _Validator:
             says = (
                 f" This company's declared shape is cut by "
                 f"{', '.join(repr(name) for name in axis)} — see"
-                f" `axes.shape_of({industry!r})` — so the declaration and the"
-                " corpus disagree about whether that dimension exists."
+                f" {DECLARATION_QUOTED}{industry!r})` — so the declaration and"
+                " the corpus disagree about whether that dimension exists."
                 if axis
                 else ""
             )
@@ -2368,6 +2407,26 @@ class _Validator:
         # which `reachability`'s own docstring argues are not defects at all.
         # Filed here, the whole suite passes unedited and somebody who builds a
         # company is still told its estate is decorative.
+        # Advisory, including the contradicting subset — and that subset was
+        # promoted to a violation here and reverted, which is worth a sentence
+        # because the reverting is the finding.
+        #
+        # The condition for promoting it was "no build path still contradicts
+        # its own declared shape", and the retail engine met it. Promoted, the
+        # suite lost nine tests across four files: every one an *authored pack*
+        # that declares the General insurance shape — `segment`,
+        # `class_of_business`, `office` — and models only reserving. None is a
+        # shipped corpus, and none was in the enumeration the condition was
+        # measured over.
+        #
+        # They are not false positives; those corpora really do declare three
+        # dimensions and report on none. But the rule that catches them is
+        # "a pack that names a shape must populate every axis of it", and
+        # enforcing that from `validate` taxes the wrong person at the wrong
+        # time: it is a claim about an authored *pack*, checkable by
+        # `packs.lint` when the pack is written, not about a corpus, discovered
+        # after one is built. So the condition was necessary and not sufficient,
+        # and the honest precondition is a lint at authoring time.
         self.as_advisory(self.reachability)
         # Domain groups last, in name order so the report is stable however
         # registration happened to be sequenced.
@@ -2406,12 +2465,24 @@ def _quantity_matches(amount: float, stated: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _pack_registries() -> tuple[dict[str, Any], ...]:
+def _pack_registries() -> tuple[Any, ...]:
     """Every process-global registry a pack install writes into.
 
-    Named here rather than reached for at each use so the snapshot below can
-    never drift from what ``packs.archetype_of`` actually installs: a seventh
-    authored layer joining a pack adds one line here and stays contained.
+    Read from ``registries.containers()`` rather than listed, and the list it
+    replaced is the argument for reading it. Its docstring claimed to name
+    "every" such registry and omitted ``columns._INSTALLED``, with a measured
+    consequence: validating a corpus built from a sheet-carrying pack left the
+    sheet installed, so a later build of that same pack revised was *refused
+    because something had been validated earlier*. A list that has to be
+    remembered is a list that will be wrong, which is the whole of
+    ``registries``' case.
+
+    So the declaration now sits beside the write — ``doctypes`` declares the
+    four ``documents`` tables and the Word renderer's handle map because
+    ``doctypes.install`` is what writes them — and this function asks for
+    whatever has been declared. A seventh authored layer joining a pack adds
+    its ``registries.declare`` next to its own writer and arrives here for
+    free.
 
     Imported inside the function, not at module scope, because this module sits
     *under* the ones that install: ``episodes`` imports it to reach
@@ -2419,20 +2490,9 @@ def _pack_registries() -> tuple[dict[str, Any], ...]:
     top-level import here would close the cycle. It is the same late import
     ``cohorts`` makes of ``episodes``, for the same reason.
     """
-    from . import doctypes, episodes, lob
+    from . import registries
 
-    return (
-        doctypes._INSTALLED,
-        episodes._LOADED,
-        # The derived-check cache is keyed by *spec name*, so it has to be
-        # restored alongside `_LOADED` rather than left as a harmless cache:
-        # two corpora may each author an episode called `QuarterlyValuation`,
-        # and a cache that outlived the first would hand the second corpus the
-        # first one's checks under its own episode's name.
-        episodes._REGISTERED_CHECKS,
-        lob._INSTALLED,
-        _DOMAIN_CHECKS,
-    )
+    return registries.containers()
 
 
 def _embedded_pack(world: World) -> Any:
@@ -2518,10 +2578,17 @@ def _under_the_corpus_rules(world: World) -> Iterator[None]:
         yield
         return
 
-    from . import episodes, packs
+    from . import episodes, packs, registries
 
-    saved = [(registry, dict(registry)) for registry in _pack_registries()]
-    try:
+    # `registries.scoped()` rather than a snapshot written here, and the reason
+    # is the defect that motivated that module. The loop this replaced did
+    # `dict(registry)` over a hand-written tuple, which quietly encoded two
+    # assumptions: that the tuple was complete, and that every entry was a
+    # mapping. Both were wrong. It omitted `columns._INSTALLED` — so validating
+    # a sheet-carrying corpus left the sheet installed and *a later build of
+    # that pack was refused because something had been validated earlier* — and
+    # one of the tables an install writes is a set, which `dict()` cannot copy.
+    with registries.scoped():
         try:
             packs.archetype_of(pack)
             for spec in pack.episodes:
@@ -2537,10 +2604,26 @@ def _under_the_corpus_rules(world: World) -> Iterator[None]:
                 f"this corpus's own rules could not be installed: {exc}"
             ) from exc
         yield
-    finally:
-        for registry, original in saved:
-            registry.clear()
-            registry.update(original)
+
+
+def contradicts_declared_shape(violation: Violation) -> bool:
+    """Whether a reachability finding is a contradiction rather than thinness.
+
+    ``run`` classifies on this: true and the finding is a violation, false and
+    it is an advisory. The distinction is the company's own declaration — a
+    grocer that declares a ``store`` axis and reports on none of 44 stores has
+    said two incompatible things about itself, and that is incoherence in the
+    strict sense this module means. A cost centre nobody reports on is a thin
+    corpus, which is a different complaint and not one ``validate`` owns.
+
+    Read off the message rather than recomputed, and the choice is deliberate:
+    a predicate that re-derived the axis could disagree with the sentence the
+    reader is shown, and then the report would say one thing while the exit code
+    meant another. The marker is `DECLARATION_QUOTED`, used by the writer and by
+    this reader, so the two cannot drift apart without failing the round-trip
+    test rather than silently demoting every contradiction.
+    """
+    return DECLARATION_QUOTED in violation.detail
 
 
 def reachability(world: World) -> ValidationReport:

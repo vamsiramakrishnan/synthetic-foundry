@@ -47,15 +47,21 @@ What is left is two classes, and they are worth naming separately so nobody
 reads them as one debt half-paid.
 
 **The reporting spine** — business unit, site, cost centre, category — is what a
-company says it cuts its own performance by. Four of the ten build paths still
-leave part of it decorative, and **all four are the retail engine**: its two
-archetypes, its pack, and `regional-insurer.json`, which is an insurer whose
-`base` is `retail`. The reference implementation is the laggard on the dimension
-it was the reference for. All four leave their cost centres decorative; two of
-them, `australian_grocery` and `trading-retailer.json`, go further and leave
-sites unreached on companies that declare a `store` axis — which is not thinness
-but a corpus contradicting itself, and is why those two are marked in `REFUSED`.
-Every one is recorded there and ratcheted downward.
+company says it cuts its own performance by, and **all ten build paths now reach
+every part of it.** Four did not when the enumeration first ran, and all four
+were the retail engine: its two archetypes, its pack, and
+`regional-insurer.json`, which is an insurer whose `base` is `retail`. The
+reference implementation had become the laggard on the dimension it was the
+reference for. Two of them went further and left sites unreached on companies
+declaring a `store` axis — not thinness but a corpus contradicting itself.
+
+The retail engine then closed all four, and it closed the sites by minting the
+measure rather than by exempting them: a distribution centre has a throughput
+and a cost to serve, and the claim that a zero-weight site has nothing to say
+was only ever true because the engine cut one measure by site. That is the third
+time this repository has faced that choice — insurance's claims centres and
+procurement's materials yards were the first two — and the third time minting
+won. **This repository now ships no `Structural` exemptions at all.**
 
 **System, service and person are a different class and not a defect.** A system
 is the *provenance* of a figure — every fact in these corpora carries one as
@@ -77,23 +83,38 @@ The tests here are therefore not a check that the gate passes. They are the
 today fails. A ratchet cannot be satisfied by switching the check off, because
 the number it asserts is the count of failures.
 
-`validate.reachability`'s own docstring carries the argument for why `run`
-reports this group as an advisory rather than failing on it, and what would make
-part of it a violation. The short version is measured rather than asserted:
-filed as violations it fails 67 tests here and reports every corpus this engine
-can build as incoherent, mostly on the three kinds the paragraph above says are
-not defects.
+`validate.reachability`'s own docstring carries the argument for the split that
+sits under all of this. Filed wholesale as violations, this group fails 67 tests
+and reports every corpus the engine can build as incoherent, mostly on the three
+kinds above that are not defects — so `run` reports it as an advisory.
+
+The contradicting subset was then promoted to a violation and **reverted**, and
+the revert is the more useful record. Every shipped build path had stopped
+contradicting itself, which was the condition named for promoting it; filing it
+as a violation still cost nine tests across four files, every one an authored
+pack that declares the General insurance shape and models only reserving. Those
+corpora do contradict themselves and the findings were right — but the rule that
+catches them, *a pack that names a shape must populate every axis of it*, is a
+claim about an authored pack and belongs to `packs.lint` when the pack is
+written, not to `validate` after a corpus is built. The condition was necessary
+and not sufficient, because it was measured over shipped build paths and the
+authored fixtures were never in that enumeration.
+
+`test_a_declaration_is_what_turns_a_reading_into_a_contradiction` keeps the
+mechanism exercised on a declaration this file makes, so whichever layer the
+rule eventually lands in, the part that classifies is already true and tested.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from worldloom import archetypes, domains, packs, validate
+from worldloom import archetypes, axes, domains, packs, registries, validate
 from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose
 
@@ -203,15 +224,8 @@ SPINE: tuple[str, ...] = ("business unit", "category", "cost centre", "site")
 #: rather than to a widened constant here.
 REFUSED: dict[str, dict[str, tuple[int, int]]] = {
     "archetype:australian_grocery": {
-        # site quotes the grocer's own declared `store` axis — see
-        # `test_a_grocer_declares_a_store_axis_and_says_nothing_about_44_of_them`.
-        # It closes either by the retail engine registering the structural
-        # exemption these 44 distribution centres have earned, or by minting a
-        # measure the estate owns; both are that engine's call to make.
-        "cost centre": (2, 2),
         "person": (15, 26),
         "service": (4, 4),
-        "site": (44, 1607),
         "system": (5, 5),
     },
     "archetype:customer_owned_bank": {
@@ -232,7 +246,6 @@ REFUSED: dict[str, dict[str, tuple[int, int]]] = {
         "system": (5, 5),
     },
     "archetype:omnichannel_retailer": {
-        "cost centre": (2, 2),
         "person": (14, 23),
         "service": (4, 4),
         "system": (5, 5),
@@ -246,18 +259,13 @@ REFUSED: dict[str, dict[str, tuple[int, int]]] = {
         "system": (4, 5),
     },
     "pack:regional-insurer.json": {
-        "cost centre": (2, 2),
         "person": (13, 20),
         "service": (4, 4),
         "system": (5, 5),
     },
     "pack:trading-retailer.json": {
-        # The other declaration-contradicting row: 5 of 173 sites, the pack's
-        # own zero-weight estate, on a company that declares a `store` axis.
-        "cost centre": (2, 2),
         "person": (14, 23),
         "service": (4, 4),
-        "site": (5, 173),
         "system": (5, 5),
     },
 }
@@ -303,15 +311,24 @@ def built():  # type: ignore[no-untyped-def]
     report that says which of them broke is worth the eight lines.
 
     Building a pack installs into process-global registries — document types,
-    episode grammar, sheets, LOBs — and this deliberately does **not** snapshot
-    and restore them. Restoring `doctypes._INSTALLED` without also restoring the
-    five tables `doctypes.install` writes and does not own puts the record and
-    its effect out of step, and the next install of the same pack then fails
-    naming a cause that does not exist; a partial undo here would be worse than
-    none. Worth knowing while reading this: `trading-retailer.json` had no test
-    in this repository building it at all before this file did, so its five
-    authored types, two episodes and two LOBs reach a process here for the first
-    time.
+    episode grammar, sheets, LOBs — and the whole module runs inside
+    `registries.scoped()` so none of it outlives the file.
+
+    That wrapper is new and the reason it is safe now is worth keeping. This
+    fixture deliberately restored *nothing* when it was written, on the grounds
+    that a partial undo is worse than none: restoring `doctypes._INSTALLED`
+    without the five tables `doctypes.install` writes and does not own puts the
+    record and its effect out of step, and the next install of the same pack
+    then fails naming a cause that does not exist. That argument was correct and
+    is now obsolete — `registries` has every one of those tables declared beside
+    the code that writes it, so the undo is complete rather than partial. The
+    objection was to partiality, not to restoring.
+
+    It mattered: this file was measured leaving five document types, three LOBs
+    and three episodes behind for every test that ran after it. Worth knowing
+    while reading this — `trading-retailer.json` had no test in this repository
+    building it at all before this file did, so its five authored types, two
+    episodes and two LOBs reach a process here for the first time.
     """
     cache: dict[str, object] = {}
 
@@ -320,7 +337,8 @@ def built():  # type: ignore[no-untyped-def]
             cache[path] = _build(path)
         return cache[path]
 
-    return get
+    with registries.scoped():
+        yield get
 
 
 def _findings(world) -> dict[str, tuple[int, int, bool]]:  # type: ignore[no-untyped-def]
@@ -517,16 +535,27 @@ def test_the_floor_is_what_the_company_itself_declares(built) -> None:  # type: 
     asymmetry is the entire argument for `SPINE` existing beside the derivation
     rather than being replaced by it.
 
-    The derived clause's *other* value cannot be asserted today because nothing
-    exercises it yet, and it is stated rather than smuggled in: a vertical that
-    declares a populated axis sourced from `roster` or `estate` would put
-    `person`, `service` or `system` into its own floor, which the named tuple
-    could never do without making those kinds a defect on the four verticals
-    where they are not one.
+    **The tripwire this test used to carry has fired, and this is the rewrite it
+    asked for — though not the one it predicted.** It asserted that some build
+    path still quoted a declared axis, with a message saying that if none did,
+    the subset had reached its floor and belonged in `validate.run` as a
+    violation. The retail engine closed its two — `australian_grocery`'s 44
+    distribution centres and `trading-retailer.json`'s 5 — and the assertion
+    went red on exactly the condition it named.
 
-    Measured with no exemption registered, so that the day the grocer's
-    distribution centres are properly exempted this still demonstrates the
-    mechanism rather than silently testing an empty set.
+    The promotion was then tried and reverted, and the reason is recorded at the
+    `as_advisory` call in `validate.run`: it cost nine tests across four files,
+    all authored packs that declare a shape and populate none of it, which is a
+    claim about a *pack* rather than about a corpus. So the tripwire's condition
+    turned out to be necessary and not sufficient — it was measured over shipped
+    build paths, and authored fixtures were never in that enumeration.
+
+    What survives is the stronger half: no company this repository *builds*
+    contradicts its own declared shape, and that is worth asserting on its own
+    account whether or not a gate ever rests on it.
+
+    Measured with no exemption registered, so that a later exemption cannot
+    quietly satisfy this by hiding a contradiction rather than closing one.
     """
     with _without_structural_exemptions():
         measured = {path: _findings(built(path)) for path in BUILD_PATHS}
@@ -535,34 +564,33 @@ def test_the_floor_is_what_the_company_itself_declares(built) -> None:  # type: 
         path: {k for k, (_, _, q) in findings.items() if q}
         for path, findings in measured.items()
     }
-    assert any(quoting.values()), (
-        "no build path produces a refusal that quotes a declared axis, so the"
-        " derived half of the floor is checking nothing. This is a deliberate"
-        " tripwire rather than a nuisance: if every company this repository"
-        " builds now agrees with its own declared shape, the axis-contradicting"
-        " subset has reached its floor and belongs in `validate.run` as a"
-        " *violation* — see `validate.reachability`'s last paragraph, which"
-        " states the argument and names this as the condition. Promote it, then"
-        " rewrite this test to assert the promotion instead of the gap."
+    contradicting = {path: kinds for path, kinds in quoting.items() if kinds}
+    assert not contradicting, (
+        f"{sorted(contradicting)} declare a dimension and report on none of it."
+        " Either an engine stopped reporting on an estate, or a new company"
+        " declares an axis nothing populates. This is the sharpest finding this"
+        " module produces — not thinness but a corpus disagreeing with itself —"
+        " and every shipped build path was clear of it when this was written."
     )
 
-    named_only = {
-        path: _floor(findings) - quoting[path] for path, findings in measured.items()
-    }
-    assert any(named_only.values()), (
-        "every floor kind now quotes a declaration, so `SPINE` adds nothing the"
-        " derivation does not already reach and should be deleted rather than"
-        " maintained"
+    # No floor kind refuses anywhere now, so the two clauses cannot be told
+    # apart by what they catch on a shipped corpus — they both catch nothing,
+    # which is the wave landing rather than either of them being wrong. What
+    # separates them is therefore asserted structurally, and that was always the
+    # stronger form of the argument.
+    #
+    # `_KIND_LABELS` maps each checked collection to the `axes.Source` that
+    # supplies it and gives `cost_centres` none at all, so no shape any industry
+    # could ever register would make a cost centre quote a declaration. The
+    # derived clause is not behind on cost centres, it is *blind* to them — and
+    # that is the whole justification for a named tuple sitting beside a
+    # derivation in a file whose standing argument is that derivations beat
+    # lists. `SPINE` is the exception that earns itself.
+    assert not any(_floor(f) for f in measured.values()), (
+        "a floor kind refuses on some build path, which the ceiling above should"
+        " have caught first — if this fires alone, `_floor` and `REFUSED`"
+        " disagree about what a floor kind is"
     )
-
-    # And the structural reason it adds something, rather than the observation
-    # that it happens to today. `_KIND_LABELS` maps each checked collection to
-    # the `axes.Source` that supplies it, and gives `cost_centres` none at all —
-    # so no shape any industry could register would ever make a cost centre
-    # quote a declaration, and the derived clause is not merely behind on it, it
-    # is structurally blind to it. That is the whole justification for a named
-    # tuple sitting beside a derivation in a file whose argument is that
-    # derivations beat lists.
     sourceless = {
         label for label, source in validate._KIND_LABELS.values() if source is None
     }
@@ -570,7 +598,7 @@ def test_the_floor_is_what_the_company_itself_declares(built) -> None:  # type: 
         "every spine kind now has an `axes.Source`, so the derivation can reach"
         " all of them and `SPINE` is redundant"
     )
-    assert any(kinds & sourceless for kinds in named_only.values())
+    assert "cost centre" in sourceless
 
 
 # ---------------------------------------------------------------------------
@@ -650,45 +678,119 @@ def test_a_plan_only_corpus_is_checked_zero_times() -> None:  # type: ignore[no-
 # ---------------------------------------------------------------------------
 
 
-def test_a_grocer_declares_a_store_axis_and_says_nothing_about_44_of_them(built) -> None:  # type: ignore[no-untyped-def]
-    """The violation quotes the declaration it contradicts.
+@contextmanager
+def _declaring(industry: str, axis: axes.Axis) -> Iterator[None]:
+    """Give *industry* one more populated axis, then put its shape back.
 
-    A site reaching nothing is only a defect because the company said it was cut
-    that way. Without that quotation the finding reads as this module's opinion
-    about how much a corpus ought to contain, which is an argument nobody can
-    settle. With it, it is the corpus disagreeing with itself — and it is what
-    `_floor` reads to decide which findings are a contradiction rather than a
-    thin patch, so this is the test under that whole mechanism.
+    The mechanism below needs a company that declares a dimension and reports on
+    none of it, and **no corpus this repository builds is one any more** — which
+    is the wave landing, not a gap. Rather than starve a real corpus of facts to
+    manufacture one, this adds the missing half from the other side: a real
+    refusal that quotes nothing today is made to quote something by declaring
+    the axis it would contradict.
 
-    This asked the *bank* the same question until three engines closed their
-    estates, and where it moved to is worth recording rather than quietly
-    editing. `axes.shape_of('Banking')` still declares its populated `branch`
-    axis; all 133 branches now reach, so banking no longer contradicts itself
-    and there is no violation left to quote anything. The same is true of every
-    other axis-backed kind on all four shipped verticals — which is precisely
-    why this had to move to keep testing the mechanism at all, and why the kinds
-    still refused there (`system`, `service`, `person`) cannot host it: no
-    populated axis on any of those industries is sourced from `estate` or
-    `roster`, so their violations correctly quote nothing.
-
-    Measured with exemptions cleared, because the 44 sites this quotes are the
-    same 44 the exemption below covers, and the day that exemption moves into
-    the retail engine and is registered at import this would otherwise measure
-    an empty list and pass without testing anything.
+    That is the truer construction. Stripping facts would test that the check
+    notices an absence, which is not in doubt; this tests the thing the
+    promotion actually turns on — that *the company's own declaration* is what
+    converts a reading into a verdict.
     """
-    grocer = built(GROCER)
-    with _without_structural_exemptions():
-        sites = [
-            v for v in validate.reachability(grocer).violations
-            if v.code == "site_reaches_nothing"
-        ]
-    assert len(sites) == 1, sites
-    assert "'store'" in sites[0].detail
-    assert f"axes.shape_of({grocer.company.industry!r})" in sites[0].detail
+    shape = axes.shape_of(industry)
+    assert shape is not None, industry
+    saved = dict(axes._REGISTRY)
+    axes._REGISTRY[industry] = replace(shape, axes=(*shape.axes, axis))
+    try:
+        yield
+    finally:
+        axes._REGISTRY.clear()
+        axes._REGISTRY.update(saved)
 
-    # And the half that moving this test could have silently dropped: banking
-    # declares the axis it used to contradict, and now agrees with it.
-    assert "site" not in _refusals(built(BANKING))
+
+def test_a_declaration_is_what_turns_a_reading_into_a_contradiction(built) -> None:  # type: ignore[no-untyped-def]
+    """One corpus, one finding, two classifications, and the declaration is the
+    whole of the difference.
+
+    Retail leaves 14 of 23 people unreached and that is **not** a defect: a
+    person is a roster entry, not a reporting dimension, and no shipped industry
+    declares an axis sourced from `roster`. Declare that same company to be cut
+    by its people, change nothing else, and the identical finding starts quoting
+    the declaration back — because the company has now said two incompatible
+    things about itself, which is the only thing this module means by
+    incoherent.
+
+    **This is the mechanism a promotion would rest on, and the promotion was
+    tried and reverted.** With every shipped build path agreeing with its own
+    declared shape, filing the contradicting subset as violations cost nine
+    tests across four files — every one an authored pack that declares the
+    General insurance shape and models only reserving. Those corpora really do
+    contradict themselves, so the findings were right; the *rule* was aimed
+    wrong. "A pack that names a shape must populate every axis of it" is a claim
+    about an authored pack, which `packs.lint` can make when the pack is
+    written, and not one `validate` should make after a corpus is built.
+
+    So the classification stays available and unused by `run`, and this asserts
+    it rather than the exit code — the part that is true regardless of where the
+    rule eventually lands.
+    """
+    world = built(RETAIL)
+    by_roster = axes.Axis(
+        name="crew", label="Crew", source="roster",
+        populated_by="tests/test_reachability.py",
+    )
+
+    plain = [
+        v for v in validate.reachability(world).violations
+        if v.code == "person_reaches_nothing"
+    ]
+    assert len(plain) == 1, plain
+    assert not validate.contradicts_declared_shape(plain[0])
+
+    with _declaring(world.company.industry, by_roster):
+        declared = [
+            v for v in validate.reachability(world).violations
+            if v.code == "person_reaches_nothing"
+        ]
+    assert len(declared) == 1, declared
+    assert "'crew'" in declared[0].detail
+    assert f"axes.shape_of({world.company.industry!r})" in declared[0].detail
+    assert validate.contradicts_declared_shape(declared[0])
+
+    # And `run` files both as readings today, which is the reverted decision
+    # stated as behaviour rather than left in a comment.
+    report = world.validate()
+    assert report.ok
+    assert any(v.code == "person_reaches_nothing" for v in report.advisories)
+    assert not [v for v in report.violations if v.group == "organisation"]
+
+
+def test_the_marker_is_what_run_classifies_on() -> None:
+    """The round trip, so the writer and the reader cannot drift apart.
+
+    `reachability` writes `DECLARATION_QUOTED` into a finding and
+    `contradicts_declared_shape` reads it back to decide violation or advisory.
+    Written as a literal in both places, a reworded message would demote every
+    contradiction to an advisory and **nothing would fail** — the findings would
+    still be reported, the counts would still be right, and only the exit code
+    would quietly stop meaning what it says.
+
+    So this asserts the constant is what the message actually contains, rather
+    than asserting the string equals itself.
+    """
+    quoting = validate.Violation(
+        group="organisation", code="site_reaches_nothing", subject="CO-0001",
+        detail=(
+            "3 of 9 site(s) are named as the subject of no fact… This company's"
+            " declared shape is cut by 'store' — see"
+            " `axes.shape_of('Retail')` — so the declaration and the corpus"
+            " disagree about whether that dimension exists."
+        ),
+    )
+    thin = validate.Violation(
+        group="organisation", code="cost_centre_reaches_nothing", subject="CO-0001",
+        detail="2 of 2 cost centre(s) are named as the subject of no fact…",
+    )
+    assert validate.contradicts_declared_shape(quoting)
+    assert not validate.contradicts_declared_shape(thin)
+    assert validate.DECLARATION_QUOTED in quoting.detail
 
 
 def test_the_appendix_does_not_count_as_reaching(built) -> None:  # type: ignore[no-untyped-def]
@@ -726,33 +828,43 @@ def test_the_appendix_does_not_count_as_reaching(built) -> None:  # type: ignore
 # ---------------------------------------------------------------------------
 
 
-#: The exemption a supermarket group's own module should declare, written here.
+#: A synthetic exemption, and the reason this file no longer carries a real one.
 #:
-#: `validate` ships no exemptions at all, on purpose: registering this one from
-#: core would put a retail industry name in the thin waist. It belongs beside the
-#: generator that mints zero-weight sites, and that module is not this lane's to
-#: edit — so it is written out here, exercised against the real 1,607-site
-#: estate, and reported for the retail owner to move.
+#: It used to hold `GROCERY_DISTRIBUTION_CENTRES`: an argued `Structural` for the
+#: grocer's 44 zero-weight distribution centres, written here because the lane
+#: that needed it could not edit the retail module, and marked for the retail
+#: owner to move. **The retail owner deleted it instead**, and the reason is the
+#: better half of this mechanism's story.
 #:
-#: `grocery_exemption` below already prefers a registered one over this, so the
-#: day the retail engine declares it, these tests exercise *that* declaration
-#: and this constant becomes dead weight to delete rather than a second copy
-#: quietly disagreeing with the first.
-GROCERY_DISTRIBUTION_CENTRES = validate.Structural(
-    kind="sites",
-    industry="Supermarkets and omnichannel retail",
-    holds=lambda site: site.revenue_weight == 0.0,
+#: That exemption's own reason text named the condition for its own removal —
+#: "disagree with this by minting a throughput or a cost-to-serve measure the
+#: estate owns, at which point the exemption should go rather than be widened" —
+#: and the retail engine did exactly that. A warehouse has a throughput and a
+#: cost to serve; the claim that "there is nothing about a zero-weight site for a
+#: fact to say" was only ever true because the engine cut one measure by site.
+#: Two other engines had already reached the same conclusion about claims centres
+#: and materials yards.
+#:
+#: So **this repository ships no `Structural` exemptions at all**, and every
+#: candidate for one has been closed by minting the measure. That is the strongest
+#: available statement about the mechanism, and it leaves these tests with no real
+#: subject — hence a synthetic one. It is scoped to an industry nothing builds, so
+#: it cannot silence a finding on a shipped corpus while claiming to test the
+#: machinery that would.
+NOWHERE = "Test fixtures, incorporated"
+
+SYNTHETIC = validate.Structural(
+    kind="services",
+    industry=NOWHERE,
+    holds=lambda service: service.criticality_tier > 1,
     reason=(
-        "A distribution centre holds stock and sells nothing, which the estate"
-        " states positively by giving it a zero revenue weight so that a"
-        " store-level P&L does not invent turnover for a warehouse. The retail"
-        " engine cuts exactly one measure by site — trading revenue, allocated"
-        " by that weight — so there is nothing about a zero-weight site for a"
-        " fact to say. Disagree with this by minting a throughput or a"
-        " cost-to-serve measure the estate owns, at which point the exemption"
-        " should go rather than be widened."
+        "A service below the top criticality tier is not one this company holds"
+        " anybody to account for, so no accountability fact names it. Stated"
+        " over the entity's own declared field rather than over its id, which is"
+        " the difference between a declaration and an allowlist — and the field"
+        " is one the estate sets deliberately, so the claim is checkable."
     ),
-    declared_by="worldloom/models.py:Site.revenue_weight",
+    declared_by="tests/test_reachability.py",
 )
 
 
@@ -761,30 +873,13 @@ def _key(exemption: validate.Structural) -> tuple[str, str, str]:
 
 
 @pytest.fixture
-def grocery_exemption(built):  # type: ignore[no-untyped-def]
-    """The grocer's distribution-centre exemption, wherever it is declared.
-
-    Prefers one the retail engine has already registered at import over the copy
-    in this file, which is what lets the constant above move without these tests
-    moving with it. The tests that matter here are the ones proving the
-    exemption is *narrow* — that it does not reach insurance's claims centres or
-    procurement's materials yards — and those are worth keeping whichever module
-    ends up owning the declaration; written against `structural_exemptions()`
-    rather than against a constant, they survive the move unedited.
-    """
-    industry = built(GROCER).company.industry
-    already = [
-        x for x in validate.structural_exemptions()
-        if x.kind == "sites" and x.industry == industry
-    ]
-    if already:
-        yield already[0]
-        return
-    validate.register_structural(GROCERY_DISTRIBUTION_CENTRES)
+def synthetic_exemption():  # type: ignore[no-untyped-def]
+    """`SYNTHETIC`, registered for one test and removed again."""
+    validate.register_structural(SYNTHETIC)
     try:
-        yield GROCERY_DISTRIBUTION_CENTRES
+        yield SYNTHETIC
     finally:
-        validate._STRUCTURAL.pop(_key(GROCERY_DISTRIBUTION_CENTRES), None)
+        validate._STRUCTURAL.pop(_key(SYNTHETIC), None)
 
 
 def test_core_declares_no_exemptions_of_its_own() -> None:
@@ -800,64 +895,71 @@ def test_core_declares_no_exemptions_of_its_own() -> None:
     assert not [x for x in declared if not x.industry], declared
 
 
-def test_the_exemption_is_narrow_and_earns_its_place(built, grocery_exemption) -> None:  # type: ignore[no-untyped-def]
-    """One declared exemption, and what it deliberately does not cover.
+def test_an_exemption_is_scoped_to_the_industry_it_argues_about(
+    built, synthetic_exemption,
+) -> None:  # type: ignore[no-untyped-def]
+    """The scoping, and the events that proved it was the right rule.
 
-    `Site.revenue_weight == 0` in a supermarket group covers 44 distribution
-    centres of a 1,607-site estate — sites the archetype states sell nothing —
-    and it is the only reason that estate is not refused.
+    `SYNTHETIC` matches a system that is the system of record for nothing, and
+    every shipped vertical has some — so an *unscoped* version of it would
+    silence a real finding on four engines at once. Scoped to an industry
+    nothing builds, it reaches none of them, which is what this asserts.
 
-    The same predicate also matches insurance's claims centres and procurement's
-    materials yards, and it does not touch them, because the exemption is scoped
-    to the industry it is an argument about. That scoping has since been proved
-    the right call by events rather than by argument: a claims centre owns a
-    claims count and a materials yard owns held materials, both engines went and
-    minted exactly those, and both kinds of site now reach. An exemption written
-    one industry wider would have declared them structural and made that work
-    unnecessary — it would have closed the finding by agreeing with it.
-
-    That contrast is the test. An exemption that covered every zero-weight site
-    everywhere would be a blanket wearing a reason.
-
-    Asserted as "exactly the zero-weight sites, some but not all of the estate"
-    rather than as the literal 44 of 1,607: the retail engine is under active
-    work on this very estate, and a count pinned here would make somebody
-    growing the grocer's warehousing think they had broken the exemption.
+    That is not a hypothetical. The same predicate written one industry wider is
+    the mistake this repository came within one lane of making three times: the
+    grocer's distribution centres, insurance's claims centres and procurement's
+    materials yards all carry `revenue_weight == 0`, and an exemption broad
+    enough to cover the first would have covered all three. Every one of them
+    was closed instead by minting the measure the site actually owns. An
+    exemption written that wide would have closed the finding **by agreeing with
+    it**, and the estates would still be scenery.
     """
-    dc = grocery_exemption
-    grocer = built(GROCER)
-    exempt = [s for s in grocer.sites if dc.covers("sites", grocer.company.industry, s)]
-    zero = [s for s in grocer.sites if s.revenue_weight == 0.0]
-    assert exempt == zero, "the exemption is exactly the estate's zero-weight sites"
-    assert 0 < len(exempt) < len(grocer.sites)
-    assert "site" not in _refusals(grocer)
-
-    for path in (INSURANCE, PROCUREMENT):
+    would_match = 0
+    for path in BUILD_PATHS:
         world = built(path)
-        others = [s for s in world.sites if s.revenue_weight == 0.0]
-        assert others, path
-        assert not [
-            s for s in others if dc.covers("sites", world.company.industry, s)
-        ], f"the grocer's exemption reached {path}"
+        industry = world.company.industry
+        assert industry != NOWHERE
+        matched = [
+            s for s in world.services
+            if synthetic_exemption.covers("services", industry, s)
+        ]
+        assert not matched, f"a foreign industry's exemption reached {path}"
+        would_match += len([s for s in world.services if s.criticality_tier > 1])
+
+    # And the predicate is not vacuous — on some path it *would* have matched
+    # had the industry agreed, which is what makes the scoping the active
+    # ingredient rather than the exemption being empty everywhere anyway.
+    # Counted across paths rather than asserted on each: the grocer's five
+    # systems are each the system of record for something, so a per-path
+    # assertion would fail on a corpus that is simply well-specified.
+    assert would_match > 0, (
+        "no shipped company has a service below the top criticality tier, so"
+        " this exemption could not have silenced anything and the scoping above"
+        " proves nothing"
+    )
 
 
-def test_without_the_exemption_the_estate_is_refused(built) -> None:  # type: ignore[no-untyped-def]
-    """The control, and the reason the exemption is not decoration.
+def test_an_exemption_removes_exactly_what_it_declares(built, synthetic_exemption) -> None:  # type: ignore[no-untyped-def]
+    """The control: a mechanism that changed nothing when removed is not one.
 
-    Undeclared, those same sites are a refusal on a corpus whose estate is
-    otherwise the one working example in this repository. A mechanism that
-    changed nothing when removed would not be a mechanism.
-
-    Tied to the exemption's own coverage rather than to the number 44, so that
-    it keeps saying the same thing after the retail engine has been through this
-    estate: what is refused with no exemption declared is precisely what the
-    exemption declares.
+    Measured on a corpus relabelled into the exemption's own industry, since no
+    shipped company is in it. Services are the right subject and one of the only
+    honest ones left — the spine kinds this file was built to chase all reach
+    now, so an exemption over one would have nothing to remove.
     """
-    grocer = built(GROCER)
-    zero = [s for s in grocer.sites if s.revenue_weight == 0.0]
+    world = built(RETAIL)
+    relabelled = world.extend(
+        company=world.company.model_copy(update={"industry": NOWHERE}),
+    )
+    covered = [s for s in relabelled.services if s.criticality_tier > 1]
+    assert covered, "the fixture needs a service the exemption can cover"
+
     with _without_structural_exemptions():
-        refused = _refusals(grocer)
-    assert refused["site"] == (len(zero), len(grocer.sites))
+        before = _refusals(relabelled)
+    after = _refusals(relabelled)
+
+    assert before["service"][0] == len(relabelled.services)
+    assert after["service"][0] == len(relabelled.services) - len(covered)
 
 
 def test_an_exemption_must_carry_a_reason_and_a_known_kind() -> None:

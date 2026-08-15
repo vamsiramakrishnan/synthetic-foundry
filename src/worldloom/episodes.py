@@ -2230,3 +2230,35 @@ __all__ = [
     "install_checks",
     "AuthoredEpisode",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Scoping
+# ---------------------------------------------------------------------------
+#
+# Declared here rather than in `validate`, `registries`' whole argument: the
+# module that *writes* a table is the one that knows it belongs to a corpus, and
+# the hand-written list in `validate._pack_registries` drifted precisely because
+# it was maintained by the restorer instead of by the writer.
+#
+# These two carry the sharpest measured leak in the package. Install any
+# authored episode whose fact kinds overlap retail's, and `worldloom validate
+# retail-close` goes from 1,283 checks and coherent to 1,288 checks and one
+# violation — one company's authored rules judging another company's corpus.
+from . import registries as _registries
+
+_registries.declare(
+    lambda: _LOADED,
+    owner="episodes",
+    name="episodes._LOADED",
+    why="an authored episode outlives the corpus that authored it, so the next"
+    " world built in this process can run a process it never declared",
+)
+_registries.declare(
+    lambda: _REGISTERED_CHECKS,
+    owner="episodes",
+    name="episodes._REGISTERED_CHECKS",
+    why="the derived-check cache is keyed by *spec name*, so two corpora each"
+    " authoring a `QuarterlyValuation` would hand the second the first one's"
+    " checks under its own episode's name",
+)
