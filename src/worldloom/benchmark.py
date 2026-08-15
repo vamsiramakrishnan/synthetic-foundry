@@ -22,6 +22,9 @@ the graph**, and the world already carries the graph:
     numerical_comparison a declared derivation, or a `sums-to` invariant, whose
                          terms sit in one document
     citation_required    a statement exactly one document makes
+    derivation_lineage   a path in the *derivation* graph — a figure, the figure
+                         it was computed from, and so on back to a recorded
+                         input (``FactKindSpec.derive``, applied transitively)
 
 Each of those is read off `CanonicalFact`, `EnterpriseEvent` and
 `ArtifactIntent` — never off a vertical's vocabulary — so the same code derives
@@ -88,6 +91,29 @@ DERIVED_FAMILIES: tuple[EvaluationType, ...] = (
     EvaluationType.CITATION_REQUIRED,
 )
 
+#: The derivation-lineage family's key in every string-keyed registry below.
+#:
+#: It is a *key* and not an ``EvaluationType`` member because the wire
+#: vocabulary (`EvaluationCase.evaluation_type`) is the thin waist's, declared
+#: in ``models.py``, and this module may not widen it. Lineage cases therefore
+#: publish under ``cross_artifact`` — honestly: a lineage chain is exactly that
+#: family's definition ("a declared derivation whose operands are carried by
+#: different documents") applied transitively — while phrasing, emphasis and
+#: slots key on this name, so an author addresses the family without touching
+#: the single-step identity questions beside it. Giving it its own wire value
+#: is a one-line ``models.py`` change plus repointing the one ``emit`` call in
+#: ``_Derivation.derivation_lineage``.
+LINEAGE_FAMILY = "derivation_lineage"
+
+#: Every family key an ``EvalSpec.emphasis`` may name — the derivable wire
+#: families plus the lineage key above, which shares ``cross_artifact``'s wire
+#: value and would otherwise be un-nameable: an author could cap the identity
+#: questions or the chains, never one without the other.
+DERIVED_FAMILY_KEYS: tuple[str, ...] = (
+    *(family.value for family in DERIVED_FAMILIES),
+    LINEAGE_FAMILY,
+)
+
 #: How many cases each family derives when nothing says otherwise.
 #:
 #: Caps, not quotas — a graph with less in it derives less, and says so by
@@ -105,6 +131,11 @@ DEFAULT_EMPHASIS: Mapping[str, int] = {
     EvaluationType.CROSS_ARTIFACT.value: 3,
     EvaluationType.NUMERICAL_COMPARISON.value: 3,
     EvaluationType.CITATION_REQUIRED.value: 2,
+    # Two, like the causal chains it is the value-side sibling of: a corpus
+    # rarely holds more than a couple of genuinely distinct deep chains, and
+    # padding the family with sub-paths of one chain would ask the same walk
+    # three times under three ids.
+    LINEAGE_FAMILY: 2,
 }
 
 #: Slots every question and answer template may name, whichever family it is.
@@ -130,6 +161,35 @@ FAMILY_SLOTS: Mapping[str, frozenset[str]] = {
     }),
     EvaluationType.CITATION_REQUIRED.value: frozenset({"document"}),
 }
+
+#: The lineage family's template vocabulary, held *beside* ``FAMILY_SLOTS``
+#: rather than in it. That table's keys are the wire families — a property
+#: test quantifies its agreement with ``DERIVED_FAMILIES`` and
+#: ``DEFAULT_EMPHASIS`` key by key — and ``derivation_lineage`` is a phrasing
+#: key, not a wire value (see ``LINEAGE_FAMILY``). Folding it into the table
+#: would make "every slot table key is a derivable wire family" false, which
+#: is a claim other code is entitled to keep relying on.
+LINEAGE_SLOTS: frozenset[str] = frozenset({"origin", "hops", "chain", "documents"})
+
+
+def _family_slots(family: str) -> frozenset[str]:
+    """The slot vocabulary for a family *key* — wire families and the lineage
+    key alike, so the lint has one answer for anything ``QuestionFamily`` can
+    legally declare."""
+    return LINEAGE_SLOTS if family == LINEAGE_FAMILY else FAMILY_SLOTS[family]
+
+#: The ``FactKindSpec.derive`` heads whose operands are this same period's
+#: recorded figures — the edges the lineage family may walk. Closed, and the
+#: exclusions are the point: ``prior`` and ``prior_in_cohort`` read the
+#: *previous* period's fact, so citing this period's fact of the operand kind
+#: would assert a lineage the runner never computed; ``initial``,
+#: ``supersession_delta`` and ``bps_delta`` read one member of a supersession
+#: pair, not the live fact a current-fact lookup resolves; ``allocation_of``
+#: mints a grid — many facts of one kind — where a chain needs exactly one.
+_LINEAGE_HEADS: frozenset[str] = frozenset({
+    "at_rate", "minus", "multiple_of", "pct_of", "percent_of", "plus",
+    "ratio_pct", "units_of",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -158,11 +218,14 @@ class QuestionFamily(Model):
     family: Literal[
         "direct_lookup", "authority_resolution", "temporal_state",
         "causal_multi_hop", "cross_artifact", "numerical_comparison",
-        "citation_required",
+        "citation_required", "derivation_lineage",
     ]
     """Which derived family this phrases. ``expected_abstention`` is not here:
     an abstention has nothing to derive from, so it is declared whole under
-    ``EvalSpec.abstentions``."""
+    ``EvalSpec.abstentions``. ``derivation_lineage`` is: its cases publish
+    under ``cross_artifact`` on the wire (see ``LINEAGE_FAMILY``), and this is
+    where an author addresses the chains without re-voicing the single-step
+    identity questions that share that wire value."""
 
     about: list[str] = Field(default_factory=list)
     """The fact kinds this phrasing applies to, matched with
@@ -322,7 +385,7 @@ def lint(
         for kind in family.about:
             check_kind(kind, f"{spot}.about")
 
-        allowed = COMMON_SLOTS | FAMILY_SLOTS[family.family]
+        allowed = COMMON_SLOTS | _family_slots(family.family)
         for label, template in (("question", family.question), ("answer", family.answer)):
             unknown = sorted({s for s in _slots(template) if s not in allowed})
             if unknown:
@@ -344,10 +407,10 @@ def lint(
 
     for name, count in sorted(spec.emphasis.items()):
         spot = f"{where}.emphasis[{name!r}]"
-        if name not in {f.value for f in DERIVED_FAMILIES}:
+        if name not in DERIVED_FAMILY_KEYS:
             findings.append(
                 f"{spot}: {name!r} is not a derived family."
-                f" Derivable: {', '.join(f.value for f in DERIVED_FAMILIES)}."
+                f" Derivable: {', '.join(DERIVED_FAMILY_KEYS)}."
             )
         if count < 0:
             findings.append(f"{spot}: a negative emphasis is not a cap, it is a typo.")
@@ -529,16 +592,22 @@ class _Derivation:
         """Whether a question may be asked of *kind* at all (``skip_kinds``)."""
         return not any(factkinds.covers(skipped, kind) for skipped in self.skip)
 
-    def voice(self, family: EvaluationType, kind: str) -> QuestionFamily | None:
+    def voice(self, family: str, kind: str) -> QuestionFamily | None:
         """The declared phrasing for this family and kind, if the author gave one.
 
         First match in declaration order, and a scoped family (one naming
         ``about``) is only consulted for the kinds it names — so an author can
         re-voice one contested question without silently re-voicing the whole
         family around it.
+
+        Keyed on the family *key* rather than the wire ``EvaluationType``
+        because they are not one-to-one: ``derivation_lineage`` publishes under
+        ``cross_artifact``, and keying phrasing on the wire value would hand a
+        ``cross_artifact`` template every chain question beside the identities
+        it was written for.
         """
         for declared in self.evaluation.families:
-            if declared.family != family.value:
+            if declared.family != family:
                 continue
             if declared.about and not any(
                 factkinds.covers(about, kind) for about in declared.about
@@ -547,12 +616,10 @@ class _Derivation:
             return declared
         return None
 
-    def cap(self, family: EvaluationType) -> int:
-        return self.evaluation.emphasis.get(
-            family.value, DEFAULT_EMPHASIS[family.value]
-        )
+    def cap(self, family: str) -> int:
+        return self.evaluation.emphasis.get(family, DEFAULT_EMPHASIS[family])
 
-    def wanted(self, family: EvaluationType, kind: str) -> int:
+    def wanted(self, family: str, kind: str) -> int:
         """0 if the author named this kind for this family, 1 otherwise.
 
         Sorts ahead of every graph-derived component of a ranking key, so the
@@ -561,7 +628,7 @@ class _Derivation:
         """
         return 0 if any(
             factkinds.covers(about, kind)
-            for about in self.preferred.get(family.value, ())
+            for about in self.preferred.get(family, ())
         ) else 1
 
     def spread(
@@ -613,8 +680,9 @@ class _Derivation:
         reasoning: str = "",
         cutoff: Any = None,
         slots: Mapping[str, Any] | None = None,
+        voiced_as: str | None = None,
     ) -> None:
-        declared = self.voice(family, kind)
+        declared = self.voice(voiced_as or family.value, kind)
         fill = dict(slots or {})
         if declared is not None:
             if declared.question:
@@ -729,14 +797,14 @@ class _Derivation:
             # difficulty ranking's clothes.
             inverts = 1 if _rank(siblings[0]) > _rank(fact) else 0
             candidates.append((
-                (self.wanted(family, fact.kind), -inverts,
+                (self.wanted(family.value, fact.kind), -inverts,
                  self.order.get(fact.kind, 999), fact.id),
                 self.g.carried(fact)[0],
                 (fact, siblings),
             ))
 
         candidates.sort(key=lambda entry: entry[0])
-        for fact, siblings in self.spread(candidates, self.cap(family)):
+        for fact, siblings in self.spread(candidates, self.cap(family.value)):
             rival = siblings[0]
             sources = self.g.carried(fact)
             distractors = [a for s in siblings for a in self.g.carried(s)]
@@ -789,7 +857,7 @@ class _Derivation:
         """
         family = EvaluationType.TEMPORAL_STATE
         emitted = 0
-        cap = self.cap(family)
+        cap = self.cap(family.value)
 
         closed = []
         for index, fact in enumerate(self.g.facts):
@@ -797,7 +865,7 @@ class _Derivation:
                 continue
             if not self.g.carried(fact) or (fact.value is None and not fact.text_value):
                 continue
-            closed.append(((self.wanted(family, fact.kind), index), fact))
+            closed.append(((self.wanted(family.value, fact.kind), index), fact))
         closed.sort(key=lambda entry: entry[0])
 
         for _, fact in closed:
@@ -921,7 +989,7 @@ class _Derivation:
                 chains.append(chain)
 
         chains.sort(key=lambda c: (-len(c), c[-1].id))
-        for chain in chains[: self.cap(family)]:
+        for chain in chains[: self.cap(family.value)]:
             facts: list[str] = []
             sources: list[str] = []
             for step in chain:
@@ -957,6 +1025,173 @@ class _Derivation:
                     "kind": chain[-1].kind, "phrase": outcome, "value": steps,
                     "unit": "", "outcome": outcome, "origin": origin,
                     "hops": len(chain) - 1, "chain": steps,
+                },
+            )
+
+    def derivation_lineage(self) -> None:
+        """A path in the derivation graph — value provenance, multi-hop.
+
+        ``FactKindSpec.derive`` declares where a figure's value comes from, and
+        the runner has already minted every link, so the chain is recorded
+        ground truth: this is a traversal, not new generation. The reading is
+        the transitive closure of what ``identities`` asks one step of — which
+        recorded inputs moved this figure, and through what intermediate
+        values — and it publishes under ``cross_artifact`` because that is the
+        family whose definition it generalises (see ``LINEAGE_FAMILY`` for why
+        the wire value is shared and the phrasing key is not).
+
+        Three refusals, each the same discipline ``causal_multi_hop`` applies
+        to its graph. A chain of two facts is one declared step — the identity
+        ``identities`` already asks — and one fact is a lookup, so chains under
+        three facts are never minted. A kind with other than exactly one live
+        fact this period (a per-unit roll-up, a cohort grid) breaks the walk at
+        that step rather than picking one fact and asserting a lineage that
+        holds only for the pick — stricter than ``identities``' one-subject
+        rule on purpose, because a chain repeats the exposure at every hop. And
+        a chain some single document carries whole is refused: the question
+        must be answerable only by walking documents, and a workbook stating
+        every figure on the path makes it a table read wearing a hard family's
+        name (also what keeps the shared wire value honest — these cases really
+        do span artifacts).
+
+        Edges come only from the ``_LINEAGE_HEADS`` derive heads, whose
+        operands are this same period's recorded figures; the exclusions are
+        argued at the constant.
+        """
+        family = EvaluationType.CROSS_ARTIFACT
+
+        # Operand edges in declaration order. Only operands the spec itself
+        # declares: a derive naming an undeclared kind is the grammar's lint to
+        # refuse, not this walk's to guess at (``dependency_graph``'s dangling-
+        # edge rule, for its reason).
+        operands_of: dict[str, tuple[str, ...]] = {}
+        for fk in self.spec.fact_kinds:
+            if not fk.derive or not self.askable(fk.kind):
+                continue
+            head, _, rest = fk.derive.partition("(")
+            if head not in _LINEAGE_HEADS:
+                continue
+            named = [part.strip() for part in rest.rstrip(")").split(",") if part.strip()]
+            kept = tuple(dict.fromkeys(
+                kind for kind in named if kind in self.declared and self.askable(kind)
+            ))
+            if kept:
+                operands_of[fk.kind] = kept
+
+        resolved: dict[str, CanonicalFact | None] = {}
+
+        def resolve(kind: str) -> CanonicalFact | None:
+            """The one live, carried, valued fact of *kind* this period — or None.
+
+            Exactly one, not last-minted-wins: several live facts of one kind
+            mean the kind is stated per unit or per cohort, and a chain that
+            picked one would assert a provenance that holds only for the one it
+            picked.
+            """
+            if kind not in resolved:
+                found = [
+                    f for f in self.g.facts
+                    if f.kind == kind and f.valid_to is None and f.value is not None
+                ]
+                keep = found[0] if len(found) == 1 and self.g.carried(found[0]) else None
+                resolved[kind] = keep
+            return resolved[kind]
+
+        def deepest(kind: str, walked: frozenset[str]) -> tuple[str, ...]:
+            """The longest resolvable path from *kind* down, head-first.
+
+            Ties break to the lexicographically smallest sequence —
+            ``graphs.longest_chain``'s stated rule, restated here because a
+            reported path that wobbles between machines is not a path. The
+            ``walked`` guard exists for a malformed spec only: the runner
+            evaluates derivations over already-valued kinds so a declared cycle
+            cannot execute, but a walk that assumed that would recurse forever
+            on the day the assumption broke, instead of degrading to a shorter
+            chain the lint will separately name.
+            """
+            if resolve(kind) is None:
+                return ()
+            tails = []
+            for operand in operands_of.get(kind, ()):
+                if operand in walked:
+                    continue
+                tail = deepest(operand, walked | {kind})
+                if tail:
+                    tails.append(tail)
+            if not tails:
+                return (kind,)
+            depth = max(len(tail) for tail in tails)
+            best = min(tail for tail in tails if len(tail) == depth)
+            return (kind, *best)
+
+        # Heads are kinds nothing else derives from — the finished figures, the
+        # exact analogue of the terminal events the causal family walks back
+        # from. A sub-path of a longer chain is deliberately not a candidate:
+        # it is the same walk asked of fewer documents.
+        derived_into = {
+            operand for operands in operands_of.values() for operand in operands
+        }
+        candidates: list[tuple[tuple[Any, ...], tuple[CanonicalFact, ...]]] = []
+        for fk in self.spec.fact_kinds:
+            if fk.kind not in operands_of or fk.kind in derived_into:
+                continue
+            path = deepest(fk.kind, frozenset())
+            if len(path) < 3:
+                continue
+            steps = tuple(reversed([resolve(kind) for kind in path]))  # origin first
+            common = set(self.g.carried(steps[0]))
+            for fact in steps[1:]:
+                common &= set(self.g.carried(fact))
+            if common:
+                continue
+            candidates.append((
+                (self.wanted(LINEAGE_FAMILY, fk.kind), -len(steps),
+                 self.order.get(fk.kind, 999), steps[-1].id),
+                steps,
+            ))
+
+        candidates.sort(key=lambda entry: entry[0])
+        for _, steps in candidates[: self.cap(LINEAGE_FAMILY)]:
+            origin, head = steps[0], steps[-1]
+            hops = len(steps) - 1
+            trail = " ← ".join(
+                f"{phrase(fact.kind)} at {_value(fact)}" for fact in reversed(steps)
+            )
+            sources = [a for fact in steps for a in self.g.carried(fact)]
+            documents = list(dict.fromkeys(sources))
+            # The tempting wrong evidence is the superseded predecessor of a
+            # chain figure — the pre-correction value of the same measure,
+            # which answers the question with a number the ledger has since
+            # closed. Usually empty; `emit` drops any carrier that is also a
+            # source.
+            stale = [
+                a for fact in steps
+                if fact.supersedes and fact.supersedes in self.g.by_id
+                for a in self.g.carried(self.g.by_id[fact.supersedes])
+            ]
+            self.emit(
+                family, voiced_as=LINEAGE_FAMILY, kind=head.kind,
+                question=(
+                    f"Which recorded inputs move the {phrase(head.kind)} for"
+                    f" {self.g.name(head.subject)} in {self.period}, and through"
+                    f" what intermediate figures?"
+                ),
+                answer=f"{trail} — {hops} hops from the {phrase(origin.kind)}.",
+                facts=[fact.id for fact in steps],
+                sources=sources, distractors=stale,
+                reasoning=(
+                    f"{hops} derivation hops across {len(documents)} document(s)."
+                    " Each document states its own figure; only the ledger's"
+                    " declared derivations connect them, and no single document"
+                    " carries the whole chain."
+                ),
+                slots={
+                    "period": self.period, "subject": self.g.name(head.subject),
+                    "kind": head.kind, "phrase": phrase(head.kind),
+                    "value": _value(head),
+                    "unit": head.value.unit if head.value else "",
+                    "origin": phrase(origin.kind), "hops": hops, "chain": trail,
+                    "documents": ", ".join(self.g.document(a) for a in documents),
                 },
             )
 
@@ -1013,7 +1248,7 @@ class _Derivation:
                 else EvaluationType.NUMERICAL_COMPARISON
             )
             operation = _OPERATIONS[head]
-            offer(family, (self.wanted(family, fk.kind), -len(documents), index, total.id),
+            offer(family, (self.wanted(family.value, fk.kind), -len(documents), index, total.id),
                   documents, {
                 "kind": fk.kind,
                 "question": (
@@ -1071,7 +1306,7 @@ class _Derivation:
                 else EvaluationType.NUMERICAL_COMPARISON
             )
             offer(family,
-                  (self.wanted(family, fk.kind), -len(documents), 1000 + index, total.id),
+                  (self.wanted(family.value, fk.kind), -len(documents), 1000 + index, total.id),
                   documents, {
                 "kind": fk.kind,
                 "question": (
@@ -1101,7 +1336,7 @@ class _Derivation:
 
         for family, entries in pending.items():
             entries.sort(key=lambda entry: entry[0])
-            for payload in self.spread(entries, self.cap(family)):
+            for payload in self.spread(entries, self.cap(family.value)):
                 self.emit(family, **payload)
 
     def citation_required(self) -> None:
@@ -1127,12 +1362,12 @@ class _Derivation:
             if len(sources) != 1:
                 continue
             candidates.append((
-                (self.wanted(family, fact.kind), self.order.get(fact.kind, 999), fact.id),
+                (self.wanted(family.value, fact.kind), self.order.get(fact.kind, 999), fact.id),
                 sources[0], (fact, sources),
             ))
 
         candidates.sort(key=lambda entry: entry[0])
-        for fact, sources in self.spread(candidates, self.cap(family)):
+        for fact, sources in self.spread(candidates, self.cap(family.value)):
             # Re-checked here and not only when the candidates were built: a
             # kind can be claimed by an earlier case *in this same family*, and
             # a filter that ran once would let the second through.
@@ -1180,12 +1415,12 @@ class _Derivation:
             if len(sources) != 1:
                 continue
             candidates.append((
-                (self.wanted(family, fact.kind), self.order.get(fact.kind, 999), fact.id),
+                (self.wanted(family.value, fact.kind), self.order.get(fact.kind, 999), fact.id),
                 sources[0], (fact, sources),
             ))
 
         candidates.sort(key=lambda entry: entry[0])
-        for fact, sources in self.spread(candidates, self.cap(family)):
+        for fact, sources in self.spread(candidates, self.cap(family.value)):
             if fact.kind in self.claimed:
                 continue
             self.emit(
@@ -1288,6 +1523,12 @@ def derive(
     derivation.authority_resolution()
     derivation.temporal_state()
     derivation.causal_multi_hop()
+    # Before the identities: a chain claims every kind it rests on, and the
+    # floor families below read those claims. Relative order with `identities`
+    # itself decides nothing — identities never consults the claims — but the
+    # chain is the harder reading of the same declarations, so it goes with
+    # the hard families, hardest-first.
+    derivation.derivation_lineage()
     derivation.identities()
     derivation.citation_required()
     derivation.direct_lookup()
@@ -1431,7 +1672,10 @@ __all__ = [
     "COMMON_SLOTS",
     "DEFAULT_EMPHASIS",
     "DERIVED_FAMILIES",
+    "DERIVED_FAMILY_KEYS",
     "FAMILY_SLOTS",
+    "LINEAGE_FAMILY",
+    "LINEAGE_SLOTS",
     "AbstentionSpec",
     "EvalSpec",
     "QuestionFamily",
