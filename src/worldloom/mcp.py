@@ -44,8 +44,8 @@ _MISSING = (
 
 def _require_mcp() -> Any:
     try:
-        import mcp.server  # noqa: F401
-        import mcp.types  # noqa: F401
+        import mcp.server
+        import mcp.types
     except ImportError as exc:  # pragma: no cover - exercised by the bare-install job
         raise RuntimeError(_MISSING) from exc
     import mcp.server.stdio
@@ -499,7 +499,7 @@ def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if tool["name"] == name:
             try:
                 return tool["call"](**arguments)
-            except Exception as exc:  # noqa: BLE001 - a tool error is data, not a crash
+            except Exception as exc:
                 # An agent that gets a traceback learns nothing it can act on;
                 # an agent that gets `{"error": ...}` can fix the argument and
                 # try again. The loop only works if failure is legible.

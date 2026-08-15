@@ -11,11 +11,11 @@ against, so their shape matters more than their current implementation.
 from __future__ import annotations
 
 import shutil
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from . import corpus
 
@@ -50,6 +50,7 @@ from .models import (
     GenerationLedgerEntry,
     IntentionalError,
     LoreCommitment,
+    Model,
     Persona,
     Service,
     Site,
@@ -155,7 +156,7 @@ class World:
                 f" ({corpus.SCHEMA_VERSION}); upgrade worldloom"
             )
 
-        def models(key: str, model: type) -> tuple:
+        def models(key: str, model: type[Model]) -> tuple:
             return tuple(model.model_validate(row) for row in header.get(key, []))
 
         return cls(
@@ -1085,9 +1086,9 @@ class World:
 
         # Rendered bodies, when this world was rendered in memory.
         for item in self._rendered:
-            destination = target / item.path
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(item.payload)
+            rendered_path = target / item.path
+            rendered_path.parent.mkdir(parents=True, exist_ok=True)
+            rendered_path.write_bytes(item.payload)
 
         # Or copied through, when it was loaded from a corpus on disk — unless
         # the in-place staging above already restored them.
@@ -1171,7 +1172,6 @@ def extend_lore(
     if not claims:
         return base, recipe
     from . import facets as facets_module
-
     from .recipe import LORE_CLAIMS_KEY
 
     implied = facets_module.commit(claims, minter, alongside=base)
@@ -1214,7 +1214,7 @@ def _moment(moment: datetime | str) -> datetime:
     ``joined`` was ``None`` and the comparison was skipped.
     """
     when = datetime.fromisoformat(moment) if isinstance(moment, str) else moment
-    return when if when.tzinfo is not None else when.replace(tzinfo=timezone.utc)
+    return when if when.tzinfo is not None else when.replace(tzinfo=UTC)
 
 
 def _merged(existing: tuple, incoming: tuple) -> tuple:

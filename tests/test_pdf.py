@@ -23,9 +23,8 @@ import pytest
 from worldloom import MonthEndClose, RetailWorld, World
 from worldloom.models import ArtifactIR, ArtifactSection, Cell, Column, Row, Table
 from worldloom.narrative import DeterministicProvider, references
-from worldloom.render import RenderError, available
+from worldloom.render import RenderError, available, ooxml
 from worldloom.render import pdf as pdf_renderer
-from worldloom.render import ooxml
 from worldloom.render.values import format_value
 
 PERIOD = "2026-03"
@@ -350,7 +349,6 @@ def test_a_hidden_section_is_written_but_labelled(rendered: World) -> None:
 
 
 def test_acronyms_survive_the_title(rendered: World) -> None:
-    titles = {ir.title for ir in rendered.artifact_irs}
     pdfs = _files(rendered, ".pdf")
     for ir in rendered.artifact_irs:
         if ir.id not in pdfs:

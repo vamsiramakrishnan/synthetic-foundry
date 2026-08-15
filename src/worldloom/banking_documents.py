@@ -849,7 +849,9 @@ def divisional_performance_ir(world, intent: ArtifactIntent, minter: Minter) -> 
 # same dual treatment retail's memos get. Import here is safe on a bare
 # install: renderer modules import their optional dependency lazily, at render
 # time, precisely so registration costs nothing.
-from .render import docx as _docx, markdown as _markdown, xlsx as _xlsx
+from .render import docx as _docx
+from .render import markdown as _markdown
+from .render import xlsx as _xlsx
 
 _xlsx.register("capital_return", "divisional_performance_pack")
 _markdown.own_elsewhere("capital_return", "divisional_performance_pack")

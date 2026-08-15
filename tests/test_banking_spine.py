@@ -233,8 +233,8 @@ def test_the_branch_figures_on_the_sheet_are_the_ledgers(world: World, workbook)
 def test_the_division_total_is_a_formula_over_its_branches(workbook) -> None:
     """A workbook, not a screenshot of one — `documents.finance_workbook`'s rule."""
     sheet = next(s for s in workbook.worksheets if "branch network" in s.title)
-    total = [row for row in sheet.iter_rows(values_only=True)
-             if row and isinstance(row[0], str) and row[0].endswith(" total")][0]
+    total = next(row for row in sheet.iter_rows(values_only=True)
+             if row and isinstance(row[0], str) and row[0].endswith(" total"))
     formulas = [cell for cell in total if isinstance(cell, str) and cell.startswith("=SUM(")]
     assert len(formulas) == 5, "every measure on the subtotal row must be a declared sum"
 

@@ -122,6 +122,188 @@ packages = ["src/worldloom"]
 [tool.hatch.build.targets.wheel.force-include]
 "examples" = "worldloom/_examples"
 
+# Lint gate. CI runs `ruff check` blocking — a linter that only warns is a
+# gate that is skipped, and this repository's own line on that is that a
+# skipped gate is not a gate. Target version is inferred from
+# `requires-python` above, so the two can never disagree.
+[tool.ruff]
+extend-exclude = ["dist"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes — undefined names, unused imports/variables
+    "I",   # import sorting
+    "B",   # bugbear — mutable defaults, useless expressions, footguns
+    "UP",  # pyupgrade — idioms the floor (3.11) already supports
+    "RUF", # ruff's own checks — noqa hygiene, ambiguous defaults
+]
+ignore = [
+    # The house style is long-form why-comments — arguments, not annotations
+    # (measured p99 line length 96, max 253). A width gate would force
+    # reflowing prose whose paragraphing is deliberate, and the loss of a
+    # readable argument outweighs the gain of a uniform right margin.
+    "E501",
+    # A late import here is the registration seam, not an accident:
+    # `retail.py` registers its physics *after* defining what they attach to,
+    # with the reason documented in place ("a span that appeared only when
+    # some module happened to have been imported would make a corpus's
+    # figures depend on import order"). The same pattern closes
+    # `banking_documents.py`, `documents.py`, `episodes.py`, `lob.py` and
+    # `procurement.py`. E402 cannot tell that seam from a mistake.
+    "E402",
+    # 102 `zip()` call sites predate this rule. Retrofitting `strict=True`
+    # wholesale changes runtime behaviour on any path where lengths can
+    # legitimately differ — a semantic change the suite does not prove safe —
+    # and `strict=False` everywhere restates the default 102 times. Left as a
+    # ratchet: new code should say `strict=`, and removing this ignore once
+    # the sites are audited is the follow-up.
+    "B905",
+    # The prose in comments and docstrings deliberately uses typographic
+    # characters — the multiplication sign in "×6", en dashes, curly quotes.
+    # These rules exist to catch homoglyph confusion in identifiers, and here
+    # they would fire on writing that is correct as written.
+    "RUF001", "RUF002", "RUF003",
+    # `path + (start,)` is the house spelling for extending an immutable
+    # path (axes, columns, docs all use it). Iterable unpacking spells the
+    # same value with no behavioural difference; churning 22 dense
+    # expressions for spelling is a loss.
+    "RUF005",
+    # `__all__` lists here are grouped semantically with section comments —
+    # `__init__.py`'s reads "# entry points / # entities / # lore /
+    # # simulation". Alphabetising would destroy a deliberate taxonomy.
+    "RUF022",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Typer's API *is* function calls in argument defaults: `typer.Option(...)`
+# is read at decoration time to build the CLI. Moving the calls into the
+# function body is how typer is not used.
+"src/worldloom/cli.py" = ["B008"]
+
+# Type gate. This package ships `py.typed`, and a typed public surface nobody
+# checks is an advisory type system — by this repository's own principle, not
+# a gate. CI runs `mypy` blocking on this config.
+#
+# The honest scope, measured 2026-08 (mypy 2.3.1): 254 errors across 59 of
+# 163 modules at this config's strictness, 520 at `--strict`. The 59 are
+# listed below with `ignore_errors` — that list IS the debt ledger, and the
+# ratchet is: fix a module, delete its line, and the gate holds it clean from
+# then on. Everything not listed — including the thin waist (`models`,
+# `world`, `recipe`, `validate`, `factkinds`, `corpus`, `rng`, `ids`, `sdk`,
+# the narrative contract) — is checked and blocking today, and
+# a *new* module is blocking by default, so the debt list can only shrink.
+[tool.mypy]
+files = ["src/worldloom"]
+python_version = "3.11"
+# Notes would drown the errors at this scale; the gate is pass/fail.
+pretty = false
+
+# Third-party packages that ship no stubs (and the optional extras, which CI
+# legs may not have installed at all). Named individually rather than a global
+# ignore_missing_imports, so a typo'd first-party import still fails.
+# numpy is skipped entirely, not merely excused missing stubs, and the
+# distinction is load-bearing. The lint leg runs Python 3.12, where the
+# resolver takes numpy 2.5+ — whose bundled stubs use PEP 695 `type`
+# statements that a `python_version = "3.11"` check refuses to parse, killing
+# the whole run ("errors prevented further checking"). 3.11 stays the target
+# because it is this package's floor; numpy 2.5 ships no 3.11 wheels, so the
+# clash is structural, not a version pin away. The cost is numpy names typing
+# as Any at the boundary, and pyproject's own dependency comment prices that:
+# worldloom uses numpy for elementwise and integer arithmetic only.
+# Both spellings, because they are different modules to mypy's matcher: the
+# stub that failed to parse is `numpy/__init__.pyi` — the module named
+# `numpy`, which `numpy.*` does not reliably cover.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "anyio.*",
+    "docx.*",
+    "huggingface_hub.*",
+    "lxml.*",
+    "mcp.*",
+    "model2vec.*",
+    "networkx.*",
+    "openpyxl.*",
+    "pptx.*",
+    "reportlab.*",
+    "sentence_transformers.*",
+    "transformers.*",
+]
+ignore_missing_imports = true
+
+# The measured debt, module by module. Each line is a module with known
+# errors that predate the gate; the gate still *parses* them (an import error
+# or syntax error here fails the run) but does not hold them to the standard
+# yet. Do not add to this list to make a red run green — fix the module or
+# leave your new module off it, where it is checked.
+[[tool.mypy.overrides]]
+module = [
+    "worldloom.actors.runtime",
+    "worldloom.banking",
+    "worldloom.banking_scenarios",
+    "worldloom.benchmark",
+    "worldloom.cli",
+    "worldloom.cohorts",
+    "worldloom.collections",
+    "worldloom.compiler.diversity",
+    "worldloom.compose",
+    "worldloom.covering",
+    "worldloom.detail",
+    "worldloom.documents",
+    "worldloom.episodes",
+    "worldloom.facets",
+    "worldloom.generators.banking_org",
+    "worldloom.generators.cases",
+    "worldloom.generators.distractors",
+    "worldloom.generators.estate",
+    "worldloom.generators.evaluation",
+    "worldloom.generators.hierarchy",
+    "worldloom.generators.insurance_book",
+    "worldloom.generators.insurance_evaluation",
+    "worldloom.generators.insurance_org",
+    "worldloom.generators.operations",
+    "worldloom.generators.org_builder",
+    "worldloom.generators.organisation",
+    "worldloom.generators.planning",
+    "worldloom.generators.procurement_cycle",
+    "worldloom.generators.procurement_evaluation",
+    "worldloom.generators.procurement_org",
+    "worldloom.graphs",
+    "worldloom.insurance",
+    "worldloom.insurance_documents",
+    "worldloom.insurance_scenarios",
+    "worldloom.lob",
+    "worldloom.locales",
+    "worldloom.mcp",
+    "worldloom.mosaic",
+    "worldloom.narrative.compiler",
+    "worldloom.pack_export",
+    "worldloom.packs",
+    "worldloom.policies",
+    "worldloom.presentation",
+    "worldloom.procurement",
+    "worldloom.procurement_documents",
+    "worldloom.procurement_scenarios",
+    "worldloom.registries",
+    "worldloom.render.bundles",
+    "worldloom.render.docx",
+    "worldloom.render.html",
+    "worldloom.render.markdown",
+    "worldloom.render.pptx",
+    "worldloom.render.xlsx",
+    "worldloom.scenarios",
+    "worldloom.stats",
+    "worldloom.structure",
+    "worldloom.timeline",
+    "worldloom.workforce",
+]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

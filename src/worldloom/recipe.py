@@ -693,8 +693,8 @@ def rebuild(
     the scripted fake, a paused handshake, or nothing at all.
     """
     from . import archetypes, domains
-    from .generators import distractors
     from . import profiles as _profiles
+    from .generators import distractors
     from .parameters import DEFAULT, overrides_from
     from .scenarios import (
         Departure,

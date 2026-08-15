@@ -47,10 +47,9 @@ The episode's shape, and why each part is there:
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-
-from collections.abc import Mapping
 
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
@@ -226,12 +225,12 @@ def generate(
     contract_lore = lore_by_target.get("finance/pay_to_contract", [])
     vendor_lore = lore_by_target.get("vendor_master_dual_approval", [])
 
-    def event(kind: str, at: datetime, summary: str, *, actors: list[str] = [],
-              systems: list[str] = [], caused_by: list[str] = [],
-              lore: list[str] = []) -> EnterpriseEvent:
+    def event(kind: str, at: datetime, summary: str, *, actors: Sequence[str] = (),
+              systems: Sequence[str] = (), caused_by: Sequence[str] = (),
+              lore: Sequence[str] = ()) -> EnterpriseEvent:
         made = EnterpriseEvent(id=minter.next("EV"), kind=kind, occurred_at=at,
-                               summary=summary, actors=actors, systems=systems,
-                               caused_by=caused_by, lore_ids=lore)
+                               summary=summary, actors=list(actors), systems=list(systems),
+                               caused_by=list(caused_by), lore_ids=list(lore))
         events.append(made)
         keys[f"event_{kind}"] = made.id
         return made

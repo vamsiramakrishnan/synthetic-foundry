@@ -421,6 +421,14 @@ MEASURES: tuple[str, ...] = (
     "p2p.approval_tolerance",
     "p2p.approval_tolerance_pct",
     "p2p.approved_payment_value",
+    # The commitment movement's two legs of its own (the closing balance is
+    # `p2p.open_commitment` and the received leg is `p2p.third_party_spend`,
+    # both already below). Numeric and minted by the default episode, so the
+    # tuple's mechanical rule admits them — and an order book's opening and
+    # what was placed against it are exactly the figures a chief procurement
+    # officer is held to at a cost review.
+    "p2p.commitment.opening",
+    "p2p.commitment.placed",
     "p2p.contract_rate",
     "p2p.credit_note_value",
     "p2p.invoiced_quantity",

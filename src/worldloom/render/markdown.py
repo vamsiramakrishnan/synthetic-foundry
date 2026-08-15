@@ -29,11 +29,22 @@ from typing import TYPE_CHECKING
 
 from ..compiler.compose import section_components
 from ..compiler.plan import SizeClass
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
-from ..models import ArtifactIR, CanonicalFact, Chart, FlowDiagram, MagnitudeBand, Quotation, Table
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
+from ..models import (
+    ArtifactIR,
+    CanonicalFact,
+    Chart,
+    FlowDiagram,
+    MagnitudeBand,
+    Quotation,
+    Table,
+)
 from ..narrative import references
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION
+from ..presentation import Presentation
+from ..presentation import of as presentation_of
 from . import Rendered, slug_for
-from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover

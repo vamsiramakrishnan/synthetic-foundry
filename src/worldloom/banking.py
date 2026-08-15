@@ -47,22 +47,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import archetypes as archetype_registry
-from . import validate as validate_module
-from .archetypes import CUSTOMER_OWNED_BANK, MIDSIZE_ADI, Archetype
-from .ids import Minter
-from .models import (
-    Authority,
-    CanonicalFact,
-    ConstraintKind,
-    Lifecycle,
-    LoreCommitment,
-    LoreConstraint,
-    LoreKind,
-)
-from .parameters import DEFAULT, Parameters
-from .rng import Rng
-from .validate import RECONCILIATION_TOLERANCE, Violation
-from .world import World, extend_lore
 
 # Imported for its side effect: registering banking's artifact types with the
 # document compiler. Kept at module scope so that importing `worldloom.banking`
@@ -77,7 +61,23 @@ from . import banking_documents  # noqa: F401  (registration)
 # loan book is and `worldloom pack params` could not show that it decides
 # anything.
 from . import parameters as _parameters_module
+from . import validate as validate_module
+from .archetypes import CUSTOMER_OWNED_BANK, MIDSIZE_ADI, Archetype
 from .generators.banking_network import SPANS as _BANKING_NETWORK_SPANS
+from .ids import Minter
+from .models import (
+    Authority,
+    CanonicalFact,
+    ConstraintKind,
+    Lifecycle,
+    LoreCommitment,
+    LoreConstraint,
+    LoreKind,
+)
+from .parameters import DEFAULT, Parameters
+from .rng import Rng
+from .validate import RECONCILIATION_TOLERANCE, Violation
+from .world import World, extend_lore
 
 _parameters_module.register(_BANKING_NETWORK_SPANS)
 
@@ -683,7 +683,7 @@ def _checks(world: World) -> tuple[list[Violation], int]:
             continue
         if fact.kind.startswith(("capital.", "review.")):
             contested.setdefault((fact.kind, fact.subject, fact.period), []).append(fact)
-    for (kind, subject, period), group in sorted(contested.items()):
+    for (kind, subject, _period), group in sorted(contested.items()):
         if len(group) < 2:
             continue
         checks += 1
@@ -895,7 +895,7 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # this kind is excluded from the roll-up above: a group loan-to-deposit
     # ratio is group lending over group deposits, never the total of three
     # divisional ratios.
-    for (kind, period), subjects in sorted(
+    for (_kind, period), subjects in sorted(
         ((key, value) for key, value in stated_by.items()
          if key[0] == "banking.loan_to_deposit_pct"),
         key=lambda item: item[0][1] or "",
@@ -920,7 +920,7 @@ def _checks(world: World) -> tuple[list[Violation], int]:
     # allocating a store estate rather than drawing it).
     centre_ids = [centre.id for centre in world.cost_centres]
     unit_ids = [unit.id for unit in world.business_units]
-    for (kind, period), subjects in sorted(
+    for (_kind, period), subjects in sorted(
         ((key, value) for key, value in stated_by.items()
          if key[0] == "banking.shared_services_cost"),
         key=lambda item: item[0][1] or "",
@@ -969,12 +969,11 @@ validate_module.register_domain_checks("banking", _checks)
 
 # The domain registry entry: how the CLI and the recipe rebuilder find this
 # vertical from an archetype key, without either naming banking in core.
-from .banking_scenarios import QuarterlyCapitalReturn  # noqa: E402
-from .domains import Domain, register_domain  # noqa: E402
-
-from .generators.banking_evaluation import EVAL_TEXT as _BANKING_EVAL_TEXT  # noqa: E402
-from .generators.banking_org import _ROLES as _BANKING_ROLES  # noqa: E402
-from .generators.regulatory import TEXT as _BANKING_TEXT  # noqa: E402
+from .banking_scenarios import QuarterlyCapitalReturn
+from .domains import Domain, register_domain
+from .generators.banking_evaluation import EVAL_TEXT as _BANKING_EVAL_TEXT
+from .generators.banking_org import _ROLES as _BANKING_ROLES
+from .generators.regulatory import TEXT as _BANKING_TEXT
 
 register_domain(Domain(
     name="banking",
@@ -1005,7 +1004,8 @@ register_domain(Domain(
 # declaration here would be refused. The invariants restate what `_checks`
 # above already enforces — the registry is the index of those rules, and the
 # episode grammar derives checks from the same strings.
-from .factkinds import FactKind, register as _register_kinds  # noqa: E402
+from .factkinds import FactKind
+from .factkinds import register as _register_kinds
 
 _register_kinds([
     FactKind(kind="capital.rwa_total", domain="banking", generated_by="generators/regulatory.py",

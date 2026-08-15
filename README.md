@@ -1,5 +1,13 @@
 # Worldloom
 
+[![ci](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/ci.yml/badge.svg)](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/ci.yml)
+[![determinism sweep](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/determinism-sweep.yml/badge.svg)](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/determinism-sweep.yml)
+[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+<!-- No PyPI or python-versions badge: `worldloom` is not published on PyPI
+     (checked 2026-08 — the name 404s), and a badge that renders as a broken
+     image is worse than none. Add them with the first release. -->
+
 **A deterministic compiler for coherent synthetic enterprise corpora.**
 
 Worldloom generates the enterprise before it generates the files: companies,

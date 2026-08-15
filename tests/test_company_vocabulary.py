@@ -171,7 +171,7 @@ def test_a_qualified_key_carries_the_words_and_not_the_vertical() -> None:
     shape = archetypes.get(key)
     assert shape.key == key
     assert shape.vocabulary == "mutual_bank"
-    assert [u.name for u in shape.units][0] == "Member Banking"
+    assert next(u.name for u in shape.units) == "Member Banking"
 
     domain = domains.for_archetype(key)
     assert domain is not None and domain.name == "banking"

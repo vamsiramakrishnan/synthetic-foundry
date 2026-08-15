@@ -129,10 +129,42 @@ def test_the_answers_are_where_the_variety_is(worlds) -> None:
 
 
 def test_survey_states_the_unflattering_verdict(worlds) -> None:
+    """The verdict, pinned at exactly how unflattering it still is.
+
+    `transfers["bm25"].identical` read True — three seeds, one company, one
+    verdict sheet — until the variance memo's divisional table gained
+    `gp_actual`, the operand its margin ratio had always been missing
+    (`columns._CUTS`). One more real column in one passage moved a marginal
+    top-5 ranking on one seed: the gross-profit reconciliation comparison now
+    fails on the third world while the other two still pass it. That is a
+    ranking margin, not variety — the question is byte-identical in every
+    world, which is the unflattering half and it has not moved — so the pin is
+    the exact width of the disagreement, one case, rather than a threshold a
+    real variety regression could hide under.
+    """
     reading = across.survey(worlds)
-    assert reading.transfers["bm25"].identical
-    assert "the variety is in the facts, not in the questions" in reading.verdict
-    assert reading.difficulty.concentration == pytest.approx(reading.difficulty.even_share)
+    transfer = reading.transfers["bm25"]
+    verdicts = {
+        name: {o.case_id: o.passed for o in card.outcomes}
+        for name, card in transfer.cards.items()
+    }
+    names = sorted(verdicts)
+    assert all(set(verdicts[n]) == set(verdicts[names[0]]) for n in names[1:])
+    split = {
+        case_id
+        for case_id in verdicts[names[0]]
+        if len({verdicts[n][case_id] for n in names}) > 1
+    }
+    assert split == {"EVAL-0017"}, split
+    assert not transfer.identical
+    # A one-case spread flips the verdict to its second branch. The questions
+    # half of the claim is what matters and is asserted above by exact ids; the
+    # difficulty half now honestly reports the margin.
+    assert "the questions repeat" in reading.verdict
+    # 26 of 76 failures on the hardest world — the same single case off a
+    # perfectly even split, read through the concentration lens.
+    assert reading.difficulty.failures[names[2]] == reading.difficulty.failures[names[0]] + 1
+    assert reading.difficulty.concentration == pytest.approx(26 / 76, abs=1e-4)
     assert "cross-world duplicate group" in str(reading)
 
 

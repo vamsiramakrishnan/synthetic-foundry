@@ -15,7 +15,7 @@ cover are still empty.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -42,7 +42,7 @@ def at(*parts: int) -> datetime:
     is precisely the kind of latent break a test written against empty fields
     cannot see.
     """
-    return datetime(*parts, tzinfo=timezone.utc)
+    return datetime(*parts, tzinfo=UTC)
 
 
 @pytest.fixture(scope="module")

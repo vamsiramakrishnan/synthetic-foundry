@@ -44,7 +44,6 @@ from worldloom.compiler.compose import (
     Composition,
     CompositionError,
     compose,
-    plan_from_ir,
     try_compose,
 )
 from worldloom.compiler.plan import DENSITY_POINTS, ArtifactPlan, NarrativeBeat

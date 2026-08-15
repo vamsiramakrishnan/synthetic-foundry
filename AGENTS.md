@@ -177,6 +177,29 @@ first: `--comparatives 23 --trend 0.004` gives two years with a direction in
 them, where the default flat level makes every seasonally-adjusted month look
 like every other.
 
+### One recorded value, one measured delta
+
+Two seeds differ everywhere at once, so comparing them attributes nothing. A
+**counterfactual twin** rebuilds the same recipe with exactly one recorded value
+replaced — the physics endpoint, a step's `trend_pct`, the whole trading year —
+so every row that differs between the two worlds differs *because of that value*:
+
+```bash
+worldloom twin ./corpus --set physics/retail.margin.erosion/high=0.06 --json
+worldloom twin ./corpus --set steps/0/trend_pct=0.008 --out ./counterfactual
+```
+
+The delta manifest names the changed facts, documents and evaluation cases with
+the unchanged counts beside them, measured at the corpus's own jsonl
+representation rather than predicted. Paths are slash-separated because physics
+names are themselves dotted. An intervention that changes *how many* things
+exist (a policy level, an incident switched off) reshuffles sequentially-minted
+ids and is **refused with the cause** — exit code 3 — because a diff across
+reshuffled ids would label unrelated changes as caused. A zero-change manifest
+is a finding, not a failure: a widened integer range can be absorbed by
+rejection sampling and the twin honestly reports that the parameter reached
+nothing. `worldloom.twins` in Python returns both worlds and the manifest.
+
 ---
 
 ## The refine loop that is deliberately not here
@@ -287,6 +310,39 @@ Both readings are *readings* and neither may be fed back into a build. A
 generator that branched on an effective-diversity score would make a corpus's
 bytes depend on which BLAS the machine linked; a fleet planner may consume
 `--holes`, but the world builder may not.
+
+### Admitting a fleet, rather than shipping whatever was generated
+
+Every reading above measures and none of them rules: a fleet is generated,
+measured six ways, and then all of it ships. `fleet` composes the readings
+into a verdict and a keep list:
+
+```bash
+worldloom fleet qualify ./mosaic --purpose challenge   # measure, verdict; exit 1 if not qualified
+worldloom fleet curate ./mosaic --purpose challenge    # champions per niche, rejects, empty niches
+```
+
+`qualify` checks that every member coheres (`validate`), rebuilds from its own
+recipe and ledger into the same fact ledger and artifact plan, and holds the
+floors its purpose requires — a challenge fleet must mint questions and must
+not contain the same world twice; a counterfactual fleet must share one
+archetype, so a difference in outcome attributes to the varied input rather
+than to being a different company. The record also reports the fleet's
+pairwise coverage of the configuration space, the axes it never varied, the
+reachable-spine share, the questions restated across worlds, and effective
+diversity — that last clearly labelled non-gating, for the BLAS reason above.
+
+`curate` keeps one champion per niche of a small behaviour grid (deterministic
+integer features of the measured corpora — never an eigendecomposition), lists
+every reject with the champion that displaced it and why, and writes
+`fleet-manifest.json`, byte-for-byte stable, whose empty niches are the next
+generation's worklist. A curator is downstream of generation: nothing it emits
+feeds back into a build.
+
+There is no `naturalistic` purpose. Qualifying a fleet as resembling real
+enterprise populations needs reference data this repository does not have, so
+that purpose is refused naming the data it would take — offering it would
+convert "we don't claim realism" into a fake claim.
 
 Each world lands in `./mosaic/world-NN/` with its own recipe, so any one of them
 rebuilds alone. `mosaic.json` records the plan. Measured on five worlds: five

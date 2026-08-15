@@ -17,7 +17,7 @@ import openpyxl
 import pytest
 
 from worldloom import MonthEndClose, RetailWorld, World
-from worldloom.render import RenderError, available, markdown, xlsx
+from worldloom.render import RenderError, available, markdown
 
 PERIOD = "2026-03"
 
@@ -260,7 +260,6 @@ def test_number_formats_are_set(workbook) -> None:  # type: ignore[no-untyped-de
 
 def test_a_percentage_is_stored_as_a_fraction(rendered: World, workbook) -> None:  # type: ignore[no-untyped-def]
     """Excel's percent format multiplies by 100, so 24.94% must be stored as 0.2494."""
-    sheet = workbook["Business Unit P&L"]
     computed = evaluate(workbook, "Business Unit P&L", "H4")
     assert 0.0 < computed < 1.0, f"margin stored as {computed}, which would display as a percent of a percent"
 

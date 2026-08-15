@@ -9,12 +9,12 @@ import pytest
 from worldloom import probe
 from worldloom.parameters import DEFAULTS
 from worldloom.probe import (
+    WHOLE,
     Answer,
     Graph,
     Interval,
     Question,
     SubQuestion,
-    WHOLE,
 )
 
 PREMISE = "A specialty apparel retailer, 180 stores, Australia."

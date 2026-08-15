@@ -15,8 +15,9 @@ import hashlib
 import json
 import os
 import threading
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence, TypeVar
+from typing import Any, TypeVar
 
 from .models import GenerationLedgerEntry
 

@@ -67,6 +67,11 @@ present_app = typer.Typer(
     help="Decide who a corpus's documents are for, and check a profile you wrote.",
 )
 app.add_typer(present_app, name="present")
+fleet_app = typer.Typer(
+    no_args_is_help=True,
+    help="Admission control for a fleet of worlds: qualify it for a purpose, curate its champions.",
+)
+app.add_typer(fleet_app, name="fleet")
 
 console = Console()
 err = Console(stderr=True)
@@ -950,7 +955,7 @@ def build(
             + (
                 ""
                 if said_it
-                else f" Nothing named an estate directly: it is implied by the"
+                else " Nothing named an estate directly: it is implied by the"
                 " facets this build resolved."
             )
         )
@@ -1724,9 +1729,8 @@ def build(
     # meant to be, and a profile whose counts are later revised replays as the
     # profile that was asked for.
     if messiness is not None:
-        from .messiness import Imperfections
-
         from .generators.distractors import messiness_ceilings
+        from .messiness import Imperfections
         from .messiness import from_document as _messiness_profile
 
         before = len(world.artifact_intents)
@@ -2829,8 +2833,8 @@ def mosaic(
     first call — deciding whether five worlds are worth the wait should not
     require generating five worlds.
     """
-    from . import mosaic as mosaic_module
     from . import batch as batch_module
+    from . import mosaic as mosaic_module
 
     if describe:
         try:
@@ -3075,7 +3079,7 @@ def mosaic(
         + f"\n[dim]{spread['distinct_shapes']} distinct organisation shape(s);"
         f" headcounts {spread['headcounts']}; estates {spread['estates']}."
         + (f" {narrated_sections} section(s) of prose written." if narrate else "")
-        + f" The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
+        + " The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
     )
     # Said at the end, where a reader stops, and said as a warning rather than
     # as a count. `--no-narrate` is a legitimate request and this does not
@@ -3345,6 +3349,130 @@ def validate(
         return
     if not _print_report(report):
         raise typer.Exit(code=1)
+
+
+#: One help string for both fleet verbs, because the refusal is part of the
+#: contract: "naturalistic" is not a hidden value waiting to be typed, it is a
+#: purpose `worldloom.fleet` refuses with the reference data it would need.
+_FLEET_PURPOSE_HELP = (
+    "What the fleet is being admitted for: challenge (it will be used to "
+    "challenge a retrieval or assistant system) or counterfactual (controlled "
+    "comparison against a shared frame). 'naturalistic' is refused, naming "
+    "the reference data it would need."
+)
+
+
+@fleet_app.command("qualify")
+def fleet_qualify(
+    fleet_dir: str = typer.Argument(
+        ..., help="A directory of member corpora — a mosaic out dir, or any directory of builds."
+    ),
+    purpose: str = typer.Option("challenge", "--purpose", help=_FLEET_PURPOSE_HELP),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the full qualification record as JSON."
+    ),
+    out: Path = typer.Option(
+        None, "--out", "-o",
+        help="Also write the record here — byte-stable, so it can be checked in and diffed.",
+    ),
+) -> None:
+    """Measure a fleet and rule on whether it is qualified for its purpose.
+
+    Exit 1 when the fleet is not qualified, with every failed floor named —
+    the same posture `worldloom validate` takes one level down: the exit code
+    is the verdict and the text is the reason.
+    """
+    from . import fleet as fleet_module
+
+    try:
+        record = fleet_module.qualify(fleet_dir, purpose)  # type: ignore[arg-type]
+    except fleet_module.FleetError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(record.manifest(), encoding="utf-8")
+
+    if as_json:
+        typer.echo(record.manifest(), nl=False)
+        if not record.qualified:
+            raise typer.Exit(code=1)
+        return
+
+    table = Table(title=f"fleet {record.fleet} — {record.purpose}",
+                  title_style="bold", box=None)
+    table.add_column("world", style="bold")
+    table.add_column("coherent")
+    table.add_column("replays")
+    table.add_column("questions", justify="right")
+    for world in record.worlds:
+        table.add_row(
+            world.name,
+            "[green]yes[/green]" if world.ok else f"[red]no ({world.violations})[/red]",
+            "[green]yes[/green]" if world.replay_verified else "[red]no[/red]",
+            str(world.questions),
+        )
+    console.print(table)
+    console.print(
+        f"[dim]coverage {record.coverage['share']:.0%} of {record.coverage['combinations']}"
+        f" pair(s); unvaried: {', '.join(record.unvaried) or 'none'};"
+        f" spine {record.spine['share']}; questions restated across worlds"
+        f" {record.questions['cross_world_restated_share']:.0%};"
+        f" effective diversity {record.effective_diversity['vendi_questions']}"
+        f" (reported, non-gating)[/dim]"
+    )
+    if record.qualified:
+        console.print(f"[green]✓[/green] qualified for [bold]{record.purpose}[/bold]")
+        return
+    for name in record.failed:
+        err.print(f"[red]✗[/red] {name}: {escape(record.floors[name]['detail'])}")
+    raise typer.Exit(code=1)
+
+
+@fleet_app.command("curate")
+def fleet_curate(
+    fleet_dir: str = typer.Argument(
+        ..., help="A directory of member corpora — a mosaic out dir, or any directory of builds."
+    ),
+    purpose: str = typer.Option("challenge", "--purpose", help=_FLEET_PURPOSE_HELP),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the manifest as JSON instead of a table."
+    ),
+) -> None:
+    """Keep one champion per niche; name every reject and every empty niche.
+
+    Writes `fleet-manifest.json` at the fleet root, byte-for-byte stable for
+    the same fleet. Exit 0 either way: a curation is a keep list, not a gate —
+    `fleet qualify` owns pass/fail.
+    """
+    from . import fleet as fleet_module
+
+    try:
+        curation = fleet_module.curate(fleet_dir, purpose)  # type: ignore[arg-type]
+    except fleet_module.FleetError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    if as_json:
+        typer.echo(curation.manifest(), nl=False)
+        return
+
+    for champion in curation.champions:
+        niche = ", ".join(f"{key}={champion.niche[key]}" for key in sorted(champion.niche))
+        console.print(f"[green]✓[/green] [bold]{champion.world}[/bold] holds"
+                      f" ({niche}) at {curation.fitness_metric}={champion.fitness}")
+    for reject in curation.rejects:
+        displaced = f" — displaced by {reject.displaced_by}" if reject.displaced_by else ""
+        console.print(f"[yellow]-[/yellow] {reject.world}: {escape(reject.reason)}{displaced}")
+    for hole in curation.holes:
+        niche = ", ".join(f"{key}={hole[key]}" for key in sorted(hole))
+        console.print(f"[dim]· empty niche ({niche}) — next generation's worklist[/dim]")
+    console.print(
+        f"[dim]{len(curation.champions)} champion(s), {len(curation.rejects)} reject(s),"
+        f" {len(curation.holes)} empty niche(s)."
+        f" The manifest is in {fleet_module.MANIFEST_NAME}.[/dim]"
+    )
 
 
 @evals_app.command("export")
@@ -4132,6 +4260,113 @@ def mcp(
     except RuntimeError as exc:
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
+
+
+@app.command()
+def twin(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    set_: str = typer.Option(
+        ..., "--set",
+        help="PATH=VALUE: one recorded recipe value to replace, slash-separated"
+             " because physics names are dotted — e.g."
+             " physics/retail.margin.erosion/high=0.06, steps/0/trend_pct=0.008."
+             " VALUE is parsed as JSON, falling back to a bare string.",
+    ),
+    out: Path = typer.Option(
+        None, "--out", "-o",
+        help="Directory to write the counterfactual corpus into. Omit to"
+             " measure the delta without keeping the twin.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the delta manifest as JSON — stable keys and ordering."
+    ),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", help="Replace the destination if it exists."
+    ),
+) -> None:
+    """Rebuild this corpus with one recorded value replaced, and measure the delta.
+
+    A counterfactual twin: same recipe, same ledger, one declared intervention.
+    Because `recipe.rebuild` is a pure function of what the corpus records, every
+    row that differs between the two worlds differs because of the intervention —
+    the delta manifest names the changed facts, documents and evaluation cases,
+    with the unchanged counts beside them as the denominator.
+
+    An intervention that changes *how many* things exist (a policy level, an
+    incident switched off) reshuffles sequentially-minted ids and is refused with
+    the cause rather than diffed; exit code 3 says "refused", so a loop can tell
+    a refusal from a failure without parsing prose. See `worldloom.twins`.
+    """
+    from . import twins as twins_module
+    from .recipe import RecipeError
+
+    if "=" not in set_:
+        err.print("[red]error:[/red] --set takes PATH=VALUE")
+        raise typer.Exit(code=2)
+    raw_path, _, raw_value = set_.partition("=")
+    try:
+        value = json.loads(raw_value)
+    except json.JSONDecodeError:
+        # A bare string like `--set policies=full`. Deliberate: quoting JSON
+        # strings through a shell is misery, and no recipe value is ambiguous
+        # between "the string full" and anything else.
+        value = raw_value
+
+    world = _load(corpus)
+    if not world.recipe:
+        err.print(
+            "[red]error:[/red] this corpus carries no recipe, so it cannot be"
+            " rebuilt — twins are measured between two rebuilds of the record."
+        )
+        raise typer.Exit(code=2)
+
+    try:
+        result = twins_module.twin(
+            world.recipe, tuple(world._ledger),
+            twins_module.Intervention(raw_path.strip(), value),
+        )
+    except (twins_module.TwinError, RecipeError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    manifest = result.manifest
+    if out is not None and manifest.refused is None:
+        result.world.export(out, overwrite=overwrite)
+
+    if as_json:
+        console.print_json(json.dumps(manifest.as_dict()))
+    else:
+        stated = manifest.intervention
+        console.print(
+            f"[bold]{stated['path']}[/bold]: {stated['before']!r} -> {stated['after']!r}"
+        )
+        if manifest.refused is not None:
+            err.print(f"[red]refused:[/red] {escape(manifest.refused)}")
+        else:
+            table = Table(show_header=True, header_style="bold")
+            table.add_column("stream")
+            table.add_column("changed", justify="right")
+            table.add_column("unchanged", justify="right")
+            for stream, ids in (
+                ("facts", manifest.changed_fact_ids),
+                ("events", manifest.changed_event_ids),
+                ("artifacts", manifest.changed_artifact_ids),
+                ("evaluations", manifest.changed_evaluation_ids),
+                ("entities", manifest.changed_entity_ids),
+                ("records", manifest.changed_record_ids),
+            ):
+                table.add_row(stream, str(len(ids)), str(manifest.unchanged_counts[stream]))
+            console.print(table)
+            if manifest.is_null:
+                console.print(
+                    "[dim]No row changed: the intervention was absorbed (or was"
+                    " the identity). That is a measurement, not a failure.[/dim]"
+                )
+            if out is not None:
+                console.print(f"Counterfactual corpus written to [bold]{out}[/bold]")
+
+    if manifest.refused is not None:
+        raise typer.Exit(code=3)
 
 
 def _for_stats(name: str) -> World:
@@ -5061,7 +5296,7 @@ def workspace(
 
     try:
         world = World.load(corpus)
-    except Exception as exc:  # noqa: BLE001 — surfaced, not swallowed
+    except Exception as exc:
         err.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
     try:
@@ -5158,7 +5393,8 @@ def present_describe() -> None:
     The same argument `mosaic --describe` makes: deciding whether a profile is
     the one you want should not require rendering a corpus to find out.
     """
-    from .presentation import KNOBS, PROFILES, describe as describe_profile
+    from .presentation import KNOBS, PROFILES
+    from .presentation import describe as describe_profile
 
     table = Table(title="Presentation profiles", box=None)
     table.add_column("profile")
@@ -5226,7 +5462,8 @@ def present_lint(
     fixing one knob per round trip pays a turn per rule it could not see.
     """
     from .cascade import load as load_seed
-    from .presentation import PresentationSeed, register as register_profile, resolve, review
+    from .presentation import PresentationSeed, resolve, review
+    from .presentation import register as register_profile
 
     doctypes: tuple[str, ...] = ()
     if corpus:
@@ -5235,7 +5472,7 @@ def present_lint(
 
     try:
         seed = load_seed(spec, PresentationSeed)
-    except Exception as exc:  # noqa: BLE001 - pydantic and json raise differently
+    except Exception as exc:
         err.print(f"[red]refused:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 

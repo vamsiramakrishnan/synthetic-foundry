@@ -16,15 +16,12 @@ Three claims pinned, matching what `detail.py` promises:
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from worldloom import ProcureToPayWorld, episodes
-from worldloom import detail
+from worldloom import ProcureToPayWorld, detail, episodes
 from worldloom.ids import Minter
 from worldloom.locales import DEFAULT as CALENDAR
 from worldloom.models import Authority, CanonicalFact, Quantity
@@ -52,7 +49,7 @@ def _fact(kind: str, amount: float, unit: str = "AUD_thousands") -> CanonicalFac
     return CanonicalFact(
         id="FACT-9001", kind=kind, subject="CO-0001",
         value=Quantity(amount=amount, unit=unit),
-        valid_from=datetime(2026, 3, 3, 9, 0, tzinfo=timezone.utc),
+        valid_from=datetime(2026, 3, 3, 9, 0, tzinfo=UTC),
         authority=Authority.SYSTEM_OF_RECORD,
     )
 
@@ -265,7 +262,7 @@ def test_edge_cases_are_recorded_and_never_touch_the_rule() -> None:
     )
     assert made.edge_rows, "a 5% rate over 400 rows injected nothing"
     for entry in made.edge_rows:
-        index, column, kind = entry.split(":")
+        _index, column, kind = entry.split(":")
         assert column == "item"  # only the choice column is eligible
         assert kind in ("unicode_variant", "near_duplicate")
     assert sum(round(row["amount"] * 100) for row in made.rows) == 50_000

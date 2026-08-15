@@ -43,10 +43,17 @@ from datetime import timedelta
 import pytest
 
 from worldloom import (
-    MonthEndClose, RetailWorld, World, doctypes, documents, packs, registries,
+    MonthEndClose,
+    RetailWorld,
+    World,
+    doctypes,
+    documents,
+    packs,
+    registries,
 )
 from worldloom.generators import planning
-from worldloom.render import docx as docx_render, markdown as markdown_render
+from worldloom.render import docx as docx_render
+from worldloom.render import markdown as markdown_render
 
 EXAMPLES = pathlib.Path(__file__).resolve().parents[1] / "examples" / "artifact-types"
 CORE = EXAMPLES / "core.json"

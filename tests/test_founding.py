@@ -10,13 +10,13 @@ vacuously true. This is what actually exercises them.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from worldloom.retail import RetailWorld, MonthEndClose
+from worldloom.retail import MonthEndClose, RetailWorld
 
 #: The earliest a close period can start in this corpus (the CLI's own default
 #: is "2026-03"); every generated `joined` must sit comfortably before this.
-EARLIEST_CLOSE = datetime(2026, 1, 1, tzinfo=timezone.utc)
+EARLIEST_CLOSE = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 # -- founding milestones ------------------------------------------------------

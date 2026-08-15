@@ -23,17 +23,10 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from . import columns as columns_module
-from . import domains
+from . import domains, roleseq, structure
 from . import recipe as recipe_module
-from . import roleseq
-from . import structure
 from .ids import Minter
-from .rng import Rng
-from .narrative import references
 from .models import (
-    FlowNode,
-    FlowEdge,
-    FlowDiagram,
     ArtifactIntent,
     ArtifactIR,
     ArtifactSection,
@@ -43,11 +36,16 @@ from .models import (
     Chart,
     ChartKind,
     Column,
+    FlowDiagram,
+    FlowEdge,
+    FlowNode,
     FormulaKind,
     Lifecycle,
     Row,
     Table,
 )
+from .narrative import references
+from .rng import Rng
 
 if TYPE_CHECKING:  # pragma: no cover
     from .adjacency import Adjacency
@@ -310,11 +308,11 @@ def declared_types() -> frozenset[str]:
 def register_artifact_types(
     *,
     standing: dict[str, tuple[Authority, Lifecycle]] | None = None,
-    lags: dict[str, "timedelta"] | None = None,
-    outlines: dict[str, tuple["SectionPlan", ...]] | None = None,
+    lags: dict[str, timedelta] | None = None,
+    outlines: dict[str, tuple[SectionPlan, ...]] | None = None,
     compilers: dict[str, Any] | None = None,
     filings: dict[str, FilingPlan] | None = None,
-    variants: dict[str, tuple[tuple["SectionPlan", ...], ...]] | None = None,
+    variants: dict[str, tuple[tuple[SectionPlan, ...], ...]] | None = None,
 ) -> None:
     """Add a domain module's artifact types to the compiler's tables.
 
@@ -478,7 +476,7 @@ class _Bound:
     column per row over thousands of rows.
     """
 
-    __slots__ = ("sheet", "_measures", "_derived", "_not_additive", "_rate_kinds")
+    __slots__ = ("_derived", "_measures", "_not_additive", "_rate_kinds", "sheet")
 
     def __init__(self, sheet: columns_module.Sheet | None) -> None:
         self.sheet = sheet
@@ -2574,8 +2572,8 @@ def outline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
             # what a section is *for*; a composer reading "Commitment" downstream
             # can only guess, and guessed wrong often enough to be worth removing
             # from the path.
-            from .compiler.compose import infer_semantic_role
             from . import templating
+            from .compiler.compose import infer_semantic_role
 
             # Resolve {{var:...}} variables in heading and purpose from the world.
             # Variables-of-variables are refused (they contain {{var:...}} after
@@ -2843,11 +2841,12 @@ def _divisional_summary(
         return None
 
     # The fourth copy of the same column decisions, now the same declaration
-    # narrowed and relabelled. `columns.DIVISIONAL`'s own comment records what
-    # `columns.lint` has to say about it: the margin ratio's numerator column is
-    # not on this table, so XLSX emits no formula for it. Latent — the memo is a
-    # Word document — and reported rather than fixed, because both fixes change
-    # what a reader sees.
+    # narrowed and relabelled. The cut carries `gp_actual` so that
+    # `gm_pct_actual` is a ratio a spreadsheet can recompute: without it the
+    # numerator resolved to no address, XLSX emitted no formula, and the margin
+    # cell was a pasted literal from the day the table was written —
+    # `columns.lint` reported exactly that for as long as the finding stood,
+    # and `columns._CUTS` keeps the account now that it is fixed.
     columns = _cut_columns(world, "divisions")
     rows = [
         _measure_row(index, key=unit.id, label=unit.name, subject=unit.id,
@@ -2890,6 +2889,7 @@ def _divisional_summary(
 #: because they are mechanism any vertical plans — a projection of an event
 #: and its facts, with no domain vocabulary of their own.
 from .generators.communications import MESSAGE_LAG, MINUTES_LAG, minutes_ir, thread_ir
+
 
 def company_timeline(world: World, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:
     """The company's own past, as the dated table the lore already witnesses.

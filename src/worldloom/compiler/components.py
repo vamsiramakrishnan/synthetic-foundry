@@ -19,7 +19,7 @@ would make that tie-break depend on insertion order nobody stated on purpose.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 #: Formats a component can be spelled in. `markdown` is the universal fallback —
 #: everything must render there, because it is what the narrative pipeline reads

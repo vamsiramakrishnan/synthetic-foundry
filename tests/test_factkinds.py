@@ -15,7 +15,6 @@ import worldloom  # noqa: F401 — importing the package is what populates the r
 from worldloom import factkinds, lob
 from worldloom.models import ConstraintKind
 
-
 # ---------------------------------------------------------------------------
 # Registration refusals
 # ---------------------------------------------------------------------------

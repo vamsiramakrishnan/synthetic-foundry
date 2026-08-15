@@ -29,13 +29,13 @@ import re
 import pytest
 
 from worldloom.compiler import components as components_module
+from worldloom.compiler.components import REGISTRY, ComponentSpec, roles_for
 from worldloom.compiler.compose import (
     CompositionError,
     compose,
     plan_from_ir,
     section_components,
 )
-from worldloom.compiler.components import REGISTRY, ComponentSpec, roles_for
 from worldloom.compiler.plan import DENSITY_POINTS, ArtifactPlan, NarrativeBeat
 from worldloom.models import (
     ArtifactIR,

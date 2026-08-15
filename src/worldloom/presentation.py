@@ -293,7 +293,10 @@ class PresentationSeed(CascadeModel):
     provenance: str = "footer"
     magnitudes: str = "ledger"
     table_fit: str = "fixed"
-    overrides: dict[str, dict[str, str]] = {}
+    # RUF012 cannot see that CascadeModel is a pydantic BaseModel, which
+    # copies mutable defaults per instance; a real shared-dict hazard
+    # needs a plain class attribute, and this is a validated field.
+    overrides: dict[str, dict[str, str]] = {}  # noqa: RUF012
     about: str = ""
     """Why this profile exists, in the author's words. Carried onto no
     rendering and read by ``describe`` — a knob table says what a profile does

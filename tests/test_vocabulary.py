@@ -16,8 +16,8 @@ pins the shape-count floor.
 from __future__ import annotations
 
 from worldloom import MonthEndClose, RetailWorld
-from worldloom.compiler.compose import compose, plan_from_ir
 from worldloom.compiler.components import REGISTRY
+from worldloom.compiler.compose import compose, plan_from_ir
 from worldloom.compiler.diversity import fingerprint, report
 from worldloom.compiler.grammar import GRAMMARS
 from worldloom.render.docx import HANDLES as DOCX_ARTIFACT_TYPES

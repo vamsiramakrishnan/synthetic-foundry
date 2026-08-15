@@ -306,7 +306,8 @@ def load_seed(source: str | Path | dict[str, Any]) -> ProcessSeed:
 
 def lint_seed(seed: ProcessSeed | dict[str, Any]) -> list[str]:
     """Findings for a process seed before opening."""
-    from . import domains, lob as lob_module
+    from . import domains
+    from . import lob as lob_module
 
     if isinstance(seed, dict):
         try:

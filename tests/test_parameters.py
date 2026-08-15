@@ -20,7 +20,6 @@ from worldloom.retail import BASE_INCIDENT_LIKELIHOOD, RetailWorld
 from worldloom.rng import Rng
 from worldloom.scenarios import MonthEndClose
 
-
 # ---------------------------------------------------------------------------
 # The registry itself
 # ---------------------------------------------------------------------------
@@ -261,7 +260,7 @@ def test_an_integer_span_survives_the_round_trip_it_is_recorded_by() -> None:
 
 
 def test_a_malformed_override_names_the_parameter() -> None:
-    with pytest.raises(ValueError, match="retail.margin.erosion"):
+    with pytest.raises(ValueError, match=r"retail\.margin\.erosion"):
         overrides_from({"retail.margin.erosion": {"low": 0.1}})
 
 
@@ -281,7 +280,7 @@ def test_a_reserving_multiple_may_be_tuned_and_not_tuned_away(name: str) -> None
     from worldloom.generators import triangles
 
     periods = ("2025-03", "2025-06", "2025-09", "2025-12")
-    with pytest.raises(ValueError, match="strictly above 1.0"):
+    with pytest.raises(ValueError, match=r"strictly above 1\.0"):
         triangles.generate(
             Rng(8128), accident_periods=periods, risk_margin_policy_pct=6.0,
             physics=DEFAULT.with_overrides({name: Span(0.9, 1.4)}),

@@ -137,7 +137,7 @@ def test_determinism() -> None:
 def test_departure_rejects_a_successor_not_yet_employed(base: World) -> None:
     leaver_id = base._roles["controller"]
     leaver = base.people.by_id(leaver_id)
-    at = leaver.joined or list(base.events)[0].occurred_at
+    at = leaver.joined or next(iter(base.events)).occurred_at
 
     # A person who joins strictly after the departure moment cannot have
     # already been holding the fort — the exact bug `depart` exists to refuse

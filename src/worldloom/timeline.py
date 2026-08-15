@@ -1018,7 +1018,13 @@ def sample(
         changes.setdefault(index, []).append(step)
 
     from .roles import ROOT
-    from .scenarios import Departure, Hire, Reorganisation, StructuralChange, WorkforceChange
+    from .scenarios import (
+        Departure,
+        Hire,
+        Reorganisation,
+        StructuralChange,
+        WorkforceChange,
+    )
 
     # Aggregate workforce first within each period's boundary. The path's
     # second value becomes effective after the first close, so the second close

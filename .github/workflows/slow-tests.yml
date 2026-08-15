@@ -1,0 +1,47 @@
+name: slow tests
+
+# The deselected suite, actually run somewhere. `pyproject.toml` deselects
+# `-m slow` from the default `pytest -q` so the house gate stays fast — which
+# meant the slow tests ran *nowhere*, and a suite that never runs rots
+# unwitnessed. It had: the first real execution of these tests found
+# `test_density.py`'s low-density invariant had been broken for as long as
+# the approval-provenance evaluation family has existed, with no red anywhere
+# to say so. This job is the standing witness.
+#
+# Weekly rather than nightly: the suite is minutes of work guarding shapes
+# that change only when someone edits the generators, and every PR that does
+# can run `pytest -m slow` directly. Weekly is the cadence for catching the
+# PR that didn't.
+on:
+  schedule:
+    # Mondays 05:43 UTC — off the hour (and off the half-hour), because the
+    # shared runner pool is measurably slower at :00, the same reasoning as
+    # the determinism sweep's 04:17.
+    - cron: "43 5 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: slow-tests-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  slow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Same setup as ci.yml's test job, so a failure here is a failure of
+      # the tests and never of a thinner environment.
+      - name: Install
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]"
+
+      - name: The slow suite
+        run: pytest -m slow -q

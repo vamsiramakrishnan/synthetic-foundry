@@ -59,7 +59,8 @@ import tempfile
 import time
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field as _field
+from dataclasses import dataclass
+from dataclasses import field as _field
 from pathlib import Path
 from typing import Any
 
@@ -73,8 +74,8 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from worldloom.dispersion import farthest_first, halton, manhattan  # noqa: E402
-from worldloom.ids import content_key  # noqa: E402
+from worldloom.dispersion import farthest_first, halton, manhattan
+from worldloom.ids import content_key
 
 # ---------------------------------------------------------------------------
 # The space
@@ -1045,7 +1046,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.describe:
         for axis in axes():
             size = len(axis.values) or "per-engine"
-            print(f"{axis.name:12} {str(size):>6}  {axis.about}")
+            print(f"{axis.name:12} {size!s:>6}  {axis.about}")
         return 0
 
     formats = tuple(f for f in args.formats.split(",") if f.strip())

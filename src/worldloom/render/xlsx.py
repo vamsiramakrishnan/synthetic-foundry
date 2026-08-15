@@ -15,6 +15,7 @@ changes and a total does not, the sheet shows it.
 
 from __future__ import annotations
 
+import itertools
 from datetime import datetime
 from io import BytesIO
 from typing import TYPE_CHECKING
@@ -71,7 +72,7 @@ class _Layout:
     one-minute one.
     """
 
-    __slots__ = ("rows", "columns", "first_data_row", "sheet")
+    __slots__ = ("columns", "first_data_row", "rows", "sheet")
 
     def __init__(self, tables, sheet_of: dict[str, str], rows_of: dict[str, int]) -> None:
         self.rows = {
@@ -153,7 +154,7 @@ def _formula(
         contiguous = (
             len(resolved) > 1
             and len({(t, c) for t, c, _, _ in resolved}) == 1
-            and all(b[2] == a[2] + 1 for a, b in zip(resolved, resolved[1:]))
+            and all(b[2] == a[2] + 1 for a, b in itertools.pairwise(resolved))
         )
         if contiguous:
             target_table = resolved[0][0]
@@ -200,8 +201,8 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
     """
     openpyxl = _require_openpyxl()
     from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.workbook.defined_name import DefinedName
     from openpyxl.utils import quote_sheetname
+    from openpyxl.workbook.defined_name import DefinedName
 
     workbook = openpyxl.Workbook()
     workbook.remove(workbook.active)

@@ -16,14 +16,24 @@ The measured diff and its reasons live in docs/episode-grammar.md.
 
 from __future__ import annotations
 
+import itertools
 import json
 from pathlib import Path
 
 import pytest
 
-from worldloom import MonthEndClose, ProcureToPayWorld, RetailWorld, episodes, lob, process
+from worldloom import (
+    MonthEndClose,
+    ProcureToPayWorld,
+    RetailWorld,
+    episodes,
+    lob,
+    process,
+)
 from worldloom.procurement import _checks as procurement_checks
-from worldloom.procurement_scenarios import PurchaseToPayCycle  # noqa: F401 — registers the engine verb
+from worldloom.procurement_scenarios import (
+    PurchaseToPayCycle,  # noqa: F401 — registers the engine verb
+)
 
 SPEC_PATH = Path(__file__).parent.parent / "examples" / "episodes" / "procure-to-pay.json"
 LOB_PATH = Path(__file__).parent.parent / "examples" / "episodes" / "procure-to-pay-lob.json"
@@ -165,7 +175,7 @@ def test_the_exception_chain_hands_over_exactly(world) -> None:
         )
         assert len(chain) == 3
         assert [f.valid_to is None for f in chain] == [False, False, True]
-        for earlier, later in zip(chain, chain[1:]):
+        for earlier, later in itertools.pairwise(chain):
             assert earlier.valid_to == later.valid_from
             assert later.supersedes == earlier.id
 

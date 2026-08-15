@@ -14,11 +14,14 @@ import html
 import math
 from typing import TYPE_CHECKING
 
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import ArtifactIR, CanonicalFact, Chart, ChartKind, Table
 from ..narrative import references
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION
+from ..presentation import Presentation
+from ..presentation import of as presentation_of
 from . import Rendered, slug_for
-from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -143,7 +146,7 @@ def _chart_svg(chart: Chart, table: Table | None) -> str:
         ]
         return (
             f"<p><strong>Figure — {html.escape(chart.title)}</strong> "
-            f"<em>({chart.kind.value} chart of {', '.join(html.escape(l) for l in labels)})</em></p>"
+            f"<em>({chart.kind.value} chart of {', '.join(html.escape(label) for label in labels)})</em></p>"
         )
 
 
@@ -606,7 +609,7 @@ def _chart_pie(
 
     # Draw slices.
     current_angle = 0
-    for slice_idx, (value_idx, value) in enumerate(slices):
+    for slice_idx, (_value_idx, value) in enumerate(slices):
         slice_pct = value / total
         slice_angle = slice_pct * 360
 

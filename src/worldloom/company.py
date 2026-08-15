@@ -129,11 +129,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field as _field
+from dataclasses import dataclass
+from dataclasses import field as _field
 from pathlib import Path
 from typing import Any
 
-from . import archetypes, domains, facets as facets_module, locales, profiles, roles
+from . import archetypes, domains, locales, profiles, roles
+from . import facets as facets_module
 from .parameters import DEFAULTS, Span, overrides_from
 
 __all__ = [
@@ -750,7 +752,7 @@ def resolve(spec: CompanySpec) -> Resolution:
 
         try:
             pack = packs.load(spec.pack)
-        except Exception as exc:            # noqa: BLE001 - reported, not swallowed
+        except Exception as exc:
             found.append(Conflict("pack", "does_not_validate", str(exc)))
         else:
             restated = [
@@ -940,7 +942,7 @@ def resolve(spec: CompanySpec) -> Resolution:
                     # this description — the pool-sizing input; see `pack_of`.
                     people=_people_needed(role_table, domain, shape),
                 )
-            except Exception as exc:        # noqa: BLE001 - reported, not swallowed
+            except Exception as exc:
                 found.append(Conflict("identity", "does_not_compose", str(exc)))
     elif spec.identity is not None and not spec.identity.company_name and pack is None:
         found.append(Conflict(

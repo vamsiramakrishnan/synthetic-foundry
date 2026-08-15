@@ -14,6 +14,7 @@ that it compiles.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import replace
 from datetime import timedelta
 
@@ -294,7 +295,7 @@ def test_an_equal_authority_contest_is_a_defect(world: World) -> None:
 def test_the_daily_cadence_is_gapless(world: World) -> None:
     lcr = sorted(world.facts.where(kind="liquidity.lcr"), key=lambda f: f.valid_from)
     assert len(lcr) == 6
-    for earlier, later in zip(lcr, lcr[1:]):
+    for earlier, later in itertools.pairwise(lcr):
         assert earlier.valid_to == later.valid_from
         assert later.supersedes == earlier.id
     assert lcr[-1].valid_to is None

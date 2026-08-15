@@ -295,7 +295,7 @@ def apply(world: World, profile: str | Mapping[str, Any] | Messiness = "lived_in
 # never has to be taught to core twice. `Imperfections(profile=...)` is exactly
 # the call `with_step`'s stored arguments reconstruct, so the class is its own
 # builder.
-from . import recipe as _recipe  # noqa: E402
+from . import recipe as _recipe
 
 _recipe.register_step("Imperfections", ("profile",), Imperfections)
 

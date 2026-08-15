@@ -37,7 +37,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..rng import Rng
 
 COMPANY_FIRST = (

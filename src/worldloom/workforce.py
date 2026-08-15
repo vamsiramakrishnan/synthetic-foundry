@@ -473,8 +473,17 @@ class HiringRound:
                 # start date alone, which is honest.
                 required_fact_ids=[offer_facts[1].id] + [
                     fact.id for fact in world.facts
-                    if fact.kind in ("policy.technology.mfa",
-                                     "policy.technology.access_review_months")
+                    # Four-part kinds since `policies.kind_of` put the policy's
+                    # own name in the prefix (leave and remote work were one
+                    # role without it). An exact-match list is the one consumer
+                    # a prefix change breaks *silently* — the checklist would
+                    # have shipped citing the start date alone, exactly the
+                    # policies-off shape, with nothing failing — so these two
+                    # literals moved with the taxonomy.
+                    if fact.kind in (
+                        "policy.technology.information_security.mfa",
+                        "policy.technology.information_security.access_review_months",
+                    )
                     and fact.valid_to is None
                 ],
                 size_profile="small",
@@ -817,7 +826,8 @@ def _register() -> None:
         },
     )
 
-    from .factkinds import FactKind, register as register_kinds
+    from .factkinds import FactKind
+    from .factkinds import register as register_kinds
 
     register_kinds([
         FactKind(kind="people.requisition.grade", domain="core",

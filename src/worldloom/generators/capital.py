@@ -94,7 +94,7 @@ def generate(
     # the floor would make the restatement's materiality question trivial in
     # the other direction.
     target = physics.number("capital.ratio.target_pct", rng.derive("ratio"))
-    cet1_capital = int(round(rwa_filed * target / 100))
+    cet1_capital = round(rwa_filed * target / 100)
 
     # Understatement sized so the corrected ratio stays above the minimum:
     # 3–5% of filed RWA moves the ratio ~40–65bps, and the floor sits at least

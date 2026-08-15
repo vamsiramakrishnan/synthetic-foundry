@@ -13,7 +13,7 @@ The centrepiece is ``test_a_world_replays_with_the_provider_unreachable``.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 

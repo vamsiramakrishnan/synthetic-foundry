@@ -24,7 +24,8 @@ from pathlib import Path
 
 import pytest
 
-from worldloom import locales, recipe as recipe_module
+from worldloom import locales
+from worldloom import recipe as recipe_module
 from worldloom.generators import masterdata, names
 from worldloom.retail import RetailWorld
 from worldloom.rng import Rng

@@ -63,6 +63,7 @@ the amounts, in the sheet, where a subtotal cannot add them up.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -230,11 +231,11 @@ def generate(
     facts: list[CanonicalFact] = []
     keys: dict[str, str] = {}
 
-    def event(kind: str, at: datetime, summary: str, *, actors: list[str] = [],
-              systems_: list[str] = [], because: list[str] = []) -> EnterpriseEvent:
+    def event(kind: str, at: datetime, summary: str, *, actors: Sequence[str] = (),
+              systems_: Sequence[str] = (), because: Sequence[str] = ()) -> EnterpriseEvent:
         made = EnterpriseEvent(id=minter.next("EV"), kind=kind, occurred_at=at,
-                               summary=summary, actors=actors, systems=systems_,
-                               caused_by=because)
+                               summary=summary, actors=list(actors), systems=list(systems_),
+                               caused_by=list(because))
         events.append(made)
         keys[f"event_{kind}"] = made.id
         return made
@@ -295,10 +296,10 @@ def generate(
     actual: dict[str, int] = {}
     for key in unit_ids:
         unit_rng = rng.derive(f"premium/{key}")
-        unit_budget = int(round(quarterly_revenue * unit_shares[key]))
+        unit_budget = round(quarterly_revenue * unit_shares[key])
         miss = physics.number("book.premium.miss_pct", unit_rng)
         budget[key] = unit_budget
-        actual[key] = int(round(unit_budget * (1 + miss)))
+        actual[key] = round(unit_budget * (1 + miss))
 
     # The group is the sum, never a draw. `quarterly_revenue` is what the units
     # were *sized from*; stating it as the group figure would leave the group
@@ -360,7 +361,7 @@ def generate(
 
     # -- policies in force, drawn per office and summed upward --------------
     policies_of_unit: dict[str, int] = {}
-    for key, unit_id in unit_ids.items():
+    for _key, unit_id in unit_ids.items():
         estate = offices_of[unit_id]
         if not estate:
             continue
@@ -393,8 +394,8 @@ def generate(
         if not book:
             continue
         claims_rng = rng.derive(f"claims/{key}")
-        notified = int(round(book * physics.number("book.claims.notification_rate", claims_rng)))
-        settled = int(round(notified * physics.number("book.claims.settlement_rate", claims_rng)))
+        notified = round(book * physics.number("book.claims.notification_rate", claims_rng))
+        settled = round(notified * physics.number("book.claims.settlement_rate", claims_rng))
         notified_of_unit[unit_id] = notified
         settled_of_unit[unit_id] = settled
 
@@ -426,8 +427,8 @@ def generate(
     # service centre's cost is a share of what the group spends to run itself,
     # not a figure the centre sets on its own.
     if cost_centres:
-        total = int(round(group_actual * physics.number(
-            "book.expense.operating_ratio", rng.derive("expense"))))
+        total = round(group_actual * physics.number(
+            "book.expense.operating_ratio", rng.derive("expense")))
         weights = [
             physics.number("book.expense.cost_centre_weight", rng.derive(f"expense/{cc.id}"))
             for cc in cost_centres

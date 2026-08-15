@@ -11,7 +11,7 @@ exact figures that would make this file as fragile as the thing it is testing.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -20,10 +20,10 @@ from typer.testing import CliRunner
 from worldloom import World
 from worldloom.cli import app
 from worldloom.models import (
-    Authority,
     ArtifactIR,
     ArtifactManifestEntry,
     ArtifactSection,
+    Authority,
     CanonicalFact,
     Company,
     EvaluationCase,
@@ -34,7 +34,7 @@ from worldloom.stats import Distribution, compute, diff
 
 runner = CliRunner()
 
-WHEN = datetime(2026, 4, 1, tzinfo=timezone.utc)
+WHEN = datetime(2026, 4, 1, tzinfo=UTC)
 
 
 def _company() -> Company:

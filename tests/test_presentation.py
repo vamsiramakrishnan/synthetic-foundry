@@ -23,7 +23,12 @@ import io
 import pytest
 
 from worldloom import presentation, recipe
-from worldloom.presentation import Presentation, PresentationSeed, scale_money, suffix_for
+from worldloom.presentation import (
+    Presentation,
+    PresentationSeed,
+    scale_money,
+    suffix_for,
+)
 
 # ---------------------------------------------------------------------------
 # 1. The control: presentation may not move a number

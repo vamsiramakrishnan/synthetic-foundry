@@ -443,8 +443,6 @@ class RetailWorld:
 # single_episode: the close loop's flags (periods, incident, comparatives,
 # actors) are retail's own, and the CLI drives them directly rather than
 # flattening them into the shared interface.
-from .domains import Domain, register_domain
-
 # This vertical's other physics, declared beside the generator that draws them
 # and registered here — `parameters.register`'s seam, used exactly as
 # `banking.py` uses it for `banking_network.SPANS`. Registered at import so the
@@ -452,7 +450,7 @@ from .domains import Domain, register_domain
 # module happened to have been imported would make a corpus's figures depend on
 # import order, which is a determinism bug wearing a plugin's clothes.
 from . import parameters as _parameters_module
-
+from .domains import Domain, register_domain
 from .generators.retail_estate import SPANS as _RETAIL_ESTATE_SPANS
 
 _parameters_module.register(_RETAIL_ESTATE_SPANS)
@@ -488,7 +486,8 @@ register_domain(Domain(
 # ("reuses retail's close.* kinds verbatim" — `generators/regulatory.py`), and
 # a kind has *one* declaration whoever's episode mints it — the other verticals
 # register only what is theirs alone.
-from .factkinds import FactKind, register as _register_kinds  # noqa: E402
+from .factkinds import FactKind
+from .factkinds import register as _register_kinds
 
 _register_kinds([
     FactKind(kind="close.due_date", domain="retail", generated_by="generators/operations.py",
@@ -678,7 +677,7 @@ def _checks(world: World) -> tuple[list[Any], int]:
     # two independently drawn ones would be two contradictions — the argument
     # `finance.generate` makes for allocating a store estate rather than
     # drawing it.
-    for (kind, period), subjects in sorted(
+    for (_kind, period), subjects in sorted(
         ((key, value) for key, value in stated.items()
          if key[0] == _estate.SHARED_COST),
         key=lambda item: item[0][1] or "",
@@ -785,7 +784,7 @@ def _checks(world: World) -> tuple[list[Any], int]:
     return violations, checks
 
 
-from . import validate as _validate_module  # noqa: E402
+from . import validate as _validate_module
 
 _validate_module.register_domain_checks("retail", _checks)
 

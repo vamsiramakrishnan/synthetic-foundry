@@ -25,7 +25,8 @@ from collections.abc import Mapping
 from ..ids import Minter
 from ..models import ArtifactIntent, EvaluationCase, EvaluationType
 from . import episode_text
-from .cases import CaseBuilder, answerable, fmt as _fmt, reachable_fact_ids
+from .cases import CaseBuilder, answerable, reachable_fact_ids
+from .cases import fmt as _fmt
 from .reserving import ReservingEpisode
 
 #: This taxonomy's surface text, keyed exactly as `evaluation.EVAL_TEXT` and

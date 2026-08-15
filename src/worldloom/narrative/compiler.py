@@ -38,15 +38,16 @@ pass decides that, once, in order.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from ..ids import content_key, format_id, highest_numeric_suffix
 from ..models import ArtifactIR, ArtifactSection, GenerationLedgerEntry
 from . import claims as claim_checks
 from . import prompts, providers
-from .requests import GeneratedClaim, GeneratedNarrative, NarrativeRequest
+from .requests import GeneratedNarrative, NarrativeRequest
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact
@@ -320,7 +321,7 @@ def _plan(
 
 def _ledger_entry(
     *,
-    id: str,  # noqa: A002 - matches the field name it fills
+    id: str,
     slot: _Slot,
     world_seed: int,
     provider_id: str,

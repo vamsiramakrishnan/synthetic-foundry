@@ -33,11 +33,11 @@ treat the draw order as API.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from ..ids import Minter
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import (
     Authority,
     BusinessUnit,
@@ -108,7 +108,7 @@ _MILESTONE_KIND: dict[LoreKind, str] = {
 #: earliest (the CLI's own default period is "2026-03"), so this sits most of a
 #: year ahead of that — comfortable margin without inspecting any actual period,
 #: which the builders here have no reason to know about.
-_LATEST_JOIN = datetime(2025, 6, 1, tzinfo=timezone.utc)
+_LATEST_JOIN = datetime(2025, 6, 1, tzinfo=UTC)
 
 
 def _month_start(effective_from: str) -> datetime:
@@ -120,7 +120,7 @@ def _month_start(effective_from: str) -> datetime:
     simple.
     """
     year, month = effective_from.split("-")
-    return datetime(int(year), int(month), 1, tzinfo=timezone.utc)
+    return datetime(int(year), int(month), 1, tzinfo=UTC)
 
 
 def _earliest_effective(lore: tuple[LoreCommitment, ...]) -> datetime:
@@ -274,7 +274,7 @@ def wire_managers(
 
 
 def form_units(
-    units,  # type: ignore[no-untyped-def]  — a sequence of UnitSpec
+    units,  # type: ignore[no-untyped-def]  # a sequence of UnitSpec
     unit_ids: dict[str, str],
     role_ids: dict[str, str],
     people: list[Employee],
