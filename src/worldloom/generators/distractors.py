@@ -53,6 +53,7 @@ corpus's promise was never that a synthetic enterprise is tidier than a real one
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -1004,7 +1005,7 @@ def _mechanical_defects(
     # (i) the paste-over: a unit's variance cell carrying the row above's number.
     variance_kind = kinds["revenue_variance"]
     rows = [(unit, current.get((variance_kind, unit.id, period))) for unit in units]
-    for (donor_unit, donor), (target_unit, target) in zip(rows, rows[1:]):
+    for (_donor_unit, donor), (target_unit, target) in itertools.pairwise(rows):
         if donor is None or target is None or donor.value is None or target.value is None:
             continue
         if abs(donor.value.amount - target.value.amount) <= 0.01:

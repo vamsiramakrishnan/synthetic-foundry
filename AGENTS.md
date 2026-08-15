@@ -200,6 +200,31 @@ is a finding, not a failure: a widened integer range can be absorbed by
 rejection sampling and the twin honestly reports that the parameter reached
 nothing. `worldloom.twins` in Python returns both worlds and the manifest.
 
+### Many mutations, no build
+
+A twin buys its causal claim with two builds. A fan-out harness planning dozens
+of structural candidates cannot afford that per candidate, so `mutate` is the
+build-free half of the same machinery: N interventions in, a mutated *recipe*
+out, and no world on either side — mutate, measure cheaply, build only winners.
+
+```bash
+worldloom mutate ./corpus --set steps/0/trend_pct=0.008 --out mutant.json
+worldloom mutate mutant.json --set steps/0/period=2026-04 --out mutant-2.json
+```
+
+Same path grammar as `twin`, same refusals, same exit taxonomy — with the
+build-time measurement traded for a static classification where the missing
+build forces the trade. An unrecorded path is an error (exit 2). A path that
+decides what *exists* rather than what is true about it — a policy level, an
+incident flag, a headcount — is refused (exit 3), because rebuilding it would
+reshuffle sequentially-minted ids and break the alignment every delta depends
+on; route that candidate through `twin`, which can afford to measure. And two
+`--set` values for one path are refused naming it: a fan-out harness that
+sends two values for one gene has a bug, and last write winning would hide it
+until a build exposed it. The output is an ordinary recipe — rebuildable,
+twin-able, and accepted back as input for a further round. In Python the same
+surface is `worldloom.twins.mutated`.
+
 ---
 
 ## The refine loop that is deliberately not here
@@ -276,9 +301,10 @@ worldloom spaces --cover -t 2 > plan.jsonl        # the planned fleet, building 
 worldloom spaces --holes plan.jsonl               # what a fleet you already built missed
 ```
 
-Twelve axes, **3,732,480 configurations exhaustive, 39 rows to cover every
+Thirteen axes, **11,197,440 configurations exhaustive, 39 rows to cover every
 pair** — because a covering array grows with the two widest axes rather than
-with the space. That is a different guarantee from `mosaic`'s: dispersion
+with the space (adding the three-level `access` axis tripled the space and
+changed the row count not at all). That is a different guarantee from `mosaic`'s: dispersion
 spreads points evenly through a cube and can still never once pair a bank with
 three periods, which is exactly what it had never done.
 
@@ -303,7 +329,7 @@ answer. What makes it a loop rather than a pipeline is that both readings report
 a **denominator**: `--effective` prices a shape used ten times differently from
 one used once, and `--holes` divides by the combinations that exist rather than
 the ones you happened to try. "We built two hundred corpora" becomes "we covered
-41% of the pairs and never varied five of the twelve axes at all", which is a
+41% of the pairs and never varied six of the thirteen axes at all", which is a
 sentence you can act on.
 
 Both readings are *readings* and neither may be fed back into a build. A
@@ -343,6 +369,24 @@ There is no `naturalistic` purpose. Qualifying a fleet as resembling real
 enterprise populations needs reference data this repository does not have, so
 that purpose is refused naming the data it would take — offering it would
 convert "we don't claim realism" into a fake claim.
+
+### Evolving a fleet, generation by generation
+
+`evolve` closes the loop `spaces`, `mosaic` and `fleet` leave open — it runs
+propose → build → measure → select → vary as one command:
+
+```bash
+worldloom evolve --generations 3 --population 6 --seed 8128 --purpose challenge --out ./evolved
+```
+
+Generation zero is a dispersed sample of the axes above; each generation's
+champions come from `fleet curate`, and each child differs from its parent
+champion in exactly one axis, chosen by a seeded ordering with every
+stepped-over candidate recorded beside its refusal. Same seed, same run,
+byte-for-byte, manifests included — and a rerun resumes rather than rebuilds.
+Axes the loop cannot drive are excluded with the reason printed, not skipped
+silently, and `naturalistic` is refused here for exactly the reason it is
+refused above. Not a token is spent until you choose a champion to narrate.
 
 Each world lands in `./mosaic/world-NN/` with its own recipe, so any one of them
 rebuilds alone. `mosaic.json` records the plan. Measured on five worlds: five

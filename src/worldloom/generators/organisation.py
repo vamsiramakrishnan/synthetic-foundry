@@ -54,7 +54,6 @@ from .org_builder import (
     wire_managers,
 )
 
-
 #: Which artifact classes ``--access strict`` moves under this engine's
 #: function-restricted policies, and to which audience. Deterministic by
 #: artifact type — never by draw — so two same-seed strict builds gate the same
