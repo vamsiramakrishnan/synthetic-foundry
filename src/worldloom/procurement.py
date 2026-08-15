@@ -93,11 +93,13 @@ from .world import World, extend_lore
 # always does — is sufficient for a corpus loaded in a fresh process to compile,
 # validate, and access procurement's parameters identically everywhere.
 from . import procurement_documents  # noqa: F401  (registration)
+from .generators import stockflow as _stockflow
 from .generators.procurement_estate import (
     COMMITMENT as _COMMITMENT,
     COMMITMENT_ROLES as _COMMITMENT_ROLES,
     MATERIALS as _MATERIALS,
     MATERIALS_ROLES as _MATERIALS_ROLES,
+    MOVEMENT as _MOVEMENT,
     SPEND as _SPEND,
     SPEND_ROLES as _SPEND_ROLES,
     role_of as _role_of,
@@ -965,6 +967,40 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                          f"a site that {role} carries {kind}, which only a site that"
                          f" {' or '.join(owning_roles)} can")
 
+    # -- (p) the commitment movement closes, and the book carries -------------
+    # Verified through `generators/stockflow.py` against the same spec the
+    # estate generator derives with, so the validator and the generator cannot
+    # hold two versions of one identity — and verified *exactly* inside, never
+    # to `RECONCILIATION_TOLERANCE`: every leg is integer arithmetic over
+    # figures already rounded to hundreds, and a tolerance here is the door a
+    # generator slides back to round-and-hope through. Outside the period loop
+    # and off the `current` index built once above, so this stays linear in the
+    # history like everything else in this group. The subject is pinned to the
+    # company because the movement is a claim about the group's book: unpinned,
+    # a corpus that quietly dropped every opening fact would verify vacuously
+    # clean, which is the decoration failure a check may not have.
+    movement_kinds = frozenset({
+        _MOVEMENT.opening, _MOVEMENT.closing,
+        *_MOVEMENT.inflows, *_MOVEMENT.outflows, *_MOVEMENT.adjustments,
+    })
+    movement_facts = [
+        fact
+        for (kind, _period), subjects in current.items()
+        if kind in movement_kinds
+        for fact in subjects.values()
+    ]
+    # Gated on a balance existing at all rather than run unconditionally: a
+    # world holding only the cycle's facts (an order, a receipt, an invoice —
+    # no estate) has no book to move, and "this world states no movement" is
+    # not a defect of it.
+    if any(fact.kind in (_MOVEMENT.opening, _MOVEMENT.closing) for fact in movement_facts):
+        tears, performed = _stockflow.verify(
+            _MOVEMENT, movement_facts, subjects=(company_id,))
+        checks += performed
+        for tear in tears:
+            fail(tear.code, tear.subject,
+                 f"{tear.period}: {tear.detail}" if tear.period else tear.detail)
+
     return violations, checks
 
 
@@ -1153,11 +1189,32 @@ _register_kinds([
              about="Third-party spend receipted in the period, at contracted rates —"
                    " by division, by spend category, and by the depots that took delivery."),
     FactKind(kind="p2p.open_commitment", domain="procurement",
+             invariants=("holds-at", "sums-to(p2p.open_commitment)",
+                         "carries-forward-as(derive)"),
              generated_by="generators/procurement_estate.py",
-             invariants=("holds-at", "sums-to(p2p.open_commitment)"),
              about="Purchase-order commitment placed and not yet received at close — by"
                    " division, by depot and project office, and by the cost centre it is"
-                   " coded to."),
+                   " coded to. Doubles as the commitment movement's closing balance:"
+                   " next period's p2p.commitment.opening is resolved from it."),
+    # The movement's two other legs. Two kinds, not four: the closing balance
+    # is `p2p.open_commitment` above and the received leg is
+    # `p2p.third_party_spend` below — each already registered to mean exactly
+    # that — and a `p2p.commitment.closing` or `p2p.commitment.received`
+    # stating the same figures under new names would be the copy-that-can-drift
+    # this corpus refuses at every level.
+    FactKind(kind="p2p.commitment.opening", domain="procurement",
+             generated_by="generators/procurement_estate.py",
+             invariants=("holds-at", "carries-forward-as(derive)"),
+             about="The order book brought forward at the period's open — the previous"
+                   " close's p2p.open_commitment, restated so one period's record"
+                   " carries its whole movement. The first period on record draws it."),
+    FactKind(kind="p2p.commitment.placed", domain="procurement",
+             generated_by="generators/procurement_estate.py",
+             invariants=("holds-at",
+                         "reconciles-against(p2p.commitment.opening, p2p.open_commitment)"),
+             about="Purchase-order value placed in the period — the movement's inflow."
+                   " Closing less opening plus receipts, exactly; `stockflow.verify`"
+                   " recomputes it."),
     FactKind(kind="p2p.materials_on_hand", domain="procurement",
              generated_by="generators/procurement_estate.py",
              invariants=("holds-at", "sums-to(p2p.materials_on_hand)"),
