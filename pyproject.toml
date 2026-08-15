@@ -211,8 +211,11 @@ pretty = false
 # clash is structural, not a version pin away. The cost is numpy names typing
 # as Any at the boundary, and pyproject's own dependency comment prices that:
 # worldloom uses numpy for elementwise and integer arithmetic only.
+# Both spellings, because they are different modules to mypy's matcher: the
+# stub that failed to parse is `numpy/__init__.pyi` — the module named
+# `numpy`, which `numpy.*` does not reliably cover.
 [[tool.mypy.overrides]]
-module = ["numpy.*"]
+module = ["numpy", "numpy.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

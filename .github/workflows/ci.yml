@@ -30,9 +30,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 3.11 — the package's declared floor, and deliberately so. The gate's
+      # own config types at `python_version = "3.11"`, and running it on a
+      # newer interpreter resolves a newer dependency set: 3.12 pulled numpy
+      # 2.5, whose stubs use PEP 695 `type` statements a 3.11-targeted check
+      # cannot parse, and numpy 2.5 ships no 3.11 wheels — so the failure was
+      # unreproducible from any 3.11 dev environment and burned two CI rounds
+      # before this line. Gating at the floor makes interpreter, typing target
+      # and resolved dependencies one consistent story, and every failure
+      # reproducible locally.
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
 
       # The project itself is installed because mypy follows imports into the
