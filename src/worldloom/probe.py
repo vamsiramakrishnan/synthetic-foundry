@@ -328,8 +328,15 @@ KINDS = ("free", "scales", "complements", "at_most")
 # Accountabilities — the other thing a leaf may bind to
 # ---------------------------------------------------------------------------
 
-#: Every measure a person may be held to: the fact kinds the three shipped
-#: engines mint *with a number attached*, in their default episodes.
+#: Every measure a person may be held to: the fact kinds **every** shipped
+#: engine mints *with a number attached*, in its default episode.
+#:
+#: "Every" is load-bearing and was not always true. This read "the three shipped
+#: engines" while the repository shipped four, so all 23 of procurement's
+#: numeric kinds were absent and a category manager could not be held to the
+#: spend they run. A vocabulary that is computed over a subset is a hand-kept
+#: list wearing a derivation, and it fails in exactly the direction the comment
+#: below warns about.
 #:
 #: The membership rule is not a matter of taste. An accountability says a
 #: person answers for a figure within a band, so it is only checkable if the
@@ -375,6 +382,7 @@ MEASURES: tuple[str, ...] = (
     "close.delay",
     "data.records_of_record",
     "expense.operating",
+    "financial.accrual.grni",
     "financial.gross_margin_pct.actual",
     "financial.gross_margin_pct.budget",
     "financial.gross_profit.actual",
@@ -390,6 +398,34 @@ MEASURES: tuple[str, ...] = (
     "metric.online_conversion_rate.forecast",
     "metric.promotional_depth_margin_impact",
     "ops.affected_records",
+    # Procurement, and the whole vertical was missing until this line. The
+    # tuple's rule is mechanical — every numeric fact kind a shipped engine's
+    # default episode mints — and it was computed over three engines while the
+    # repository shipped four, so a category manager could not be held to the
+    # spend they actually run. That is the tuple's own stated failure, verbatim:
+    # a model told a perfectly good measure does not exist cannot argue back.
+    "p2p.approval_tolerance",
+    "p2p.approval_tolerance_pct",
+    "p2p.approved_payment_value",
+    "p2p.contract_rate",
+    "p2p.credit_note_value",
+    "p2p.invoiced_quantity",
+    "p2p.invoiced_unit_price",
+    "p2p.invoiced_value",
+    "p2p.match_price_variance",
+    "p2p.match_quantity_variance",
+    "p2p.match_total_variance",
+    "p2p.materials_on_hand",
+    "p2p.open_commitment",
+    "p2p.open_shortfall_quantity",
+    "p2p.open_shortfall_value",
+    "p2p.ordered_quantity",
+    "p2p.ordered_value",
+    "p2p.received_quantity",
+    "p2p.received_value",
+    "p2p.shortfall_released_quantity",
+    "p2p.shortfall_released_value",
+    "p2p.third_party_spend",
     "portfolio.policies_in_force",
     "reserves.attribution_deterioration",
     "reserves.attribution_pattern_change",
