@@ -103,6 +103,40 @@ The vertical owns the causal episode, its fact kinds, documents, invariants, and
 benchmark. A pack changes the company using an existing episode. A new vertical
 changes what happens.
 
+#### The organisation is load-bearing, and that is where volume comes from
+
+A company declares business units, sites, cost centres and categories. Whether
+anything *reports* on them is a separate question, and for three of the four
+verticals the answer used to be no: a bank with three divisions and 133 branches
+mentioned none of them in any fact or any document, and its corpus was 58 facts
+about capital ratios. Every one of those corpora passed `worldloom validate`,
+because coherence and thinness are different properties.
+
+`validate.reachability` asks the question directly — an entity is *reached* when
+a fact names it and a compiled document carries that fact on its readable
+surface, appendices excluded. Closing it is what produced the volume:
+
+| Vertical | Facts, one period | Documents | `validate` checks |
+| --- | --- | --- | --- |
+| Retail | 588 | 7 | 7,787 |
+| Banking | 58 → **744** | 11 → **12** | 1,661 → **9,249** |
+| Insurance | 62 → **219** | 4 → **8** | 1,155 → **3,088** |
+| Procurement | 52 → **217** | 6 → **7** | 1,090 → **3,332** |
+
+Each vertical measures what its own vocabulary owns: deposits, lending and
+front-line FTE by branch; written premium by underwriting office and claims by
+claims centre; spend, commitment and materials by depot, project office and
+yard. Every split goes through a largest-remainder allocator, so roll-ups
+reconcile exactly rather than nearly, and a rate is never summed. Volume scales
+with the estate rather than with a multiplier — banking at `--periods 3` mints
+2,220 facts.
+
+The check ships as a ratchet rather than as part of `worldloom validate`: what
+it reports is true and is not a statement about coherence, which is the question
+`validate` answers. What it still refuses is a different class and is named as
+such — a system of record is the *provenance* of every figure in these corpora,
+not the subject of one.
+
 ### Structured and unstructured outputs
 
 | Layer | Outputs |
@@ -299,9 +333,14 @@ lifecycle window instead of deleting the entity. Targets below dependency-safe,
 role-safe, or category-safe floors are refused.
 
 Current CLI scope is explicit: time-varying workforce and structural trajectories
-are multi-period retail capabilities. Banking, insurance, and procurement are
-single-episode CLI verticals today; no flag is silently ignored to simulate a
-history they do not implement.
+are multi-period retail capabilities. Banking and procurement run consecutive
+periods — `--periods 3` validates at 27,001 and 9,398 checks respectively —
+without the workforce and estate trajectories retail carries. Insurance declares
+`max_periods=1`, because a second consecutive valuation quarter is phase 2 of
+that engine and phase 1 is what ships; `--periods 2` is refused at plan time
+naming the cap, rather than building a world and then failing inside the
+episode. No flag is silently ignored to simulate a history a vertical does not
+implement.
 
 For the operational runbook, see [Generating an enterprise corpus](docs/enterprise-corpus.md).
 

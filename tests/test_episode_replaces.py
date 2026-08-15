@@ -142,6 +142,14 @@ def test_four_authored_quarters_build_and_validate(tmp_path) -> None:
 
     Four quarters is the point: the built-in refuses its own second run, so
     every count above one is a corpus the command line could not reach.
+
+    It is also the test that says what `domains.Domain.max_periods` means, and
+    it caught the first version of that guard getting it wrong. `build` refuses
+    `--periods 2` against the insurer because `QuarterlyReserving` implements
+    phase 1 only — but the cap belongs to *that episode*, not to the vertical,
+    and a cap applied by vertical refused this build too. An authored grammar
+    standing in for a built-in is not bound by the built-in's limits; if this
+    goes red with "builds at most 1 period(s)", that distinction is what broke.
     """
     out = tmp_path / "corpus"
     result = runner.invoke(app, [

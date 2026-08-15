@@ -1203,6 +1203,36 @@ def build(
                 f"[dim]episode:[/dim] {', '.join(standing_in)} stands in for"
                 f" {built_in_name}, which is not run\n"
             )
+        # Refused here, before a single episode runs, because the engine's own
+        # refusal arrives too late to be one. `QuarterlyReserving` raises on its
+        # second consecutive run — correctly, phase 2 is not implemented — but
+        # by then the world is built and the traceback reaches the terminal raw,
+        # so `--periods 3` against the insurer printed a `ValueError` and no
+        # corpus. The cap is already declared on the domain for the sweep's
+        # benefit (`tools/sweep.py` clamps its periods axis by it), and reading
+        # the same declaration here is what makes it a stated limit rather than
+        # two places that happen to agree.
+        #
+        # `max_periods=None` means uncapped, which is the honest default: a
+        # domain that has not measured its own limit should not assert one, and
+        # banking and procurement both run at 3 and 12.
+        #
+        # Skipped when something stands in for the built-in, and that is not a
+        # loophole — it is what the cap actually means. `max_periods` is a
+        # statement about *this engine's own episode*: `QuarterlyReserving`
+        # implements phase 1 and cannot run twice. An authored `--episode` that
+        # replaces it is a different grammar with its own limits, and the
+        # shipped one runs four consecutive valuation quarters. Capping by
+        # vertical rather than by the episode being run refused that build,
+        # which is how this was found.
+        cap = domain.max_periods
+        if cap is not None and periods > cap and not standing_in:
+            err.print(
+                f"[red]error:[/red] {domain.name} builds at most {cap} period(s)"
+                f" per corpus, and --periods {periods} was asked for. Build one"
+                " at a time, or use a vertical whose episode carries a history."
+            )
+            raise typer.Exit(code=2)
         for index in range(max(1, periods)):
             stamp = _step_period(period, index, domain.period_step_months)
             if not standing_in:

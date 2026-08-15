@@ -453,6 +453,21 @@ thing a recipe records about the shape, so a width carried anywhere else would
 rebuild a three-division company from an eight-division corpus and report
 success.
 
+The same principle decides the other three verticals, and it is worth knowing
+which way round it works before reaching for a flag. Structure only makes a
+corpus bigger where something *reports* on the structure. Banking, insurance and
+procurement each declared a full organisation that no fact named and no document
+carried — 243 sites, 9 business units and 6 cost centres between them — so
+widening any of them changed nothing, and their corpora were 52 to 62 facts
+against retail's 588. Now that their estates carry facts, one period of banking
+is 744 and three is 2,220.
+
+`validate.reachability` is the reading that answers this for a corpus you have:
+it reports declared entities that no compiled document says anything about, per
+kind, and an entity kind it names is a knob that will not turn. It is not part
+of `worldloom validate`, because what it reports is true and is not a statement
+about coherence.
+
 ## Saying what kind of company it is, one attribute at a time
 
 The four flags below are the difference between "a corpus" and "the corpus you
