@@ -464,8 +464,25 @@ def from_document(payload: Mapping[str, Any] | str | Path) -> CompanySpec:
         identity=identity,
         pack=str(payload.get("pack", "")),
         about=str(payload.get("about", "")),
-        rivals=tuple(str(rival) for rival in payload.get("rivals", ())),
+        rivals=_rivals(payload.get("rivals", ())),
     )
+
+
+def _rivals(payload: Any) -> tuple[str, ...]:
+    """The rivals list, refusing the one wrong shape Python would accept.
+
+    A bare string is iterable, so ``"Coles"`` used to sail through the tuple
+    comprehension as five one-character rivals — each then reported ``unmet``
+    against the landscape, which reads as five separate mysteries instead of
+    one wrong shape. Found by a skill-doc smoke run, not by a user, which is
+    the lucky order.
+    """
+    if isinstance(payload, str):
+        raise ValueError(
+            f"rivals is a list of names, not a single string; write"
+            f' ["{payload}"] rather than "{payload}"'
+        )
+    return tuple(str(rival) for rival in payload)
 
 
 def _spans(payload: Mapping[str, Any]) -> dict[str, Span]:
