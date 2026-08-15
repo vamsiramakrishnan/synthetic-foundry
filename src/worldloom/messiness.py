@@ -17,7 +17,7 @@ the volume half of that (drafts, personal copies, routine notices); this adds th
 imperfection here is *recorded*: a reader holding only the corpus can establish,
 mechanically, that the stale page is stale and what the current position is. An
 imperfection the corpus cannot itself explain would be a defect wearing realism's
-clothes, and it would break the one property the project rests on. Three kinds
+clothes, and it would break the one property the project rests on. Four kinds
 ship, and each states its own audit trail:
 
 staleness
@@ -43,7 +43,20 @@ orphaning
     anyone leaves, and until now *nothing recorded that it had*. Making a latent
     imperfection legible is the whole contribution.
 
-All three are additionally labelled as ``IntentionalError`` rows in
+mechanical
+    A spreadsheet error, on a working copy of the month-end model: a cell that
+    carries a typed-in number where its formula belongs, or a SUM range that
+    stops one row early. Established by: the labelled cell cites the canonical
+    fact, states exactly the recorded wrong reading, and states it in the
+    recorded way — no formula behind a paste-over, a truncated range behind a
+    short total — while the real workbook, the narration and the appendix all
+    still quote the ledger. The discoverable disagreement between the sheet and
+    the record is the product. Unlike the three editorial kinds this one mints
+    a document (the copy), so it is zero in every named profile and reached
+    only by an explicit budget, e.g. ``worldloom.messiness.apply(world,
+    {"mechanical": 2})``.
+
+All four are additionally labelled as ``IntentionalError`` rows in
 ``intentional-errors.jsonl``, which is the corpus's existing "this is deliberate,
 here is the canonical value" channel, and ``validate.intentional`` now enforces
 that the label is *earned* rather than asserted.
@@ -75,9 +88,22 @@ if TYPE_CHECKING:  # pragma: no cover
 #: The kinds of imperfection this dimension grades, in the order they are
 #: applied. Order is part of the contract, not presentation: the pass draws from
 #: one seeded stream and a reordering would change every corpus that asks for
-#: more than one kind.
+#: more than one kind. ``mechanical`` is therefore *appended*, never inserted:
+#: it spends after the three editorial kinds have drawn, so every corpus built
+#: from an older three-kind profile keeps its exact bytes.
 #:
-#: Deliberately three, and one candidate was rejected rather than half-built.
+#: ``mechanical`` is the spreadsheet's own failure modes — a cell hardcoded
+#: over its formula, a SUM range stopping one row early — planned by the same
+#: pass and made true of a rendered workbook copy by ``compiler.mechanical``.
+#: It is **zero in every named profile above**, deliberately: the editorial
+#: kinds decay documents that already exist, while this one mints a corrupted
+#: copy of the month-end model, and a corpus should only gain a wrong workbook
+#: when its author asked for one by budget. A kind that is merely absent reads
+#: as zero (the rule stated at the bottom of this docstring), which is exactly
+#: what lets it arrive without invalidating a single stored profile.
+#:
+#: The original three were deliberately three, and one candidate was rejected
+#: rather than half-built.
 #: *Incompleteness* — a document missing a section its type normally carries —
 #: cannot be recorded honestly here. Which sections a document has is decided at
 #: compile time by ``documents.outline()`` from the artifact type and the facts
@@ -89,7 +115,7 @@ if TYPE_CHECKING:  # pragma: no cover
 #: would risk removing the only passage carrying an evaluation case's answer,
 #: which is precisely the grading-safety property ``generators/distractors.py``
 #: was built to preserve.
-KINDS: tuple[str, ...] = ("staleness", "disagreement", "orphaning")
+KINDS: tuple[str, ...] = ("staleness", "disagreement", "orphaning", "mechanical")
 
 
 @dataclass(frozen=True)
