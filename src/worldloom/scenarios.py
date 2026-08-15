@@ -1458,13 +1458,232 @@ class Reorganisation:
         )
 
 
+# ---------------------------------------------------------------------------
+# Access strictness — how much of the corpus is gated
+# ---------------------------------------------------------------------------
+
+#: The levels ``AccessProfile`` accepts, in the order the fleet axis declares
+#: them. One tuple, defined here and imported by ``spaces.build_space`` and the
+#: CLI, because the last time an axis and its flag were maintained as two
+#: literals the module docstring had to carry a warning about keeping them in
+#: sync instead of the import doing it.
+ACCESS_LEVELS: tuple[str, ...] = ("open", "standard", "strict")
+
+
+def _strict_access_map() -> dict[str, str]:
+    """Every engine's strict re-gating, merged into one table.
+
+    Each engine declares its own ``STRICT_ACCESS`` beside the policy tuple it
+    is written against (``generators/organisation.py`` and its three
+    siblings), because which document classes a strict company would gate is
+    an argument about that vertical, not a rule about documents. Merged flat
+    rather than dispatched per engine: artifact type names are engine-distinct
+    vocabulary, so a lookup by type reaches exactly one engine's claim — and
+    the overlap check below is what keeps that true when a fifth engine
+    registers, since two engines claiming one type would make the level mean
+    whatever module order said.
+    """
+    from .generators import banking_org, insurance_org, organisation, procurement_org
+
+    merged: dict[str, str] = {}
+    for module in (organisation, banking_org, insurance_org, procurement_org):
+        table: dict[str, str] = dict(module.STRICT_ACCESS)
+        overlap = merged.keys() & table.keys()
+        if overlap:
+            raise ValueError(
+                f"two engines declare a strict access class for {sorted(overlap)};"
+                " an artifact type may belong to one STRICT_ACCESS table only"
+            )
+        merged.update(table)
+    return merged
+
+
+@dataclass(frozen=True)
+class AccessProfile:
+    """Re-gate a world's planned documents: ``open``, ``standard`` or ``strict``.
+
+    The knob no build had: every artifact's access policy was assigned
+    statically from its intent's audience, so how much of a corpus is gated
+    was a constant of the engine. This step moves the *audiences* — the one
+    field ``World._policy_for`` reads — rather than the policies, so the
+    mapping seam itself stays untouched and every downstream reader
+    (``visible_to``, ``workspace``, ``validate.approvals``) sees the level
+    through the door it already uses.
+
+    A scenario rather than a bare function for ``messiness.Imperfections``'
+    reason verbatim: registered as a recipe verb below, so a corpus built at a
+    level replays byte-for-byte from its own recipe.
+
+    ``standard`` is the exact current behaviour — an identity that records
+    nothing, because a recorded no-op step would be a new line in every recipe
+    for a value that changes nothing, and the default-build byte diff is what
+    catches that (the ``pristine`` rule).
+
+    ``open`` moves every intent under the ``all_staff`` audience, which every
+    shipped engine's ``All staff`` policy answers by exact label match.
+
+    ``strict`` moves the artifact classes each engine's ``STRICT_ACCESS``
+    names under that engine's function-restricted policies — deterministically
+    by artifact type, never by draw, so two same-seed strict builds gate the
+    same documents. A build the table reaches nothing in is **refused**, not
+    quietly shipped unchanged: a level that is accepted and ignored is the
+    flag-reach defect ``tests/test_flag_reach.py`` exists to keep out.
+    """
+
+    level: str = "standard"
+    physics: Any = None
+    """Never read. Declared because ``recipe._under`` rebinds recorded physics
+    onto every registered step's spec and raises on one that cannot carry
+    them — ``messiness.Imperfections.physics``' reason verbatim."""
+
+    def run(self, world: World) -> World:
+        from dataclasses import replace as _replace
+
+        from .recipe import with_step
+
+        if self.level not in ACCESS_LEVELS:
+            raise ValueError(
+                f"unknown access level {self.level!r}; expected one of"
+                f" {', '.join(ACCESS_LEVELS)}"
+            )
+        if self.level == "standard":
+            return world
+        if world._artifact_irs:
+            # The manifest reads audiences at compile time, so a level applied
+            # afterwards would be recorded on a corpus whose documents were
+            # gated without it — the recipe lying about its own output, the
+            # same trap `recipe.rebuild` documents for a late-attached genome.
+            raise ValueError(
+                "the access level must be applied before documents are"
+                " compiled; this world already carries compiled IR"
+            )
+        if world._observations or world._actor_ledger:
+            # Refused rather than silently inconsistent: the knowledge ledger
+            # records who read what under the access map that existed when it
+            # was derived, and re-gating afterwards would leave observations
+            # of documents the manifest now denies to their observers.
+            raise ValueError(
+                "the access level cannot be changed after a knowledge ledger"
+                " was derived; --access is refused beside --conversations and"
+                " --actors"
+            )
+        if not world._artifact_intents:
+            raise ValueError(
+                f"--access {self.level} reaches nothing here: no documents are"
+                " planned yet — run an episode first"
+            )
+
+        policies = {p.id: p for p in world._access_policies}
+        people = {e.id: e for e in world._people}
+
+        if self.level == "open":
+            target_id = world._policy_for("all_staff")
+            target = policies.get(target_id or "")
+            if target is None or target.label.lower() != "all staff":
+                # `_policy_for` falls back to the *most restrictive* policy for
+                # an audience nothing answers, which for this level would be
+                # "open" delivering the opposite of what it says.
+                raise ValueError(
+                    "--access open needs a policy labelled 'All staff' and"
+                    " this build minted none; the engine that built this world"
+                    " does not support the open level"
+                )
+            rewritten = tuple(
+                intent if intent.audience == "all_staff"
+                else intent.model_copy(update={"audience": "all_staff"})
+                for intent in world._artifact_intents
+            )
+        else:  # strict
+            table = _strict_access_map()
+            moved = {
+                intent.id: table[intent.artifact_type]
+                for intent in world._artifact_intents
+                if table.get(intent.artifact_type)
+                and table[intent.artifact_type] != intent.audience
+            }
+            if not moved:
+                raise ValueError(
+                    "--access strict reaches nothing in this build: none of"
+                    " its artifact types has a registered strict access class"
+                    " (each engine's STRICT_ACCESS table), so the engine that"
+                    " planned these documents does not support the strict level"
+                )
+            for intent in world._artifact_intents:
+                audience = moved.get(intent.id)
+                if audience is None:
+                    continue
+                policy = policies.get(world._policy_for(audience) or "")
+                if policy is None:
+                    raise ValueError(
+                        f"strict maps {intent.artifact_type!r} to audience"
+                        f" {audience!r}, which resolves to no policy in this"
+                        " build"
+                    )
+                if not (policy.allow_people or policy.allow_functions
+                        or policy.allow_business_units):
+                    # A policy with no allow lists admits everyone, so a move
+                    # "under" it would be strict granting rather than gating.
+                    raise ValueError(
+                        f"strict maps {intent.artifact_type!r} to"
+                        f" {policy.label!r}, which restricts nobody"
+                    )
+                # Checked here, at plan time, rather than left for `validate`:
+                # `author_cannot_see_own_artifact` and `approvals` would catch
+                # the same defect after compile, but a level that builds a
+                # corpus the validator then refuses is a worse failure than a
+                # level that refuses itself naming the document.
+                for person_id, part in ((intent.author_id, "author"),
+                                        (intent.approver_id, "approver")):
+                    person = people.get(person_id or "")
+                    if person is not None and not policy.permits(person):
+                        raise ValueError(
+                            f"strict would lock the {part} of"
+                            f" {intent.artifact_type!r} ({person.name}, "
+                            f"{person.function}) out of their own document"
+                            f" under {policy.label!r}; fix the engine's"
+                            " STRICT_ACCESS table rather than the check"
+                        )
+            rewritten = tuple(
+                intent.model_copy(update={"audience": moved[intent.id]})
+                if intent.id in moved else intent
+                for intent in world._artifact_intents
+            )
+
+        return _replace(
+            world,
+            _artifact_intents=rewritten,
+            _recipe=with_step(world._recipe, "AccessProfile", level=self.level),
+        )
+
+
+def apply_access(world: World, level: str = "standard") -> World:
+    """Re-gate *world* at *level*. The library entry point.
+
+    ``standard`` returns the world untouched and records nothing — the exact
+    current behaviour, held to byte-identity by ``tests/test_access_axis.py``.
+    """
+    return AccessProfile(level=level).run(world)
+
+
+# The recipe verb, registered from this module rather than as a literal in
+# `recipe.py` — the seam `messiness.Imperfections` and every vertical's episode
+# already use. `AccessProfile(level=...)` is exactly the call `with_step`'s
+# stored arguments reconstruct, so the class is its own builder.
+from . import recipe as _recipe
+
+_recipe.register_step("AccessProfile", ("level",), AccessProfile)
+
+
 __all__ = [
+    "ACCESS_LEVELS",
+    "AccessProfile",
     "MonthEndClose",
     "Hire",
     "Departure",
     "Reorganisation",
     "WorkforceChange",
     "StructuralChange",
+    "apply_access",
     "lore_index",
     "likelihood_multiplier",
     "density_adjustment",

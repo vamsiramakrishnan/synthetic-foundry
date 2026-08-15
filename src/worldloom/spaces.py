@@ -419,6 +419,7 @@ def build_space() -> BuildSpace:
     with a facet assignment, and use `holes` on what survives ``facets.resolve``.
     """
     from . import archetypes, locales, messiness, policies
+    from .scenarios import ACCESS_LEVELS
 
     return BuildSpace((
         # `--archetype`. The engine is *implied* by the archetype rather than
@@ -442,6 +443,16 @@ def build_space() -> BuildSpace:
         # the axis needs no extra "none" — unlike `locale`, where omission and
         # any named value differ.
         covering.Parameter("messiness", tuple(sorted(messiness.PROFILES))),
+        # `--access`: how much of the corpus is gated. `standard` is the flag's
+        # default and an identity that records nothing, so it stands for the
+        # omitted flag the way `pristine` does one line up — and it is the
+        # value to project a row to for an engine whose org module declares no
+        # STRICT_ACCESS table, since `open`/`strict` are refused rather than
+        # ignored there (`scenarios.AccessProfile`). The tuple is imported
+        # rather than restated: `ACCESS_LEVELS` is the one literal, and the
+        # CLI's `--access` choices read the same name, so this axis cannot
+        # drift from the flag the way the hand-synced axes above can.
+        covering.Parameter("access", ACCESS_LEVELS),
         # `--incident` / `--no-incident` / `--timeline`, merged. "unforced" is
         # the CLI's own default — neither flag given, the seed and the lore
         # decide — and it is the only value a single-episode vertical accepts.
