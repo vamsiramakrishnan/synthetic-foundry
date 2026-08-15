@@ -1,0 +1,69 @@
+---
+title: Installation
+description: Install Worldloom from a checkout, and pick the extras you need.
+---
+
+Worldloom is a Python package. It needs Python 3.11 or later. It is not on
+PyPI yet, so you install it from a checkout.
+
+```bash
+git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
+cd synthetic-foundry
+pip install -e ".[dev]"
+worldloom --help
+```
+
+The core install carries no renderer for Office formats. It depends only on
+`pydantic`, `typer`, `rich`, `networkx`, and `numpy`. You can build, narrate,
+validate, and evaluate a corpus with the core alone. Markdown, HTML, Jira,
+Confluence, and ServiceNow output need nothing extra.
+
+## Extras
+
+Each extra unlocks one capability. Install the ones your output needs.
+
+| Extra | Installs | What it unlocks |
+| --- | --- | --- |
+| `xlsx` | `openpyxl` | Formula-bearing Excel workbooks |
+| `docx` | `python-docx` | Word documents with live page fields |
+| `pdf` | `reportlab` | PDF rendering |
+| `pptx` | `python-pptx` | PowerPoint decks with native charts |
+| `mcp` | `mcp` | `worldloom mcp`: the read-only measurements as MCP tools |
+| `embeddings` | `model2vec`, `huggingface-hub` | `evaluate --retriever embedding`: a dense retriever beside the lexical baselines |
+| `all` | every renderer plus `mcp` | The ordinary way to install the tool |
+| `dev` | `all` plus `pytest`, `hypothesis` | Working on Worldloom itself |
+
+```bash
+pip install -e ".[xlsx,docx]"     # only the workbooks and Word documents
+pip install -e ".[all]"          # every renderer
+```
+
+Two extras deserve a note.
+
+**`embeddings`** is the only part of Worldloom that downloads model weights
+over a network. Without it, `worldloom evaluate --retriever all` skips the
+dense column with a message. The lexical baselines still run. A corpus that
+carries a committed vector cache scores against the dense retriever with no
+model installed at all.
+
+**`mcp`** is optional because every measurement it serves is also a plain
+command: `validate`, `topology`, `series`, `diversity`. The extra adds the
+protocol, not the capability.
+
+## No model SDK
+
+There is no extra for a language model. Worldloom never calls one. Your agent
+writes prose through the [narration handshake](/guides/narration/), as shell
+commands and JSON files.
+
+## Check the install
+
+```bash
+worldloom version
+worldloom formats
+```
+
+`worldloom formats` lists the renderers your installation registered. With
+the core install it lists the dependency-free formats. With `[all]` it lists
+nine: `confluence`, `docx`, `html`, `jira`, `markdown`, `pdf`, `pptx`,
+`servicenow`, `xlsx`.

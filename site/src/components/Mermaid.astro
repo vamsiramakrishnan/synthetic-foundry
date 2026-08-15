@@ -1,0 +1,114 @@
+---
+/**
+ * Client-rendered Mermaid diagram.
+ *
+ * The `mermaid` package is imported in a bundled module script, so the
+ * runtime ships with the site's own assets and works offline — no CDN.
+ * Diagrams re-render when the Starlight theme toggle flips `data-theme`,
+ * with node fill, stroke and text read from the site's CSS tokens. The
+ * accent appears only where a diagram's own `classDef accent` or
+ * `linkStyle` puts it.
+ */
+interface Props {
+  code: string;
+}
+const { code } = Astro.props;
+---
+
+<div class="wl-mermaid" data-code={code}>
+  <pre class="wl-mermaid-fallback">{code}</pre>
+</div>
+
+<script>
+  import mermaid from 'mermaid';
+
+  let renderPass = 0;
+
+  function token(name: string, fallback: string): string {
+    const value = getComputedStyle(document.documentElement)
+      .getPropertyValue(name)
+      .trim();
+    return value || fallback;
+  }
+
+  function isDark(): boolean {
+    return document.documentElement.dataset.theme !== 'light';
+  }
+
+  async function renderAll(): Promise<void> {
+    const pass = ++renderPass;
+    const text = token('--sl-color-text', isDark() ? '#ececea' : '#1a1a1a');
+    const surface = token('--sl-color-gray-6', isDark() ? '#242426' : '#ffffff');
+    const hairline = token(
+      '--sl-color-hairline',
+      isDark() ? '#333336' : '#e3e3df',
+    );
+    const muted = token('--sl-color-gray-3', isDark() ? '#9a9a9e' : '#55555a');
+
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      // Flat: fills are the surface colour, strokes are 1px hairlines,
+      // text is the text colour. No shadows, no gradients.
+      themeVariables: {
+        darkMode: isDark(),
+        background: surface,
+        fontFamily:
+          "-apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif",
+        fontSize: '14px',
+        primaryColor: surface,
+        primaryBorderColor: hairline,
+        primaryTextColor: text,
+        secondaryColor: surface,
+        secondaryBorderColor: hairline,
+        secondaryTextColor: text,
+        tertiaryColor: surface,
+        tertiaryBorderColor: hairline,
+        tertiaryTextColor: text,
+        lineColor: muted,
+        textColor: text,
+        nodeTextColor: text,
+        edgeLabelBackground: surface,
+        clusterBkg: 'transparent',
+        clusterBorder: hairline,
+        titleColor: text,
+      },
+    });
+
+    const nodes = document.querySelectorAll<HTMLElement>('.wl-mermaid');
+    let index = 0;
+    for (const node of nodes) {
+      const source = node.dataset.code ?? '';
+      if (!source) continue;
+      try {
+        const { svg } = await mermaid.render(
+          `wl-mermaid-${pass}-${index++}`,
+          source,
+        );
+        if (pass === renderPass) node.innerHTML = svg;
+      } catch {
+        // Leave the fallback <pre> in place: the source is still readable.
+      }
+    }
+  }
+
+  renderAll();
+
+  // Starlight's theme select flips data-theme on <html>. Re-render so the
+  // diagram reads the other theme's tokens.
+  new MutationObserver(() => {
+    renderAll();
+  }).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  });
+</script>
+
+<style>
+  .wl-mermaid-fallback {
+    margin: 0;
+    font-size: 0.8125rem;
+    background: none;
+    border: none;
+  }
+</style>

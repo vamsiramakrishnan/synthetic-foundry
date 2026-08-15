@@ -1,0 +1,235 @@
+/*
+ * Worldloom docs design tokens.
+ *
+ * Neutral field, one accent. The accent (#E85D1F) marks the current or
+ * interactive state only: the active sidebar item, focus, hover, the one
+ * primary action. It is never body-link text in light mode, because
+ * #E85D1F on #F7F7F5 is 3.3:1 — enough for a 1px marker, not for text.
+ * On the dark background it is 4.9:1, so accent text is allowed there.
+ * No shadows. No gradients. Hairline borders. 2px corners everywhere.
+ */
+
+:root {
+  --wl-accent: #e85d1f;
+
+  /* Type: system grotesque, no webfont payload. */
+  --sl-font: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --sl-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+
+  /* Dark theme (Starlight's default scope): charcoal, not blue-black. */
+  --sl-color-accent-low: #38200f;
+  --sl-color-accent: var(--wl-accent);
+  --sl-color-accent-high: #f0956a;
+  --sl-color-white: #ececea;
+  --sl-color-gray-1: #d8d8d6;
+  --sl-color-gray-2: #b8b8b6;
+  --sl-color-gray-3: #9a9a9e;
+  --sl-color-gray-4: #6c6c70;
+  --sl-color-gray-5: #333336;
+  --sl-color-gray-6: #242426;
+  --sl-color-gray-7: #202022;
+  --sl-color-black: #1c1c1e;
+  --sl-color-bg: #1c1c1e;
+  --sl-color-bg-nav: #1c1c1e;
+  --sl-color-bg-sidebar: #1c1c1e;
+  --sl-color-bg-inline-code: #242426;
+  --sl-color-hairline: #333336;
+  --sl-color-hairline-light: #333336;
+  --sl-color-hairline-shade: #333336;
+  --sl-color-text: #ececea;
+  --sl-color-text-accent: var(--wl-accent);
+  --sl-color-text-invert: #1a1a1a;
+
+  /* Flat surfaces: no elevation anywhere. */
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: none;
+}
+
+:root[data-theme='light'] {
+  --sl-color-white: #1a1a1a;
+  --sl-color-gray-1: #2c2c2e;
+  --sl-color-gray-2: #444448;
+  --sl-color-gray-3: #55555a;
+  --sl-color-gray-4: #8a8a8e;
+  --sl-color-gray-5: #d9d9d5;
+  --sl-color-gray-6: #ffffff;
+  --sl-color-gray-7: #f0f0ed;
+  --sl-color-black: #f7f7f5;
+  --sl-color-bg: #f7f7f5;
+  --sl-color-bg-nav: #f7f7f5;
+  --sl-color-bg-sidebar: #f7f7f5;
+  --sl-color-bg-inline-code: #ececea;
+  --sl-color-hairline: #e3e3df;
+  --sl-color-hairline-light: #e3e3df;
+  --sl-color-hairline-shade: #e3e3df;
+  --sl-color-text: #1a1a1a;
+  /* Accent text fails 4.5:1 on the light field, so text-accent stays text. */
+  --sl-color-text-accent: #1a1a1a;
+  --sl-color-text-invert: #f7f7f5;
+}
+
+/* ---- Type ---------------------------------------------------------- */
+
+/* Headings differ by size and weight only. Never by colour or italics. */
+.sl-markdown-content :is(h1, h2, h3, h4, h5) {
+  color: var(--sl-color-white);
+  font-style: normal;
+  letter-spacing: -0.01em;
+}
+
+/* Tabular numbers in every table. */
+.sl-markdown-content table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The site title is identity, not state: never the accent. */
+.site-title {
+  color: var(--sl-color-white);
+}
+
+/* ---- Links --------------------------------------------------------- */
+
+/* Body links: text colour with an accent underline. Hover thickens it.
+ * The accent never becomes light-mode text colour (contrast). */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--sl-color-text);
+  text-decoration: underline;
+  text-decoration-color: var(--wl-accent);
+  text-underline-offset: 3px;
+}
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+  text-decoration-thickness: 2px;
+}
+:root:not([data-theme='light'])
+  .sl-markdown-content
+  a:not(:where(.not-content *)):hover {
+  color: var(--wl-accent);
+}
+
+/* ---- Sidebar: accent marks the current page ------------------------ */
+
+/* Replace Starlight's filled pill with a flat 2px accent marker. */
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+  background: none;
+  color: var(--sl-color-white);
+  font-weight: 600;
+  border-inline-start: 2px solid var(--wl-accent);
+  border-radius: 0;
+}
+
+/* ---- Surfaces: flat, hairline, 2px --------------------------------- */
+
+.sl-markdown-content :is(code, pre),
+.card,
+.starlight-aside,
+.expressive-code .frame,
+.expressive-code .frame pre {
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+.expressive-code .frame {
+  --code-background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-hairline);
+}
+.expressive-code .frame pre {
+  border: none;
+  background: var(--sl-color-gray-6);
+}
+.expressive-code .frame.has-title .header .title {
+  background: var(--sl-color-gray-6);
+  border-radius: 0;
+}
+
+.card {
+  border: 1px solid var(--sl-color-hairline);
+  background: var(--sl-color-gray-6);
+}
+:root[data-theme='light'] .card {
+  background: #ffffff;
+}
+.card .icon {
+  color: var(--sl-color-gray-3);
+  border: none;
+  background: none;
+}
+
+.starlight-aside {
+  border: 1px solid var(--sl-color-hairline);
+  border-inline-start: 2px solid var(--wl-accent);
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-text);
+}
+.starlight-aside__title {
+  color: var(--sl-color-white);
+}
+
+/* Tables: hairline row separators, no zebra striping. */
+.sl-markdown-content table :is(th, td) {
+  border: none;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+.sl-markdown-content tr:nth-child(2n),
+.sl-markdown-content tr:nth-child(2n) :is(th, td) {
+  background: transparent;
+}
+
+/* ---- Interaction states: the accent -------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--wl-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--wl-accent) 28%, transparent);
+}
+
+/* ---- Hero: quiet ---------------------------------------------------- */
+
+/* Starlight paints the hero title with an accent gradient. Remove it. */
+.hero h1 {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--sl-color-white);
+  font-weight: 650;
+}
+.hero .tagline {
+  color: var(--sl-color-gray-3);
+}
+
+/* The one primary action: accent field, dark label (4.97:1 on the accent). */
+.hero .sl-link-button.primary,
+.sl-link-button.primary {
+  background: var(--wl-accent);
+  border: 1px solid var(--wl-accent);
+  color: #1a1a1a;
+  border-radius: 2px;
+  box-shadow: none;
+  font-weight: 600;
+}
+.sl-link-button.minimal,
+.sl-link-button.secondary {
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+/* ---- Mermaid diagrams ----------------------------------------------- */
+
+.wl-mermaid {
+  overflow-x: auto;
+  padding: 1rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 2px;
+  background: var(--sl-color-gray-6);
+}
+.wl-mermaid svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin-inline: auto;
+}

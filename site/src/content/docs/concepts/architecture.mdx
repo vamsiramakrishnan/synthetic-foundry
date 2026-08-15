@@ -1,0 +1,83 @@
+---
+title: Architecture
+description: Facts precede prose. The pipeline that enforces that order.
+---
+
+import Mermaid from '../../../components/Mermaid.astro';
+
+Most synthetic-data systems generate files independently. The files look
+plausible alone and fail as a set: a PDF reports a total the workbook cannot
+reconcile, a ticket names an employee who does not exist, a board paper cites
+information discovered after it was signed.
+
+Worldloom reverses the order:
+
+```text
+world state --> events --> canonical facts --> artifact plan --> prose --> files
+```
+
+Facts precede prose. Simulation precedes rendering. Evaluation ground truth is
+derived from the same state as the evidence.
+
+## The pipeline
+
+<Mermaid
+  code={`flowchart LR
+  A["Authoring inputs
+spec · pack · facets
+seed · locale · lore
+physics · org shape"] --> W["Deterministic world
+company · people · estate
+events · facts · access
+recipe · eval ground truth"]
+  W --> I["Artifact intents
+author · audience
+type · facts · time"]
+  I -- "propose → validate → accept" --> IR["ArtifactIR
+tables · sections
+claims · lineage"]
+  IR --> X["XLSX"]
+  IR --> D["DOCX · PDF"]
+  IR --> P["PPTX · Markdown"]
+  IR --> B["Jira · Confluence · ServiceNow"]
+  classDef accent stroke:#e85d1f,stroke-width:2px;
+  class IR accent`}
+/>
+
+Four stages, each with a narrow output.
+
+1. **Authoring inputs** say what kind of company this is. A seed, and
+   optionally a [specification, pack, facets, locale, or physics
+   file](/guides/authoring/).
+2. **The deterministic world** is everything that is true: the company, its
+   people and reporting lines, its systems and services, its events, its
+   facts, and its access policies. No model call happens here.
+3. **Artifact intents** say which documents that world would have. Each intent
+   names a real author, an audience, an access policy, a creation time, a
+   knowledge boundary, and the facts the document must carry.
+4. **ArtifactIR** is the one resolved structure every renderer reads. Tables,
+   sections, claims, and lineage. A renderer decides spelling, never truth.
+
+## The division of labour
+
+You supply judgement and language. Worldloom supplies truth, structure,
+lineage, and refusal. The library imports no LLM SDK. Your agent writes prose
+through a [checked handshake](/guides/narration/): requests out as JSON,
+responses back as JSON, every violation returned as data.
+
+## The compiler contract
+
+Compilation refuses an undeclared artifact type, an author who could not have
+written the document, an empty audience, a title unrelated to the artifact
+family, and content that escapes the declared fact scope. It stamps accepted
+IR with a machine-readable `artifact-contract@1` cohesion scope.
+
+This is stronger than prompting a model to keep documents consistent. A prompt
+is advisory. The contract is executable, and it is renderer-independent.
+
+## The thin waist
+
+Every subsystem speaks the types in `src/worldloom/models.py`. Generators own
+deterministic state. Scenarios append events and facts. Compilers consume
+intents. Renderers consume IR. Validators stay independent of the code that
+produced the data, so they can [refuse it](/concepts/validation/).
