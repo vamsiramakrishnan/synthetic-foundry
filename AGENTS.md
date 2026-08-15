@@ -177,6 +177,29 @@ first: `--comparatives 23 --trend 0.004` gives two years with a direction in
 them, where the default flat level makes every seasonally-adjusted month look
 like every other.
 
+### One recorded value, one measured delta
+
+Two seeds differ everywhere at once, so comparing them attributes nothing. A
+**counterfactual twin** rebuilds the same recipe with exactly one recorded value
+replaced — the physics endpoint, a step's `trend_pct`, the whole trading year —
+so every row that differs between the two worlds differs *because of that value*:
+
+```bash
+worldloom twin ./corpus --set physics/retail.margin.erosion/high=0.06 --json
+worldloom twin ./corpus --set steps/0/trend_pct=0.008 --out ./counterfactual
+```
+
+The delta manifest names the changed facts, documents and evaluation cases with
+the unchanged counts beside them, measured at the corpus's own jsonl
+representation rather than predicted. Paths are slash-separated because physics
+names are themselves dotted. An intervention that changes *how many* things
+exist (a policy level, an incident switched off) reshuffles sequentially-minted
+ids and is **refused with the cause** — exit code 3 — because a diff across
+reshuffled ids would label unrelated changes as caused. A zero-change manifest
+is a finding, not a failure: a widened integer range can be absorbed by
+rejection sampling and the twin honestly reports that the parameter reached
+nothing. `worldloom.twins` in Python returns both worlds and the manifest.
+
 ---
 
 ## The refine loop that is deliberately not here

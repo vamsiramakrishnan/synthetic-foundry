@@ -632,6 +632,21 @@ worldloom topology <CORPUS>
 | `--json` | Emit the reading as JSON — stable keys and ordering, safe to diff in CI. |
 | `--limit`, `-n` | How many services to list, most load-bearing first. |
 
+### `worldloom twin`
+
+Rebuild this corpus with one recorded value replaced, and measure the delta.
+
+```
+worldloom twin <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the delta manifest as JSON — stable keys and ordering. |
+| `--out`, `-o` | Directory to write the counterfactual corpus into. Omit to measure the delta without keeping the twin. |
+| `--overwrite` | Replace the destination if it exists. |
+| `--set` | PATH=VALUE: one recorded recipe value to replace, slash-separated because physics names are dotted — e.g. physics/retail.margin.erosion/high=0.06, steps/0/trend_pct=0.008. VALUE is parsed as JSON, falling back to a bare string. |
+
 ### `worldloom validate`
 
 Check a corpus for coherence violations.

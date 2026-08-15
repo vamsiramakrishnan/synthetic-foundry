@@ -4134,6 +4134,113 @@ def mcp(
         raise typer.Exit(code=2) from exc
 
 
+@app.command()
+def twin(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    set_: str = typer.Option(
+        ..., "--set",
+        help="PATH=VALUE: one recorded recipe value to replace, slash-separated"
+             " because physics names are dotted — e.g."
+             " physics/retail.margin.erosion/high=0.06, steps/0/trend_pct=0.008."
+             " VALUE is parsed as JSON, falling back to a bare string.",
+    ),
+    out: Path = typer.Option(
+        None, "--out", "-o",
+        help="Directory to write the counterfactual corpus into. Omit to"
+             " measure the delta without keeping the twin.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the delta manifest as JSON — stable keys and ordering."
+    ),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", help="Replace the destination if it exists."
+    ),
+) -> None:
+    """Rebuild this corpus with one recorded value replaced, and measure the delta.
+
+    A counterfactual twin: same recipe, same ledger, one declared intervention.
+    Because `recipe.rebuild` is a pure function of what the corpus records, every
+    row that differs between the two worlds differs because of the intervention —
+    the delta manifest names the changed facts, documents and evaluation cases,
+    with the unchanged counts beside them as the denominator.
+
+    An intervention that changes *how many* things exist (a policy level, an
+    incident switched off) reshuffles sequentially-minted ids and is refused with
+    the cause rather than diffed; exit code 3 says "refused", so a loop can tell
+    a refusal from a failure without parsing prose. See `worldloom.twins`.
+    """
+    from .recipe import RecipeError
+    from . import twins as twins_module
+
+    if "=" not in set_:
+        err.print("[red]error:[/red] --set takes PATH=VALUE")
+        raise typer.Exit(code=2)
+    raw_path, _, raw_value = set_.partition("=")
+    try:
+        value = json.loads(raw_value)
+    except json.JSONDecodeError:
+        # A bare string like `--set policies=full`. Deliberate: quoting JSON
+        # strings through a shell is misery, and no recipe value is ambiguous
+        # between "the string full" and anything else.
+        value = raw_value
+
+    world = _load(corpus)
+    if not world.recipe:
+        err.print(
+            "[red]error:[/red] this corpus carries no recipe, so it cannot be"
+            " rebuilt — twins are measured between two rebuilds of the record."
+        )
+        raise typer.Exit(code=2)
+
+    try:
+        result = twins_module.twin(
+            world.recipe, tuple(world._ledger),
+            twins_module.Intervention(raw_path.strip(), value),
+        )
+    except (twins_module.TwinError, RecipeError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+
+    manifest = result.manifest
+    if out is not None and manifest.refused is None:
+        result.world.export(out, overwrite=overwrite)
+
+    if as_json:
+        console.print_json(json.dumps(manifest.as_dict()))
+    else:
+        stated = manifest.intervention
+        console.print(
+            f"[bold]{stated['path']}[/bold]: {stated['before']!r} -> {stated['after']!r}"
+        )
+        if manifest.refused is not None:
+            err.print(f"[red]refused:[/red] {escape(manifest.refused)}")
+        else:
+            table = Table(show_header=True, header_style="bold")
+            table.add_column("stream")
+            table.add_column("changed", justify="right")
+            table.add_column("unchanged", justify="right")
+            for stream, ids in (
+                ("facts", manifest.changed_fact_ids),
+                ("events", manifest.changed_event_ids),
+                ("artifacts", manifest.changed_artifact_ids),
+                ("evaluations", manifest.changed_evaluation_ids),
+                ("entities", manifest.changed_entity_ids),
+                ("records", manifest.changed_record_ids),
+            ):
+                table.add_row(stream, str(len(ids)), str(manifest.unchanged_counts[stream]))
+            console.print(table)
+            if manifest.is_null:
+                console.print(
+                    "[dim]No row changed: the intervention was absorbed (or was"
+                    " the identity). That is a measurement, not a failure.[/dim]"
+                )
+            if out is not None:
+                console.print(f"Counterfactual corpus written to [bold]{out}[/bold]")
+
+    if manifest.refused is not None:
+        raise typer.Exit(code=3)
+
+
 def _for_stats(name: str) -> World:
     """Load *name* the way `stats` needs it: compiled if it can be.
 
