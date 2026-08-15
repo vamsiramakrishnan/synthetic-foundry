@@ -164,7 +164,7 @@ def test_an_area_that_authors_no_vocabulary_still_gets_its_own_words() -> None:
     assert headings not in {sequence for _, sequence in fleet()}
 
 
-def test_the_fleet_is_forty_two_distinct_outlines() -> None:
+def test_the_fleet_is_forty_three_distinct_outlines() -> None:
     """What the count says, before the effective count is allowed to speak.
 
     33 before, 42 after, which is the whole of the repeated pair being spent on
@@ -172,32 +172,38 @@ def test_the_fleet_is_forty_two_distinct_outlines() -> None:
     a one-heading difference as a whole new document — so it has to be checked
     first: a change that moved the score without moving this would be one that
     made the near-repeats slightly less near, which is not what was asked for.
+
+    43 now: insurance's ``underwriting_result_commentary`` arrived with that
+    vertical's estate, and its two headings are its own rather than a
+    re-spelling of the divisional close commentary's — which is why the count
+    and the effective count moved together by very nearly one whole document
+    (42.855 of a possible 43) instead of the count moving alone.
     """
     outlines = fleet()
-    assert len(outlines) == 42
-    assert len({sequence for _, sequence in outlines}) == 42
+    assert len(outlines) == 43
+    assert len({sequence for _, sequence in outlines}) == 43
 
 
 def test_the_effective_count_is_off_twenty_four() -> None:
-    """The deliverable. 24.19 before, 41.86 after, out of a possible 42.
+    """The deliverable. 24.19 before, 42.86 after, out of a possible 43.
 
     Read three ways, because quoting a bracket rather than a point is the
     honest reading of this family and `vendi.py` says so: ``q = 0`` is the rank
-    and now agrees with the distinct count at 42, ``q = 1`` is the Vendi score
+    and agrees with the distinct count at 43, ``q = 1`` is the Vendi score
     proper, and ``q = inf`` — the sample judged entirely by its most dominant
-    mode — went from **4.20** to **33.07**, which is the reading the defect was
+    mode — went from **4.20** to **33.86**, which is the reading the defect was
     loudest in. Ten of forty-two documents being one document put the dominant
     mode at four; nothing dominates the fleet now.
 
-    The residual 0.14 between 41.86 and 42 is the near-repeats *among genuinely
-    different documents* — a close commentary and its own variant share four of
-    five headings — and it is not a defect. Driving it to 42 would mean no two
-    documents in this company's archive resemble each other, which is not true
-    of any archive.
+    The residual 0.14 between the score and the count is the near-repeats
+    *among genuinely different documents* — a close commentary and its own
+    variant share four of five headings — and it is not a defect. Driving it to
+    the count would mean no two documents in this company's archive resemble
+    each other, which is not true of any archive.
     """
     outlines = [sequence for _, sequence in fleet()]
-    assert vendi_of(outlines, bigram_jaccard) == pytest.approx(41.8553, abs=TOLERANCE)
-    assert vendi_of(outlines, bigram_jaccard, order=0.0) == pytest.approx(42.0)
+    assert vendi_of(outlines, bigram_jaccard) == pytest.approx(42.8553, abs=TOLERANCE)
+    assert vendi_of(outlines, bigram_jaccard, order=0.0) == pytest.approx(43.0)
     assert vendi_of(outlines, bigram_jaccard, order=float("inf")) == pytest.approx(
-        33.0711, abs=TOLERANCE
+        33.8585, abs=TOLERANCE
     )

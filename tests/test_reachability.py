@@ -1,21 +1,8 @@
-"""Every entity a company declares reaches something — and today most do not.
+"""Every entity a company declares reaches something — and the spine now does.
 
 `validate.carried_evidence` closed "a fact minted and carried nowhere". Nothing
-ever asked the dual: **a subject declared and reaching nothing**. Audited on
-one-period builds of the four shipped verticals: banking, insurance and
-procurement between them declare 243 sites, 9 business units, 14 systems and 6
-cost centres that no fact names and no document carries, and retail — the one
-vertical whose units, sites and categories are all reached — still leaves its
-own systems, services and cost centres unreached. Every one of those corpora
-reports clean from `worldloom validate` today.
-
-So the tests below are not a check that the gate passes. They are the
-*measurement*, pinned as a **ceiling**: a build that reaches fewer entities than
-today fails. A ratchet cannot be satisfied by switching the check off, because
-the number it asserts is the count of failures.
-
-What it refused when this was written, one period, seed 8128, per vertical
-`kind: unreached of declared`:
+ever asked the dual: **a subject declared and reaching nothing**. When this gate
+was written it refused, on one-period builds of the four shipped verticals:
 
     retail       cost centre 2/2 · person 14/23 · service 4/4 · system 5/5
     banking      business unit 3/3 · cost centre 2/2 · person 11/21 ·
@@ -25,14 +12,48 @@ What it refused when this was written, one period, seed 8128, per vertical
     procurement  business unit 3/3 · category 6/8 · cost centre 2/2 ·
                  person 7/12 · site 81/81 · system 5/5
 
-Retail's business units, sites and categories are absent from that list and no
-other vertical's are. That is the finding in one line, and it is also why retail
-mints 588 facts from one period against banking's 58.
+Banking, insurance and procurement between them declared 243 sites, 9 business
+units and 6 cost centres that no fact named and no document carried, and every
+one of those corpora reported clean from `worldloom validate`. Retail was the
+only vertical whose organisation was load-bearing, which is also why it minted
+588 facts from one period against banking's 58.
+
+Three engines then made their estates real, and the same measurement now reads:
+
+    retail       cost centre 2/2 · person 14/23 · service 4/4 · system 5/5
+    banking      person 10/21 · service 1/4 · system 4/5
+    insurance    person 2/10
+    procurement  person 6/12 · system 5/5
+
+**Every business unit, site, cost centre and category in every shipped vertical
+now reaches a compiled document** — 243 sites, 9 units, 6 cost centres and 11
+categories that reached nothing before. Volume followed exactly as the finding
+predicted it would: banking 58 → 744 facts, insurance 62 → 219, procurement
+52 → 217. That is the point of the table above being kept rather than replaced.
+It is the before and after of one claim.
+
+What is left is a different class, and worth naming so nobody reads it as the
+same debt half-paid. A **system** is the *provenance* of a figure — every fact
+in these corpora carries one as `source_system` — not the subject of one; a
+**service** is the same thing one layer down; and the unreached **people** are a
+roster with no accountability fact of their own. None of the three is a
+reporting dimension any of these companies declares itself cut by, which is now
+checkable rather than assertable: no populated `axes.Shape` axis on any of the
+four industries is sourced from `estate` or `roster`, and every axis that *is*
+populated — `division`, `book`, `segment`, `branch`, `office`, `store`,
+`category`, `class_of_business` — reaches. `test_the_declared_shape_is_the_one
+_that_is_real` pins that as a floor.
+
+The tests below are therefore not a check that the gate passes. They are the
+*measurement*, pinned as a **ceiling**: a build that reaches fewer entities than
+today fails. A ratchet cannot be satisfied by switching the check off, because
+the number it asserts is the count of failures.
 
 `validate.reachability`'s own docstring says why the group is not yet in
 `validate.run` and what promoting it costs. The short version: it is the correct
 verdict and an untrue statement about *coherence*, which is the question
-`worldloom validate` answers, and every corpus here is coherent — it is thin.
+`worldloom validate` answers, and every corpus here is coherent — what it was
+was thin.
 """
 
 from __future__ import annotations
@@ -58,11 +79,12 @@ VERTICALS: dict[str, str] = {
 #:
 #: Measured, not chosen — `worldloom build --seed 8128 --archetype <key>` for
 #: each, then `validate.reachability` over what came out. A kind absent from a
-#: row reaches everything it declares, and retail's three present rows against
-#: banking's six is the whole finding of this wave in one table: retail's units,
-#: sites and categories are load-bearing and no other vertical's are.
+#: row reaches everything it declares, which is now true of `business unit`,
+#: `site`, `cost centre` and `category` in all four rows.
 #:
-#: Lanes B, I and P lower these. Nobody raises them.
+#: Tightened as each engine landed, and tightening it is the deliverable: these
+#: numbers only ever come down. The module docstring keeps what they were, so
+#: the diff between the two tables is the wave.
 REFUSED: dict[str, dict[str, tuple[int, int]]] = {
     "retail": {
         "cost centre": (2, 2),
@@ -71,30 +93,36 @@ REFUSED: dict[str, dict[str, tuple[int, int]]] = {
         "system": (5, 5),
     },
     "banking": {
-        "business unit": (3, 3),
-        "cost centre": (2, 2),
-        "person": (11, 21),
+        "person": (10, 21),
         "service": (1, 4),
-        "site": (133, 133),
         "system": (4, 5),
     },
     "insurance": {
-        "business unit": (3, 3),
-        "category": (5, 6),
-        "cost centre": (2, 2),
-        "person": (7, 10),
-        "site": (29, 29),
-        "system": (5, 5),
+        "person": (2, 10),
     },
     "procurement": {
-        "business unit": (3, 3),
-        "category": (6, 8),
-        "cost centre": (2, 2),
-        "person": (7, 12),
-        "site": (81, 81),
+        "person": (6, 12),
         "system": (5, 5),
     },
 }
+
+#: Entity kinds no vertical may leave unreached, ever again.
+#:
+#: The ceiling above catches a kind getting *worse*; it cannot catch a kind that
+#: is currently perfect going bad, because a ratchet only looks at what is
+#: already broken. This is the floor under the reporting spine, and it is stated
+#: once for every vertical rather than as an absence from four rows, so that a
+#: fifth vertical added to `VERTICALS` inherits the requirement instead of
+#: quietly opting out of it by having no row at all.
+#:
+#: `cost centre` is deliberately **not** here, and the reason is the sharpest
+#: single line in this file. Banking, insurance and procurement all closed
+#: theirs; retail — the vertical the other three were measured against, and the
+#: only one this wave did not touch — is now the sole corpus whose cost centres
+#: reach nothing. The reference implementation is the laggard, on exactly the
+#: dimension it was the reference for. Adding it here is the next increment and
+#: it belongs to whoever owns `generators/finance.py`, not to a widened constant.
+LOAD_BEARING: tuple[str, ...] = ("business unit", "site", "category")
 
 
 def _build(archetype_key: str):  # type: ignore[no-untyped-def]
@@ -190,38 +218,68 @@ def test_the_measured_refusals_are_a_ceiling(built, vertical: str) -> None:  # t
         )
 
 
-def test_retails_estate_is_the_one_that_is_real(built) -> None:  # type: ignore[no-untyped-def]
-    """The positive claim the other three are measured against.
+@pytest.mark.parametrize("vertical", sorted(VERTICALS))
+def test_the_reporting_spine_is_load_bearing_everywhere(built, vertical: str) -> None:  # type: ignore[no-untyped-def]
+    """The positive claim, and the only assertion here that can fail upward.
 
-    Retail's business units, sites and categories are absent from its refusal
-    row, and that is the whole reason retail produces an order of magnitude more
-    facts from one period than the others. This is the assertion that would fail
-    if a change made retail's organisation decorative too — the direction no
-    ceiling above can catch, because a ceiling only ever looks at what is
-    already broken.
+    Every ceiling above looks at what is already broken, so none of them can see
+    a kind that is currently perfect going bad. This one can: it is the floor,
+    and it is what makes an estate difficult to quietly abandon. Deleting the
+    workbook that reports on branches would leave the banking ceiling perfectly
+    satisfied — 133 branches reaching nothing is not "worse than" a row that no
+    longer exists — and would fail here on the first run.
+
+    Written as one parametrised claim over all four verticals rather than four
+    hand-written assertions, because the interesting property is that it is the
+    *same sentence* for every engine. When it was four assertions it could only
+    ever have been true of retail.
     """
-    measured = _refusals(built("retail"))
-    for kind in ("business unit", "site", "category"):
-        assert kind not in measured, measured[kind]
+    measured = _refusals(built(vertical))
+    unreached = {k: measured[k] for k in LOAD_BEARING if k in measured}
+    assert not unreached, (
+        f"{vertical} declares an organisation it does not report on: {unreached}."
+        " Units, sites and categories are the dimensions these companies say"
+        " they are cut by; a corpus that leaves one decorative is the defect"
+        " this module's docstring records three engines being rebuilt to close."
+    )
 
 
-def test_a_bank_declares_a_branch_axis_and_says_nothing_about_a_branch(built) -> None:  # type: ignore[no-untyped-def]
+def test_a_grocer_declares_a_store_axis_and_says_nothing_about_44_of_them(built) -> None:  # type: ignore[no-untyped-def]
     """The violation quotes the declaration it contradicts.
 
     A site reaching nothing is only a defect because the company said it was cut
-    that way — `axes.shape_of('Banking')` declares a populated `branch` axis
-    sourced from `sites`. Without that quotation the finding reads as this
-    module's opinion about how much a corpus ought to contain, which is an
-    argument nobody can settle. With it, it is the corpus disagreeing with
-    itself.
+    that way. Without that quotation the finding reads as this module's opinion
+    about how much a corpus ought to contain, which is an argument nobody can
+    settle. With it, it is the corpus disagreeing with itself.
+
+    This asked the *bank* the same question until three engines closed their
+    estates, and where it moved to is worth recording rather than quietly
+    editing. `axes.shape_of('Banking')` still declares its populated `branch`
+    axis; all 133 branches now reach, so banking no longer contradicts itself
+    and there is no violation left to quote anything. The same is true of every
+    other axis-backed kind on all four shipped verticals — which is precisely
+    why this had to move to keep testing the mechanism at all, and why the
+    kinds still refused there (`system`, `service`, `person`) cannot host it:
+    no populated axis on any of those industries is sourced from `estate` or
+    `roster`, so their violations correctly quote nothing.
+
+    The grocer keeps it honest and pays for itself twice, because its 44
+    distribution centres are also the subject of the exemption tests below: the
+    quotation is what makes that exemption an argument the reader can evaluate
+    rather than a silenced row.
     """
+    grocer = _build("australian_grocery")
     sites = [
-        v for v in validate.reachability(built("banking")).violations
+        v for v in validate.reachability(grocer).violations
         if v.code == "site_reaches_nothing"
     ]
     assert len(sites) == 1, sites
-    assert "'branch'" in sites[0].detail
-    assert "axes.shape_of('Banking')" in sites[0].detail
+    assert "'store'" in sites[0].detail
+    assert "axes.shape_of('Supermarkets and omnichannel retail')" in sites[0].detail
+
+    # And the half that moving this test could have silently dropped: banking
+    # declares the axis it used to contradict, and now agrees with it.
+    assert "site" not in _refusals(built("banking"))
 
 
 def test_the_appendix_does_not_count_as_reaching(built) -> None:  # type: ignore[no-untyped-def]
@@ -332,11 +390,14 @@ def test_the_exemption_is_narrow_and_earns_its_place(built, grocery_exemption) -
     centres of a 1,607-site estate — sites the archetype states sell nothing —
     and it is the only reason that estate is not refused.
 
-    The same predicate also matches three insurance claims centres and five
-    procurement materials yards, and it does not touch them, because the
-    exemption is scoped to the industry it is an argument about. A claims centre
-    owns a claims count and a materials yard owns committed spend; both stay
-    refused, which is what those rows in `REFUSED` show.
+    The same predicate also matches insurance's claims centres and procurement's
+    materials yards, and it does not touch them, because the exemption is scoped
+    to the industry it is an argument about. That scoping has since been proved
+    the right call by events rather than by argument: a claims centre owns a
+    claims count and a materials yard owns held materials, both engines went and
+    minted exactly those, and both kinds of site now reach. An exemption written
+    one industry wider would have declared them structural and made that work
+    unnecessary — it would have closed the finding by agreeing with it.
 
     That contrast is the test. An exemption that covered every zero-weight site
     everywhere would be a blanket wearing a reason.

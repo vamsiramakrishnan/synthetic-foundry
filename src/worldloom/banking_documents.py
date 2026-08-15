@@ -27,6 +27,7 @@ from datetime import timedelta
 
 from . import documents
 from .documents import SectionPlan
+from .generators.banking_network import Network
 from .generators.regulatory import ReturnEpisode
 from .ids import Minter
 from .models import (
@@ -47,6 +48,7 @@ from .models import (
 
 MONEY_FORMAT = "#,##0;(#,##0)"
 RATIO_FORMAT = "0.00"
+COUNT_FORMAT = "#,##0"
 
 #: Who signs each of the nine, by role key (`documents.approver_of`).
 #:
@@ -76,6 +78,11 @@ _APPROVED_BY: dict[str, str] = {
     "internal_audit_review": "audit",
     "board_risk_committee_summary": "ceo",
     "meeting_minutes": "cfo",
+    # The divisional performance pack is the controller's work and the CFO's
+    # number: it is the one document in this episode that reports how the bank
+    # traded rather than how it filed, and the CFO answers for that to the
+    # executive committee.
+    "divisional_performance_pack": "cfo",
 }
 
 
@@ -84,12 +91,19 @@ def artifact_intents(
     *,
     episode: ReturnEpisode,
     roles: dict[str, str],
+    network: Network | None = None,
 ) -> tuple[tuple[ArtifactIntent, ...], tuple[IntentionalError, ...]]:
     """Plan the nine artifacts of one challenged return, and label its lies.
 
     Order is identity: these mint ``ART`` ids, so a new artifact may only ever
     be appended after the ninth — inserting one would renumber everything a
     checked-in narration cites.
+
+    ``network`` is the quarter's branch-network position
+    (``generators/banking_network``), and the twelfth artifact reports it.
+    Optional and appended last, for that same ordering rule: a caller that
+    passes none plans the eleven records exactly as it did before, which is
+    what keeps ``artifact_intents`` usable from a test that has no world.
     """
     k = episode.keys
     book_facts = [
@@ -277,6 +291,28 @@ def artifact_intents(
         "The challenge was argued by email before it was memoed; the thread is the "
         "live disagreement, message by message.",
     )
+
+    # 12 — the divisional performance pack: the only document in this episode
+    # that reports the *business* rather than the filing. Before it existed the
+    # bank's three divisions, its 133 branches and both its cost centres were
+    # named by no fact and carried by no document — a corpus that could be
+    # asked what the CET1 ratio was and not which division holds the deposits.
+    #
+    # A workbook rather than a memo, and for the reason `finance_workbook` is
+    # one: the figures reconcile by declared formula, so a reader who
+    # recalculates the sheet gets the same answer as the ledger. It plans only
+    # when there is an estate to report — see `Network.empty`.
+    if network is not None and not network.empty:
+        intent(
+            "divisional_performance_pack", "finance", "finance_and_risk",
+            roles["controller"],
+            [fact.id for fact in network.facts],
+            [k["event_close_finalised"]], "long",
+            "The quarter's divisional and branch-network performance, read from the "
+            "locked ledger: deposits, lending, settlements, income and front-line "
+            "headcount by division and by branch, and what the shared services cost "
+            "the divisions they are recharged to.",
+        )
 
     errors = (
         IntentionalError(
@@ -547,6 +583,262 @@ def capital_return_ir(world, intent: ArtifactIntent, minter: Minter) -> Artifact
 
 
 # ---------------------------------------------------------------------------
+# The divisional performance pack
+# ---------------------------------------------------------------------------
+
+#: The measures the pack reports, in column order: key, label, the fact kind it
+#: reads, and how a spreadsheet spells it. Every one of these **adds up** — a
+#: division's deposits are the sum of its branches' — which is what lets a
+#: subtotal row declare ``SUM`` over its children rather than paste a figure.
+_NETWORK_MEASURES: tuple[tuple[str, str, str, str], ...] = (
+    ("deposits", "Deposits", "banking.deposits.balance", MONEY_FORMAT),
+    ("lending", "Lending", "banking.lending.balance", MONEY_FORMAT),
+    ("settled", "New lending settled", "banking.lending.settled", MONEY_FORMAT),
+    ("income", "Net operating income", "banking.net_operating_income", MONEY_FORMAT),
+    ("fte", "Front-line FTE", "banking.network.fte", COUNT_FORMAT),
+)
+
+#: The rate, held in a separate constant from the measures above rather than
+#: carried in the same list behind a boolean. A group loan-to-deposit ratio is
+#: group lending over group deposits, never the total of three divisional
+#: ratios — the rule ``columns.not_summable`` and ``documents._RATE_KINDS``
+#: state for the retail sheet, which this repository has already paid for twice
+#: because the two hand-written sets could disagree. Two constants that cannot
+#: be confused are cheaper here than one that can.
+_NETWORK_RATE: tuple[str, str, str, str] = (
+    "loan_to_deposit", "Loan-to-deposit (%)",
+    "banking.loan_to_deposit_pct", RATIO_FORMAT,
+)
+
+
+def divisional_performance_ir(world, intent: ArtifactIntent, minter: Minter) -> ArtifactIR:  # type: ignore[no-untyped-def]
+    """The quarter's business, as a resolved workbook.
+
+    A source artifact rather than a projection of one, exactly as
+    ``documents.finance_workbook`` is: every subtotal is declared as a sum of
+    the rows above it, so a reader who recalculates the sheet gets the ledger's
+    own answer and a renderer with formula support emits the sum rather than
+    pasting it.
+
+    The tables follow the organisation rather than a fixed list: a division
+    with no branches gets no network table, and the same rule keeps a bank
+    whose pack declares no estate from rendering an empty one.
+    """
+    facts: list[CanonicalFact] = [world.facts.by_id(f) for f in intent.required_fact_ids]
+    stated: dict[tuple[str, str], CanonicalFact] = {(f.kind, f.subject): f for f in facts}
+    # No `world.entity_names()` here, unlike `capital_return_ir`: every row of
+    # this pack is built from the entity itself, so a row is labelled with the
+    # branch's own name rather than resolved back out of a fact's subject id.
+    company = world.company
+    period = next((f.period for f in facts if f.period), world.period or "")
+
+    def cell(kind: str, subject: str, children: list[str] | None = None) -> Cell:
+        """One measure for one subject: stated where the ledger states it.
+
+        ``children`` makes the cell a subtotal. The literal value is still the
+        ledger's own figure rather than a Python sum of the rows — the two are
+        equal by construction (``banking_network`` allocates by largest
+        remainder), and stating the fact is what lets the reconciliation check
+        compare a declared sum against the fact it claims to be.
+        """
+        fact = stated.get((kind, subject))
+        value = fact.value.amount if fact and fact.value else None
+        # No `fact_id` when there is no fact: a cell that names a fact and
+        # states nothing is `validate.empty_cell_cites_a_fact`, and a treasury
+        # desk genuinely holds no deposits.
+        fact_id = fact.id if fact else None
+        if children:
+            return Cell(value=value, fact_id=fact_id,
+                        formula=FormulaKind.SUM, operands=children)
+        return Cell(value=value, fact_id=fact_id)
+
+    def measure_row(key: str, label: str, subject: str, *,
+                    kinds: tuple[tuple[str, str, str, str], ...],
+                    rate: bool = False, children: list[str] | None = None,
+                    extra: dict[str, Cell] | None = None,
+                    emphasis: bool = False) -> Row:
+        cells = {
+            column_key: cell(kind, subject, children)
+            for column_key, _, kind, _ in kinds
+        }
+        if rate:
+            # Never `children`: see `_NETWORK_RATE`.
+            cells[_NETWORK_RATE[0]] = cell(_NETWORK_RATE[2], subject)
+        cells.update(extra or {})
+        return Row(key=key, label=label, cells=cells, emphasis=emphasis)
+
+    def columns_for(kinds: tuple[tuple[str, str, str, str], ...], *,
+                    rate: bool, descriptive: bool = False) -> list[Column]:
+        head = (
+            [Column(key="region", label="Region"), Column(key="format", label="Format")]
+            if descriptive else []
+        )
+        body = [
+            Column(key=key, label=label, number_format=fmt)
+            for key, label, _, fmt in kinds
+        ]
+        tail = (
+            [Column(key=_NETWORK_RATE[0], label=_NETWORK_RATE[1],
+                    number_format=_NETWORK_RATE[3])]
+            if rate else []
+        )
+        return [*head, *body, *tail]
+
+    measured_kinds = {kind for _, _, kind, _ in _NETWORK_MEASURES}
+
+    def measured(subject: str) -> bool:
+        """Whether this subject was booked a quarter at all.
+
+        The rule ``finance_workbook.measured`` states: a unit added after the
+        close it is being reported for would otherwise render as a row of empty
+        cells inside a subtotal it contributes nothing to.
+        """
+        return any((kind, subject) in stated for kind in measured_kinds)
+
+    sections: list[ArtifactSection] = []
+
+    # -- divisions, then group ---------------------------------------------
+    units = [unit for unit in world.business_units if measured(unit.id)]
+    unit_keys = [unit.id for unit in units]
+    divisional = Table(
+        key="divisions",
+        title="Divisional performance",
+        columns=columns_for(_NETWORK_MEASURES, rate=True),
+        rows=[
+            *[measure_row(unit.id, unit.name, unit.id,
+                          kinds=_NETWORK_MEASURES, rate=True)
+              for unit in units],
+            measure_row(company.id, "Group", company.id, kinds=_NETWORK_MEASURES,
+                        rate=True, children=unit_keys, emphasis=True),
+        ],
+        note=(
+            f"{company.name} · quarter ended {period} · {company.currency} "
+            f"{company.currency_unit}. Divisions sum to group. Loan-to-deposit is a "
+            "ratio of the two balances at the level it is stated and does not sum: "
+            "a division with no branch network holds no customer balances at all."
+        ),
+    )
+    sections.append(ArtifactSection(heading="Divisional performance", table=divisional))
+
+    # -- one network table per division that has one ------------------------
+    for unit in units:
+        estate = [
+            site for site in world.sites
+            if site.business_unit_id == unit.id and measured(site.id)
+        ]
+        if not estate:
+            continue
+        site_keys = [site.id for site in estate]
+        rows = [
+            measure_row(
+                site.id, site.name, site.id, kinds=_NETWORK_MEASURES,
+                extra={"region": Cell(value=site.region),
+                       "format": Cell(value=site.format)},
+            )
+            for site in estate
+        ]
+        rows.append(measure_row(
+            unit.id, f"{unit.name} total", unit.id, kinds=_NETWORK_MEASURES,
+            children=site_keys, emphasis=True,
+            extra={"region": Cell(value=None), "format": Cell(value=None)},
+        ))
+        sections.append(ArtifactSection(
+            heading=f"{unit.name} network",
+            table=Table(
+                key=f"network_{unit.id}",
+                title=f"{unit.name} — branch network",
+                columns=columns_for(_NETWORK_MEASURES, rate=False, descriptive=True),
+                rows=rows,
+                note=(
+                    "Branches sum to the division exactly. A site that holds work "
+                    "rather than customers — an operations centre — carries "
+                    "headcount and no balances, which is why its money cells are "
+                    "blank rather than zero: a zero would claim it took no deposits, "
+                    "and it was never open to any."
+                ),
+            ),
+        ))
+
+    # -- shared services, decomposed twice ----------------------------------
+    cost_column = [Column(key="cost", label="Cost", number_format=MONEY_FORMAT)]
+    centres = [c for c in world.cost_centres
+               if ("banking.shared_services_cost", c.id) in stated]
+    if centres:
+        centre_keys = [centre.id for centre in centres]
+        sections.append(ArtifactSection(
+            heading="Shared services by cost centre",
+            table=Table(
+                key="cost_centres",
+                title="Shared services cost base",
+                columns=cost_column,
+                rows=[
+                    *[Row(key=centre.id, label=centre.name,
+                          cells={"cost": cell("banking.shared_services_cost", centre.id)})
+                      for centre in centres],
+                    Row(key=company.id, label="Total shared services", emphasis=True,
+                        cells={"cost": cell("banking.shared_services_cost", company.id,
+                                            centre_keys)}),
+                ],
+                note="Where the cost is incurred. The centres sum to the group total.",
+            ),
+        ))
+
+    recharged = [unit for unit in world.business_units
+                 if ("banking.shared_services_recharge", unit.id) in stated]
+    if recharged:
+        sections.append(ArtifactSection(
+            heading="Shared services recharged to divisions",
+            table=Table(
+                key="recharge",
+                title="Shared services recharged",
+                columns=[Column(key="recharge", label="Recharge",
+                                number_format=MONEY_FORMAT)],
+                rows=[
+                    *[Row(key=unit.id, label=unit.name,
+                          cells={"recharge": cell("banking.shared_services_recharge",
+                                                  unit.id)})
+                      for unit in recharged],
+                    Row(key=company.id, label="Total recharged", emphasis=True,
+                        cells={"recharge": cell("banking.shared_services_cost",
+                                                company.id,
+                                                [u.id for u in recharged])}),
+                ],
+                note=(
+                    "Who carries it, recharged on income share. The same total as the "
+                    "cost centres above, decomposed across a different set of "
+                    "entities — which is what makes either of them checkable."
+                ),
+            ),
+        ))
+
+    author = world.people.by_id(intent.author_id)
+    persona = world.personas.get(author.persona_id) if author.persona_id else None
+    return ArtifactIR(
+        id=intent.id,
+        intent_id=intent.id,
+        title=f"{company.name} — Divisional and Branch Network Performance",
+        subtitle=(
+            f"Quarter ended {period} · {company.currency} {company.currency_unit}"
+        ),
+        sections=sections,
+        metadata={
+            "worldloom_synthetic": "true",
+            "worldloom_seed": str(world.seed),
+            "worldloom_period": period,
+            "worldloom_created": documents.written_at(
+                intent, {f.id: f for f in facts}
+            ).isoformat(),
+            "company": company.name,
+            "author": author.name,
+            "author_title": author.title,
+            "persona": persona.label if persona else "",
+            "voice": persona.voice if persona else "",
+            "note": "Synthetic corpus generated by Worldloom. Not a real company or regulator.",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -559,8 +851,8 @@ def capital_return_ir(world, intent: ArtifactIntent, minter: Minter) -> Artifact
 # time, precisely so registration costs nothing.
 from .render import docx as _docx, markdown as _markdown, xlsx as _xlsx
 
-_xlsx.register("capital_return")
-_markdown.own_elsewhere("capital_return")
+_xlsx.register("capital_return", "divisional_performance_pack")
+_markdown.own_elsewhere("capital_return", "divisional_performance_pack")
 _docx.register(
     "rwa_working_paper",
     "second_line_challenge_memo",
@@ -577,6 +869,9 @@ documents.register_artifact_types(
         "second_line_challenge_memo": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
         "internal_audit_review": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
         "board_risk_committee_summary": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
+        # An approved management report, not a filing: it is read inside the
+        # bank, it may be revised, and nothing in `FILING_TYPES` covers it.
+        "divisional_performance_pack": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
     },
     lags={
         "capital_return": timedelta(minutes=30),
@@ -586,6 +881,10 @@ documents.register_artifact_types(
         # After the audit review it summarises (and derives from): the summary
         # is written for the committee meeting, not the lodgement day.
         "board_risk_committee_summary": timedelta(days=4),
+        # Two days after the ledger locks — a divisional pack is assembled from
+        # the close, not on the day of it, and it is out well before the return
+        # it sits beside is lodged.
+        "divisional_performance_pack": timedelta(days=2),
     },
     outlines={
         "rwa_working_paper": (
@@ -722,5 +1021,8 @@ documents.register_artifact_types(
             ),
         ),
     },
-    compilers={"capital_return": capital_return_ir},
+    compilers={
+        "capital_return": capital_return_ir,
+        "divisional_performance_pack": divisional_performance_ir,
+    },
 )

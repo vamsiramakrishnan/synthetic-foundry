@@ -25,23 +25,31 @@ project cares about, and the thing two documents can genuinely have in common
 even when no author ever typed the same heading twice.
 
 **The projection is the whole design decision**, so it was measured rather than
-argued. Order 2, the 42 shipped outlines, sequences of length 1 to 8, admitted
+argued. Order 2, the 43 shipped outlines, sequences of length 1 to 8, admitted
 counts by exhaustive enumeration, and "shuffles" is the fraction of non-identity
 permutations of the *training* outlines that the model waves through — a
 projection that admits every reordering of a real document has stopped meaning
 anything about order, which is the failure mode at the coarse end:
 
     projection      symbols  windows  admitted  novel   shuffles admitted
-    heading             102       72        43      1        0 / 1,736
-    kinds                70       62       113     76        0 / 1,723
-    scope+kinds          71       63        84     47        0 / 1,726
-    kind                 53       58       264    229        0 / 1,723
-    scope+kind  ←        55       59       195    159        0 / 1,726
-    domain               14       26     1,088  1,060       48 / 913    5.3%
-    scope+domain         17       29       835    806       48 / 925    5.2%
-    scope                 3        7       275    262       44 / 158   27.9%
+    heading             104       73        44      1        0 / 1,737
+    kinds                72       63       114     76        0 / 1,724
+    scope+kinds          73       64        85     47        0 / 1,727
+    kind                 54       59       265    229        0 / 1,724
+    scope+kind  ←        56       60       196    159        0 / 1,727
+    domain               15       27     1,089  1,060       48 / 914    5.3%
+    scope+domain         18       30       836    806       48 / 926    5.2%
+    scope                 3        8       282    268       44 / 158   27.8%
 
-The ``heading`` row is the control, and it reads 102/72/43/1 rather than the
+The forty-third outline is insurance's ``underwriting_result_commentary``, which
+arrived when that vertical's estate was made load-bearing. It is worth naming
+here because of what it did *not* move: one more document added two symbols and
+one admitted sequence at ``scope+kind`` and left ``novel`` at 159 exactly, which
+is the table's own claim about itself — novelty comes from recombining roles the
+fleet already has, so a document whose sections project onto existing roles adds
+reach without adding shapes.
+
+The ``heading`` row is the control, and it reads 104/73/44/1 rather than the
 84/63/34/1 ``adjacency``'s docstring publishes because this wave gave ten policies
 their own headings — eighteen more strings, nine more admitted sequences, and
 **still one novel one**, which is the finding restated: heading text does not
@@ -53,8 +61,8 @@ the rename, because a policy's kinds and scope did not move.
 are what choose it rather than a preference for the middle:
 
 *The coarse boundary is between ``kind`` and ``domain``, and the shuffle column
-finds it.* ``domain`` collapses 102 headings to 14 symbols and admits 5.3% of the
-reorderings of documents somebody actually wrote; ``scope`` alone admits 27.9%.
+finds it.* ``domain`` collapses 104 headings to 15 symbols and admits 5.3% of the
+reorderings of documents somebody actually wrote; ``scope`` alone admits 27.8%.
 Those models will happily emit a policy whose responsibilities precede its
 purpose, which is the exact failure ``adjacency`` was built to avoid. Everything
 at ``kind`` granularity or finer admits **zero** shuffles.
@@ -68,8 +76,8 @@ repeatedly — sequences that say "state the group position, then state it again
 Scope is one bit and it is the bit that distinguishes the two sections in this
 repository's most-read memo.
 
-``kinds`` (the full tuple) is the "too fine" end the exercise predicted: 70
-symbols against 102 headings is barely a collapse at all, and it buys 76 novel
+``kinds`` (the full tuple) is the "too fine" end the exercise predicted: 72
+symbols against 104 headings is barely a collapse at all, and it buys 76 novel
 sequences against 159.
 
 **Cross-vertical splices are refused by tagging the symbol**, not by partitioning
@@ -81,10 +89,10 @@ under every tag, and a policy section can therefore splice into a retail close
 *and* into a bank's committee pack while the close and the pack stay apart. And
 it makes the guard structural rather than optional: a caller who forgets to pass
 ``forbid`` gets a cross-vertical splice, whereas a caller who forgets a tag gets a
-``KeyError`` from the catalogue. Measured at ``scope+kind``: **412 sequences are
-admitted by the pooled model, 217 of them are refused** because no single company
-issues all their sections, leaving the 195 above. Per vertical those 195 shapes
-account for 334 (vertical, shape) pairs — retail 146, banking 89, insurance 50,
+``KeyError`` from the catalogue. Measured at ``scope+kind``: **414 sequences are
+admitted by the pooled model, 218 of them are refused** because no single company
+issues all their sections, leaving the 196 above. Per vertical those 196 shapes
+account for 335 (vertical, shape) pairs — retail 146, banking 89, insurance 51,
 procurement 49 — of which 267 are novel.
 
 **What the projection still cannot see, stated because it shows in the output.**
@@ -435,7 +443,7 @@ def admitted(model: Adjacency, *, max_length: int) -> tuple[tuple[Symbol, ...], 
     """Every sequence of at most *max_length* symbols that *model* admits, sorted.
 
     Exhaustive, by forward closure over prefixes rather than by generate-and-test
-    — the space over 55 symbols at length 8 is 10^13 and the admitted set is 412.
+    — the space over 56 symbols at length 8 is 10^13 and the admitted set is 414.
 
     *max_length* is required, with no default, because on a role model there is no
     honest one: the policy family's self-loop makes the admitted set infinite, and
@@ -495,8 +503,8 @@ def refused(
 
     The cross-vertical guard, measured rather than asserted. Takes untagged
     sequences — the shapes a *pooled* model would admit — and reports the ones
-    that survive only by borrowing sections from two companies at once. 217 of
-    412 at the shipped projection.
+    that survive only by borrowing sections from two companies at once. 218 of
+    414 at the shipped projection.
     """
     ordered = sorted(tags)
     out: list[tuple[Symbol, ...]] = []

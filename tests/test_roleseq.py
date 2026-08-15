@@ -73,7 +73,12 @@ _BANKING = (
     "internal_audit_review",
     "board_risk_committee_summary",
 )
-_INSURANCE = ("claims_emergence_note", "actuarial_valuation_report", "margin_decision_memo")
+_INSURANCE = (
+    "claims_emergence_note",
+    "actuarial_valuation_report",
+    "margin_decision_memo",
+    "underwriting_result_commentary",
+)
 _PROCUREMENT = ("match_exception_report", "payment_approval_memo", "vendor_master_change")
 
 #: Families every company has, whatever engine built it: ten policies and five
@@ -119,7 +124,7 @@ _RETAIL = (
 )
 
 #: Every type the engine ships, spelled out so that the vertical attribution
-#: below is total and "the 42 shipped outlines" is a fact a reader can check.
+#: below is total and "the 43 shipped outlines" is a fact a reader can check.
 FLEET = _RETAIL + ("incident_rca",) + _BANKING + _INSURANCE + _PROCUREMENT + _EVERY_COMPANY
 
 VERTICALS = ("banking", "insurance", "procurement", "retail")
@@ -166,7 +171,7 @@ def test_every_shipped_type_is_attributed_to_a_company_that_issues_it() -> None:
     is not named here goes unmeasured, and a type named here that no longer ships
     would quietly shrink the corpus the table is quoted against.
     """
-    assert len(FLEET) == len(set(FLEET)) == 42
+    assert len(FLEET) == len(set(FLEET)) == 43
     assert set(FLEET) == set(engine_outlines()), (
         "the shipped fleet has moved. Name the new type in `_RETAIL` or the"
         " vertical family that issues it, then re-derive roleseq.py's table —"
@@ -225,13 +230,13 @@ two, which is enough room for a splice to exceed both of its parents."""
 #: about the control is a *ratio*, and `test_roles_beat_headings_by_two_orders`
 #: asserts that instead.
 TABLE: dict[str, tuple[int, int, int, int]] = {
-    "kinds": (70, 62, 113, 76),
-    "scope+kinds": (71, 63, 84, 47),
-    "kind": (53, 58, 264, 229),
-    "scope+kind": (55, 59, 195, 159),
-    "domain": (14, 26, 1088, 1060),
-    "scope+domain": (17, 29, 835, 806),
-    "scope": (3, 7, 275, 262),
+    "kinds": (72, 63, 114, 76),
+    "scope+kinds": (73, 64, 85, 47),
+    "kind": (54, 59, 265, 229),
+    "scope+kind": (56, 60, 196, 159),
+    "domain": (15, 27, 1089, 1060),
+    "scope+domain": (18, 30, 836, 806),
+    "scope": (3, 8, 282, 268),
 }
 
 
@@ -403,7 +408,7 @@ def test_roles_beat_headings_by_two_orders(shipped: dict[str, list[tuple]]) -> N
 def test_the_cross_vertical_guard_refuses_more_than_it_keeps(
     shipped: dict[str, list[tuple]],
 ) -> None:
-    """217 refused against 195 kept, and the refusals are the interesting half.
+    """218 refused against 196 kept, and the refusals are the interesting half.
 
     A splice whose windows are each real and whose whole is issued by no company
     is exactly the defect the last wave's report named. Asserting the guard bites

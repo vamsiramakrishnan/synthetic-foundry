@@ -119,12 +119,19 @@ def test_every_optional_purpose_still_reads_as_a_complete_instruction() -> None:
 def test_the_reachable_space_is_what_the_wave_claims() -> None:
     """The headline figure, pinned so it cannot rot silently.
 
-    49 classic, 71 under ``omission=400``: 20 optional sections across 16 types.
+    50 classic, 73 under ``omission=400``: 21 optional sections across 17 types.
     The twentieth is `workforce`'s ``onboarding_checklist/Access and security``,
     annotated when the policy vocabulary was authored: a corpus built without
     ``--policies`` has no security clauses for it to cite and already ships the
     start-date-only checklist, so the shorter document is one this repository
     produces rather than one this annotation invents.
+
+    The twenty-first is insurance's ``underwriting_result_commentary/The book
+    and the claims behind it``, which arrived with that vertical's own estate.
+    An investment function has no policy book and notifies no claims, so its
+    managing director's page genuinely has nothing to put under that heading —
+    the annotation says the absence is intended rather than a section somebody
+    lost, which is the same judgement every other one here is.
 
     The classic half is the more important assertion of the two — it is the
     byte-identity guarantee stated as a number, because every corpus in this
@@ -134,14 +141,14 @@ def test_the_reachable_space_is_what_the_wave_claims() -> None:
     """
     outlines = installed()
     classic = sum(structure.space(outline) for _, outline in outlines)
-    assert classic == len(outlines) == 49
+    assert classic == len(outlines) == 50
 
     reachable = sum(structure.space(outline, OMISSION) for _, outline in outlines)
-    assert reachable == 71, (
-        f"reachable heading sequences is {reachable}, not 71 — if you have"
+    assert reachable == 73, (
+        f"reachable heading sequences is {reachable}, not 73 — if you have"
         " annotated a section, say so here and in the module's own comment"
     )
-    assert len(optional_sections()) == 20
+    assert len(optional_sections()) == 21
 
 
 def test_the_policy_family_is_deliberately_not_annotated() -> None:

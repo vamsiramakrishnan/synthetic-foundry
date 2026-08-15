@@ -62,31 +62,23 @@ def _i(low: int, high: int, about: str) -> Span:
     return Span(low, high, "integer", None, about)
 
 
-#: This vertical's physics, and **the one registration seam this repository
-#: does not have**.
+#: The match's physics: how badly one order's three documents disagree.
 #:
-#: ``parameters.DEFAULTS`` is a literal dict in a core module, and
-#: ``Parameters.with_overrides`` refuses a name that is not already in it — so
-#: a pack cannot tune a fourth vertical's ranges, and ``worldloom pack params``
-#: cannot show them. The other four seams a vertical needs
-#: (``domains.register_domain``, ``recipe.register_step``,
-#: ``documents.register_artifact_types``, ``validate.register_domain_checks``)
-#: all exist; this one does not, and widening ``parameters.py`` to add
-#: procurement's names would be exactly the thin-waist violation those seams
-#: exist to prevent — ``tests/test_thin_waist.py`` would (correctly) refuse it,
-#: and mutating ``DEFAULTS`` from here would be the same violation with the
-#: evidence removed.
+#: This vertical is the reason ``parameters.register`` exists. These names were
+#: once unreachable — ``parameters.DEFAULTS`` was a literal dict in a core
+#: module and ``with_overrides`` refuses a name that is not already in it, so a
+#: pack could tune retail's margins and not a contractor's tolerance, while
+#: widening ``parameters.py`` by hand would have been exactly the thin-waist
+#: violation the other four seams exist to prevent. The seam closed that:
+#: ``worldloom.procurement`` registers this dict and
+#: ``generators/procurement_estate.SPANS`` at import, so both are in the
+#: registry `worldloom pack params` prints.
 #:
-#: So these live here and ``_physics`` layers them *under* whatever a caller
-#: supplied. Two consequences worth knowing:
-#:
-#: * a caller who constructs ``Parameters({**DEFAULTS, **SPANS, ...})`` by hand
-#:   can already override them, and that route works today;
-#: * a caller who does that and lets ``build_recipe`` record the overrides gets
-#:   a recipe that will not replay, because ``with_overrides`` on the rebuild
-#:   path refuses the unknown names. Unreachable through the CLI or a pack,
-#:   which is why it is stated rather than guarded — the fix is the seam, not a
-#:   workaround here.
+#: ``_physics`` still layers them *under* whatever a caller supplied, and that
+#: is not vestigial. Registration reaches ``DEFAULTS``, so every ``Parameters``
+#: derived from it already carries these; a caller who assembles one from a
+#: literal dict of their own does not, and would otherwise get a ``KeyError``
+#: from the middle of a draw rather than the engine's own range.
 SPANS: dict[str, Span] = {
     "procurement.order.contested_quantity": _i(
         900, 1_600,

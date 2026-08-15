@@ -55,14 +55,16 @@ evidence, not memory:
   carried by the ``p2p.exception_approved_by`` fact and the role table
   instead, and the field stays empty rather than plausibly wrong.
 
-And one seam that is genuinely missing, stated here rather than worked around:
-``parameters.DEFAULTS`` has **no registration seam**. A fourth vertical's
-physics cannot be added to it without editing a core module, so this vertical's
-seven ranges live in ``generators/procurement_match.SPANS`` and are layered
-under whatever a caller supplies. The consequence is precise: ``worldloom pack
-params`` cannot list them, ``Parameters.with_overrides`` refuses them by name,
-and a pack therefore cannot tune this vertical's physics at all. See that
-module's comment for the full shape of the gap.
+The one seam this vertical had to argue for is ``parameters.register``, and it
+now exists. This engine's ranges live in its own generators —
+``generators/procurement_match.SPANS`` for how badly one order's three
+documents disagree, ``generators/procurement_estate.SPANS`` for how much the
+group buys in and how far forward its order book runs — and are registered from
+here, so ``worldloom pack params`` lists all twelve and
+``Parameters.with_overrides`` accepts them by name. Both modules still layer
+their own spans *under* whatever a caller hands them, which is a no-op on every
+route that goes through ``DEFAULT`` and the defence for one that does not: a
+caller who builds a ``Parameters`` from a literal dict of its own.
 """
 
 from __future__ import annotations
@@ -91,10 +93,35 @@ from .world import World, extend_lore
 # always does — is sufficient for a corpus loaded in a fresh process to compile,
 # validate, and access procurement's parameters identically everywhere.
 from . import procurement_documents  # noqa: F401  (registration)
+from .generators.procurement_estate import (
+    COMMITMENT as _COMMITMENT,
+    COMMITMENT_ROLES as _COMMITMENT_ROLES,
+    MATERIALS as _MATERIALS,
+    MATERIALS_ROLES as _MATERIALS_ROLES,
+    SPEND as _SPEND,
+    SPEND_ROLES as _SPEND_ROLES,
+    role_of as _role_of,
+)
+from .generators.procurement_estate import SPANS as _ESTATE_SPANS
 from .generators.procurement_match import SPANS as _PROCUREMENT_SPANS
 from . import parameters as _parameters_module
 
 _parameters_module.register(_PROCUREMENT_SPANS)
+# The estate's own ranges, registered beside the match's rather than folded into
+# them: they are drawn by a different generator answering a different question —
+# how much a contracting group buys in and how far forward its order book runs,
+# against how badly one order's three documents disagree — and a single dict
+# would have made `worldloom pack params` describe them as one subsystem.
+_parameters_module.register(_ESTATE_SPANS)
+
+#: The estate's three measures, and which kind of place may own each. Read by
+#: the check group below so the generator's own rule and the validator's are one
+#: table rather than two that can drift.
+_ESTATE_KINDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (_SPEND, _SPEND_ROLES),
+    (_COMMITMENT, _COMMITMENT_ROLES),
+    (_MATERIALS, _MATERIALS_ROLES),
+)
 
 #: Archetype keys that build a ``ProcureToPayWorld``. The recipe rebuilder and
 #: the CLI dispatch on this.
@@ -302,13 +329,14 @@ class ProcureToPayWorld:
     physics: Parameters = DEFAULT
     """The world physics the organisation is drawn under.
 
-    Note what this *cannot* carry, and it is this vertical's own seam report:
-    procurement's seven ranges are not in ``parameters.DEFAULTS``, so a
-    ``Parameters`` built by ``with_overrides`` cannot hold one. The generators
-    layer their own defaults under whatever arrives here
-    (``generators.procurement_match._physics``), so the organisation and the
-    cycle are still drawn under the same physics — which is the invariant that
-    actually matters — but a pack cannot move a procurement range."""
+    This vertical's own ranges reach ``parameters.DEFAULTS`` through
+    ``parameters.register``, called at module import above, so a ``Parameters``
+    built by ``with_overrides`` can hold every one of them and a pack can move
+    any of them. The generators still layer their own spans under whatever
+    arrives here (``generators.procurement_match._physics``,
+    ``generators.procurement_estate._physics``), which is what keeps the
+    organisation, the cycle and the estate drawn under one set of physics even
+    when a caller assembles a ``Parameters`` by hand."""
 
     lore_claims: tuple[Any, ...] = ()
     """Lore a set of facet claims commits this group to (``facets.LoreClaim``).
@@ -842,6 +870,101 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                      "does not hand over exactly where the next status opens, or the"
                      " next status does not record what it replaced")
 
+    # The organisational spine, indexed once, for the same reason
+    # `order_periods` is: the estate measures are stated at four levels and a
+    # twelve-month corpus must cost twelve times a one-month corpus rather than
+    # a hundred and forty-four times it. Lists, not sets — these decide the
+    # order a reconciliation failure names its children in, and a set's
+    # iteration order is not stable across processes.
+    sites_of: dict[str, list[str]] = {unit.id: [] for unit in world.business_units}
+    for site in world.sites:
+        if site.business_unit_id in sites_of:
+            sites_of[site.business_unit_id].append(site.id)
+    categories_of: dict[str, list[str]] = {unit.id: [] for unit in world.business_units}
+    for category in world.categories:
+        if category.business_unit_id in categories_of:
+            categories_of[category.business_unit_id].append(category.id)
+    unit_ids = [unit.id for unit in world.business_units]
+    centre_ids = [centre.id for centre in world.cost_centres]
+    role_of_site = {site.id: _role_of(site) for site in world.sites}
+
+    # The estate's own months rather than `periods`, which is the months an
+    # *order* was raised in. They are the same set today — one scenario mints
+    # both — and deriving this one from the order's would make the whole spine
+    # go unchecked the moment a world carried a position for a month it placed
+    # no order in, which is a perfectly ordinary thing for a company to do.
+    for period in sorted({
+        month for (kind, month) in current
+        if month and kind in (_SPEND, _COMMITMENT, _MATERIALS)
+    }):
+        # -- (n) the organisation reconciles, on every cut it is stated on ---
+        # The dual of everything above. (a) to (j) hold one purchase cycle to
+        # its own arithmetic; this holds the *company* to its, because a
+        # corpus whose three divisions, eighty-one depots and two cost centres
+        # were named by no fact at all passed every check in this file — the
+        # estate was declared and reached nothing, which is the failure this
+        # group had no way to see.
+        #
+        # Checked per parent rather than only at group level. Units summing to
+        # the group while a division's own depots summed to something else
+        # would be a workbook whose sheets disagree and whose total is right,
+        # which is the class of defect `validate.financial()` covers for the
+        # retail hierarchy and has no view of here: these are `p2p.` kinds and
+        # that check reads `financial.` ones.
+        for kind, owning_roles in _ESTATE_KINDS:
+            stated = at(kind, period)
+            if not stated:
+                continue
+            group = stated.get(company_id)
+
+            for unit_id in unit_ids:
+                parent = stated.get(unit_id)
+                if parent is None:
+                    continue
+                for label, members in (
+                    ("site", sites_of[unit_id]),
+                    ("spend category", categories_of[unit_id]),
+                ):
+                    children = [stated[m].value.amount for m in members if m in stated]
+                    if not children:
+                        continue
+                    checks += 1
+                    if not close_enough(sum(children), parent.value.amount):
+                        fail("estate_does_not_reconcile", parent.id,
+                             f"{len(children)} {label}(s) of this division state"
+                             f" {sum(children):,.2f} of {kind} but the division states"
+                             f" {parent.value.amount:,.2f}")
+
+            for label, members in (("division", unit_ids), ("cost centre", centre_ids)):
+                if group is None:
+                    continue
+                children = [stated[m].value.amount for m in members if m in stated]
+                if not children:
+                    continue
+                checks += 1
+                if not close_enough(sum(children), group.value.amount):
+                    fail("estate_does_not_reconcile", group.id,
+                         f"{len(children)} {label}(s) state {sum(children):,.2f} of"
+                         f" {kind} but the group states {group.value.amount:,.2f}")
+
+            # -- (o) and no place carries a measure its format cannot own ----
+            # A project office takes no delivery and a materials yard buys
+            # nothing in. Held rather than trusted, because the arithmetic
+            # above would close perfectly on a corpus that had quietly given
+            # every site every measure — the roll-up cannot tell a division
+            # split three ways from the same division split five, and "the
+            # yards book a month of subcontract spend" is exactly the
+            # distribution-centre-with-turnover claim `hierarchy.SiteFormat`
+            # already refuses to make.
+            for site_id, role in role_of_site.items():
+                if site_id not in stated:
+                    continue
+                checks += 1
+                if role not in owning_roles:
+                    fail("site_states_a_measure_its_format_cannot_own", stated[site_id].id,
+                         f"a site that {role} carries {kind}, which only a site that"
+                         f" {' or '.join(owning_roles)} can")
+
     return violations, checks
 
 
@@ -1019,6 +1142,27 @@ _register_kinds([
              generated_by="generators/procurement_cycle.py",
              invariants=("holds-at", "reconciles-against(p2p.open_shortfall_value, p2p.match_total_variance)"),
              about="Goods-received-not-invoiced accrual the close books."),
+    # The estate's three, and the reason each carries `sums-to` against itself:
+    # like retail's `financial.revenue.actual`, one kind is stated at four
+    # levels — group, division, spend category or site, and (for commitment)
+    # cost centre — and the roll-up is between facts of the same kind rather
+    # than between two kinds.
+    FactKind(kind="p2p.third_party_spend", domain="procurement",
+             generated_by="generators/procurement_estate.py",
+             invariants=("holds-at", "sums-to(p2p.third_party_spend)"),
+             about="Third-party spend receipted in the period, at contracted rates —"
+                   " by division, by spend category, and by the depots that took delivery."),
+    FactKind(kind="p2p.open_commitment", domain="procurement",
+             generated_by="generators/procurement_estate.py",
+             invariants=("holds-at", "sums-to(p2p.open_commitment)"),
+             about="Purchase-order commitment placed and not yet received at close — by"
+                   " division, by depot and project office, and by the cost centre it is"
+                   " coded to."),
+    FactKind(kind="p2p.materials_on_hand", domain="procurement",
+             generated_by="generators/procurement_estate.py",
+             invariants=("holds-at", "sums-to(p2p.materials_on_hand)"),
+             about="Materials held in the yards at close. Only a yard holds any: the"
+                   " archetype gives one no revenue weight for exactly that reason."),
 ])
 
 

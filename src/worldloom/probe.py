@@ -346,6 +346,19 @@ KINDS = ("free", "scales", "complements", "at_most")
 #: perfectly good measure does not exist, which it cannot argue with. Same
 #: mechanism, and same reason, as `roles.SPINE`.
 MEASURES: tuple[str, ...] = (
+    # The bank's branch network. A division's deposits and a branch's headcount
+    # are the figures a bank actually holds a managing director to, and until
+    # `generators/banking_network` existed there were none — the whole
+    # organisation reached nothing, so an accountability naming a division had
+    # no number to be checked against.
+    "banking.deposits.balance",
+    "banking.lending.balance",
+    "banking.lending.settled",
+    "banking.loan_to_deposit_pct",
+    "banking.net_operating_income",
+    "banking.network.fte",
+    "banking.shared_services_cost",
+    "banking.shared_services_recharge",
     "capital.cet1_capital",
     "capital.cet1_delta",
     "capital.cet1_ratio",
@@ -357,7 +370,11 @@ MEASURES: tuple[str, ...] = (
     "claims.actual_vs_expected",
     "claims.incurred_to_date",
     "claims.paid_to_date",
+    "claims_ops.notified_count",
+    "claims_ops.settled_count",
     "close.delay",
+    "data.records_of_record",
+    "expense.operating",
     "financial.gross_margin_pct.actual",
     "financial.gross_margin_pct.budget",
     "financial.gross_profit.actual",
@@ -373,6 +390,7 @@ MEASURES: tuple[str, ...] = (
     "metric.online_conversion_rate.forecast",
     "metric.promotional_depth_margin_impact",
     "ops.affected_records",
+    "portfolio.policies_in_force",
     "reserves.attribution_deterioration",
     "reserves.attribution_pattern_change",
     "reserves.booked_strengthening",

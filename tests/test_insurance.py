@@ -65,13 +65,26 @@ def test_the_episode_is_coherent(compiled: World) -> None:
 
 
 def test_the_shape_of_the_episode(world: World) -> None:
-    """Four artifacts, one labelled imperfection, and all three mutation
-    disciplines' fact kinds on the record."""
-    assert len(world.artifact_intents) == 4
+    """The valuation's four artifacts plus the book's, one labelled
+    imperfection, and all three mutation disciplines' fact kinds on the record.
+
+    The count is ``4 + 1 + one per business unit``: the four the valuation
+    warrants, the underwriting performance pack, and a commentary per division.
+    Written as arithmetic rather than as ``8`` because the last term is a
+    fan-out — widen the archetype and the right answer moves, which is the
+    whole point of it (``insurance_documents``' own docstring).
+    """
+    units = len(world.business_units)
+    assert len(world.artifact_intents) == 4 + 1 + units
     assert {i.artifact_type for i in world.artifact_intents} == {
         "reserve_triangle_workbook", "claims_emergence_note",
         "actuarial_valuation_report", "margin_decision_memo",
+        "underwriting_performance_pack", "underwriting_result_commentary",
     }
+    assert [i.artifact_type for i in world.artifact_intents][:4] == [
+        "reserve_triangle_workbook", "claims_emergence_note",
+        "actuarial_valuation_report", "margin_decision_memo",
+    ], "ART order is identity; the book's documents are appended, never inserted"
     assert len(world.intentional_errors) == 1
     kinds = {f.kind for f in world.facts}
     assert {"close.due_date", "close.status", "close.delay"} <= kinds

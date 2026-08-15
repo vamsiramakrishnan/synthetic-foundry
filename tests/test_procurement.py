@@ -103,10 +103,13 @@ def test_a_history_is_coherent(history: World) -> None:
 
 
 def test_the_shape_of_the_episode(world: World) -> None:
-    assert len(world.artifact_intents) == 6
+    assert len(world.artifact_intents) == 7
     assert {i.artifact_type for i in world.artifact_intents} == {
         "purchase_order", "goods_receipt_note", "supplier_invoice",
         "match_exception_report", "payment_approval_memo", "vendor_master_change",
+        # The seventh reports the company rather than one cycle — see
+        # `tests/test_procurement_spine.py`, which holds it to that.
+        "spend_and_commitment_workbook",
     }
     assert len(world.intentional_errors) == 1
     kinds = {f.kind for f in world.facts}

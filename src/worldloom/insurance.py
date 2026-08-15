@@ -32,6 +32,18 @@ evidence, not memory:
   at all (increment 2's scope), so this misfit is recorded now, ahead of the
   code that would exercise it, rather than left to be rediscovered.
 
+One thing this module's first increment left out entirely, closed now and
+recorded here because the omission was invisible: **the organisation reached
+nothing.** A one-period build produced 62 facts and four documents, and its
+three business units, twenty branches, three claims centres, six underwriting
+offices, five systems and two cost centres were named by no fact and carried by
+no document at all. The reserving cycle is an argument about one long-tail
+book; it was never going to name a branch, and nothing else was minting
+anything. ``generators/insurance_book.py`` is the answer, and its docstring
+argues the constraint that shapes it — ``reserves.*`` is already cut by
+accident quarter over a cohort axis and must not be cut a second time by site,
+so the book asks what a *place* owns instead.
+
 Also deferred, with its reason: full chain-walking for the estimate-chain
 discipline (check b). Increment 1's chain is exactly two links (prior,
 strengthened) inside one run, so "exactly one unsuperseded estimate per
@@ -82,6 +94,19 @@ from .world import World, extend_lore
 # identically everywhere.
 from . import insurance_documents  # noqa: F401  (registration)
 
+# The book generator's physics, into the global registry through
+# `parameters.register` — the same call procurement makes from its own module,
+# so `worldloom pack params` lists these eight ranges and a pack can tune what
+# kind of insurer this is. Kept at module scope for the reason the artifact
+# types are: a parameter that exists only when some module happened to be
+# imported would make `Parameters.with_overrides` refuse a name in one process
+# and accept it in another, which is a determinism bug wearing a plugin's
+# clothes.
+from . import parameters as _parameters_module  # noqa: E402
+from .generators.insurance_book import SPANS as _INSURANCE_BOOK_SPANS  # noqa: E402
+
+_parameters_module.register(_INSURANCE_BOOK_SPANS)
+
 #: Archetype keys that build an ``InsuranceWorld``. The recipe rebuilder and
 #: the CLI dispatch on this.
 INSURANCE_ARCHETYPES = frozenset({MIDSIZE_GENERAL_INSURER.key})
@@ -104,6 +129,10 @@ CONSULTED_TARGETS: tuple[tuple[str, str], ...] = (
      "tags the committee's recommendation event (generators.reserving.generate)"),
     ("recurrence_after_release",
      "tags the retrospective's dependency on the next quarter's diagonal (increment 2)"),
+    ("written_premium/<unit_key>",
+     "tags that unit's written-premium variance against plan — a pack saying why"
+     " a book has been under pricing pressure lands here"
+     " (generators.insurance_book.generate)"),
 )
 
 
@@ -723,6 +752,58 @@ def _checks(world: World) -> tuple[list[Violation], int]:
                  "a booked reserve is the permanent statement of what was carried at a "
                  "valuation; closing or superseding it erases what the insurer held and when")
 
+    # -- (i) the organisation's own roll-ups ----------------------------------
+    # `validate.financial` already reconciles the money spine — units to group,
+    # lines to unit, offices to unit, variance to actual less budget — because
+    # `generators/insurance_book.py` mints it into the shared `financial.`
+    # vocabulary precisely so that one reconciler serves every vertical that
+    # states a money spine rather than one per engine. What core cannot cover is
+    # this vertical's *own* counts, and they decompose over axes core has no
+    # vocabulary for: a claims centre and a cost centre.
+    #
+    # Written as one loop over declared parent/child sets rather than three
+    # bespoke blocks, and driven by what the facts state rather than by what the
+    # archetype declares: a unit with no claims centre states a total and no
+    # breakdown, which is the archetype's own arrangement (Commercial Lines has
+    # none) and not a missing fact. An absent child is skipped; a *present* set
+    # of children that does not reach its stated parent is the defect.
+    rollups: list[tuple[str, str, list[str]]] = [
+        ("business units", world.company.id, [u.id for u in world.business_units]),
+        ("cost centres", world.company.id, [c.id for c in world.cost_centres]),
+    ]
+    for unit in world.business_units:
+        estate = [s.id for s in world.sites if s.business_unit_id == unit.id]
+        if estate:
+            rollups.append((f"sites of {unit.name}", unit.id, estate))
+
+    additive = (
+        "portfolio.policies_in_force",
+        "claims_ops.notified_count",
+        "claims_ops.settled_count",
+        "expense.operating",
+    )
+    stated: dict[tuple[str, str | None], dict[str, float]] = {}
+    for f in facts:
+        if f.value is None or f.kind not in additive or f.is_superseded:
+            continue
+        stated.setdefault((f.kind, f.period), {})[f.subject] = f.value.amount
+
+    for (kind, period), subjects in sorted(
+        stated.items(), key=lambda item: (item[0][0], item[0][1] or "")
+    ):
+        for label, parent, children in rollups:
+            if parent not in subjects:
+                continue
+            parts = [subjects[child] for child in children if child in subjects]
+            if not parts:
+                continue
+            checks += 1
+            total = sum(parts)
+            if abs(total - subjects[parent]) > RECONCILIATION_TOLERANCE:
+                fail("organisation_does_not_reconcile", f"{kind}/{period}/{parent}",
+                     f"{label} sum to {total:,.0f} but {parent} states "
+                     f"{subjects[parent]:,.0f} (difference {total - subjects[parent]:,.0f})")
+
     return violations, checks
 
 
@@ -844,6 +925,42 @@ _register_kinds([
              about="A cohort's paid position, as read at one valuation."),
     FactKind(kind="claims.actual_vs_expected", domain="insurance", generated_by="generators/triangles.py",
              invariants=("holds-at",), about="The quarter's development against the calibrated pattern."),
+    # -- the book, cut by the organisation that wrote it ---------------------
+    # `financial.revenue.*` is deliberately absent from this list: it is
+    # retail's registration and shared vocabulary, the way `close.*` is, and
+    # re-declaring it here under `domain="insurance"` would be two modules
+    # disagreeing about one kind — exactly what `factkinds.register` refuses.
+    # See `generators/insurance_book.generate` for why the book is minted into
+    # that vocabulary rather than a private one.
+    FactKind(kind="portfolio.policies_in_force", domain="insurance",
+             generated_by="generators/insurance_book.py",
+             invariants=("holds-at", "sums-to(portfolio.policies_in_force)"),
+             about="The policy book one office, unit or group carries into the"
+                   " valuation. Sites sum to their unit and units to the group."),
+    FactKind(kind="claims_ops.notified_count", domain="insurance",
+             generated_by="generators/insurance_book.py",
+             invariants=("holds-at", "sums-to(claims_ops.notified_count)"),
+             about="Claims notified in the quarter. Deliberately a separate"
+                   " prefix from `claims.*`: the triangle's diagonals are keyed"
+                   " by accident cohort over the period field, and an"
+                   " operational count keyed by the reporting quarter under the"
+                   " same prefix would make that pun ambiguous."),
+    FactKind(kind="claims_ops.settled_count", domain="insurance",
+             generated_by="generators/insurance_book.py",
+             invariants=("holds-at", "sums-to(claims_ops.settled_count)"),
+             about="Claims settled in the quarter, by claims centre, unit and group."),
+    FactKind(kind="expense.operating", domain="insurance",
+             generated_by="generators/insurance_book.py",
+             invariants=("holds-at", "sums-to(expense.operating)"),
+             about="Operating expense. Cost centres sum to the group; the"
+                   " expense *ratio* is never minted, because a ratio of totals"
+                   " is not the total of ratios."),
+    FactKind(kind="data.records_of_record", domain="insurance",
+             generated_by="generators/insurance_book.py",
+             invariants=("holds-at",),
+             about="How many records a system holds for what it is the system of"
+                   " record for. No roll-up: five systems of record for five"
+                   " different things do not add to anything anybody reports."),
 ])
 
 

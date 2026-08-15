@@ -12,6 +12,17 @@ and the extend/derive shape every scenario's ``run`` has. What does not
 repeat: the cycle itself, which lives in ``generators/procurement_cycle.py``
 and ``generators/procurement_match.py``.
 
+**One run, two generators, and they answer different questions.** The cycle is
+one purchase order and the three documents that disagree about it;
+``generators/procurement_estate.py`` is the company that order was raised
+inside — what each division buys in, what it has committed, what sits in the
+yards. They are separate because their inputs are: the cycle's figures come
+from a drawn quantity and a rate card, the estate's from the group's own
+revenue, and a corpus that had sized the second from the first would have made
+a contractor's whole cost base a function of one subcontract package. They
+share a date and an event, so the position is the position at the close the
+cycle finished.
+
 **What does not repeat and should have: the multi-period guard.**
 ``QuarterlyReserving`` refuses a second run on one world, so the insurance
 vertical is capped at a single period and cannot reach any scale. This
@@ -62,7 +73,13 @@ class PurchaseToPayCycle:
 
     def run(self, world: World) -> World:
         from . import procurement_documents
-        from .generators import cases, procurement_cycle, procurement_evaluation, procurement_match
+        from .generators import (
+            cases,
+            procurement_cycle,
+            procurement_estate,
+            procurement_evaluation,
+            procurement_match,
+        )
         from .generators.finance import previous_periods
 
         if world.seed is None:
@@ -191,8 +208,40 @@ class PurchaseToPayCycle:
             physics=self.physics,
         )
 
+        # The company the cycle happened inside. Generated *after* the cycle and
+        # from the cycle's own close, so the position it states is dated at the
+        # moment the ledger locked rather than at some hour of its own — and so
+        # a reader who asks "what had we committed when this accrual was posted"
+        # is reading two facts that share an event rather than two moments that
+        # nearly agree.
+        #
+        # Its figures come from the company's revenue, not from the order: the
+        # cycle raises one two-line order and the estate buys in a month, and a
+        # generator that had sized the second from the first would have made a
+        # group's whole cost base a function of one subcontract package.
+        estate = procurement_estate.generate(
+            rng.derive("estate"), minter,
+            period=self.period,
+            company_id=company_id,
+            unit_ids={unit.key: roles[f"unit_{unit.key}"] for unit in world._archetype.units},
+            unit_shares={unit.key: unit.share for unit in world._archetype.units},
+            categories=world._categories,
+            sites=world._sites,
+            commercial_cost_centre_id=roles["cc_commercial"],
+            finance_cost_centre_id=roles["cc_finance"],
+            annual_revenue=world._annual_revenue,
+            money_unit=f"{world._archetype.currency}_{world._archetype.currency_unit}",
+            at=episode.closed_at,
+            event_id=episode.keys["event_close_finalised"],
+            procure_system_id=roles["sys_procure"],
+            receipting_system_id=roles["sys_receipting"],
+            general_ledger_id=roles["sys_general_ledger"],
+            lore_by_target=index,
+            physics=self.physics,
+        )
+
         intents, errors = procurement_documents.artifact_intents(
-            minter, episode=episode, roles=roles,
+            minter, episode=episode, estate=estate, roles=roles,
             # Once per corpus, not once per month. A supplier that re-requested
             # its remittance details every close would turn a control finding
             # into wallpaper, and the fact is standing for the same reason.
@@ -219,6 +268,10 @@ class PurchaseToPayCycle:
         # filtered back out before `world.extend`, which is append-only.
         known_fact_ids = set(world.facts.ids())
         new_facts = tuple(f for f in episode.facts if f.id not in known_fact_ids)
+        # The estate's facts are minted fresh every month — a position is a
+        # position at a date — so none of them can be a reuse and none needs the
+        # filter above.
+        new_facts += estate.facts
 
         return world.extend(
             events=episode.events,

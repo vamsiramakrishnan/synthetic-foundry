@@ -93,10 +93,10 @@ def test_locale_holidays_cannot_move_a_cause_after_its_effect() -> None:
 
 
 def test_the_shape_of_the_episode(world: World) -> None:
-    """Eleven artifacts — the nine records plus the approval minutes and the
-    pre-lodgement thread — two labelled omissions, and the three cadences'
-    facts."""
-    assert len(world.artifact_intents) == 11
+    """Twelve artifacts — the nine records, the approval minutes, the
+    pre-lodgement thread and the divisional performance pack — two labelled
+    omissions, and the three cadences' facts."""
+    assert len(world.artifact_intents) == 12
     assert len(world.intentional_errors) == 2
     kinds = {f.kind for f in world.facts}
     # Retail's kinds reused verbatim — the cross-vertical sharing evidence.
