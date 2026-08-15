@@ -1,0 +1,7 @@
+{
+  "question": "gm_md_revenue_accountability",
+  "claim": "The divisional MD answers for revenue against budget; anything past three per cent goes to the CFO.",
+  "answers_for": "gm_md/financial.revenue.variance",
+  "low": 2.0,
+  "high": 3.0
+}

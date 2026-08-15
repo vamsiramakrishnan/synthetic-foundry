@@ -1,0 +1,29 @@
+{
+  "about": "A listed mid-size German general insurer in a fragmented broker market, carrying decades of systems.",
+  "industry": "General insurance",
+  "geo": "germany",
+  "facets": {
+    "listing": "listed",
+    "scale": "midmarket",
+    "competition": "fragmented",
+    "maturity": "legacy",
+    "trading_pattern": "steady"
+  },
+  "organisation": {
+    "headcount": 26,
+    "span": 5,
+    "levels": 3
+  },
+  "leadership": [
+    {
+      "key": "chief_underwriting",
+      "title": "Chief Underwriting Officer",
+      "function": "Executive",
+      "reports_to": "ceo"
+    }
+  ],
+  "identity": {
+    "company_name": "Rheinmark Versicherung",
+    "headquarters": "Munich, Germany"
+  }
+}
