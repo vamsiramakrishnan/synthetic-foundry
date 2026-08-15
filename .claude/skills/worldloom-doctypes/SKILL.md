@@ -52,3 +52,5 @@ into documents that are quietly wrong.
 - `references/boundaries.md` — what still needs Python (compilers, fact
   kinds, roles, access policies) and why authored types travel in the pack.
   Load before promising a workbook, a new role, or a new audience.
+- A pack carrying authored types builds from Python too —
+  `sdk.described({"pack": ...})` — see `/worldloom-sdk`.

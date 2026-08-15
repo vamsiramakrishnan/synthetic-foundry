@@ -118,5 +118,13 @@ surfacing, in order:
   `src/worldloom/narrative/prompts.py`. The version is part of the ledger key, so
   editing in place silently changes what a seed means.
 
+## When the ask is a loop, not a command
+
+Every command above is one fixed arrangement of the machinery. The moment the
+ask is a comprehension — fields of worlds, sweeps, filters on what came out, a
+corpus searching itself mid-loop, recipe mutations, counterfactual twins, a
+fleet qualified from memory — write Python against `worldloom.sdk` instead:
+`/worldloom-sdk`.
+
 `pytest -q` and `worldloom validate retail-close` must both pass before you
 commit anything.

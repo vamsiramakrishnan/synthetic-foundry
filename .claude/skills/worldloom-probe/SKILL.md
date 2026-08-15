@@ -45,3 +45,5 @@ Fix that specific thing and resubmit. **A rejection is the harness working.**
 - `references/endgame.md` — the refusal taxonomy, `probe_worlds` before
   resolving, and why an unbound leaf is the finding. Load on a refusal you do
   not recognise, or when the graph settles.
+- A settled session fans out to buildable blueprints from Python —
+  `sdk.probe_of(session, n)` — see `/worldloom-sdk`.

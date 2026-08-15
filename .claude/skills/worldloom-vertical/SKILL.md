@@ -49,3 +49,5 @@ figures, episode, evaluation). Plus one archetype in
 - `references/traps.md` — multi-period reuse, draw order, intent ordering,
   and the done protocol (byte-diff of existing corpora, replay proof). Load
   before the first multi-period run and again before calling it done.
+- A registered vertical is immediately a Python front door —
+  `sdk.engine("hospital")` joins every loop in `/worldloom-sdk`.

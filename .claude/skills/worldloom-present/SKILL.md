@@ -59,3 +59,5 @@ trip is a turn paid per rule you could not see.
   cascade, and why a profile replays by value. Load when writing profile.json.
 - `references/checking.md` — reading the rendered file instead of trusting the
   flag. Load after the first render under a new profile.
+- From Python, a profile rides the render call — `built.render("pdf",
+  profile="reader")` — see `/worldloom-sdk`.
