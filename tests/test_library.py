@@ -204,6 +204,73 @@ def test_cli_refuses_to_replay_a_corpus_with_no_ledger(tmp_path) -> None:
     assert "no generation ledger" in result.output
 
 
+def test_cli_refuses_to_replay_one_worlds_prose_into_another(tmp_path) -> None:
+    """`--replay` narrates whatever the *other* flags built, and says so.
+
+    The reported failure: `worldloom build --replay <a-banking-corpus>` with no
+    `--archetype` builds the default retail world, tries to key a bank's ledger
+    against it, and dies from inside `narrate` with "no ledger entry for
+    ART-0001/Commitment" — an artifact the caller never asked for, and a message
+    that says nothing about the mistake they made.
+
+    Worth having as a refusal rather than a better exception because of what
+    `--replay` promises. Every other flag on `build` describes the world; this
+    one describes a *recording of* a world, and the two are only ever meant to
+    be the same one.
+    """
+    bank, wrong = tmp_path / "bank", tmp_path / "wrong"
+    built = runner.invoke(app, [
+        "build", "--seed", "8128", "--archetype", "midsize_adi",
+        "--narrate", "--out", str(bank),
+    ])
+    assert built.exit_code == 0, built.output
+
+    result = runner.invoke(app, ["build", "--seed", "8128", "--replay", str(bank),
+                                 "--out", str(wrong)])
+    assert result.exit_code == 2
+    assert "recorded a different world" in result.output
+    # The divergence is named, so the caller learns which flag they dropped
+    # rather than being told to go and compare two recipes themselves.
+    assert "archetype" in result.output
+
+
+def test_cli_refuses_a_replay_that_would_otherwise_have_succeeded(tmp_path) -> None:
+    """The case that makes this a guard rather than a nicer exception.
+
+    A wrong `--archetype` misses every ledger key, so it was always going to
+    fail somehow and the only thing gained there is a better message.
+    `--employees` is the one that would not have failed: measured, 900 against
+    1,400 produces **the same 32 sections under the same intent ids** and the
+    same 588 facts, differing only in the headcount recorded on the company. So
+    every key hits, the replay succeeds, and out comes a corpus whose recipe
+    says 1,400 and whose prose was written for a company of 900.
+
+    Nothing visible is corrupted today, and that is exactly why it is worth
+    refusing rather than tolerating. The whole claim a recipe makes is that it
+    is a sufficient account of how a corpus was made; a replay that quietly
+    accepts a recipe it was not recorded under has falsified that claim while
+    reporting success, which is the same shape as the defect this branch fixed
+    in `recipe.rebuild` — and that one was invisible for exactly as long.
+
+    Hence comparing whole recipes rather than enumerating the flags that
+    matter. The ways to build the wrong world are not a list anybody finishes.
+    """
+    big, small = tmp_path / "big", tmp_path / "small"
+    built = runner.invoke(app, [
+        "build", "--seed", "8128", "--employees", "1400",
+        "--narrate", "--out", str(big),
+    ])
+    assert built.exit_code == 0, built.output
+
+    result = runner.invoke(app, [
+        "build", "--seed", "8128", "--employees", "900",
+        "--replay", str(big), "--out", str(small),
+    ])
+    assert result.exit_code == 2
+    assert "recorded a different world" in result.output
+    assert "employees" in result.output
+
+
 def test_cli_rejects_an_unknown_format(tmp_path) -> None:
     result = runner.invoke(app, ["build", "--format", "powerpoint", "--out", str(tmp_path / "x")])
     assert result.exit_code == 2

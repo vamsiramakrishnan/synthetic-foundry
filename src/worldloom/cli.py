@@ -1621,6 +1621,7 @@ def build(
         )
 
     if narrate or replay is not None:
+        from . import recipe as recipe_module
         from .narrative import DeterministicProvider, ProviderError, UnreachableProvider
 
         ledger = ()
@@ -1630,6 +1631,52 @@ def build(
             ledger = source._ledger
             if not ledger:
                 err.print(f"[red]error:[/red] {replay} carries no generation ledger to replay")
+                raise typer.Exit(code=2)
+            # The world being narrated must be the world the ledger was recorded
+            # for, and this says so up front instead of letting it emerge.
+            #
+            # `--replay` does not rebuild the world — it replays prose into
+            # whatever the other flags built — so `worldloom build --replay
+            # <a-banking-corpus>` with no `--archetype` narrates the *default
+            # retail* world from a bank's ledger. Every key misses, and the
+            # failure surfaces from inside `narrate` as "no ledger entry for
+            # ART-0001/Commitment", which names an artifact the user never
+            # asked for and says nothing about the mistake they actually made.
+            #
+            # Recipes rather than archetype-and-seed, because the ways to build
+            # the wrong world are not enumerable: `--periods`, `--messiness`,
+            # `--distractors` and `--facet` all change what there is to narrate.
+            # And a divergence that leaves the *sections* intact is the worse
+            # one, not the milder — replaying under a different `--annual-
+            # revenue` would succeed and file prose quoting last world's figures
+            # beside this world's tables, which is the cross-format defect this
+            # repository has already paid for once.
+            #
+            # `presentation` is excluded because a profile decides who a
+            # document is for and nothing about the world; `worldloom render`
+            # writes one onto an existing corpus, so a corpus rendered after it
+            # was narrated would otherwise refuse to replay itself.
+            def _world_only(document: dict[str, Any]) -> dict[str, Any]:
+                return {
+                    key: value
+                    for key, value in document.items()
+                    if key != recipe_module.PRESENTATION_KEY
+                }
+
+            here, there = _world_only(world.recipe), _world_only(source.recipe)
+            if here != there:
+                differs = sorted(
+                    key for key in set(here) | set(there)
+                    if here.get(key) != there.get(key)
+                )
+                err.print(
+                    f"[red]error:[/red] {replay} recorded a different world;"
+                    f" its recipe and this build's disagree on"
+                    f" {', '.join(differs)}. A replay reproduces a corpus, so"
+                    " the flags that built it have to be the flags that build"
+                    f" this one; {replay}/world.json records the recipe it was"
+                    " built from."
+                )
                 raise typer.Exit(code=2)
             # Unreachable on purpose: a replay that quietly falls back to
             # generating would not be a replay. Its id comes from what the
