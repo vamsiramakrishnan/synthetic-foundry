@@ -2737,5 +2737,15 @@ def validate(world: World) -> ValidationReport:
     exactly the rules it was built under rather than by whatever this process
     happened to import.
     """
+    # The package's domain registrations are lazy (W6: `worldloom._install`),
+    # and a caller who imported this module directly — `from worldloom.validate
+    # import validate` — never triggered them. Installing here, *before*
+    # `_under_the_corpus_rules` snapshots the registries, keeps the check
+    # count independent of the caller's import path; a validate run against a
+    # half-registered `_DOMAIN_CHECKS` would report "coherent" from a check
+    # set missing whole verticals.
+    from . import _install
+
+    _install()
     with _under_the_corpus_rules(world):
         return _Validator(world).run()

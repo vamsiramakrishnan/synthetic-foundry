@@ -15,7 +15,7 @@ import json
 import os
 from datetime import UTC
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import typer
 from rich.console import Console
@@ -23,9 +23,14 @@ from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
-from .corpus import CorpusError
-from .validate import ValidationReport
-from .world import World
+
+# Type-only: this module's import time is the console script's startup floor
+# (W6), and `World`/`ValidationReport`/`CorpusError` each drag the pydantic
+# model stack in. Annotations stay honest through TYPE_CHECKING; runtime uses
+# import inside the bodies that actually pay for a world anyway.
+if TYPE_CHECKING:
+    from .validate import ValidationReport
+    from .world import World
 
 app = typer.Typer(
     add_completion=False,
@@ -82,6 +87,26 @@ app.add_typer(benchmark_app, name="benchmark")
 
 console = Console()
 err = Console(stderr=True)
+
+
+@app.callback()
+def _install_domains() -> None:
+    # No docstring on purpose: typer would surface one as the app's help text,
+    # and the app help is pinned in `typer.Typer(help=...)` above.
+    #
+    # Runs before every command body and never for bare `--help` (click's
+    # eager help exits during parsing, before the group is invoked) — which is
+    # the whole W6 trade: `worldloom --help` pays only for typer and rich,
+    # while a real command finds the domain surface exactly as registered as
+    # it was when the package imported everything eagerly. The command bodies
+    # below import submodules directly (`from .retail import RetailWorld`),
+    # and a direct submodule import no longer registers the *other* verticals'
+    # check groups, artifact types and recipe verbs — this callback is what
+    # keeps "which tables are full" independent of which command ran, the
+    # invariant every comment in `worldloom._install` exists to protect.
+    from . import _install
+
+    _install()
 
 #: Every refusal code this CLI can emit, mapped to its one-line meaning. A
 #: registry rather than bare strings at the call sites so the codes are
@@ -266,6 +291,15 @@ def _refuse_exec_error(exc: Any) -> NoReturn:
 
 
 def _load(name_or_path: str) -> World:
+    # `from . import World`, not `from .world import World`: the package
+    # attribute goes through `worldloom.__getattr__`, which installs the whole
+    # domain surface first. That matters when a test calls this helper
+    # directly — the app callback never ran, and a world loaded into a process
+    # with half-registered check groups would validate clean while checking
+    # nothing, the failure mode `register_domain_checks` names.
+    from . import World
+    from .corpus import CorpusError
+
     try:
         return World.load(name_or_path)
     except CorpusError as exc:
@@ -3748,6 +3782,8 @@ def validate(
     # same exit, one step later. Not caught inside `_report`, which the build
     # and render commands share: those hold a world they just built in this
     # process, where the pack is installed already and this cannot arise.
+    from .corpus import CorpusError
+
     try:
         report = world.validate()
     except CorpusError as exc:
@@ -3916,6 +3952,8 @@ def verify(
     # thing, and the on-disk world is the one whose artifact files exist to
     # check. Same `CorpusError` posture as `validate`: a corpus whose own pack
     # cannot be reconstructed fails the same way as one that cannot be read.
+    from .corpus import CorpusError
+
     try:
         report = world.validate()
     except CorpusError as exc:
@@ -3958,6 +3996,7 @@ def migrate(
     """
     # Imported here, not at module top: cli.py startup is a budget (W6), and
     # migration is a maintenance verb no other command should pay for.
+    from .corpus import CorpusError
     from .migrate import migrate as migrate_corpus
 
     try:
@@ -6283,6 +6322,7 @@ def workspace(
 
     Written to a separate root: nothing in the corpus moves.
     """
+    from . import World
     from . import workspace as workspace_module
 
     try:
@@ -6336,8 +6376,10 @@ def doctor(
     import sys as sys_module
     from importlib import metadata as importlib_metadata
 
+    from . import World
     from . import docs as docs_generator
     from . import render as render_module
+    from .corpus import CorpusError
     from .render import RenderError
 
     checks: list[dict[str, Any]] = []
