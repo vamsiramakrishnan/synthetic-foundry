@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from . import columns as columns_module
 from . import domains, roleseq, structure
@@ -2758,6 +2758,85 @@ def approver_of(
     key = role_key or table.get(artifact_type)
     person = roles.get(key) if key else None
     return None if person == author else person
+
+
+class IntentFn(Protocol):
+    """The shape of the ``intent()`` closure ``intent_minter`` returns.
+
+    A Protocol rather than ``Callable[..., ArtifactIntent]`` so the four
+    planners' call sites stay typechecked — an ``...`` callable would let a
+    misspelled keyword through silently, and a planner's keyword arguments are
+    exactly where the four used to drift (``approver_role`` vs ``approved_by``
+    for the same ``approver_of`` role-key override).
+    """
+
+    def __call__(
+        self, artifact_type: str, domain: str, audience: str, author: str,
+        facts: list[str], events: list[str], size: str, rationale: str, *,
+        supersedes: str | None = None, derived_from: list[str] | None = None,
+        revises: str | None = None, restates: str | None = None,
+        approver_role: str | None = None,
+    ) -> ArtifactIntent: ...
+
+
+def intent_minter(
+    minter: Minter, intents: list[ArtifactIntent], *,
+    roles: dict[str, str], approved_by: Mapping[str, str],
+) -> IntentFn:
+    """The ``intent()`` closure every artifact planner builds its plan with.
+
+    Four planners — retail's close (``generators/planning.py``), banking's
+    return, insurance's valuation, procurement's match — each hand-copied this
+    construction, and the copies had already drifted: only insurance could
+    override the approver's role key, only banking could ``restates``, only
+    retail filtered empty ids out of ``derived_from``. None of those was a
+    per-vertical semantic — a vertical that never passes ``restates`` mints
+    the same intent whether the keyword exists or not — so the union of the
+    four signatures lives here once. What *is* per-vertical stays at the call
+    site: which artifacts to plan, in what order, and each vertical's own
+    ``approved_by`` table, because who signs a prudential return is an
+    argument about banking (see ``approver_of``).
+
+    ``derived_from`` drops falsy entries because retail's planner passes
+    ``[latest(...)]`` where ``latest`` returns ``None`` on a world that has
+    not run before — the first period's RCA derives from nothing. For the
+    other three the filter is a no-op: an actual ``None`` in their lists
+    would have failed ``ArtifactIntent``'s ``list[str]`` validation, so none
+    ever carried one.
+
+    Appends to *intents* and returns the made intent, so a planner can both
+    accumulate the plan and hold a reference for a later ``revises=``.
+    """
+
+    def intent(
+        artifact_type: str, domain: str, audience: str, author: str,
+        facts: list[str], events: list[str], size: str, rationale: str, *,
+        supersedes: str | None = None, derived_from: list[str] | None = None,
+        revises: str | None = None, restates: str | None = None,
+        approver_role: str | None = None,
+    ) -> ArtifactIntent:
+        made = ArtifactIntent(
+            id=minter.next("ART"),
+            artifact_type=artifact_type,
+            domain=domain,
+            audience=audience,
+            author_id=author,
+            approver_id=approver_of(
+                roles, artifact_type, author, approved_by, role_key=approver_role
+            ),
+            triggered_by=events,
+            required_fact_ids=facts,
+            size_profile=size,  # type: ignore[arg-type]
+            rationale=rationale,
+            supersedes=supersedes,
+            derived_from=[a for a in (derived_from or []) if a],
+            revises=revises,
+            restates=restates,
+        )
+        intents.append(made)
+        return made
+
+    return intent
 
 
 def _signoff(
