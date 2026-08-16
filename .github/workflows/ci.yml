@@ -443,12 +443,12 @@ jobs:
   # autocrlf rewriting fixtures at checkout (.gitattributes) and from
   # unpinned text-mode writes (newline="\n" pins in corpus.py and every
   # manifest writer; O_BINARY on the narration checkpoint's raw descriptor).
-  # `continue-on-error: true` stays for exactly one more run: phase 2 fixes
-  # applied — flip after one green run. Never make this leg green by skipping
-  # a test.
+  # The leg also caught two portability bugs the fixes above did not predict:
+  # the exec seam's POSIX tokenizer eating Windows paths, and verify
+  # reporting divergences in host-separator form. Gating since the first
+  # green run. Never make this leg green by skipping a test.
   windows:
     runs-on: windows-latest
-    continue-on-error: true
     env:
       # GitHub step output is a pipe, not a console, so sys.stdout falls back
       # to the locale codec (cp1252) and any ✓ the CLI prints raises
