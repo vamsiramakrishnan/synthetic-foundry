@@ -138,27 +138,12 @@ def artifact_intents(
     k = episode.keys
     lines = [line.category_id for line in episode.position.lines]
     intents: list[ArtifactIntent] = []
-
-    def intent(artifact_type: str, domain: str, audience: str, author: str,
-               facts: list[str], events: list[str], size: str, rationale: str,
-               *, derived_from: list[str] | None = None) -> ArtifactIntent:
-        made = ArtifactIntent(
-            id=minter.next("ART"),
-            artifact_type=artifact_type,
-            domain=domain,
-            audience=audience,
-            author_id=author,
-            approver_id=documents.approver_of(
-                roles, artifact_type, author, _APPROVED_BY
-            ),
-            triggered_by=events,
-            required_fact_ids=facts,
-            size_profile=size,  # type: ignore[arg-type]
-            rationale=rationale,
-            derived_from=derived_from or [],
-        )
-        intents.append(made)
-        return made
+    # The shared minter, with procurement's own approval table: four planners
+    # used to hand-copy this closure and drift on its keywords (see
+    # ``documents.intent_minter``); what stays procurement's is _APPROVED_BY.
+    intent = documents.intent_minter(
+        minter, intents, roles=roles, approved_by=_APPROVED_BY
+    )
 
     # 1 — the purchase order: what was committed, and at what rate.
     order_facts: list[str] = []

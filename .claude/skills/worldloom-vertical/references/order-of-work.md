@@ -1,7 +1,14 @@
+---
+title: Vertical Order of Work
+description: Build a vertical in nine steps, each ordered by dependency and named for the defect it prevents.
+read-when: When starting the vertical build.
+tags: [worldloom, vertical, workflow, generators, checks]
+---
+
 # The order of work — nine steps, each with the defect it prevents
 
-Load this when starting the build. The order is dependency order: each step
-consumes what the previous one decided.
+The order is dependency order: each step consumes what the previous one
+decided.
 
 1. **Decide what disagrees with what.** A vertical is worth building when two
    sources of truth can both be current and both be right about different

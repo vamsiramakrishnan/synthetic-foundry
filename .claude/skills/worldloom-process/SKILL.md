@@ -1,6 +1,7 @@
 ---
 name: worldloom-process
 description: Author a business process for a Worldloom company through a refusable cascade — seed it with a name, purpose, engine and owning LOB, propose its steps and the fact kinds they mint, declare its ordered role slots, and resolve it into an episode spec that installs, runs, and replays. Use when a company needs a recurring process (a close, a P2P cycle, an onboarding drive) that no shipped scenario models, or when asked who participates in a process and in what order.
+tags: [worldloom, process, episodes, cascade, cohorts]
 ---
 
 # Authoring a process

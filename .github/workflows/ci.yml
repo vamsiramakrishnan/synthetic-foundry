@@ -434,6 +434,50 @@ jobs:
           diff -r "${{ runner.temp }}/narrated" "${{ runner.temp }}/replayed"
           worldloom validate "${{ runner.temp }}/replayed"
 
+  # The Windows leg, phase 1 of 2: inventory, not gate. Every byte-identity
+  # claim this repository enforces has run on POSIX kernels only (ubuntu on
+  # every push, macOS nightly in determinism-sweep.yml), while the package
+  # calls itself "OS Independent" — this job is the first witness on Windows.
+  # `continue-on-error: true` is deliberate and temporary: the expected
+  # failures (CRLF from text-mode writes breaking byte-identity, hardcoded
+  # /tmp, path-separator assumptions in tests) are the *inventory* this phase
+  # exists to collect, so the job must run to completion and report without
+  # blocking merges. Phase 2 fixes what it finds and flips this off — see
+  # docs/plans/builder-revamp.md, item W7. Never make this leg green by
+  # skipping a test.
+  windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    # The default shell on windows-latest is pwsh; bash (Git Bash, which the
+    # runner ships) keeps these steps byte-identical to the linux test job's,
+    # so a failure here is the OS, never a shell-translation artifact.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # One version only (3.12, the coverage leg's version on linux): the
+      # 3.11–3.13 matrix is the linux job's job; the axis under test here is
+      # the OS.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]"
+
+      - name: Tests
+        run: pytest -q
+
+      # The coherence gate on the pinned example: proves the shipped corpus
+      # loads and validates when read on a CRLF-native filesystem.
+      - name: Golden episode validates
+        run: worldloom validate retail-close
+
   # The artifact users install, not the checkout developers test. Everything the
   # test job proves is proven against the repo; this job proves the *wheel* —
   # that the bundled examples ship, that a bare install (no extras) works and

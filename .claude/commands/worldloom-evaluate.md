@@ -1,5 +1,6 @@
 ---
 description: Score the corpus against the built-in baseline retrievers, and report what it contains
+tags: [worldloom, evaluation, retrieval]
 ---
 
 Score the corpus at $ARGUMENTS (default `./corpus`) against its own evaluation set.

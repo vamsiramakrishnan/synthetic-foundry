@@ -1,5 +1,6 @@
 ---
 description: Drive a Worldloom actor episode — be each employee, one decision at a time, through validated tools
+tags: [worldloom, acting, actor-episode]
 ---
 
 Drive the actor episode in the corpus at $ARGUMENTS (default `./corpus`).

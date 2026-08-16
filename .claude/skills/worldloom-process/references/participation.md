@@ -1,7 +1,11 @@
-# Binding and participation
+---
+title: Bindings and Participation
+description: Seat LOB roles into a process's slots, and derive who participates instead of storing a roster.
+read-when: When seating roles into slots or asking who is in a process.
+tags: [worldloom, process, lob, slot-bindings, participation]
+---
 
-Purpose: the company's half of a process — seating LOB roles into declared
-slots, and deriving who is in a process instead of maintaining a roster.
+# Binding and participation
 
 The company's half lives on the LOB: `lob.SlotBinding(process=..., slot=...,
 role_key=...)` rows in `Lob.slot_bindings`. Lint them with

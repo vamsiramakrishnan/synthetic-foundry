@@ -1,6 +1,7 @@
 ---
 name: worldloom-sdk
 description: Write Python against Worldloom instead of driving its CLI — compose blueprints, cross and disperse them, build many worlds in a loop, and filter on what came out. Use when a corpus request needs an arrangement no single command expresses: several organisation shapes crossed with several calendars, a sweep of one parameter, keeping only the worlds whose blast radius exceeds some number, or anything where the answer is a comprehension rather than a flag.
+tags: [worldloom, sdk, python, blueprints, sweeps]
 ---
 
 # Worldloom as a library

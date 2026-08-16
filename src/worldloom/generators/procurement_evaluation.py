@@ -157,15 +157,11 @@ def evaluation_cases(
     contested_name = category_names.get(contested.category_id, contested.category_id)
     clean_name = category_names.get(clean.category_id, clean.category_id)
 
-    builder = CaseBuilder(minter)
-
-    def case(question: str, kind: EvaluationType, answer: str, facts: list[str], *,
-             cutoff=None, difficulty: str = "hard", reasoning: str = "",  # type: ignore[no-untyped-def]
-             sources: list[str | None] | None = None,
-             distractors: list[str | None] | None = None) -> None:
-        builder.case(question, kind, answer, facts, cutoff=cutoff,
-                     difficulty=difficulty, reasoning=reasoning,
-                     sources=sources, distractors=distractors)
+    # This vertical's families are hard by design, so the builder's default
+    # flips to "hard" rather than repeating it at every call, the same choice
+    # `banking_evaluation` makes.
+    builder = CaseBuilder(minter, default_difficulty="hard")
+    case = builder.case
 
     rate = by_id[k[f"fact_contract_rate_{contested.category_id}"]]
     invoiced_price = by_id[k[f"fact_invoiced_unit_price_{contested.category_id}"]]

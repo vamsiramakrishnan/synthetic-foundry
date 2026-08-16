@@ -502,7 +502,15 @@ class Calendar(Protocol):
     spelled (ISO, see the locales module on why that stays closed).
     """
 
-    fiscal_year_start_month: int
+    # A read-only property rather than a bare attribute, because a bare
+    # attribute in a Protocol demands a *settable* member — and ``Locale`` is a
+    # frozen dataclass, so structural typing refused the very type this
+    # Protocol exists to admit. Nothing writes a calendar's start month (the
+    # close reads it once, at `fiscal_period` time), so read-only is the honest
+    # contract, and it is what let mypy clear this module and every scenario
+    # module that passes a ``Locale`` in.
+    @property
+    def fiscal_year_start_month(self) -> int: ...
 
     def is_business_day(self, day: date) -> bool: ...
 

@@ -28,6 +28,7 @@ Layout::
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -126,6 +127,55 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     """Write a JSON object with stable key order."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+@dataclass(frozen=True)
+class TreeDivergence:
+    """The first way two corpus trees fail to be byte-identical.
+
+    Exactly one of the two halves is populated: a file-*set* divergence carries
+    the ``missing``/``extra`` relative paths and an empty ``differing``; a
+    *byte* divergence carries the first differing relative path (in sorted
+    order) and empty sets. Paths are strings so a caller can print or serialise
+    them without knowing which ``Path`` flavour produced them.
+    """
+
+    missing: tuple[str, ...]
+    """Expected by the reference tree, absent from the tree under test."""
+    extra: tuple[str, ...]
+    """Present in the tree under test, not produced by the reference tree."""
+    differing: str | None
+    """The first file whose bytes differ, when the file sets already agree."""
+
+
+def tree_divergence(expected: Path, actual: Path) -> TreeDivergence | None:
+    """How *actual* diverges from *expected*, or ``None`` when byte-identical.
+
+    File set first, then bytes, deliberately in that order: a corpus missing a
+    file *and* differing in another should report the missing file, because a
+    wrong file set means the two trees are different corpora and any byte diff
+    inside them is noise about the wrong question. Only after the sets agree is
+    the first byte difference (in sorted path order) worth naming.
+
+    This is the comparison the dispersed replay sweep has always made
+    (``.github/scripts/dispersed_replay.py``); it lives here so ``worldloom
+    verify`` and the sweep cannot drift apart about what "byte-identical"
+    means — the third hand-rolled copy is the one that would have.
+    """
+    expected_files = {
+        path.relative_to(expected) for path in expected.rglob("*") if path.is_file()
+    }
+    actual_files = {path.relative_to(actual) for path in actual.rglob("*") if path.is_file()}
+    if expected_files != actual_files:
+        return TreeDivergence(
+            missing=tuple(sorted(str(path) for path in expected_files - actual_files)),
+            extra=tuple(sorted(str(path) for path in actual_files - expected_files)),
+            differing=None,
+        )
+    for relative in sorted(expected_files):
+        if (expected / relative).read_bytes() != (actual / relative).read_bytes():
+            return TreeDivergence(missing=(), extra=(), differing=str(relative))
+    return None
 
 
 def bundled_examples_dir() -> Path:

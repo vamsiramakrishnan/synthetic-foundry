@@ -443,15 +443,32 @@ def _survey(
     for member in _members(fleet_dir):
         world = World.load(member)
         report = world.validate()
-        reach = validate_module.reachability(world)
-        declared += reach.checks_run
-        for violation in reach.violations:
-            matched = _UNREACHED.match(violation.detail)
+        # `validate()` already ran the reachability group and re-filed its
+        # findings — the same `Violation` objects, verbatim — as
+        # `report.advisories` (`as_advisory` is called for that group alone),
+        # so the standalone `validate.reachability(world)` this used to call
+        # here built a second validator and a second readable surface per
+        # member for findings the report in hand already carried. The one
+        # reading the verdict had that the report cannot give back is its
+        # `checks_run` — one check per declared entity of every reachable
+        # kind, whether or not it was reached — so that census is taken
+        # straight off the same collections the group iterates
+        # (`validate.REACHABLE_KINDS`), under the group's own early-return
+        # condition: a corpus with no compiled documents is checked zero times.
+        if world.artifact_irs:
+            declared += sum(
+                len(list(getattr(world, kind)))
+                for kind in validate_module.REACHABLE_KINDS
+            )
+        for advisory in report.advisories:
+            matched = _UNREACHED.match(advisory.detail)
             if matched is None:
                 raise FleetError(
-                    "validate.reachability changed its finding format"
-                    f" ({violation.detail[:60]!r}...); fleet._survey reads the"
-                    " count off the front of it and must be updated with it"
+                    "validate.reachability changed its finding format, or a"
+                    " second check group started filing advisories"
+                    f" ({advisory.detail[:60]!r}...); fleet._survey reads the"
+                    " unreached count off the front of every advisory and must"
+                    " be updated with it"
                 )
             unreached += int(matched.group(1))
         reading = outcomes.read(world, name=member.name, seed=world.seed or 0)

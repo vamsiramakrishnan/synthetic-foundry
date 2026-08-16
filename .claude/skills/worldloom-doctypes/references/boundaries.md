@@ -1,7 +1,11 @@
-# What still needs Python, and why the pack is the only carrier
+---
+title: Authored/Coded Boundary
+description: Know where a JSON type stops being enough, and why authored types travel in the pack.
+read-when: Before promising a workbook, a new role, or a new audience from a pack-authored type.
+tags: [worldloom, doctypes, compilers, determinism, packs]
+---
 
-Purpose: the authored/coded boundary — where a JSON type stops being enough —
-and the determinism argument for types travelling in the pack.
+# What still needs Python, and why the pack is the only carrier
 
 ## What still needs Python
 

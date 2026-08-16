@@ -1,3 +1,10 @@
+---
+title: Rendered Profile Checks
+description: Check a rendered profile by reading the file — page count, figure spelling, harness voice.
+read-when: After the first render under a new profile.
+tags: [worldloom, presentation, rendering, pdf, verification]
+---
+
 # Checking a rendered profile: read the file, do not trust the flag.
 
 ```bash

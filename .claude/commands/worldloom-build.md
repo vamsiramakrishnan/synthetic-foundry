@@ -1,5 +1,6 @@
 ---
 description: Build a Worldloom corpus from a seed and report what it contains
+tags: [worldloom, build, seeds]
 ---
 
 Build a synthetic enterprise corpus. Arguments: $ARGUMENTS (a seed, and optionally

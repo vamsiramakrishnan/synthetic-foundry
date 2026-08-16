@@ -1,3 +1,10 @@
+---
+title: Presentation Knobs
+description: Choose among audit, reader and filing, and know what every knob value does to the page.
+read-when: Before choosing or authoring a presentation profile.
+tags: [worldloom, presentation, profiles, knobs, pdf]
+---
+
 # The shipped profiles and what every knob value does.
 
 `worldloom present describe` prints this table from the code; this is the why

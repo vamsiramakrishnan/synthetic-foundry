@@ -288,29 +288,14 @@ def artifact_intents(
         found = [i for i in prior_intents if i.artifact_type == artifact_type]
         return found[-1] if found else None
 
-    def intent(artifact_type: str, domain: str, audience: str, author: str,
-               facts: list[str], events: list[str], size: str, rationale: str,
-               *, supersedes: str | None = None, derived_from: list[str] | None = None,
-               revises: str | None = None, approved_by: str | None = None) -> None:
-        intents.append(
-            ArtifactIntent(
-                id=minter.next("ART"),
-                artifact_type=artifact_type,
-                domain=domain,
-                audience=audience,
-                author_id=author,
-                approver_id=documents.approver_of(
-                    roles, artifact_type, author, _APPROVED_BY, role_key=approved_by,
-                ),
-                triggered_by=events,
-                required_fact_ids=facts,
-                size_profile=size,  # type: ignore[arg-type]
-                rationale=rationale,
-                supersedes=supersedes,
-                derived_from=[a for a in (derived_from or []) if a],
-                revises=revises,
-            )
-        )
+    # The shared minter, with retail's own approval table: four planners used
+    # to hand-copy this closure and drift on its keywords (see
+    # ``documents.intent_minter``). The falsy-filter on ``derived_from`` that
+    # this planner needed — ``[latest(...)]`` is ``[None]`` on a world that
+    # has not run before — now lives in the shared helper.
+    intent = documents.intent_minter(
+        minter, intents, roles=roles, approved_by=_APPROVED_BY
+    )
 
     # Republished every period, replacing the last one. This is the corpus's
     # cleanest supersession chain: two documents that both look authoritative,
@@ -469,7 +454,7 @@ def artifact_intents(
                    # widen a retailer to eight divisions and eight different
                    # people sign eight different documents. `_APPROVED_BY` is a
                    # table keyed by type and has no way to say which one.
-                   approved_by=unit_role_key(unit_key, "_md"))
+                   approver_role=unit_role_key(unit_key, "_md"))
 
     # High-density fan-out: one layer below the unit, only once a build has
     # asked for it. A quarter of each unit's categories, ranked by revenue and
@@ -509,7 +494,7 @@ def artifact_intents(
                        category_facts, [episode.close_event_id], "small",
                        "At high density the same business partner also argues the "
                        "categories that moved the unit, not only its total.",
-                       approved_by=unit_role_key(unit_key, "_md"))
+                       approver_role=unit_role_key(unit_key, "_md"))
 
     if episode.had_incident and not actor_authored:
         k = episode.keys

@@ -1,3 +1,10 @@
+---
+title: Described Blueprints
+description: Drive a company specification from Python via sdk.described and company.resolve.
+read-when: Driving a specification from Python, or reading what a description committed to.
+tags: [worldloom, company-spec, sdk, python, blueprints]
+---
+
 # Driving a company specification from Python: sdk.described and company.resolve.
 
 ```python

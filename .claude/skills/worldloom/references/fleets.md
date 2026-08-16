@@ -1,3 +1,10 @@
+---
+title: Fleet Coverage
+description: Plan a fleet of corpora with covering arrays, and audit which combinations one never reached
+read-when: The ask is several corpora — a mosaic, a sweep, a training set — rather than one
+tags: [fleets, coverage, covering-arrays, mosaic, sweeps]
+---
+
 # Fleets: planning one, and auditing one you already built
 
 Load this when the ask is *several* corpora — a mosaic, a determinism sweep, a

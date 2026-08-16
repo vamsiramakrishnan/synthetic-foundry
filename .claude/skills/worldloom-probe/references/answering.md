@@ -1,3 +1,10 @@
+---
+title: Probe Answering
+description: Answer probe questions layer by layer — narrowing, relations, cross-layer links, grounding.
+read-when: Before answering the first probe question.
+tags: [worldloom, probe, layers, constraints, grounding]
+---
+
 # How to answer a probe question: layers, narrowing, relations, links, grounding.
 
 ## Descend the layers, and stay in the one you are given

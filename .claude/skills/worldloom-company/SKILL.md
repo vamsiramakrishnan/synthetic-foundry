@@ -1,6 +1,7 @@
 ---
 name: worldloom-company
 description: Describe a company once, in one document, instead of assembling it from nine flags — industry, geography, revenue, size, margins, listing, competition, leadership — and let the description be refused when it contradicts itself. Use when a corpus has to be a *particular* kind of business ("a listed mid-size German insurer, thin margins, fragmented market"), when you find yourself reaching for --facet and --locale and --physics and --pack in one command, or when asked whether Worldloom can express some attribute of a company.
+tags: [worldloom, company-spec, facets, locale, refusal-loop]
 ---
 
 # One document that says what kind of company this is

@@ -68,7 +68,12 @@ def render_servicenow(world: World) -> list[Rendered]:
     confirmed = next((f for f in facts if f.kind == "ops.cause" and not f.is_superseded), None)
     classification = next((f for f in facts if f.kind == "ops.root_cause_classification"), None)
     service = confirmed.subject if confirmed else (opened.subject if opened else None)
-    service_name = world.services.get(service).name if service and world.services.get(service) else ""
+    # Looked up once and narrowed, not `.get(...).name if .get(...)`: the
+    # double lookup left `.name` reached on a `Service | None` the checker
+    # could not see narrowed, which is what kept this module on the mypy
+    # debt ledger.
+    service_entry = world.services.get(service) if service else None
+    service_name = service_entry.name if service_entry else ""
 
     work_notes = [
         {

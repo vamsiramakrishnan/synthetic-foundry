@@ -1,3 +1,10 @@
+---
+title: Specification Fields
+description: Write each company-spec field against the seam it resolves into, and know what may go where.
+read-when: Before writing company.json, or when unsure whether a field is a value, a range, or free text.
+tags: [worldloom, company-spec, schema, registries, packs]
+---
+
 # Every field of a company specification, and the seam each resolves into.
 
 `worldloom pack spec` prints this schema from the code; what follows is the

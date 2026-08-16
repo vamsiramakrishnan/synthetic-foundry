@@ -11,6 +11,9 @@ description = "Generate coherent synthetic enterprise worlds that materialise in
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
+authors = [
+    { name = "Vamsi Ramakrishnan", email = "vamsiramakrishnan@gmail.com" },
+]
 requires-python = ">=3.11"
 keywords = [
     "synthetic-data",
@@ -23,7 +26,10 @@ keywords = [
     "corpus",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    # Alpha, honestly: nothing has been tagged or published yet (no v* tag,
+    # nothing on PyPI), and "Beta" on a first upload would claim a history the
+    # package does not have. Promote when a release has actually shipped.
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
@@ -245,10 +251,8 @@ ignore_missing_imports = true
 module = [
     "worldloom.actors.runtime",
     "worldloom.banking",
-    "worldloom.banking_scenarios",
     "worldloom.benchmark",
     "worldloom.cli",
-    "worldloom.cohorts",
     "worldloom.collections",
     "worldloom.compiler.diversity",
     "worldloom.compose",
@@ -266,7 +270,6 @@ module = [
     "worldloom.generators.insurance_book",
     "worldloom.generators.insurance_evaluation",
     "worldloom.generators.insurance_org",
-    "worldloom.generators.operations",
     "worldloom.generators.org_builder",
     "worldloom.generators.organisation",
     "worldloom.generators.planning",
@@ -288,12 +291,8 @@ module = [
     "worldloom.presentation",
     "worldloom.procurement",
     "worldloom.procurement_documents",
-    "worldloom.procurement_scenarios",
-    "worldloom.registries",
-    "worldloom.render.bundles",
     "worldloom.render.docx",
     "worldloom.render.html",
-    "worldloom.render.markdown",
     "worldloom.render.pptx",
     "worldloom.render.xlsx",
     "worldloom.scenarios",

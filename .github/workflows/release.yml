@@ -85,8 +85,55 @@ jobs:
           name: dist
           path: dist/
 
-  publish:
+  # A dress rehearsal on test.pypi.org before the real index sees anything:
+  # the one failure mode the wheel smoke above cannot catch is the *upload*
+  # itself — metadata PyPI refuses, a name collision, a trusted-publishing
+  # misconfiguration — and discovering that on the real index burns the
+  # version number forever (PyPI never reuses a filename, even deleted).
+  # This job is removable after v0.1.0 ships: once one release has proven the
+  # publishing path end to end, the rehearsal is paying rent on a door that
+  # is known to open.
+  testpypi:
     needs: [test, package]
+    runs-on: ubuntu-latest
+    # Trusted publishing against TestPyPI, configured separately from the
+    # `pypi` environment below — TestPyPI is a distinct index with its own
+    # publisher registration (see RELEASING.md).
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: The uploaded package installs from the index and answers
+        # A clean venv, installing from TestPyPI by name the way a user would
+        # from PyPI. Pinned to the tag's version so the check exercises the
+        # artifact just uploaded rather than whatever older rehearsal the
+        # index resolves; `--extra-index-url` points at real PyPI because
+        # TestPyPI does not carry the dependencies. The index can lag the
+        # upload by a few seconds, hence the retry.
+        run: |
+          python -m venv /tmp/testpypi
+          for attempt in 1 2 3 4 5; do
+            /tmp/testpypi/bin/pip install --quiet \
+              --index-url https://test.pypi.org/simple/ \
+              --extra-index-url https://pypi.org/simple \
+              "worldloom==${GITHUB_REF_NAME#v}" && break
+            echo "TestPyPI has not served the upload yet (attempt $attempt); waiting"
+            sleep 15
+          done
+          /tmp/testpypi/bin/worldloom --help
+
+  publish:
+    needs: [test, package, testpypi]
     runs-on: ubuntu-latest
     # Trusted publishing: PyPI is told to accept this repository, this workflow,
     # and this environment, and no API token is stored anywhere. Configured once

@@ -126,18 +126,11 @@ def evaluation_cases(
                        for key in k if key.startswith("fact_ultimate_current_")})
     first_cohort = cohorts[0]
 
-    # This vertical's families are hard by design; the wrapper defaults to
-    # "hard" rather than repeating it at every call, the same choice
-    # `banking_evaluation.case` makes.
-    builder = CaseBuilder(minter)
-
-    def case(question: str, kind: EvaluationType, answer: str, facts: list[str], *,
-             cutoff=None, difficulty: str = "hard", reasoning: str = "",  # type: ignore[no-untyped-def]
-             sources: list[str | None] | None = None,
-             distractors: list[str | None] | None = None) -> None:
-        builder.case(question, kind, answer, facts, cutoff=cutoff,
-                     difficulty=difficulty, reasoning=reasoning,
-                     sources=sources, distractors=distractors)
+    # This vertical's families are hard by design, so the builder's default
+    # flips to "hard" rather than repeating it at every call, the same choice
+    # `banking_evaluation` makes.
+    builder = CaseBuilder(minter, default_difficulty="hard")
+    case = builder.case
 
     central_current = by_id[k["fact_central_current"]]
     booked_current = by_id[k["fact_booked_current"]]

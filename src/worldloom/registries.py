@@ -269,15 +269,25 @@ def scoped() -> Iterator[None]:
         # default.
         for container, original in reversed(saved):
             container.clear()
-            container.update(original)  # type: ignore[arg-type]
+            # A branch after all, where an unconditional `update` used to sit
+            # under an ignore: concrete `set` answers `update`, but the
+            # `MutableSet` ABC this union is typed against does not — the
+            # ignore was masking a real [union-attr], not a stylistic one.
+            # Dispatching on the same test `_copy` uses keeps both directions
+            # of the snapshot honest about which shape they are holding, and
+            # `|=` is `MutableSet`'s own spelling of "put these back".
+            if isinstance(container, MutableMapping):
+                container.update(original)
+            else:
+                container |= original
 
 
 def _copy(container: MutableMapping[Any, Any] | MutableSet[Any]) -> Any:
     """A shallow copy that works for both shapes a registry takes here.
 
-    ``dict`` for seven of them and ``set`` for ``render.docx.HANDLES``, and both
-    answer ``clear()``/``update()`` the same way — so the restore above needs no
-    branch and a ninth container of either shape needs no change.
+    ``dict`` for seven of them and ``set`` for ``render.docx.HANDLES``. The
+    restore above dispatches on the same ``MutableMapping`` test, so a ninth
+    container of either shape needs no change to either direction.
     """
     return dict(container) if isinstance(container, MutableMapping) else set(container)
 

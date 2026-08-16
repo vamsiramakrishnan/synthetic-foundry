@@ -1,7 +1,14 @@
+---
+title: Harness Constraints
+description: Hold every authoring stage to the four harness constraints no layer may relax.
+read-when: Before authoring any stage of any layer's cascade.
+tags: [worldloom, authoring, determinism, fact-kinds, narration]
+---
+
 # The constraints every authoring stage must respect
 
-These are the harness's, not any one layer's, and no layer may relax them.
-Load this before authoring any stage; each layer skill assumes them.
+These are the harness's, not any one layer's, and no layer may relax them;
+each layer skill assumes them.
 
 - **Registry-known kinds, or declared invariants.** A step may only mint a
   fact kind that `worldloom.factkinds.names()` knows — or one you declare

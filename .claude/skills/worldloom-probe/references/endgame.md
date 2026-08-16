@@ -1,3 +1,10 @@
+---
+title: Probe Endgame
+description: Read a probe refusal's chain, check the world-space before resolving, and report unbound leaves.
+read-when: On a refusal you do not recognise, or when the graph settles.
+tags: [worldloom, probe, refusals, arc-consistency, resolve]
+---
+
 # Reading a refusal, checking the world-space before resolving, and what an unbound leaf means.
 
 ## The refusals are computed, not listed

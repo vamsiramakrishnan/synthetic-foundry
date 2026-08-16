@@ -1,3 +1,10 @@
+---
+title: Extending Worldloom
+description: Add a format, scenario, industry, or coherence rule without crossing the generation boundary
+read-when: Changing this repository rather than using it — a new renderer, scenario, vertical, or validator
+tags: [extending, determinism, renderers, scenarios, validators]
+---
+
 # Extending Worldloom
 
 You are changing the repository, not using it. Read `docs/build-order.md` and

@@ -1,3 +1,10 @@
+---
+title: Acting the Employees
+description: Drive an actor episode — one employee decision per turn, from only what that employee observed
+read-when: A corpus built with --actors agent has an episode waiting for decisions, or an action was refused
+tags: [acting, actor-episode, authority, observations, rejections]
+---
+
 # Acting
 
 You are here because a corpus was built with `worldloom build --actors agent` and

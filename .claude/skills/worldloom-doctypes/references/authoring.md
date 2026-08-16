@@ -1,7 +1,11 @@
-# Writing an authored type, field by field
+---
+title: Authored Type Schema
+description: Write an artifact_types entry field by field, and the lore that makes the company file it.
+read-when: Before writing an authored type's JSON into a pack.
+tags: [worldloom, doctypes, packs, schema, lore]
+---
 
-Purpose: the `artifact_types` schema, why each of the five decisive fields is
-decisive, and the lore that makes the company actually file the type.
+# Writing an authored type, field by field
 
 ## What is authorable
 

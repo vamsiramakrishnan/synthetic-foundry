@@ -1,6 +1,7 @@
 ---
 name: worldloom-vertical
 description: Author a whole new industry vertical for Worldloom — its own episode, documents, checks and benchmark — through the registration seams, without editing core. Use when a corpus needs a business this repository does not model (a hospital, a manufacturer, an airline), when an industry pack cannot express what the episode actually is, or when asked what adding a fourth engine to this codebase would cost.
+tags: [worldloom, vertical, engines, registration, determinism]
 ---
 
 # Authoring a vertical

@@ -1,128 +1,173 @@
-# Worldloom
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero.svg">
+  <img src="assets/readme/hero-light.svg" width="100%" alt="Worldloom — a deterministic compiler for coherent synthetic enterprise corpora. One seed becomes 615 facts, 16 artifacts, 51 evaluation cases and 8,861 coherence checks, byte-identical on every rebuild.">
+</picture>
 
 [![ci](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/ci.yml/badge.svg)](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/ci.yml)
 [![determinism sweep](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/determinism-sweep.yml/badge.svg)](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/determinism-sweep.yml)
+[![docs](https://img.shields.io/badge/docs-site-blue)](https://vamsiramakrishnan.github.io/synthetic-foundry/)
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 <!-- No PyPI or python-versions badge: `worldloom` is not published on PyPI
      (checked 2026-08 — the name 404s), and a badge that renders as a broken
      image is worse than none. Add them with the first release. -->
 
-**A deterministic compiler for coherent synthetic enterprise corpora.**
+[Quickstart](#-quickstart) · [The design](#-the-design-in-one-diagram) · [Four verticals](#-four-verticals) · [The fleet loop](#%EF%B8%8F-plan-build-measure-ask) · [Agent handshake](#-production-prose-a-checked-agent-handshake) · [SDK](#-python-sdk) · [Docs site](https://vamsiramakrishnan.github.io/synthetic-foundry/)
 
-Worldloom generates the enterprise before it generates the files: companies,
-people, reporting lines, systems, services, financial facts, events, permissions,
-document intents, and evaluation cases. It then projects that state into native
-XLSX, DOCX, PPTX, PDF, Markdown, Jira, Confluence, and ServiceNow artifacts.
+**Status:** pre-release, installed from a clone · 3,086 test functions · four verticals · every build byte-identical on replay · Apache-2.0
 
-The result is a corpus in which a memo, workbook, incident, ticket, board summary,
-and retrieval answer can be checked against the same fact ledger.
+</div>
 
-No service to operate. No API key in the library. No hidden model call.
+Most synthetic-data systems generate files independently. The documents look
+plausible one at a time and fail as a corpus: the PDF reports a total the
+workbook cannot reconcile, the RCA names a cause no incident record
+established, the ticket is assigned to an employee who does not exist, and the
+retriever is scored against questions whose evidence was never generated.
 
-> Your agent supplies judgement and language. Worldloom supplies truth,
-> structure, lineage, and refusal.
+**Worldloom generates the enterprise before it generates the files.**
 
-```bash
-pip install "worldloom[all]"
+| | |
+|---|---|
+| **615 → 16 → 8,861** | facts → documents → coherence checks, from one default seed |
+| **58 → 744** | facts per period after reachability closed the thin-corpus gap (banking) |
+| **11,197,440 → 39** | configurations exhaustive → covering rows that reach every pair |
+| **zero** | model calls inside the library — no service, no API key, no hidden judgement |
 
-worldloom build --seed 8128 --incident --narrate --out ./corpus
-worldloom render ./corpus -f xlsx -f docx -f pptx -f pdf -f markdown
-worldloom validate ./corpus
-worldloom evaluate ./corpus --retriever both
-```
+What that buys you:
 
-The built-in deterministic narrator is useful for tests, replay, and inspecting a
-complete corpus without a model. For production prose, let a coding agent drive the
-validated `narrate requests` / `narrate accept` handshake described below.
+- **Every file agrees with every other file.** A memo, workbook, incident,
+  ticket, board summary and retrieval answer all check against the same fact
+  ledger — coherence is validated, not prompted for.
+- **Ground truth is generated with the evidence.** Evaluation cases carry
+  expected fact IDs, required artifacts, distractors, temporal cutoffs and
+  abstention labels, derived from the same state as the documents.
+- **The same seed returns the same bytes.** A corpus rebuilds from its seed,
+  recipe and generation ledger, byte-for-byte, offline. CI proves it nightly
+  on a rotating dispersed sample.
+- **Refusal is a feature.** A flag either acts or refuses with the reason. An
+  impossible company, an unreachable episode, a claim outside its evidence —
+  each is refused naming the rule, never silently absorbed.
+- **Your agent supplies judgement and language.** Worldloom supplies truth,
+  structure, lineage and refusal, over a shell-and-JSON handshake any coding
+  agent can drive.
 
-## The design in one diagram
+Every number in this README is reproducible from a command on this page or a
+test in [`tests/`](tests/).
 
-```text
-Authoring inputs                         Deterministic world
-+----------------------+                 +---------------------------+
-| spec / pack / facets |----+            | company + people + estate |
-| seed / locale / lore |    |            | events + facts + access   |
-| physics / org shape  |    +----------->| recipe + eval ground truth|
-+----------------------+                 +-------------+-------------+
-                                                        |
-                                                        v
-                                              +---------------------+
-                                              | artifact intents    |
-                                              | author / audience   |
-                                              | type / facts / time |
-                                              +----------+----------+
-                                                         |
-                              propose -> validate -> accept
-                                                         |
-                                                         v
-                                              +---------------------+
-                                              | ArtifactIR          |
-                                              | tables + sections   |
-                                              | claims + lineage    |
-                                              +----------+----------+
-                                                         |
-                         +---------------+---------------+---------------+
-                         |               |               |               |
-                         v               v               v               v
-                       XLSX          DOCX/PDF         PPTX/MD       Jira/Confluence/
-                                                                      ServiceNow
-```
+## 🧭 The design in one diagram
 
-The renderers never decide what is true. They receive one resolved `ArtifactIR`
-and project it into different file grammars. That is why the PDF and DOCX can
-share the same title, author, period, evidence, and numbers without coordinating
-with each other.
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/flow.svg">
+  <img src="assets/readme/flow-light.svg" width="100%" alt="Authoring inputs build a deterministic world; the world plans artifact intents; a propose-validate-accept gate resolves them into one ArtifactIR; renderers project that IR into XLSX, DOCX, PDF, PPTX, Markdown, Jira, Confluence and ServiceNow.">
+</picture>
+</div>
 
-## Why this exists
-
-Most synthetic-data systems generate files independently. That produces documents
-that look plausible in isolation and fail as a corpus:
-
-- a PDF reports a total the workbook cannot reconcile;
-- an RCA names a cause that the incident record never established;
-- a ticket is assigned to an employee who does not exist;
-- a board paper cites information discovered after it was signed;
-- five seeded companies are the same organisation with different names;
-- a retriever is evaluated against questions whose evidence is absent.
-
-Worldloom reverses the order:
+Facts precede prose. Simulation precedes rendering. The renderers never decide
+what is true: they receive one resolved `ArtifactIR` and project it into
+different file grammars, which is why the PDF and the DOCX share the same
+title, author, period, evidence and numbers without coordinating.
 
 ```text
 world state --> events --> canonical facts --> artifact plan --> prose --> files
 ```
 
-Facts precede prose. Simulation precedes rendering. Evaluation ground truth is
-derived from the same state as the evidence. Every generated claim remains
-traceable to the facts and events that support it.
+## ⚡ Quickstart
 
-## What ships today
+From zero to a complete, validated corpus (PyPI release pending, so install
+from the clone):
 
-### Four verticals
+```bash
+git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
+cd synthetic-foundry
+pip install -e ".[all]"     # the library imports no LLM SDK
+worldloom doctor            # every check names its fix; exit 0 means go
+
+worldloom build --seed 8128 --incident --narrate --out ./corpus
+worldloom validate ./corpus
+```
+
+Real output, not a mockup — the numbers in the hero are this run's:
+
+```
+              Ardent Holdings
+ Industry                Omnichannel retail
+ Headquarters              Perth, Australia
+ Employees (stated)                  80,000
+ Business units                           3
+ Sites                                  160
+ Events                                  17
+ Facts                                  615
+ Artifacts (rendered)                    16
+ Evaluation cases                        51
+ Narrated sections                       35
+ Seed                                  8128
+
+✓ coherent — 8,861 checks passed
+```
+
+Then materialise and measure:
+
+```bash
+worldloom render ./corpus -f xlsx -f docx -f pptx -f pdf -f markdown \
+                          -f jira -f confluence -f servicenow
+worldloom evaluate ./corpus --retriever both
+worldloom status ./corpus        # where you are, and the exact next command
+```
+
+The built-in deterministic narrator is for tests, replay and inspection. For
+production prose, a coding agent drives the validated
+[`narrate requests` / `narrate accept` handshake](#-production-prose-a-checked-agent-handshake)
+below. Independent readings — `worldloom topology`, `worldloom series`,
+`worldloom diversity --near-duplicates` — each answer one question about what
+came out.
+
+## 🔒 The core invariants
+
+> The model never owns arithmetic, identity, chronology, or graph mutation.
+> Every claim has evidence, every artifact has provenance, and a rebuild from
+> the recipe is byte-identical.
+
+- **Facts precede prose** *(enforced)*: prose that contradicts the ledger is
+  refused with the violation named; the corpus is never edited to fit a
+  sentence.
+- **Determinism without freezing** *(enforced)*: replay re-executes the recipe
+  and proves the same inputs produce the same world — no golden files, no
+  clock, no `random`, no UUID anywhere in the pipeline.
+- **Cohesion is a compiler contract** *(enforced)*: an undeclared artifact
+  type, an impossible author, an empty audience, a title unrelated to its
+  family, or content escaping its declared fact scope is refused at compile
+  time and stamped `artifact-contract@1` when accepted.
+- **Planned accidents only** *(enforced)*: mess is ledgered. A stale page, a
+  pasted-over formula, a SUM that stops a row short — each is recorded in
+  `intentional-errors.jsonl` and substantiated by the validator, so a reader
+  holding only the corpus can establish mechanically what is wrong and what
+  the current position is.
+
+## 🏭 Four verticals
 
 | Vertical | Episode | What makes it useful |
 | --- | --- | --- |
 | Retail | `MonthEndClose` | Financial reconciliation, operational incidents, multi-period histories, workforce and estate trajectories |
 | Banking | `QuarterlyCapitalReturn` | Second-line challenge, equal-authority conflict, filing and restatement |
 | Insurance | `QuarterlyReserving` | Triangle development, emergence, held versus central estimates, authority-sensitive answers |
-| Procurement | `PurchaseToPayCycle` | Purchase-to-pay controls, three-way matching, exceptions, and carried shortfalls |
+| Procurement | `PurchaseToPayCycle` | Purchase-to-pay controls, three-way matching, stock-flow identities, carried shortfalls |
 
-The vertical owns the causal episode, its fact kinds, documents, invariants, and
-benchmark. A pack changes the company using an existing episode. A new vertical
-changes what happens.
+The vertical owns the causal episode, its fact kinds, documents, invariants
+and benchmark. A pack changes the company using an existing episode; a new
+vertical changes what happens — and is authored through registration seams
+without editing core (`/worldloom-vertical`).
 
-#### The organisation is load-bearing, and that is where volume comes from
+### Volume comes from the organisation being load-bearing
 
-A company declares business units, sites, cost centres and categories. Whether
+A company declares business units, sites, cost centres and categories; whether
 anything *reports* on them is a separate question, and for three of the four
-verticals the answer used to be no: a bank with three divisions and 133 branches
-mentioned none of them in any fact or any document, and its corpus was 58 facts
-about capital ratios. Every one of those corpora passed `worldloom validate`,
-because coherence and thinness are different properties.
-
-`validate.reachability` asks the question directly — an entity is *reached* when
-a fact names it and a compiled document carries that fact on its readable
-surface, appendices excluded. Closing it is what produced the volume:
+verticals the answer used to be no. A bank with three divisions and 133
+branches mentioned none of them in any document — 58 facts about capital
+ratios, and every check passing, because coherence and thinness are different
+properties. `validate.reachability` asks the question directly, and closing it
+is where the volume came from:
 
 | Vertical | Facts, one period | Documents | `validate` checks |
 | --- | --- | --- | --- |
@@ -131,163 +176,85 @@ surface, appendices excluded. Closing it is what produced the volume:
 | Insurance | 62 → **219** | 4 → **8** | 1,155 → **3,088** |
 | Procurement | 52 → **217** | 6 → **7** | 1,090 → **3,332** |
 
-Each vertical measures what its own vocabulary owns: deposits, lending and
-front-line FTE by branch; written premium by underwriting office and claims by
-claims centre; spend, commitment and materials by depot, project office and
-yard. Every split goes through a largest-remainder allocator, so roll-ups
-reconcile exactly rather than nearly, and a rate is never summed. Volume scales
-with the estate rather than with a multiplier — banking at `--periods 3` mints
-2,220 facts.
+Every split goes through a largest-remainder allocator, so roll-ups reconcile
+exactly rather than nearly, and a rate is never summed. Volume scales with the
+estate rather than with a multiplier — banking at `--periods 3` mints 2,220
+facts and validates at 27,001 checks.
 
-The check ships as a ratchet rather than as part of `worldloom validate`: what
-it reports is true and is not a statement about coherence, which is the question
-`validate` answers. What it still refuses is a different class and is named as
-such — a system of record is the *provenance* of every figure in these corpora,
-not the subject of one.
+## 🧬 Structure is derived, not looked up
 
-### Structured and unstructured outputs
-
-| Layer | Outputs |
-| --- | --- |
-| Canonical structured state | `world.json`; facts, events, lore, artifact intents, IR, manifests, evaluation cases, detail tables, actor ledgers, and generation ledgers as JSON/JSONL |
-| Business-system records | Portable Jira issues/changelog/links, Confluence pages/comments, ServiceNow incidents and CMDB relationships |
-| Analytical artifacts | Formula-bearing XLSX workbooks with lineage and reconciliation sheets |
-| Narrative artifacts | DOCX, PDF, PPTX, and Markdown generated from the same resolved IR |
-| Evaluation assets | Questions, expected fact IDs, required evidence, distractors, temporal cutoffs, and abstention labels |
-
-The corpus directory is plain files. Worldloom is needed to build and validate it,
-not to read it.
-
-### Structure is derived, not looked up
-
-A document's outline used to be a constant per artifact type, so a corpus of a
-thousand documents rendered a few dozen shapes and twelve monthly close packs
-were twelve renderings of one skeleton. A retriever can learn that shape instead
-of the content.
-
-The outline is now a function of a **structural genome** — a handful of integers
-recorded on the recipe, so a corpus resolves the same shapes when it is loaded
-back and a rebuild reproduces them.
+A document's outline used to be a constant per artifact type: a corpus of a
+thousand documents rendered a few dozen shapes, and a retriever can learn the
+shape instead of the content. The outline is now a function of a **structural
+genome** — integers recorded on the recipe, so a rebuild reproduces the same
+shapes.
 
 ```bash
 worldloom build --section-omission 400 --variant-bias 1 --outline-synthesis 600 --out ./corpus
 worldloom diversity ./corpus --effective
 ```
 
-`--section-omission` is swarm testing applied to documents: a document emits a
-*subset* of its type's optional sections rather than all of them every time.
-Sections are required unless a type says otherwise, so the default build is
-byte-identical to what it always was.
+`--outline-synthesis` *draws* a shape from what this company's own document
+types have in common — projected onto the roles sections play, not the words
+in their headings — and it is recombination, never inflation: a synthesised
+outline must carry at least what the authored one carried, in no more
+sections. Measured on a six-period retail corpus: 40 distinct rendered shapes
+become 62 with no document losing a line of prose. `--effective` reports the
+Vendi score — the *effective* number of shapes, which is where monotony hides
+from a plain count.
 
-`--outline-synthesis` goes further and *draws* a shape rather than subsetting
-one — from what this company's own document types have in common, projected onto
-the roles their sections play rather than the words in their headings. It is
-recombination and never inflation: a synthesised outline has to carry at least
-what the authored one carried, in no more sections, arguing the document the way
-its type argues it, and falls back to the authored outline when no draw does.
-Measured on a six-period retail corpus, 40 distinct rendered shapes become 62
-with no document losing a line of prose.
+## 🗺️ Plan, build, measure, ask
 
-Why roles rather than headings is a measured answer, not a preference. Splicing
-on heading text admits exactly **one** novel outline across the whole fleet,
-because only a handful of headings appear in more than one document type — and
-that stayed true after ten policy types were given entirely new headings, which
-is how we know the vocabulary was never the fixable part.
-
-`--effective` is the reading that made the case for the work. A count of
-distinct shapes prices a shape used ten times exactly as it prices one used
-once; the Vendi score reports the **effective** number, and the gap between the
-two is where the monotony hides.
-
-### Planning a fleet, not sampling one
-
-```bash
-worldloom spaces                              # 12 axes, 3,732,480 configurations
-worldloom spaces --cover -t 2 > plan.jsonl    # 39 rows cover every pair
-worldloom spaces --holes plan.jsonl           # what a fleet you built missed
-```
-
-A covering array grows with the two widest axes rather than with the space, so
-every pairwise interaction is reachable in a fleet a person would actually
-build. The complement matters more: pointed at the shipped determinism gate,
-`--holes` reported that it covered 24% of pairs and had **never once built a
-bank running more than one period** — a gap the gate could not see, because a
-sampler knows where its points landed and not which combinations nobody reached.
-
-### These are one loop, not five features
-
-Each command above answers a different question, and they close on each other:
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/loop.svg">
+  <img src="assets/readme/loop-light.svg" width="100%" alt="The fleet loop: spaces --cover plans 39 rows that reach every pair of 11,197,440 configurations; build, mosaic or evolve builds into the plan; diversity --effective measures what came out; spaces --holes reports which combinations still do not exist — and the loop closes by planning again against the answer.">
+</picture>
+</div>
 
 ```bash
 worldloom spaces --cover -t 2 > plan.jsonl    # what should exist
-worldloom build --outline-synthesis 600 ...   # make one of them
-worldloom diversity ./corpus --effective      # is it actually varied
-worldloom spaces --holes fleet.jsonl          # what still does not exist
+worldloom mosaic -n 20 --incident --out ./m   # dispersed, sharded, resumable
+worldloom diversity ./m/world-01 --effective  # is it actually varied
+worldloom spaces --holes plan.jsonl           # what still does not exist
 ```
 
-Plan the space, build into it, measure what came out, and ask what is still
-missing — then plan again against the answer. The measurement is what makes it a
-loop rather than a pipeline: `--effective` and `--holes` both report a
-*denominator*, so "we built two hundred corpora" becomes "we covered 41% of the
-pairs and never varied five of the twelve axes at all".
+Thirteen axes, 11,197,440 configurations exhaustive, 39 covering rows —
+because a covering array grows with the two widest axes, not with the space.
+The complement is the part that pays: pointed at the shipped determinism gate,
+`--holes` reported it covered 24% of pairs and had **never once built a bank
+running more than one period** — a gap the gate could not see, because a
+sampler knows where its points landed, not which combinations nobody reached.
 
-One step is deliberately library-only. `worldloom.archive` keeps one champion per
-structural niche rather than the best *n* overall — on a measured population it
-spanned 33 of 36 niches where best-*n* spanned 20 — and it composes with
-`spaces.archive_of` today, but selecting a shipped fleet with it is a decision
-about what to keep, not a reading. It gets a command when there is a fleet big
-enough for the choice to matter.
+The loop closes with selection and evolution, all deterministic:
 
-## Quickstart: one coherent enterprise
+| Command | Question it answers |
+|---|---|
+| `worldloom fleet qualify ./m --purpose challenge` | does this fleet cohere, replay, and hold its floors — exit 1 if not |
+| `worldloom fleet curate ./m --purpose challenge` | one champion per structural niche, every reject named with its displacer |
+| `worldloom mutate ./corpus --set steps/0/trend_pct=0.008 --out mutant.json` | a recipe patched without a build — fan out candidates, spend builds on winners |
+| `worldloom twin ./corpus --set steps/0/trend_pct=0.008` | the counterfactual one intervention away, delta measured stream by stream |
+| `worldloom evolve --generations 3 --population 6 --purpose challenge --out ./evolved` | generations of single-axis variations, champions chosen by the curator |
+| `worldloom search ./corpus "operational incident" -k 3` | what the corpus already says — the same BM25 the benchmark's baseline uses |
 
-```bash
-# Build deterministic state and a complete test narration.
-worldloom build \
-  --seed 8128 \
-  --incident \
-  --comparatives 11 \
-  --estate large \
-  --eval-density high \
-  --narrate \
-  --out ./corpus
+Not a token is spent anywhere in that table: the harness writes prose only for
+the corpus that survived selection.
 
-# Materialise every supported artifact family.
-worldloom render ./corpus \
-  -f xlsx -f docx -f pptx -f pdf -f markdown \
-  -f jira -f confluence -f servicenow
+## 🤝 Production prose: a checked agent handshake
 
-# Run independent readings of the corpus.
-worldloom validate ./corpus
-worldloom topology ./corpus
-worldloom series ./corpus
-worldloom diversity ./corpus --near-duplicates
-worldloom evaluate ./corpus --retriever both
-```
-
-Use `worldloom status ./corpus` at any point. It reports the current stage and
-the exact next command instead of requiring an orchestrator to infer state from
-the directory.
-
-## Production prose: a checked agent handshake
-
-Worldloom deliberately does not import an LLM SDK. Any agent that can execute a
-terminal and exchange JSON can narrate a corpus.
+Worldloom deliberately imports no LLM SDK. Any agent that can execute a
+terminal and exchange JSON can narrate a corpus:
 
 ```bash
 worldloom narrate requests ./corpus -o requests.json
 # The agent writes responses.json.
-worldloom narrate accept ./corpus \
-  --from responses.json \
-  --model-id enterprise-writer-v1
+worldloom narrate accept ./corpus --from responses.json --model-id enterprise-writer-v1
 ```
 
-Each request carries the artifact type, section, author, author voice, audience,
-knowledge cutoff, target length, allowed facts, required facts, and claims that
-must not be made. Each response carries prose plus explicit supporting fact IDs.
-
-Acceptance is transactional: all applicable rules are checked, violations are
-returned as data, and invalid prose is not committed. The loop repeats until the
-section is accepted.
+Each request carries the artifact type, section, author and voice, audience,
+knowledge cutoff, target length, allowed and required facts, and claims that
+must not be made. Acceptance is transactional — every applicable rule is
+checked, violations return as data, and invalid prose is never committed:
 
 ```text
 request
@@ -295,7 +262,6 @@ request
   +--> author worked here at this time?
   +--> author allowed to own this department's artifact?
   +--> audience permits the author and intended readers?
-  +--> title cohesive with the artifact type?
   +--> every cited fact inside the declared scope?
   +--> fact existed before the document's knowledge cutoff?
   +--> every numeric claim expressed as a fact reference?
@@ -303,170 +269,89 @@ request
   +--> accept and ledger it, or refuse with every finding
 ```
 
-See [Architecture and invariants](docs/architecture.md) for the complete boundary.
+Expect rejection on the first pass. **Rejection is the harness working, not
+failing** — the loop repeats until every section is accepted, and the most
+common violation by far is a figure typed out instead of referenced as
+`{{fact:ID}}`.
 
-## Enterprise-scale history
+Before writing a document that leans on earlier ones, ask the corpus what it
+already says: `worldloom search` ranks its passages through the same index the
+benchmark's baseline retriever will be scored on, and `--as-of` restricts
+retrieval to what existed at the author's knowledge cutoff.
 
-Workforce size is authoritative aggregate scale; named employees are the bounded
-decision-making graph. This permits a large-company corpus without minting one
-Python object per payroll record.
+## 📈 Enterprise-scale history
 
-The same principle applies to the structural estate. Business units, sites,
-systems, and services have half-open lifecycles and can grow or contract across
-a timeline while historical artifacts retain their original referents.
-
-```bash
-worldloom build \
-  --seed 8128 \
-  --employees 80000 \
-  --headcount-end 92000 \
-  --periods 6 \
-  --timeline steady \
-  --estate large \
-  --business-units-end 8 \
-  --sites-end 240 \
-  --systems-end 24 \
-  --services-end 60 \
-  --eval-density high \
-  --narrate \
-  --out ./enterprise
-
-worldloom render ./enterprise -f xlsx -f docx -f pptx -f pdf -f markdown
-worldloom validate ./enterprise
-```
-
-Every intermediate target is deterministic. Each movement emits count and delta
-facts, an enterprise notice, and a replayable recipe step. Contraction closes a
-lifecycle window instead of deleting the entity. Targets below dependency-safe,
-role-safe, or category-safe floors are refused.
-
-Current CLI scope is explicit: time-varying workforce and structural trajectories
-are multi-period retail capabilities. Banking and procurement run consecutive
-periods — `--periods 3` validates at 27,001 and 9,398 checks respectively —
-without the workforce and estate trajectories retail carries. Insurance declares
-`max_periods=1`, because a second consecutive valuation quarter is phase 2 of
-that engine and phase 1 is what ships; `--periods 2` is refused at plan time
-naming the cap, rather than building a world and then failing inside the
-episode. No flag is silently ignored to simulate a history a vertical does not
-implement.
-
-For the operational runbook, see [Generating an enterprise corpus](docs/enterprise-corpus.md).
-
-## Many companies: dispersed, sharded, resumable
-
-Changing a seed changes names and figures; it does not guarantee a different
-company shape. `mosaic` starts from a low-discrepancy candidate field and uses
-farthest-first selection so the chosen worlds cover configuration space instead
-of clumping in it.
+Workforce size is authoritative aggregate scale; named employees are the
+bounded decision-making graph — a large-company corpus without one Python
+object per payroll record. Units, sites, systems and services carry half-open
+lifecycles: they grow and contract across a timeline while historical
+artifacts keep their original referents.
 
 ```bash
-worldloom mosaic --describe
-worldloom mosaic -n 20 --incident --out ./mosaic
+worldloom build --seed 8128 \
+  --employees 80000 --headcount-end 92000 \
+  --periods 6 --timeline steady \
+  --estate large --sites-end 240 --systems-end 24 \
+  --eval-density high --narrate --out ./enterprise
 ```
 
-For large runs, every worker receives the same global plan and owns a deterministic
-subset of world indices:
+Every intermediate target is deterministic; each movement emits count and
+delta facts, an enterprise notice, and a replayable recipe step. Contraction
+closes a lifecycle window instead of deleting the entity, and targets below
+dependency-safe floors are refused. Scope is stated, not simulated: histories
+are multi-period retail capabilities; banking and procurement run consecutive
+periods (validating at 27,001 and 9,398 checks at `--periods 3`); insurance
+declares `max_periods=1` and `--periods 2` is refused at plan time naming the
+cap. No flag is silently ignored.
 
-```bash
-worldloom mosaic -n 1000 \
-  --shard-count 20 --shard-index 0 \
-  --out ./enterprise-corpus
+## 🐍 Python SDK
 
-worldloom mosaic -n 1000 \
-  --shard-count 20 --shard-index 0 \
-  --out ./enterprise-corpus --resume
-```
-
-`mosaic.json` stores a digest of the complete plan. Argument drift on resume is
-refused. Completed worlds are revalidated before being skipped. Each accepted
-narrative section is fsync'd to a newline-framed checkpoint, and a torn final
-append is recoverable without accepting malformed committed records.
-
-## Artifact cohesion is a compiler contract
-
-Every `ArtifactIntent` states:
-
-- artifact type and business domain;
-- real employee author and author function;
-- audience and access policy;
-- creation time and knowledge boundary;
-- required facts and triggering events;
-- lifecycle, authority, revision, derivation, and restatement relationships.
-
-Compilation refuses an undeclared artifact type, an impossible departmental
-author, an empty audience or title, a title unrelated to its artifact family, or
-content escaping the declared fact scope. It stamps the accepted IR with a
-machine-readable `artifact-contract@1` cohesion scope. Every renderer consumes
-that same IR.
-
-This is stronger than prompting a model to "keep documents consistent". A prompt
-is advisory. The contract is executable and renderer-independent.
-
-## Python SDK
-
-The CLI is a collection of fixed pipelines. Use the SDK when the required shape
-is a Python loop: cross calendars and organisation shapes, sweep a parameter,
-select the least-alike candidates, or keep only worlds whose measured topology is
-interesting.
+The CLI is a set of fixed pipelines. The moment the ask is a comprehension —
+fields of worlds, sweeps, filters on what came out — write Python:
 
 ```python
 from worldloom import sdk
 
-base = (
-    sdk.company("retail", seed=8128)
-    .staff(80_000)
-    .located("australia")
-    .estate("large")
-)
+base = sdk.company("retail", seed=8128).staff(80_000).located("australia").estate("large")
+candidates = sdk.cross(base, calendar=["flat", "harvest"], org=[
+    {"headcount": 24, "span": 4, "levels": 3},
+    {"headcount": 45, "span": 6, "levels": 4},
+])
+field = sdk.dispersed(candidates, 4)           # the 4 least alike
+worlds = [b.build().episodes("2026-01", periods=3) for b in field]
 
-candidates = sdk.cross(
-    base,
-    calendar=["flat", "harvest", "retail_christmas"],
-    org=[
-        {"headcount": 24, "span": 4, "levels": 3},
-        {"headcount": 45, "span": 6, "levels": 4},
-    ],
-)
-
-field = sdk.dispersed(candidates, 4)
-worlds = [blueprint.build().episodes("2026-01", periods=3) for blueprint in field]
-
-selected = [world for world in worlds if world.ok and world.measure()["chokepoints"] > 0]
-for index, world in enumerate(selected, start=1):
-    world.render("xlsx", "docx", "pdf", out=f"./sdk-corpus/world-{index:02d}")
+kept = [w for w in worlds if w.ok and w.measure()["chokepoints"] > 0]
+hits = kept[0].search("stock loss variance", limit=3)      # the corpus, asked about itself
+mutant = kept[0].mutated({"steps/0/trend_pct": 0.008})     # recipe patched, rebuilt in memory
+delta = kept[0].twin("steps/0/trend_pct", 0.008).manifest  # the measured counterfactual
 ```
 
-Blueprints are immutable values. `build()` is the only operation that mints a
-world. `cross`, `sweep`, `companies`, and `dispersed` arrange blueprints without
-relaxing any invariant.
+Blueprints are immutable values; `build()` is the only operation that mints a
+world; no combinator relaxes an invariant. `sdk.as_fleet(worlds, "./fleet")`
+hands a loop's worlds to the same admission controller the CLI uses. See the
+[Python SDK guide](docs/sdk.md).
 
-See the [Python SDK guide](docs/sdk.md) for the complete public surface.
+## 🧰 Agent skills
 
-## Agent skills
-
-The repository ships a progressively disclosed agent interface under `.claude/`:
+The repository ships a progressively disclosed agent interface under
+`.claude/` — a slim always-loaded core per skill, references loaded when the
+work reaches them, and spec skeletons as assets verified against their real
+parsers:
 
 | Entry point | Use it for |
 | --- | --- |
-| `/worldloom-design` | Take an open-ended corpus ask from design through measurement and delivery |
-| `/worldloom-build` | Build a decided world and report what landed |
-| `/worldloom-narrate` | Write fact-scoped prose until every section is accepted |
-| `/worldloom-render` | Render native files and validate the result |
-| `/worldloom-evaluate` | Measure retrieval hardness, diversity, topology, and corpus statistics |
-| `/worldloom-act` | Drive an actor episode one employee decision at a time |
+| `/worldloom-design` | an open-ended corpus ask, design through delivery |
+| `/worldloom-build` · `/worldloom-narrate` · `/worldloom-render` · `/worldloom-evaluate` | one stage each |
+| `/worldloom-act` | drive an actor episode one employee decision at a time |
+| `/worldloom-company` · `/worldloom-probe` | describe the business, or derive it Socratically |
+| `/worldloom-lob` · `/worldloom-process` · `/worldloom-doctypes` | author a capability, a process, a document type |
+| `/worldloom-vertical` · `/worldloom-author` · `/worldloom-sdk` | a new industry, the whole cascade, or Python |
 
-Specialist skills cover company specifications, probes, the SDK, whole-world
-authoring, document types, lines of business, processes, and new verticals. They
-all use the same cascade: propose, receive all findings, revise, accept, resolve,
-install, replay.
+All of them use the same cascade — propose, receive every finding, revise,
+accept — and none depends on a Claude-specific runtime: other harnesses start
+at [AGENTS.md](AGENTS.md), and every workflow is shell plus JSON.
 
-Claude Code discovers these files directly when opened at the repository root.
-Other coding harnesses start with [AGENTS.md](AGENTS.md); every workflow is shell
-plus JSON and does not depend on a Claude-specific runtime.
-
-See [Using Worldloom with coding agents](docs/skills.md).
-
-## Corpus anatomy
+## 💾 Corpus anatomy
 
 ```text
 corpus/
@@ -474,43 +359,42 @@ corpus/
 |-- lore.jsonl                    historical priors and constraints
 |-- events.jsonl                  append-only enterprise events
 |-- facts.jsonl                   canonical and superseded facts
-|-- detail.jsonl                  transaction-level tables, when requested
-|-- masterdata.json               vendors, customers, SKUs, when requested
 |-- artifact-intents.jsonl        type, author, audience, facts, lineage
 |-- artifact-ir.jsonl             resolved tables and narrative sections
 |-- artifact-manifest.jsonl       rendered files and provenance
 |-- evals.jsonl                   questions, evidence, distractors, cutoffs
 |-- intentional-errors.jsonl      labelled, mechanically explainable mess
 |-- generation-ledger.jsonl       content-addressed generative decisions
+|-- detail.jsonl / masterdata.json  transaction tables and reference data, when requested
 |-- actor-*.jsonl                 observations, messages, tasks, tool calls
 `-- artifacts/                    XLSX, DOCX, PDF, PPTX, Markdown, bundles
 ```
 
-All ledgers are ordinary JSONL. Native artifacts are optional projections. The
-canonical state remains inspectable even when no renderer dependency is installed.
+All ledgers are ordinary JSONL. Native artifacts are optional projections;
+the canonical state stays inspectable with no renderer dependency installed.
 
-## Determinism and replay
+## 🔁 Determinism and replay
 
 ```bash
 worldloom build --seed 8128 --incident --narrate -f xlsx -f markdown --out ./one
 worldloom build --seed 8128 --incident --replay ./one -f xlsx -f markdown --out ./two
-diff -r ./one ./two
+diff -r ./one ./two          # exits 0
 ```
 
-The second build uses the first corpus's content-addressed generation ledger and
-makes no generative call. A world is reproduced from its seed, recipe, generation
-ledger, and Worldloom version. CI exercises exact file-set and byte identity over
-a rotating dispersed sample of configurations.
+The second build consumes the first corpus's content-addressed generation
+ledger and makes no generative call. Determinism is not implemented by
+freezing outputs — the system re-executes the recipe and proves that the same
+inputs produce the same world. CI exercises exact byte identity over a
+rotating dispersed sample of configurations, nightly, on Linux and macOS.
 
-Determinism is not implemented by freezing outputs. The system re-executes the
-recipe and proves that the same inputs produce the same world.
+The same proof as one verb, on any unrendered corpus:
 
-## Evaluation is generated with the evidence
+```bash
+worldloom build --seed 8128 --incident --narrate --out ./one
+worldloom verify ./one       # rebuild from its own recipe, byte-compare, validate
+```
 
-Each world creates its own evaluation set from canonical facts. An evaluation case
-can carry expected fact IDs, required artifacts, explicit distractors, a temporal
-cutoff, and an abstention expectation. Ground truth is therefore not another
-model's judgement.
+## 📊 Evaluation is generated with the evidence
 
 ```bash
 worldloom evals export ./corpus --out ./evals.jsonl
@@ -518,48 +402,62 @@ worldloom evaluate ./corpus --retriever both --json
 worldloom stats ./corpus --json
 ```
 
-BM25 and TF-IDF are deliberately modest baselines. The useful signal is the score
-shape: direct lookup should be easier than temporal state, contested authority,
-causal chains, and abstention. If a baseline rises without improving, the corpus
-may have become easier.
+Each world creates its own evaluation set from canonical facts: expected fact
+IDs, required artifacts, explicit distractors, temporal cutoffs, abstention
+expectations, and multi-hop families — causal chains over the event graph and
+derivation-lineage chains over the value-provenance graph (a real 9-hop chain
+per period on the P2P spec). BM25 and TF-IDF are deliberately modest
+baselines: the useful signal is the score *shape*. Direct lookup should be
+easier than temporal state, contested authority, causal chains and abstention
+— a baseline that rises without improving means the corpus got easier.
 
-## Documentation
+## 📚 Documentation
 
-Start at the [documentation home](docs/README.md).
+The docs site is live at
+**[vamsiramakrishnan.github.io/synthetic-foundry](https://vamsiramakrishnan.github.io/synthetic-foundry/)** —
+including [`llms.txt`](https://vamsiramakrishnan.github.io/synthetic-foundry/llms.txt)
+and [`llms-full.txt`](https://vamsiramakrishnan.github.io/synthetic-foundry/llms-full.txt)
+for agents. In-repo, start at the [documentation home](docs/README.md):
 
 | Guide | Purpose |
 | --- | --- |
-| [Architecture and invariants](docs/architecture.md) | Thin waist, generation boundary, cohesion, lineage, replay, and validation |
-| [Enterprise corpus generation](docs/enterprise-corpus.md) | Scale model, histories, sharding, resume, narration, quality gates, and operations |
-| [Python SDK](docs/sdk.md) | Blueprints, combinators, scenarios, queries, measurements, rendering, and extensions |
-| [Agent skills](docs/skills.md) | Stage commands, specialist skills, progressive disclosure, and harness-neutral operation |
-| [Generated command reference](.claude/skills/worldloom/references/commands.md) | Every installed CLI command and option, derived from Typer and checked in CI |
-| [Generation model](docs/generation-model.md) | Which decisions are deterministic and which belong to a generative author |
-| [Artifact compiler](docs/artifact-compiler.md) | Components, grammars, style genomes, diversity, and renderer constraints |
-| [Episode grammar](docs/episode-grammar.md) | Facts, phases, slots, carry-forward, lints, and authored processes |
-| [Build order](docs/build-order.md) | Historical architecture decisions, sequencing, and release gates |
+| [Architecture and invariants](docs/architecture.md) | thin waist, generation boundary, cohesion, lineage, replay, validation |
+| [Enterprise corpus generation](docs/enterprise-corpus.md) | scale model, histories, sharding, resume, narration, quality gates |
+| [Python SDK](docs/sdk.md) | blueprints, combinators, scenarios, measurements, rendering |
+| [Agent skills](docs/skills.md) | stage commands, specialist skills, harness-neutral operation |
+| [Generated command reference](.claude/skills/worldloom/references/commands.md) | every CLI command and option, derived from Typer, checked in CI |
+| [Generation model](docs/generation-model.md) | which decisions are deterministic, which belong to an author |
+| [Artifact compiler](docs/artifact-compiler.md) | components, grammars, style genomes, diversity, renderer constraints |
+| [Episode grammar](docs/episode-grammar.md) | facts, phases, slots, carry-forward, lints, authored processes |
+| [Build order](docs/build-order.md) | historical decisions, sequencing, release gates |
 
-## Developing Worldloom
+## 🛠️ Developing Worldloom
 
 ```bash
 git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
 cd synthetic-foundry
 pip install -e ".[dev]"
 
-pytest -q
-worldloom validate retail-close
-worldloom docs --check
+pytest -q                        # 3,086 test functions
+worldloom validate retail-close  # the pinned example corpus: 1,283 checks
+worldloom docs --check           # the generated command reference is current
 ```
 
-The top-level model stays small and typed. Generators own deterministic state.
-Scenarios append events and facts. Artifact compilers consume intents. Renderers
-consume IR. Validators remain independent of the code that produced the data.
+The top-level model stays small and typed. Generators own deterministic
+state; scenarios append events and facts; artifact compilers consume intents;
+renderers consume IR; validators stay independent of the code that produced
+the data. Read [AGENTS.md](AGENTS.md) before changing the harness — it states
+the invariants, the agent protocol, and the exit gates.
 
-Read [AGENTS.md](AGENTS.md) before changing the harness. It states the invariants,
-the agent protocol, and the exit gates that are easy to violate with a locally
-reasonable abstraction.
+## 🤲 Contributing
 
-## Principles
+[CONTRIBUTING.md](CONTRIBUTING.md) has the house rules — the short version is
+that both gates above must pass, CI additionally regenerates a corpus from its
+own ledger and diffs it byte-for-byte, and a rejection from the validator is
+fixed in the prose, never in the check. Security reports go through
+[SECURITY.md](SECURITY.md).
+
+## 📜 Principles
 
 1. Reality is generated once; artifacts are rendered many times.
 2. The model never owns arithmetic, identity, chronology, or graph mutation.
@@ -568,7 +466,5 @@ reasonable abstraction.
 5. Diversity is measured across a batch, not inferred from prompt variation.
 6. Replay is offline and byte-identical.
 7. Scale may change throughput; it may not change semantics.
-
-## License
 
 Apache License 2.0. See [LICENSE](LICENSE).

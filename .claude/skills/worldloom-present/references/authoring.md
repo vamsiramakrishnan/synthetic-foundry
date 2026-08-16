@@ -1,3 +1,10 @@
+---
+title: Profile Authoring
+description: Write profile.json — overrides, what the lint refuses, the Python cascade, what replays.
+read-when: When none of the three shipped profiles fits and you are writing profile.json.
+tags: [worldloom, presentation, profiles, lint, recipes]
+---
+
 # Authoring a profile: overrides, what the lint refuses, the Python cascade, and what replays.
 
 ## The document

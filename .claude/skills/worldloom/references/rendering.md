@@ -1,3 +1,10 @@
+---
+title: Rendering Formats
+description: Pick render formats knowing what each carries — the IR contract, charts, profiles, determinism
+read-when: About to run worldloom render, choosing formats or a presentation profile, or debugging output
+tags: [rendering, formats, artifact-ir, ooxml, profiles]
+---
+
 # Rendering a world
 
 You are about to run `worldloom render`, on a corpus that is already narrated.

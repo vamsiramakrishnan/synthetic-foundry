@@ -1,6 +1,7 @@
 ---
 name: worldloom-author
 description: Author a whole Worldloom company from the top — what it is, its lines of business, its processes, its paperwork — and run it into a narrated, validated corpus, by driving one loop at every layer: propose, be refused with findings, revise, until accepted. Use when the ask is a complete authored world rather than one layer of it, when unsure which layer skill a change belongs to, or when asked how the authoring layers fit together.
+tags: [worldloom, authoring, cascade, refusal-loop, routing]
 ---
 
 # Authoring a world, top to bottom

@@ -1,6 +1,7 @@
 ---
 name: worldloom
 description: Generate a coherent synthetic enterprise corpus with Worldloom — build a world from a seed, write prose under fact constraints, render XLSX/DOCX/PPTX/PDF/Markdown and business-system bundles, score retrieval baselines, and validate that every artifact agrees. Use when asked to create synthetic enterprise data, a RAG or agent evaluation corpus, a fictional company's documents, or to add a scenario, renderer, or industry to this repository.
+tags: [worldloom, synthetic-corpus, determinism, narration, rendering, evaluation]
 ---
 
 # Worldloom

@@ -1,3 +1,10 @@
+---
+title: Corpus Loop
+description: Ask a built world about itself — search, mutate, twin, fleet hand-off, access gating, evolve.
+read-when: Closing the loop on a built world with retrieval, counterfactuals, or fleet qualification.
+tags: [worldloom, sdk, retrieval, twins, fleet]
+---
+
 # The corpus loop: search, mutate, twin, fleet — from Python
 
 Every door here reaches the same machinery its CLI command does — never a
