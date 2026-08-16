@@ -1,3 +1,10 @@
+---
+title: Designing a Corpus
+description: Turn a loose corpus ask into defensible choices — decide, author, build, measure, iterate, deliver
+read-when: The ask is open-ended ("a hard RAG corpus for insurance") rather than a named stage or a seed
+tags: [design, elicitation, packs, measurement, corpus-card]
+---
+
 # Designing a corpus
 
 Loaded by `/worldloom-design`, when the ask is not "build seed 8128" but

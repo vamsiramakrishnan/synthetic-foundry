@@ -1,3 +1,10 @@
+---
+title: Building a World
+description: Choose the build surface that owns each decision — seed, archetype, spec, facets, pack, periods, scale
+read-when: About to run worldloom build and deciding which flags state the request completely
+tags: [build, seeds, archetypes, packs, periods, determinism]
+---
+
 # Building a world
 
 You are about to run `worldloom build`. This reference explains which build

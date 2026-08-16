@@ -1,3 +1,10 @@
+---
+title: Proposing Structure
+description: Propose each artifact's section shape under grammar validation, before any prose is written
+read-when: Running worldloom plan requests, or a proposed plan came back rejected
+tags: [planning, structure, grammar, headings, diversity]
+---
+
 # Proposing an artifact's structure
 
 Loaded when you run `worldloom plan requests`. This is the handshake one layer

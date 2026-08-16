@@ -1,3 +1,10 @@
+---
+title: Writing Prose
+description: Write each section's prose under fact constraints, and fix the exact violation a rejection names
+read-when: narrate requests has run and responses.json must be written, or narrate accept rejected prose
+tags: [narration, prose, fact-references, rejections, claims]
+---
+
 # Writing prose
 
 You are here because `worldloom narrate requests ./corpus -o requests.json` has

@@ -1,5 +1,6 @@
 ---
 description: Write the prose a Worldloom corpus needs, under fact constraints, until accepted
+tags: [worldloom, narration, prose]
 ---
 
 Write the narrative for a corpus at $ARGUMENTS (default `./corpus`).
