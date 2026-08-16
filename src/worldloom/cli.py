@@ -12,9 +12,10 @@ themselves, and adds no capability the library lacks::
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import typer
 from rich.console import Console
@@ -77,13 +78,171 @@ app.add_typer(fleet_app, name="fleet")
 console = Console()
 err = Console(stderr=True)
 
+#: Every refusal code this CLI can emit, mapped to its one-line meaning. A
+#: registry rather than bare strings at the call sites so the codes are
+#: enumerable (a harness can list what it must handle) and so a typo'd code
+#: fails loudly in `_refuse` instead of shipping a new accidental code — the
+#: same reason ledger keys are content addresses, applied to error taxonomy.
+#: Codes are stable wire format: renaming one breaks consumers, so don't.
+#: Where the refusal already had a taxonomy name (`facets.py` / `company.py`
+#: conflict rules like `unknown_facet` and `no_overlap`), the same name is
+#: reused here rather than inventing a synonym.
+_REFUSALS: dict[str, str] = {
+    "access_profile_failed": "the corpus's documents could not be re-gated under the asked-for access profile",
+    "actor_episode_failed": "the actor episode could not run to completion",
+    "bad_physics": "a physics override names an unknown parameter or an impossible span",
+    "bad_shard": "the shard arguments do not describe a partition of the mosaic",
+    "cannot_combine": "two flags were given that cannot both decide the same build",
+    "conflict": "a resolution conflict whose rule has no individually registered code",
+    "corpus_unloadable": "the corpus (or something it depends on) cannot be read",
+    "destination_exists": "the output destination exists and --overwrite was not given",
+    "duplicate_facet": "one facet dimension was given two values",
+    "empty_query": "the search query is empty",
+    "engine_lacks_roles": "a facet implies roles and this engine has no role table to append them to",
+    "episode_replaces_nothing": "the episode declares it replaces a loop this build does not run",
+    "estate_unavailable": "an estate was asked for in a vertical with no landscape vocabulary",
+    "exactly_one": "exactly one of a set of mutually exclusive flags must be given",
+    "excludes": "two facet claims exclude each other",
+    "existence_path": "a mutation path decides existence, which a rebuild cannot measure a delta over",
+    "evolve_failed": "the evolution run could not complete",
+    "facet_syntax": "--facet takes name=value",
+    "fleet_error": "the fleet directory cannot be qualified or curated",
+    "history_too_short": "the corpus's history is too short for this decomposition",
+    "implausible_productivity": "revenue and employees describe an implausible revenue per head",
+    "infeasible_estate": "the structural estate endpoints admit no path over the periods",
+    "infeasible_headcounts": "the workforce endpoints admit no path over the periods",
+    "intervention_syntax": "--set takes PATH=VALUE",
+    "invalid_actions": "the submitted actions cannot be applied to this episode",
+    "mcp_unavailable": "the MCP server cannot start in this installation",
+    "missing_flag": "a required companion flag was not given",
+    "mosaic_failed": "the mosaic could not be planned or built",
+    "narration_failed": "the narration provider failed to produce accepted prose",
+    "negative_distractors": "--distractors takes a non-negative count",
+    "negative_estate": "structural estate endpoints must be non-negative",
+    "negative_headcount": "a headcount takes a non-negative value",
+    "no_ledger": "the corpus carries no generation ledger to replay",
+    "no_matching_facts": "no period-keyed numeric facts match the asked-for kind/subject",
+    "no_overlap": "two facet claims want physics spans whose intersection is empty",
+    "no_passages": "the corpus has no retrievable passages (or none inside the cutoff)",
+    "no_recipe": "the corpus carries no recipe, so it cannot be rebuilt",
+    "not_a_date": "a flag that takes an ISO date was given something else",
+    "not_a_recipe": "the named file does not hold a recipe object",
+    "nothing_awaiting_prose": "responses were supplied but no section awaits prose",
+    "pack_export_failed": "the pack could not be exported",
+    "pack_invalid": "the industry pack does not validate",
+    "period_cap": "--periods asks for more periods than this engine builds per corpus",
+    "physics_unsupported": "--physics was given and this specification type accepts none",
+    "recipe_error": "the corpus's recipe and this engine version disagree",
+    "render_failed": "a requested format could not be rendered",
+    "replay_many_providers": "the corpus was narrated by several providers; one pass replays one",
+    "replay_recipe_mismatch": "the replayed corpus's recipe and this build's flags disagree",
+    "resume_invalid": "a completed world does not validate for resume",
+    "shard_state_error": "the shard state on disk cannot be read or does not match this plan",
+    "stats_failed": "the corpus does not carry what the statistics need",
+    "timeline_infeasible": "the sampled timeline cannot be scheduled over these periods",
+    "two_calendars": "two facet claims want different fiscal calendars",
+    "uncompilable": "the corpus cannot compile its artifact plans",
+    "unknown_access_level": "--access names no known access level",
+    "unknown_actors": "--actors takes `scripted` or `agent`",
+    "unknown_archetype": "no archetype is registered under that name",
+    "unknown_engine": "no engine (domain) is registered under that name",
+    "unknown_episode": "--episode names no installed process",
+    "unknown_eval_density": "--eval-density names no known tier",
+    "unknown_facet": "no facet is registered under that name",
+    "unknown_landscape": "no landscape is registered under that name",
+    "unknown_locale": "no locale is registered under that name",
+    "unknown_messiness": "no messiness level is registered under that name",
+    "unknown_parameter": "no physics parameter starts with that prefix",
+    "unknown_profile": "no presentation profile is registered under that name",
+    "unknown_timeline": "--timeline names no known density",
+    "unknown_value": "the facet exists but has no such value",
+    "unknown_world": "the mosaic has no world with that index",
+    "unreadable_document": "a document handed to the CLI cannot be read or parsed",
+    "unrecorded_path": "an intervention path does not resolve against the recorded recipe",
+    "vertical_excludes_flags": "the flag belongs to another vertical's episode",
+    "workspace_unwritable": "the workspace cannot be written",
+}
+
+
+def _refuse(
+    code: str,
+    message: str,
+    *,
+    fix: str | None = None,
+    exit_code: int = 2,
+    **data: Any,
+) -> NoReturn:
+    """Refuse with *message*, as prose by default and as data on request.
+
+    Default mode prints *message* — the exact string the site printed before
+    this helper existed — through `err`, so default stderr is byte-identical
+    and every test pinned to those strings still holds. With
+    ``WORLDLOOM_OUTPUT=json`` in the environment, one line of JSON goes to
+    stderr instead: ``{"refusal": code, "message": …, "fix": …, "data": …}``.
+    An env var and not a global ``--json`` flag because per-command ``--json``
+    flags already exist with a different meaning (success payloads) and a
+    second reading of the same spelling would be a trap.
+
+    The registry lookup is unconditional — a code missing from `_REFUSALS`
+    raises even in default mode, so a typo'd code is caught by the first test
+    that walks the site, not by the first harness that matches on it.
+
+    Sites converted out of ``except`` blocks lose their explicit ``raise …
+    from exc``; nothing is lost in behaviour — the in-flight exception still
+    rides along as ``__context__``, and typer swallows the Exit either way.
+    """
+    if code not in _REFUSALS:
+        raise RuntimeError(
+            f"unregistered refusal code {code!r}; add it to _REFUSALS"
+        )
+    if os.environ.get("WORLDLOOM_OUTPUT") == "json":
+        # Rich's own markup parser recovers the plain text, so `escape()`d
+        # brackets in the message read back as the user typed them. Written
+        # with `typer.echo` and not `err.print` because the envelope must be
+        # one machine-readable line and `err` soft-wraps at terminal width.
+        from rich.text import Text
+
+        envelope = {
+            "refusal": code,
+            "message": Text.from_markup(message).plain,
+            "fix": fix,
+            "data": data,
+        }
+        # `default=str`: a refusal that crashes while refusing is strictly
+        # worse than one whose data field stringified a Path.
+        typer.echo(json.dumps(envelope, ensure_ascii=False, default=str), err=True)
+    else:
+        err.print(message)
+    raise typer.Exit(code=exit_code)
+
+
+def _conflict_code(conflicts: Any) -> str:
+    """The refusal code for a list of resolution `Conflict`s.
+
+    When every conflict fell to one rule and that rule is a registered code
+    (`unknown_facet`, `no_overlap`, `implausible_productivity`, …), the rule
+    is the code — the taxonomy already named this refusal, and a second name
+    for it would make harnesses match on two spellings. A mixed or
+    unregistered set falls back to the generic ``conflict``; the individual
+    rules still ride in the envelope's ``data``. The fallback is deliberate:
+    `company.py` grows rules faster than a CLI wire format should, and an
+    unregistered rule must degrade to a coarser code, not crash the refusal.
+    """
+    rules = {conflict.rule for conflict in conflicts}
+    if len(rules) == 1 and (rule := next(iter(rules))) in _REFUSALS:
+        return rule
+    return "conflict"
+
 
 def _load(name_or_path: str) -> World:
     try:
         return World.load(name_or_path)
     except CorpusError as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse(
+            "corpus_unloadable",
+            f"[red]error:[/red] {escape(str(exc))}",
+            corpus=str(name_or_path),
+        )
 
 
 def _step_period(period: str, index: int, step_months: int) -> str:
@@ -150,8 +309,8 @@ def _compiled(world: World, corpus: str) -> World:
     try:
         return world.compile()
     except ValueError as exc:
-        err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("uncompilable", f"[red]error:[/red] {corpus}: {escape(str(exc))}",
+                corpus=str(corpus))
 
 
 def _print_report(report: ValidationReport, *, quiet: bool = False) -> bool:
@@ -215,8 +374,8 @@ def demo(
     try:
         written = world.export(destination, overwrite=overwrite)
     except FileExistsError as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("destination_exists", f"[red]error:[/red] {escape(str(exc))}",
+                fix="pass --overwrite to replace it")
 
     console.print(f"[green]✓[/green] exported to [bold]{written}[/bold]")
 
@@ -601,21 +760,22 @@ def build(
     from .retail import MonthEndClose, RetailWorld
 
     if eval_density not in _EVAL_DENSITY_LEVELS:
-        err.print(
+        _refuse(
+            "unknown_eval_density",
             f"[red]error:[/red] --eval-density takes {', '.join(_EVAL_DENSITY_LEVELS)},"
-            f" not {eval_density!r}"
+            f" not {eval_density!r}",
+            choices=sorted(_EVAL_DENSITY_LEVELS),
         )
-        raise typer.Exit(code=2)
     eval_density_value = _EVAL_DENSITY_LEVELS[eval_density]
     if distractors < 0:
-        err.print("[red]error:[/red] --distractors takes a non-negative count")
-        raise typer.Exit(code=2)
+        _refuse("negative_distractors",
+                "[red]error:[/red] --distractors takes a non-negative count")
     if employees is not None and employees < 0:
-        err.print("[red]error:[/red] --employees takes a non-negative headcount")
-        raise typer.Exit(code=2)
+        _refuse("negative_headcount",
+                "[red]error:[/red] --employees takes a non-negative headcount")
     if headcount_end is not None and headcount_end < 0:
-        err.print("[red]error:[/red] --headcount-end takes a non-negative headcount")
-        raise typer.Exit(code=2)
+        _refuse("negative_headcount",
+                "[red]error:[/red] --headcount-end takes a non-negative headcount")
     estate_ends = {
         "business_units": business_units_end,
         "sites": sites_end,
@@ -623,30 +783,29 @@ def build(
         "services": services_end,
     }
     if any(value is not None and value < 0 for value in estate_ends.values()):
-        err.print("[red]error:[/red] structural estate endpoints must be non-negative")
-        raise typer.Exit(code=2)
+        _refuse("negative_estate",
+                "[red]error:[/red] structural estate endpoints must be non-negative")
     if messiness is not None:
         from . import messiness as messiness_module
 
         try:
             messiness_module.named(messiness)
         except KeyError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("unknown_messiness", f"[red]error:[/red] {escape(str(exc))}")
     if locale is not None:
         from . import locales as locales_module
 
         try:
             locales_module.named(locale)
         except KeyError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("unknown_locale", f"[red]error:[/red] {escape(str(exc))}")
     if timeline is not None and timeline not in _TIMELINE_DENSITIES:
-        err.print(
+        _refuse(
+            "unknown_timeline",
             f"[red]error:[/red] --timeline takes {', '.join(_TIMELINE_DENSITIES)},"
-            f" not {timeline!r}"
+            f" not {timeline!r}",
+            choices=sorted(_TIMELINE_DENSITIES),
         )
-        raise typer.Exit(code=2)
 
     # One document instead of nine surfaces. Resolved here, before anything is
     # built, and its consequences are then indistinguishable from the flags'
@@ -672,26 +831,38 @@ def build(
             ) if given
         ]
         if subsumed:
-            err.print(
+            _refuse(
+                "cannot_combine",
                 f"[red]error:[/red] {', '.join(subsumed)} cannot be combined with"
                 " --spec; the specification already says what kind of company"
                 " this is, and two accounts of one company is the thing a"
                 " corpus's own recipe exists to make impossible. Put the claim"
-                " in the document."
+                " in the document.",
+                flags=[*subsumed, "--spec"],
             )
-            raise typer.Exit(code=2)
         from . import company as company_module
 
         try:
             resolution = company_module.resolve(company_module.from_document(spec))
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-            err.print(f"[red]error:[/red] {spec}: {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("unreadable_document",
+                    f"[red]error:[/red] {spec}: {escape(str(exc))}", path=str(spec))
         if not resolution.ok:
-            err.print("[red]error:[/red] this description cannot be built:")
-            for conflict in resolution.conflicts:
-                err.print(f"  [yellow]{conflict.rule}[/yellow] {escape(str(conflict))}")
-            raise typer.Exit(code=2)
+            _refuse(
+                # The taxonomy rule *is* the refusal when the description fell
+                # to a single registered rule (`unknown_facet`,
+                # `implausible_productivity`, …) — a harness matching on codes
+                # should not need to open `data` for the common one-conflict
+                # case. Heterogeneous or unregistered rules fall back to the
+                # generic `conflict`; every rule still rides in `data`.
+                _conflict_code(resolution.conflicts),
+                "[red]error:[/red] this description cannot be built:\n"
+                + "\n".join(
+                    f"  [yellow]{conflict.rule}[/yellow] {escape(str(conflict))}"
+                    for conflict in resolution.conflicts
+                ),
+                conflicts=[conflict.as_dict() for conflict in resolution.conflicts],
+            )
         # Assigned onto the flags' own locals rather than threaded through a
         # parallel path. Two paths to one build is how the second one quietly
         # stops matching the first, and everything below has already been
@@ -720,28 +891,30 @@ def build(
             ) if given
         ]
         if refused_with_pack:
-            err.print(
+            _refuse(
+                "cannot_combine",
                 f"[red]error:[/red] {', '.join(refused_with_pack)} cannot be combined"
-                " with --pack; the pack states the company's shape and scale"
+                " with --pack; the pack states the company's shape and scale",
+                flags=[*refused_with_pack, "--pack"],
             )
-            raise typer.Exit(code=2)
         from . import packs as packs_module
 
         try:
             pack_obj = packs_module.load(pack)
         except Exception as exc:
-            err.print(f"[red]error:[/red] pack does not validate: {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("pack_invalid",
+                    f"[red]error:[/red] pack does not validate: {escape(str(exc))}")
         for finding in packs_module.lint(pack_obj):
             err.print(f"[yellow]pack:[/yellow] {escape(finding)}")
         shape = packs_module.archetype_of(pack_obj)
         domain = domains.by_name(pack_obj.base)
         if domain is None:
-            err.print(
+            _refuse(
+                "unknown_engine",
                 f"[red]error:[/red] pack base {pack_obj.base!r} names no registered"
-                f" engine; registered: {', '.join(domains.names())}"
+                f" engine; registered: {', '.join(domains.names())}",
+                registered=list(domains.names()),
             )
-            raise typer.Exit(code=2)
     elif pack_obj is not None:
         # A specification that carried an identity composed one, or named one to
         # load. Only the named one is linted: `packs.lint` exists to hold an
@@ -760,11 +933,12 @@ def build(
         shape = packs_module.archetype_of(pack_obj)
         domain = domains.by_name(pack_obj.base)
         if domain is None:
-            err.print(
+            _refuse(
+                "unknown_engine",
                 f"[red]error:[/red] pack base {pack_obj.base!r} names no registered"
-                f" engine; registered: {', '.join(domains.names())}"
+                f" engine; registered: {', '.join(domains.names())}",
+                registered=list(domains.names()),
             )
-            raise typer.Exit(code=2)
     elif inspired_by:
         shape = archetype_registry.inspired_by(inspired_by)
         domain = domains.for_archetype(shape.key)
@@ -772,8 +946,7 @@ def build(
         try:
             shape = archetype_registry.get(archetype)
         except KeyError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("unknown_archetype", f"[red]error:[/red] {escape(str(exc))}")
         domain = domains.for_archetype(shape.key)
 
     # The archetype names its domain, and the domain says how a build runs. A
@@ -807,13 +980,14 @@ def build(
         for episode_name in episode:
             if episode_name not in episodes_module.loaded():
                 installed_names = sorted(episodes_module.loaded()) or ["(none)"]
-                err.print(
+                _refuse(
+                    "unknown_episode",
                     f"[red]error:[/red] --episode {episode_name!r} names no installed"
                     f" process; installed: {', '.join(installed_names)}. An authored"
                     " episode ships in a pack's `episodes` field — build with the"
-                    " --pack that declares it."
+                    " --pack that declares it.",
+                    installed=list(installed_names),
                 )
-                raise typer.Exit(code=2)
             replaced = episodes_module.loaded()[episode_name].replaces
             if replaced:
                 stands_in_for.setdefault(replaced, []).append(episode_name)
@@ -828,13 +1002,13 @@ def build(
     )
     unhonoured = sorted(name for name in stands_in_for if name != built_in_name)
     if unhonoured:
-        err.print(
+        _refuse(
+            "episode_replaces_nothing",
             f"[red]error:[/red] --episode declares replaces={unhonoured[0]!r}, but this"
             f" build runs {built_in_name or 'the retail close loop'}; the episode would"
             " stand in for nothing and both would mint over the same period. Build the"
-            " archetype whose engine owns that episode."
+            " archetype whose engine owns that episode.",
         )
-        raise typer.Exit(code=2)
 
     # Resolved once, before anything is built, and applied to the builder *and*
     # every episode: the world's organisation and the episode's figures are
@@ -862,29 +1036,39 @@ def build(
         for entry in facet:
             name, separator, value = entry.partition("=")
             if not separator or not name.strip() or not value.strip():
-                err.print(
+                _refuse(
+                    "facet_syntax",
                     f"[red]error:[/red] --facet takes `name=value`, not {entry!r};"
-                    " run `worldloom pack facets` for the dimensions"
+                    " run `worldloom pack facets` for the dimensions",
+                    fix="run `worldloom pack facets` for the dimensions",
                 )
-                raise typer.Exit(code=2)
             # A dimension named twice is refused rather than last-wins: keyword
             # collection would silently drop the earlier claim, and `--facet
             # listing=listed --facet listing=mutual` is somebody expecting a
             # contradiction to be caught, not a company to be quietly unlisted.
             if name.strip() in chosen:
-                err.print(
+                _refuse(
+                    "duplicate_facet",
                     f"[red]error:[/red] --facet {name.strip()} given twice"
                     f" ({chosen[name.strip()]!r} and {value.strip()!r}); a facet is"
-                    " one dimension and takes one value"
+                    " one dimension and takes one value",
+                    facet=name.strip(),
                 )
-                raise typer.Exit(code=2)
             chosen[name.strip()] = value.strip()
         resolved = facets_module.resolve(**chosen)
         if not resolved.ok:
-            err.print("[red]error:[/red] these claims cannot hold together:")
-            for conflict in resolved.conflicts:
-                err.print(f"  [yellow]{conflict.rule}[/yellow] {escape(str(conflict))}")
-            raise typer.Exit(code=2)
+            _refuse(
+                _conflict_code(resolved.conflicts),
+                "[red]error:[/red] these claims cannot hold together:\n"
+                + "\n".join(
+                    f"  [yellow]{conflict.rule}[/yellow] {escape(str(conflict))}"
+                    for conflict in resolved.conflicts
+                ),
+                conflicts=[
+                    {"subject": c.subject, "rule": c.rule, "detail": c.detail}
+                    for c in resolved.conflicts
+                ],
+            )
         # Round-tripped through the recipe's own serialisation rather than used
         # as constructed, and that is not fastidiousness: a facet declares
         # `Span(120, 300)` with Python ints, `overrides_from` coerces to float on
@@ -961,7 +1145,8 @@ def build(
             else "--spec" if resolution is not None
             else "a facet"
         )
-        err.print(
+        _refuse(
+            "estate_unavailable",
             f"[red]error:[/red] {source} asks for an estate and the"
             f" {domain.name} vertical has no landscape vocabulary — only"
             f" {', '.join(sorted(landscape.LANDSCAPES))} name one. A"
@@ -972,9 +1157,8 @@ def build(
                 if said_it
                 else " Nothing named an estate directly: it is implied by the"
                 " facets this build resolved."
-            )
+            ),
         )
-        raise typer.Exit(code=2)
 
     physics_value = _DEFAULT_PHYSICS
     overrides: dict[str, Any] = dict(facet_overrides)
@@ -987,8 +1171,9 @@ def build(
             # file of ranges is a statement, a facet is an implication.
             overrides.update(overrides_from(document.get("overrides", document)))
         except (OSError, AttributeError, KeyError, ValueError, json.JSONDecodeError) as exc:
-            err.print(f"[red]error:[/red] {physics}: {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("unreadable_document",
+                    f"[red]error:[/red] {physics}: {escape(str(exc))}",
+                    path=str(physics))
     if overrides:
         # Rebound only when something was actually overridden, so the identity
         # check in `_under_physics` still recognises a default build and every
@@ -996,8 +1181,7 @@ def build(
         try:
             physics_value = _DEFAULT_PHYSICS.with_overrides(overrides)
         except (KeyError, TypeError, ValueError) as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("bad_physics", f"[red]error:[/red] {escape(str(exc))}")
 
     #: The trading year a facet actually put on the builder, if any. Held rather
     #: than re-derived because it has to reach the *episodes* as well: a
@@ -1059,12 +1243,12 @@ def build(
             try:
                 base_rows = roles_module.to_rows(roles_module._shipped(domain.name))
             except (AttributeError, KeyError) as exc:
-                err.print(
+                _refuse(
+                    "engine_lacks_roles",
                     f"[red]error:[/red] --facet implies role(s) and the"
                     f" {getattr(domain, 'name', '?')!r} engine has no table to"
-                    f" append them to: {escape(str(exc))}"
+                    f" append them to: {escape(str(exc))}",
                 )
-                raise typer.Exit(code=2) from exc
             have = {row[0] for row in base_rows}
             changes["role_table"] = base_rows + tuple(
                 row for row in facet_roles if row[0] not in have
@@ -1189,11 +1373,11 @@ def build(
         try:
             return _replace_physics(spec, physics=physics_value)
         except TypeError as exc:
-            err.print(
+            _refuse(
+                "physics_unsupported",
                 f"[red]error:[/red] --physics was given, but {type(spec).__name__}"
-                f" does not accept any: {escape(str(exc))}"
+                f" does not accept any: {escape(str(exc))}",
             )
-            raise typer.Exit(code=2) from exc
 
     def _rounds(world: World, stamp: str) -> World:
         """The engine-neutral steps that run in *stamp*, after its episode.
@@ -1272,11 +1456,12 @@ def build(
             ) if given
         ]
         if refused:
-            err.print(
+            _refuse(
+                "vertical_excludes_flags",
                 f"[red]error:[/red] {', '.join(refused)} belong(s) to the retail close;"
-                f" the {domain.name} vertical runs one episode per build"
+                f" the {domain.name} vertical runs one episode per build",
+                flags=list(refused),
             )
-            raise typer.Exit(code=2)
 
         builder = _claimed(_under_physics(
             domain.world.from_pack(pack_obj, seed=seed)
@@ -1343,12 +1528,14 @@ def build(
         # which is how this was found.
         cap = domain.max_periods
         if cap is not None and periods > cap and not standing_in:
-            err.print(
+            _refuse(
+                "period_cap",
                 f"[red]error:[/red] {domain.name} builds at most {cap} period(s)"
                 f" per corpus, and --periods {periods} was asked for. Build one"
-                " at a time, or use a vertical whose episode carries a history."
+                " at a time, or use a vertical whose episode carries a history.",
+                cap=cap,
+                asked=periods,
             )
-            raise typer.Exit(code=2)
         for index in range(max(1, periods)):
             stamp = _step_period(period, index, domain.period_step_months)
             if not standing_in:
@@ -1410,8 +1597,7 @@ def build(
         try:
             workforce_path = workforce.headcounts(max(1, periods))
         except ValueError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("infeasible_headcounts", f"[red]error:[/red] {escape(str(exc))}")
         if workforce.initial != workforce.final:
             console.print(
                 "[dim]workforce:[/dim] "
@@ -1441,8 +1627,7 @@ def build(
         try:
             estate_path = estate_trajectory.sizes(max(1, periods))
         except ValueError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("infeasible_estate", f"[red]error:[/red] {escape(str(exc))}")
         if initial_estate != final_estate:
             console.print(
                 "[dim]estate:[/dim] "
@@ -1458,42 +1643,46 @@ def build(
     # unreachable for the same reason a replayed narration does: a fallback that
     # quietly generated instead would not be a replay.
     if actors is not None and actors not in {"scripted", "agent"}:
-        err.print(f"[red]error:[/red] --actors takes `scripted` or `agent`, not {actors!r}")
-        raise typer.Exit(code=2)
+        _refuse("unknown_actors",
+                f"[red]error:[/red] --actors takes `scripted` or `agent`, not {actors!r}",
+                choices=["scripted", "agent"])
 
     # Both produce `observations` and `messages`. Refused rather than merged:
     # two producers appending to one knowledge ledger would give a (person,
     # fact) pair two learned_at values, and every asymmetry answer read off it
     # would depend on which of them ran second.
     if conversations and actors is not None:
-        err.print(
+        _refuse(
+            "cannot_combine",
             "[red]error:[/red] --conversations and --actors cannot be combined;"
             " an actor episode already derives its own knowledge ledger from what"
-            " each employee could see when it acted"
+            " each employee could see when it acted",
+            flags=["--conversations", "--actors"],
         )
-        raise typer.Exit(code=2)
 
     # `agent` exports the world *before* the episode, carrying a recipe that says
     # an actor close is expected. There is no half-run episode to serialise —
     # `worldloom act` resumes by rebuilding from that recipe and the ledger — so
     # the honest artifact at this point is the organisation and nothing else.
     if actors == "agent" and distractors:
-        err.print(
+        _refuse(
+            "cannot_combine",
             "[red]error:[/red] --distractors belongs after the episode that plans "
             "the documents it drafts and copies; --actors agent exports before "
-            "that episode has run"
+            "that episode has run",
+            flags=["--distractors", "--actors"],
         )
-        raise typer.Exit(code=2)
 
     # Same boundary, one step further: an imperfection attaches to a correction
     # an episode recorded and to documents a planner has already written, and
     # `--actors agent` exports before either exists.
     if actors == "agent" and messiness is not None:
-        err.print(
+        _refuse(
+            "cannot_combine",
             "[red]error:[/red] --messiness decays documents the episode has not "
-            "planned yet; --actors agent exports before that episode has run"
+            "planned yet; --actors agent exports before that episode has run",
+            flags=["--messiness", "--actors"],
         )
-        raise typer.Exit(code=2)
 
     # Refused here, not merely validated inside the step at the end of the
     # build: an unknown level should cost nothing, and the two combinations
@@ -1506,24 +1695,27 @@ def build(
     from .scenarios import ACCESS_LEVELS
 
     if access not in ACCESS_LEVELS:
-        err.print(
+        _refuse(
+            "unknown_access_level",
             f"[red]error:[/red] unknown access level {access!r}; expected one "
-            f"of {', '.join(ACCESS_LEVELS)}"
+            f"of {', '.join(ACCESS_LEVELS)}",
+            choices=list(ACCESS_LEVELS),
         )
-        raise typer.Exit(code=2)
     if access != "standard" and actors == "agent":
-        err.print(
+        _refuse(
+            "cannot_combine",
             "[red]error:[/red] --access re-gates documents the episode has not "
-            "planned yet; --actors agent exports before that episode has run"
+            "planned yet; --actors agent exports before that episode has run",
+            flags=["--access", "--actors"],
         )
-        raise typer.Exit(code=2)
     if access != "standard" and (conversations or actors is not None):
-        err.print(
+        _refuse(
+            "cannot_combine",
             "[red]error:[/red] --access cannot re-gate a corpus whose knowledge "
             "ledger was derived under the standard map; it is refused beside "
-            "--conversations and --actors"
+            "--conversations and --actors",
+            flags=["--access", "--conversations", "--actors"],
         )
-        raise typer.Exit(code=2)
 
     # A sampled history is a *schedule*, and an actor episode is a handshake that
     # resumes from the ledger one decision at a time. Combining them would mean
@@ -1532,25 +1724,29 @@ def build(
     # with no org changes between them — so the schedule would be silently
     # discarded on the first `worldloom act`. Refused rather than half-served.
     if timeline is not None and actors is not None:
-        err.print(
+        _refuse(
+            "cannot_combine",
             "[red]error:[/red] --timeline and --actors cannot be combined; an "
             "episode resumed from the ledger is driven one decision at a time and "
-            "a sampled history is decided before the first one is taken"
+            "a sampled history is decided before the first one is taken",
+            flags=["--timeline", "--actors"],
         )
-        raise typer.Exit(code=2)
     if headcount_end is not None and actors is not None:
-        err.print(
+        _refuse(
+            "cannot_combine",
             "[red]error:[/red] --headcount-end and --actors cannot be combined;"
             " actor resumption records close decisions one at a time, while a"
-            " workforce trajectory is fixed before the first period"
+            " workforce trajectory is fixed before the first period",
+            flags=["--headcount-end", "--actors"],
         )
-        raise typer.Exit(code=2)
     if estate_trajectory is not None and actors is not None:
-        err.print(
+        _refuse(
+            "cannot_combine",
             "[red]error:[/red] structural estate endpoints and --actors cannot be"
-            " combined; both advance the world between close checkpoints"
+            " combined; both advance the world between close checkpoints",
+            flags=["--business-units-end", "--sites-end", "--systems-end",
+                   "--services-end", "--actors"],
         )
-        raise typer.Exit(code=2)
 
     if actors == "agent":
         from dataclasses import replace as _replace
@@ -1572,13 +1768,14 @@ def build(
             )
         world = _replace(world, _recipe=intended)
         if out is None:
-            err.print("[red]error:[/red] --actors agent needs --out; the episode is driven from a corpus")
-            raise typer.Exit(code=2)
+            _refuse("missing_flag",
+                    "[red]error:[/red] --actors agent needs --out; the episode is driven from a corpus",
+                    flag="--out")
         try:
             written = world.export(out, overwrite=overwrite)
         except FileExistsError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("destination_exists", f"[red]error:[/red] {escape(str(exc))}",
+                    fix="pass --overwrite to replace it")
         console.print(_summary_table(world))
         console.print(
             f"\n[green]✓[/green] exported to [bold]{written}[/bold]"
@@ -1656,14 +1853,16 @@ def build(
 
         density = _density(timeline)
         if incident is not None and density.incidents:
-            err.print(
+            _refuse(
+                "cannot_combine",
                 f"[red]error:[/red] --incident/--no-incident and --timeline"
                 f" {timeline} cannot both decide; the schedule states an incident"
                 " in both directions for every period once it schedules any, so"
                 " a forced flag would either be ignored or make the schedule"
-                " vacuous. Use --timeline quiet to keep the flag."
+                " vacuous. Use --timeline quiet to keep the flag.",
+                flags=["--incident/--no-incident", "--timeline"],
+                fix="use --timeline quiet to keep the flag",
             )
-            raise typer.Exit(code=2)
 
         stamps = timeline_module.periods_from(period, max(1, periods))
         history = timeline_module.sample(
@@ -1691,8 +1890,7 @@ def build(
         try:
             world = history.run(world)
         except timeline_module.TimelineError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("timeline_infeasible", f"[red]error:[/red] {escape(str(exc))}")
         # After the whole history rather than interleaved into it, which is the
         # one place these rounds do not sit inside their own period's loop. The
         # sampler owns the schedule — it decides which months hold an incident,
@@ -1736,8 +1934,7 @@ def build(
                         services=target.services,
                     ))
             except (ActorProviderError, ValueError) as exc:
-                err.print(f"[red]error:[/red] {escape(str(exc))}")
-                raise typer.Exit(code=2) from exc
+                _refuse("actor_episode_failed", f"[red]error:[/red] {escape(str(exc))}")
 
     if actors == "scripted":
         accepted = sum(1 for entry in world.actor_ledger if entry.result.accepted)
@@ -1839,8 +2036,7 @@ def build(
         try:
             world = world.run(AccessProfile(level=access))
         except ValueError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("access_profile_failed", f"[red]error:[/red] {escape(str(exc))}")
         moved = sum(
             1 for i in world.artifact_intents if before.get(i.id) != i.audience
         )
@@ -1859,8 +2055,9 @@ def build(
             source = _load(str(replay))
             ledger = source._ledger
             if not ledger:
-                err.print(f"[red]error:[/red] {replay} carries no generation ledger to replay")
-                raise typer.Exit(code=2)
+                _refuse("no_ledger",
+                        f"[red]error:[/red] {replay} carries no generation ledger to replay",
+                        corpus=str(replay))
             # The world being narrated must be the world the ledger was recorded
             # for, and this says so up front instead of letting it emerge.
             #
@@ -1898,15 +2095,16 @@ def build(
                     key for key in set(here) | set(there)
                     if here.get(key) != there.get(key)
                 )
-                err.print(
+                _refuse(
+                    "replay_recipe_mismatch",
                     f"[red]error:[/red] {replay} recorded a different world;"
                     f" its recipe and this build's disagree on"
                     f" {', '.join(differs)}. A replay reproduces a corpus, so"
                     " the flags that built it have to be the flags that build"
                     f" this one; {replay}/world.json records the recipe it was"
-                    " built from."
+                    " built from.",
+                    differs=list(differs),
                 )
-                raise typer.Exit(code=2)
             # Unreachable on purpose: a replay that quietly falls back to
             # generating would not be a replay. Its id comes from what the
             # artifacts record as `narrated_by` — the id is a key component,
@@ -1923,12 +2121,13 @@ def build(
                 if "narrated_by" in ir.metadata
             }
             if len(narrated_ids) > 1:
-                err.print(
+                _refuse(
+                    "replay_many_providers",
                     f"[red]error:[/red] {replay} was narrated by several providers"
                     f" ({', '.join(sorted(narrated_ids))}); one narrate pass"
-                    " replays one provider's keys"
+                    " replays one provider's keys",
+                    providers=sorted(narrated_ids),
                 )
-                raise typer.Exit(code=2)
             provider = (
                 UnreachableProvider(id=narrated_ids.pop())
                 if narrated_ids
@@ -1938,8 +2137,7 @@ def build(
         try:
             world = world.narrate(provider, ledger=ledger)
         except ProviderError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("narration_failed", f"[red]error:[/red] {escape(str(exc))}")
 
         calls, replayed, rejected = world._narration
         console.print(
@@ -1953,8 +2151,7 @@ def build(
         try:
             world = world.render(*formats)
         except RenderError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("render_failed", f"[red]error:[/red] {escape(str(exc))}")
 
     console.print(_summary_table(world))
     console.print()
@@ -1969,8 +2166,8 @@ def build(
         try:
             written = world.export(out, overwrite=overwrite)
         except FileExistsError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("destination_exists", f"[red]error:[/red] {escape(str(exc))}",
+                    fix="pass --overwrite to replace it")
         console.print(f"[green]✓[/green] exported to [bold]{written}[/bold]")
 
 
@@ -2028,8 +2225,8 @@ def narrate_accept(
     try:
         responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
 
     verdicts = handshake.review(world, responses)
     rejected = {name: v for name, v in verdicts.items() if not v.accepted}
@@ -2047,13 +2244,14 @@ def narrate_accept(
     # and when that unrelated bug was fixed the step failed and revealed that
     # the guardrail it names had not been exercised in a long time.
     if responses and not verdicts:
-        err.print(
+        _refuse(
+            "nothing_awaiting_prose",
             f"[red]error:[/red] {len(responses)} response(s) supplied but this corpus"
             " has no section awaiting prose — nothing was reviewed and nothing was"
             " committed.\n[dim]Every section already carries prose. Run `worldloom"
-            " status` to see where this corpus actually is.[/dim]"
+            " status` to see where this corpus actually is.[/dim]",
+            responses=len(responses),
         )
-        raise typer.Exit(code=2)
 
     if as_json:
         import json as json_module
@@ -2165,8 +2363,8 @@ def compose_accept(
             json.loads(source.read_text(encoding="utf-8"))
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
 
     result = compose_module.accept(world, proposal, model_id=model_id)
 
@@ -2217,8 +2415,8 @@ def _probe_session(path: Path):  # type: ignore[no-untyped-def]
             json.loads(path.read_text(encoding="utf-8"))
         )
     except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {path}: {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {path}: {escape(str(exc))}", path=str(path))
 
 
 def _write_probe(session, path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -2319,8 +2517,8 @@ def probe_accept(
             json.loads(source.read_text(encoding="utf-8"))
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
 
     result = probe_module.accept(session.graph, answer)
 
@@ -2538,8 +2736,8 @@ def plan_accept(
     try:
         responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
 
     result = handshake.accept(world, responses, model_id=model_id)
     rejected = {name: v for name, v in result.verdicts.items() if not v.accepted}
@@ -2631,8 +2829,8 @@ def act_requests(
     try:
         document = handshake.requests_document(world)
     except RecipeError as exc:
-        err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("recipe_error", f"[red]error:[/red] {corpus}: {escape(str(exc))}",
+                corpus=str(corpus))
 
     if document.get("complete"):
         # "Complete" and "committed" are not the same thing, and conflating them
@@ -2708,14 +2906,13 @@ def act_accept(
     try:
         actions = handshake.parse_actions(json.loads(source.read_text(encoding="utf-8")))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {source}: {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
 
     try:
         outcome = handshake.accept(world, actions, model_id=model_id)
     except (RecipeError, ValueError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("invalid_actions", f"[red]error:[/red] {escape(str(exc))}")
 
     if as_json:
         import json as json_module
@@ -2797,24 +2994,43 @@ def render(
         try:
             world = world.extend(recipe=with_presentation(world.recipe, named(profile)))
         except ValueError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("unknown_profile", f"[red]error:[/red] {escape(str(exc))}")
     try:
         rendered = world.render(*formats)
     except (RenderError, ValueError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("render_failed", f"[red]error:[/red] {escape(str(exc))}")
 
     written = rendered.export(out or Path(corpus), overwrite=True)
     console.print(f"[green]✓[/green] {len(rendered._rendered)} file(s) written to [bold]{written}[/bold]")
-    # Reloaded from where the files actually landed, not validated in memory.
-    # The in-memory world still resolves artifact paths against the *source*
+    # Validated against where the files actually landed, not in memory. The
+    # in-memory world still resolves artifact paths against the *source*
     # corpus, so rendering to a `--out` directory reported every file it had
     # just written as missing — a false failure, and the loudest possible one,
     # since anyone running this in a pipeline reads it as rendering being
-    # broken. Reloading also makes the check mean what it says: the artifact on
-    # disk is the thing a reader will open.
-    if not _report(_load(str(written))):
+    # broken. This used to `_load(str(written))` — a full re-parse of every
+    # JSONL stream it had exported one line earlier — when the only check that
+    # reads the disk is `artifact_files`, and all it needs is the written
+    # root. So: rebind `root` and re-parse only the manifest. The manifest
+    # comes back off the disk rather than from memory on purpose — it is the
+    # file that names what a reader will open, so the check stays a statement
+    # about the corpus on disk, not about what this process meant to write.
+    # The full write→read round trip this no longer exercises is pinned by
+    # `test_export_round_trips_without_loss`; before the reload was dropped,
+    # both paths were measured to produce equal reports (8,133 checks, and
+    # the same `missing_file` violations when a written artifact is deleted).
+    from dataclasses import replace as _replace_root
+
+    from . import corpus as corpus_module
+    from .models import ArtifactManifestEntry
+
+    on_disk = _replace_root(
+        rendered,
+        root=written,
+        _artifacts=tuple(corpus_module.load_models(
+            written / corpus_module.MANIFEST_FILE, ArtifactManifestEntry,
+        )),
+    )
+    if not _report(on_disk):
         raise typer.Exit(code=1)
 
 
@@ -2917,8 +3133,7 @@ def mosaic(
         try:
             document = mosaic_module.describe(engine)
         except KeyError as exc:
-            err.print(f"[red]error:[/red] {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("unknown_engine", f"[red]error:[/red] {escape(str(exc))}")
         if as_json:
             typer.echo(json.dumps(document, indent=2))
             return
@@ -2945,8 +3160,7 @@ def mosaic(
         else:
             variants = mosaic_module.field(count, seed=seed, engine=engine)
     except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("mosaic_failed", f"[red]error:[/red] {escape(str(exc))}")
 
     spread = mosaic_module.spread(variants)
     try:
@@ -2954,11 +3168,10 @@ def mosaic(
             variants, shard_count=shard_count, shard_index=shard_index,
         )
     except ValueError as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("bad_shard", f"[red]error:[/red] {escape(str(exc))}")
     if out is None and (resume or shard_count != 1 or shard_index != 0):
-        err.print("[red]error:[/red] sharding and resume require --out")
-        raise typer.Exit(code=2)
+        _refuse("missing_flag", "[red]error:[/red] sharding and resume require --out",
+                flag="--out")
     if as_json:
         typer.echo(json.dumps(
             {"spread": spread, "worlds": [v.as_dict() for v in variants]}, indent=2))
@@ -2999,8 +3212,7 @@ def mosaic(
             shard_count=shard_count, shard_index=shard_index, resume=resume,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("shard_state_error", f"[red]error:[/red] {escape(str(exc))}")
 
     from dataclasses import replace as _replace_spec
 
@@ -3016,9 +3228,10 @@ def mosaic(
     # was first written.
     registered = domains.by_name(engine)
     if registered is None or not registered.default_archetype:
-        err.print(f"[red]error:[/red] no domain named {engine!r} is registered;"
-                  f" known: {', '.join(domains.names())}")
-        raise typer.Exit(code=2)
+        _refuse("unknown_engine",
+                f"[red]error:[/red] no domain named {engine!r} is registered;"
+                f" known: {', '.join(domains.names())}",
+                registered=list(domains.names()))
     domain = registered
     shape = archetypes.get(domain.default_archetype)
 
@@ -3047,11 +3260,12 @@ def mosaic(
                     )
                 existing.validate().raise_if_failed()
             except Exception as exc:
-                err.print(
+                _refuse(
+                    "resume_invalid",
                     f"[red]error:[/red] completed world {variant.index} does not"
-                    f" validate for resume: {escape(str(exc))}"
+                    f" validate for resume: {escape(str(exc))}",
+                    world=variant.index,
                 )
-                raise typer.Exit(code=2) from exc
             skipped += 1
             console.print(
                 f"[cyan]↷[/cyan] [bold]world {variant.index}[/bold]"
@@ -3114,8 +3328,9 @@ def mosaic(
                     on_accepted=checkpoint.append,
                 )
             except (OSError, ValueError, ProviderError, NarrationError) as exc:
-                err.print(f"[red]error:[/red] world {variant.index}: {escape(str(exc))}")
-                raise typer.Exit(code=2) from exc
+                _refuse("narration_failed",
+                        f"[red]error:[/red] world {variant.index}: {escape(str(exc))}",
+                        world=variant.index)
             sections = world._narration[0]
             narrated_sections += sections
 
@@ -3126,8 +3341,9 @@ def mosaic(
             try:
                 world = world.render(*formats)
             except RenderError as exc:
-                err.print(f"[red]error:[/red] world {variant.index}: {escape(str(exc))}")
-                raise typer.Exit(code=2) from exc
+                _refuse("render_failed",
+                        f"[red]error:[/red] world {variant.index}: {escape(str(exc))}",
+                        world=variant.index)
 
         written.append(str(world.export(target, overwrite=True)))
         report = world.validate()
@@ -3401,8 +3617,7 @@ def validate(
     try:
         report = world.validate()
     except CorpusError as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("corpus_unloadable", f"[red]error:[/red] {escape(str(exc))}")
     if as_json:
         import json as json_module
 
@@ -3464,8 +3679,7 @@ def fleet_qualify(
     try:
         record = fleet_module.qualify(fleet_dir, purpose)  # type: ignore[arg-type]
     except fleet_module.FleetError as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("fleet_error", f"[red]error:[/red] {escape(str(exc))}")
 
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -3528,8 +3742,7 @@ def fleet_curate(
     try:
         curation = fleet_module.curate(fleet_dir, purpose)  # type: ignore[arg-type]
     except fleet_module.FleetError as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("fleet_error", f"[red]error:[/red] {escape(str(exc))}")
 
     if as_json:
         typer.echo(curation.manifest(), nl=False)
@@ -3606,8 +3819,7 @@ def evolve_run(
             out_dir=out, purpose=purpose,  # type: ignore[arg-type]
         )
     except (evolve_module.EvolveError, fleet_module.FleetError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("evolve_failed", f"[red]error:[/red] {escape(str(exc))}")
 
     if as_json:
         typer.echo(run.manifest(), nl=False)
@@ -3911,15 +4123,15 @@ def search(
     from .evaluate.index import passages as index_passages
 
     if not query.strip():
-        err.print("[red]error:[/red] an empty query ranks every passage equally; say what you are looking for")
-        raise typer.Exit(code=2)
+        _refuse("empty_query",
+                "[red]error:[/red] an empty query ranks every passage equally; say what you are looking for")
     cutoff = None
     if as_of:
         try:
             cutoff = datetime.fromisoformat(as_of)
         except ValueError as exc:
-            err.print(f"[red]error:[/red] --as-of {as_of!r} is not an ISO date: {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("not_a_date",
+                    f"[red]error:[/red] --as-of {as_of!r} is not an ISO date: {escape(str(exc))}")
         if cutoff.tzinfo is None:
             # Corpus timestamps are timezone-aware UTC throughout; a bare
             # `--as-of 2026-03-01` would otherwise crash on the comparison.
@@ -3939,8 +4151,7 @@ def search(
             f"no artifact existed at or before {cutoff.isoformat()}" if cutoff is not None
             else "this corpus has no retrievable passages"
         )
-        err.print(f"[red]error:[/red] nothing to search: {reason}")
-        raise typer.Exit(code=2)
+        _refuse("no_passages", f"[red]error:[/red] nothing to search: {reason}")
 
     index = Bm25([passage.text for passage in found])
     ranked = index.rank(query, limit=max(1, limit))
@@ -4385,8 +4596,8 @@ def series(
         units.setdefault((fact.kind, fact.subject), fact.value.unit)
 
     if not grouped:
-        err.print("[red]error:[/red] no period-keyed numeric facts match that kind/subject")
-        raise typer.Exit(code=2)
+        _refuse("no_matching_facts",
+                "[red]error:[/red] no period-keyed numeric facts match that kind/subject")
 
     # Longest wins, and the ties are the interesting part: a retail close mints
     # a dozen kinds over the same twelve months, so length alone would pick
@@ -4414,12 +4625,13 @@ def series(
     try:
         decomposition = series_module.decompose(values, period=span)
     except ValueError as exc:
-        err.print(
+        _refuse(
+            "history_too_short",
             f"[red]error:[/red] {escape(str(exc))}\n"
             "[dim]Build a longer history with --comparatives, or name a shorter "
-            "--cycle.[/dim]"
+            "--cycle.[/dim]",
+            fix="build a longer history with --comparatives, or name a shorter --cycle",
         )
-        raise typer.Exit(code=2) from exc
 
     outliers = series_module.anomalies(decomposition)
     expected = decomposition.extend(1)
@@ -4525,8 +4737,7 @@ def mcp(
     try:
         mcp_module.serve()
     except RuntimeError as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("mcp_unavailable", f"[red]error:[/red] {escape(str(exc))}")
 
 
 @app.command()
@@ -4568,8 +4779,7 @@ def twin(
     from .recipe import RecipeError
 
     if "=" not in set_:
-        err.print("[red]error:[/red] --set takes PATH=VALUE")
-        raise typer.Exit(code=2)
+        _refuse("intervention_syntax", "[red]error:[/red] --set takes PATH=VALUE")
     raw_path, _, raw_value = set_.partition("=")
     try:
         value = json.loads(raw_value)
@@ -4581,11 +4791,11 @@ def twin(
 
     world = _load(corpus)
     if not world.recipe:
-        err.print(
+        _refuse(
+            "no_recipe",
             "[red]error:[/red] this corpus carries no recipe, so it cannot be"
-            " rebuilt — twins are measured between two rebuilds of the record."
+            " rebuilt — twins are measured between two rebuilds of the record.",
         )
-        raise typer.Exit(code=2)
 
     try:
         result = twins_module.twin(
@@ -4593,8 +4803,7 @@ def twin(
             twins_module.Intervention(raw_path.strip(), value),
         )
     except (twins_module.TwinError, RecipeError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("unrecorded_path", f"[red]error:[/red] {escape(str(exc))}")
 
     manifest = result.manifest
     if out is not None and manifest.refused is None:
@@ -4679,8 +4888,8 @@ def mutate(
     interventions = []
     for entry in set_:
         if "=" not in entry:
-            err.print(f"[red]error:[/red] --set takes PATH=VALUE, got {escape(entry)!r}")
-            raise typer.Exit(code=2)
+            _refuse("intervention_syntax",
+                    f"[red]error:[/red] --set takes PATH=VALUE, got {escape(entry)!r}")
         raw_path, _, raw_value = entry.partition("=")
         try:
             value = json.loads(raw_value)
@@ -4699,35 +4908,37 @@ def mutate(
         try:
             recipe_document = json.loads(source.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            err.print(f"[red]error:[/red] {corpus_or_recipe}: {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("unreadable_document",
+                    f"[red]error:[/red] {corpus_or_recipe}: {escape(str(exc))}",
+                    path=str(corpus_or_recipe))
         if not isinstance(recipe_document, dict):
-            err.print(
-                f"[red]error:[/red] {corpus_or_recipe} does not hold a recipe object"
+            _refuse(
+                "not_a_recipe",
+                f"[red]error:[/red] {corpus_or_recipe} does not hold a recipe object",
+                path=str(corpus_or_recipe),
             )
-            raise typer.Exit(code=2)
     else:
         world = _load(corpus_or_recipe)
         recipe_document = world.recipe
         if not recipe_document:
-            err.print(
+            _refuse(
+                "no_recipe",
                 "[red]error:[/red] this corpus carries no recipe, so there is"
-                " nothing to mutate — a mutation is an edit to the record."
+                " nothing to mutate — a mutation is an edit to the record.",
             )
-            raise typer.Exit(code=2)
 
     try:
         result = twins_module.mutated(recipe_document, interventions)
     except twins_module.MutationRefused as exc:
-        err.print(f"[red]refused:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=3) from exc
+        _refuse("existence_path", f"[red]refused:[/red] {escape(str(exc))}",
+                exit_code=3)
     except (twins_module.TwinError, RecipeError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("unrecorded_path", f"[red]error:[/red] {escape(str(exc))}")
 
     if out.exists() and not overwrite:
-        err.print(f"[red]error:[/red] {out} exists; pass --overwrite to replace it")
-        raise typer.Exit(code=2)
+        _refuse("destination_exists",
+                f"[red]error:[/red] {out} exists; pass --overwrite to replace it",
+                fix="pass --overwrite to replace it")
     out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
     for intervention in interventions:
@@ -4796,8 +5007,8 @@ def stats(
     try:
         report = stats_module.compute(world)
     except ValueError as exc:
-        err.print(f"[red]error:[/red] {corpus}: {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("stats_failed", f"[red]error:[/red] {corpus}: {escape(str(exc))}",
+                corpus=str(corpus))
 
     other_report = None
     if against:
@@ -4805,8 +5016,8 @@ def stats(
         try:
             other_report = stats_module.compute(other_world)
         except ValueError as exc:
-            err.print(f"[red]error:[/red] {against}: {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("stats_failed", f"[red]error:[/red] {against}: {escape(str(exc))}",
+                    corpus=str(against))
 
     if as_json:
         payload: dict[str, Any] = {"corpus": corpus, **report.as_dict()}
@@ -5065,8 +5276,8 @@ def pack_params(
         if prefix is None or name.startswith(prefix)
     }
     if not registry:
-        err.print(f"[red]error:[/red] no parameter starts with {prefix!r}")
-        raise typer.Exit(code=2)
+        _refuse("unknown_parameter",
+                f"[red]error:[/red] no parameter starts with {prefix!r}")
 
     if as_json:
         typer.echo(json.dumps(registry, indent=2))
@@ -5112,12 +5323,13 @@ def pack_facets(
 
     try:
         registry = facets_module.describe(name)
-    except KeyError as exc:
-        err.print(
+    except KeyError:
+        _refuse(
+            "unknown_facet",
             f"[red]error:[/red] no facet named {name!r}; known:"
-            f" {', '.join(sorted(facets_module.FACETS))}"
+            f" {', '.join(sorted(facets_module.FACETS))}",
+            known=sorted(facets_module.FACETS),
         )
-        raise typer.Exit(code=2) from exc
 
     if as_json:
         typer.echo(json.dumps(registry, indent=2))
@@ -5217,9 +5429,10 @@ def pack_landscapes(
     published = landscape_module.publish()
     if name is not None:
         if name not in published:
-            err.print(f"[red]error:[/red] no landscape named {name!r};"
-                      f" known: {', '.join(sorted(published))}")
-            raise typer.Exit(code=2)
+            _refuse("unknown_landscape",
+                    f"[red]error:[/red] no landscape named {name!r};"
+                    f" known: {', '.join(sorted(published))}",
+                    known=sorted(published))
         published = {name: published[name]}
 
     if as_json:
@@ -5279,9 +5492,10 @@ def pack_locales(
     published = locales_module.publish()
     if name is not None:
         if name not in published:
-            err.print(f"[red]error:[/red] no locale named {name!r};"
-                      f" known: {', '.join(published)}")
-            raise typer.Exit(code=2)
+            _refuse("unknown_locale",
+                    f"[red]error:[/red] no locale named {name!r};"
+                    f" known: {', '.join(published)}",
+                    known=list(published))
         published = {name: published[name]}
 
     if as_json:
@@ -5371,8 +5585,9 @@ def pack_texts(
 
     domain = domains.by_name(engine)
     if domain is None:
-        err.print(f"[red]error:[/red] no engine named {engine!r}; registered: {', '.join(domains.names())}")
-        raise typer.Exit(code=2)
+        _refuse("unknown_engine",
+                f"[red]error:[/red] no engine named {engine!r}; registered: {', '.join(domains.names())}",
+                registered=list(domains.names()))
     if as_json:
         typer.echo(json_module.dumps(
             {
@@ -5440,8 +5655,9 @@ def pack_export_command(
     from . import pack_export as export_module
 
     if (world is None) == (probe_file is None):
-        err.print("[red]error:[/red] pass exactly one of --world (a mosaic index) or --probe")
-        raise typer.Exit(code=2)
+        _refuse("exactly_one",
+                "[red]error:[/red] pass exactly one of --world (a mosaic index) or --probe",
+                flags=["--world", "--probe"])
 
     base = None
     if onto is not None:
@@ -5450,8 +5666,7 @@ def pack_export_command(
         try:
             base = packs_module.load(onto)
         except Exception as exc:
-            err.print(f"[red]error:[/red] {onto}: {escape(str(exc))}")
-            raise typer.Exit(code=2) from exc
+            _refuse("pack_invalid", f"[red]error:[/red] {onto}: {escape(str(exc))}")
 
     try:
         if world is not None:
@@ -5460,11 +5675,12 @@ def pack_export_command(
             variants = mosaic_module.field(count, seed=seed, engine=engine)
             found = [v for v in variants if v.index == world]
             if not found:
-                err.print(
+                _refuse(
+                    "unknown_world",
                     f"[red]error:[/red] this mosaic has no world {world};"
-                    f" its indices are {[v.index for v in variants]}"
+                    f" its indices are {[v.index for v in variants]}",
+                    indices=[v.index for v in variants],
                 )
-                raise typer.Exit(code=2)
             derived = export_module.from_variant(found[0], name=name, onto=base)
         else:
             from . import probe as probe_module
@@ -5476,8 +5692,7 @@ def pack_export_command(
                 name=name or "probe", onto=base, premise=session.premise,
             )
     except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("pack_export_failed", f"[red]error:[/red] {escape(str(exc))}")
 
     if as_json:
         typer.echo(json.dumps(derived.as_dict(), indent=2))
@@ -5591,8 +5806,9 @@ def pack_template(
     from . import domains
 
     if domains.by_name(engine) is None:
-        err.print(f"[red]error:[/red] no engine named {engine!r}; registered: {', '.join(domains.names())}")
-        raise typer.Exit(code=2)
+        _refuse("unknown_engine",
+                f"[red]error:[/red] no engine named {engine!r}; registered: {', '.join(domains.names())}",
+                registered=list(domains.names()))
     starter = {
         "name": "my-industry",
         "base": engine,
@@ -5671,13 +5887,12 @@ def workspace(
     try:
         world = World.load(corpus)
     except Exception as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("corpus_unloadable", f"[red]error:[/red] {escape(str(exc))}",
+                corpus=str(corpus))
     try:
         written = workspace_module.write(world, out, overwrite=overwrite, noise=noise)
     except (FileExistsError, ValueError) as exc:
-        err.print(f"[red]error:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("workspace_unwritable", f"[red]error:[/red] {escape(str(exc))}")
 
     reading = workspace_module.summarise(world, noise=noise)
     console.print(
@@ -5847,8 +6062,8 @@ def present_lint(
     try:
         seed = load_seed(spec, PresentationSeed)
     except Exception as exc:
-        err.print(f"[red]refused:[/red] {escape(str(exc))}")
-        raise typer.Exit(code=2) from exc
+        _refuse("unreadable_document", f"[red]refused:[/red] {escape(str(exc))}",
+                path=str(spec))
 
     findings = review(seed, doctypes=doctypes)
     if findings:

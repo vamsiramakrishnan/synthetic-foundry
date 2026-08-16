@@ -1233,6 +1233,13 @@ If you are tempted to make one of these pass by editing the fixture or relaxing 
 check: don't. A validator that can be talked out of failing is decoration. Fix the
 thing it caught.
 
+Refusals are also machine-readable. With `WORLDLOOM_OUTPUT=json` in the
+environment, every CLI refusal prints one line of JSON to stderr —
+`{"refusal": "<code>", "message": ..., "fix": ..., "data": {...}}` — with the
+same exit code the prose form uses (2 for a caller error, 3 for a measured
+refusal). The codes are stable, snake_case, and registered in `cli._REFUSALS`;
+parse the code, not the message. Without the variable, output is unchanged.
+
 ---
 
 ## Determinism, and why it constrains you
