@@ -510,7 +510,7 @@ reproducibility even when no API moved.
 - `Built.measure()` and `Built.topology()` were a second copy of
   `outcomes.shape_vector`'s walk; they now delegate to it.
 
-## 0.1.0 — first release
+## 0.1.0 — first release (unreleased)
 
 One coherent enterprise, taken all the way through. Two, in fact.
 

@@ -870,9 +870,24 @@ class World:
                 previous = revises.get(previous)
             return version
 
+        # One pass over the plan, not one per IR: the linear `next(...)` scan
+        # this replaces made the manifest quadratic in corpus size. Ids are
+        # unique in the plan (`revises` above already banks on it), so the
+        # mapping loses nothing the scan had.
+        intents_by_id = {i.id: i for i in self._artifact_intents}
+
         entries: list[ArtifactManifestEntry] = []
         for ir in irs:
-            intent = next(i for i in self._artifact_intents if i.id == ir.intent_id)
+            intent = intents_by_id.get(ir.intent_id)
+            if intent is None:
+                # The scan raised a bare StopIteration here; keep the crash —
+                # an IR citing an intent the plan does not carry is corpus
+                # corruption, not a case to paper over — but name it.
+                raise ValueError(
+                    f"artifact IR {ir.id} cites intent {ir.intent_id!r},"
+                    " which is not in this world's plan — the compiled IRs and"
+                    " the artifact intents disagree about what was planned"
+                )
             item = first_file.get(intent.id)
             authority, lifecycle = documents.standing(intent.artifact_type)
             if intent.id in replaced:

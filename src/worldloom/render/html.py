@@ -803,6 +803,10 @@ def render(
 
 def render_all(world: World) -> list[Rendered]:
     """Render every artifact to HTML."""
+    # Hoisted, as docx/pdf/pptx already do: rebuilt inside the loop, the fact
+    # dict made this renderer quadratic in corpus size for no reading it
+    # changed — `render` only ever looks facts up by id.
+    facts = {fact.id: fact for fact in world.facts}
     locale = corpus_locale(world)
     profile = presentation_of(world)
 
@@ -814,7 +818,7 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.html",
                 media_type="text/html",
-                payload=render(ir, {fact.id: fact for fact in world.facts}, locale=locale,
+                payload=render(ir, facts, locale=locale,
                               presentation=profile.for_doctype(intent.artifact_type)),
             )
         )

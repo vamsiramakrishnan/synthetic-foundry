@@ -158,8 +158,17 @@ def _near_duplicates(pool: list[Passage]) -> tuple[int, int]:
     return len(_near_duplicate_reading(pool)[0]), total_pairs
 
 
-def _texts_and_citations(world: World) -> tuple[dict[str, str], dict[str, set[str]]]:
+def _texts_and_citations(
+    world: World, pool: list[Passage],
+) -> tuple[dict[str, str], dict[str, set[str]]]:
     """Per-document text and per-document cited-fact-ids, from whatever the world has.
+
+    *pool* is `passages(world)`, computed once by `compute()` and handed in
+    rather than recomputed here: `compute()` needs the same pool again for the
+    near-duplicate reading, and `passages()` re-renders every compiled
+    artifact's substitution, so calling it twice doubled the most expensive
+    step of `worldloom stats` for two readings of one list. Empty on the
+    fallback path below, where there are no compiled IRs to passage.
 
     The compiled path (`world.artifact_irs` present, which the CLI arranges by
     calling `world.compile()` when needed — every generated corpus has
@@ -181,7 +190,7 @@ def _texts_and_citations(world: World) -> tuple[dict[str, str], dict[str, set[st
     if world.artifact_irs:
         texts = document_texts(world)
         cited: dict[str, set[str]] = {doc_id: set() for doc_id in texts}
-        for passage in passages(world):
+        for passage in pool:
             cited.setdefault(passage.artifact_id, set()).update(passage.fact_ids)
         return texts, cited
 
@@ -356,7 +365,12 @@ def compute(world: World) -> Stats:
     corpus with zero of everything rather than one that was never given a
     chance to have anything.
     """
-    texts, fact_ids_by_document = _texts_and_citations(world)
+    # The passage pool is the priciest thing this function touches (it
+    # re-renders every artifact's substitution), and both the citation map and
+    # the near-duplicate reading below want exactly the same pool — so it is
+    # computed once, here, and threaded through.
+    pool = passages(world) if world.artifact_irs else []
+    texts, fact_ids_by_document = _texts_and_citations(world, pool)
     if not texts:
         raise ValueError("nothing to compute statistics from — render or compile the corpus first")
 
@@ -377,7 +391,6 @@ def compute(world: World) -> Stats:
         total_tokens += len(token_list)
     type_token_ratio = (len(vocabulary) / total_tokens) if total_tokens else 0.0
 
-    pool = passages(world) if world.artifact_irs else []
     # One join, both readings. Calling `_near_duplicates` and then
     # `near_duplicate_clusters` would shingle and join the whole pool twice for
     # two halves of one answer — which is the cost the join exists to avoid.
