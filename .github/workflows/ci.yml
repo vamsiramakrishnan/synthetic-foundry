@@ -434,20 +434,30 @@ jobs:
           diff -r "${{ runner.temp }}/narrated" "${{ runner.temp }}/replayed"
           worldloom validate "${{ runner.temp }}/replayed"
 
-  # The Windows leg, phase 1 of 2: inventory, not gate. Every byte-identity
-  # claim this repository enforces has run on POSIX kernels only (ubuntu on
-  # every push, macOS nightly in determinism-sweep.yml), while the package
-  # calls itself "OS Independent" — this job is the first witness on Windows.
-  # `continue-on-error: true` is deliberate and temporary: the expected
-  # failures (CRLF from text-mode writes breaking byte-identity, hardcoded
-  # /tmp, path-separator assumptions in tests) are the *inventory* this phase
-  # exists to collect, so the job must run to completion and report without
-  # blocking merges. Phase 2 fixes what it finds and flips this off — see
-  # docs/plans/builder-revamp.md, item W7. Never make this leg green by
-  # skipping a test.
+  # The Windows leg, phase 2 of 2. Every byte-identity claim this repository
+  # enforces ran on POSIX kernels only (ubuntu on every push, macOS nightly in
+  # determinism-sweep.yml) until phase 1 ran this job as inventory, not gate.
+  # The inventory (14 failures / 8 errors) fell into two classes, both fixed:
+  # console encoding — piped stdout falls back to cp1252 and the CLI's ✓/✗
+  # glyphs raise UnicodeEncodeError (PYTHONUTF8 below) — and CRLF drift, from
+  # autocrlf rewriting fixtures at checkout (.gitattributes) and from
+  # unpinned text-mode writes (newline="\n" pins in corpus.py and every
+  # manifest writer; O_BINARY on the narration checkpoint's raw descriptor).
+  # The leg also caught two portability bugs the fixes above did not predict:
+  # the exec seam's POSIX tokenizer eating Windows paths, and verify
+  # reporting divergences in host-separator form. Gating since the first
+  # green run. Never make this leg green by skipping a test.
   windows:
     runs-on: windows-latest
-    continue-on-error: true
+    env:
+      # GitHub step output is a pipe, not a console, so sys.stdout falls back
+      # to the locale codec (cp1252) and any ✓ the CLI prints raises
+      # UnicodeEncodeError. The glyphs are pinned output — the fix is the
+      # stream, not the strings. This mirrors what a real Windows user needs
+      # when *redirecting* output on Python < 3.15 (PEP 686 makes UTF-8 the
+      # default there); interactive consoles are already UTF-8 via PEP 528,
+      # so redirection is the only gap.
+      PYTHONUTF8: "1"
     # The default shell on windows-latest is pwsh; bash (Git Bash, which the
     # runner ships) keeps these steps byte-identical to the linux test job's,
     # so a failure here is the OS, never a shell-translation artifact.

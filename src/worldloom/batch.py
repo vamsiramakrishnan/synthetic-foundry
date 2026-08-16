@@ -52,7 +52,10 @@ def _atomic_json(path: Path, document: dict[str, Any]) -> None:
         f".{path.name}.tmp-{os.getpid()}-{threading.get_ident()}"
     )
     payload = json.dumps(document, indent=2, sort_keys=True) + "\n"
-    with temporary.open("w", encoding="utf-8") as handle:
+    # newline="\n" so shard state and plan bytes do not depend on the OS: the
+    # plan digest is compared across resumes, and a CRLF rewrite on Windows
+    # text mode would be a byte drift no digest check here would explain.
+    with temporary.open("w", encoding="utf-8", newline="\n") as handle:
         handle.write(payload)
         handle.flush()
         os.fsync(handle.fileno())
@@ -138,8 +141,16 @@ class Checkpoint:
             # Repair a prior interrupted append even when a caller resumes by
             # appending directly rather than calling ``load`` first.
             self._complete_prefix()
+            # O_BINARY (Windows-only; getattr yields 0 elsewhere) because the
+            # MSVC CRT defaults os.open to text mode, which silently rewrites
+            # the "\n" framing to "\r\n" on write. The loader above tolerates
+            # CRLF, so the drift would stay invisible until a resumed run
+            # failed byte-identity against an uninterrupted one — corruption
+            # no check in this module reports, the worst kind.
             descriptor = os.open(
-                self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644
+                self.path,
+                os.O_APPEND | os.O_CREAT | os.O_WRONLY | getattr(os, "O_BINARY", 0),
+                0o644,
             )
             try:
                 written = 0

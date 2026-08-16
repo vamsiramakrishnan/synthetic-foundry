@@ -111,6 +111,7 @@ UNDOCUMENTED_BY_DESIGN = {
     "demo",
     # A group's own line is its subcommands' business.
     "narrate",
+    "benchmark",
     "evals",
     "evals export",
 }
