@@ -30,6 +30,26 @@ ROOT = Path(__file__).resolve().parent.parent
 #: the build, and a new agent-facing document should be added here deliberately.
 DOCUMENTS = (
     "AGENTS.md",
+    # AGENTS.md's progressively-disclosed half: one topic file per deep section,
+    # routed to from the core's map. Checked exactly like the core, because a
+    # file read only when its situation applies is *more* likely to go stale,
+    # not less — nothing routine exercises it.
+    "docs/agents/workspace.md",
+    "docs/agents/one-type-several-arguments.md",
+    "docs/agents/twins-and-mutation.md",
+    "docs/agents/refine-not-here.md",
+    "docs/agents/fleets.md",
+    "docs/agents/company-specification.md",
+    "docs/agents/company-attributes.md",
+    "docs/agents/paperwork.md",
+    "docs/agents/probe.md",
+    "docs/agents/estate-composition.md",
+    "docs/agents/conversations.md",
+    "docs/agents/actors.md",
+    "docs/agents/writing-responses.md",
+    "docs/agents/refusals-and-envelope.md",
+    "docs/agents/determinism.md",
+    "docs/agents/working-on-the-harness.md",
     "README.md",
     "CLAUDE.md",
     ".claude/skills/worldloom/SKILL.md",
