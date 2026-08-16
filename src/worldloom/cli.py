@@ -96,6 +96,7 @@ _REFUSALS: dict[str, str] = {
     "conflict": "a resolution conflict whose rule has no individually registered code",
     "corpus_unloadable": "the corpus (or something it depends on) cannot be read",
     "destination_exists": "the output destination exists and --overwrite was not given",
+    "doctor_unhealthy": "this installation cannot do everything the docs promise",
     "duplicate_facet": "one facet dimension was given two values",
     "empty_query": "the search query is empty",
     "engine_lacks_roles": "a facet implies roles and this engine has no role table to append them to",
@@ -137,6 +138,7 @@ _REFUSALS: dict[str, str] = {
     "replay_many_providers": "the corpus was narrated by several providers; one pass replays one",
     "replay_recipe_mismatch": "the replayed corpus's recipe and this build's flags disagree",
     "resume_invalid": "a completed world does not validate for resume",
+    "schema_version": "the corpus's schema version cannot be carried to this engine's by the migration chain",
     "shard_state_error": "the shard state on disk cannot be read or does not match this plan",
     "stats_failed": "the corpus does not carry what the statistics need",
     "timeline_infeasible": "the sampled timeline cannot be scheduled over these periods",
@@ -159,6 +161,7 @@ _REFUSALS: dict[str, str] = {
     "unknown_world": "the mosaic has no world with that index",
     "unreadable_document": "a document handed to the CLI cannot be read or parsed",
     "unrecorded_path": "an intervention path does not resolve against the recorded recipe",
+    "verify_diverged": "the corpus's bytes are not what its own recipe and ledger rebuild",
     "vertical_excludes_flags": "the flag belongs to another vertical's episode",
     "workspace_unwritable": "the workspace cannot be written",
 }
@@ -3643,6 +3646,205 @@ def validate(
         raise typer.Exit(code=1)
 
 
+@app.command()
+def verify(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the verdict as JSON — files compared, checks run."
+    ),
+) -> None:
+    """Rebuild this corpus from its own record and prove the bytes match.
+
+    The trust demo as one verb: the corpus's recipe and generation ledger are
+    rebuilt into a temporary directory, every file is byte-compared against the
+    directory on disk, and the corpus is then validated. Exit 0 means this
+    corpus is exactly what its own record regenerates, and coherent. The
+    rebuild is the same machinery `build --replay` narrates with and `act`
+    resumes with — `recipe.rebuild` plus a ledger-only provider — not a second
+    replay path that could drift from the one CI proves.
+
+    Rendered artifact files are compared only as the corpus holds them —
+    verify never renders. A rebuild without rendering cannot reproduce the
+    files `worldloom render` (or `-f` at build) wrote, so a rendered corpus
+    reports its first rendered file as beyond the record: verify the corpus as
+    built and narrated, and prove a rendering by replaying the build with the
+    same `-f` flags (the README's three-command block).
+    """
+    import tempfile
+
+    from . import corpus as corpus_module
+    from . import recipe as recipe_module
+    from .actors import ActorProviderError, UnreachableActorProvider
+    from .narrative import ProviderError, UnreachableProvider
+    from .recipe import RecipeError
+
+    world = _load(corpus)
+    root = world.root
+    assert root is not None  # `World.load` always records where it read from
+    if not world.recipe:
+        _refuse(
+            "no_recipe",
+            "[red]error:[/red] this corpus carries no recipe, so it cannot be"
+            " rebuilt — verification is a rebuild of the record.",
+            corpus=str(corpus),
+        )
+
+    ledger = tuple(world._ledger)
+    # The same replay stance `build --replay` takes, for the same reasons: the
+    # provider id is a key component, so it comes from what the artifacts
+    # record as `narrated_by`; several providers cannot be replayed in one
+    # pass; and a rebuild that quietly *generated* where the ledger missed
+    # would prove that a plausible corpus exists, not that this one is its own
+    # record — which is why both providers below are the unreachable kind.
+    narrated_ids = {
+        ir.metadata["narrated_by"]
+        for ir in world._artifact_irs
+        if "narrated_by" in ir.metadata
+    }
+    if len(narrated_ids) > 1:
+        _refuse(
+            "replay_many_providers",
+            f"[red]error:[/red] {corpus} was narrated by several providers"
+            f" ({', '.join(sorted(narrated_ids))}); one narrate pass replays"
+            " one provider's keys",
+            providers=sorted(narrated_ids),
+        )
+    if narrated_ids and not ledger:
+        _refuse(
+            "no_ledger",
+            f"[red]error:[/red] {corpus} carries no generation ledger to replay",
+            corpus=str(corpus),
+        )
+
+    acted = recipe_module.has_actor_step(world.recipe)
+    try:
+        rebuilt = recipe_module.rebuild(
+            world.recipe,
+            actors=UnreachableActorProvider() if acted else None,
+            actor_ledger=ledger if acted else (),
+            ledger=ledger,
+        )
+        if narrated_ids:
+            rebuilt = rebuilt.narrate(
+                UnreachableProvider(id=narrated_ids.pop()), ledger=ledger
+            )
+    except RecipeError as exc:
+        _refuse("recipe_error", f"[red]error:[/red] {escape(str(exc))}")
+    except ActorProviderError as exc:
+        _refuse("actor_episode_failed", f"[red]error:[/red] {escape(str(exc))}")
+    except ProviderError as exc:
+        _refuse("narration_failed", f"[red]error:[/red] {escape(str(exc))}")
+    # Mirror what `build --out` does before exporting, so an unnarrated
+    # corpus's rebuild carries the same artifact IR and manifest files its
+    # build was exported with. (A narrated rebuild compiled inside `narrate`.)
+    if not rebuilt.artifact_irs:
+        rebuilt = _compiled(rebuilt, corpus)
+
+    with tempfile.TemporaryDirectory(prefix="worldloom-verify-") as scratch:
+        rebuilt_dir = Path(scratch) / "rebuilt"
+        rebuilt.export(rebuilt_dir)
+        divergence = corpus_module.tree_divergence(rebuilt_dir, root)
+        files = sum(1 for path in rebuilt_dir.rglob("*") if path.is_file())
+
+    if divergence is not None:
+        if divergence.missing:
+            first, kind = divergence.missing[0], "missing"
+        elif divergence.extra:
+            first, kind = divergence.extra[0], "extra"
+        else:
+            assert divergence.differing is not None  # the only remaining half
+            first, kind = divergence.differing, "different"
+        # The one divergence with a known innocent cause gets its explanation
+        # in the message, not only in the envelope's `fix` — default mode
+        # prints the message alone, and "your rendered corpus failed the trust
+        # command" with no way out is the worst sentence this command could say.
+        rendered_extra = kind == "extra" and first.startswith(
+            f"{corpus_module.ARTIFACTS_DIR}/"
+        )
+        fix = (
+            "verify never renders; prove a rendering by replaying the build"
+            " with the same -f flags, and verify the corpus as built and"
+            " narrated"
+            if rendered_extra else None
+        )
+        _refuse(
+            "verify_diverged",
+            f"[red]✗[/red] diverged at {escape(first)} ({kind}): this corpus's"
+            " bytes are not what its own recipe and ledger rebuild"
+            + (f" — {fix}" if fix else ""),
+            exit_code=1,
+            fix=fix,
+            path=first,
+            kind=kind,
+            missing=list(divergence.missing),
+            extra=list(divergence.extra),
+        )
+
+    # Validate the corpus on disk, exactly as `worldloom validate` would —
+    # byte-identity has just made "the corpus" and "its rebuild" the same
+    # thing, and the on-disk world is the one whose artifact files exist to
+    # check. Same `CorpusError` posture as `validate`: a corpus whose own pack
+    # cannot be reconstructed fails the same way as one that cannot be read.
+    try:
+        report = world.validate()
+    except CorpusError as exc:
+        _refuse("corpus_unloadable", f"[red]error:[/red] {escape(str(exc))}")
+
+    if as_json:
+        typer.echo(json.dumps({
+            "verified": report.ok,
+            "files": files,
+            "checks": report.checks_run,
+            "violations": [
+                {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
+                for v in report.violations
+            ],
+        }, indent=2))
+        if not report.ok:
+            raise typer.Exit(code=1)
+        return
+    if not _print_report(report, quiet=True):
+        raise typer.Exit(code=1)
+    console.print(
+        f"[green]✓[/green] verified — {files} files byte-identical,"
+        f" {report.checks_run} checks passed"
+    )
+
+
+@app.command()
+def migrate(
+    corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
+    out: Path = typer.Option(..., "--out", "-o", help="Directory to write the migrated corpus into."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
+) -> None:
+    """Copy a corpus to --out, upgraded to the current schema version.
+
+    Today the chain of version-to-version steps is empty, so this is the
+    identity migration: verify the version, copy byte-for-byte. An unknown or
+    future schema version is refused with both versions named — see
+    `worldloom.migrate` for the bump policy and `tests/test_migrate.py` for
+    the frozen fixture that enforces it.
+    """
+    # Imported here, not at module top: cli.py startup is a budget (W6), and
+    # migration is a maintenance verb no other command should pay for.
+    from .migrate import migrate as migrate_corpus
+
+    try:
+        written = migrate_corpus(corpus, out, overwrite=overwrite)
+    except CorpusError as exc:
+        _refuse("corpus_unloadable", f"[red]error:[/red] {escape(str(exc))}",
+                corpus=str(corpus))
+    except FileExistsError as exc:
+        _refuse("destination_exists", f"[red]error:[/red] {escape(str(exc))}",
+                fix="pass --overwrite to replace it")
+    except ValueError as exc:
+        # `migrate` names both versions in the message; the envelope carries
+        # the corpus so a harness need not parse them back out of prose.
+        _refuse("schema_version", f"[red]error:[/red] {escape(str(exc))}",
+                corpus=str(corpus))
+    console.print(f"[green]✓[/green] migrated to [bold]{written}[/bold]")
+
+
 #: One help string for both fleet verbs, because the refusal is part of the
 #: contract: "naturalistic" is not a hidden value waiting to be typed, it is a
 #: purpose `worldloom.fleet` refuses with the reference data it would need.
@@ -5916,6 +6118,156 @@ def archetypes() -> None:
             f"[bold]{key}[/bold]  {shape.label}\n"
             f"  {len(shape.units)} business units · {shape.category_count} categories · "
             f"{shape.site_count:,} sites · {shape.employees:,} employees"
+        )
+
+
+@app.command()
+def doctor(
+    as_json: bool = typer.Option(False, "--json", help="Emit the check list as JSON."),
+) -> None:
+    """Say whether this installation can do what the docs promise.
+
+    Each check reports ✓ or ✗ with the exact fix when it fails: the Python
+    floor (read from the package's own metadata), every registered render
+    format's optional dependency, the bundled example corpus validating, and
+    the generated command reference being current. Exit 0 when everything
+    passes, 1 otherwise. Reads only this process and this disk — no network,
+    ever.
+    """
+    import sys as sys_module
+    from importlib import metadata as importlib_metadata
+
+    from . import docs as docs_generator
+    from . import render as render_module
+    from .render import RenderError
+
+    checks: list[dict[str, Any]] = []
+
+    def check(name: str, ok: bool, detail: str, fix: str | None = None) -> None:
+        # `fix` is nulled on a passing check rather than stored, so the JSON
+        # never shows a remedy beside a ✓ — a fix string is a claim that
+        # something needs fixing.
+        checks.append({"check": name, "ok": ok, "detail": detail,
+                       "fix": None if ok else fix})
+
+    # 1. The Python floor, read from the installed package's own metadata
+    # rather than restated here: `requires-python` lives in pyproject.toml,
+    # and a hardcoded copy would hold doctor at an old floor the day the real
+    # one moves.
+    running = ".".join(str(part) for part in sys_module.version_info[:3])
+    try:
+        requires = importlib_metadata.metadata("worldloom").get("Requires-Python") or ""
+    except importlib_metadata.PackageNotFoundError:
+        requires = ""
+    if requires:
+        floor_clause = next(
+            (clause.strip() for clause in requires.split(",")
+             if clause.strip().startswith(">=")),
+            None,
+        )
+        floor = (
+            tuple(int(part) for part in floor_clause[2:].split("."))
+            if floor_clause else ()
+        )
+        check(
+            "python",
+            not floor or sys_module.version_info[: len(floor)] >= floor,
+            f"Python {running} (needs {requires})",
+            fix=f"run worldloom under Python {requires}",
+        )
+    else:
+        check(
+            "python", False,
+            f"Python {running} — worldloom's package metadata is not installed",
+            fix="install the package (`pip install worldloom`, or `pip install -e .`"
+                " from a checkout) so its declared Python floor exists to check",
+        )
+
+    # 2. Every registered render format's optional dependency, probed through
+    # the same `_require_*` function the renderer itself calls first at render
+    # time — discovered off the registered renderer's own module rather than a
+    # table here, so doctor can neither disagree with what `render` would
+    # actually do nor drift when a format arrives: a new format's probe rides
+    # in with its registration, and a format with no probe needs nothing
+    # beyond the library itself.
+    for name in render_module.available():
+        module = sys_module.modules.get(render_module.renderer(name).__module__)
+        probes = [
+            probe for attribute, probe in sorted(vars(module).items())
+            if attribute.startswith("_require_") and callable(probe)
+        ] if module is not None else []
+        if not probes:
+            check(f"render:{name}", True, "no optional dependency")
+            continue
+        try:
+            for probe in probes:
+                probe()
+        except RenderError as exc:
+            # The probe's message already names the missing package and the
+            # exact pip extra that installs it; repeating that here would be a
+            # second copy to drift.
+            check(f"render:{name}", False, "dependency missing", fix=str(exc))
+        else:
+            check(f"render:{name}", True, "dependency importable")
+
+    # 3. The pinned example corpus validates. This is the engine end to end —
+    # load, pack rules, every coherence check — against a corpus the package
+    # ships, so a failure here is an installation defect, not a user corpus's.
+    try:
+        report = World.load("retail-close").validate()
+    except CorpusError as exc:
+        check(
+            "corpus:retail-close", False, f"cannot load: {exc}",
+            fix="reinstall worldloom — the bundled example ships inside the package"
+                " (`pip install --force-reinstall worldloom`)",
+        )
+    else:
+        check(
+            "corpus:retail-close", report.ok,
+            f"{report.checks_run} checks, {len(report.violations)} violation(s)",
+            fix="reinstall worldloom — the bundled example must validate, so a"
+                " violation here means the install (or an edit to it) is broken",
+        )
+
+    # 4. The generated command reference, compared exactly as `docs --check`
+    # compares it — imported and called, never shelled out. One stated
+    # divergence from that command: `REFERENCE_PATH` is relative to the
+    # working directory, so outside a repository checkout there is no
+    # checked-in file at all. `docs --check` fails there, to stop CI running
+    # from the wrong directory; doctor is judging an *install*, and an install
+    # without a checkout has no reference to have let go stale.
+    reference_target = Path(docs_generator.REFERENCE_PATH)
+    if not reference_target.exists():
+        check(
+            "docs:reference", True,
+            "no checked-in reference here (not a repository checkout) —"
+            " nothing to be stale",
+        )
+    elif reference_target.read_text() == docs_generator.reference():
+        check("docs:reference", True, f"{reference_target} is current")
+    else:
+        check(
+            "docs:reference", False, f"{reference_target} is stale",
+            fix="run `worldloom docs` from the repository root and commit the result",
+        )
+
+    healthy = all(entry["ok"] for entry in checks)
+    if as_json:
+        typer.echo(json.dumps({"ok": healthy, "checks": checks}, indent=2))
+    else:
+        for entry in checks:
+            mark = "[green]✓[/green]" if entry["ok"] else "[red]✗[/red]"
+            console.print(f"{mark} {escape(entry['check'])} — {escape(entry['detail'])}")
+            if not entry["ok"] and entry["fix"]:
+                console.print(f"  [yellow]fix:[/yellow] {escape(entry['fix'])}")
+    if not healthy:
+        failed = [entry["check"] for entry in checks if not entry["ok"]]
+        _refuse(
+            "doctor_unhealthy",
+            f"[red]error:[/red] {len(failed)} of {len(checks)} check(s) failed:"
+            f" {', '.join(failed)} — each names its fix above",
+            exit_code=1,
+            failed=failed,
         )
 
 

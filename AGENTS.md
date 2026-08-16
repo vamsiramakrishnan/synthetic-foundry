@@ -21,8 +21,18 @@ it works from Claude Code, Antigravity, or any harness that can run a terminal.
 
 ```bash
 pip install -e ".[dev]"          # from a checkout; released: pip install "worldloom[all]"
-worldloom --help
+worldloom doctor
 ```
+
+`worldloom doctor` says whether this installation can do what these docs
+promise, and names the exact fix for anything it cannot: the Python floor
+(read from the package's own metadata), each registered render format's
+optional dependency (a ✗ names the pip extra, e.g. `pip install
+'worldloom[xlsx]'`), the bundled `retail-close` corpus validating, and — in a
+checkout — the generated command reference being current. Exit 0 all-green, 1
+otherwise; `--json` emits the check list as data. It reads only this process
+and this disk, no network ever. Run it once after install, and again whenever
+a render format refuses.
 
 If the ask is loose — an industry, a purpose, a hardness bar, but no seed or
 shape yet chosen — start one level up from the loop below:
@@ -1253,6 +1263,25 @@ diff -r ./corpus ./again
 
 The second command makes **no model call at all** — every request is served from
 the ledger. CI enforces this on every push.
+
+`worldloom verify ./corpus` is that contract as one verb: it rebuilds the
+corpus from its own recipe and generation ledger into a temporary directory,
+byte-compares every file, then validates — exit 0 means the directory on disk
+is exactly what its own record regenerates, and coherent. It makes no model
+call and never renders, so a corpus already rendered into files diverges at
+its first rendered file by design; prove a rendering by replaying the build
+with the same `-f` flags. A corpus with no recipe refuses (`no_recipe`)
+rather than verifying vacuously, and a divergence names the first differing
+path and whether it is missing, extra, or different (`verify_diverged`,
+exit 1).
+
+`worldloom migrate ./corpus --out ./upgraded` carries a corpus to the current
+schema version — today an identity copy, because the version chain has no
+steps yet. `corpus.SCHEMA_VERSION` may only be bumped together with a
+migration step in `worldloom.migrate._STEPS`; the frozen fixture test in
+`tests/test_migrate.py` fails on any PR that bumps without one. When bumping:
+move `tests/fixtures/schema-current` to `schema-v{old}`, freeze a new current
+fixture, and add a test migrating the old one.
 
 Two consequences for you:
 

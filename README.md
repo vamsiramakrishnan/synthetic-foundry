@@ -82,6 +82,7 @@ from the clone):
 git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
 cd synthetic-foundry
 pip install -e ".[all]"     # the library imports no LLM SDK
+worldloom doctor            # every check names its fix; exit 0 means go
 
 worldloom build --seed 8128 --incident --narrate --out ./corpus
 worldloom validate ./corpus
@@ -385,6 +386,13 @@ ledger and makes no generative call. Determinism is not implemented by
 freezing outputs — the system re-executes the recipe and proves that the same
 inputs produce the same world. CI exercises exact byte identity over a
 rotating dispersed sample of configurations, nightly, on Linux and macOS.
+
+The same proof as one verb, on any unrendered corpus:
+
+```bash
+worldloom build --seed 8128 --incident --narrate --out ./one
+worldloom verify ./one       # rebuild from its own recipe, byte-compare, validate
+```
 
 ## 📊 Evaluation is generated with the evidence
 

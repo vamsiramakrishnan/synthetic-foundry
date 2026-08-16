@@ -171,6 +171,14 @@ Regenerate the agent-facing command reference from this CLI.
 | --- | --- |
 | `--check` | Exit non-zero if the checked-in reference is stale. |
 
+### `worldloom doctor`
+
+Say whether this installation can do what the docs promise.
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the check list as JSON. |
+
 ### `worldloom evals`
 
 Work with a corpus's evaluation set.
@@ -274,6 +282,19 @@ Serve Worldloom's readings and gates as MCP tools, over stdio.
 | Option | Purpose |
 | --- | --- |
 | `--tools` | List the tools and exit, without starting a server. |
+
+### `worldloom migrate`
+
+Copy a corpus to --out, upgraded to the current schema version.
+
+```
+worldloom migrate <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Directory to write the migrated corpus into. |
+| `--overwrite` | Replace the destination if it exists. |
 
 ### `worldloom mosaic`
 
@@ -732,6 +753,18 @@ worldloom validate <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the report as JSON — violations as data, not prose to parse. |
+
+### `worldloom verify`
+
+Rebuild this corpus from its own record and prove the bytes match.
+
+```
+worldloom verify <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the verdict as JSON — files compared, checks run. |
 
 ### `worldloom version`
 
