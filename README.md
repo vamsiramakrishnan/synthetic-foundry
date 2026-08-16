@@ -75,10 +75,13 @@ world state --> events --> canonical facts --> artifact plan --> prose --> files
 
 ## ⚡ Quickstart
 
-From a clone (PyPI release pending), three commands to a complete corpus:
+From zero to a complete, validated corpus (PyPI release pending, so install
+from the clone):
 
 ```bash
-pip install -e ".[all]"     # from a clone; the library imports no LLM SDK
+git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
+cd synthetic-foundry
+pip install -e ".[all]"     # the library imports no LLM SDK
 
 worldloom build --seed 8128 --incident --narrate --out ./corpus
 worldloom validate ./corpus
@@ -437,6 +440,14 @@ state; scenarios append events and facts; artifact compilers consume intents;
 renderers consume IR; validators stay independent of the code that produced
 the data. Read [AGENTS.md](AGENTS.md) before changing the harness — it states
 the invariants, the agent protocol, and the exit gates.
+
+## 🤲 Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) has the house rules — the short version is
+that both gates above must pass, CI additionally regenerates a corpus from its
+own ledger and diffs it byte-for-byte, and a rejection from the validator is
+fixed in the prose, never in the check. Security reports go through
+[SECURITY.md](SECURITY.md).
 
 ## 📜 Principles
 
