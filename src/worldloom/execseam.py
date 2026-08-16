@@ -35,6 +35,7 @@ refused in review.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import subprocess
 from collections.abc import Callable
@@ -144,9 +145,19 @@ def run_exec(
     splitting and nothing in the command is ever interpreted by `/bin/sh`.
     ``shell=True`` is the explicit opt-in for pipelines, where the caller is
     choosing shell semantics on purpose.
+
+    On Windows the string goes to CreateProcess whole instead: `shlex.split`
+    is a POSIX tokenizer and eats the backslashes out of every Windows path
+    (`C:\\Users\\...` becomes `C:Users...`), which the Windows CI leg caught.
+    Passing the string is not a shell — CreateProcess takes a command line by
+    contract, no interpretation beyond the callee's own argv parsing.
     """
-    argv: str | list[str] = command if shell else shlex.split(command)
-    if not argv:
+    argv: str | list[str]
+    if shell or os.name == "nt":
+        argv = command
+    else:
+        argv = shlex.split(command)
+    if not argv or (isinstance(argv, str) and not argv.strip()):
         raise ExecFailed("--exec was given an empty command", command=command)
     try:
         completed = subprocess.run(

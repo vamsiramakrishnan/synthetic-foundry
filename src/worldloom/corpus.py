@@ -174,19 +174,24 @@ def tree_divergence(expected: Path, actual: Path) -> TreeDivergence | None:
     verify`` and the sweep cannot drift apart about what "byte-identical"
     means — the third hand-rolled copy is the one that would have.
     """
+    # Reported paths are always the portable forward-slash form, whatever the
+    # host separator: corpus-relative paths are forward-slash by contract
+    # everywhere they are recorded, and a divergence report spelled with
+    # backslashes on Windows would fail any consumer comparing against that
+    # contract — the Windows CI leg caught exactly that.
     expected_files = {
         path.relative_to(expected) for path in expected.rglob("*") if path.is_file()
     }
     actual_files = {path.relative_to(actual) for path in actual.rglob("*") if path.is_file()}
     if expected_files != actual_files:
         return TreeDivergence(
-            missing=tuple(sorted(str(path) for path in expected_files - actual_files)),
-            extra=tuple(sorted(str(path) for path in actual_files - expected_files)),
+            missing=tuple(sorted(path.as_posix() for path in expected_files - actual_files)),
+            extra=tuple(sorted(path.as_posix() for path in actual_files - expected_files)),
             differing=None,
         )
     for relative in sorted(expected_files):
         if (expected / relative).read_bytes() != (actual / relative).read_bytes():
-            return TreeDivergence(missing=(), extra=(), differing=str(relative))
+            return TreeDivergence(missing=(), extra=(), differing=relative.as_posix())
     return None
 
 

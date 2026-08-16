@@ -28,7 +28,9 @@ What is pinned here, and why:
 from __future__ import annotations
 
 import json
+import os
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -47,9 +49,17 @@ def _flat(text: str) -> str:
 
 
 def _cmd(*parts: object) -> str:
-    """A --exec command string that survives shlex.split whatever tmp path
-    pytest hands out — the seam's own no-shell parsing is what re-splits it."""
-    return " ".join(shlex.quote(str(part)) for part in (sys.executable, *parts))
+    """A --exec command string that survives the seam's own per-OS parsing.
+
+    POSIX re-splits with `shlex.split`, so `shlex.quote` is the right armor;
+    Windows hands the string to CreateProcess whole, whose quoting dialect is
+    `subprocess.list2cmdline` — `shlex.quote` there wraps backslash paths in
+    single quotes CreateProcess does not understand, which is exactly how the
+    Windows CI leg failed before this split."""
+    argv = [sys.executable, *(str(part) for part in parts)]
+    if os.name == "nt":
+        return subprocess.list2cmdline(argv)
+    return " ".join(shlex.quote(part) for part in argv)
 
 
 #: The compliant-answer core every fake model shares: the same strategy as
@@ -459,7 +469,14 @@ def test_shell_mode_is_an_explicit_opt_in_for_pipelines(
     """--shell must reach the seam: a pipeline only works under a shell, so
     this command succeeding is proof the flag acted rather than decorated."""
     script = _script(tmp_path, "even_odd.py", _EVEN_ODD_RESPONDER)
-    pipeline = f"cat | {_cmd(script, tmp_path / 'case.txt')}"
+    # The pipeline's upstream is a Python passthrough rather than `cat`: the
+    # test runs under whichever shell the host gives --shell (sh on POSIX,
+    # cmd.exe on Windows), and double-quoted tokens are the one quoting both
+    # shells read the same way. cmd.exe has no `cat`.
+    passthrough = (
+        f'"{sys.executable}" -c "import sys;sys.stdout.write(sys.stdin.read())"'
+    )
+    pipeline = f"{passthrough} | {_cmd(script, tmp_path / 'case.txt')}"
     result = runner.invoke(app, [
         "benchmark", "run", str(pending_corpus), "--limit", "1", "--json",
         "--shell", "--exec", pipeline,
