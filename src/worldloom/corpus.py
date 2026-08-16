@@ -96,7 +96,13 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 def write_jsonl(path: Path, models: list[BaseModel]) -> None:
     """Write models as JSONL, one per line, with stable key order."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
+    # newline="\n" because text mode otherwise substitutes the platform
+    # terminator: on Windows every ledger line would gain a CR, and the
+    # replay diff — the project's central byte-identity claim — would fail
+    # against a corpus written on POSIX with no writer at fault. This
+    # function is the single funnel for every JSONL ledger, so one pin here
+    # covers them all.
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
         for model in models:
             handle.write(json.dumps(model.model_dump(mode="json"), sort_keys=True) + "\n")
 
@@ -126,7 +132,13 @@ def read_json(path: Path) -> dict[str, Any]:
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     """Write a JSON object with stable key order."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # Same CRLF pin as write_jsonl: write_text opens in text mode, and an
+    # unpinned newline would make world.json's bytes depend on the OS that
+    # built the corpus, breaking cross-platform byte-identity.
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8", newline="\n",
+    )
 
 
 @dataclass(frozen=True)

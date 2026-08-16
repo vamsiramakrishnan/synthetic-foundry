@@ -1,0 +1,46 @@
+# Checkout must not rewrite bytes. The Windows CI runner (and any clone with
+# core.autocrlf=true) converts LF to CRLF at checkout time, which corrupts the
+# checked-in corpus fixtures *before Python ever runs*: the shipped
+# `retail-close` example and the schema fixtures are compared byte-for-byte
+# against regenerated trees, so a CRLF introduced by git — not by any writer
+# this repo controls — fails byte-identity with no code at fault. `eol=lf`
+# overrides core.autocrlf on checkout for everything git already classifies
+# as text; binary files are untouched by definition of `text=auto`.
+* text=auto eol=lf
+
+# Explicit pins for the formats that carry the byte-identity claim, so they
+# stay LF even if git's content heuristic ever misjudges one (an empty or
+# oddly-encoded fixture can be sniffed as binary, and a later commit adding
+# real content would then flip its classification mid-history):
+#
+# Corpus ledgers and headers — every JSONL/JSON fixture is diffed
+# byte-for-byte against a regenerated corpus, so a checkout-time CRLF is a
+# guaranteed false failure.
+*.jsonl text eol=lf
+*.json  text eol=lf
+# Prose and docs — the generated command reference under .claude/skills is
+# compared verbatim by `worldloom docs --check`; CRLF on checkout would
+# report it stale on every Windows machine.
+*.md    text eol=lf
+*.mdx   text eol=lf
+# Source and config — not byte-compared, but mixed line endings churn diffs
+# and Windows Python happily executes either, so nothing is gained by
+# letting them float.
+*.py    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+# SVG is XML, i.e. text — it gets LF like any other text file. Only true
+# binary formats below are exempt.
+*.svg   text eol=lf
+
+# Binary render outputs. None are tracked today, but the renderers produce
+# all of these and a future golden fixture must never be line-ending
+# converted: a single rewritten byte corrupts a zip container (xlsx/docx/pptx
+# are zips) or a PDF xref table.
+*.png  binary
+*.xlsx binary
+*.docx binary
+*.pptx binary
+*.pdf  binary
+*.zip  binary

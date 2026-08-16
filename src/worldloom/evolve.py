@@ -756,8 +756,10 @@ def evolve(
             curation=curation.as_dict(),
             champions=champions,
         )
+        # newline pinned: Windows text mode writes CRLF, so the manifest's
+        # bytes would depend on the OS that ran the evolution.
         (generation_dir / GENERATION_MANIFEST_NAME).write_text(
-            record.manifest(), encoding="utf-8"
+            record.manifest(), encoding="utf-8", newline="\n"
         )
         records.append(record)
 
@@ -773,7 +775,10 @@ def evolve(
         axes={axis.name: axis.values for axis in space.axes},
         generations=tuple(records),
     )
-    (root / RUN_MANIFEST_NAME).write_text(run.manifest(), encoding="utf-8")
+    # Same OS-independence pin as the per-generation manifest above.
+    (root / RUN_MANIFEST_NAME).write_text(
+        run.manifest(), encoding="utf-8", newline="\n"
+    )
     return run
 
 

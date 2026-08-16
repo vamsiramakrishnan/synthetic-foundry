@@ -951,7 +951,11 @@ def curate(fleet_dir: str | Path, purpose: FleetPurpose) -> Curation:
             dict(zip(axis_names, hole, strict=True)) for hole in grid.holes()
         ),
     )
-    (root / MANIFEST_NAME).write_text(curation.manifest(), encoding="utf-8")
+    # newline pinned so a manifest's bytes never depend on the OS that curated
+    # the fleet — Windows text mode would rewrite "\n" as "\r\n".
+    (root / MANIFEST_NAME).write_text(
+        curation.manifest(), encoding="utf-8", newline="\n"
+    )
     return curation
 
 
