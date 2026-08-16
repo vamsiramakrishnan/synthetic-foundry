@@ -1,7 +1,11 @@
-# When the process's numbers are a grid, not a series
+---
+title: Cohort Grids
+description: Declare origin-cohort by observation-date kinds — axes, derivations, roll-ups, refusals.
+read-when: Only when a process's numbers are a grid — a loss triangle, a vintage book, a hiring cohort.
+tags: [worldloom, process, cohorts, invariants, derivations]
+---
 
-Purpose: cohort axes — declaring origin-cohort × observation-date kinds, the
-two cohort derivations, the roll-up invariant, and the refusals to expect.
+# When the process's numbers are a grid, not a series
 
 Most kinds mint one fact per period. Some businesses do not work that way: a
 loss triangle, a loan book by vintage, warranty by manufacture quarter,

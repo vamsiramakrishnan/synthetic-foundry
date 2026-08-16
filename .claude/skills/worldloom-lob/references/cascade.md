@@ -1,7 +1,11 @@
-# The LOB cascade, stage by stage
+---
+title: LOB Cascade Stages
+description: Answer each LOB stage's brief field by field, and read what every refusal means.
+read-when: Before answering a LOB brief, or when an accept is refused.
+tags: [worldloom, lob, cascade, refusals, roles]
+---
 
-Purpose: field-level reference for each stage of `worldloom.lob`, and what each
-refusal means.
+# The LOB cascade, stage by stage
 
 ## Seed
 

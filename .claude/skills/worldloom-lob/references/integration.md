@@ -1,7 +1,11 @@
-# Using a finished LOB
+---
+title: Finished LOB Integration
+description: Build with a resolved Lob — blueprints, slot bindings, the standard library, install and describe.
+read-when: Building with a finished LOB, or seating its roles into a process.
+tags: [worldloom, lob, blueprints, slot-bindings, determinism]
+---
 
-Purpose: what to do with a resolved `Lob` — blueprints, slot bindings, the
-standard library, the registry, and why only the spec replays.
+# Using a finished LOB
 
 ## Building with a LOB
 

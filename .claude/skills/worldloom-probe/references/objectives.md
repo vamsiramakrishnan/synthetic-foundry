@@ -1,3 +1,10 @@
+---
+title: Objectives Layer
+description: Bind an accountability with answers_for and a tolerance band, and avoid its three refusals.
+read-when: When the probe's objectives layer opens.
+tags: [worldloom, probe, objectives, accountability, refusals]
+---
+
 # The objectives layer: binding an accountability instead of a measure, and its three refusals.
 
 The bottom two layers reach the engine by different routes, and this is the one

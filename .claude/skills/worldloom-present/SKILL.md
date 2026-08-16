@@ -1,6 +1,7 @@
 ---
 name: worldloom-present
 description: Decide who a Worldloom corpus's documents are for, and author a presentation profile through a refusable lint — whether the supporting-fact appendix prints, where the author's voice goes, how a money figure is spelled, and how a PDF table sizes its columns. Use when a corpus's documents will be read by a person rather than checked by a validator, when a demo or a filing pack needs the traceability scaffolding off the page, or when asked why a rendered memo looks like a machine wrote it.
+tags: [worldloom, presentation, profiles, rendering, pdf]
 ---
 
 # Presenting a corpus

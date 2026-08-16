@@ -1,7 +1,11 @@
-# The process cascade, stage by stage
+---
+title: Process Cascade Stages
+description: Answer the steps and slots briefs field by field — seed, EventSpec, FactKindSpec, resolve.
+read-when: Before answering the first process brief.
+tags: [worldloom, process, cascade, episodes, fact-kinds]
+---
 
-Purpose: field-level reference for `worldloom.process` — seed, steps and
-kinds, slots, resolve, and what the cascade does and does not replay.
+# The process cascade, stage by stage
 
 ## Seed
 

@@ -1,7 +1,13 @@
+---
+title: Cascade Verbs
+description: Drive any layer's cascade from Python with the four shared verbs — open, next_stage, accept, resolve.
+read-when: Working a layer's loop directly from Python rather than through its slash command.
+tags: [worldloom, cascade, python, sessions, refusal-loop]
+---
+
 # Driving a cascade from Python
 
-Load this when working a layer's loop directly rather than through its slash
-command. Every cascade module exposes the same four verbs.
+Every cascade module exposes the same four verbs.
 
 ```python
 from worldloom import lob, process   # every cascade has the same verbs

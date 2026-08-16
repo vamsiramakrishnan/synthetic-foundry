@@ -1,8 +1,13 @@
+---
+title: Vertical Traps
+description: Avoid the multi-period and ordering traps, then prove the vertical done — byte-diff and replay.
+read-when: Before the first multi-period run, and again before calling the vertical done.
+tags: [worldloom, vertical, determinism, multi-period, replay]
+---
+
 # Traps, and the done protocol
 
-Each trap below cost somebody a debugging session. Load this before the first
-multi-period run, and the protocol at the bottom before calling the vertical
-done.
+Each trap below cost somebody a debugging session.
 
 ## Traps
 

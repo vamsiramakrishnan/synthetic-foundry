@@ -1,8 +1,14 @@
+---
+title: Registration Seams
+description: Register a vertical through the four seams, and report — never widen — the closed tables.
+read-when: Before writing any vertical code.
+tags: [worldloom, vertical, registries, thin-waist, cli]
+---
+
 # The registration seams — what is open, and what is deliberately not
 
-Load this before writing any vertical code. A domain module reaches core
-through four registries and nothing else; the closed tables at the bottom are
-the gaps to report, not widen.
+A domain module reaches core through four registries and nothing else; the
+closed tables at the bottom are the gaps to report, not widen.
 
 ## The seven files
 

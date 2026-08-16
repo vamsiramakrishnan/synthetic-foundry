@@ -1,6 +1,7 @@
 ---
 name: worldloom-doctypes
 description: Give a company a document type the engine does not have — authored as JSON in its pack, planned by its own lore, rendered to Word, and linted against what the compiler actually assumes. Use when a corpus needs paperwork no archetype ships (a franchisee statement, a levy return, a covenant certificate), when asked whether Worldloom can produce some particular document, or when a pack's lore asks for a filing nothing plans.
+tags: [worldloom, doctypes, packs, lint, documents]
 ---
 
 # A document type, authored rather than written in Python
@@ -18,8 +19,8 @@ worldloom pack check ./pack.json                      # lint it before you build
 worldloom build --pack ./pack.json --seed 8128 -f docx -o ./corpus
 ```
 
-Reference: `examples/artifact-types/` — the thirty core types ported to the
-schema (`core.json`), a pack that authors one and builds
+Reference: `examples/artifact-types/` at the repository root — the thirty core
+types ported to the schema (`core.json`), a pack that authors one and builds
 (`franchise-network.json`), and one that fires every lint rule
 (`franchise-network-broken.json`). Skeletons to copy:
 `assets/artifact-type.json` (one complete type, for the pack's

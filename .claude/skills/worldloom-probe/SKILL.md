@@ -1,6 +1,7 @@
 ---
 name: worldloom-probe
 description: Derive a world's physics by Socratic drill-down instead of typing ranges — descend org → reporting → roles → objectives → measures, state the constraints between layers, and let arc consistency refuse what cannot hold. Use when a corpus needs to be a specific kind of organisation rather than the engine's default one, when a pack cannot express what a business actually is, or when asked what shapes a set of answers has committed to.
+tags: [worldloom, probe, physics, arc-consistency, cascade]
 ---
 
 # Probing a world

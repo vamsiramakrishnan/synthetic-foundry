@@ -1,7 +1,11 @@
-# Fields, dispersion, and measuring what came out
+---
+title: Fields of Worlds
+description: Arrange many worlds — cross, sweep, dispersed — then measure and filter what came out.
+read-when: Arranging many worlds, or choosing between cross, sweep and dispersed.
+tags: [worldloom, sdk, sweeps, dispersion, filtering]
+---
 
-Load this when arranging many worlds: products, sweeps, dispersed selection,
-and the measure-then-filter loop that justifies building any of them.
+# Fields, dispersion, and measuring what came out
 
 ## Three loop shapes, and one of them is the interesting one
 

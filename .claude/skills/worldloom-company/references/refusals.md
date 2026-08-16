@@ -1,3 +1,10 @@
+---
+title: Specification Refusals
+description: Read a refused build's arithmetic, and tell a refusal from an honest unmet line.
+read-when: When a --spec build refuses, or an unmet line surprises you.
+tags: [worldloom, company-spec, refusals, unmet, facets]
+---
+
 # What a company specification refuses, with what arithmetic — and what it reports as unmet instead of dropping.
 
 ## Refusals

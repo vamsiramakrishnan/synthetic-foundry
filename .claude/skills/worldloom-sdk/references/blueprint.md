@@ -1,7 +1,13 @@
+---
+title: Blueprint Methods
+description: Compose a Blueprint beyond seed, org and calendar — every builder method and what it sets.
+read-when: Composing a blueprint beyond seed, org and calendar.
+tags: [worldloom, sdk, blueprints, python, refusals]
+---
+
 # Blueprint composition — every builder method and what it sets
 
-Load this when composing a blueprint beyond seed, org and calendar. Everything
-is a value until you say `build()`: each method returns a new `Blueprint`, and
+Everything is a value until you say `build()`: each method returns a new `Blueprint`, and
 `.describe()` returns what one says — engine, seed, shape, calendar, physics,
 facets — without building it.
 

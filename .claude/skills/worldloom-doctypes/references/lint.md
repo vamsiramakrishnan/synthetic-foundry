@@ -1,8 +1,11 @@
-# Reading the lint
+---
+title: Doctype Lint Findings
+description: Act on pack check findings — the two that refuse, and why the fifteen that compile still matter.
+read-when: When worldloom pack check reports anything on an authored type.
+tags: [worldloom, doctypes, lint, packs, refusals]
+---
 
-Purpose: what `worldloom pack check` reports on an authored type, which
-findings are refused, and why the rest are worth reading even though they
-compile.
+# Reading the lint
 
 `worldloom pack check ./pack.json` runs it. Two findings are refused at build
 time (`is reserved`, `already declared by a module`); the other fifteen
@@ -28,5 +31,5 @@ type is declared, renderable, and inert.
 first: lore asking for a document nobody declared resolves, plans nothing, and
 reports success.
 
-`examples/artifact-types/franchise-network-broken.json` fires every rule at
-once — run `pack check` on it to see the full set before authoring anything.
+`examples/artifact-types/franchise-network-broken.json` at the repository root
+fires every rule at once — run `pack check` on it to see the full set before authoring anything.
