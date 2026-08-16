@@ -74,6 +74,11 @@ fleet_app = typer.Typer(
     help="Admission control for a fleet of worlds: qualify it for a purpose, curate its champions.",
 )
 app.add_typer(fleet_app, name="fleet")
+benchmark_app = typer.Typer(
+    no_args_is_help=True,
+    help="Run an executable agent against the corpus's own benchmark, scored on IDs alone.",
+)
+app.add_typer(benchmark_app, name="benchmark")
 
 console = Console()
 err = Console(stderr=True)
@@ -103,6 +108,9 @@ _REFUSALS: dict[str, str] = {
     "episode_replaces_nothing": "the episode declares it replaces a loop this build does not run",
     "estate_unavailable": "an estate was asked for in a vertical with no landscape vocabulary",
     "exactly_one": "exactly one of a set of mutually exclusive flags must be given",
+    "exec_failed": "the --exec child process exited non-zero or could not be started",
+    "exec_timeout": "the --exec child process ran past --timeout and was killed",
+    "exec_unparseable": "the --exec child's stdout is not the JSON document the contract asks for",
     "excludes": "two facet claims exclude each other",
     "existence_path": "a mutation path decides existence, which a rebuild cannot measure a delta over",
     "evolve_failed": "the evolution run could not complete",
@@ -114,6 +122,7 @@ _REFUSALS: dict[str, str] = {
     "infeasible_headcounts": "the workforce endpoints admit no path over the periods",
     "intervention_syntax": "--set takes PATH=VALUE",
     "invalid_actions": "the submitted actions cannot be applied to this episode",
+    "loop_exhausted": "narrate loop hit --max-rounds with sections still rejected; nothing was committed",
     "mcp_unavailable": "the MCP server cannot start in this installation",
     "missing_flag": "a required companion flag was not given",
     "mosaic_failed": "the mosaic could not be planned or built",
@@ -235,6 +244,25 @@ def _conflict_code(conflicts: Any) -> str:
     if len(rules) == 1 and (rule := next(iter(rules))) in _REFUSALS:
         return rule
     return "conflict"
+
+
+def _refuse_exec_error(exc: Any) -> NoReturn:
+    """An `execseam.ExecError` as a CLI refusal, child stderr included.
+
+    Typed `Any` because `execseam` is imported inside the two commands that
+    use it (the module-top import budget is a standing concern in this file),
+    and the exception already carries everything the envelope needs: its
+    `code` is a `_REFUSALS` key, its `data` includes the stderr tail. The tail
+    is printed in prose mode too — a dead subprocess leaves exactly one
+    artifact behind, and hiding it in the JSON rendering would make the
+    default mode the one you cannot debug an adapter with.
+    """
+    message = f"[red]error:[/red] {escape(str(exc))}"
+    if exc.stderr_tail:
+        message += (
+            "\n[dim]child stderr, last lines:[/dim]\n" + escape(exc.stderr_tail)
+        )
+    _refuse(exc.code, message, **exc.data)
 
 
 def _load(name_or_path: str) -> World:
@@ -2290,6 +2318,109 @@ def narrate_accept(
         )
         console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
     if not _report(narrated, quiet=as_json):
+        raise typer.Exit(code=1)
+
+
+@narrate_app.command("loop")
+def narrate_loop(
+    corpus: str = typer.Argument(..., help="Corpus path to narrate."),
+    exec_command: str = typer.Option(
+        ..., "--exec",
+        help=(
+            "The model as an executable: reads one requests JSON document on "
+            "stdin, prints one responses JSON document on stdout. Run without "
+            "a shell (shlex argv) unless --shell is given."
+        ),
+    ),
+    max_rounds: int = typer.Option(
+        8, "--max-rounds",
+        help="Rounds to run before giving up with every outstanding violation listed.",
+    ),
+    timeout: float = typer.Option(
+        600.0, "--timeout",
+        help="Seconds the child may run per round before it is killed and refused.",
+    ),
+    shell: bool = typer.Option(
+        False, "--shell",
+        help="Run the command through the shell — the opt-in for pipelines.",
+    ),
+    model_id: str = typer.Option(
+        "agent", "--model-id",
+        help="Who wrote it. Recorded in the ledger and part of the replay key.",
+    ),
+) -> None:
+    """Drive an executable model until every section's prose is accepted.
+
+    One command instead of the requests/accept round trip: each round hands the
+    child the same requests document `narrate requests` writes — restricted to
+    the still-unaccepted sections — and reads back the same responses document
+    `narrate accept --from` reads. Acceptance runs in-process; accepted prose
+    is committed to the ledger only once everything passes, so the corpus
+    replays byte-for-byte afterwards and a failed loop leaves it untouched.
+
+    The adapter contract is JSON-on-stdin, JSON-on-stdout; no vendor is
+    special-cased in code. A working adapter around an agent CLI is a few
+    lines of shell — e.g. `adapter.sh`, run as `--exec ./adapter.sh`:
+
+        #!/bin/sh
+        exec claude -p "Here is a Worldloom narration requests document.
+        Print only the responses JSON document it asks for: $(cat)"
+    """
+    from . import execseam
+
+    world = _compiled(_load(corpus), corpus)
+
+    def _print_round(round_report: Any) -> None:
+        console.print(
+            f"round {round_report.number}: {round_report.accepted} of"
+            f" {round_report.submitted} section(s) accepted"
+        )
+
+    try:
+        result = execseam.narrate_loop(
+            world, exec_command, model_id=model_id, max_rounds=max_rounds,
+            timeout=timeout, shell=shell, on_round=_print_round,
+        )
+    except execseam.ExecError as exc:
+        _refuse_exec_error(exc)
+
+    if not result.rounds:
+        console.print("[green]✓[/green] nothing awaiting prose")
+        return
+
+    if result.outstanding:
+        # Through `_refuse` rather than a bare print-and-exit so a harness in
+        # JSON mode gets the violations as data — the loop exhausting its
+        # budget is the refusal an unattended run most needs to consume.
+        lines = [
+            f"[red]✗[/red] {len(result.outstanding)} section(s) still rejected"
+            f" after {len(result.rounds)} round(s). Nothing was committed."
+        ]
+        for name, verdict in sorted(result.outstanding.items()):
+            lines.append(f"\n[bold]{name}[/bold]")
+            for violation in verdict.violations:
+                lines.append(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
+        _refuse(
+            "loop_exhausted",
+            "\n".join(lines),
+            exit_code=1,
+            rounds=len(result.rounds),
+            outstanding={
+                name: [{"code": v.code, "detail": v.detail} for v in verdict.violations]
+                for name, verdict in sorted(result.outstanding.items())
+            },
+        )
+
+    narrated = result.world
+    assert narrated is not None  # complete with rounds run means a narrated world
+    written = narrated.export(corpus, overwrite=True)
+    accepted_total = sum(round_report.accepted for round_report in result.rounds)
+    console.print(
+        f"[green]✓[/green] {accepted_total} section(s) accepted over"
+        f" {len(result.rounds)} round(s) and recorded in the ledger"
+    )
+    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not _report(narrated):
         raise typer.Exit(code=1)
 
 
@@ -4393,6 +4524,74 @@ def search(
         console.print(f"      {escape(snippet)}\n")
 
 
+@benchmark_app.command("run")
+def benchmark_run(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    exec_command: str = typer.Option(
+        ..., "--exec",
+        help=(
+            "The agent as an executable: reads one case's JSON on stdin, "
+            "prints its answer JSON on stdout. Run without a shell (shlex "
+            "argv) unless --shell is given."
+        ),
+    ),
+    k: int = typer.Option(5, "-k", help="How many passages each case offers the agent."),
+    limit: int = typer.Option(
+        0, "--limit", help="Score only the first N cases; 0 means all of them."
+    ),
+    timeout: float = typer.Option(
+        600.0, "--timeout",
+        help="Seconds the child may run per case before it is killed and refused.",
+    ),
+    shell: bool = typer.Option(
+        False, "--shell",
+        help="Run the command through the shell — the opt-in for pipelines.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the scorecard as JSON, labelled with the exec command."
+    ),
+) -> None:
+    """Score an executable agent against the corpus's own evaluation set.
+
+    Per case the child receives `{"question": ..., "passages": [{"passage_id",
+    "text"}, ...]}` — the top-k from the same BM25 index `search` and
+    `evaluate` rank with — and must print `{"answer_passage_ids": [...],
+    "abstain": bool}`. Scoring is id-based only, never text similarity: a case
+    passes when the returned passages carry the expected fact IDs and the
+    abstention flag matches the case's expectation. Grading answer *text*
+    would put a judge inside a benchmark whose whole point is mechanical
+    ground truth, so there is deliberately no flag for it.
+    """
+    from . import execseam
+
+    world = _compiled(_load(corpus), corpus)
+    try:
+        card = execseam.benchmark_run(
+            world, exec_command, k=k, limit=limit or None,
+            timeout=timeout, shell=shell,
+        )
+    except execseam.ExecError as exc:
+        _refuse_exec_error(exc)
+    except ValueError as exc:
+        # `benchmark_run` raises exactly `evaluate.score()`'s empty-pool
+        # sentence for exactly its state; the CLI maps it to the same code
+        # `search` uses for a passage-less corpus.
+        _refuse("no_passages", f"[red]error:[/red] {escape(str(exc))}")
+
+    if as_json:
+        import json as json_module
+
+        # The single-retriever `evaluate --json` shape with `exec` in place of
+        # `retriever` — same `k`/`overall`/`by_type`/`outcomes` fragment, so a
+        # harness that parses one scorecard parses both.
+        typer.echo(json_module.dumps(
+            {"exec": exec_command, "k": card.k, **_card_json(card)}, indent=2
+        ))
+        return
+    console.print(f"[bold]exec:[/bold] {escape(exec_command)}")
+    console.print(str(card))
+
+
 @app.command()
 def diversity(
     corpus: str = typer.Argument(..., help="Corpus name or path."),
@@ -6243,7 +6442,10 @@ def doctor(
             "no checked-in reference here (not a repository checkout) —"
             " nothing to be stale",
         )
-    elif reference_target.read_text() == docs_generator.reference():
+    # encoding pinned because the reference contains "→", which cp1252 cannot
+    # represent: read under the Windows locale codec, a current reference
+    # mojibakes and doctor reports it stale — a false installation defect.
+    elif reference_target.read_text(encoding="utf-8") == docs_generator.reference():
         check("docs:reference", True, f"{reference_target} is current")
     else:
         check(
@@ -6306,7 +6508,10 @@ def docs(
                 " root."
             )
             raise typer.Exit(code=1)
-        existing = target.read_text()
+        # encoding pinned on both sides of this pair: the reference holds
+        # "→"/"—", so a cp1252 read on Windows mojibakes the checked-in file
+        # and --check reports a current reference as stale.
+        existing = target.read_text(encoding="utf-8")
         if existing == current:
             console.print(f"[green]✓[/green] {target} is current")
             return
@@ -6317,7 +6522,10 @@ def docs(
         raise typer.Exit(1)
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(current)
+    # utf-8 because the default Windows codec cannot encode the reference's
+    # arrows; newline="\n" because a CRLF write here would immediately fail
+    # `docs --check` on LF platforms — the same file, two byte sequences.
+    target.write_text(current, encoding="utf-8", newline="\n")
     console.print(f"[green]✓[/green] wrote {target}")
 
 

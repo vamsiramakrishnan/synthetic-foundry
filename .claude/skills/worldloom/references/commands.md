@@ -56,6 +56,27 @@ worldloom actors <CORPUS>
 
 List the company shapes `build --archetype` accepts.
 
+### `worldloom benchmark`
+
+Run an executable agent against the corpus's own benchmark, scored on IDs alone.
+
+### `worldloom benchmark run`
+
+Score an executable agent against the corpus's own evaluation set.
+
+```
+worldloom benchmark run <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exec` | The agent as an executable: reads one case's JSON on stdin, prints its answer JSON on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--json` | Emit the scorecard as JSON, labelled with the exec command. |
+| `--limit` | Score only the first N cases; 0 means all of them. |
+| `--shell` | Run the command through the shell — the opt-in for pipelines. |
+| `--timeout` | Seconds the child may run per case before it is killed and refused. |
+| `-k` | How many passages each case offers the agent. |
+
 ### `worldloom build`
 
 Generate a world deterministically from a seed, then validate it.
@@ -350,6 +371,22 @@ worldloom narrate accept <CORPUS>
 | `--from`, `-i` | Response JSON from the agent. |
 | `--json` | Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table. |
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
+
+### `worldloom narrate loop`
+
+Drive an executable model until every section's prose is accepted.
+
+```
+worldloom narrate loop <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exec` | The model as an executable: reads one requests JSON document on stdin, prints one responses JSON document on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--max-rounds` | Rounds to run before giving up with every outstanding violation listed. |
+| `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
+| `--shell` | Run the command through the shell — the opt-in for pipelines. |
+| `--timeout` | Seconds the child may run per round before it is killed and refused. |
 
 ### `worldloom narrate requests`
 

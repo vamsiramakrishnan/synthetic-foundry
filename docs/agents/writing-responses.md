@@ -113,3 +113,29 @@ What it is not: a fact source. The facts-only rule above stands unchanged — if
 a fact is not in the request, you may not use it, however prominently a search
 hit displays it. Search informs *how* you write (register, continuity, what to
 echo); the request alone governs *what* you may claim.
+
+## The model as an executable
+
+`worldloom narrate loop CORPUS --exec CMD` collapses the requests/accept round
+trip: each round pipes the same requests document `narrate requests` writes to
+CMD's stdin (only the still-unaccepted sections), reads the same responses
+document `narrate accept --from` takes from its stdout, and judges it with the
+same validator. Accepted prose commits to the ledger only once everything
+passes — a loop that hits `--max-rounds` (default 8) exits 1 with every
+outstanding violation and leaves the corpus untouched. CMD runs without a
+shell (`--shell` opts pipelines in) and is killed at `--timeout` seconds
+(default 600); a child that exits non-zero or prints anything but the document
+is refused with the last lines of its stderr, as prose or as a
+`WORLDLOOM_OUTPUT=json` envelope. No vendor is special-cased: an adapter is
+any executable honouring JSON-on-stdin, JSON-on-stdout.
+
+`worldloom benchmark run CORPUS --exec CMD [-k 5] [--limit N]` scores that
+same executable against the corpus's own evaluation set: per case the child
+receives the question plus the top-k passages from the same BM25 index
+`search` ranks with, and answers `{"answer_passage_ids": [...], "abstain":
+bool}`. Scoring is id-based only — a case passes when the returned passages
+carry the expected fact IDs and the abstention flag matches the case's
+expectation. Answer *text* is never graded; that would put a judge inside a
+benchmark whose whole point is mechanical ground truth, and it is a design
+boundary, not a missing feature. Output is `evaluate`'s scorecard shape,
+labelled with the exec command, `--json` included.
