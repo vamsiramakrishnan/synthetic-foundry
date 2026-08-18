@@ -214,6 +214,26 @@ _WRITERS = ("columns", "doctypes", "episodes", "lob", "validate")
 
 
 def _ensure_declared() -> None:
+    # The package install runs first, and before the writer imports below, for
+    # two reasons the lazy `worldloom._install` (W6) created at this seam:
+    #
+    # 1. Declaration *order* is import order, and `declared()` promises the
+    #    same tuple in every process. Under the eager init that held for free;
+    #    lazily, a process that imported only this module would declare the
+    #    `_WRITERS` in tuple order while the suite process declared them in
+    #    install order — measured as `columns._INSTALLED` first in one and
+    #    `validate._DOMAIN_CHECKS` first in the other
+    #    (`test_the_declarations_are_the_same_in_every_process`). One fixed
+    #    install prefix makes the order a property of the checkout again.
+    #
+    # 2. `scoped()` snapshots through `containers()`, which lands here. If the
+    #    process's *first* install fired inside a scoped block instead, the
+    #    restore would roll the registrations back — and, modules being cached
+    #    in `sys.modules`, nothing would ever re-run them. Installing before
+    #    any snapshot means whatever triggers inside a block is a no-op.
+    from . import _install
+
+    _install()
     from importlib import import_module
 
     for module in _WRITERS:
@@ -258,6 +278,9 @@ def scoped() -> Iterator[None]:
     installs for the life of the process deliberately, because the world it
     built is compiled later and has to still find its sheet.
     """
+    # `containers()` reaches `_ensure_declared`, which runs the full package
+    # install before this snapshot is taken — see reason 2 there for why a
+    # first install *inside* the block would be a silent, permanent rollback.
     saved = [(container, _copy(container)) for container in containers()]
     try:
         yield

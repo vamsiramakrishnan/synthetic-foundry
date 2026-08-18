@@ -146,6 +146,15 @@ class World:
     @classmethod
     def load(cls, name_or_path: str | Path) -> World:
         """Load a corpus by bundled name (``"retail-close"``) or path."""
+        # The package's domain registrations are lazy (W6: see
+        # `worldloom._install`), and `from worldloom.world import World` skips
+        # the package `__getattr__` that would have triggered them. A loaded
+        # corpus must compile and validate identically to the process that
+        # generated it, so the read path forces the full surface — artifact
+        # types, recipe verbs, check groups — before any table is consulted.
+        from . import _install
+
+        _install()
         root = corpus.resolve_corpus(str(name_or_path))
         header = corpus.read_json(root / corpus.WORLD_FILE)
 
