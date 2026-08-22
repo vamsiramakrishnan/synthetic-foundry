@@ -465,7 +465,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # One version only (3.12, the coverage leg's version on linux): the
       # 3.11–3.13 matrix is the linux job's job; the axis under test here is
