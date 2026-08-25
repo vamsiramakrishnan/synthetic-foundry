@@ -1,0 +1,349 @@
+"""Deterministic Jira, ServiceNow and email projections of a World."""
+
+from __future__ import annotations
+
+import re
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
+
+from pydantic import Field
+
+from .ids import content_key
+from .models import Model
+
+if TYPE_CHECKING:
+    from .world import World
+
+
+class ConnectorVerb(StrEnum):
+    SEARCH = "search"
+    LIST = "list"
+    READ = "read"
+    CREATE = "create"
+    UPDATE = "update"
+    PATCH = "patch"
+    UPSERT = "upsert"
+    DELETE = "delete"
+    COMMENT = "comment"
+    ATTACH = "attach"
+    LINK = "link"
+    UNLINK = "unlink"
+    DRAFT = "draft"
+    SEND = "send"
+    REPLY = "reply"
+    FORWARD = "forward"
+
+
+class ContentVerb(StrEnum):
+    SUMMARIZE = "summarize"
+    EXTRACT = "extract"
+    CLASSIFY = "classify"
+    COMPARE = "compare"
+    RECONCILE = "reconcile"
+    TRANSFORM = "transform"
+    GENERATE = "generate"
+    RENDER = "render"
+    CONVERT = "convert"
+
+
+class ConnectorCapability(Model):
+    connector: str
+    entity: str
+    verbs: tuple[ConnectorVerb, ...]
+    content_verbs: tuple[ContentVerb, ...] = ()
+    stable_id_field: str
+
+
+class ConnectorRecord(Model):
+    id: str
+    connector: str
+    entity: str
+    external_id: str
+    title: str
+    fields: dict[str, Any]
+    fact_ids: list[str] = Field(default_factory=list)
+    event_ids: list[str] = Field(default_factory=list)
+    source_artifact_ids: list[str] = Field(default_factory=list)
+
+
+class ConnectorDataset(Model):
+    capabilities: list[ConnectorCapability]
+    records: list[ConnectorRecord]
+
+    def for_connector(self, name: str) -> list[ConnectorRecord]:
+        return [record for record in self.records if record.connector == name]
+
+
+CAPABILITIES = [
+    ConnectorCapability(
+        connector="jira",
+        entity="issue",
+        verbs=(
+            ConnectorVerb.SEARCH,
+            ConnectorVerb.LIST,
+            ConnectorVerb.READ,
+            ConnectorVerb.CREATE,
+            ConnectorVerb.UPDATE,
+            ConnectorVerb.PATCH,
+            ConnectorVerb.UPSERT,
+            ConnectorVerb.COMMENT,
+            ConnectorVerb.ATTACH,
+            ConnectorVerb.LINK,
+            ConnectorVerb.UNLINK,
+        ),
+        content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
+        stable_id_field="key",
+    ),
+    ConnectorCapability(
+        connector="servicenow",
+        entity="incident",
+        verbs=(
+            ConnectorVerb.SEARCH,
+            ConnectorVerb.LIST,
+            ConnectorVerb.READ,
+            ConnectorVerb.CREATE,
+            ConnectorVerb.UPDATE,
+            ConnectorVerb.PATCH,
+            ConnectorVerb.UPSERT,
+            ConnectorVerb.COMMENT,
+            ConnectorVerb.ATTACH,
+        ),
+        content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
+        stable_id_field="sys_id",
+    ),
+    ConnectorCapability(
+        connector="servicenow",
+        entity="change_request",
+        verbs=(
+            ConnectorVerb.SEARCH,
+            ConnectorVerb.LIST,
+            ConnectorVerb.READ,
+            ConnectorVerb.CREATE,
+            ConnectorVerb.UPDATE,
+            ConnectorVerb.PATCH,
+            ConnectorVerb.UPSERT,
+            ConnectorVerb.COMMENT,
+            ConnectorVerb.ATTACH,
+        ),
+        content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
+        stable_id_field="sys_id",
+    ),
+    ConnectorCapability(
+        connector="email",
+        entity="message",
+        verbs=(
+            ConnectorVerb.SEARCH,
+            ConnectorVerb.LIST,
+            ConnectorVerb.READ,
+            ConnectorVerb.DRAFT,
+            ConnectorVerb.SEND,
+            ConnectorVerb.REPLY,
+            ConnectorVerb.FORWARD,
+            ConnectorVerb.ATTACH,
+            ConnectorVerb.DELETE,
+        ),
+        content_verbs=(
+            ContentVerb.SUMMARIZE,
+            ContentVerb.EXTRACT,
+            ContentVerb.CLASSIFY,
+        ),
+        stable_id_field="message_id",
+    ),
+]
+
+
+def canonical_verb(value: str, *, target: str = "record") -> str:
+    """Resolve user language to one executable verb.
+
+    Modify is deliberately not a protocol verb: for a stored record it means
+    update; for content in memory it means transform. Callers needing field-
+    level semantics should ask for patch explicitly.
+    """
+    lowered = value.strip().lower()
+    if lowered == "modify":
+        return (
+            ContentVerb.TRANSFORM.value
+            if target == "content"
+            else ConnectorVerb.UPDATE.value
+        )
+    valid = {verb.value for verb in ConnectorVerb} | {
+        verb.value for verb in ContentVerb
+    }
+    if lowered not in valid:
+        raise ValueError(f"unknown verb {value!r}")
+    return lowered
+
+
+def _facts_by_event(world: "World") -> dict[str, list[Any]]:
+    grouped: dict[str, list[Any]] = {}
+    for fact in world.facts:
+        if fact.event_id:
+            grouped.setdefault(fact.event_id, []).append(fact)
+    return grouped
+
+
+def _artifact_ids(world: "World", fact_ids: set[str]) -> list[str]:
+    records = tuple(world.artifacts) or tuple(world.artifact_intents)
+    ids = []
+    for artifact in records:
+        cited = set(
+            getattr(artifact, "supporting_fact_ids", None)
+            or getattr(artifact, "required_fact_ids", ())
+        )
+        if cited & fact_ids:
+            ids.append(artifact.id)
+    return sorted(ids)
+
+
+def _email_address(name: str, company: str) -> str:
+    local = re.sub(r"[^a-z0-9]+", ".", name.lower()).strip(".")
+    domain = re.sub(r"[^a-z0-9]+", "", company.lower()) or "worldloom"
+    return f"{local}@{domain}.example"
+
+
+def generate_jira(world: "World") -> list[ConnectorRecord]:
+    facts = _facts_by_event(world)
+    records = []
+    for index, event in enumerate(world.timeline(), start=1):
+        linked = facts.get(event.id, [])
+        fact_ids = sorted(fact.id for fact in linked)
+        records.append(
+            ConnectorRecord(
+                id=f"CONN-JIRA-{content_key(world.seed, event.id)[:12].upper()}",
+                connector="jira",
+                entity="issue",
+                external_id=f"WL-{index}",
+                title=event.summary,
+                fields={
+                    "key": f"WL-{index}",
+                    "summary": event.summary,
+                    "description": f"Track {event.kind.replace('_', ' ')} for {world.company.name}.",
+                    "status": "Done" if any(not fact.is_superseded for fact in linked) else "Open",
+                    "priority": "Highest" if "incident" in event.kind else "Medium",
+                    "labels": ["worldloom", event.kind, world.period or "current"],
+                    "linked_event_id": event.id,
+                    "service_ids": event.services,
+                    "system_ids": event.systems,
+                    "created_at": event.occurred_at.isoformat(),
+                },
+                fact_ids=fact_ids,
+                event_ids=[event.id],
+                source_artifact_ids=_artifact_ids(world, set(fact_ids)),
+            )
+        )
+    return records
+
+
+def generate_servicenow(world: "World") -> list[ConnectorRecord]:
+    facts = _facts_by_event(world)
+    records = []
+    incident_number = 1
+    change_number = 1
+    for event in world.timeline():
+        is_incident = "incident" in event.kind or "failure" in event.kind
+        entity = "incident" if is_incident else "change_request"
+        prefix = "INC" if is_incident else "CHG"
+        ordinal = incident_number if is_incident else change_number
+        if is_incident:
+            incident_number += 1
+        else:
+            change_number += 1
+        linked = facts.get(event.id, [])
+        fact_ids = sorted(fact.id for fact in linked)
+        sys_id = content_key("servicenow", world.seed, event.id)
+        records.append(
+            ConnectorRecord(
+                id=f"CONN-SNOW-{sys_id[:12].upper()}",
+                connector="servicenow",
+                entity=entity,
+                external_id=f"{prefix}{ordinal:07d}",
+                title=event.summary,
+                fields={
+                    "sys_id": sys_id,
+                    "number": f"{prefix}{ordinal:07d}",
+                    "short_description": event.summary,
+                    "description": f"{event.kind.replace('_', ' ').title()} affecting {world.company.name}.",
+                    "state": "Closed" if any(not fact.is_superseded for fact in linked) else "New",
+                    "priority": "1" if is_incident else "3",
+                    "correlation_id": event.id,
+                    "service_ids": event.services,
+                    "system_ids": event.systems,
+                    "opened_at": event.occurred_at.isoformat(),
+                },
+                fact_ids=fact_ids,
+                event_ids=[event.id],
+                source_artifact_ids=_artifact_ids(world, set(fact_ids)),
+            )
+        )
+    return records
+
+
+def generate_email(world: "World") -> list[ConnectorRecord]:
+    people = {person.id: person for person in world.people}
+    fallback = list(world.people)[:2]
+    facts = _facts_by_event(world)
+    records = []
+    for index, event in enumerate(world.timeline(), start=1):
+        actors = [people[actor] for actor in event.actors if actor in people]
+        sender = actors[0] if actors else (fallback[0] if fallback else None)
+        recipient = actors[1] if len(actors) > 1 else (
+            fallback[1] if len(fallback) > 1 else sender
+        )
+        sender_name = sender.name if sender else "System Operations"
+        recipient_name = recipient.name if recipient else "Programme Office"
+        linked = facts.get(event.id, [])
+        fact_ids = sorted(fact.id for fact in linked)
+        message_key = content_key("email", world.seed, event.id)
+        records.append(
+            ConnectorRecord(
+                id=f"CONN-EMAIL-{message_key[:12].upper()}",
+                connector="email",
+                entity="message",
+                external_id=f"<{message_key}@worldloom.example>",
+                title=event.summary,
+                fields={
+                    "message_id": f"<{message_key}@worldloom.example>",
+                    "thread_id": content_key("thread", event.caused_by or event.id),
+                    "from": _email_address(sender_name, world.company.name),
+                    "to": [_email_address(recipient_name, world.company.name)],
+                    "subject": event.summary,
+                    "body": (
+                        f"{recipient_name},\n\n{event.summary}. This update relates to "
+                        f"{world.company.name} and record {event.id}. Please review the "
+                        f"linked evidence and outstanding actions.\n\n{sender_name}"
+                    ),
+                    "sent_at": event.occurred_at.isoformat(),
+                    "in_reply_to": None if index == 1 else records[-1].external_id,
+                    "labels": ["worldloom", world.period or "current"],
+                },
+                fact_ids=fact_ids,
+                event_ids=[event.id],
+                source_artifact_ids=_artifact_ids(world, set(fact_ids)),
+            )
+        )
+    return records
+
+
+def generate_connector_data(
+    world: "World",
+    connectors: tuple[str, ...] = ("jira", "servicenow", "email"),
+) -> ConnectorDataset:
+    generators = {
+        "jira": generate_jira,
+        "servicenow": generate_servicenow,
+        "email": generate_email,
+    }
+    unknown = set(connectors) - set(generators)
+    if unknown:
+        raise ValueError(f"unknown connector projection(s): {sorted(unknown)}")
+    records = [
+        record
+        for connector in connectors
+        for record in generators[connector](world)
+    ]
+    capabilities = [
+        capability
+        for capability in CAPABILITIES
+        if capability.connector in connectors
+    ]
+    return ConnectorDataset(capabilities=capabilities, records=records)

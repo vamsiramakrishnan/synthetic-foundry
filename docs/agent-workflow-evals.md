@@ -55,3 +55,23 @@ Entity representations and MCP tool names stay in the hidden execution plan.
 The initial API writes agent-evals.jsonl alongside a corpus without changing
 World serialisation. A later schema change can make it an optional World ledger
 after connector projection manifests and trajectory validation land.
+
+## Connector projections and verbs
+
+The worldloom.connector_data module projects the same world events, facts,
+people, systems, services, and artifacts into coherent Jira issues, ServiceNow
+incidents and changes, and email threads. Stable cross-system keys make joins
+testable rather than guessed.
+
+Connector verbs describe state access: search, list, read, create, update,
+patch, upsert, delete, comment, attach, link, unlink, draft, send, reply, and
+forward. Content verbs describe
+reasoning over retrieved content: summarize, extract, classify, compare,
+reconcile, transform, generate, render, and convert. An email summary is therefore an email.read node
+followed by content.extract and content.summarize nodes.
+
+Generate and create are not synonyms. Generate produces content. Create
+persists a new entity. Update retains entity identity. Patch changes named
+fields or ranges. Upsert requires a stable key. Modify is rejected as a
+canonical protocol verb and normalised to update for stored records or
+transform for in-memory content.

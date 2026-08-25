@@ -10,6 +10,7 @@ from pydantic import Field, model_validator
 
 from .ids import content_key
 from .models import Model
+from .connector_data import ConnectorVerb, ContentVerb
 
 if TYPE_CHECKING:
     from .world import World
@@ -65,8 +66,9 @@ class WorkflowSeed(Model):
         "steering_pack",
         "customer_health",
         "change_assurance",
+        "executive_digest",
     )
-    destinations: tuple[str, ...] = ("sharepoint", "drive", "confluence")
+    destinations: tuple[str, ...] = ("sharepoint", "drive", "confluence", "email")
     max_cases: int = Field(default=100, ge=1)
 
 
@@ -77,6 +79,7 @@ _ENTITY = {
     "drive": "file",
     "servicenow": "incident",
     "salesforce": "case",
+    "email": "message",
 }
 
 _SOURCE_TEXT = {
@@ -86,6 +89,7 @@ _SOURCE_TEXT = {
     "drive": "the latest working files in Drive",
     "servicenow": "linked ServiceNow incidents and changes",
     "salesforce": "escalated Salesforce cases and open opportunities",
+    "email": "the programme email thread and its attachments",
 }
 
 _WORKFLOWS: dict[str, dict[str, Any]] = {
@@ -124,6 +128,13 @@ _WORKFLOWS: dict[str, dict[str, Any]] = {
         "artifact": "change assurance report",
         "requirements": "failed changes, linked defects, runbook gaps, remediation owners, due dates, and exceptions",
     },
+    "executive_digest": {
+        "persona": "programme director",
+        "sources": ("email", "jira", "servicenow"),
+        "topology": "fan_in",
+        "artifact": "executive delivery digest",
+        "requirements": "decisions, commitments, owners, deadlines, unresolved incidents, and links to the originating message or record",
+    },
 }
 
 
@@ -146,7 +157,10 @@ def _request(
 ) -> str:
     sources = [_SOURCE_TEXT[name] for name in spec["sources"]]
     source_clause = ", ".join(sources[:-1]) + f", and {sources[-1]}"
-    verb = "Update the existing" if update else "Create a"
+    if destination == "email":
+        verb = "Reply with an updated" if update else "Draft an"
+    else:
+        verb = "Update the existing" if update else "Create a"
     period = world.period or "current"
     return (
         f"Prepare the {period} {spec['artifact']} for {world.company.name}. "
@@ -191,11 +205,36 @@ def compile_agent_evals(
                     for index, connector in enumerate(spec["sources"], start=1)
                 ]
                 read_ids = [node.id for node in nodes]
+                if "email" in spec["sources"]:
+                    nodes.append(
+                        WorkflowNode(
+                            id="extract-email",
+                            kind="transform",
+                            intent=f"content.{ContentVerb.EXTRACT.value}",
+                            depends_on=[
+                                node.id for node in nodes if node.connector == "email"
+                            ],
+                            arguments={
+                                "fields": [
+                                    "decision",
+                                    "commitment",
+                                    "owner",
+                                    "deadline",
+                                    "record_reference",
+                                ]
+                            },
+                        )
+                    )
+                    read_ids.append("extract-email")
                 nodes.append(
                     WorkflowNode(
                         id="synthesise",
                         kind="transform",
-                        intent=f"workflow.{workflow}.reconcile",
+                        intent=(
+                            f"content.{ContentVerb.SUMMARIZE.value}"
+                            if workflow == "executive_digest"
+                            else f"workflow.{workflow}.{ContentVerb.RECONCILE.value}"
+                        ),
                         depends_on=read_ids,
                         expected_fact_ids=fact_ids,
                         arguments={
@@ -206,14 +245,35 @@ def compile_agent_evals(
                 )
                 nodes.append(
                     WorkflowNode(
+                        id="generate",
+                        kind="transform",
+                        intent=f"content.{ContentVerb.GENERATE.value}",
+                        depends_on=["synthesise"],
+                        expected_fact_ids=fact_ids,
+                        arguments={
+                            "artifact": spec["artifact"],
+                            "preserve_provenance": True,
+                        },
+                    )
+                )
+                operation = (
+                    ConnectorVerb.REPLY.value
+                    if destination == "email" and update
+                    else ConnectorVerb.DRAFT.value
+                    if destination == "email"
+                    else ConnectorVerb.UPDATE.value
+                    if update
+                    else ConnectorVerb.CREATE.value
+                )
+                nodes.append(
+                    WorkflowNode(
                         id="write-1",
                         kind="mcp",
-                        intent=f"{destination}.{_ENTITY[destination]}."
-                        f"{'update' if update else 'create'}",
-                        depends_on=["synthesise"],
+                        intent=f"{destination}.{_ENTITY[destination]}.{operation}",
+                        depends_on=["generate"],
                         connector=destination,
                         entity=_ENTITY[destination],
-                        operation="update" if update else "create",
+                        operation=operation,
                         expected_fact_ids=fact_ids,
                         arguments={
                             "idempotency_key": "${case.id}",

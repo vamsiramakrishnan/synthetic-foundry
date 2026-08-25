@@ -6,6 +6,12 @@ import pytest
 
 from worldloom import World
 from worldloom.agent_evals import WorkflowSeed, compile_agent_evals, export_agent_evals
+from worldloom.connector_data import (
+    ConnectorVerb,
+    ContentVerb,
+    canonical_verb,
+    generate_connector_data,
+)
 
 
 @pytest.fixture(scope="module")
@@ -25,7 +31,11 @@ def test_queries_are_business_language(world: World) -> None:
 def test_mutations_are_grounded_idempotent_and_verified(world: World) -> None:
     for case in compile_agent_evals(world):
         assert set(case.expected_fact_ids) <= set(world.facts.ids())
-        writes = [node for node in case.nodes if node.operation in {"create", "update"}]
+        writes = [
+            node
+            for node in case.nodes
+            if node.operation in {"create", "update", "draft", "reply"}
+        ]
         verifies = [node for node in case.nodes if node.kind == "verify"]
         assert len(writes) == len(verifies) == 1
         assert writes[0].arguments["idempotency_key"] == "${case.id}"
@@ -49,3 +59,35 @@ def test_jsonl_round_trip(world: World, tmp_path) -> None:
     assert [json.loads(line) for line in path.read_text().splitlines()] == [
         case.model_dump(mode="json") for case in compile_agent_evals(world)
     ]
+
+
+def test_connector_projections_are_grounded_and_linkable(world: World) -> None:
+    dataset = generate_connector_data(world)
+    assert {record.connector for record in dataset.records} == {
+        "jira",
+        "servicenow",
+        "email",
+    }
+    fact_ids = set(world.facts.ids())
+    event_ids = set(world.events.ids())
+    for record in dataset.records:
+        assert set(record.fact_ids) <= fact_ids
+        assert set(record.event_ids) <= event_ids
+        assert record.external_id
+
+
+def test_email_has_real_transport_and_content_verbs(world: World) -> None:
+    dataset = generate_connector_data(world, connectors=("email",))
+    capability = dataset.capabilities[0]
+    assert {ConnectorVerb.READ, ConnectorVerb.DRAFT, ConnectorVerb.SEND, ConnectorVerb.REPLY} <= set(capability.verbs)
+    assert {ContentVerb.SUMMARIZE, ContentVerb.EXTRACT} <= set(capability.content_verbs)
+    assert all(record.fields["from"] and record.fields["to"] for record in dataset.records)
+
+
+def test_generate_and_mutation_verbs_are_not_conflated(world: World) -> None:
+    case = compile_agent_evals(world)[0]
+    assert any(node.intent == "content.generate" for node in case.nodes)
+    write = next(node for node in case.nodes if node.id == "write-1")
+    assert write.operation in {"create", "update", "draft", "reply"}
+    assert canonical_verb("modify", target="record") == "update"
+    assert canonical_verb("modify", target="content") == "transform"
