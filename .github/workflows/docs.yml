@@ -40,7 +40,7 @@ jobs:
       # source to GitHub Actions instead of failing with "Pages not enabled".
       # If the token lacks permission for that, flip it once by hand:
       # Settings → Pages → Source → GitHub Actions.
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
           enablement: true
       - run: npm ci
