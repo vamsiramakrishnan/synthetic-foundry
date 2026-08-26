@@ -116,7 +116,7 @@ class CoverageProfile(CascadeModel):
         "stale_source",
         "version_conflict",
     )
-    max_candidates: int = Field(default=1_000_000, ge=1)
+    max_candidates: int = Field(default=10_000_000, ge=1)
 
 
 class EnterpriseEvalSpec(CascadeModel):
