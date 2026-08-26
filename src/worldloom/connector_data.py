@@ -203,7 +203,7 @@ def canonical_verb(value: str, *, target: str = "record") -> str:
     return lowered
 
 
-def _facts_by_event(world: "World") -> dict[str, list[Any]]:
+def _facts_by_event(world: World) -> dict[str, list[Any]]:
     grouped: dict[str, list[Any]] = {}
     for fact in world.facts:
         if fact.event_id:
@@ -211,7 +211,7 @@ def _facts_by_event(world: "World") -> dict[str, list[Any]]:
     return grouped
 
 
-def _artifact_ids(world: "World", fact_ids: set[str]) -> list[str]:
+def _artifact_ids(world: World, fact_ids: set[str]) -> list[str]:
     records = tuple(world.artifacts) or tuple(world.artifact_intents)
     ids = []
     for artifact in records:
@@ -230,7 +230,7 @@ def _email_address(name: str, company: str) -> str:
     return f"{local}@{domain}.example"
 
 
-def generate_jira(world: "World") -> list[ConnectorRecord]:
+def generate_jira(world: World) -> list[ConnectorRecord]:
     facts = _facts_by_event(world)
     records = []
     for index, event in enumerate(world.timeline(), start=1):
@@ -263,7 +263,7 @@ def generate_jira(world: "World") -> list[ConnectorRecord]:
     return records
 
 
-def generate_servicenow(world: "World") -> list[ConnectorRecord]:
+def generate_servicenow(world: World) -> list[ConnectorRecord]:
     facts = _facts_by_event(world)
     records = []
     incident_number = 1
@@ -307,7 +307,7 @@ def generate_servicenow(world: "World") -> list[ConnectorRecord]:
     return records
 
 
-def generate_email(world: "World") -> list[ConnectorRecord]:
+def generate_email(world: World) -> list[ConnectorRecord]:
     people = {person.id: person for person in world.people}
     fallback = list(world.people)[:2]
     facts = _facts_by_event(world)
@@ -354,7 +354,7 @@ def generate_email(world: "World") -> list[ConnectorRecord]:
 
 
 def generate_artifact_projection(
-    world: "World", connector: str
+    world: World, connector: str
 ) -> list[ConnectorRecord]:
     entity = {
         "confluence": "page",
@@ -409,7 +409,7 @@ def generate_artifact_projection(
 
 
 def generate_connector_data(
-    world: "World",
+    world: World,
     connectors: tuple[str, ...] = (
         "jira",
         "confluence",
