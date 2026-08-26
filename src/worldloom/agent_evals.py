@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, model_validator
 
+from .connector_data import ConnectorVerb, ContentVerb
 from .ids import content_key
 from .models import Model
-from .connector_data import ConnectorVerb, ContentVerb
 
 if TYPE_CHECKING:
     from .world import World

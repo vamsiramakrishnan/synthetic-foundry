@@ -149,6 +149,35 @@ CAPABILITIES = [
         ),
         stable_id_field="message_id",
     ),
+    *[
+        ConnectorCapability(
+            connector=connector,
+            entity=entity,
+            verbs=(
+                ConnectorVerb.SEARCH,
+                ConnectorVerb.LIST,
+                ConnectorVerb.READ,
+                ConnectorVerb.CREATE,
+                ConnectorVerb.UPDATE,
+                ConnectorVerb.PATCH,
+                ConnectorVerb.UPSERT,
+                ConnectorVerb.DELETE,
+            ),
+            content_verbs=(
+                ContentVerb.SUMMARIZE,
+                ContentVerb.EXTRACT,
+                ContentVerb.GENERATE,
+                ContentVerb.CONVERT,
+            ),
+            stable_id_field=stable_id,
+        )
+        for connector, entity, stable_id in (
+            ("confluence", "page", "page_id"),
+            ("sharepoint", "file", "item_id"),
+            ("drive", "file", "file_id"),
+            ("salesforce", "case", "id"),
+        )
+    ],
 ]
 
 
@@ -324,14 +353,81 @@ def generate_email(world: "World") -> list[ConnectorRecord]:
     return records
 
 
+def generate_artifact_projection(
+    world: "World", connector: str
+) -> list[ConnectorRecord]:
+    entity = {
+        "confluence": "page",
+        "sharepoint": "file",
+        "drive": "file",
+        "salesforce": "case",
+    }[connector]
+    artifacts = tuple(world.artifacts) or tuple(world.artifact_intents)
+    records = []
+    for index, artifact in enumerate(sorted(artifacts, key=lambda item: item.id), start=1):
+        fact_ids = sorted(
+            getattr(artifact, "supporting_fact_ids", None)
+            or getattr(artifact, "required_fact_ids", ())
+        )
+        key = content_key(connector, world.seed, artifact.id)
+        external_id = {
+            "confluence": str(10_000_000 + index),
+            "sharepoint": key,
+            "drive": key,
+            "salesforce": f"500{key[:15].upper()}",
+        }[connector]
+        title = getattr(artifact, "title", None) or (
+            f"{artifact.artifact_type.replace('_', ' ').title()} - "
+            f"{world.period or 'current'}"
+        )
+        records.append(
+            ConnectorRecord(
+                id=f"CONN-{connector.upper()}-{key[:12].upper()}",
+                connector=connector,
+                entity=entity,
+                external_id=external_id,
+                title=title,
+                fields={
+                    "name": title,
+                    "artifact_type": artifact.artifact_type,
+                    "domain": artifact.domain,
+                    "author_id": artifact.author_id,
+                    "audience": artifact.audience,
+                    "version": getattr(artifact, "version", 1),
+                    "world_artifact_id": artifact.id,
+                    "reporting_period": world.period,
+                },
+                fact_ids=fact_ids,
+                event_ids=sorted(
+                    getattr(artifact, "event_ids", ())
+                    or getattr(artifact, "triggered_by", ())
+                ),
+                source_artifact_ids=[artifact.id],
+            )
+        )
+    return records
+
+
 def generate_connector_data(
     world: "World",
-    connectors: tuple[str, ...] = ("jira", "servicenow", "email"),
+    connectors: tuple[str, ...] = (
+        "jira",
+        "confluence",
+        "sharepoint",
+        "drive",
+        "servicenow",
+        "salesforce",
+        "email",
+    ),
 ) -> ConnectorDataset:
     generators = {
         "jira": generate_jira,
         "servicenow": generate_servicenow,
         "email": generate_email,
+        "confluence": lambda value: generate_artifact_projection(value, "confluence"),
+        "sharepoint": lambda value: generate_artifact_projection(value, "sharepoint"),
+        "drive": lambda value: generate_artifact_projection(value, "drive"),
+        "salesforce": lambda value: generate_artifact_projection(value, "salesforce"),
     }
     unknown = set(connectors) - set(generators)
     if unknown:

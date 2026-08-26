@@ -75,3 +75,43 @@ persists a new entity. Update retains entity identity. Patch changes named
 fields or ranges. Upsert requires a stable key. Modify is rejected as a
 canonical protocol verb and normalised to update for stored records or
 transform for in-memory content.
+
+## Query-first generation
+
+The worldloom.query_planning module inverts the pipeline:
+
+    declare query space
+      -> select exhaustive or t-way covering plan
+      -> derive record and mutation requirements
+      -> generate connector projections
+      -> bind exact records to each query
+      -> inject conflict or failure state
+      -> emit the executable evaluation case
+
+The declared space varies workflow, source connector set, write target and
+verb, output kind, content verb, DAG topology, failure mode, and verification
+policy. Source connector sets include one, two, three, four, and six inputs.
+The destination adds another connector hop.
+
+Exhaustive mode materialises the full Cartesian product. Covering mode uses
+WorldLoom's existing deterministic covering-array engine. At strength two,
+every pair of dimension values occurs at least once. At strength three, every
+triple occurs. The plan therefore has an explicit denominator and holes can be
+measured rather than inferred from random samples.
+
+    from worldloom import World
+    from worldloom.query_planning import build_query_driven_corpus
+
+    world = World.load("./corpus")
+    generated = build_query_driven_corpus(
+        world,
+        strategy="covering",
+        strength=2,
+    )
+
+Every planned query carries RecordRequirement and MutationRequirement objects.
+Generation then creates only the connectors the plan requires and binds stable
+record IDs to each input. Create operations receive an empty destination.
+Update, patch, upsert, and reply operations receive an existing destination
+record. Failure families add ambiguous joins, missing identifiers, permission
+denials, partial writes, stale sources, or version conflicts.
