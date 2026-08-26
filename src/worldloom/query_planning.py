@@ -178,7 +178,7 @@ def _entity(connector: str) -> str:
     }[connector]
 
 
-def _query(world: "World", row: dict[str, str]) -> str:
+def _query(world: World, row: dict[str, str]) -> str:
     sources = row["source_set"].split("+")
     source_names = {
         "jira": "unresolved Jira issues",
@@ -224,7 +224,7 @@ def _query(world: "World", row: dict[str, str]) -> str:
 
 
 def plan_query_set(
-    world: "World",
+    world: World,
     *,
     strategy: Literal["covering", "exhaustive"] = "covering",
     strength: int = 2,
@@ -279,7 +279,7 @@ def _pick(records: list[Any], query_id: str) -> Any:
 
 
 def generate_from_query_plan(
-    world: "World", plans: tuple[PlannedQuery, ...]
+    world: World, plans: tuple[PlannedQuery, ...]
 ) -> QueryDrivenCorpus:
     """Materialise connector records and mutation fixtures demanded by the plan."""
     required = tuple(
@@ -324,7 +324,7 @@ def generate_from_query_plan(
 
 
 def build_query_driven_corpus(
-    world: "World",
+    world: World,
     *,
     strategy: Literal["covering", "exhaustive"] = "covering",
     strength: int = 2,
