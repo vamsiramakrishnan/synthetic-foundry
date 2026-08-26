@@ -8,8 +8,8 @@ from worldloom.enterprise_specs import (
     EnterpriseEvalSpec,
     ScenarioProfile,
     apply_scenario_profile,
-    builtin_spec,
     builtin_registry,
+    builtin_spec,
     canonical_action,
     load_enterprise_spec,
 )
