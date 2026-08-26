@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Mapping
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -541,6 +542,45 @@ def generate_salesforce(world: World) -> list[ConnectorRecord]:
     return records
 
 
+Projection = Callable[[Any], list[ConnectorRecord]]
+
+
+class ConnectorProjectionRegistry:
+    """Harness-owned mapping from semantic connector names to projections."""
+
+    def __init__(self, projections: Mapping[str, Projection]) -> None:
+        self._projections = dict(projections)
+
+    def project(self, connector: str, world: World) -> list[ConnectorRecord]:
+        try:
+            projection = self._projections[connector]
+        except KeyError as error:
+            raise ValueError(f"unknown connector projection {connector!r}") from error
+        return projection(world)
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return tuple(sorted(self._projections))
+
+
+def builtin_projections() -> ConnectorProjectionRegistry:
+    return ConnectorProjectionRegistry(
+        {
+            "jira": generate_jira,
+            "servicenow": generate_servicenow,
+            "email": generate_email,
+            "confluence": lambda value: generate_artifact_projection(
+                value, "confluence"
+            ),
+            "sharepoint": lambda value: generate_artifact_projection(
+                value, "sharepoint"
+            ),
+            "drive": lambda value: generate_artifact_projection(value, "drive"),
+            "salesforce": generate_salesforce,
+        }
+    )
+
+
 def generate_connector_data(
     world: World,
     connectors: tuple[str, ...] = (
@@ -552,23 +592,17 @@ def generate_connector_data(
         "salesforce",
         "email",
     ),
+    *,
+    projections: ConnectorProjectionRegistry | None = None,
 ) -> ConnectorDataset:
-    generators = {
-        "jira": generate_jira,
-        "servicenow": generate_servicenow,
-        "email": generate_email,
-        "confluence": lambda value: generate_artifact_projection(value, "confluence"),
-        "sharepoint": lambda value: generate_artifact_projection(value, "sharepoint"),
-        "drive": lambda value: generate_artifact_projection(value, "drive"),
-        "salesforce": generate_salesforce,
-    }
-    unknown = set(connectors) - set(generators)
+    projections = projections or builtin_projections()
+    unknown = set(connectors) - set(projections.names)
     if unknown:
         raise ValueError(f"unknown connector projection(s): {sorted(unknown)}")
     records = [
         record
         for connector in connectors
-        for record in generators[connector](world)
+        for record in projections.project(connector, world)
     ]
     capabilities = [
         capability
