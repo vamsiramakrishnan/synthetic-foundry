@@ -112,6 +112,8 @@ def enterprise_evals_plan(
     limit: int | None = None,
     exhaustive: bool = False,
     profile_path: Path | None = typer.Option(None, "--profile"),
+    shard_index: int | None = typer.Option(None, "--shard-index"),
+    shard_count: int | None = typer.Option(None, "--shard-count"),
 ) -> None:
     """Write grounded query plans as JSONL."""
     from .enterprise_queries import plan_queries
@@ -145,6 +147,8 @@ def enterprise_evals_plan(
         profile=coverage,
         strategy="exhaustive" if exhaustive else "covering",
         limit=limit,
+        shard_index=shard_index,
+        shard_count=shard_count,
     )
     with output.open("w", encoding="utf-8") as handle:
         for query in queries:
@@ -174,6 +178,8 @@ def enterprise_evals_build(
     strength: int = typer.Option(2, min=1, max=4),
     limit: int | None = None,
     profile_path: Path | None = typer.Option(None, "--profile"),
+    shard_index: int | None = typer.Option(None, "--shard-index"),
+    shard_count: int | None = typer.Option(None, "--shard-count"),
 ) -> None:
     """Plan, materialize, validate, and export a connector corpus."""
     from .enterprise_corpus import materialize_corpus, validate_corpus
@@ -204,7 +210,12 @@ def enterprise_evals_build(
         else CoverageProfile(strengths=strength)
     )
     queries, report = plan_queries(
-        world, registry=registry, profile=coverage, limit=limit
+        world,
+        registry=registry,
+        profile=coverage,
+        limit=limit,
+        shard_index=shard_index,
+        shard_count=shard_count,
     )
     corpus = materialize_corpus(world, queries)
     findings = validate_corpus(corpus)
