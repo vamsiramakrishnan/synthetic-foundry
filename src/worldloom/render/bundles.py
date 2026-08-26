@@ -250,7 +250,9 @@ def render_confluence(world: World) -> list[Rendered]:
     format adds — a reader arriving at a stale status page should be able to see
     what it hangs off.
     """
+    from ..presentation import of as presentation_of
     from . import markdown
+    from .values import corpus_locale
 
     page_types = {"confluence_page", "knowledge_article", "close_calendar", "working_note"}
     intents = [i for i in world.artifact_intents if i.artifact_type in page_types]
@@ -268,6 +270,8 @@ def render_confluence(world: World) -> list[Rendered]:
     pages: list[dict[str, Any]] = []
     comments: list[dict[str, Any]] = []
     facts = {f.id: f for f in world.facts}
+    locale = corpus_locale(world)
+    profile = presentation_of(world)
 
     for intent in intents:
         ir = next((r for r in world.artifact_irs if r.intent_id == intent.id), None)
@@ -286,7 +290,19 @@ def render_confluence(world: World) -> list[Rendered]:
                 "author": intent.author_id,
                 "created": manifest.created_at.isoformat() if manifest else None,
                 "version": 1,
-                "body": markdown.render(ir, facts).decode("utf-8"),
+                # A Confluence page is still a document a person reads.  The
+                # bundle used to call the isolated Markdown renderer without
+                # the corpus decisions, which silently restored the audit
+                # appendix and authoring brief even when `render --profile
+                # reader` had removed them from every standalone format.
+                "body": markdown.render(
+                    ir,
+                    facts,
+                    locale=locale,
+                    presentation=profile.for_doctype(intent.artifact_type),
+                    artifact_type=intent.artifact_type,
+                    size_class=intent.size_profile,
+                ).decode("utf-8"),
                 "labels": [intent.domain, intent.artifact_type],
                 "worldloom_fact_ids": list(intent.required_fact_ids),
                 # A page whose facts have since been superseded is stale. Labelled

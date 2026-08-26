@@ -7,6 +7,132 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Added — a real-model writer behind the agent seam
+
+- **`tools/model_narrator.py`** turns `claude -p` or `codex exec` into the
+  stdin/stdout child contract: request document in, responses document out,
+  rejections fed back verbatim on the next round. The backend sees only a
+  self-contained prompt built from the harness's own rules and facts — no
+  Worldloom types, no corpus access. Output parsing tolerates fenced or
+  chatter-wrapped JSON by scanning for the balanced `responses` object.
+
+### Added — an agent command can write for a whole mosaic
+
+- **`mosaic --narrate-exec COMMAND`** narrates every world through an agent
+  command of your choosing instead of the deterministic provider: the command
+  runs once per section with a request document on stdin and must print one
+  responses document on stdout — the same child contract `narrate loop --exec`
+  speaks, so one adapter (a wrapper around any writer that reads stdin and
+  writes stdout) drives both surfaces unchanged. `tools/exec_agent.py` ships as
+  the reference adapter: no model, key or network, and the contract drives end
+  to end.
+- The exec-backed provider (`narrative.ExecProvider`) rides the existing
+  `World.narrate` seam rather than beside it, so everything the mosaic already
+  guarantees about narration holds for agent prose too: ledger entries keyed by
+  the writer's id (`--narrate-model-id`, so a corpus records who wrote it),
+  checkpoint resume via `on_accepted`, `--narration-concurrency` fanning
+  sections across concurrent children, and per-section retry with the violation
+  text fed back to the child. Rejections come back to the agent as feedback;
+  nothing is repaired locally.
+- Refused before anything lands on disk: `--narrate-exec` with `--no-narrate`
+  is a contradiction (refusal code `narration_conflict`). A child whose stdout
+  is not JSON dies in `run_exec`; valid JSON of the wrong shape is refused by
+  the provider layer with the child's stderr tail attached.
+
+### Generation — corpora stop being clones of one document and one brand
+
+Five small dials, turned together, aimed at what a six-period corpus reads like
+rather than at any one mechanism: **variety** (documents of a type stop sharing
+one shape wherever the type gives them room to differ), **diversity** (names no
+longer repeat from pools sized for a demo), and **length** (sections asked for
+telegrams now ask for prose). Measured on the reference six-period retail build
+(seed 8128): 11 → 13 distinct document shapes across 30 compiled artifacts,
+unique-shape ratio 37% → 43%, repeated shapes 93% → 87% of artifacts. The
+per-period close calendar is still an exact ×6 clone — its sections are all
+required and it ships one variant, so every mechanism here declines to touch
+it by construction. Types with optional sections, several variants, or room to
+recombine are where the difference lives.
+
+- **The structural genome is on by default at the CLI.** `worldloom build` now
+  passes `--section-omission 200 --outline-synthesis 300 --variant-bias 1`
+  unless told otherwise, so an unflagged build's documents vary in which
+  optional sections they carry, in shape drawn from the company's own types,
+  and in which authored variant they take — instead of emitting each type's
+  outline identically, every period. All three mechanisms are coherence-safe by
+  construction (required sections always survive; synthesis must carry at least
+  what the authored outline carries; variant bias only rotates variants a type
+  ships), and the genome is recorded on the recipe, so replay is byte-exact and
+  older recipes without the key stay classic. Pass three zeros for the
+  historical corpus.
+- **Narration briefs lengthened ~55%, measured at the pin:** `target_words`
+  small/medium/long 70/130/200 → 110/190/300 (`narrative/compiler.py`), with
+  `NarrativeRequest.target_words`'s standalone default aligned at 190. Longer
+  briefs pull more optional facts per section — the deterministic provider's
+  evidence budget scales off this number — and that is the whole of the
+  retrieval-hardness move recorded in `tests/test_retrievers.py` (numerical
+  comparison 5/8 → 4/8): holding briefs at the old numbers while pools widened
+  reproduces the old score exactly, so documents demonstrably cite more of the
+  corpus, not just more words.
+- **Company-name pool tripled** (`generators/names.COMPANY_FIRST`, 15 → 45):
+  fifteen first words meant a mosaic of tenants shared one branding vocabulary.
+- **Site-name pools doubled per locale** (`locales.py`, four presets, 6 → 12
+  cities each): six names could not carry a national estate. Real place names —
+  geography, not branding — keeping each preset's existing cross-border
+  entries (Auckland/Wellington, Wien/Zürich).
+- **System-name pools widened** (`names.py`: ERP 6→10, MDM/PLATFORM/COMMERCE/
+  POS 4–6 → 6–7): a company whose every system was named from a four-deep list
+  read as procured from one vendor fair.
+
+**Breaking for reproducibility:** a fresh build from the same seed produces
+different documents than before the change — different shapes (genome), names
+(pools), and narration briefs. Existing corpora replay byte-for-byte: the
+genome travels in the recipe, facts and ledgers travel in the corpus, and
+nothing here touches either. The golden `examples/retail-close` corpus is
+hand-authored and unaffected.
+
+### Generation — every format reads the style genome, and the genome gains a typeface
+
+- **The style genome now reaches every renderer.** `render/pdf.py` (Helvetica
+  end-to-end, hardcoded palette), `render/html.py` (a generic grey stylesheet),
+  and `render/xlsx.py` (grey `EEEEEE` headers) were the three formats that
+  still decided their own look. They now derive the same world-seeded
+  `StyleGenome` `render/docx.py` and `render/pptx.py` already read — fills,
+  text colours, type sizes, spacing, density, gridline policy, rule weight,
+  title alignment — so one world's memo, deck, PDF, HTML twin, and workbook
+  cannot disagree about the company's own identity. PDF additionally gains
+  genome-driven table rules per `gridline_policy`/`rule_weight` and
+  genome-scaled cell padding; HTML gains the negative-figure colour the other
+  formats already carried as colour-is-the-second-signal.
+- **A fourth axis: `typeface`.** The genome samples one of four curated
+  families — `house_sans` (the shipped look), `editorial_serif`,
+  `engineering_mono`, `director_serif` (serif display over sans body) — drawn
+  from its own named `Rng` stream, so no existing draw reshuffles.
+  `render/fonts.py` is the one resolution table: base-14 families for PDF,
+  OOXML names or theme-default `None` for Word/PowerPoint/Excel, CSS stacks
+  for HTML. `house_sans` is deliberately inert in the theme-bearing formats
+  (no font name set at all) and resolves to Helvetica only in PDF, where
+  reportlab has no theme to inherit.
+- **Breaking for reproducibility:** a world whose sampled genome draws a
+  non-house family now renders different bytes in every format, and the
+  genome-driven colours/sizes change PDF, HTML, and XLSX bytes even for house
+  palettes. Existing corpora replay identically under their recorded version;
+  re-rendering under the new version re-skins them.
+
+### Generation — AlphaEvolve balances evolutionary search without evolving truth
+
+- Added a checkout-only `evals/alphaevolve` portfolio following a strict
+  current-policy → restricted search → holdout/adversarial → reviewed-source
+  integration loop. Managed execution uses the official client, is bounded,
+  and refuses to start without `--confirm-spend`.
+- The first seam is `evolve._propose_children`. Its prior value-only rank could
+  mutate a wide axis repeatedly while narrower axes remained untouched. The
+  reviewed policy now ranks the least-varied axis first, then the least-seen
+  value, then the existing content-addressed tie key.
+- Coherence validation, recipe replay, fleet fitness, and fact/generation
+  ledgers are protected oracles: candidates cannot see or change them. The
+  local gate freezes 64 search, 37 holdout, and four adversarial cases and makes
+  no realism, retrieval-quality, managed-winner, or billed-cost claim.
+
 ### Generation — a document type may argue its case more than one way
 
 - **`documents._OUTLINE_VARIANTS`** — a six-period corpus produced **32 distinct

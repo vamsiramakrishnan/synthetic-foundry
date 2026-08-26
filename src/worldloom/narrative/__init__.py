@@ -35,6 +35,7 @@ from .compiler import (
 from .prompts import SECTION_PROSE, Prompt, get, register, versions
 from .providers import (
     DeterministicProvider,
+    ExecProvider,
     Provider,
     ProviderError,
     ResponseProvider,
@@ -70,6 +71,7 @@ __all__ = [
     "Provider",
     "ProviderError",
     "DeterministicProvider",
+    "ExecProvider",
     "ResponseProvider",
     "handshake",
     "UnreachableProvider",

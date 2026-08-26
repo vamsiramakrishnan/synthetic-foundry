@@ -122,7 +122,10 @@ def test_a_locale_moves_the_estate_the_headquarters_and_the_people(module, arche
     assert {s.region for s in de.sites} <= set(locales.GERMANY.regions)
     assert {s.region for s in au.sites} and {s.region for s in de.sites}
 
-    assert au.company.headquarters.endswith("Australia")
+    # The preset is "Australia and New Zealand" by its own about-text, so an
+    # Antipodean headquarters may land on either country; asserting Australia
+    # alone passed only while no seed drew Auckland or Wellington.
+    assert au.company.headquarters.endswith(("Australia", "New Zealand"))
     assert de.company.headquarters.endswith(("Germany", "Austria"))
 
     assert {p.name for p in au.people}.isdisjoint({p.name for p in de.people})

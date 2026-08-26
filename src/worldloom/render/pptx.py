@@ -46,17 +46,11 @@ from ..locales import DEFAULT as DEFAULT_LOCALE
 from ..locales import Locale
 from ..models import ArtifactIR, CanonicalFact, Chart, ChartKind, Row, Table
 from ..narrative import references
-from ..presentation import (
-    DEFAULT as DEFAULT_PRESENTATION,
-)
-from ..presentation import (
-    Presentation as PresentationProfile,
-)
-from ..presentation import (
-    of as presentation_of,
-)
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION
+from ..presentation import Presentation as PresentationProfile
+from ..presentation import of as presentation_of
 from ..rng import Rng
-from . import Rendered, RenderError, ooxml, slug_for
+from . import Rendered, RenderError, fonts, ooxml, slug_for
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -500,12 +494,13 @@ def _write(
     frame,  # type: ignore[no-untyped-def]
     paragraphs: list[str],
     *,
-    size: int,
+    size: float,
     colour: str,
     bold: bool = False,
     italic: bool = False,
     align=None,  # type: ignore[no-untyped-def]
     space_after_pt: float | None = None,
+    face: str | None = None,
 ) -> None:
     """Fill a text frame with one paragraph per string, uniformly styled.
 
@@ -539,6 +534,12 @@ def _write(
         run.font.bold = bold
         run.font.italic = italic
         run.font.color.rgb = _rgb(colour)
+        # The genome's typeface, resolved by the caller to this run's role
+        # (display for titles and bands, body for everything else). `None` —
+        # the house family in the theme-bearing formats — sets no name, which
+        # is the theme default a house deck always had.
+        if face:
+            run.font.name = face
 
 
 def _new_slide(prs, heading: str, *, footer_text: str, g: StyleGenome = _HOUSE_GENOME):  # type: ignore[no-untyped-def]
@@ -553,6 +554,7 @@ def _new_slide(prs, heading: str, *, footer_text: str, g: StyleGenome = _HOUSE_G
     _write(
         header.text_frame, [heading], size=_clamped_pt(g.type_scale[_TS_HEADING]),
         colour=g.colour_roles["header_text"], bold=True, align=heading_align,
+        face=fonts.named(g.typeface).display,
     )
 
     footer = _textbox(slide, FOOTER)
@@ -582,6 +584,7 @@ def _draw_cover(prs, plan: PresentationPlan, g: StyleGenome = _HOUSE_GENOME) -> 
     _write(
         title.text_frame, [plan.title], size=_clamped_pt(g.type_scale[_TS_TITLE]),
         colour=g.colour_roles["body_text"], bold=True, align=PP_ALIGN.CENTER,
+        face=fonts.named(g.typeface).display,
     )
 
     if plan.subtitle:
@@ -629,6 +632,7 @@ def _draw_divider(prs, heading: str, g: StyleGenome = _HOUSE_GENOME) -> None:  #
     _write(
         band.text_frame, [heading], size=_clamped_pt(g.type_scale[_TS_TITLE]),
         colour=g.colour_roles["header_text"], bold=True, align=PP_ALIGN.CENTER,
+        face=fonts.named(g.typeface).display,
     )
 
     note_box = Box(_CONTENT_X, band_box.bottom + _GUTTER, _CONTENT_W, _in(0.5))
@@ -695,6 +699,7 @@ def _draw_prose_content(prs, slide_plan, facts, footer_text: str,
         text.text_frame, paragraphs, size=_clamped_pt(g.type_scale[style["band"]]),
         colour=g.colour_roles["body_text"], bold=style.get("bold", False),
         space_after_pt=_space_pt(g, _SP_PARAGRAPH),
+        face=fonts.named(g.typeface).body,
     )
 
 

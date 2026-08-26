@@ -189,6 +189,31 @@ def test_the_incident_tempo_is_reachable() -> None:
     assert confirmed(_close(faster)) != confirmed(_close(DEFAULT))
 
 
+def test_a_fast_hypothesis_never_predates_the_incident_it_depends_on() -> None:
+    """Independent mosaic axes once let a fast hypothesis beat ticket raising.
+
+    Seed 8138 reaches that draw in its fourth close: 12 minutes from detection
+    to a hypothesis and 18 minutes to an opened incident.  The dependency must
+    remain chronological without narrowing the caller's authored physics span.
+    """
+    physics = DEFAULT.with_overrides({
+        "ops.incident.hypothesis_minutes": Span(2, 28),
+    })
+    world = RetailWorld(seed=8138, physics=physics).build()
+    for period in ("2026-03", "2026-04", "2026-05", "2026-06"):
+        world = world.run(MonthEndClose(
+            period=period, include_operational_incident=True, physics=physics,
+        ))
+
+    events = {event.id: event for event in world.events}
+    assert all(
+        events[cause].occurred_at <= event.occurred_at
+        for event in world.events
+        for cause in event.caused_by
+    )
+    assert world.validate().ok
+
+
 # ---------------------------------------------------------------------------
 # Carriage: the recipe, and replay
 # ---------------------------------------------------------------------------

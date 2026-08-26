@@ -413,6 +413,116 @@ def _observe(
     return tuple(out)
 
 
+def _artifact_origins(
+    world: World,
+    *,
+    acting: dict[str, str],
+    minter: Minter,
+    known: frozenset[tuple[str, str]],
+) -> tuple[Observation, ...]:
+    """The first artifact carrying an eventless fact is that fact's origin.
+
+    Most facts have an event: its participants and routed messages establish
+    who could know it. A deliberately eventless fact has no such source. A
+    standing policy is brought into force by its signed policy document; a
+    manager's held rating first exists in their one-to-one note; an offer's
+    terms first exist in the offer record. The ordinary ``duty`` channel
+    delivers those facts only after their originating record was written.
+
+    This is not a blanket "authors know their documents" exception. For each
+    eventless fact, only the earliest artifact that carries it is an origin.
+    Every later author still needs duty, participation, a message, a readable
+    artifact, or a briefing. Event-backed facts are never admitted here, so a
+    missing route from an incident to its author remains visible.
+    """
+    from .documents import written_at
+
+    facts = {fact.id: fact for fact in world.facts}
+    first_carrier: dict[str, tuple[datetime, str]] = {}
+    deadlines: dict[str, datetime] = {}
+    for intent in sorted(world.artifact_intents, key=lambda item: item.id):
+        try:
+            deadline = written_at(intent, facts)
+        except ValueError:
+            continue
+        deadlines[intent.id] = deadline
+        for fact_id in intent.required_fact_ids:
+            fact = facts.get(fact_id)
+            if fact is None or fact.event_id is not None or fact.valid_from > deadline:
+                continue
+            candidate = (deadline, intent.id)
+            first_carrier[fact_id] = min(
+                candidate, first_carrier.get(fact_id, candidate)
+            )
+
+    out: list[Observation] = []
+    for intent in sorted(world.artifact_intents, key=lambda item: item.id):
+        if intent.author_id not in acting or intent.id not in deadlines:
+            continue
+        at = deadlines[intent.id]
+        if not _employed(world, intent.author_id, at):
+            continue
+        for fact_id in sorted(intent.required_fact_ids):
+            fact = facts.get(fact_id)
+            if (
+                fact is None
+                or first_carrier.get(fact_id) != (at, intent.id)
+                or (intent.author_id, fact_id) in known
+            ):
+                continue
+            out.append(Observation(
+                id=minter.next("OBS"),
+                observer_id=intent.author_id,
+                fact_id=fact_id,
+                learned_at=at,
+                source_type="artifact",
+                source_id=intent.id,
+                confidence=observation_module._CONFIDENCE["artifact"],
+            ))
+    return tuple(out)
+
+
+def _message_sender_origins(
+    world: World,
+    *,
+    messages: tuple[ActorMessage, ...],
+    minter: Minter,
+    known: frozenset[tuple[str, str]],
+) -> tuple[Observation, ...]:
+    """Record event participation for senders outside the actor-policy table.
+
+    Workforce join events name the joiner as their participant. That person can
+    truthfully tell their manager that they joined even when their new role has
+    no ongoing ``ActorPolicy`` and therefore is not projected by ``_observe``.
+    This origin is limited to facts minted by the message's subject event and a
+    sender named on that event; it grants no duty or document visibility.
+    """
+    facts = {fact.id: fact for fact in world.facts}
+    events = {event.id: event for event in world.events}
+    out: list[Observation] = []
+    pairs = set(known)
+    for message in sorted(messages, key=lambda item: item.id):
+        event = events.get(message.subject_ref or "")
+        if event is None or message.sender_id not in event.actors:
+            continue
+        for fact_id in sorted(message.disclosed_fact_ids):
+            fact = facts.get(fact_id)
+            pair = (message.sender_id, fact_id)
+            if fact is None or fact.event_id != event.id or pair in pairs:
+                continue
+            out.append(Observation(
+                id=minter.next("OBS"),
+                observer_id=message.sender_id,
+                fact_id=fact_id,
+                learned_at=fact.valid_from,
+                source_type="participant",
+                source_id=event.id,
+                confidence=observation_module._CONFIDENCE["participant"],
+            ))
+            pairs.add(pair)
+    return tuple(out)
+
+
 def _attribute(
     observations: tuple[Observation, ...], messages: tuple[ActorMessage, ...]
 ) -> tuple[Observation, ...]:
@@ -494,9 +604,20 @@ def derive(
     # them would put the id of a discarded observation into every later id, so
     # the corpus's numbering would depend on work that left no trace in it.
     scratch = Minter()
-    first = _observe(
+    scratch_messages = held + _mint(drafts, scratch)
+    first_origins = _artifact_origins(
+        world, acting=acting, minter=scratch, known=known
+    )
+    first_origins += _message_sender_origins(
+        world, messages=scratch_messages, minter=scratch, known=known
+    )
+    first_known = known | frozenset(
+        (record.observer_id, record.fact_id) for record in first_origins
+    )
+    first = first_origins + _observe(
         world, acting=acting, triggered=triggered,
-        messages=held + _mint(drafts, scratch), at=horizon, minter=scratch, known=known,
+        messages=scratch_messages, at=horizon, minter=scratch,
+        known=first_known,
     )
 
     drafts += [
@@ -508,14 +629,53 @@ def derive(
     ]
     fresh = _mint(drafts, minter)
     messages = held + fresh
+    origins = _artifact_origins(world, acting=acting, minter=minter, known=known)
+    origins += _message_sender_origins(
+        world, messages=messages, minter=minter, known=known
+    )
+    final_known = known | frozenset(
+        (record.observer_id, record.fact_id) for record in origins
+    )
     observations = _attribute(
-        _observe(
+        origins + _observe(
             world, acting=acting, triggered=triggered,
-            messages=messages, at=horizon, minter=minter, known=known,
+            messages=messages, at=horizon, minter=minter, known=final_known,
         ),
         messages,
     )
     return Conversation(observations=observations, messages=fresh)
+
+
+@dataclass(frozen=True)
+class ConversationRefresh:
+    """Reconcile knowledge after later document-producing stages.
+
+    A timeline runs its closes before the CLI appends hiring, review,
+    distractor, and messiness records. Each close can only derive knowledge for
+    documents that exist at that point. This explicit final stage makes the
+    reconciliation part of the recipe, so rebuild performs the same derivation
+    instead of relying on an unrecorded CLI side effect.
+    """
+
+    def run(self, world: World) -> World:
+        from .recipe import with_step
+
+        if world._minter is None:
+            raise ValueError(
+                "a knowledge refresh needs a build-time world; a loaded corpus"
+                " has no deterministic minter"
+            )
+        if not world.observations and not world.messages:
+            raise ValueError(
+                "a knowledge refresh needs an existing conversation ledger;"
+                " build an episode with conversations=True first"
+            )
+        fresh = derive(world, minter=world._minter)
+        return world.extend(
+            observations=fresh.observations,
+            messages=fresh.messages,
+            recipe=with_step(world._recipe, "ConversationRefresh"),
+        )
 
 
 def _mint(drafts: list[_Draft], minter: Minter) -> tuple[ActorMessage, ...]:
@@ -535,4 +695,4 @@ def _mint(drafts: list[_Draft], minter: Minter) -> tuple[ActorMessage, ...]:
     )
 
 
-__all__ = ["ROUTES", "SETTLING", "Conversation", "derive"]
+__all__ = ["ROUTES", "SETTLING", "Conversation", "ConversationRefresh", "derive"]

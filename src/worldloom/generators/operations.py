@@ -757,7 +757,15 @@ def _incident_chain(
 
     detected = _at(day, 8, physics.integer("ops.incident.detected_minute", rng))
     raised = detected + timedelta(minutes=physics.integer("ops.incident.raise_minutes", rng))
-    hypothesised = detected + timedelta(minutes=physics.integer("ops.incident.hypothesis_minutes", rng))
+    # Physics axes are independently authorable.  A fast organisation may put
+    # the hypothesis span below the ticket-raising span, but the recorded
+    # hypothesis causally depends on that ticket and therefore cannot predate
+    # it.  Preserve the stated detection-to-hypothesis tempo whenever it is
+    # feasible and meet the chronology boundary when it is not.
+    hypothesised = max(
+        raised,
+        detected + timedelta(minutes=physics.integer("ops.incident.hypothesis_minutes", rng)),
+    )
     ruled_out = hypothesised + timedelta(minutes=physics.integer("ops.incident.rule_out_minutes", rng))
     confirmed = ruled_out + timedelta(minutes=physics.integer("ops.incident.confirm_minutes", rng))
     worked_around = confirmed + timedelta(minutes=physics.integer("ops.incident.workaround_minutes", rng))

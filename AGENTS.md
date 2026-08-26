@@ -1,196 +1,216 @@
-# Worldloom, for agents
+# Repository Guidelines
 
-You are the model. Worldloom is the harness.
+Working guide for AI assistants in this repository (Worldloom, published from
+`synthetic-foundry`). Read before editing anything.
 
-This repository does not call a language model. It builds a coherent synthetic
-enterprise deterministically, works out which documents that enterprise would
-have, hands you a bounded request for each one, and then **checks what you wrote
-against the facts**. If you restate a number, cite something you were not given,
-or mention an entity that does not exist, your prose is rejected with the reason
-and you try again.
+## Project Overview
 
-That division is the whole design. You supply judgement and language. The harness
-supplies truth, and refuses anything that contradicts it.
+Python library + CLI (`worldloom`, entry point `src/worldloom/cli.py:app`) that
+deterministically generates coherent synthetic enterprise corpora — facts,
+timelines, org graphs, business processes — and materialises them as realistic
+documents (xlsx/docx/pdf/pptx/markdown/html), evaluation sets, and permissioned
+drive layouts.
 
-Written to be agent-neutral: everything below is shell commands and JSON files, so
-it works from Claude Code, Antigravity, or any harness that can run a terminal.
+The harness never calls a language model; **the agent is the writer**. The loop:
 
-This file is the contract. The deep material — every optional stage, every
-why-argument — lives one file per topic under `docs/agents/`, and the routing
-map at the bottom says when to read which. Read a topic file *before* using its
-surface, not after it refuses you.
+1. `worldloom narrate requests ./corpus -o requests.json` hands you bounded prose
+   requests (allowed facts, temporal cutoff).
+2. You write `responses.json` — every figure referenced as `{{fact:ID}}`, never
+   typed out (the most common rejection is `bare_number`; percentages and dates
+   count as figures). Contract details: `docs/agents/writing-responses.md`.
+3. `worldloom narrate accept ./corpus --from responses.json --model-id <model>`
+   checks every claim against the corpus and commits or rejects with the violated
+   rule.
 
----
+Rejection is normal — read the violation, fix that specific thing, resubmit.
+Never make a validator pass by editing a fixture, relaxing a check, or working
+around a refusal. Deep material is routed one-topic-per-file in `docs/agents/`
+(16 files, each says when to read it); the index is `docs/README.md`.
 
-## Setup
+Everything replays byte-for-byte from `seed + recipe + generation ledger`; CI
+rebuilds corpora and byte-compares them on every push.
+
+## Architecture & Data Flow
+
+Layered pipeline around an immutable `World` (frozen dataclass,
+`src/worldloom/world.py`) — the single entry point for load/build/validate.
+No layer re-decides a fact an earlier layer owns. The thin waist is
+`src/worldloom/models.py`: every subsystem speaks only in frozen pydantic models
+(`ConfigDict(frozen=True, extra="forbid")`, `StrEnum` vocabularies); nothing
+format- or provider-aware crosses it.
+
+1. `generators/` (~34 modules, uniform `generate(rng, minter, *, …)` shape) mint
+   entities/facts/events from `recipe.py` scenario steps, drawing from
+   `rng.derive("<stable-name>")` streams and `ids.Minter` sequential ids.
+2. `documents.py` compiles `ArtifactIntent` → `ArtifactIR` (structure and
+   tables, no prose); `compiler/` (plan/components/grammar) is the deterministic
+   artifact compiler where a model may only choose a content-addressed *plan*.
+3. `narrative/` — `requests.py` (contract) → `prompts.py` (versioned registry) →
+   providers → `claims.py` validation → `compiler.py` (ledger, retries, the only
+   ThreadPoolExecutor; all ids minted single-threaded *before* threads spin up).
+4. `render/` turns IR → bytes; `workspace.py` exports the corpus as a
+   permissioned shared-drive tree.
+5. `validate.py` is the coherence gate (referential, graph, financial, temporal,
+   lore, actors); `evaluate/` scores retrieval hardness (BM25/TF-IDF/embedding
+   floors, pinned and cached).
+
+Determinism spine:
+
+- **Generation ledger** (`generation-ledger.jsonl`): key = `(seed, call_site,
+  ordinal, fact_digest, model_id, prompt_version)` → SHA-256 `ids.content_key`.
+  A corpus carrying a ledger rebuilds with zero provider calls, offline.
+- **Recipe** (`recipe.py`) records every build-affecting input (archetype,
+  `register_step` steps, locale, presentation) so `build --replay` is
+  byte-identical; `corpus.tree_divergence` is the arbiter of "identical".
+- `cli.py` (~310KB, 30+ commands, 10 sub-apps) is a thin wrapper: lazy imports
+  inside command bodies, and `@app.callback()` runs `worldloom._install()`
+  before every command so domain registration is all-or-nothing.
+
+## Key Directories
+
+| Path | Purpose |
+|---|---|
+| `src/worldloom/` | The package; `cli.py`, `world.py`, `models.py`, `validate.py`, `documents.py`, `episodes.py` are load-bearing |
+| `src/worldloom/generators/` | Vertical generators (retail, banking, insurance, procurement, org, estate, …) |
+| `src/worldloom/{narrative,render,evaluate,compiler,actors}/` | Pipeline stages above |
+| `tests/` | ~160 pytest files; scripted agent stand-ins (`scripted_composer.py`, `scripted_actor.py`, `scripted_agent.py`) |
+| `tools/` | Dev-only scripts (`sweep.py` determinism sweep, `measure_retrievers.py`, `outcome_selection.py`); stdlib-only, never imported from `src/` |
+| `docs/`, `docs/agents/` | Operator guides; 16 agent topic files |
+| `examples/` | `retail-close/` golden corpus (CI-validated, hand-authored — never regenerate or "fix" it), `grocery-close/` reference narration, `packs/`, `episodes/`, `artifact-types/` |
+| `evals/` | Checkout-only eval harnesses (enterprise_minimum, executive_narration, alphaevolve) |
+| `.claude/skills/`, `.claude/commands/` | 11 skills + 6 slash commands driving the loop |
+| `site/` | Astro/Starlight docs site (npm, GitHub Pages) |
+| `.github/` | CI workflows; `scripts/dispersed_replay.py` is the byte-identity gate |
+
+## Development Commands
 
 ```bash
-pip install -e ".[dev]"          # from a checkout; released: pip install "worldloom[all]"
-worldloom doctor
+pip install -e ".[dev]"            # add renderers as needed: ,xlsx,docx,pdf,pptx,polars
+pre-commit install                 # ruff-check + worldloom docs --check
+worldloom doctor                   # verifies the install; names exact fixes; --json for data
+
+pytest -q                          # house gate (slow tests deselected via addopts)
+pytest tests/test_render.py -q     # one file; -k "name" for one test
+pytest -m slow -q                  # opt in to heavy builds (weekly in CI)
+ruff check .                       # lint gate (CI-blocking)
+mypy                               # type gate (CI-blocking; new modules checked by default)
+
+worldloom validate retail-close    # golden corpus must stay coherent (CI gate)
+worldloom docs --check             # generated CLI reference must be current
 ```
 
-`worldloom doctor` says whether this installation can do what these docs
-promise, and names the exact fix for anything it cannot: the Python floor
-(read from the package's own metadata), each registered render format's
-optional dependency (a ✗ names the pip extra, e.g. `pip install
-'worldloom[xlsx]'`), the bundled `retail-close` corpus validating, and — in a
-checkout — the generated command reference being current. Exit 0 all-green, 1
-otherwise; `--json` emits the check list as data. It reads only this process
-and this disk, no network ever. Run it once after install, and again whenever
-a render format refuses.
-
-If the ask is loose — an industry, a purpose, a hardness bar, but no seed or
-shape yet chosen — start one level up from the loop below:
-`.claude/skills/worldloom/references/designing.md` is the decision guide for
-turning that kind of ask into a build (stock archetype vs. authoring an
-industry pack, which hardness families to force, deterministic prose vs.
-writing it yourself), and in Claude Code `/worldloom-design` drives the whole
-thing end to end — decide, author, build, measure, iterate, deliver. The loop
-below assumes those decisions are already made.
-
-## The loop
+Corpus loop:
 
 ```bash
-# 1. Build a world. Same seed, same world, every time.
 worldloom build --seed 8128 --incident --out ./corpus
-
-# 1a. Optional: let each document's *outline* be derived rather than looked up.
-#     Without this every document of a type carries the same headings forever,
-#     which is a shape a retriever can learn instead of the content. Off by
-#     default, recorded on the recipe, and replays byte-for-byte.
-#
-#     --section-omission drops optional sections; --outline-synthesis draws a
-#     shape from what this company's own document types have in common. Neither
-#     can make a document say less than it did: a synthesised outline must carry
-#     at least what the authored one carried, and falls back when no draw does.
-worldloom build --seed 8128 --section-omission 400 --variant-bias 1 \
-    --outline-synthesis 600 --out ./corpus
-
-# 1b. Optional: choose each document's shape before writing any of it. Without
-#     this, structure comes from a fixed outline and every memo looks the same.
-worldloom plan requests ./corpus -o plans.json
-worldloom plan accept ./corpus --from plans.json --model-id <your model>
-
-# 2. Ask what prose is needed.
 worldloom narrate requests ./corpus -o requests.json
-
-# 3. Read requests.json. Write responses.json. (This is your job — read
-#    docs/agents/writing-responses.md first.)
-
-# 4. Submit. Accepted prose is committed and recorded; rejected prose is returned
-#    with the violated rule, and nothing is committed.
-worldloom narrate accept ./corpus --from responses.json --model-id <your model>
-
-# 5. Materialise it.
-worldloom render ./corpus -f xlsx -f docx -f markdown -f jira -f confluence -f servicenow
-
-# 6. Check the whole corpus agrees with itself.
+worldloom narrate accept ./corpus --from responses.json --model-id <your-model>
+worldloom render ./corpus -f xlsx -f docx -f markdown
 worldloom validate ./corpus
-
-# 7. Find out whether it is actually hard, not merely coherent.
-worldloom evaluate ./corpus
-
-# 7b. And whether it is hard for a retriever anyone would deploy, not only for
-#     keyword matching. `all` adds a dense retriever beside BM25 and TF-IDF and
-#     names, per family, whether it is genuinely hard or merely a lexical trap.
-#     Optional extra; without it the dense column is skipped with a message.
 worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
-```
-
-```bash
-# 8. Lay it out as a drive somebody could be pointed at, with its permissions.
 worldloom workspace ./corpus -o ./drive
+worldloom status ./corpus --json   # names the stage and the exact next command
 ```
 
-At any point, `worldloom status ./corpus` names the stage the corpus is at and
-the exact command that comes next — resume from that rather than from memory.
-`status`, `validate`, and every `accept` command take `--json` when you would
-rather read data than parse a table.
+Docs site: `cd site && npm ci && npm run build` (deployed by
+`.github/workflows/docs.yml`).
 
-Steps 3 and 4 repeat until every response is accepted. Rejection is normal and is
-not a failure of the harness — it is the harness working.
+## Code Conventions & Common Patterns
 
----
+**Determinism** (umbrella rule; `tests/test_determinism_hygiene.py` AST-enforces
+it over `src/`):
 
-## What the harness will not let you do
+- No `random`, `uuid`, wall clock (`datetime.now()` and friends), or builtin
+  `hash()` for identity. Draws via `rng.derive("<stable-name>")`; ids via
+  `ids.Minter`/`format_id`; content addresses via `ids.content_key` (SHA-256).
+- No dict/set iteration order reaching output — sort before emitting; JSON/JSONL
+  writes go through `corpus.write_jsonl`/`write_json` (sort_keys, pinned
+  newlines).
+- Prompts are versioned data (`narrative/prompts.py`, key `name@version`):
+  never edit a template in place — bump the version; it is a ledger-key
+  component.
+- Anything that changes what a seed generates is a **Generation** change:
+  CHANGELOG entry under its own heading, treated as breaking for
+  reproducibility.
 
-`worldloom validate` prints the number of checks it ran — tens of thousands on a
-large world — and treats any of these as a defect, not a warning:
+**Registration seams** (idempotent, refuse conflicting duplicates):
+`register_domain` (`domains.py`), `register_step` (`recipe.py`),
+`register_domain_checks` (`validate.py`), `register_artifact_types`
+(`documents.py`), `registries.declare` (per-corpus tables beside the code that
+writes them), `narrative/prompts.register`. A new vertical registers from its
+own module AND must be imported unconditionally from `__init__._install()` —
+lazy registration makes coherence depend on import order.
 
-- A total that does not equal the sum of its parts
-- A variance that is not actual less budget
-- A percentage that does not match the amounts it describes
-- A document citing a fact that did not yet exist when it was written
-- A reference to an entity, event, or fact that does not exist
-- A reporting line that cycles, or a service that owns itself
-- An author who cannot see the document they wrote
-- Lore that constrains nothing
-- A fact a document was asked to carry and does not carry
-- A table cell that names a fact and states nothing
-- Fewer compiled documents than the plan asked for
+**Error handling**: named exceptions (`CorpusError`, `CoherenceError`,
+`RecipeError`, `NarrationError`, `RenderError`) plus the `ValidationReport`
+envelope (`raise_if_failed()`; violations vs advisories). CLI refusals go
+through the `_REFUSALS` code registry in `cli.py` — codes are a stable wire
+format.
 
-If you are tempted to make one of these pass by editing the fixture or relaxing a
-check: don't. A validator that can be talked out of failing is decoration. Fix the
-thing it caught. The defect that forced the last three checks, and the JSON
-refusal envelope for parsing failures as data, are in
-[docs/agents/refusals-and-envelope.md](docs/agents/refusals-and-envelope.md).
+**Style**:
 
-## Determinism, and why it constrains you
+- Comments argue *why*, not *what* — including the defect that motivated a
+  check. Match that; don't strip it when editing.
+- No formatter by design. E501 is ignored (prose comments run long); E402 is
+  ignored (late imports are the registration seam, not accidents); `zip()`
+  without `strict=` is a ratchet — new code should say `strict=`.
+- `from __future__ import annotations` everywhere; frozen dataclasses for value
+  objects, pydantic `Model` for serialized entities; `__all__` grouped
+  semantically; `TYPE_CHECKING` blocks for import-only types.
+- No async anywhere in `src/`; the only concurrency is `narrative/compiler.py`'s
+  thread pool.
 
-A world regenerates byte-for-byte from its seed plus its generation ledger:
+## Important Files
 
-```bash
-worldloom build --seed 8128 --incident --replay ./corpus -f markdown --out ./again
-diff -r ./corpus ./again
-```
+| File | Role |
+|---|---|
+| `pyproject.toml` | All gates: extras, ruff, mypy (incl. the `ignore_errors` debt ledger — fix a module, delete its line; never add one), pytest config |
+| `src/worldloom/__init__.py` | Version (hatch reads it — bump here only) + `_install()` registration |
+| `src/worldloom/ids.py`, `rng.py`, `corpus.py` | Deterministic ids, RNG streams, byte-identical IO |
+| `src/worldloom/validate.py` | Coherence gate; `register_domain_checks` |
+| `src/worldloom/narrative/prompts.py` | Versioned prompt registry |
+| `.claude/skills/worldloom/references/commands.md` | GENERATED CLI reference — regenerate with `worldloom docs`, never hand-edit |
+| `examples/retail-close/` | Golden corpus; its empty generation ledger is asserted by a test |
+| `tests/test_determinism_hygiene.py`, `tests/test_properties.py` | Determinism AST gate; hypothesis properties |
+| `CONTRIBUTING.md`, `RELEASING.md`, `CHANGELOG.md` | PR gates; tag-driven release steps; changelog format |
 
-The second command makes **no model call at all** — every request is served from
-the ledger. CI enforces this on every push. Two consequences for you:
+## Runtime/Tooling Preferences
 
-- **Never introduce a clock, `random`, or a UUID.** Ledger keys are content
-  addresses. `hash()` is randomised per process and is not one either; use
-  `worldloom.ids.content_key`.
-- **Prompt text is versioned data.** Editing a prompt in place silently changes
-  what a seed means. Bump the version in `src/worldloom/narrative/prompts.py`.
+- Python ≥ 3.11 (floor); CI matrix 3.11/3.12/3.13. `uv run <cmd>` works for
+  one-off commands in a checkout.
+- pip + hatchling; version single-sourced from `src/worldloom/__init__.py`.
+- Optional extras unlock features, and `worldloom doctor` names the missing pip
+  extra per format: `xlsx`, `docx`, `pdf`, `pptx`, `polars`, `mcp`,
+  `embeddings` (downloads weights — deliberately never core), `all`, `dev`.
+- `tools/` scripts run as `python3 tools/<name>.py` (they sys.path-insert
+  `src/`); stdlib-only, dev-only.
+- Site tooling is npm/Node (Astro 5 + Starlight), isolated to `site/`.
+- `.gitattributes` pins LF everywhere — byte-identity fixtures depend on it.
 
-`worldloom verify`, `worldloom migrate`, and the schema-bump policy are in
-[docs/agents/determinism.md](docs/agents/determinism.md).
+## Testing & QA
 
-## Before you commit
-
-```bash
-pytest -q
-worldloom validate retail-close             # the reference corpus must stay coherent
-worldloom docs --check                      # the docs still describe the CLI
-```
-
-CI additionally regenerates a corpus from its ledger and byte-compares it, so
-anything non-deterministic fails there even when tests pass locally. The
-argument for the docs gate, and the wider determinism sweep, are in
-[docs/agents/working-on-the-harness.md](docs/agents/working-on-the-harness.md).
-
----
-
-## Where to read more
-
-One topic per file, under `docs/agents/`. Read the file *when* its situation
-applies:
-
-| Read | When |
-| --- | --- |
-| [writing-responses.md](docs/agents/writing-responses.md) | Before step 3 — the request/response contract, the rules and why each exists, and `worldloom search` |
-| [workspace.md](docs/agents/workspace.md) | Laying the corpus out as a permissioned drive, or making it untidy with `--noise` |
-| [one-type-several-arguments.md](docs/agents/one-type-several-arguments.md) | Documents of one type all share a skeleton, or you want the `topology` / `series` / `diversity` readings |
-| [twins-and-mutation.md](docs/agents/twins-and-mutation.md) | Attributing a measured delta to one recorded value (`twin`), or mutating recipes without building (`mutate`) |
-| [refine-not-here.md](docs/agents/refine-not-here.md) | Tempted to close a rewrite loop over the corpus, or wiring the read-only MCP tools |
-| [fleets.md](docs/agents/fleets.md) | Building many companies, or asked for a fleet — `mosaic`, `spaces`, `fleet`, `evolve` |
-| [company-specification.md](docs/agents/company-specification.md) | The corpus must be a *particular* kind of business, needs more divisions, or needs an industry pack or the banking vertical |
-| [company-attributes.md](docs/agents/company-attributes.md) | Reaching for `--facet`, `--messiness`, `--locale`, `--timeline`, or keeping a derived world with `pack export` |
-| [paperwork.md](docs/agents/paperwork.md) | Hiring and review rounds, standing policies, or who signed what |
-| [probe.md](docs/agents/probe.md) | Deriving the physics by Socratic drill-down instead of typing ranges |
-| [estate-composition.md](docs/agents/estate-composition.md) | Growing a service landscape with `--estate`, or authoring one through `compose` |
-| [conversations.md](docs/agents/conversations.md) | Recording who came to know what, when — `--conversations` |
-| [actors.md](docs/agents/actors.md) | Driving the incident's records one validated decision at a time — `--actors` |
-| [refusals-and-envelope.md](docs/agents/refusals-and-envelope.md) | A check looks excessive, or a caller must parse refusals mechanically |
-| [determinism.md](docs/agents/determinism.md) | Proving byte-identity with `verify`, migrating a corpus, or bumping the schema version |
-| [working-on-the-harness.md](docs/agents/working-on-the-harness.md) | Changing the harness itself — where things are, the docs gate, the determinism sweep, retrieval hardness |
+- pytest only (no xdist). `pytest -q` is the house gate; `addopts` deselects
+  `@pytest.mark.slow` (three heavy density builds) so the default run stays
+  fast.
+- Hypothesis properties in `tests/test_properties.py`: derandomized, deadline
+  on, database disabled. Never weaken a property to pass it; nothing under
+  `src/` may gain randomness.
+- Determinism is enforced in layers: `tests/test_determinism_hygiene.py` (AST
+  scan of `src/`), `tests/test_verify_cli.py` (byte-tamper detection),
+  `tests/test_dispersed_replay.py` (guards the CI gate script), nightly
+  `tools/sweep.py` across Linux/macOS configs.
+- Fixtures: `tests/conftest.py` session fixtures only for genuinely repeated
+  identical builds (lazy, no FS mutation). Agent handshakes are tested with the
+  scripted stand-ins, which read only the request document, never the corpus.
+- CLI test style: module-level `runner = CliRunner()`, assert
+  `result.exit_code` with `result.output` in the assert message; negative
+  validator tests corrupt one fact and expect the named violation.
+- Before committing: `pytest -q`, `ruff check .`, `mypy`,
+  `worldloom validate retail-close`, `worldloom docs --check`. CI additionally
+  byte-replays corpora — anything nondeterministic fails there even when local
+  tests pass.
+- Changed the CLI surface (command or flag)? Run `worldloom docs` from the root
+  and commit the regenerated reference. `tests/test_harness_docs.py` requires
+  every real command to be mentioned in an agent-facing document and rejects
+  fenced examples naming commands or flags that don't exist — **this file is on
+  that checked list.**

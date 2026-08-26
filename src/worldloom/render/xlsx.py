@@ -20,8 +20,9 @@ from datetime import datetime
 from io import BytesIO
 from typing import TYPE_CHECKING
 
+from ..compiler.style import StyleGenome, genome
 from ..models import ArtifactIR, FormulaKind, Table
-from . import Rendered, RenderError, ooxml, slug_for
+from . import Rendered, RenderError, fonts, ooxml, slug_for
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
@@ -61,6 +62,23 @@ def _column_letter(index: int) -> str:
     from openpyxl.utils import get_column_letter
 
     return get_column_letter(index)
+
+
+def _genome_for(ir: ArtifactIR) -> StyleGenome:
+    """This workbook's world-derived style genome — see `render/docx.py::
+    _genome_for` for the reasoning. The workbook is analytical rather than
+    editorial, so the genome reaches it through the two places a reader sees
+    identity at all: the header row's fill and text colour, and the shaded
+    subtotal/total rows. Number formats, formulas, and column widths stay
+    exactly what they were — those are the workbook's own contract, and a
+    genome that moved a number would be worse than one that coloured it.
+    """
+    from ..rng import Rng
+
+    raw = ir.metadata.get("worldloom_seed")
+    seed = int(raw) if raw and raw != "None" else 0
+    return genome(Rng(seed).derive("style"))
+
 
 
 class _Layout:
@@ -212,8 +230,15 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
     rows_of = {s.table.key: _HEADER_ROW + 1 for s in sections}
     layout = _Layout([s.table for s in sections], sheet_of, rows_of)
 
-    bold = Font(bold=True)
-    header_fill = PatternFill("solid", fgColor="EEEEEE")
+    g = _genome_for(ir)
+    roles = g.colour_roles
+    face = fonts.named(g.typeface).body
+    # `name=face` only when the family declares one: `None` leaves openpyxl's
+    # own default in force, which is the face a house workbook always had.
+    header_font = Font(bold=True, color=roles["header_text"], name=face)
+    header_fill = PatternFill("solid", fgColor=roles["header_fill"])
+    emphasis_font = Font(bold=True, color=roles["subtotal_text"], name=face)
+    emphasis_fill = PatternFill("solid", fgColor=roles["subtotal_fill"])
 
     for section in sections:
         table = section.table
@@ -224,11 +249,12 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
         if ir.subtitle:
             sheet.cell(row=2, column=1, value=ir.subtitle).font = Font(italic=True, color="666666")
 
-        sheet.cell(row=_HEADER_ROW, column=1, value=table.title).font = bold
-        sheet.cell(row=_HEADER_ROW, column=1).fill = header_fill
+        head = sheet.cell(row=_HEADER_ROW, column=1, value=table.title)
+        head.font = header_font
+        head.fill = header_fill
         for index, column in enumerate(table.columns, start=2):
             header = sheet.cell(row=_HEADER_ROW, column=index, value=column.label)
-            header.font = bold
+            header.font = header_font
             header.fill = header_fill
             header.alignment = Alignment(horizontal="right")
 
@@ -236,7 +262,8 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
             excel_row = rows_of[table.key] + row_offset
             label = sheet.cell(row=excel_row, column=1, value=row.label)
             if row.emphasis:
-                label.font = bold
+                label.font = emphasis_font
+                label.fill = emphasis_fill
 
             for column_index, column in enumerate(table.columns, start=2):
                 cell = row.cells.get(column.key)
@@ -262,7 +289,8 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
                             target.value = cell.value / 100
                     target.number_format = column.number_format
                 if row.emphasis:
-                    target.font = bold
+                    target.font = emphasis_font
+                    target.fill = emphasis_fill
 
         widths = [max(12, len(table.title))] + [max(12, len(c.label) + 2) for c in table.columns]
         for index, width in enumerate(widths, start=1):
@@ -277,8 +305,9 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
         sheet.freeze_panes = sheet.cell(row=rows_of[table.key], column=2)
 
     for table in detail:
-        _detail_sheet(workbook, ir, table, bold=bold, header_fill=header_fill,
-                      Alignment=Alignment, Font=Font)
+        _detail_sheet(workbook, ir, table, header_font=header_font,
+                      header_fill=header_fill, emphasis_font=emphasis_font,
+                      emphasis_fill=emphasis_fill, Alignment=Alignment, Font=Font)
 
     # Named ranges, so a consumer can address the numbers that matter without
     # depending on where they happen to sit.
@@ -325,7 +354,8 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
     return ooxml.normalise(buffer.getvalue(), created=stamp)
 
 
-def _detail_sheet(workbook, ir, table, *, bold, header_fill, Alignment, Font):  # type: ignore[no-untyped-def]
+def _detail_sheet(workbook, ir, table, *, header_font, header_fill,
+                  emphasis_font, emphasis_fill, Alignment, Font):  # type: ignore[no-untyped-def]
     """One detail table as a sheet of literal rows plus a computed total.
 
     Values are literals — a thousand generated lines are the data, not a
@@ -342,7 +372,7 @@ def _detail_sheet(workbook, ir, table, *, bold, header_fill, Alignment, Font):  
 
     for index, column in enumerate(table.columns, start=1):
         header = sheet.cell(row=_HEADER_ROW, column=index, value=column.label)
-        header.font = bold
+        header.font = header_font
         header.fill = header_fill
         if column.number_format:
             header.alignment = Alignment(horizontal="right")
@@ -355,14 +385,17 @@ def _detail_sheet(workbook, ir, table, *, bold, header_fill, Alignment, Font):  
                 cell.number_format = column.number_format
 
     total_row = first + len(table.rows)
-    sheet.cell(row=total_row, column=1, value="Total").font = bold
+    label = sheet.cell(row=total_row, column=1, value="Total")
+    label.font = emphasis_font
+    label.fill = emphasis_fill
     for index, column in enumerate(table.columns, start=1):
         if not column.fact_id:
             continue
         letter = _column_letter(index)
         cell = sheet.cell(row=total_row, column=index)
         cell.value = f"=SUM({letter}{first}:{letter}{total_row - 1})"
-        cell.font = bold
+        cell.font = emphasis_font
+        cell.fill = emphasis_fill
         if column.number_format:
             cell.number_format = column.number_format
 

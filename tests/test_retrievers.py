@@ -141,9 +141,17 @@ def test_bm25_numbers_are_pinned_exactly(corpus: World) -> None:
     direction: the corpus got harder for a keyword baseline by getting more like
     a real archive, and the three families it exists to keep hard are still at
     zero.
+
+    numerical_comparison then moved 5/8 → 4/8 and the totals to 25 of 51 when
+    narration briefs lengthened to 110/190/300 words (`narrative/compiler`):
+    the deterministic provider's evidence budget scales off the brief, so each
+    section cites more optional facts, and an archive where every document
+    quotes more numbers is one where a figure question has more figures to be
+    beaten by. The same move as the two above — density, not retriever ability
+    — with authority, temporal and abstention unmoved at zero.
     """
     card = score(corpus)
-    assert card.passed == 26
+    assert card.passed == 25
     assert card.by_type() == {
         EvaluationType.AUTHORITY_RESOLUTION: (0, 6),
         EvaluationType.CAUSAL_MULTI_HOP: (1, 3),
@@ -151,7 +159,7 @@ def test_bm25_numbers_are_pinned_exactly(corpus: World) -> None:
         EvaluationType.CROSS_ARTIFACT: (4, 4),
         EvaluationType.DIRECT_LOOKUP: (9, 9),
         EvaluationType.EXPECTED_ABSTENTION: (0, 10),
-        EvaluationType.NUMERICAL_COMPARISON: (5, 8),
+        EvaluationType.NUMERICAL_COMPARISON: (4, 8),
         EvaluationType.TEMPORAL_STATE: (0, 3),
     }
 

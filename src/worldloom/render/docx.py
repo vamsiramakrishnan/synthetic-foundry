@@ -32,7 +32,7 @@ from ..presentation import DEFAULT as DEFAULT_PRESENTATION
 from ..presentation import Presentation
 from ..presentation import of as presentation_of
 from ..rng import Rng
-from . import Rendered, RenderError, ooxml, slug_for
+from . import Rendered, RenderError, fonts, ooxml, slug_for
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -330,6 +330,24 @@ def _field(paragraph, instruction: str) -> None:  # type: ignore[no-untyped-def]
         f'<w:r {nsdecls("w")}><w:fldChar w:fldCharType="end"/></w:r>',
     ):
         element.append(parse_xml(fragment))
+
+
+def _apply_typeface(document, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+    """Set the document's default faces from the genome's typeface family.
+
+    A style-default seam rather than per-run `font.name` assignment: this
+    renderer styles every run explicitly for size and colour but never for
+    face, so every run inherits its style's font — setting `Normal` (body) and
+    the heading styles (display) once covers the whole document, and a family
+    of ``None`` (house) sets nothing, which is exactly the theme-default face
+    a house document always had.
+    """
+    faces = fonts.named(g.typeface)
+    if faces.body:
+        document.styles["Normal"].font.name = faces.body
+    if faces.display:
+        for style_name in ("Title", "Heading 1", "Heading 2"):
+            document.styles[style_name].font.name = faces.display
 
 
 def _page_setup(document) -> None:  # type: ignore[no-untyped-def]
@@ -987,6 +1005,7 @@ def render(
     docx = _require_docx()
     document = docx.Document()
     g = _genome_for(ir)
+    _apply_typeface(document, g)
 
     _page_setup(document)
     _running_heads(document, ir, g)

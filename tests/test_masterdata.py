@@ -138,6 +138,10 @@ def test_masterdata_refuses_a_bad_request() -> None:
         masterdata.check_request({"vendor": 10})
     with pytest.raises(ValueError, match="not one"):
         masterdata.check_request({"vendors": -1})
+    with pytest.raises(ValueError, match="can compose only 3450"):
+        masterdata.check_request({"vendors": 1, "skus": 10_000})
+    with pytest.raises(ValueError, match="children of vendors"):
+        masterdata.check_request({"skus": 10})
     with pytest.raises(ValueError, match="children of vendors"):
         masterdata.generate(Rng(1), skus=10)
 

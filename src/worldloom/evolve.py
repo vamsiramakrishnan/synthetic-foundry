@@ -26,13 +26,15 @@ consumes a fitness.
 **Variation is ranked, not drawn.** Each child slot takes the least-explored
 admissible single-axis variation of its parent: candidates are every
 ``(axis, value)`` the parent does not already hold, ranked first by how many
-times that value has appeared anywhere in the run's proposed configurations
-(ascending — the loop prefers what it has never built), with ties broken by
-``ids.content_key`` over the run seed, generation, slot, axis and value. That
-tie-break is the run's entire use of the seed beyond generation zero: a
-seeded *ordering*, not a draw, so the choice replays from the manifest and no
-``random`` is anywhere in the loop. Candidates the registries refuse are
-skipped and **recorded with the refusal** — copied from
+times that *axis* has been varied, then by how many times that value has
+appeared anywhere in the run's proposed configurations (both ascending). The
+first term prevents a wide axis from consuming the build budget merely because
+it has more unseen values; the second still spreads the values within an axis.
+Ties break by ``ids.content_key`` over the run seed, generation, slot, axis and
+value. That tie-break is the run's entire use of the seed beyond generation
+zero: a seeded *ordering*, not a draw, so the choice replays from the manifest
+and no ``random`` is anywhere in the loop. Candidates the registries refuse
+are skipped and **recorded with the refusal** — copied from
 ``.github/scripts/dispersed_replay.py``'s gates, whose docstring records why:
 sampling a command the CLI promises to reject tests argument validation, not
 the corpus, and can fail before there is anything to measure.
@@ -508,6 +510,7 @@ def _propose_children(
     generation: int,
     population: int,
     explored: Mapping[tuple[str, str], int],
+    varied_axes: Mapping[str, int],
     proposed: frozenset[tuple[tuple[str, str], ...]],
 ) -> tuple[Proposal, ...]:
     """*population* single-axis variations of *parents*, round-robin.
@@ -524,27 +527,32 @@ def _propose_children(
     when *every* champion is exhausted does the generation refuse.
     """
     exploration = dict(explored)
+    axis_exploration = dict(varied_axes)
     seen = set(proposed)
     children: list[Proposal] = []
     for slot in range(population):
-        chosen: tuple[str, Mapping[str, str], tuple[tuple[int, str], str, str, dict[str, str]], tuple[tuple[str, str, str], ...]] | None = None
+        chosen: tuple[str, Mapping[str, str], tuple[tuple[int, int, str], str, str, dict[str, str]], tuple[tuple[str, str, str], ...]] | None = None
         for attempt in range(len(parents)):
             parent_address, parent_row = parents[(slot + attempt) % len(parents)]
             refused: list[tuple[str, str, str]] = []
-            best: tuple[tuple[int, str], str, str, dict[str, str]] | None = None
-            # Candidates ranked by (times this value has been proposed anywhere
-            # in the run, seeded content key) and walked in the space's
-            # declared axis and value order, keeping the minimum. A candidate
-            # is only *checked* against the registries when it would improve on
-            # the best admissible one found so far, so `refused` holds every
-            # candidate the choice had to step past — the list a reader needs
-            # to audit why the winner won — without paying a registry check for
-            # candidates that never contended.
+            best: tuple[tuple[int, int, str], str, str, dict[str, str]] | None = None
+            # Candidates ranked by (times the axis has been varied, times this
+            # value has appeared anywhere in the run, seeded content key) and
+            # walked in the space's declared axis and value order, keeping the
+            # minimum. Axis balance is first because a four-value axis must not
+            # get three mutations before a two-value axis gets one merely for
+            # having more unseen values. A candidate is only *checked* against
+            # the registries when it would improve on the best admissible one
+            # found so far, so `refused` holds every candidate the choice had
+            # to step past — the list a reader needs to audit why the winner
+            # won — without paying a registry check for candidates that never
+            # contended.
             for axis in space.axes:
                 for value in axis.values:
                     if value == parent_row[axis.name]:
                         continue
                     rank = (
+                        axis_exploration.get(axis.name, 0),
                         exploration.get((axis.name, value), 0),
                         content_key(str(seed), str(generation), str(slot), axis.name, value),
                     )
@@ -584,6 +592,7 @@ def _propose_children(
             refused=refused_tuple,
         ))
         seen.add(tuple(sorted(child_row.items())))
+        axis_exploration[axis_name] = axis_exploration.get(axis_name, 0) + 1
         for pair in child_row.items():
             exploration[pair] = exploration.get(pair, 0) + 1
     return tuple(children)
@@ -703,6 +712,7 @@ def evolve(
     records: list[Generation] = []
     parents: tuple[tuple[str, Mapping[str, str]], ...] = ()
     explored: dict[tuple[str, str], int] = {}
+    varied_axes: dict[str, int] = {}
     proposed: set[tuple[tuple[str, str], ...]] = set()
 
     for index in range(generations):
@@ -723,12 +733,15 @@ def evolve(
             members = _propose_children(
                 space, parents,
                 seed=seed, generation=index, population=population,
-                explored=explored, proposed=frozenset(proposed),
+                explored=explored, varied_axes=varied_axes,
+                proposed=frozenset(proposed),
             )
         for member in members:
             proposed.add(tuple(sorted(member.configuration.items())))
             for pair in member.configuration.items():
                 explored[pair] = explored.get(pair, 0) + 1
+            if member.axis:
+                varied_axes[member.axis] = varied_axes.get(member.axis, 0) + 1
 
         generation_dir = root / f"gen{index}"
         for member in members:

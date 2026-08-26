@@ -237,6 +237,17 @@ def from_document(payload: Mapping[str, Any]) -> MasterData:
 #: that was asked for — `Parameters.with_overrides`'s argument.
 REQUEST_KEYS = frozenset({"vendors", "customers", "skus"})
 
+#: The largest request the committed vocabulary can satisfy without repeating
+#: a supposedly unique business or item name.  This belongs at the request
+#: boundary, not only in ``generate``: company specifications and SDK
+#: blueprints promise to reject an impossible shape before an expensive world
+#: build begins.
+REQUEST_LIMITS = {
+    "vendors": len(_VOCAB["company_stems"]) * len(_VOCAB["trades"]),
+    "customers": len(_VOCAB["company_stems"]) * len(_VOCAB["trades"]),
+    "skus": len(_VOCAB["sku_qualifiers"]) * len(_VOCAB["sku_nouns"]),
+}
+
 
 def check_request(request: Mapping[str, Any]) -> dict[str, int]:
     """A ``master_data`` request normalised, or a ValueError naming the defect."""
@@ -251,7 +262,17 @@ def check_request(request: Mapping[str, Any]) -> dict[str, int]:
         value = int(request[key])
         if value < 0:
             raise ValueError(f"master_data.{key} is a count, and {value} is not one")
+        if value > REQUEST_LIMITS[key]:
+            raise ValueError(
+                f"master_data.{key} asks for {value} unique rows, but the"
+                f" committed vocabulary can compose only {REQUEST_LIMITS[key]}"
+            )
         counts[key] = value
+    if counts.get("skus", 0) and not counts.get("vendors", 0):
+        raise ValueError(
+            "master_data.skus are children of vendors; asking for skus with"
+            " vendors=0 would mint rows whose parent table does not exist"
+        )
     return counts
 
 
@@ -481,5 +502,6 @@ def applied(world: Any, request: Mapping[str, Any] | None, *,
 
 __all__ = [
     "CONTACT_POOL_SIZE", "Contact", "Customer", "MasterData", "REQUEST_KEYS",
-    "Sku", "Vendor", "applied", "check_request", "from_document", "generate",
+    "REQUEST_LIMITS", "Sku", "Vendor", "applied", "check_request",
+    "from_document", "generate",
 ]

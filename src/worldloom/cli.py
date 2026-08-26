@@ -404,6 +404,7 @@ _REFUSALS: dict[str, str] = {
     "mcp_unavailable": "the MCP server cannot start in this installation",
     "missing_flag": "a required companion flag was not given",
     "mosaic_failed": "the mosaic could not be planned or built",
+    "narration_conflict": "--narrate-exec names the writer and cannot ride with --no-narrate",
     "narration_failed": "the narration provider failed to produce accepted prose",
     "negative_distractors": "--distractors takes a non-negative count",
     "negative_estate": "structural estate endpoints must be non-negative",
@@ -719,7 +720,7 @@ def build(
         ),
     ),
     section_omission: int = typer.Option(
-        0, "--section-omission", min=0, max=1000,
+        200, "--section-omission", min=0, max=1000,
         help=(
             "Per-mille chance that any one *optional* section is left out of any "
             "one document, so a type emits a subset of its outline rather than "
@@ -727,8 +728,9 @@ def build(
             "sections compete for a reader's attention exactly as test features "
             "compete for room, and a corpus whose every close pack carries the "
             "same five headings teaches a retriever the headings. Sections are "
-            "required unless a type says otherwise, so 0 — the default — and an "
-            "un-annotated corpus are both byte-identical to before."
+            "required unless a type says otherwise, so no required fact can ever "
+            "be lost to it; an un-annotated corpus has nothing optional and is "
+            "unaffected at any value. Pass 0 for the historical all-sections shape."
         ),
     ),
     outline_floor: int = typer.Option(
@@ -739,7 +741,7 @@ def build(
         ),
     ),
     outline_synthesis: int = typer.Option(
-        0, "--outline-synthesis", min=0, max=1000,
+        300, "--outline-synthesis", min=0, max=1000,
         help=(
             "Per-mille chance that any one document's outline is *synthesised* — "
             "a shape drawn from what this company's own document types have in "
@@ -749,16 +751,17 @@ def build(
             "the document the way its type argues it, and falls back to the "
             "authored outline when no draw does. Measured at 1000 on a "
             "six-period retail build: 89% of documents synthesised, 40 distinct "
-            "shapes becoming 62. 0 — the default — is byte-identical to before."
+            "shapes becoming 62. Pass 0 for the authored-shape-only corpus."
         ),
     ),
     variant_bias: int = typer.Option(
-        0, "--variant-bias", min=0,
+        1, "--variant-bias", min=0,
         help=(
             "Rotate which authored outline variant each document gets. Two "
             "tenants built from one engine with different biases disagree about "
             "every document's shape, which is most of what stops a mosaic "
-            "sharing one shape vocabulary."
+            "sharing one shape vocabulary. Only rotates among variants a type "
+            "already ships; pass 0 to pin every document to variant zero."
         ),
     ),
     employees: int = typer.Option(None, "--employees", help="Override the archetype's stated headcount."),
@@ -1662,9 +1665,11 @@ def build(
         document compiler reads it from and where replay reads it back, so this
         one line is the whole threading.
 
-        A strict no-op on the default path: `with_structure` declines to write
-        the key for a classic genome, so an unflagged build produces the recipe
-        it always did, byte for byte.
+        The flag defaults describe a varying genome, so an unflagged build now
+        records the key — and that recording is what keeps it honest: replay
+        reads the recorded numbers rather than whatever this release's defaults
+        are, and a caller wanting the historical all-sections corpus passes 0s.
+        A classic genome (all zeros) still writes nothing, per `with_structure`.
         """
         from .recipe import with_structure
         from .structure import StructuralGenome
@@ -2363,22 +2368,14 @@ def build(
             f" {len(world.artifact_intents)} document(s) re-gated\n"
         )
 
-    # Conversations are derived inside each episode, while distractors and
-    # archive messiness deliberately run after every episode. Refresh the
-    # append-only knowledge ledger once all document-producing passes finish so
-    # their authors are not left citing records the settled ledger says they
-    # never knew. Existing observer/fact pairs and messages are deduplicated by
-    # `derive`; builds without conversations remain byte-identical.
+    # Timeline builds append hiring/review rounds after all closes, and the
+    # archive passes above can append still more documents. Their authorship
+    # must be reconciled with the opt-in knowledge ledger too. A named recipe
+    # step rather than an invisible derive call makes replay reproduce it.
     if conversations:
-        from .conversation import derive as derive_conversation
-        from .ids import Minter
+        from .conversation import ConversationRefresh
 
-        refresh = derive_conversation(world, minter=world._minter or Minter())
-        if refresh.observations or refresh.messages:
-            world = world.extend(
-                observations=refresh.observations,
-                messages=refresh.messages,
-            )
+        world = world.run(ConversationRefresh())
 
     if narrate or replay is not None:
         from . import recipe as recipe_module
@@ -3506,16 +3503,49 @@ def mosaic(
     narrate: bool = typer.Option(
         True, "--narrate/--no-narrate",
         help=(
-            "Write the prose every section is waiting for, with the built-in "
-            "deterministic provider — no network, no key, no spend. On by "
-            "default, unlike `build --narrate`: an un-narrated world compiles "
-            "fifteen artifacts of which three carry a retrievable passage, so "
-            "a third of its evaluation cases cite evidence that is in no "
-            "passage at all and every score read off them is about the ranker "
-            "when the sentence belongs to the corpus. `--no-narrate` writes "
-            "the plan-only corpora this command used to write, for a caller "
-            "who wants the shapes and will narrate them another way."
+            "Write the prose every section is waiting for — with the built-in "
+            "deterministic provider by default (no network, no key, no spend), "
+            "or through an agent command via --narrate-exec. On by default, "
+            "unlike `build --narrate`: an un-narrated world compiles fifteen "
+            "artifacts of which three carry a retrievable passage, so a third "
+            "of its evaluation cases cite evidence that is in no passage at "
+            "all and every score read off them is about the ranker when the "
+            "sentence belongs to the corpus. `--no-narrate` writes the "
+            "plan-only corpora this command used to write, for a caller who "
+            "wants the shapes and will narrate them another way."
         ),
+    ),
+    narrate_exec: str = typer.Option(
+        None, "--narrate-exec",
+        help=(
+            "Narrate every world through AGENT COMMAND instead of the "
+            "deterministic provider: the command runs once per section with "
+            "the request document on stdin and must print one responses "
+            "document on stdout — the same child contract `narrate loop "
+            "--exec` speaks, so one adapter drives either surface (e.g. "
+            "`python3 tools/exec_agent.py`, or a wrapper around your writer "
+            "of choice). Rejections come back to the child as feedback and "
+            "are retried; ledger entries, checkpoint resume and "
+            "--narration-concurrency all work exactly as they do for the "
+            "deterministic provider. Implies narration; refused together "
+            "with --no-narrate."
+        ),
+    ),
+    narrate_model_id: str = typer.Option(
+        "agent", "--narrate-model-id",
+        help=(
+            "Model identifier recorded in the ledger and replay keys when "
+            "--narrate-exec is in use. Name the real writer, so a corpus can "
+            "say what wrote it."
+        ),
+    ),
+    narrate_timeout: float = typer.Option(
+        600.0, "--narrate-timeout", min=1.0,
+        help="Seconds one agent command may run before it is killed.",
+    ),
+    narrate_shell: bool = typer.Option(
+        False, "--narrate-shell",
+        help="Run --narrate-exec through the shell, for pipelines.",
     ),
     formats: list[str] = typer.Option(
         None, "--format", "-f",
@@ -3558,7 +3588,9 @@ def mosaic(
     rebuilds it on its own.
 
     Every world is narrated as it is built, so what lands on disk is a corpus
-    rather than a plan. `--no-narrate` gives back the plans.
+    rather than a plan. `--no-narrate` gives back the plans; `--narrate-exec`
+    hands the writing to an agent command of your choosing, section by section,
+    under the same child contract `narrate loop --exec` speaks.
 
     `--describe` prints the axes without building anything, which is the right
     first call — deciding whether five worlds are worth the wait should not
@@ -3610,6 +3642,13 @@ def mosaic(
     if out is None and (resume or shard_count != 1 or shard_index != 0):
         _refuse("missing_flag", "[red]error:[/red] sharding and resume require --out",
                 flag="--out")
+    if narrate_exec and not narrate:
+        _refuse(
+            "narration_conflict",
+            "[red]error:[/red] --narrate-exec names the writer, so it cannot ride"
+            " with --no-narrate; drop --no-narrate to have the command write.",
+            flag="--narrate-exec",
+        )
     if as_json:
         typer.echo(json.dumps(
             {"spread": spread, "worlds": [v.as_dict() for v in variants]}, indent=2))
@@ -3655,7 +3694,8 @@ def mosaic(
     from dataclasses import replace as _replace_spec
 
     from . import archetypes, domains
-    from .narrative import DeterministicProvider, ProviderError
+    from .execseam import ExecError
+    from .narrative import DeterministicProvider, ExecProvider, ProviderError
     from .narrative.compiler import NarrationError
     from .render import RenderError
     from .scenarios import MonthEndClose
@@ -3680,7 +3720,19 @@ def mosaic(
     # rather than trusting it — a provider that *did* carry state would make
     # world 5 depend on world 1 having been built, which is the one thing a
     # mosaic must never do (world N is reproducible without worlds 1..N-1).
-    provider = DeterministicProvider()
+    # `ExecProvider` holds no more: a command string and knobs, so the same
+    # argument carries — the agent child is stateless across calls by contract,
+    # and the ledger, not the provider instance, is what makes world N's prose
+    # reproducible.
+    if narrate_exec:
+        provider = ExecProvider(
+            narrate_exec,
+            model_id=narrate_model_id,
+            timeout=narrate_timeout,
+            shell=narrate_shell,
+        )
+    else:
+        provider = DeterministicProvider()
 
     written: list[str] = []
     narrated_sections = 0
@@ -3751,7 +3803,7 @@ def mosaic(
         # evidence lives in unwritten prose as a failure, and five worlds of
         # them read as a hard benchmark.
         sections = 0
-        if narrate:
+        if narrate or narrate_exec:
             checkpoint = batch_module.Checkpoint(out, variant.index)
             try:
                 checkpoint_ledger = checkpoint.load() if resume else ()
@@ -3765,7 +3817,7 @@ def mosaic(
                     concurrency=narration_concurrency,
                     on_accepted=checkpoint.append,
                 )
-            except (OSError, ValueError, ProviderError, NarrationError) as exc:
+            except (OSError, ValueError, ExecError, ProviderError, NarrationError) as exc:
                 _refuse("narration_failed",
                         f"[red]error:[/red] world {variant.index}: {escape(str(exc))}",
                         world=variant.index)

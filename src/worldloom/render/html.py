@@ -14,6 +14,7 @@ import html
 import math
 from typing import TYPE_CHECKING
 
+from ..compiler.style import StyleGenome, genome
 from ..locales import DEFAULT as DEFAULT_LOCALE
 from ..locales import Locale
 from ..models import ArtifactIR, CanonicalFact, Chart, ChartKind, Table
@@ -21,7 +22,7 @@ from ..narrative import references
 from ..presentation import DEFAULT as DEFAULT_PRESENTATION
 from ..presentation import Presentation
 from ..presentation import of as presentation_of
-from . import Rendered, slug_for
+from . import Rendered, fonts, slug_for
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -36,6 +37,70 @@ def _round_coord(value: float) -> float:
     """Round a coordinate to fixed decimals for deterministic SVG output."""
     factor = 10 ** _SVG_PRECISION
     return round(value * factor) / factor
+
+
+def _genome_for(ir: ArtifactIR) -> StyleGenome:
+    """This artifact's world-derived style genome — see `render/docx.py::
+    _genome_for` for the full reasoning. Every renderer derives it the same
+    way, so one artifact's HTML, Word, and PDF cannot disagree about the
+    company's own look.
+    """
+    from ..rng import Rng
+
+    raw = ir.metadata.get("worldloom_seed")
+    seed = int(raw) if raw and raw != "None" else 0
+    return genome(Rng(seed).derive("style"))
+
+
+def _css(g: StyleGenome) -> list[str]:
+    """The document stylesheet, every value read off the genome.
+
+    The stylesheet this renderer shipped — grey headers, `#333` body text,
+    one generic sans stack — was never a genome: it was the *absence* of one,
+    the same gap `render/pdf.py`'s hardcoded Helvetica filled before that
+    renderer read a genome. Reading the genome here closes the last format
+    that could disagree with the others about a company's own look: the same
+    world's memo and its HTML twin now share header fills, emphasis fills,
+    text colours, and type family.
+
+    Two values stay local rather than genome-driven, for the reasons the other
+    renderers already document: the muted `#666` (the genome declares no
+    "muted" role — notes print on the bare page, not on a genome fill, so
+    there is no contrast pair for `style.py`'s floor to police) and the `#ddd`
+    rules (a gridline grey, not a fourth ink).
+    """
+    faces = fonts.named(g.typeface)
+    roles = g.colour_roles
+    body_family = faces.html_body or "sans-serif"
+    # Display falls back to the body stack when the family declares no
+    # display face of its own — a family is one identity, never two.
+    display_family = faces.html_display or body_family
+    return [
+        f"body {{ font-family: {body_family}; max-width: 900px; margin: 0 auto;"
+        f" padding: 20px; line-height: 1.5; color: #{roles['body_text']};"
+        f" background-color: #{roles['background']}; }}",
+        f"h1, h2 {{ font-family: {display_family}; color: #{roles['accent']}; }}",
+        "table { border-collapse: collapse; width: 100%; margin: 20px 0; }",
+        "th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }",
+        f"th {{ background-color: #{roles['header_fill']};"
+        f" color: #{roles['header_text']}; font-weight: bold; }}",
+        f"tr.emphasis td, tr.emphasis th {{ background-color:"
+        f" #{roles['subtotal_fill']}; font-weight: bold; }}",
+        f"td.emphasis, th.emphasis {{ background-color: #{roles['subtotal_fill']}; }}",
+        # Colour is the second signal, never the only one — the figure is
+        # already parenthesised or minus-signed by `format_value`, same rule
+        # `docx._table` and `pdf._table_flowable` apply.
+        f"td.negative {{ color: #{roles['negative_text']}; }}",
+        "p.note { font-size: 0.9em; color: #666; font-style: italic; margin: 10px 0; }",
+        "blockquote { border-left: 4px solid #ddd; padding-left: 16px; margin: 16px 0; color: #666; }",
+        "svg { max-width: 100%; height: auto; margin: 20px 0; }",
+        ".chart-figure { margin: 20px 0; }",
+        "p { margin: 10px 0; }",
+        ".provenance { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; "
+        "font-size: 0.9em; color: #666; }",
+        ".hidden-notice { background-color: #fff3cd; padding: 10px; margin: 10px 0; "
+        "border-radius: 4px; }",
+    ]
 
 
 def _table_html(table: Table, locale: Locale = DEFAULT_LOCALE) -> str:
@@ -53,15 +118,20 @@ def _table_html(table: Table, locale: Locale = DEFAULT_LOCALE) -> str:
         cells = []
         label_class = ' class="emphasis"' if row.emphasis else ""
         cells.append(f"<td{label_class}><strong>{html.escape(row.label)}</strong></td>")
-
         for column in table.columns:
             cell = row.cells.get(column.key)
+            value = cell.value if cell else None
             text = format_value(cell.value, column.number_format, locale=locale) if cell else ""
-            cell_class = ' class="emphasis"' if row.emphasis and text else ""
+            classes = []
+            if row.emphasis:
+                classes.append("emphasis")
+            if isinstance(value, (int, float)) and value < 0:
+                classes.append("negative")
+            class_attr = f' class="{" ".join(classes)}"' if classes else ""
             if row.emphasis and text:
-                cells.append(f"<td{cell_class}><strong>{html.escape(text)}</strong></td>")
+                cells.append(f"<td{class_attr}><strong>{html.escape(text)}</strong></td>")
             else:
-                cells.append(f"<td>{html.escape(text)}</td>")
+                cells.append(f"<td{class_attr}>{html.escape(text)}</td>")
         rows.append("<tr>" + "".join(cells) + "</tr>")
 
     table_html = "<table>\n" + "\n".join(f"  {row}" for row in rows) + "\n</table>"
@@ -672,23 +742,7 @@ def render(
         '<meta charset="utf-8">',
         f"<title>{html.escape(ir.title)}</title>",
         "<style>",
-        "body { font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; "
-        "line-height: 1.5; color: #333; }",
-        "h1, h2 { color: #222; }",
-        "table { border-collapse: collapse; width: 100%; margin: 20px 0; }",
-        "th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }",
-        "th { background-color: #f5f5f5; font-weight: bold; }",
-        "tr.emphasis td, tr.emphasis th { background-color: #e8e8e8; font-weight: bold; }",
-        "td.emphasis, th.emphasis { background-color: #e8e8e8; }",
-        "p.note { font-size: 0.9em; color: #666; font-style: italic; margin: 10px 0; }",
-        "blockquote { border-left: 4px solid #ddd; padding-left: 16px; margin: 16px 0; color: #666; }",
-        "svg { max-width: 100%; height: auto; margin: 20px 0; }",
-        ".chart-figure { margin: 20px 0; }",
-        "p { margin: 10px 0; }",
-        ".provenance { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; "
-        "font-size: 0.9em; color: #666; }",
-        ".hidden-notice { background-color: #fff3cd; padding: 10px; margin: 10px 0; "
-        "border-radius: 4px; }",
+        *_css(_genome_for(ir)),
         "</style>",
         "</head>",
         "<body>",

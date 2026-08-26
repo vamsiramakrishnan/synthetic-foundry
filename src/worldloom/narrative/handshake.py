@@ -163,6 +163,19 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
     }
 
 
+def request_payload(
+    request: NarrativeRequest, facts: dict[str, CanonicalFact]
+) -> dict[str, Any]:
+    """The one entry ``requests[]`` carries — the unit an adapter answers.
+
+    Public because `providers.ExecProvider` speaks the same document contract
+    `narrate loop --exec` does, one request at a time: a payload is this entry
+    in a one-element list, and a reply is parsed by `parse_responses` exactly as
+    `narrate accept` parses a file. One shape, two surfaces.
+    """
+    return _request_payload(request, facts)
+
+
 def pending(world: World) -> list[NarrativeRequest]:
     """Every section still awaiting prose, as a bounded request."""
     facts = {fact.id: fact for fact in world.facts}

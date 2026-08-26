@@ -625,7 +625,12 @@ def test_pdf_table_flowable_shades_banded_cells_when_asked_directly() -> None:
     and `mgmt.risk_matrix` would use if `compose()` could ever reach them
     against the shipped registry; proven directly since it cannot.
     """
-    styles = pdf_renderer._styles()
+    from worldloom.compiler.style import genome
+    from worldloom.rng import Rng
+
+    # `"house"` — the shipped look — so this test measures the banding
+    # mechanism, not whichever palette some other seed samples.
+    styles = pdf_renderer._styles(genome(Rng(0).derive("style"), archetype="house"))
     table = Table(
         key="t", title="Values",
         columns=[Column(key="v", label="Value")],
@@ -633,11 +638,17 @@ def test_pdf_table_flowable_shades_banded_cells_when_asked_directly() -> None:
     )
     from reportlab.lib import colors
 
-    grid = pdf_renderer._table_flowable(table, 400.0, styles, show_bands=True)
+    grid = pdf_renderer._table_flowable(
+        table, 400.0, styles, g=genome(Rng(0).derive("style"), archetype="house"),
+        show_bands=True,
+    )
     fills = {cmd[3] for cmd in grid._bkgrndcmds}
     assert colors.HexColor(f"#{pdf_renderer._BAND_FILL[MagnitudeBand.HIGH]}") in fills
 
-    unbanded = pdf_renderer._table_flowable(table, 400.0, styles, show_bands=False)
+    unbanded = pdf_renderer._table_flowable(
+        table, 400.0, styles, g=genome(Rng(0).derive("style"), archetype="house"),
+        show_bands=False,
+    )
     unbanded_fills = {cmd[3] for cmd in unbanded._bkgrndcmds}
     assert colors.HexColor(f"#{pdf_renderer._BAND_FILL[MagnitudeBand.HIGH]}") not in unbanded_fills
 

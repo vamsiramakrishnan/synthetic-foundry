@@ -87,6 +87,9 @@ STEPS: dict[str, tuple[str, ...]] = {
     # derivation. `master_data`'s argument, one layer along.
     "HiringRound": ("period", "count"),
     "PerformanceCycle": ("period", "pairs"),
+    # Reconciles knowledge after timeline-adjacent stages append documents.
+    # It takes no arguments because the ledger and world are its whole input.
+    "ConversationRefresh": (),
     "WorkforceChange": ("period", "headcount"),
     "StructuralChange": ("period", "business_units", "sites", "systems", "services"),
     # Not a scenario in the sense the others are — it mints no event and no
@@ -918,6 +921,10 @@ def rebuild(
             world = world.run(PerformanceCycle(
                 period=step["period"], pairs=step.get("pairs", 3),
             ))
+        elif name == "ConversationRefresh":
+            from .conversation import ConversationRefresh
+
+            world = world.run(ConversationRefresh())
         elif name == "Departure":
             world = world.run(Departure(period=step["period"], role_key=step["role_key"]))
         elif name == "Reorganisation":

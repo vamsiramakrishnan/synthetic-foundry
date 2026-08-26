@@ -129,18 +129,26 @@ def test_the_answers_are_where_the_variety_is(worlds) -> None:
 
 
 def test_survey_states_the_unflattering_verdict(worlds) -> None:
-    """The verdict, pinned at exactly how unflattering it still is.
+    """The verdict, pinned at exactly how unflattering it is.
 
     `transfers["bm25"].identical` read True — three seeds, one company, one
     verdict sheet — until the variance memo's divisional table gained
     `gp_actual`, the operand its margin ratio had always been missing
     (`columns._CUTS`). One more real column in one passage moved a marginal
-    top-5 ranking on one seed: the gross-profit reconciliation comparison now
-    fails on the third world while the other two still pass it. That is a
-    ranking margin, not variety — the question is byte-identical in every
-    world, which is the unflattering half and it has not moved — so the pin is
-    the exact width of the disagreement, one case, rather than a threshold a
-    real variety regression could hide under.
+    top-5 ranking on one seed and the gross-profit reconciliation comparison
+    became the single case the worlds disagreed on, which this file pinned at
+    that exact width rather than at a threshold a real variety regression could
+    hide under.
+
+    Narration briefs then lengthened (`narrative/compiler`, 70/130/200 words →
+    110/190/300): the deterministic provider's evidence budget scales off the
+    brief, every document cites more optional facts, and the margin that had
+    split the seeds resolved — adversely and unanimously. EVAL-0017 now fails
+    on all three worlds, the verdict sheet is one sheet again, and the reading
+    is back to its original branch. The unflattering half has not moved an
+    inch: the questions are byte-identical across worlds either way, which is
+    why this test pins the questions above and only reports the difficulty
+    spread here.
     """
     reading = across.survey(worlds)
     transfer = reading.transfers["bm25"]
@@ -155,16 +163,16 @@ def test_survey_states_the_unflattering_verdict(worlds) -> None:
         for case_id in verdicts[names[0]]
         if len({verdicts[n][case_id] for n in names}) > 1
     }
-    assert split == {"EVAL-0017"}, split
-    assert not transfer.identical
-    # A one-case spread flips the verdict to its second branch. The questions
-    # half of the claim is what matters and is asserted above by exact ids; the
-    # difficulty half now honestly reports the margin.
-    assert "the questions repeat" in reading.verdict
-    # 26 of 76 failures on the hardest world — the same single case off a
-    # perfectly even split, read through the concentration lens.
-    assert reading.difficulty.failures[names[2]] == reading.difficulty.failures[names[0]] + 1
-    assert reading.difficulty.concentration == pytest.approx(26 / 76, abs=1e-4)
+    assert split == set(), split
+    assert transfer.identical
+    # Back on the first branch: one company's verdict sheet, retold. The
+    # questions half of the claim is what matters and is asserted above by
+    # exact ids; the difficulty half reports the even margin.
+    assert "the variety is in the facts, not in the questions" in reading.verdict
+    # 26 of 78 failures on every world — the once-marginal case failing
+    # everywhere, read through the concentration lens as a perfect third.
+    assert reading.difficulty.failures[names[2]] == reading.difficulty.failures[names[0]]
+    assert reading.difficulty.concentration == pytest.approx(26 / 78, abs=1e-4)
     assert "cross-world duplicate group" in str(reading)
 
 

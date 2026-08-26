@@ -305,6 +305,10 @@ ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The checkout-only eval harnesses under `evals/` are imported by tests but
+# never installed, so the repo root must be importable for those imports to
+# resolve regardless of how pytest is invoked.
+pythonpath = ["."]
 markers = [
     "slow: a full multi-period, high-density build — the shape a large corpus actually is, not a fixture-sized stand-in for it. Excluded from the default run by `addopts` below; opt in with `pytest -m slow`.",
 ]

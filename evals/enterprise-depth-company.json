@@ -1,0 +1,41 @@
+{
+  "about": "A listed Australian omnichannel retailer with eight operating divisions, a large legacy technology estate, formal governance, and a deep customer and supplier master-data footprint.",
+  "engine": "retail",
+  "archetype": "omnichannel_retailer",
+  "revenue": 15000000,
+  "employees": 80000,
+  "geo": "australia",
+  "facets": {
+    "listing": "listed",
+    "scale": "enterprise",
+    "competition": "fragmented",
+    "maturity": "legacy",
+    "trading_pattern": "christmas_peak",
+    "governance": "professional",
+    "margin_profile": "standard"
+  },
+  "estate": "large",
+  "policies": "full",
+  "organisation": {
+    "headcount": 90,
+    "span": 6,
+    "levels": 4,
+    "divisions": 8
+  },
+  "master_data": {
+    "vendors": 1000,
+    "customers": 5000,
+    "skus": 3000
+  },
+  "identity": {
+    "company_name": "Meridian Retail Group",
+    "headquarters": "Sydney, Australia",
+    "regions": [
+      "New South Wales",
+      "Victoria",
+      "Queensland",
+      "Western Australia",
+      "South Australia"
+    ]
+  }
+}

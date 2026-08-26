@@ -226,6 +226,92 @@ class ResponseProvider:
             ) from None
 
 
+class ExecProvider:
+    """An agent behind a command: the request on stdin, responses on stdout.
+
+    The child contract is `narrate loop --exec`'s exactly — a request document
+    in, a responses document out, judged by the same `handshake.review` — sent
+    one request at a time rather than one round at a time. That inversion is
+    what lets one adapter drive both surfaces: a wrapper around any writer that
+    reads ``requests[]`` and answers with
+    ``{"responses": [{"id", "text", "claims": [...]}]}`` works unchanged under
+    `narrate loop` (whole corpus, round-based) and under `mosaic
+    --narrate-exec` (many corpora, section-at-a-time through this provider).
+
+    Riding the `Provider` seam rather than replacing it is the point of this
+    class. Everything the mosaic guarantees about narration — ledger entries,
+    checkpoint resume via `on_accepted`, the thread pool behind
+    `--narration-concurrency`, per-section retry with feedback — is a property
+    of `World.narrate`, not of any provider; an exec-backed provider inherits
+    them all by being called the same way. The child's rejections come back as
+    ``feedback`` on the next call, so an agent that broke a rule sees its
+    violation without this class learning what the rules are.
+
+    Each call spawns a process. At `--narration-concurrency` N there are up to
+    N children alive per world; worlds themselves stay sequential inside a
+    shard, because cross-world parallelism is `--shard-count` processes' job.
+    """
+
+    def __init__(
+        self,
+        command: str,
+        *,
+        model_id: str = "agent",
+        timeout: float = 600.0,
+        shell: bool = False,
+    ) -> None:
+        self.command = command
+        self.id = model_id
+        self.timeout = timeout
+        self.shell = shell
+        self.calls = 0
+
+    def complete(
+        self,
+        request: NarrativeRequest,
+        prompt: Prompt,
+        facts: dict[str, CanonicalFact],
+        *,
+        feedback: str = "",
+    ) -> GeneratedNarrative:
+        from .. import execseam
+        from . import handshake
+
+        self.calls += 1
+        payload = {
+            # The rendered brief carries the rules, the cut-off and the word
+            # budget — everything a writer needs — so no document-level framing
+            # is duplicated here. A child that wants the machine-readable form
+            # reads `requests[]`; one that wants prose instructions reads
+            # `brief`; both are the same request.
+            "prompt_version": prompt.key,
+            "brief": prompt.render(request, facts, feedback=feedback),
+            "feedback": feedback or None,
+            "requests": [handshake.request_payload(request, facts)],
+        }
+        reply = execseam.run_exec(
+            self.command, payload, timeout=self.timeout, shell=self.shell
+        )
+        key = f"{request.artifact_id}/{request.section}"
+        try:
+            responses = handshake.parse_responses(reply.document)
+        except ValueError as exc:
+            raise ProviderError(
+                f"{key}: the child's stdout is not a responses document: {exc}"
+                f" (stderr tail: {reply.stderr_tail.strip()[:200] or '—'})"
+            ) from exc
+        try:
+            return responses[key]
+        except KeyError:
+            raise ProviderError(
+                f"{key}: the child answered {len(responses)} request(s) but not"
+                " this one. Answer every request in `requests[]`, keyed by id."
+            ) from None
+
+    def __repr__(self) -> str:
+        return f"ExecProvider(command={self.command!r}, model_id={self.id!r})"
+
+
 class UnreachableProvider:
     """A provider that refuses to answer.
 

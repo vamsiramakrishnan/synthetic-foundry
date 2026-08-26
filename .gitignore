@@ -22,3 +22,8 @@ venv/
 # scoring whatever happened to be to hand, keyed to no corpus in particular.
 # Point `--vectors` at the corpus to keep one worth keeping.
 .worldloom/
+# Managed AlphaEvolve credentials and controller scratch belong to the local
+# operator. Dated, reviewed result receipts under evals/alphaevolve remain
+# commit-worthy; raw controller state does not.
+.alphaevolve.env
+evals/_runs/

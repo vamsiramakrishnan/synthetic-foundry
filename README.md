@@ -240,6 +240,13 @@ The loop closes with selection and evolution, all deterministic:
 Not a token is spent anywhere in that table: the harness writes prose only for
 the corpus that survived selection.
 
+The evolution schedule itself has a checkout-only
+[AlphaEvolve optimization plane](docs/ALPHAEVOLVE-OPTIMIZATION.md). Generated
+policies are restricted to one pure decision block and cannot alter validators,
+fitness, recipes, or ledgers. The first reviewed integration balances child
+mutations across axes before reusing one, then across values within that axis;
+managed search is optional, bounded, and requires explicit spend confirmation.
+
 ## 🤝 Production prose: a checked agent handshake
 
 Worldloom deliberately imports no LLM SDK. Any agent that can execute a

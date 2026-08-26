@@ -231,7 +231,15 @@ def _request_for(
             for constraint in commitment.constrains
             if constraint.kind.value == "terminology"
         },
-        target_words={"small": 70, "medium": 130, "long": 200}.get(intent.size_profile, 120),
+        # Briefs, not physics: what the writer is asked for, not what the world
+        # contains. Raised from 70/130/200 after rendered corpora read as
+        # telegrams — three sentences could not carry a variance memo's
+        # argument, and the optional-fact budget below scales off this number,
+        # so shorter briefs also meant thinner evidence per section. Measured
+        # both ways when it moved: with pools widened but briefs held at the
+        # old numbers, retrieval hardness reads exactly as before (26 of 51),
+        # so the pin's move is attributable here and nowhere else.
+        target_words={"small": 110, "medium": 190, "long": 300}.get(intent.size_profile, 190),
         fact_digest=providers.digest([facts[f] for f in allowed]),
     )
 

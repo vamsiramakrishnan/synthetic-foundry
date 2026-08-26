@@ -760,6 +760,13 @@ AUSTRALIA = Locale(
     cities=(
         ("Sydney", "Australia"), ("Melbourne", "Australia"), ("Auckland", "New Zealand"),
         ("Brisbane", "Australia"), ("Perth", "Australia"), ("Adelaide", "Australia"),
+        # Six cities named every major site in the estate; a national chain drew
+        # its whole footprint from a boardroom's holiday list. Extended with the
+        # next tier of real capitals and centres — the same invented-company
+        # discipline does not apply to place names, which are geography.
+        ("Canberra", "Australia"), ("Hobart", "Australia"), ("Darwin", "Australia"),
+        ("Gold Coast", "Australia"), ("Wellington", "New Zealand"),
+        ("Christchurch", "New Zealand"),
     ),
     given=(
         "Rosalind", "Desmond", "Priya", "Marguerite", "Callum", "Sunniva", "Adaeze",
@@ -834,6 +841,12 @@ UNITED_KINGDOM = Locale(
         ("London", "United Kingdom"), ("Manchester", "United Kingdom"),
         ("Leeds", "United Kingdom"), ("Edinburgh", "United Kingdom"),
         ("Bristol", "United Kingdom"), ("Belfast", "United Kingdom"),
+        # Same widening as Australia's: six names could not carry a national
+        # estate. The four capitals/nations stay represented — Glasgow, Cardiff
+        # and a second English tier join the draw.
+        ("Glasgow", "United Kingdom"), ("Cardiff", "United Kingdom"),
+        ("Birmingham", "United Kingdom"), ("Newcastle", "United Kingdom"),
+        ("Southampton", "United Kingdom"), ("Aberdeen", "United Kingdom"),
     ),
     given=(
         "Aoife", "Nathaniel", "Sukhwinder", "Cordelia", "Ewan", "Blessing",
@@ -921,6 +934,13 @@ GERMANY = Locale(
         ("Frankfurt am Main", "Germany"), ("München", "Germany"),
         ("Hamburg", "Germany"), ("Düsseldorf", "Germany"),
         ("Berlin", "Germany"), ("Wien", "Austria"),
+        # Widened like the other presets, staying inside what the about-text
+        # declares ("Germany and Austria"): Köln and Stuttgart are the next
+        # tier of German centres, and Wien's Austrian entry gains Salzburg.
+        ("Köln", "Germany"), ("Stuttgart", "Germany"),
+        ("Leipzig", "Germany"), ("Dortmund", "Germany"),
+        ("Essen", "Germany"), ("Bremen", "Germany"),
+        ("Dresden", "Germany"), ("Salzburg", "Austria"),
     ),
     given=(
         "Annegret", "Bastian", "Cemile", "Dietrich", "Elif", "Friedhelm",
@@ -1019,6 +1039,11 @@ GULF = Locale(
         ("Dubai", "United Arab Emirates"), ("Abu Dhabi", "United Arab Emirates"),
         ("Sharjah", "United Arab Emirates"), ("Doha", "Qatar"),
         ("Manama", "Bahrain"), ("Muscat", "Oman"),
+        # Widened like the other presets: the second tier of the Emirates plus
+        # the neighbouring capitals the six already reached for.
+        ("Ajman", "United Arab Emirates"), ("Ras Al Khaimah", "United Arab Emirates"),
+        ("Fujairah", "United Arab Emirates"), ("Al Ain", "United Arab Emirates"),
+        ("Riyadh", "Saudi Arabia"), ("Kuwait City", "Kuwait"),
     ),
     # A Gulf workforce is majority-expatriate, and a name pool that was uniformly
     # Arabic would be a less accurate corpus rather than a more coherent one —

@@ -147,6 +147,43 @@ def test_children_differ_from_their_parent_in_exactly_one_axis(
         assert child[member["variation"]["axis"]] == member["variation"]["to"]
 
 
+def test_child_policy_touches_every_axis_before_reusing_one() -> None:
+    """A wide axis must not consume slots just because it has more values.
+
+    This is the reviewed production translation of the AlphaEvolve
+    ``variation-policy`` result.  The old value-only rank touched three of
+    these four axes at seed 8129; the axis-first rank touches all four while
+    preserving the single-axis, buildability and deterministic tie gates.
+    """
+    space = spaces.BuildSpace((
+        covering.Parameter(
+            "archetype",
+            ("australian_grocery", "omnichannel_retailer"),
+        ),
+        covering.Parameter("history", ("no_incident", "incident")),
+        covering.Parameter("locale", ("none", "australia")),
+        covering.Parameter("messiness", ("pristine", "well_run", "lived_in")),
+    ))
+    parent = {
+        "archetype": "australian_grocery",
+        "history": "no_incident",
+        "locale": "none",
+        "messiness": "pristine",
+    }
+    children = evolve._propose_children(
+        space,
+        (("gen0/cfg-00", parent),),
+        seed=8129,
+        generation=1,
+        population=4,
+        explored={pair: 1 for pair in parent.items()},
+        varied_axes={},
+        proposed=frozenset({tuple(sorted(parent.items()))}),
+    )
+
+    assert {child.axis for child in children} == set(space.names)
+
+
 def test_parents_are_exactly_the_previous_generations_champions(
     twin_runs: tuple[Path, Path],
 ) -> None:
