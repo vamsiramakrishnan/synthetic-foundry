@@ -78,6 +78,7 @@ async def execute_query(
             "entity": node["entity"],
             "dependencies": {dependency: outputs[dependency] for dependency in dependencies},
             "fixture": fixture.model_dump(mode="json"),
+            "generation_requirement": query.generation.model_dump(mode="json"),
         }
         response = dict(await invoke(tool_name, arguments))
         outputs[node["id"]] = response
