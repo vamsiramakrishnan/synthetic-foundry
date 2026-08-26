@@ -3,7 +3,11 @@ from __future__ import annotations
 import itertools
 
 from worldloom.enterprise_queries import constrained_cover, valid_rows
-from worldloom.enterprise_specs import CoverageProfile, builtin_registry, canonical_action
+from worldloom.enterprise_specs import (
+    CoverageProfile,
+    builtin_registry,
+    canonical_action,
+)
 
 
 def test_modify_is_explicitly_canonicalized() -> None:
