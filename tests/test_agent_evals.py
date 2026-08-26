@@ -7,9 +7,9 @@ import pytest
 from worldloom import World
 from worldloom.agent_evals import WorkflowSeed, compile_agent_evals, export_agent_evals
 from worldloom.connector_data import (
-    canonical_verb,
     ConnectorVerb,
     ContentVerb,
+    canonical_verb,
     generate_connector_data,
 )
 
