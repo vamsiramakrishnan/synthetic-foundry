@@ -213,11 +213,12 @@ def _facts_by_event(world: World) -> dict[str, list[Any]]:
 
 def _artifact_ids(world: World, fact_ids: set[str]) -> list[str]:
     records = tuple(world.artifacts) or tuple(world.artifact_intents)
-    ids = []
+    ids: list[str] = []
     for artifact in records:
         cited = set(
             getattr(artifact, "supporting_fact_ids", None)
             or getattr(artifact, "required_fact_ids", ())
+            or ()
         )
         if cited & fact_ids:
             ids.append(artifact.id)
@@ -232,7 +233,7 @@ def _email_address(name: str, company: str) -> str:
 
 def generate_jira(world: World) -> list[ConnectorRecord]:
     facts = _facts_by_event(world)
-    records = []
+    records: list[ConnectorRecord] = []
     for index, event in enumerate(world.timeline(), start=1):
         linked = facts.get(event.id, [])
         fact_ids = sorted(fact.id for fact in linked)
@@ -265,7 +266,7 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
 
 def generate_servicenow(world: World) -> list[ConnectorRecord]:
     facts = _facts_by_event(world)
-    records = []
+    records: list[ConnectorRecord] = []
     incident_number = 1
     change_number = 1
     for event in world.timeline():
@@ -368,6 +369,7 @@ def generate_artifact_projection(
         fact_ids = sorted(
             getattr(artifact, "supporting_fact_ids", None)
             or getattr(artifact, "required_fact_ids", ())
+            or ()
         )
         key = content_key(connector, world.seed, artifact.id)
         external_id = {
