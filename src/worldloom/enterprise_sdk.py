@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Literal
 from .connector_data import ConnectorProjectionRegistry
 from .enterprise_corpus import EnterpriseCorpus, materialize_corpus
 from .enterprise_queries import CoverageReport, PlannedEnterpriseQuery, plan_queries
-from .enterprise_runner import shard_queries
 from .enterprise_specs import (
     CoverageProfile,
     EnterpriseEvalSpec,
@@ -82,5 +81,13 @@ class EnterpriseEvalHarness:
     def shard(
         self, index: int, count: int
     ) -> tuple[tuple[PlannedEnterpriseQuery, ...], CoverageReport | None]:
-        queries, report = self.plan()
-        return shard_queries(queries, index, count), report
+        queries, report = plan_queries(
+            self.world,
+            registry=self.registry,
+            profile=self.profile,
+            strategy=self.strategy,
+            limit=self.limit,
+            shard_index=index,
+            shard_count=count,
+        )
+        return tuple(queries), report
