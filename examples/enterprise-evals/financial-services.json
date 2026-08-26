@@ -1,0 +1,41 @@
+{
+  "name": "regulated-financial-services",
+  "industry": "financial_services",
+  "company_description": "A regulated multi-region financial institution with formal change, incident, customer, and executive reporting controls.",
+  "workflows": [
+    "incident_review",
+    "change_assurance",
+    "customer_health",
+    "executive_digest"
+  ],
+  "connectors": [
+    "jira",
+    "confluence",
+    "sharepoint",
+    "drive",
+    "servicenow",
+    "salesforce",
+    "email"
+  ],
+  "vocabulary": {
+    "customer": "client",
+    "executive_digest": "operating risk committee pack",
+    "incident_review": "major incident review",
+    "change_assurance": "change advisory assurance pack"
+  },
+  "coverage": {
+    "name": "regulated-pairwise",
+    "strengths": 2,
+    "connector_counts": [1, 2, 4, 6],
+    "failures": [
+      "none",
+      "ambiguous_join",
+      "missing_stable_id",
+      "permission_denied",
+      "partial_write",
+      "stale_source",
+      "version_conflict"
+    ],
+    "max_candidates": 1000000
+  }
+}
