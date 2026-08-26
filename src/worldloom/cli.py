@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 81805)
-Total output lines: 7061
-
 """The command line interface.
 
 A thin wrapper. Every command calls the same library methods a user would call
@@ -2033,7 +2030,2822 @@ def build(
         _refuse(
             "cannot_combine",
             "[red]error:[/red] --access cannot re-gate a corpus whose knowledge "
-            "ledg…31805 tokens truncated…er.Option(
+            "ledger was derived under the standard map; it is refused beside "
+            "--conversations and --actors",
+            flags=["--access", "--conversations", "--actors"],
+        )
+
+    # A sampled history is a *schedule*, and an actor episode is a handshake that
+    # resumes from the ledger one decision at a time. Combining them would mean
+    # the resumption had to know which of several closes it was inside, and the
+    # recipe the `agent` path writes by hand above states one close per period
+    # with no org changes between them — so the schedule would be silently
+    # discarded on the first `worldloom act`. Refused rather than half-served.
+    if timeline is not None and actors is not None:
+        _refuse(
+            "cannot_combine",
+            "[red]error:[/red] --timeline and --actors cannot be combined; an "
+            "episode resumed from the ledger is driven one decision at a time and "
+            "a sampled history is decided before the first one is taken",
+            flags=["--timeline", "--actors"],
+        )
+    if headcount_end is not None and actors is not None:
+        _refuse(
+            "cannot_combine",
+            "[red]error:[/red] --headcount-end and --actors cannot be combined;"
+            " actor resumption records close decisions one at a time, while a"
+            " workforce trajectory is fixed before the first period",
+            flags=["--headcount-end", "--actors"],
+        )
+    if estate_trajectory is not None and actors is not None:
+        _refuse(
+            "cannot_combine",
+            "[red]error:[/red] structural estate endpoints and --actors cannot be"
+            " combined; both advance the world between close checkpoints",
+            flags=["--business-units-end", "--sites-end", "--systems-end",
+                   "--services-end", "--actors"],
+        )
+
+    if actors == "agent":
+        from dataclasses import replace as _replace
+
+        from .recipe import with_step
+
+        intended = world._recipe
+        year, month = (int(part) for part in period.split("-"))
+        for index in range(max(1, periods)):
+            stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
+            intended = with_step(
+                intended, "MonthEndClose", period=stamp, incident=incident,
+                comparatives=comparatives if index == 0 else 0, actors=True,
+                **({} if trend == 0.0 else {"trend_pct": trend}),
+                # Only recorded away from its default — see `scenarios.py`'s
+                # matching call for why an unconditional write here would
+                # break the byte-identity gate every default build depends on.
+                **({} if eval_density_value == 1.0 else {"eval_density": eval_density_value}),
+            )
+        world = _replace(world, _recipe=intended)
+        if out is None:
+            _refuse("missing_flag",
+                    "[red]error:[/red] --actors agent needs --out; the episode is driven from a corpus",
+                    flag="--out")
+        try:
+            written = world.export(out, overwrite=overwrite)
+        except FileExistsError as exc:
+            _refuse("destination_exists", f"[red]error:[/red] {escape(str(exc))}",
+                    fix="pass --overwrite to replace it")
+        console.print(_summary_table(world))
+        console.print(
+            f"\n[green]✓[/green] exported to [bold]{written}[/bold]"
+            f"\n[dim]{len(intended['steps'])} actor episode(s) awaiting decisions."
+            f" Run `worldloom act requests {written}` to see the first.[/dim]"
+        )
+        return
+
+    actor_provider = None
+    actor_ledger: tuple = ()
+    if actors == "scripted":
+        from .actors import ScriptedActorProvider, UnreachableActorProvider
+
+        actor_provider = ScriptedActorProvider()
+        if replay is not None:
+            actor_provider = UnreachableActorProvider()
+            actor_ledger = _load(str(replay))._ledger
+
+    # Consecutive closes on one world. Comparatives belong to the first only: they
+    # backfill months before it, and a later episode asking for them again would
+    # generate a second set of facts for months the corpus already has. A
+    # single-episode domain already ran its episode above and skips this loop.
+    year, month = (int(part) for part in period.split("-"))
+    from .actors import ActorProviderError
+
+    # One rotation for the whole build, drawn from the world seed under its
+    # own label: period N is the same storyline on every rebuild of this
+    # world, and a different world's seed deals a different order. Classic
+    # first (see `storyline_rotation`), so a one-period build is byte-equal
+    # with the flag on or off.
+    from .generators import operations as operations_module
+    from .rng import Rng
+
+    storyline_order = (
+        operations_module.storyline_rotation(Rng(seed).derive("incident-storylines"))
+        if vary_incidents else None
+    )
+
+    def _close(stamp: str, stated: bool | None, index: int) -> Any:
+        return MonthEndClose(
+            period=stamp,
+            include_operational_incident=stated,
+            comparative_months=comparatives if index == 0 else 0,
+            trend_pct=trend if index == 0 else 0.0,
+            actors=actor_provider,
+            actor_ledger=actor_ledger,
+            conversations=conversations,
+            eval_density=eval_density_value,
+            physics=physics_value,
+            # Only when a facet put one on the builder — see `claimed_calendar`.
+            **({} if not claimed_calendar else {"seasonality": claimed_calendar[0]}),
+            **({} if storyline_order is None
+               else {"storyline": storyline_order[index % len(storyline_order)]}),
+        )
+
+    # No blanket multi-period refusal for single-episode domains any more. The
+    # one that stood here predated the episode grammar it was waiting for, and
+    # it outlived its own justification: carry-forward *is* declared slots now,
+    # the mosaic path has stepped these domains multi-period for as long as it
+    # has existed, and measured today banking runs three consecutive quarters
+    # and P2P six consecutive months, both validating clean. The authority on
+    # whether a *particular* scenario supports a second run is the scenario —
+    # `QuarterlyReserving` refuses its own second quarter, loudly and with the
+    # reason (attribution supersession is increment 2) — and a gate here would
+    # only ever disagree with the code that actually knows.
+
+    if timeline is not None and single_episode is None:
+        # A history rather than a repetition. Note what is *not* here: no new
+        # recipe verb and no `timeline` key. Every scenario the sampler can emit
+        # already records itself through its own `with_step`, so a sampled
+        # history rebuilds from the steps it wrote — and a recipe entry for the
+        # history beside the steps it produced would be two accounts of one
+        # thing, which is the failure `recipe.py`'s docstring names first.
+        from . import timeline as timeline_module
+
+        density = _density(timeline)
+        if incident is not None and density.incidents:
+            _refuse(
+                "cannot_combine",
+                f"[red]error:[/red] --incident/--no-incident and --timeline"
+                f" {timeline} cannot both decide; the schedule states an incident"
+                " in both directions for every period once it schedules any, so"
+                " a forced flag would either be ignored or make the schedule"
+                " vacuous. Use --timeline quiet to keep the flag.",
+                flags=["--incident/--no-incident", "--timeline"],
+                fix="use --timeline quiet to keep the flag",
+            )
+
+        stamps = timeline_module.periods_from(period, max(1, periods))
+        history = timeline_module.sample(
+            roster=timeline_module.Roster.of(world),
+            start=period,
+            periods=max(1, periods),
+            seed=seed,
+            density=density,
+            workforce=workforce,
+            estate=estate_trajectory,
+            # The sampler decides *when* something happens; what a close is
+            # remains this command's business, so the episode it schedules is
+            # built here with the same arguments the plain loop uses. `stated`
+            # is the schedule's answer, and `incident` fills the silence a
+            # zero-incident density leaves.
+            episode=lambda stamp, stated: _close(
+                stamp, incident if stated is None else stated, stamps.index(stamp),
+            ),
+        )
+        console.print(
+            f"[dim]timeline:[/dim] {timeline} — "
+            + ", ".join(f"{at} {what}" for at, what in history.outline())
+            + "\n"
+        )
+        try:
+            world = history.run(world)
+        except timeline_module.TimelineError as exc:
+            _refuse("timeline_infeasible", f"[red]error:[/red] {escape(str(exc))}")
+        # After the whole history rather than interleaved into it, which is the
+        # one place these rounds do not sit inside their own period's loop. The
+        # sampler owns the schedule — it decides which months hold an incident,
+        # a departure or a reorganisation — and reaching into it to run a hiring
+        # round mid-history would make this command a second author of a
+        # timeline that already has one. Appending per period afterwards keeps
+        # the schedule's own ART sequence untouched, which is the same
+        # id-stability rule `_rounds` follows everywhere else.
+        for stamp in stamps:
+            world = _rounds(world, stamp)
+    else:
+        for index in range(max(1, periods) if single_episode is None else 0):
+            stamp = f"{year + (month + index - 1) // 12:04d}-{(month + index - 1) % 12 + 1:02d}"
+            try:
+                world = world.run(_close(stamp, incident, index))
+                world = _rounds(world, stamp)
+                if (
+                    workforce_path is not None
+                    and index + 1 < len(workforce_path)
+                    and workforce_path[index + 1] != workforce_path[index]
+                ):
+                    from .scenarios import WorkforceChange
+
+                    world = world.run(WorkforceChange(
+                        period=stamp,
+                        headcount=workforce_path[index + 1],
+                    ))
+                if (
+                    estate_path is not None
+                    and index + 1 < len(estate_path)
+                    and estate_path[index + 1] != estate_path[index]
+                ):
+                    from .scenarios import StructuralChange
+
+                    target = estate_path[index + 1]
+                    world = world.run(StructuralChange(
+                        period=stamp,
+                        business_units=target.business_units,
+                        sites=target.sites,
+                        systems=target.systems,
+                        services=target.services,
+                    ))
+            except (ActorProviderError, ValueError) as exc:
+                _refuse("actor_episode_failed", f"[red]error:[/red] {escape(str(exc))}")
+
+    if actors == "scripted":
+        accepted = sum(1 for entry in world.actor_ledger if entry.result.accepted)
+        console.print(
+            f"[dim]actors:[/dim] {len(world.actor_ledger)} tool call(s), {accepted} accepted"
+            f", {len(world.observations)} observation(s)\n"
+        )
+
+    if conversations:
+        told = sum(len(m.recipient_ids) for m in world.messages)
+        console.print(
+            f"[dim]conversations:[/dim] {len(world.messages)} message(s) to {told}"
+            f" recipient(s), {len(world.observations)} observation(s) across"
+            f" {len({o.observer_id for o in world.observations})} employee(s)\n"
+        )
+
+    # After every episode this build runs, never before — a distractor drafts
+    # or copies a real document the planner already produced, so it needs the
+    # full plan (both branches above, single-episode or the retail loop) in
+    # front of it, and it must run before `narrate`/`render` so its sections
+    # enter the ordinary awaiting-prose pipeline rather than a second one.
+    if distractors:
+        from .generators import distractors as distractors_module
+
+        world = distractors_module.apply(world, count=distractors)
+        console.print(f"[dim]distractors:[/dim] {distractors} requested\n")
+
+    # After the distractors and not before, so the decay pass sees the whole
+    # archive: a personal working copy is exactly the kind of document that gets
+    # orphaned when its author leaves, and a corpus whose noise was immune to its
+    # own decay would be a tidier archive than the one it claims to be. Recorded
+    # by name rather than as an expanded budget — `messiness.from_document` reads
+    # a name back, so the recipe stays the small "how it was made" document it is
+    # meant to be, and a profile whose counts are later revised replays as the
+    # profile that was asked for.
+    if messiness is not None:
+        from .generators.distractors import messiness_ceilings
+        from .messiness import Imperfections
+        from .messiness import from_document as _messiness_profile
+
+        before = len(world.artifact_intents)
+        # Measured before the pass runs: it spends what it finds, so the ceiling
+        # is a property of the world it was handed.
+        ceilings = messiness_ceilings(world)
+        asked = _messiness_profile(messiness)
+        world = world.run(Imperfections(profile=messiness))
+        delivered = len(world.intentional_errors)
+        wanted = sum(asked[kind] for kind in ceilings)
+        console.print(
+            f"[dim]messiness:[/dim] {messiness} —"
+            f" {len(world.artifact_intents) - before} document(s) added,"
+            f" {delivered} of {wanted} imperfection(s) delivered\n"
+        )
+        # A shortfall is stated, with the reason, and it is the whole point of
+        # this block. "Budget, not quota" is the documented contract and it is
+        # correct — this pass may never invent a figure to be wrong about — but
+        # a 0-of-17 delivery reported as success is a corpus that is not what
+        # was asked for and says nothing about it. On a default retail build
+        # that is exactly what happened.
+        short = {
+            kind: (asked[kind], ceilings[kind])
+            for kind in sorted(ceilings)
+            if asked[kind] > ceilings[kind]
+        }
+        if short:
+            reasons = {
+                "staleness": "needs a corrected figure some document cites",
+                "disagreement": "needs a correction whose old and new figures are"
+                                " both carried",
+                "orphaning": "needs an author who has left, which only a departure"
+                             " produces — build with --timeline or --periods > 1",
+                # The mechanical kind corrupts a copy of a compiled workbook,
+                # so its ceiling is per corruptible workbook —
+                # `compiler.mechanical.CORRUPTIBLE` names which types qualify.
+                # Every named profile keeps this budget at zero, so today the
+                # entry is defensive; the KeyError it prevents would otherwise
+                # arrive with the first profile or spec that asks for more
+                # mechanical errors than a world's workbooks can carry.
+                "mechanical": "needs a workbook this engine can corrupt a copy"
+                              " of — the retail month-end model today",
+            }
+            for kind, (want, ceiling) in short.items():
+                console.print(
+                    f"[yellow]unmet:[/yellow] {kind} — asked for {want}, this"
+                    f" world supports at most {ceiling}: it {reasons[kind]}"
+                )
+            console.print()
+
+    # After every pass that plans or copies a document — episodes, workforce
+    # rounds, distractors, messiness — and before narrate/render, because the
+    # manifest reads each intent's audience at compile time and a level applied
+    # later would be recorded on a corpus gated without it. `standard` is an
+    # identity inside the step, so the guard here is only to keep the default
+    # build's console output byte-identical too.
+    if access != "standard":
+        from .scenarios import AccessProfile
+
+        before = {i.id: i.audience for i in world.artifact_intents}
+        try:
+            world = world.run(AccessProfile(level=access))
+        except ValueError as exc:
+            _refuse("access_profile_failed", f"[red]error:[/red] {escape(str(exc))}")
+        moved = sum(
+            1 for i in world.artifact_intents if before.get(i.id) != i.audience
+        )
+        console.print(
+            f"[dim]access:[/dim] {access} — {moved} of"
+            f" {len(world.artifact_intents)} document(s) re-gated\n"
+        )
+
+    # Conversations are derived inside each episode, while distractors and
+    # archive messiness deliberately run after every episode. Refresh the
+    # append-only knowledge ledger once all document-producing passes finish so
+    # their authors are not left citing records the settled ledger says they
+    # never knew. Existing observer/fact pairs and messages are deduplicated by
+    # `derive`; builds without conversations remain byte-identical.
+    if conversations:
+        from .conversation import derive as derive_conversation
+        from .ids import Minter
+
+        refresh = derive_conversation(world, minter=world._minter or Minter())
+        if refresh.observations or refresh.messages:
+            world = world.extend(
+                observations=refresh.observations,
+                messages=refresh.messages,
+            )
+
+    if narrate or replay is not None:
+        from . import recipe as recipe_module
+        from .narrative import DeterministicProvider, ProviderError, UnreachableProvider
+
+        ledger = ()
+        provider = DeterministicProvider()
+        if replay is not None:
+            source = _load(str(replay))
+            ledger = source._ledger
+            if not ledger:
+                _refuse("no_ledger",
+                        f"[red]error:[/red] {replay} carries no generation ledger to replay",
+                        corpus=str(replay))
+            # The world being narrated must be the world the ledger was recorded
+            # for, and this says so up front instead of letting it emerge.
+            #
+            # `--replay` does not rebuild the world — it replays prose into
+            # whatever the other flags built — so `worldloom build --replay
+            # <a-banking-corpus>` with no `--archetype` narrates the *default
+            # retail* world from a bank's ledger. Every key misses, and the
+            # failure surfaces from inside `narrate` as "no ledger entry for
+            # ART-0001/Commitment", which names an artifact the user never
+            # asked for and says nothing about the mistake they actually made.
+            #
+            # Recipes rather than archetype-and-seed, because the ways to build
+            # the wrong world are not enumerable: `--periods`, `--messiness`,
+            # `--distractors` and `--facet` all change what there is to narrate.
+            # And a divergence that leaves the *sections* intact is the worse
+            # one, not the milder — replaying under a different `--annual-
+            # revenue` would succeed and file prose quoting last world's figures
+            # beside this world's tables, which is the cross-format defect this
+            # repository has already paid for once.
+            #
+            # `presentation` is excluded because a profile decides who a
+            # document is for and nothing about the world; `worldloom render`
+            # writes one onto an existing corpus, so a corpus rendered after it
+            # was narrated would otherwise refuse to replay itself.
+            def _world_only(document: dict[str, Any]) -> dict[str, Any]:
+                return {
+                    key: value
+                    for key, value in document.items()
+                    if key != recipe_module.PRESENTATION_KEY
+                }
+
+            here, there = _world_only(world.recipe), _world_only(source.recipe)
+            if here != there:
+                differs = sorted(
+                    key for key in set(here) | set(there)
+                    if here.get(key) != there.get(key)
+                )
+                _refuse(
+                    "replay_recipe_mismatch",
+                    f"[red]error:[/red] {replay} recorded a different world;"
+                    f" its recipe and this build's disagree on"
+                    f" {', '.join(differs)}. A replay reproduces a corpus, so"
+                    " the flags that built it have to be the flags that build"
+                    f" this one; {replay}/world.json records the recipe it was"
+                    " built from.",
+                    differs=list(differs),
+                )
+            # Unreachable on purpose: a replay that quietly falls back to
+            # generating would not be a replay. Its id comes from what the
+            # artifacts record as `narrated_by` — the id is a key component,
+            # so replaying a corpus narrated under any other `--model-id`
+            # with a fixed id here missed every key. It is NOT
+            # derived from the ledger's model_ids: an actor-mode corpus's
+            # ledger legitimately carries the actor provider's entries beside
+            # the narration's (CI's package job proved it, the first commit of
+            # this fix having refused exactly that), and extra entries are
+            # harmless — a key either matches or it doesn't.
+            narrated_ids = {
+                ir.metadata["narrated_by"]
+                for ir in source._artifact_irs
+                if "narrated_by" in ir.metadata
+            }
+            if len(narrated_ids) > 1:
+                _refuse(
+                    "replay_many_providers",
+                    f"[red]error:[/red] {replay} was narrated by several providers"
+                    f" ({', '.join(sorted(narrated_ids))}); one narrate pass"
+                    " replays one provider's keys",
+                    providers=sorted(narrated_ids),
+                )
+            provider = (
+                UnreachableProvider(id=narrated_ids.pop())
+                if narrated_ids
+                else UnreachableProvider()
+            )
+
+        try:
+            world = world.narrate(provider, ledger=ledger)
+        except ProviderError as exc:
+            _refuse("narration_failed", f"[red]error:[/red] {escape(str(exc))}")
+
+        calls, replayed, rejected = world._narration
+        console.print(
+            f"[dim]narration:[/dim] {calls} provider call(s), {replayed} replayed"
+            f", {rejected} rejected\n"
+        )
+
+    if formats:
+        from .render import RenderError
+
+        try:
+            world = world.render(*formats)
+        except RenderError as exc:
+            _refuse("render_failed", f"[red]error:[/red] {escape(str(exc))}")
+
+    console.print(_summary_table(world))
+    console.print()
+    if not _report(world):
+        raise typer.Exit(code=1)
+
+    if out is not None:
+        # Compile before writing, so the exported corpus carries its artifact IR
+        # and an agent can ask it for prose requests without rebuilding.
+        if not world.artifact_irs:
+            world = world.compile()
+        try:
+            written = world.export(out, overwrite=overwrite)
+        except FileExistsError as exc:
+            _refuse("destination_exists", f"[red]error:[/red] {escape(str(exc))}",
+                    fix="pass --overwrite to replace it")
+        console.print(f"[green]✓[/green] exported to [bold]{written}[/bold]")
+
+
+@narrate_app.command("requests")
+def narrate_requests(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the prose requests an agent needs to answer.
+
+    Each request is self-describing: the facts it may use, which are required, what
+    the author knew and when, the voice, and the rules in full.
+    """
+    from .narrative import handshake
+
+    world = _compiled(_load(corpus), corpus)
+
+    document = handshake.requests_document(world)
+    if not document["requests"]:
+        console.print("[green]✓[/green] nothing awaiting prose")
+        return
+
+    payload = handshake.dump(document)
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(
+            f"[green]✓[/green] {len(document['requests'])} request(s) written to [bold]{out}[/bold]"
+        )
+
+
+@narrate_app.command("accept")
+def narrate_accept(
+    corpus: str = typer.Argument(..., help="Corpus path to write prose into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Response JSON from the agent."),
+    model_id: str = typer.Option(
+        "agent", "--model-id",
+        help="Who wrote it. Recorded in the ledger and part of the replay key.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table.",
+    ),
+) -> None:
+    """Validate agent-written prose and commit it, or report every violation.
+
+    Nothing is committed unless every response passes. A partial commit would leave
+    a corpus half-narrated with no record of which half.
+    """
+    from .narrative import ResponseProvider, handshake
+
+    world = _compiled(_load(corpus), corpus)
+    try:
+        responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
+
+    verdicts = handshake.review(world, responses)
+    rejected = {name: v for name, v in verdicts.items() if not v.accepted}
+
+    # Responses supplied, and not one of them was even looked at. That happens
+    # when every section already has prose, so `pending()` is empty and
+    # `review()` has nothing to review — and it printed "✓ 0 section(s)
+    # accepted" and exited zero, which is indistinguishable from success to
+    # anything reading the exit code.
+    #
+    # It is not a corner. CI's agent-handshake step submits *deliberately
+    # invalid* prose to prove the guardrail rejects it, and had been doing so
+    # against an already-narrated corpus: the responses were never reviewed,
+    # the step passed on a `FileExistsError` raised further down in `export`,
+    # and when that unrelated bug was fixed the step failed and revealed that
+    # the guardrail it names had not been exercised in a long time.
+    if responses and not verdicts:
+        _refuse(
+            "nothing_awaiting_prose",
+            f"[red]error:[/red] {len(responses)} response(s) supplied but this corpus"
+            " has no section awaiting prose — nothing was reviewed and nothing was"
+            " committed.\n[dim]Every section already carries prose. Run `worldloom"
+            " status` to see where this corpus actually is.[/dim]",
+            responses=len(responses),
+        )
+
+    if as_json:
+        import json as json_module
+
+        typer.echo(json_module.dumps({
+            "accepted": not rejected,
+            "responses": len(verdicts),
+            "rejected": {
+                name: [{"code": v.code, "detail": v.detail} for v in verdict.violations]
+                for name, verdict in sorted(rejected.items())
+            },
+        }, indent=2))
+        if rejected:
+            raise typer.Exit(code=1)
+
+    if rejected:
+        err.print(
+            f"[red]✗[/red] {len(rejected)} of {len(verdicts)} response(s) rejected."
+            " Nothing was committed."
+        )
+        for name, verdict in sorted(rejected.items()):
+            err.print(f"\n[bold]{name}[/bold]")
+            for violation in verdict.violations:
+                err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
+        raise typer.Exit(code=1)
+
+    narrated = world.narrate(ResponseProvider(responses, model_id=model_id), retries=0)
+    written = narrated.export(corpus, overwrite=True)
+
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] {len(verdicts)} section(s) accepted and recorded in the ledger"
+        )
+        console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not _report(narrated, quiet=as_json):
+        raise typer.Exit(code=1)
+
+
+@narrate_app.command("loop")
+def narrate_loop(
+    corpus: str = typer.Argument(..., help="Corpus path to narrate."),
+    exec_command: str = typer.Option(
+        ..., "--exec",
+        help=(
+            "The model as an executable: reads one requests JSON document on "
+            "stdin, prints one responses JSON document on stdout. Run without "
+            "a shell (shlex argv) unless --shell is given."
+        ),
+    ),
+    max_rounds: int = typer.Option(
+        8, "--max-rounds",
+        help="Rounds to run before giving up with every outstanding violation listed.",
+    ),
+    timeout: float = typer.Option(
+        600.0, "--timeout",
+        help="Seconds the child may run per round before it is killed and refused.",
+    ),
+    shell: bool = typer.Option(
+        False, "--shell",
+        help="Run the command through the shell — the opt-in for pipelines.",
+    ),
+    model_id: str = typer.Option(
+        "agent", "--model-id",
+        help="Who wrote it. Recorded in the ledger and part of the replay key.",
+    ),
+) -> None:
+    """Drive an executable model until every section's prose is accepted.
+
+    One command instead of the requests/accept round trip: each round hands the
+    child the same requests document `narrate requests` writes — restricted to
+    the still-unaccepted sections — and reads back the same responses document
+    `narrate accept --from` reads. Acceptance runs in-process; accepted prose
+    is committed to the ledger only once everything passes, so the corpus
+    replays byte-for-byte afterwards and a failed loop leaves it untouched.
+
+    The adapter contract is JSON-on-stdin, JSON-on-stdout; no vendor is
+    special-cased in code. A working adapter around an agent CLI is a few
+    lines of shell — e.g. `adapter.sh`, run as `--exec ./adapter.sh`:
+
+        #!/bin/sh
+        exec claude -p "Here is a Worldloom narration requests document.
+        Print only the responses JSON document it asks for: $(cat)"
+    """
+    from . import execseam
+
+    world = _compiled(_load(corpus), corpus)
+
+    def _print_round(round_report: Any) -> None:
+        console.print(
+            f"round {round_report.number}: {round_report.accepted} of"
+            f" {round_report.submitted} section(s) accepted"
+        )
+
+    try:
+        result = execseam.narrate_loop(
+            world, exec_command, model_id=model_id, max_rounds=max_rounds,
+            timeout=timeout, shell=shell, on_round=_print_round,
+        )
+    except execseam.ExecError as exc:
+        _refuse_exec_error(exc)
+
+    if not result.rounds:
+        console.print("[green]✓[/green] nothing awaiting prose")
+        return
+
+    if result.outstanding:
+        # Through `_refuse` rather than a bare print-and-exit so a harness in
+        # JSON mode gets the violations as data — the loop exhausting its
+        # budget is the refusal an unattended run most needs to consume.
+        lines = [
+            f"[red]✗[/red] {len(result.outstanding)} section(s) still rejected"
+            f" after {len(result.rounds)} round(s). Nothing was committed."
+        ]
+        for name, verdict in sorted(result.outstanding.items()):
+            lines.append(f"\n[bold]{name}[/bold]")
+            for violation in verdict.violations:
+                lines.append(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
+        _refuse(
+            "loop_exhausted",
+            "\n".join(lines),
+            exit_code=1,
+            rounds=len(result.rounds),
+            outstanding={
+                name: [{"code": v.code, "detail": v.detail} for v in verdict.violations]
+                for name, verdict in sorted(result.outstanding.items())
+            },
+        )
+
+    narrated = result.world
+    assert narrated is not None  # complete with rounds run means a narrated world
+    written = narrated.export(corpus, overwrite=True)
+    accepted_total = sum(round_report.accepted for round_report in result.rounds)
+    console.print(
+        f"[green]✓[/green] {accepted_total} section(s) accepted over"
+        f" {len(result.rounds)} round(s) and recorded in the ledger"
+    )
+    console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not _report(narrated):
+        raise typer.Exit(code=1)
+
+
+@compose_app.command("requests")
+def compose_requests(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the request an agent needs to author this company's estate.
+
+    One request, not one per document: an estate is a graph, and asking for it
+    a node at a time would mean no proposal could ever be checked for the
+    property that matters — whether the whole thing is coherent.
+
+    The request is self-contained. It carries the company and its units, every
+    system and service that already exists (including what each depends on),
+    the people who could own something, the closed constraint vocabulary lore
+    may use, and the grammar in plain sentences. An agent should not need to
+    read this repository to answer, and a rule it cannot see is a rejection it
+    could not have predicted.
+    """
+    import json as json_module
+
+    from . import compose as compose_module
+
+    world = _load(corpus)
+    document = compose_module.requests_document(world)
+    payload = json_module.dumps(document, indent=2)
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(
+            f"[green]✓[/green] estate request written to [bold]{out}[/bold]"
+            f"\n[dim]{len(document['existing_services'])} service(s) and"
+            f" {len(document['existing_systems'])} system(s) already exist; up to"
+            f" {document['budget']['max_services']} more may be proposed.[/dim]"
+        )
+
+
+@compose_app.command("accept")
+def compose_accept(
+    corpus: str = typer.Argument(..., help="Corpus path to record the estate into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Response JSON from the agent."),
+    model_id: str = typer.Option(
+        "agent", "--model-id",
+        help="Who composed it. Recorded in the ledger and part of the replay key.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the verdict as JSON — an agent fixing rejections should read data, not parse a table.",
+    ),
+) -> None:
+    """Validate an agent-authored estate against the graph, and commit it or refuse all of it.
+
+    The grammar is `worldloom.graphs`: the same reading `validate` and
+    `topology` do. A cycle through any number of hops, a dependency that
+    resolves to nothing, an owner who does not work here, a tier the graph
+    contradicts, or an estate in which nothing is a single point of failure —
+    each is refused with the rule it broke, and every violation is reported at
+    once rather than one per round.
+
+    All-or-nothing. A partial commit would leave a corpus half-composed with no
+    record of which half, and the half that landed is the half nobody reviewed.
+    """
+    import json as json_module
+
+    from . import compose as compose_module
+
+    world = _load(corpus)
+    try:
+        proposal = compose_module.Composition.model_validate(
+            json.loads(source.read_text(encoding="utf-8"))
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
+
+    result = compose_module.accept(world, proposal, model_id=model_id)
+
+    if as_json:
+        typer.echo(json_module.dumps({
+            "accepted": result.accepted,
+            "services_added": result.services_added,
+            "systems_added": result.systems_added,
+            "lore_added": result.lore_added,
+            "rejections": [
+                {"subject": r.subject, "rule": r.rule, "detail": r.detail}
+                for r in result.rejections
+            ],
+        }, indent=2))
+        if not result.accepted:
+            raise typer.Exit(code=1)
+
+    if not result.accepted:
+        err.print(
+            f"[red]✗[/red] {len(result.rejections)} violation(s). Nothing was committed."
+        )
+        for rejection in result.rejections:
+            err.print(f"  [yellow]{rejection.rule}[/yellow] {rejection.subject}: {rejection.detail}")
+        raise typer.Exit(code=1)
+
+    assert result.world is not None
+    written = result.world.export(corpus, overwrite=True)
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] estate accepted: {result.services_added} service(s),"
+            f" {result.systems_added} system(s), {result.lore_added} lore commitment(s)"
+            f"\n[dim]recorded in the generation ledger and on the recipe, so"
+            f" `--replay` rebuilds it with no provider. Written to {written}."
+            f"\nRead it with `worldloom topology {corpus}`.[/dim]"
+        )
+
+
+# ---------------------------------------------------------------------------
+# probe — physics a model derives, rather than physics an engineer typed
+# ---------------------------------------------------------------------------
+
+
+def _probe_session(path: Path):  # type: ignore[no-untyped-def]
+    from . import probe as probe_module
+
+    try:
+        return probe_module.Session.from_document(
+            json.loads(path.read_text(encoding="utf-8"))
+        )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {path}: {escape(str(exc))}", path=str(path))
+
+
+def _write_probe(session, path: Path) -> None:  # type: ignore[no-untyped-def]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # `allow_nan=False` on purpose. An unbounded end must have been encoded as
+    # null before it reaches here; if one slipped through as an infinity this
+    # raises rather than writing `Infinity`, which Python reads back and no
+    # other JSON parser does.
+    path.write_text(json.dumps(session.document(), indent=2, allow_nan=False) + "\n",
+                    encoding="utf-8")
+
+
+@probe_app.command("open")
+def probe_open(
+    premise: str = typer.Option(..., "--premise", "-p",
+                                help="What this business is, in a sentence or two."),
+    out: Path = typer.Option(Path("probe.json"), "--out", "-o", help="Where to keep the probe."),
+    depth: int = typer.Option(
+        None, "--depth",
+        help="How many levels of sub-question to allow. Two is a sketch; five is a business plan.",
+    ),
+) -> None:
+    """Start a probe from a premise.
+
+    Creates one question — the premise's own — and nothing else. Every quantity
+    the world ends up with is raised by a model answering that, and then by
+    answering what its own answers raised.
+    """
+    from . import probe as probe_module
+
+    session = probe_module.Session(
+        premise, probe_module.DEFAULT_MAX_DEPTH if depth is None else depth
+    )
+    _write_probe(session, out)
+    console.print(
+        f"[green]✓[/green] probe opened at [bold]{out}[/bold]"
+        f"\n[dim]depth limit {session.max_depth}. Ask the first question with"
+        f" `worldloom probe next {out}`.[/dim]"
+    )
+
+
+@probe_app.command("next")
+def probe_next(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to read."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the next question, with the bounds earlier answers have left it.
+
+    The bounds are the *propagated* ones, not the question's own declared
+    range. That is the whole mechanism by which context shapes what a model may
+    say: by the time margin is asked, sell-through and markdown have already
+    squeezed it, and the model answers inside a box that earlier answers built.
+
+    Exits 3 when the graph is settled, so a driving loop can tell "nothing left
+    to ask" from "something went wrong" without parsing prose.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    graph = session.graph
+    brief = probe_module.frontier(graph)
+    payload = json.dumps(
+        probe_module.brief_document(brief, premise=session.premise), indent=2, allow_nan=False
+    )
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(f"[green]✓[/green] question written to [bold]{out}[/bold]")
+    if brief is None:
+        raise typer.Exit(code=3)
+
+
+@probe_app.command("accept")
+def probe_accept(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to record into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Answer JSON from the agent."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the verdict as JSON — an agent fixing rejections should read data, not parse a table.",
+    ),
+) -> None:
+    """Check one answer against the graph, and commit it or refuse all of it.
+
+    Refused for widening a question it was meant to narrow, for raising a
+    sub-question with no reasoning under it, for binding a terminal twice — and,
+    once it is well-formed, for being unable to hold alongside everything
+    already accepted. That last one is the interesting rejection: nobody wrote
+    down which combinations are illegal, they fall out of propagating the
+    relations the model itself supplied.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    try:
+        answer = probe_module.Answer.model_validate(
+            json.loads(source.read_text(encoding="utf-8"))
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
+
+    result = probe_module.accept(session.graph, answer)
+
+    if as_json:
+        typer.echo(json.dumps({
+            "accepted": result.accepted,
+            "raised": result.raised,
+            "rejections": [
+                {"subject": r.subject, "rule": r.rule, "detail": r.detail}
+                for r in result.rejections
+            ],
+        }, indent=2))
+
+    if not result.accepted:
+        if not as_json:
+            err.print(f"[red]✗[/red] {len(result.rejections)} violation(s). Nothing was committed.")
+            for rejection in result.rejections:
+                err.print(
+                    f"  [yellow]{rejection.rule}[/yellow] {rejection.subject}:"
+                    f" {escape(rejection.detail)}"
+                )
+        raise typer.Exit(code=1)
+
+    _write_probe(session.committed(answer), path)
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] {answer.question} answered"
+            + (f", raising {result.raised} sub-question(s)" if result.raised else "")
+        )
+
+
+@probe_app.command("show")
+def probe_show(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to read."),
+) -> None:
+    """The graph as it stands: what is settled, what it implies, what is missing."""
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    graph = session.graph
+    state = probe_module.propagate(graph)
+    resolution = probe_module.resolve(graph)
+
+    console.print(f"[bold]{escape(session.premise)}[/bold]\n")
+    for node in graph.ordered:
+        if node.key == probe_module.ROOT:
+            continue
+        bounds = state.domains.get(node.key, node.domain)
+        mark = "[green]✓[/green]" if node.answered else "[yellow]?[/yellow]"
+        bound = f" [dim]→ {node.binds}[/dim]" if node.binds else ""
+        console.print(
+            f"{'  ' * node.depth}{mark} [bold]{escape(node.key)}[/bold]"
+            f" {bounds} {escape(node.unit)}{bound}"
+        )
+        if node.because:
+            console.print(f"{'  ' * node.depth}  [dim]{escape(node.because)}[/dim]")
+
+    for contradiction in resolution.contradictions:
+        err.print(f"[red]✗[/red] {escape(str(contradiction))}")
+    for missing in resolution.unbound:
+        # Not a warning. A leaf the world needed and the engine cannot read is
+        # the only honest evidence for growing the terminal registry, and it
+        # only counts as evidence if it survives to be read.
+        console.print(f"[magenta]unbound[/magenta] {escape(str(missing))}")
+    if resolution.unanswered:
+        console.print(f"\n[dim]{len(resolution.unanswered)} question(s) still open.[/dim]")
+
+
+@probe_app.command("worlds")
+def probe_worlds(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to read."),
+    count: int = typer.Option(5, "--count", "-n", help="How many worlds."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """The worlds this probe allows, as unlike each other as possible.
+
+    A settled probe does not describe one world. It describes a space — every
+    assignment inside the narrowed ranges that also respects the relations —
+    and taking the midpoint of each range, which is what resolving does,
+    produces the single most average member of it.
+
+    This covers the space with a low-discrepancy sequence rather than random
+    draws, keeps the assignments that satisfy every relation, and returns the
+    ones furthest apart by farthest-point traversal. Deterministic: the same
+    graph gives the same mosaic every time.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    try:
+        found = probe_module.worlds(session.graph, count=count)
+    except ValueError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+
+    document = {
+        "premise": session.premise,
+        "worlds": [world.as_dict() for world in found],
+    }
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(document, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        console.print(f"[green]✓[/green] {len(found)} world(s) written to [bold]{out}[/bold]")
+        return
+
+    keys = sorted({key for world in found for key in world.values})
+    for index, world in enumerate(found, start=1):
+        values = world.as_dict()
+        console.print(f"[bold]world {index}[/bold] " + "  ".join(
+            f"[dim]{escape(key)}[/dim] {values[key]:.4g}" for key in keys if key in values
+        ))
+
+
+@probe_app.command("resolve")
+def probe_resolve(
+    path: Path = typer.Argument(Path("probe.json"), help="The probe to resolve."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write the overrides here."),
+) -> None:
+    """Turn a settled graph into overrides for the terminal parameter registry.
+
+    Refuses while anything is unanswered or contradictory: physics derived from
+    a graph that does not yet hold would be a build calibrated against
+    reasoning nobody finished.
+    """
+    from . import probe as probe_module
+
+    session = _probe_session(path)
+    resolution = probe_module.resolve(session.graph)
+
+    if not resolution.usable:
+        err.print("[red]✗[/red] this probe cannot produce physics yet.")
+        for contradiction in resolution.contradictions:
+            err.print(f"  [red]contradiction[/red] {escape(str(contradiction))}")
+        for key in resolution.unanswered:
+            err.print(f"  [yellow]unanswered[/yellow] {key}")
+        raise typer.Exit(code=1)
+
+    document = {
+        "premise": session.premise,
+        "overrides": {
+            name: span.as_dict() for name, span in sorted(resolution.overrides.items())
+        },
+        "unbound": [
+            {"key": u.key, "asks": u.asks, "claim": u.claim, "unit": u.unit,
+             "low": u.bounds.low, "high": u.bounds.high}
+            for u in resolution.unbound
+        ],
+    }
+    payload = json.dumps(document, indent=2, allow_nan=False)
+    if out is None:
+        typer.echo(payload, nl=False)
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(payload + "\n", encoding="utf-8")
+    console.print(
+        f"[green]✓[/green] {len(resolution.overrides)} parameter(s) written to [bold]{out}[/bold]"
+        + (f"\n[magenta]{len(resolution.unbound)} leaf/leaves bound to nothing[/magenta]"
+           " [dim]— parameters this world wanted and the engine cannot read.[/dim]"
+           if resolution.unbound else "")
+    )
+
+
+@plan_app.command("requests")
+def plan_requests(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the artifact-shape requests an agent needs to answer.
+
+    Each request is self-describing: the facts it may cite, the vocabulary of
+    beat roles the compiler can spell, this artifact type's grammar stated in
+    plain terms, and the headings this author has already used elsewhere.
+    """
+    from .compiler import handshake
+
+    world = _compiled(_load(corpus), corpus)
+
+    document = handshake.requests_document(world)
+    if not document["requests"]:
+        console.print("[green]✓[/green] nothing to plan")
+        return
+
+    payload = handshake.dump(document)
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(
+            f"[green]✓[/green] {len(document['requests'])} request(s) written to [bold]{out}[/bold]"
+        )
+
+
+@plan_app.command("accept")
+def plan_accept(
+    corpus: str = typer.Argument(..., help="Corpus path to record plans into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Response JSON from the agent."),
+    model_id: str = typer.Option(
+        "agent", "--model-id",
+        help="Who proposed it. Recorded in the ledger and part of the replay key.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table.",
+    ),
+) -> None:
+    """Validate agent-proposed plans and commit them to the ledger, or report every violation.
+
+    Nothing is committed unless every response passes. A partial commit would leave
+    a corpus half-planned with no record of which half.
+    """
+    from .compiler import handshake
+
+    world = _compiled(_load(corpus), corpus)
+    try:
+        responses = handshake.parse_responses(json.loads(source.read_text(encoding="utf-8")))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
+
+    result = handshake.accept(world, responses, model_id=model_id)
+    rejected = {name: v for name, v in result.verdicts.items() if not v.accepted}
+
+    if as_json:
+        import json as json_module
+
+        typer.echo(json_module.dumps({
+            "accepted": not rejected,
+            "plans": len(result.verdicts),
+            "rejected": {
+                name: [{"code": v.code, "detail": v.detail} for v in verdict.violations]
+                for name, verdict in sorted(rejected.items())
+            },
+        }, indent=2))
+        if rejected:
+            raise typer.Exit(code=1)
+
+    if rejected:
+        err.print(
+            f"[red]✗[/red] {len(rejected)} of {len(result.verdicts)} plan(s) rejected."
+            " Nothing was committed."
+        )
+        for name, verdict in sorted(rejected.items()):
+            err.print(f"\n[bold]{name}[/bold]")
+            for violation in verdict.violations:
+                err.print(f"  [yellow]{violation.code}[/yellow] {violation.detail}")
+        raise typer.Exit(code=1)
+
+    # Recompile, and do it *after* the ledger holds the accepted plans — the
+    # outline reads them from there. Recording the plans and stopping left the
+    # corpus with the IR it had compiled before the plans existed, and because
+    # every later step skips `compile()` when `artifact_irs` is already
+    # populated, narration and rendering both went on using the fixed outline.
+    # The plans were accepted, stored, and silently ignored: the whole point of
+    # the handshake, lost between two lines that each looked correct.
+    updated = world.extend(ledger=result.ledger).compile()
+    written = updated.export(corpus, overwrite=True)
+
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] {len(result.verdicts)} plan(s) accepted and recorded in the ledger"
+        )
+        console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+    if not _report(updated, quiet=as_json):
+        raise typer.Exit(code=1)
+
+
+def _warn_on_version_skew(world: World) -> None:
+    """Say so when a corpus is being advanced by a different release than made it.
+
+    Resume works by rebuilding from the recipe and replaying the ledger, and the
+    ledger's content-addressed keys include a digest of what each actor was
+    shown. A different release may generate a slightly different world, so keys
+    miss and decisions get re-asked — correct, but baffling without this line.
+    """
+    from . import __version__
+
+    made_by = world._generator_version
+    if made_by and made_by != __version__:
+        err.print(
+            f"[yellow]![/yellow] this corpus was generated by worldloom {made_by};"
+            f" you are running {__version__}. Replay keys may miss, and decisions"
+            " already taken may be asked again."
+        )
+
+
+@act_app.command("requests")
+def act_requests(
+    corpus: str = typer.Argument(..., help="Corpus path carrying an actor episode."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSON here instead of stdout."),
+) -> None:
+    """Emit the next decision an employee has to make.
+
+    Self-describing: the facts this person has actually observed and how they
+    came to know each one, the messages they were sent, the obligations they
+    hold, the tools their role permits, and the rules in full. There is no other
+    context — an actor that went looking for some would be reading the world
+    rather than its own position in it.
+
+    One decision at a time, because the next one depends on this one. See
+    `worldloom.actors.handshake` for why there is no batch form.
+    """
+    from .actors import handshake
+    from .recipe import RecipeError
+
+    world = _load(corpus)
+    _warn_on_version_skew(world)
+    try:
+        document = handshake.requests_document(world)
+    except RecipeError as exc:
+        _refuse("recipe_error", f"[red]error:[/red] {corpus}: {escape(str(exc))}",
+                corpus=str(corpus))
+
+    if document.get("complete"):
+        # "Complete" and "committed" are not the same thing, and conflating them
+        # was a dead end. `requests_document` rebuilds to find the next decision
+        # and throws the rebuilt world away, because reading is not writing. If
+        # the rebuild finished without needing anybody — a routing table that
+        # wakes no one for this world — then the corpus on disk is still the
+        # pre-episode organisation, and saying "complete" while leaving it that
+        # way gives the user no command that would commit it.
+        if not world.actor_ledger:
+            console.print(
+                "[yellow]![/yellow] this episode requires no decisions, and nothing"
+                " has been committed yet.\n"
+                "[dim]Commit it with an empty action set:"
+                ' `echo \'{"actions": []}\' > none.json &&'
+                f" worldloom act accept {corpus} --from none.json`[/dim]"
+            )
+            return
+        console.print("[green]✓[/green] the episode is complete — nothing left to decide")
+        return
+
+    payload = handshake.dump(document)
+    if out is None:
+        typer.echo(payload, nl=False)
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(payload, encoding="utf-8")
+    decision = document["decision"]
+    console.print(
+        f"[green]✓[/green] [bold]{decision['id']}[/bold] — {decision['title']}"
+        f" woken by {decision['trigger']['kind']}"
+    )
+    console.print(
+        f"[dim]{len(decision['facts'])} observed fact(s), {len(decision['tools'])} tool(s)"
+        f" available. Written to {out}[/dim]"
+    )
+
+
+@act_app.command("accept")
+def act_accept(
+    corpus: str = typer.Argument(..., help="Corpus path to record the decision into."),
+    source: Path = typer.Option(..., "--from", "-i", help="Action JSON from the agent."),
+    model_id: str = typer.Option(
+        None, "--model-id",
+        help=(
+            "Who decided. Recorded in the ledger and part of the replay key, so it "
+            "is pinned to the corpus on the first accepted decision and cannot "
+            "change mid-episode."
+        ),
+    ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the verdict as JSON — an agent fixing a rejection should read data, not parse a table.",
+    ),
+) -> None:
+    """Validate a decision and commit it, or report the rule it broke.
+
+    Nothing is committed unless the action is legal: a tool beyond the role's
+    authority, a fact the actor never observed, or a failed precondition comes
+    back with the rule and the corpus is untouched. That is the same contract
+    `narrate accept` has — rejection is the harness working.
+
+    While the episode is still running this commits the *ledger*, because
+    mid-episode there is no finished world to write and the ledger is what the
+    next call resumes from. When the last decision lands, the completed world is
+    written whole.
+    """
+    from .actors import handshake
+    from .recipe import RecipeError
+
+    world = _load(corpus)
+    _warn_on_version_skew(world)
+    try:
+        actions = handshake.parse_actions(json.loads(source.read_text(encoding="utf-8")))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        _refuse("unreadable_document",
+                f"[red]error:[/red] {source}: {escape(str(exc))}", path=str(source))
+
+    try:
+        outcome = handshake.accept(world, actions, model_id=model_id)
+    except (RecipeError, ValueError) as exc:
+        _refuse("invalid_actions", f"[red]error:[/red] {escape(str(exc))}")
+
+    if as_json:
+        import json as json_module
+
+        typer.echo(json_module.dumps({
+            "accepted": outcome.accepted,
+            "applied": outcome.applied,
+            "complete": outcome.complete,
+            "rejected": dict(sorted(outcome.rejections.items())),
+        }, indent=2))
+        if not outcome.accepted:
+            raise typer.Exit(code=1)
+
+    if not outcome.accepted:
+        err.print(
+            f"[red]✗[/red] {len(outcome.rejections)} action(s) rejected. Nothing was committed."
+        )
+        for name, reason in sorted(outcome.rejections.items()):
+            err.print(f"\n[bold]{name}[/bold]\n  [yellow]{reason}[/yellow]")
+        raise typer.Exit(code=1)
+
+    assert outcome.world is not None
+    written = outcome.world.export(corpus, overwrite=True)
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] {len(outcome.applied)} decision(s) accepted"
+            f" and recorded as [dim]{outcome.model_id}[/dim]"
+        )
+        console.print(f"[green]✓[/green] written to [bold]{written}[/bold]")
+
+    if not outcome.complete:
+        if not as_json:
+            console.print(
+                "[dim]the episode continues — run `worldloom act requests` for the next decision[/dim]"
+            )
+        return
+
+    if not as_json:
+        console.print(
+            f"[green]✓[/green] episode complete: {len(outcome.world.actor_ledger)} tool call(s),"
+            f" {len(outcome.world.observations)} observation(s)"
+        )
+    if not _report(outcome.world, quiet=as_json):
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def render(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    formats: list[str] = typer.Option(..., "--format", "-f", help="Formats to render. Repeatable."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write here instead of back into the corpus."),
+    profile: str = typer.Option(
+        None, "--profile",
+        help=(
+            "Who the documents are for. `audit` (the default, and what every "
+            "corpus rendered before this flag existed got) prints the "
+            "supporting-fact appendix and the author's voice in the document. "
+            "`reader` records both and prints neither, and spells figures the "
+            "way a memo does. `filing` puts the citations in a sibling file. "
+            "`worldloom present describe` prints every profile and knob; "
+            "`worldloom present lint` checks one you wrote."
+        ),
+    ),
+) -> None:
+    """Render an existing corpus into files.
+
+    The profile is written onto the corpus's recipe before rendering, so the
+    files on disk and the record of how they were made cannot disagree — and a
+    later `--replay` reproduces this rendering rather than the default one.
+    Re-rendering an existing corpus under a second profile is a supported thing
+    to do and needs no rebuild: a profile decides nothing about the world.
+    """
+    from .presentation import named
+    from .recipe import with_presentation
+    from .render import RenderError
+
+    world = _load(corpus)
+    if profile is not None:
+        try:
+            world = world.extend(recipe=with_presentation(world.recipe, named(profile)))
+        except ValueError as exc:
+            _refuse("unknown_profile", f"[red]error:[/red] {escape(str(exc))}")
+    try:
+        rendered = world.render(*formats)
+    except (RenderError, ValueError) as exc:
+        _refuse("render_failed", f"[red]error:[/red] {escape(str(exc))}")
+
+    written = rendered.export(out or Path(corpus), overwrite=True)
+    console.print(f"[green]✓[/green] {len(rendered._rendered)} file(s) written to [bold]{written}[/bold]")
+    # Validated against where the files actually landed, not in memory. The
+    # in-memory world still resolves artifact paths against the *source*
+    # corpus, so rendering to a `--out` directory reported every file it had
+    # just written as missing — a false failure, and the loudest possible one,
+    # since anyone running this in a pipeline reads it as rendering being
+    # broken. This used to `_load(str(written))` — a full re-parse of every
+    # JSONL stream it had exported one line earlier — when the only check that
+    # reads the disk is `artifact_files`, and all it needs is the written
+    # root. So: rebind `root` and re-parse only the manifest. The manifest
+    # comes back off the disk rather than from memory on purpose — it is the
+    # file that names what a reader will open, so the check stays a statement
+    # about the corpus on disk, not about what this process meant to write.
+    # The full write→read round trip this no longer exercises is pinned by
+    # `test_export_round_trips_without_loss`; before the reload was dropped,
+    # both paths were measured to produce equal reports (8,133 checks, and
+    # the same `missing_file` violations when a written artifact is deleted).
+    from dataclasses import replace as _replace_root
+
+    from . import corpus as corpus_module
+    from .models import ArtifactManifestEntry
+
+    on_disk = _replace_root(
+        rendered,
+        root=written,
+        _artifacts=tuple(corpus_module.load_models(
+            written / corpus_module.MANIFEST_FILE, ArtifactManifestEntry,
+        )),
+    )
+    if not _report(on_disk):
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def mosaic(
+    count: int = typer.Option(5, "--count", "-n", help="How many worlds."),
+    seed: int = typer.Option(8128, "--seed", "-s", help="Base seed. World N uses seed+N-1."),
+    engine: str = typer.Option(
+        "retail", "--engine", "-e",
+        help="Which vertical to build: retail, banking or insurance. Each varies"
+             " its own physics — a bank's capital headroom, an insurer's tail"
+             " length — because a mosaic that moved a retailer's margin through a"
+             " bank would report varying something it had not.",
+    ),
+    out: Path = typer.Option(None, "--out", "-o", help="Directory to write the worlds into."),
+    period: str = typer.Option("2026-03", "--period", "-p", help="Reporting period, YYYY-MM."),
+    periods: int = typer.Option(1, "--periods", help="Consecutive periods per world."),
+    shard_count: int = typer.Option(
+        1, "--shard-count", help="Deterministic number of batch shards.",
+    ),
+    shard_index: int = typer.Option(
+        0, "--shard-index", help="Zero-based shard owned by this worker.",
+    ),
+    resume: bool = typer.Option(
+        False, "--resume", help="Resume this exact plan from validated worlds and section checkpoints.",
+    ),
+    narration_concurrency: int = typer.Option(
+        1, "--narration-concurrency", min=1,
+        help="Concurrent narration sections per world; assembly remains deterministic.",
+    ),
+    incident: bool = typer.Option(
+        None, "--incident/--no-incident",
+        help="Force the operational incident. Omit to let each world's seed and lore decide.",
+    ),
+    narrate: bool = typer.Option(
+        True, "--narrate/--no-narrate",
+        help=(
+            "Write the prose every section is waiting for, with the built-in "
+            "deterministic provider — no network, no key, no spend. On by "
+            "default, unlike `build --narrate`: an un-narrated world compiles "
+            "fifteen artifacts of which three carry a retrievable passage, so "
+            "a third of its evaluation cases cite evidence that is in no "
+            "passage at all and every score read off them is about the ranker "
+            "when the sentence belongs to the corpus. `--no-narrate` writes "
+            "the plan-only corpora this command used to write, for a caller "
+            "who wants the shapes and will narrate them another way."
+        ),
+    ),
+    formats: list[str] = typer.Option(
+        None, "--format", "-f",
+        help=(
+            "Render every world to these formats. Repeatable. Separate from "
+            "--narrate on purpose: prose is what makes a corpus measurable and "
+            "files are what make it readable, and only the first is a "
+            "correctness question. Omit to leave the corpora as IR."
+        ),
+    ),
+    probe_file: Path = typer.Option(
+        None, "--probe",
+        help=(
+            "Take the axes from a settled probe instead of this engine's defaults. "
+            "The probe decides what varies and between which bounds; the algorithm "
+            "still decides which N. Every parameter the probe bound becomes an axis "
+            "over the interval it argued for, and axes it said nothing about keep "
+            "their defaults."
+        ),
+    ),
+    describe: bool = typer.Option(
+        False, "--describe", help="Print what a mosaic varies, and build nothing.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Emit the plan as data."),
+) -> None:
+    """Build several companies at once, as unlike each other as the rules allow.
+
+    Varying the seed does not do this. A seed decides names, figures, and which
+    month the incident lands in; it does not decide headcount, span of control,
+    reporting depth, trading calendar, or how fast an organisation finds the
+    cause of an outage. Five seeds produce one company with different names on
+    the same twenty-three people — which is a fine corpus and a poor dataset,
+    because a model evaluated against it has seen one enterprise five times.
+
+    Candidates are covered with a low-discrepancy sequence rather than drawn at
+    random (random points clump, and a clump is a company shape the tool never
+    produces), filtered to the ones that can actually be built, and then the
+    furthest apart are chosen by farthest-point traversal. Deterministic: the
+    same request gives the same mosaic, and each world carries a recipe that
+    rebuilds it on its own.
+
+    Every world is narrated as it is built, so what lands on disk is a corpus
+    rather than a plan. `--no-narrate` gives back the plans.
+
+    `--describe` prints the axes without building anything, which is the right
+    first call — deciding whether five worlds are worth the wait should not
+    require generating five worlds.
+    """
+    from . import batch as batch_module
+    from . import mosaic as mosaic_module
+
+    if describe:
+        try:
+            document = mosaic_module.describe(engine)
+        except KeyError as exc:
+            _refuse("unknown_engine", f"[red]error:[/red] {escape(str(exc))}")
+        if as_json:
+            typer.echo(json.dumps(document, indent=2))
+            return
+        console.print(f"[bold]What a {engine} mosaic varies[/bold]"
+                      f" [dim]— engines: {', '.join(document['engines'])}[/dim]\n")
+        for axis in document["axes"]:
+            bound = f"{axis['low']:g}–{axis['high']:g}"
+            console.print(f"[bold]{escape(axis['name'])}[/bold] [cyan]{bound}[/cyan]"
+                          + (f" [dim]→ {axis['parameter']}[/dim]" if axis["parameter"] else ""))
+            console.print(f"  [dim]{escape(axis['about'])}[/dim]")
+        console.print(f"\n[dim]estates: {', '.join(document['estates'])}[/dim]")
+        if document.get("calendars"):
+            console.print(f"[dim]calendars: {', '.join(document['calendars'])}[/dim]")
+        return
+
+    try:
+        if probe_file is not None:
+            from . import probe as probe_module
+
+            session = probe_module.Session.from_document(
+                json.loads(probe_file.read_text(encoding="utf-8"))
+            )
+            variants = mosaic_module.from_probe(session, count, seed=seed, engine=engine)
+        else:
+            variants = mosaic_module.field(count, seed=seed, engine=engine)
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        _refuse("mosaic_failed", f"[red]error:[/red] {escape(str(exc))}")
+
+    spread = mosaic_module.spread(variants)
+    try:
+        shard_variants = batch_module.owned(
+            variants, shard_count=shard_count, shard_index=shard_index,
+        )
+    except ValueError as exc:
+        _refuse("bad_shard", f"[red]error:[/red] {escape(str(exc))}")
+    if out is None and (resume or shard_count != 1 or shard_index != 0):
+        _refuse("missing_flag", "[red]error:[/red] sharding and resume require --out",
+                flag="--out")
+    if as_json:
+        typer.echo(json.dumps(
+            {"spread": spread, "worlds": [v.as_dict() for v in variants]}, indent=2))
+        if out is None:
+            return
+
+    if out is None:
+        console.print("[bold]The mosaic[/bold] [dim]— nothing written; pass --out to build[/dim]\n")
+        for variant in variants:
+            console.print(f"  [bold]{variant.index}[/bold] seed {variant.seed}"
+                          f"  {escape(variant.summary())}")
+        console.print(
+            f"\n[dim]{spread['distinct_shapes']} distinct shape(s),"
+            f" headcounts {spread['headcounts']}, spans {spread['spans']},"
+            f" estates {spread['estates']}.[/dim]"
+        )
+        return
+
+    plan_document = {
+        "batch_version": batch_module.PLAN_VERSION,
+        "generator_version": __version__,
+        "seed": seed,
+        "count": count,
+        "engine": engine,
+        "period": period,
+        "periods": periods,
+        "incident": incident,
+        "spread": spread,
+        "narrated": narrate,
+        "formats": sorted(formats or ()),
+        "shard_count": shard_count,
+        "worlds": [variant.as_dict() for variant in variants],
+    }
+    try:
+        plan_digest = batch_module.install_plan(out, plan_document, resume=resume)
+        shard_state = batch_module.ShardState(
+            out, plan_digest=plan_digest,
+            shard_count=shard_count, shard_index=shard_index, resume=resume,
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        _refuse("shard_state_error", f"[red]error:[/red] {escape(str(exc))}")
+
+    from dataclasses import replace as _replace_spec
+
+    from . import archetypes, domains
+    from .narrative import DeterministicProvider, ProviderError
+    from .narrative.compiler import NarrationError
+    from .render import RenderError
+    from .scenarios import MonthEndClose
+
+    # The domain names its own archetype. Core may not hold a map from a
+    # vertical's name to one of its archetype keys — the thin-waist ratchet
+    # forbids engine vocabulary here, and it caught exactly that map when this
+    # was first written.
+    registered = domains.by_name(engine)
+    if registered is None or not registered.default_archetype:
+        _refuse("unknown_engine",
+                f"[red]error:[/red] no domain named {engine!r} is registered;"
+                f" known: {', '.join(domains.names())}",
+                registered=list(domains.names()))
+    domain = registered
+    shape = archetypes.get(domain.default_archetype)
+
+    # One provider for the whole mosaic, and that is not a shared-state hazard:
+    # `DeterministicProvider` reads a request and a fact table and holds nothing
+    # between calls but a counter, so five worlds through one instance and five
+    # worlds through five instances write the same bytes. The test asserts that
+    # rather than trusting it — a provider that *did* carry state would make
+    # world 5 depend on world 1 having been built, which is the one thing a
+    # mosaic must never do (world N is reproducible without worlds 1..N-1).
+    provider = DeterministicProvider()
+
+    written: list[str] = []
+    narrated_sections = 0
+    unhealthy = 0
+    skipped = 0
+    for variant in shard_variants:
+        target = out / f"world-{variant.index:02d}"
+        if resume and variant.index in shard_state.completed and target.exists():
+            try:
+                existing = _load(str(target))
+                if existing.recipe.get("seed") != variant.seed:
+                    raise ValueError(
+                        f"world {variant.index} has seed {existing.recipe.get('seed')},"
+                        f" expected {variant.seed}"
+                    )
+                existing.validate().raise_if_failed()
+            except Exception as exc:
+                _refuse(
+                    "resume_invalid",
+                    f"[red]error:[/red] completed world {variant.index} does not"
+                    f" validate for resume: {escape(str(exc))}",
+                    world=variant.index,
+                )
+            skipped += 1
+            console.print(
+                f"[cyan]↷[/cyan] [bold]world {variant.index}[/bold]"
+                " [dim]already complete and validated[/dim]"
+            )
+            continue
+        # `speaks` gives the variant its own division, category and site-format
+        # names (`worldloom.vocabulary`) without touching a share, a margin or a
+        # site count, and returns `shape` unchanged for any engine whose unit
+        # kinds nothing names — so this line varies what the five worlds are
+        # *called* and cannot vary what they are.
+        spec = domain.world(seed=variant.seed, archetype=variant.speaks(shape))
+        changes: dict[str, Any] = {
+            "physics": variant.physics,
+            "role_table": variant.role_table(),
+        }
+        if variant.estate is not None:
+            changes["estate"] = variant.estate
+        # Only the retail engine reads a trading year, and only its mosaic
+        # varies one — handing a bank's world a `seasonality` it has no field
+        # for would fail on a keyword rather than on a decision.
+        if any(axis.name == "calendar" for axis in mosaic_module.ENGINES[engine]):
+            changes["seasonality"] = variant.seasonality
+        world = _replace_spec(spec, **changes).build()
+
+        for index in range(max(1, periods)):
+            stamp = _step_period(period, index, domain.period_step_months)
+            if domain.single_episode is not None:
+                episode = _replace_spec(domain.single_episode(stamp),
+                                        physics=variant.physics)
+            else:
+                episode = MonthEndClose(
+                    period=stamp,
+                    include_operational_incident=incident,
+                    physics=variant.physics,
+                    seasonality=variant.seasonality,
+                )
+            world = world.run(episode)
+
+        # Narrate before export, so what lands on disk is a corpus rather than
+        # a plan. Until this line a mosaic world reached disk as artifact
+        # *intents* — the sections were never compiled, let alone written — and
+        # a directory of those is indistinguishable from a finished one to
+        # anything except the measurement: `evaluate.score` grades a case whose
+        # evidence lives in unwritten prose as a failure, and five worlds of
+        # them read as a hard benchmark.
+        sections = 0
+        if narrate:
+            checkpoint = batch_module.Checkpoint(out, variant.index)
+            try:
+                checkpoint_ledger = checkpoint.load() if resume else ()
+                if checkpoint.path.exists() and not resume:
+                    raise ValueError(
+                        f"checkpoint {checkpoint.path} already exists; pass --resume"
+                    )
+                world = world.narrate(
+                    provider,
+                    ledger=checkpoint_ledger,
+                    concurrency=narration_concurrency,
+                    on_accepted=checkpoint.append,
+                )
+            except (OSError, ValueError, ProviderError, NarrationError) as exc:
+                _refuse("narration_failed",
+                        f"[red]error:[/red] world {variant.index}: {escape(str(exc))}",
+                        world=variant.index)
+            sections = world._narration[0]
+            narrated_sections += sections
+
+        # After narration, never before: `render` compiles if it must, and a
+        # render that ran first would freeze the empty sections into the IR the
+        # narration then had to be threaded back into.
+        if formats:
+            try:
+                world = world.render(*formats)
+            except RenderError as exc:
+                _refuse("render_failed",
+                        f"[red]error:[/red] world {variant.index}: {escape(str(exc))}",
+                        world=variant.index)
+
+        written.append(str(world.export(target, overwrite=True)))
+        report = world.validate()
+        mark = "[green]✓[/green]" if report.ok else "[red]✗[/red]"
+        unhealthy += 0 if report.ok else 1
+        console.print(f"{mark} [bold]world {variant.index}[/bold] {escape(variant.summary())}"
+                      f" [dim]— {report.checks_run} checks,"
+                      f" {len(report.violations)} violation(s)"
+                      + (f", {sections} section(s) written" if narrate else "")
+                      + "[/dim]")
+        if not report.ok:
+            for violation in report.violations[:3]:
+                err.print(f"    [yellow]{violation.code}[/yellow] {escape(violation.detail)}")
+        else:
+            shard_state.mark_completed(variant.index)
+
+    # `narrated` and `formats` ride in the plan because a reader of the
+    # directory — `evaluate.across.load` above all — otherwise has to infer
+    # from a passage count whether a thin corpus is an easy one or an
+    # unfinished one, and those are the two readings this whole change exists
+    # to stop being confusable.
+    console.print(
+        f"\n[green]✓[/green] shard {shard_index}/{shard_count} wrote"
+        f" {len(written)} world(s) under [bold]{out}[/bold]"
+        + (f"; {skipped} already complete" if skipped else "")
+        + f"\n[dim]{spread['distinct_shapes']} distinct organisation shape(s);"
+        f" headcounts {spread['headcounts']}; estates {spread['estates']}."
+        + (f" {narrated_sections} section(s) of prose written." if narrate else "")
+        + " The plan is in mosaic.json, and each world rebuilds from its own recipe.[/dim]"
+    )
+    # Said at the end, where a reader stops, and said as a warning rather than
+    # as a count. `--no-narrate` is a legitimate request and this does not
+    # refuse it; what it refuses is letting the resulting directory be scored
+    # by somebody who did not type the flag. A survey over these corpora
+    # reports missing prose as failed retrieval, and the two print the same
+    # digit.
+    if not narrate:
+        console.print(
+            "[yellow]![/yellow] nothing was narrated: these are plans, and most"
+            " of each world's sections are still awaiting prose."
+            "\n[dim]`worldloom evaluate` and `worldloom.evaluate.across.survey`"
+            " over this directory measure the missing prose, not the"
+            " difficulty. Drop --no-narrate to finish them.[/dim]"
+        )
+    elif unhealthy:
+        # Newly reachable rather than newly broken, and the distinction is
+        # worth the line: `validate` runs the author/audience and manifest
+        # checks over *compiled* artifacts, a plan-only mosaic had none, and so
+        # this whole family of checks scored zero out of zero for as long as
+        # the command stopped at `build`.
+        #
+        # What they found when this branch was written was one defect, in every
+        # world of every engine: `author_cannot_see_own_artifact`, because
+        # `roles.from_shape` dealt functions round-robin by position and put
+        # the engine's `controller` in Merchandising while the policy on a
+        # finance document named Finance. The corpora were always like that;
+        # compiling them is what made it sayable, and it is fixed — a spine key
+        # now keeps the function its engine gives it, a synthesised role
+        # inherits its manager's, and a mosaic validates clean. The branch
+        # stays because the next such defect will arrive the same way.
+        console.print(
+            f"[yellow]![/yellow] {unhealthy} of {len(written)} world(s) report"
+            " violations. These are checks a plan-only mosaic never ran, not"
+            " new defects: narrating compiles the artifacts, and the compiled"
+            " artifacts are what the author/audience checks read."
+        )
+
+
+@app.command()
+def inspect(
+    corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
+    facts: bool = typer.Option(False, "--facts", help="List facts."),
+    events: bool = typer.Option(False, "--events", help="List the timeline."),
+    artifacts: bool = typer.Option(False, "--artifacts", help="List artifacts."),
+    evaluations: bool = typer.Option(False, "--evals", help="List evaluation cases."),
+    lore: bool = typer.Option(False, "--lore", help="List lore commitments."),
+) -> None:
+    """Show what a corpus contains. Nothing is hidden."""
+    world = _load(corpus)
+
+    if not any([facts, events, artifacts, evaluations, lore]):
+        console.print(_summary_table(world))
+        return
+
+    if lore:
+        table = Table(title="Lore", box=None)
+        table.add_column("id", style="dim")
+        table.add_column("kind")
+        table.add_column("constrains", justify="right")
+        table.add_column("assertion", overflow="fold")
+        for item in world.lore:
+            table.add_row(item.id, item.kind.value, str(len(item.constrains)), item.assertion[:96])
+        console.print(table, "")
+
+    if events:
+        table = Table(title="Timeline", box=None)
+        table.add_column("id", style="dim")
+        table.add_column("when")
+        table.add_column("kind")
+        table.add_column("summary", overflow="fold")
+        for event in world.timeline():
+            table.add_row(event.id, event.occurred_at.strftime("%Y-%m-%d %H:%M"), event.kind, event.summary[:88])
+        console.print(table, "")
+
+    if facts:
+        table = Table(title="Facts", box=None)
+        table.add_column("id", style="dim")
+        table.add_column("kind")
+        table.add_column("subject")
+        table.add_column("value", justify="right", overflow="fold")
+        table.add_column("authority")
+        table.add_column("", style="dim")
+        for fact in world.facts:
+            value = f"{fact.value.amount:,g} {fact.value.unit}" if fact.value else (fact.text_value or "")
+            table.add_row(
+                fact.id,
+                fact.kind,
+                fact.subject,
+                value[:48],
+                fact.authority.value,
+                "superseded" if fact.is_superseded else "",
+            )
+        console.print(table, "")
+
+    if artifacts:
+        table = Table(title="Artifacts", box=None)
+        table.add_column("id", style="dim")
+        table.add_column("type")
+        table.add_column("author")
+        table.add_column("authority")
+        table.add_column("facts", justify="right")
+        table.add_column("path", overflow="fold")
+        for artifact in world.artifacts:
+            table.add_row(
+                artifact.id,
+                artifact.artifact_type,
+                artifact.author_id,
+                artifact.authority.value,
+                str(len(artifact.supporting_fact_ids)),
+                artifact.path,
+            )
+        console.print(table, "")
+
+    if evaluations:
+        table = Table(title="Evaluation cases", box=None)
+        table.add_column("id", style="dim")
+        table.add_column("type")
+        table.add_column("diff")
+        table.add_column("question", overflow="fold")
+        for case in world.evaluations:
+            table.add_row(case.id, case.evaluation_type.value, case.difficulty, case.question[:80])
+        console.print(table, "")
+
+
+@app.command()
+def status(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit machine-readable state instead of the table."
+    ),
+) -> None:
+    """Where this corpus is in the loop, and the exact command that comes next.
+
+    The pipeline's sequence lives in the skill files, but a sequence an agent has
+    to memorise is a sequence it will eventually resume in the wrong place — a
+    corpus picked up mid-loop looks like a directory of JSONL, and nothing in a
+    directory listing says whether prose has been written or an actor episode is
+    waiting. This makes the harness answer the question the skill used to answer
+    by prose: run `worldloom status`, do what it says, repeat.
+
+    The stage order is the loop's own: an actor episode decides which documents
+    exist, so it precedes prose; prose precedes rendering, because a rendered
+    outline is a corpus that looks finished and is not.
+    """
+    import json as json_module
+
+    from .narrative import handshake as narrate_handshake
+    from .recipe import has_actor_step
+
+    world = _load(corpus)
+
+    # Compiled in memory only — status must never write. A read command that
+    # mutates what it reports on cannot be trusted mid-loop.
+    staged = world
+    if not staged.artifact_irs and staged._artifact_intents:
+        staged = staged.compile()
+
+    actor_pending = has_actor_step(world.recipe) and not world._actor_ledger
+    prose_pending = len(narrate_handshake.pending(staged)) if staged.artifact_irs else 0
+    plans_accepted = any(entry.call_site.endswith("/plan") for entry in world.ledger)
+    rendered = sum(1 for artifact in world.artifacts if artifact.path)
+    report = world.validate()
+
+    if actor_pending:
+        stage, next_command = "awaiting actor decisions", f"worldloom act requests {corpus} -o decision.json"
+    elif prose_pending:
+        stage, next_command = (
+            f"awaiting prose ({prose_pending} section(s))",
+            f"worldloom narrate requests {corpus} -o requests.json",
+        )
+    elif not rendered:
+        stage, next_command = "compiled, not rendered", f"worldloom render {corpus} -f markdown -f xlsx"
+    elif not report.ok:
+        stage, next_command = "rendered, with violations", f"worldloom validate {corpus}"
+    else:
+        stage, next_command = "complete and coherent", f"worldloom evaluate {corpus}"
+
+    if as_json:
+        typer.echo(json_module.dumps({
+            "stage": stage,
+            "next": next_command,
+            "facts": len(world.facts),
+            "artifact_intents": len(world.artifact_intents),
+            "sections_awaiting_prose": prose_pending,
+            "plans_accepted": plans_accepted,
+            "rendered_files": rendered,
+            "actor_episode_pending": actor_pending,
+            "evaluation_cases": len(world.evaluations),
+            "generated_by": world._generator_version,
+            "validation": {
+                "ok": report.ok,
+                "checks": report.checks_run,
+                "violations": [
+                    {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
+                    for v in report.violations
+                ],
+            },
+        }, indent=2))
+        return
+
+    table = Table(title=world.company.name, title_style="bold", show_header=False, box=None)
+    table.add_column(style="dim")
+    table.add_column()
+    table.add_row("Stage", stage)
+    table.add_row("Facts", f"{len(world.facts):,}")
+    table.add_row("Artifact intents", f"{len(world.artifact_intents):,}")
+    table.add_row("Awaiting prose", f"{prose_pending:,} section(s)")
+    table.add_row("Plans accepted", "yes" if plans_accepted else "no (optional — worldloom plan requests)")
+    table.add_row("Rendered files", f"{rendered:,}")
+    table.add_row(
+        "Validation",
+        f"[green]coherent[/green] — {report.checks_run:,} checks"
+        if report.ok
+        else f"[red]{len(report.violations)} violation(s)[/red]",
+    )
+    console.print(table)
+    console.print(f"\n[bold]next:[/bold] {next_command}")
+
+
+@app.command()
+def validate(
+    corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit the report as JSON — violations as data, not prose to parse.",
+    ),
+) -> None:
+    """Check a corpus for coherence violations.
+
+    A corpus built from a pack is checked under its own pack: `validate`
+    reconstructs it from the corpus's recipe and installs it before the checks
+    run, so an authored corpus's authored invariants are verified here and not
+    only in the process that built it. See `validate._under_the_corpus_rules`.
+    """
+    world = _load(corpus)
+    # `_load` maps a corpus that cannot be *read* to exit 2; a corpus whose own
+    # rules cannot be *reconstructed* is the same kind of failure and gets the
+    # same exit, one step later. Not caught inside `_report`, which the build
+    # and render commands share: those hold a world they just built in this
+    # process, where the pack is installed already and this cannot arise.
+    from .corpus import CorpusError
+
+    try:
+        report = world.validate()
+    except CorpusError as exc:
+        _refuse("corpus_unloadable", f"[red]error:[/red] {escape(str(exc))}")
+    if as_json:
+        import json as json_module
+
+        typer.echo(json_module.dumps({
+            "ok": report.ok,
+            "checks": report.checks_run,
+            "violations": [
+                {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
+                for v in report.violations
+            ],
+            # Beside `violations` rather than merged into it, for the reason the
+            # channel exists: a caller filtering on `violations` is asking what
+            # makes this corpus incoherent, and an advisory is not that.
+            "advisories": [
+                {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
+                for v in report.advisories
+            ],
+        }, indent=2))
+        if not report.ok:
+            raise typer.Exit(code=1)
+        return
+    if not _print_report(report):
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def verify(
+    corpus: str = typer.Argument(..., help="Corpus path or bundled name."),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the verdict as JSON — files compared, checks run."
+    ),
+) -> None:
+    """Rebuild this corpus from its own record and prove the bytes match.
+
+    The trust demo as one verb: the corpus's recipe and generation ledger are
+    rebuilt into a temporary directory, every file is byte-compared against the
+    directory on disk, and the corpus is then validated. Exit 0 means this
+    corpus is exactly what its own record regenerates, and coherent. The
+    rebuild is the same machinery `build --replay` narrates with and `act`
+    resumes with — `recipe.rebuild` plus a ledger-only provider — not a second
+    replay path that could drift from the one CI proves.
+
+    Rendered artifact files are compared only as the corpus holds them —
+    verify never renders. A rebuild without rendering cannot reproduce the
+    files `worldloom render` (or `-f` at build) wrote, so a rendered corpus
+    reports its first rendered file as beyond the record: verify the corpus as
+    built and narrated, and prove a rendering by replaying the build with the
+    same `-f` flags (the README's three-command block).
+    """
+    import tempfile
+
+    from . import corpus as corpus_module
+    from . import recipe as recipe_module
+    from .actors import ActorProviderError, UnreachableActorProvider
+    from .narrative import ProviderError, UnreachableProvider
+    from .recipe import RecipeError
+
+    world = _load(corpus)
+    root = world.root
+    assert root is not None  # `World.load` always records where it read from
+    if not world.recipe:
+        _refuse(
+            "no_recipe",
+            "[red]error:[/red] this corpus carries no recipe, so it cannot be"
+            " rebuilt — verification is a rebuild of the record.",
+            corpus=str(corpus),
+        )
+
+    ledger = tuple(world._ledger)
+    # The same replay stance `build --replay` takes, for the same reasons: the
+    # provider id is a key component, so it comes from what the artifacts
+    # record as `narrated_by`; several providers cannot be replayed in one
+    # pass; and a rebuild that quietly *generated* where the ledger missed
+    # would prove that a plausible corpus exists, not that this one is its own
+    # record — which is why both providers below are the unreachable kind.
+    narrated_ids = {
+        ir.metadata["narrated_by"]
+        for ir in world._artifact_irs
+        if "narrated_by" in ir.metadata
+    }
+    if len(narrated_ids) > 1:
+        _refuse(
+            "replay_many_providers",
+            f"[red]error:[/red] {corpus} was narrated by several providers"
+            f" ({', '.join(sorted(narrated_ids))}); one narrate pass replays"
+            " one provider's keys",
+            providers=sorted(narrated_ids),
+        )
+    if narrated_ids and not ledger:
+        _refuse(
+            "no_ledger",
+            f"[red]error:[/red] {corpus} carries no generation ledger to replay",
+            corpus=str(corpus),
+        )
+
+    acted = recipe_module.has_actor_step(world.recipe)
+    try:
+        rebuilt = recipe_module.rebuild(
+            world.recipe,
+            actors=UnreachableActorProvider() if acted else None,
+            actor_ledger=ledger if acted else (),
+            ledger=ledger,
+        )
+        if narrated_ids:
+            rebuilt = rebuilt.narrate(
+                UnreachableProvider(id=narrated_ids.pop()), ledger=ledger
+            )
+    except RecipeError as exc:
+        _refuse("recipe_error", f"[red]error:[/red] {escape(str(exc))}")
+    except ActorProviderError as exc:
+        _refuse("actor_episode_failed", f"[red]error:[/red] {escape(str(exc))}")
+    except ProviderError as exc:
+        _refuse("narration_failed", f"[red]error:[/red] {escape(str(exc))}")
+    # Mirror what `build --out` does before exporting, so an unnarrated
+    # corpus's rebuild carries the same artifact IR and manifest files its
+    # build was exported with. (A narrated rebuild compiled inside `narrate`.)
+    if not rebuilt.artifact_irs:
+        rebuilt = _compiled(rebuilt, corpus)
+
+    with tempfile.TemporaryDirectory(prefix="worldloom-verify-") as scratch:
+        rebuilt_dir = Path(scratch) / "rebuilt"
+        rebuilt.export(rebuilt_dir)
+        divergence = corpus_module.tree_divergence(rebuilt_dir, root)
+        files = sum(1 for path in rebuilt_dir.rglob("*") if path.is_file())
+
+    if divergence is not None:
+        if divergence.missing:
+            first, kind = divergence.missing[0], "missing"
+        elif divergence.extra:
+            first, kind = divergence.extra[0], "extra"
+        else:
+            assert divergence.differing is not None  # the only remaining half
+            first, kind = divergence.differing, "different"
+        # The one divergence with a known innocent cause gets its explanation
+        # in the message, not only in the envelope's `fix` — default mode
+        # prints the message alone, and "your rendered corpus failed the trust
+        # command" with no way out is the worst sentence this command could say.
+        rendered_extra = kind == "extra" and first.startswith(
+            f"{corpus_module.ARTIFACTS_DIR}/"
+        )
+        fix = (
+            "verify never renders; prove a rendering by replaying the build"
+            " with the same -f flags, and verify the corpus as built and"
+            " narrated"
+            if rendered_extra else None
+        )
+        _refuse(
+            "verify_diverged",
+            f"[red]✗[/red] diverged at {escape(first)} ({kind}): this corpus's"
+            " bytes are not what its own recipe and ledger rebuild"
+            + (f" — {fix}" if fix else ""),
+            exit_code=1,
+            fix=fix,
+            path=first,
+            kind=kind,
+            missing=list(divergence.missing),
+            extra=list(divergence.extra),
+        )
+
+    # Validate the corpus on disk, exactly as `worldloom validate` would —
+    # byte-identity has just made "the corpus" and "its rebuild" the same
+    # thing, and the on-disk world is the one whose artifact files exist to
+    # check. Same `CorpusError` posture as `validate`: a corpus whose own pack
+    # cannot be reconstructed fails the same way as one that cannot be read.
+    from .corpus import CorpusError
+
+    try:
+        report = world.validate()
+    except CorpusError as exc:
+        _refuse("corpus_unloadable", f"[red]error:[/red] {escape(str(exc))}")
+
+    if as_json:
+        typer.echo(json.dumps({
+            "verified": report.ok,
+            "files": files,
+            "checks": report.checks_run,
+            "violations": [
+                {"group": v.group, "code": v.code, "subject": v.subject, "detail": v.detail}
+                for v in report.violations
+            ],
+        }, indent=2))
+        if not report.ok:
+            raise typer.Exit(code=1)
+        return
+    if not _print_report(report, quiet=True):
+        raise typer.Exit(code=1)
+    console.print(
+        f"[green]✓[/green] verified — {files} files byte-identical,"
+        f" {report.checks_run} checks passed"
+    )
+
+
+@app.command()
+def migrate(
+    corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
+    out: Path = typer.Option(..., "--out", "-o", help="Directory to write the migrated corpus into."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace the destination if it exists."),
+) -> None:
+    """Copy a corpus to --out, upgraded to the current schema version.
+
+    Today the chain of version-to-version steps is empty, so this is the
+    identity migration: verify the version, copy byte-for-byte. An unknown or
+    future schema version is refused with both versions named — see
+    `worldloom.migrate` for the bump policy and `tests/test_migrate.py` for
+    the frozen fixture that enforces it.
+    """
+    # Imported here, not at module top: cli.py startup is a budget (W6), and
+    # migration is a maintenance verb no other command should pay for.
+    from .corpus import CorpusError
+    from .migrate import migrate as migrate_corpus
+
+    try:
+        written = migrate_corpus(corpus, out, overwrite=overwrite)
+    except CorpusError as exc:
+        _refuse("corpus_unloadable", f"[red]error:[/red] {escape(str(exc))}",
+                corpus=str(corpus))
+    except FileExistsError as exc:
+        _refuse("destination_exists", f"[red]error:[/red] {escape(str(exc))}",
+                fix="pass --overwrite to replace it")
+    except ValueError as exc:
+        # `migrate` names both versions in the message; the envelope carries
+        # the corpus so a harness need not parse them back out of prose.
+        _refuse("schema_version", f"[red]error:[/red] {escape(str(exc))}",
+                corpus=str(corpus))
+    console.print(f"[green]✓[/green] migrated to [bold]{written}[/bold]")
+
+
+#: One help string for both fleet verbs, because the refusal is part of the
+#: contract: "naturalistic" is not a hidden value waiting to be typed, it is a
+#: purpose `worldloom.fleet` refuses with the reference data it would need.
+_FLEET_PURPOSE_HELP = (
+    "What the fleet is being admitted for: challenge (it will be used to "
+    "challenge a retrieval or assistant system) or counterfactual (controlled "
+    "comparison against a shared frame). 'naturalistic' is refused, naming "
+    "the reference data it would need."
+)
+
+
+@fleet_app.command("qualify")
+def fleet_qualify(
+    fleet_dir: str = typer.Argument(
+        ..., help="A directory of member corpora — a mosaic out dir, or any directory of builds."
+    ),
+    purpose: str = typer.Option("challenge", "--purpose", help=_FLEET_PURPOSE_HELP),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the full qualification record as JSON."
+    ),
+    out: Path = typer.Option(
+        None, "--out", "-o",
+        help="Also write the record here — byte-stable, so it can be checked in and diffed.",
+    ),
+) -> None:
+    """Measure a fleet and rule on whether it is qualified for its purpose.
+
+    Exit 1 when the fleet is not qualified, with every failed floor named —
+    the same posture `worldloom validate` takes one level down: the exit code
+    is the verdict and the text is the reason.
+    """
+    from . import fleet as fleet_module
+
+    try:
+        record = fleet_module.qualify(fleet_dir, purpose)  # type: ignore[arg-type]
+    except fleet_module.FleetError as exc:
+        _refuse("fleet_error", f"[red]error:[/red] {escape(str(exc))}")
+
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(record.manifest(), encoding="utf-8")
+
+    if as_json:
+        typer.echo(record.manifest(), nl=False)
+        if not record.qualified:
+            raise typer.Exit(code=1)
+        return
+
+    table = Table(title=f"fleet {record.fleet} — {record.purpose}",
+                  title_style="bold", box=None)
+    table.add_column("world", style="bold")
+    table.add_column("coherent")
+    table.add_column("replays")
+    table.add_column("questions", justify="right")
+    for world in record.worlds:
+        table.add_row(
+            world.name,
+            "[green]yes[/green]" if world.ok else f"[red]no ({world.violations})[/red]",
+            "[green]yes[/green]" if world.replay_verified else "[red]no[/red]",
+            str(world.questions),
+        )
+    console.print(table)
+    console.print(
+        f"[dim]coverage {record.coverage['share']:.0%} of {record.coverage['combinations']}"
+        f" pair(s); unvaried: {', '.join(record.unvaried) or 'none'};"
+        f" spine {record.spine['share']}; questions restated across worlds"
+        f" {record.questions['cross_world_restated_share']:.0%};"
+        f" effective diversity {record.effective_diversity['vendi_questions']}"
+        f" (reported, non-gating)[/dim]"
+    )
+    if record.qualified:
+        console.print(f"[green]✓[/green] qualified for [bold]{record.purpose}[/bold]")
+        return
+    for name in record.failed:
+        err.print(f"[red]✗[/red] {name}: {escape(record.floors[name]['detail'])}")
+    raise typer.Exit(code=1)
+
+
+@fleet_app.command("curate")
+def fleet_curate(
+    fleet_dir: str = typer.Argument(
+        ..., help="A directory of member corpora — a mosaic out dir, or any directory of builds."
+    ),
+    purpose: str = typer.Option("challenge", "--purpose", help=_FLEET_PURPOSE_HELP),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the manifest as JSON instead of a table."
+    ),
+) -> None:
+    """Keep one champion per niche; name every reject and every empty niche.
+
+    Writes `fleet-manifest.json` at the fleet root, byte-for-byte stable for
+    the same fleet. Exit 0 either way: a curation is a keep list, not a gate —
+    `fleet qualify` owns pass/fail.
+    """
+    from . import fleet as fleet_module
+
+    try:
+        curation = fleet_module.curate(fleet_dir, purpose)  # type: ignore[arg-type]
+    except fleet_module.FleetError as exc:
+        _refuse("fleet_error", f"[red]error:[/red] {escape(str(exc))}")
+
+    if as_json:
+        typer.echo(curation.manifest(), nl=False)
+        return
+
+    for champion in curation.champions:
+        niche = ", ".join(f"{key}={champion.niche[key]}" for key in sorted(champion.niche))
+        console.print(f"[green]✓[/green] [bold]{champion.world}[/bold] holds"
+                      f" ({niche}) at {curation.fitness_metric}={champion.fitness}")
+    for reject in curation.rejects:
+        displaced = f" — displaced by {reject.displaced_by}" if reject.displaced_by else ""
+        console.print(f"[yellow]-[/yellow] {reject.world}: {escape(reject.reason)}{displaced}")
+    for hole in curation.holes:
+        niche = ", ".join(f"{key}={hole[key]}" for key in sorted(hole))
+        console.print(f"[dim]· empty niche ({niche}) — next generation's worklist[/dim]")
+    console.print(
+        f"[dim]{len(curation.champions)} champion(s), {len(curation.rejects)} reject(s),"
+        f" {len(curation.holes)} empty niche(s)."
+        f" The manifest is in {fleet_module.MANIFEST_NAME}.[/dim]"
+    )
+
+
+@app.command("evolve")
+def evolve_run(
+    generations: int = typer.Option(
+        3, "--generations", "-g",
+        help="How many generations to run, the dispersed generation 0 included.",
+    ),
+    population: int = typer.Option(
+        6, "--population", "-n",
+        help="Configurations proposed and built per generation.",
+    ),
+    seed: int = typer.Option(
+        8128, "--seed", "-s",
+        help="Run seed. The same seed reruns the same evolution byte for byte.",
+    ),
+    purpose: str = typer.Option("challenge", "--purpose", help=_FLEET_PURPOSE_HELP),
+    out: Path = typer.Option(
+        ..., "--out", "-o",
+        help="Directory the generations are built into: gen0/, gen1/, ... each"
+             " with its own manifest beside fleet's.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Emit the run manifest as JSON instead of a summary."
+    ),
+) -> None:
+    """Evolve build configurations: propose, build, measure, select, vary.
+
+    Generation 0 is a dispersed sample of the build-configuration space;
+    every later generation is single-axis variations of the previous
+    generation's champions, exactly as `fleet curate` kept them. Fitness and
+    selection are fleet's own — integer-gated, vendi reported and never
+    gating — and a purpose fleet refuses ('naturalistic') is refused here at
+    the door with the same reason. Deterministic throughout: rerunning the
+    same seed resumes an interrupted run and rewrites byte-identical
+    manifests.
+    """
+    from . import evolve as evolve_module
+    from . import fleet as fleet_module
+    from . import spaces as spaces_module
+
+    space = spaces_module.build_space()
+    # Narrowed as a visible act, never silently inside the loop: `evolve`
+    # refuses a space carrying an axis it cannot drive, so each exclusion is
+    # printed with its reason (`surface` above all — a spec is resolved and
+    # never recorded, so selection could not see that axis move).
+    undrivable = evolve_module.excluded(space)
+    for name, reason in sorted(undrivable.items()):
+        err.print(f"[yellow]axis {name} not evolved:[/yellow] {escape(reason)}")
+    space = space.select([n for n in space.names if n not in undrivable])
+    try:
+        run = evolve_module.evolve(
+            space, seed=seed, generations=generations, population=population,
+            out_dir=out, purpose=purpose,  # type: ignore[arg-type]
+        )
+    except (evolve_module.EvolveError, fleet_module.FleetError) as exc:
+        _refuse("evolve_failed", f"[red]error:[/red] {escape(str(exc))}")
+
+    if as_json:
+        typer.echo(run.manifest(), nl=False)
+        return
+    for generation in run.generations:
+        champions = ", ".join(generation.champions) or "none"
+        variations = ", ".join(
+            f"{member.label} {member.axis}->{member.to_value}"
+            for member in generation.members if member.axis
+        )
+        console.print(
+            f"[bold]gen{generation.index}[/bold]: {len(generation.members)} built,"
+            f" champion(s): {champions}"
+            + (f" — varied {variations}" if variations else " — dispersed sample")
+        )
+    console.print(
+        f"[dim]{evolve_module.RUN_MANIFEST_NAME} and"
+        f" gen*/{evolve_module.GENERATION_MANIFEST_NAME} record the run under {out}.[/dim]"
+    )
+
+
+@evals_app.command("export")
+def evals_export(
+    corpus: str = typer.Argument(..., help="Bundled corpus name or path."),
+    out: Path = typer.Option(None, "--out", "-o", help="Write JSONL here instead of stdout."),
+) -> None:
+    """Export the evaluation set as JSONL, ready to score a retrieval system."""
+    world = _load(corpus)
+    lines = [json.dumps(case.model_dump(mode="json"), sort_keys=True) for case in world.evaluations]
+    payload = "\n".join(lines) + "\n"
+    if out is None:
+        typer.echo(payload, nl=False)
+    else:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        console.print(f"[green]✓[/green] {len(lines)} case(s) written to [bold]{out}[/bold]")
+
+
+@app.command()
+def formats() -> None:
+    """List the renderers this installation has."""
+    from .render import available
+
+    for name in available():
+        console.print(name)
+
+
+def _card_json(card: Any) -> dict[str, Any]:
+    """A `Scorecard` as the JSON fragment shared by every `evaluate` shape below.
+
+    Factored out so the single-retriever payload (`{k, overall, by_type,
+    outcomes}`, unchanged since before `--retriever` existed) and each entry
+    under `"retrievers"` in the `both` payload are built from one place — two
+    copies of this dict comprehension drifting apart is exactly the kind of
+    thing that would go unnoticed until an agent's `--json` parsing broke on
+    one shape and not the other.
+    """
+    return {
+        "overall": {"passed": card.passed, "total": len(card)},
+        "by_type": {
+            kind.value: {"passed": passed, "total": total}
+            for kind, (passed, total) in sorted(card.by_type().items(), key=lambda item: item[0].value)
+        },
+        "outcomes": [
+            {
+                "case_id": outcome.case_id,
+                "type": outcome.evaluation_type.value,
+                "passed": outcome.passed,
+                "detail": outcome.detail,
+            }
+            for outcome in card.outcomes
+        ],
+    }
+
+
+@app.command()
+def evaluate(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    k: int = typer.Option(5, "-k", help="How many passages a retriever may return."),
+    retriever: str = typer.Option(
+        "bm25", "--retriever",
+        help=(
+            "bm25 (default — the original baseline, unchanged), tfidf "
+            "(vector-space cosine, a genuinely different ranking family — see "
+            "src/worldloom/evaluate/tfidf.py), embedding (dense vectors against "
+            "a pinned model — needs the `embeddings` extra or a vector cache), "
+            "both (the two lexical baselines side by side, with a per-family "
+            "agreement reading), or all (every retriever this installation can "
+            "run, skipping any whose model is unavailable)."
+        ),
+    ),
+    vectors: str = typer.Option(
+        "", "--vectors",
+        help=(
+            "Vector cache for --retriever embedding: a file, or a directory to "
+            "keep one per model. A corpus that carries its cache scores against "
+            "the embedding retriever with no model installed at all."
+        ),
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every question."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help=(
+            "Emit the scorecard as JSON. This is the measure half of the "
+            "measure-then-iterate loop — an agent deciding what to change next "
+            "should read data, not parse a bar chart."
+        ),
+    ),
+) -> None:
+    """Score one or more retrievers against the corpus's evaluation set.
+
+    A *low* score on the hard question types is the good result. No retriever
+    here has any notion of when a document was written or how authoritative it
+    is, so a corpus on which they do well on temporal and authority questions is
+    a corpus that is not testing anything. `--retriever both` is the stronger
+    claim: a family low under BM25 *and* TF-IDF cosine — two different ranking
+    families — is hard because of the corpus, not because of which keyword
+    heuristic happened to be asked. `--retriever all` is stronger still, because
+    both of those are still *keyword* heuristics: a family the embedding
+    retriever also fails is hard for a reason no ranking function fixes, and a
+    family it walks past was a lexical trap rather than a difficult question.
+    """
+    import json as json_module
+
+    from .evaluate import (
+        LEXICAL_RETRIEVERS,
+        RETRIEVERS,
+        compare,
+        difficulty_by_family,
+        embedding,
+        render_agreement,
+        render_difficulty,
+    )
+    from .evaluate import score as run_score
+
+    choices = sorted([*RETRIEVERS, "both", "all"])
+    if retriever not in choices:
+        raise typer.BadParameter(f"must be one of {choices}", param_hint="--retriever")
+
+    if vectors:
+        # Bound for this invocation only, and by rebinding the registry entry
+        # rather than by threading a path through `score()` — the scorer takes
+        # documents and a name, and giving it an argument only one retriever
+        # understands is exactly the branch the seam exists to prevent.
+        RETRIEVERS["embedding"] = embedding.configured(cache=vectors)
+
+    world = _compiled(_load(corpus), corpus)
+
+    if retriever in ("both", "all"):
+        # `both` is the two lexical baselines, and stays that way whatever else
+        # gets registered: it is the pre-existing reading, its JSON shape is
+        # pinned by tests, and "lexical versus semantic" is only a comparison
+        # while the lexical side is a fixed pair.
+        wanted = list(LEXICAL_RETRIEVERS) if retriever == "both" else sorted(RETRIEVERS)
+        cards = {}
+        for name in wanted:
+            try:
+                cards[name] = run_score(world, k=k, retriever=name)
+            except embedding.EmbeddingUnavailable as unavailable:
+                # A skip, not a failure. The two lexical readings are still a
+                # measurement, and saying which one was missing and why is more
+                # use than an exit code — see `embedding.py`'s docstring on
+                # being absent-friendly.
+                if not as_json:
+                    # Escaped: the message names the extra as
+                    # `worldloom[embeddings]`, and rich reads a bracketed word
+                    # as a style tag and prints the instruction with the part
+                    # you have to type removed.
+                    console.print(f"[yellow]skipped {name}[/yellow] — {escape(str(unavailable))}")
+                continue
+        if not cards:
+            raise typer.Exit(1)
+        findings = compare(cards)
+        # Only computed where a semantic retriever actually ran. `both` is two
+        # lexical baselines, and printing "lexical vs semantic" over a table
+        # with no semantic column in it would be a heading describing an
+        # experiment that did not happen.
+        difficulty = difficulty_by_family(cards)
+        if as_json:
+            # A new top-level shape, not a variant of the single-retriever one —
+            # `retriever="both"` is a capability nothing could request before
+            # this flag existed, so there is no old consumer whose parsing this
+            # could break. The single-retriever shape below (`bm25`, the
+            # default, and `tfidf`) is untouched byte-for-byte.
+            typer.echo(json_module.dumps({
+                "retriever": retriever,
+                "k": k,
+                "retrievers": {name: _card_json(card) for name, card in cards.items()},
+                "agreement": {
+                    finding.evaluation_type.value: {
+                        "scores": {
+                            name: {"passed": passed, "total": total}
+                            for name, (passed, total) in finding.scores.items()
+                        },
+                        "disagreements": finding.disagreements,
+                        "total": finding.total,
+                        "finding": finding.finding,
+                    }
+                    for finding in findings
+                },
+                # Additive, and absent when only lexical retrievers ran — so
+                # `--retriever both`'s payload keeps exactly the shape it had.
+                **(
+                    {
+                        "difficulty": {
+                            finding.evaluation_type.value: {
+                                "lexical": {"passed": finding.lexical[0], "total": finding.lexical[1]},
+                                "semantic": {"passed": finding.semantic[0], "total": finding.semantic[1]},
+                                "verdict": finding.verdict,
+                            }
+                            for finding in difficulty
+                        }
+                    }
+                    if difficulty
+                    else {}
+                ),
+            }, indent=2))
+            return
+        for name in sorted(cards):
+            console.print(str(cards[name]))
+            console.print("")
+        console.print(render_agreement(findings))
+        if difficulty:
+            console.print("")
+            console.print(render_difficulty(difficulty))
+        if verbose:
+            for name in sorted(cards):
+                console.print(f"\n[bold]{name}[/bold]")
+                for outcome in cards[name].outcomes:
+                    mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
+                    console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
+                    console.print(f"      {outcome.detail}")
+        return
+
+    try:
+        card = run_score(world, k=k, retriever=retriever)
+    except embedding.EmbeddingUnavailable as unavailable:
+        # Explicitly asked for, and not runnable. Nonzero, because a command
+        # that printed nothing and exited clean would read as "scored, no
+        # findings" — but a stated reason and no traceback, because this is a
+        # missing optional package, not a defect.
+        console.print(f"[red]cannot run {retriever}[/red] — {escape(str(unavailable))}")
+        raise typer.Exit(1) from None
+    if as_json:
+        # Exactly the pre-`--retriever` shape, plus one additive key naming
+        # which retriever produced it — an old consumer reading `k`/`overall`/
+        # `by_type`/`outcomes` sees the same thing it always has.
+        typer.echo(json_module.dumps({"retriever": retriever, "k": card.k, **_card_json(card)}, indent=2))
+        return
+    console.print(str(card))
+
+    if verbose:
+        console.print("")
+        for outcome in card.outcomes:
+            mark = "[green]✓[/green]" if outcome.passed else "[red]✗[/red]"
+            console.print(f"  {mark} {outcome.case_id}  {outcome.evaluation_type.value}")
+            console.print(f"      {outcome.detail}")
+
+
+@app.command()
+def search(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    query: str = typer.Argument(..., help="What to look for, in plain words."),
+    limit: int = typer.Option(5, "-k", "--limit", help="How many passages to return."),
+    as_of: str = typer.Option(
+        "", "--as-of",
+        help=(
+            "ISO date or datetime; only passages from artifacts created at or "
+            "before this moment are searched. This is the temporal-cutoff rule "
+            "the narration contract already imposes on facts, applied to "
+            "retrieval: an author amending a document in March may only lean "
+            "on what existed in March."
+        ),
+    ),
+    include_hidden: bool = typer.Option(
+        False, "--include-hidden",
+        help=(
+            "Search hidden sections (lineage appendices) too. Off by default "
+            "for `evaluate`'s reason: machinery is not something a reader "
+            "would have found."
+        ),
+    ),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit ranked passages as JSON, full text included.",
+    ),
+) -> None:
+    """Rank the corpus's own passages against a query, BM25, deterministic.
+
+    The retrieval half of self-referential narration: before writing a document
+    that amends, summarises or contradicts earlier ones, ask the corpus what it
+    already says. This is the same passage index and the same ranking
+    `evaluate` scores retrievers with — so what the harness retrieves here is
+    exactly what the benchmark's baseline retriever would have seen, and a
+    corpus searched while it is being written is searched the way it will be
+    judged. Read-only: nothing here writes a byte.
+    """
+    from datetime import datetime
+
+    from .evaluate.bm25 import Bm25
+    from .evaluate.index import passages as index_passages
+
+    if not query.strip():
+        _refuse("empty_query",
+                "[red]error:[/red] an empty query ranks every passage equally; say what you are looking for")
+    cutoff = None
+    if as_of:
+        try:
+            cutoff = datetime.fromisoformat(as_of)
+        except ValueError as exc:
+            _refuse("not_a_date",
+                    f"[red]error:[/red] --as-of {as_of!r} is not an ISO date: {escape(str(exc))}")
+        if cutoff.tzinfo is None:
+            # Corpus timestamps are timezone-aware UTC throughout; a bare
+            # `--as-of 2026-03-01` would otherwise crash on the comparison.
+            # Reading it as UTC matches what every timestamp in the corpus
+            # means, rather than what the caller's machine is set to.
+            cutoff = cutoff.replace(tzinfo=UTC)
+
+    world = _compiled(_load(corpus), corpus)
+    found = index_passages(world, include_hidden=include_hidden)
+    if cutoff is not None:
+        found = [passage for passage in found if passage.created_at <= cutoff]
+    if not found:
+        # An empty index is a state of the corpus, not a poor query, so it is
+        # an error rather than a zero-result success — and it names the flag
+        # that caused it when one did.
+        reason = (
+            f"no artifact existed at or before {cutoff.isoformat()}" if cutoff is not None
+            else "this corpus has no retrievable passages"
+        )
+        _refuse("no_passages", f"[red]error:[/red] nothing to search: {reason}")
+
+    index = Bm25([passage.text for passage in found])
+    ranked = index.rank(query, limit=max(1, limit))
+    hits = [
+        {
+            "passage_id": found[position].id,
+            "artifact_id": found[position].artifact_id,
+            "heading": found[position].heading,
+            "created_at": found[position].created_at.isoformat(),
+            "authority": found[position].authority.value,
+            "score": score,
+            "fact_ids": sorted(found[position].fact_ids),
+            "text": found[position].text,
+        }
+        for position, score in ranked
+        if score > 0.0
+        # Zero-score passages share no term with the query; returning them
+        # would pad the list with whatever document order put first and call
+        # it a ranking.
+    ]
+
+    if as_json:
+        typer.echo(json.dumps({"query": query, "searched": len(found), "hits": hits}, indent=2))
+        return
+    if not hits:
+        console.print(f"no passage shares a term with {query!r} ({len(found)} searched)")
+        return
+    console.print(f"[bold]{len(hits)}[/bold] of {len(found)} passages, best first\n")
+    for hit in hits:
+        snippet = " ".join(str(hit["text"]).split())
+        if len(snippet) > 220:
+            snippet = snippet[:220] + "…"
+        console.print(
+            f"  [cyan]{hit['passage_id']}[/cyan]  {hit['heading']}"
+            f"  [dim]{hit['created_at']} · {hit['authority']} · {hit['score']:.3f}[/dim]"
+        )
+        console.print(f"      {escape(snippet)}\n")
+
+
+@benchmark_app.command("run")
+def benchmark_run(
+    corpus: str = typer.Argument(..., help="Corpus name or path."),
+    exec_command: str = typer.Option(
+        ..., "--exec",
+        help=(
+            "The agent as an executable: reads one case's JSON on stdin, "
+            "prints its answer JSON on stdout. Run without a shell (shlex "
+            "argv) unless --shell is given."
+        ),
+    ),
+    k: int = typer.Option(5, "-k", help="How many passages each case offers the agent."),
+    limit: int = typer.Option(
         0, "--limit", help="Score only the first N cases; 0 means all of them."
     ),
     timeout: float = typer.Option(
