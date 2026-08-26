@@ -150,6 +150,13 @@ CAPABILITIES = [
         ),
         stable_id_field="message_id",
     ),
+    ConnectorCapability(
+        connector="email",
+        entity="thread",
+        verbs=(ConnectorVerb.SEARCH, ConnectorVerb.LIST, ConnectorVerb.READ),
+        content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
+        stable_id_field="thread_id",
+    ),
     *[
         ConnectorCapability(
             connector="salesforce",
@@ -480,6 +487,11 @@ def generate_artifact_projection(
                 external_id=external_id,
                 title=title,
                 fields={
+                    {
+                        "confluence": "page_id",
+                        "sharepoint": "item_id",
+                        "drive": "file_id",
+                    }[connector]: external_id,
                     "name": title,
                     "artifact_type": artifact.artifact_type,
                     "domain": artifact.domain,
