@@ -69,12 +69,17 @@ def materialize_corpus(
         world, connectors=needed, projections=projections
     )
     records = list(data.records)
+    stable_fields = {
+        (capability.connector, capability.entity): capability.stable_id_field
+        for capability in data.capabilities
+    }
     required_pairs = sorted({(requirement.connector, requirement.entity) for query in planned for requirement in query.generation.source_requirements})
     for connector, entity in required_pairs:
         if any(record.connector == connector and record.entity == entity for record in records):
             continue
         record_id = content_key("query-required-record", connector, entity, world.company.id)
-        records.append(ConnectorRecord(id=record_id, connector=connector, entity=entity, external_id=record_id, title=f"{world.company.name} {entity.replace('_', ' ')}", fields={"company_id": world.company.id, "period": world.period, "stable_id": record_id, "generated_for_query_requirements": True}))
+        stable_field = stable_fields.get((connector, entity), "stable_id")
+        records.append(ConnectorRecord(id=record_id, connector=connector, entity=entity, external_id=record_id, title=f"{world.company.name} {entity.replace('_', ' ')}", fields={"company_id": world.company.id, "period": world.period, stable_field: record_id, "generated_for_query_requirements": True}))
     destinations: dict[tuple[str, str], str] = {}
     for query in planned:
         mutation = query.generation.mutation
@@ -93,7 +98,9 @@ def materialize_corpus(
                 external_id=record_id,
                 title=f"Existing {mutation.entity.replace('_', ' ')} for {world.company.name}",
                 fields={
-                    "stable_id": record_id,
+                    stable_fields.get(
+                        (mutation.connector, mutation.entity), "stable_id"
+                    ): record_id,
                     "version": 1,
                     "etag": content_key("etag", record_id, "1"),
                     "manual_content": "Preserve this manually authored content.",
@@ -184,6 +191,19 @@ def score_trace(query: PlannedEnterpriseQuery, calls: Iterable[TraceCall]) -> Sc
 
 def validate_corpus(corpus: EnterpriseCorpus) -> tuple[str, ...]:
     findings: list[str] = []
+    record_ids = {record.id for record in corpus.connector_data.records}
+    if len(record_ids) != len(corpus.connector_data.records):
+        findings.append("connector data: duplicate internal record ids")
+    stable_fields = {
+        (capability.connector, capability.entity): capability.stable_id_field
+        for capability in corpus.connector_data.capabilities
+    }
+    for record in corpus.connector_data.records:
+        stable_field = stable_fields.get((record.connector, record.entity))
+        if stable_field and not record.fields.get(stable_field):
+            findings.append(
+                f"connector record {record.id}: missing stable field {stable_field}"
+            )
     fixtures = {fixture.query_id: fixture for fixture in corpus.fixtures}
     for query in corpus.queries:
         fixture = fixtures.get(query.id)
@@ -194,6 +214,18 @@ def validate_corpus(corpus: EnterpriseCorpus) -> tuple[str, ...]:
             key = f"{requirement.connector}:{requirement.entity}"
             if len(fixture.input_record_ids.get(key, ())) < requirement.minimum:
                 findings.append(f"query {query.id}: unmet source requirement {key}")
+            dangling = set(fixture.input_record_ids.get(key, ())) - record_ids
+            if dangling:
+                findings.append(
+                    f"query {query.id}: dangling input records {sorted(dangling)}"
+                )
+        if (
+            fixture.destination_record_id is not None
+            and fixture.destination_record_id not in record_ids
+        ):
+            findings.append(
+                f"query {query.id}: dangling destination record {fixture.destination_record_id}"
+            )
         if query.generation.state_overrides and not fixture.overrides:
             findings.append(f"query {query.id}: failure dimension has no state override")
     return tuple(findings)
