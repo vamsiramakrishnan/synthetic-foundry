@@ -55,13 +55,19 @@ def materialize_corpus(world: World, queries: Iterable[PlannedEnterpriseQuery]) 
     planned = tuple(queries)
     needed = tuple(sorted({requirement.connector for query in planned for requirement in query.generation.source_requirements} | {query.generation.mutation.connector for query in planned}))
     data = generate_connector_data(world, connectors=needed)
+    records = list(data.records)
+    required_pairs = sorted({(requirement.connector, requirement.entity) for query in planned for requirement in query.generation.source_requirements})
+    for connector, entity in required_pairs:
+        if any(record.connector == connector and record.entity == entity for record in records):
+            continue
+        record_id = content_key("query-required-record", connector, entity, world.company.id)
+        records.append(ConnectorRecord(id=record_id, connector=connector, entity=entity, external_id=record_id, title=f"{world.company.name} {entity.replace('_', ' ')}", fields={"company_id": world.company.id, "period": world.period, "stable_id": record_id, "generated_for_query_requirements": True}))
+    data = ConnectorDataset(capabilities=data.capabilities, records=records)
     fixtures: list[QueryFixture] = []
     for query in planned:
         inputs: dict[str, tuple[str, ...]] = {}
         for requirement in query.generation.source_requirements:
             matches = tuple(record.id for record in data.records if record.connector == requirement.connector and record.entity == requirement.entity)
-            if len(matches) < requirement.minimum:
-                matches = matches + tuple(content_key("fixture-record", query.id, requirement.connector, requirement.entity, str(index)) for index in range(requirement.minimum - len(matches)))
             inputs[f"{requirement.connector}:{requirement.entity}"] = matches[: max(requirement.minimum, 3)]
         mutation = query.generation.mutation
         destination_id = content_key("fixture-destination", query.id, mutation.connector, mutation.entity) if mutation.preexisting_record else None
