@@ -93,7 +93,7 @@ app.add_typer(enterprise_evals_app, name="enterprise-evals")
 
 @enterprise_evals_app.command("space")
 def enterprise_evals_space(
-    max_candidates: int = typer.Option(1_000_000, min=1),
+    max_candidates: int = typer.Option(10_000_000, min=1),
 ) -> None:
     """Count semantically valid query candidates without generating fixtures."""
     from .enterprise_queries import valid_rows
