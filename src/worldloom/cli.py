@@ -180,9 +180,11 @@ def enterprise_evals_build(
     profile_path: Path | None = typer.Option(None, "--profile"),
     shard_index: int | None = typer.Option(None, "--shard-index"),
     shard_count: int | None = typer.Option(None, "--shard-count"),
+    render_limit: int = typer.Option(0, "--render-limit", min=0),
 ) -> None:
-    """Plan, materialize, validate, and export a connector corpus."""
+    """Plan, materialize, validate, export, and optionally render a connector corpus."""
     from .enterprise_corpus import materialize_corpus, validate_corpus
+    from .enterprise_artifacts import render_corpus_artifacts
     from .enterprise_io import export_corpus
     from .enterprise_queries import plan_queries
     from .enterprise_specs import (
@@ -224,11 +226,20 @@ def enterprise_evals_build(
             typer.echo(finding, err=True)
         raise typer.Exit(1)
     export_corpus(corpus, output)
+    rendered = render_corpus_artifacts(
+        corpus, output / "artifacts", limit=render_limit
+    ) if render_limit else ()
+    if rendered:
+        (output / "rendered-artifacts.json").write_text(
+            json.dumps([item.model_dump(mode="json") for item in rendered], indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     typer.echo(
         json.dumps(
             {
                 "queries": len(corpus.queries),
                 "records": len(corpus.connector_data.records),
+                "rendered_artifacts": len(rendered),
                 "coverage": report.model_dump(mode="json") if report else None,
             },
             sort_keys=True,
