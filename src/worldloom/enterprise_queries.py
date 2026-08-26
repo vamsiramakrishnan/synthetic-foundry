@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import itertools
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, model_validator
 
-from .enterprise_specs import CoverageProfile, SpecRegistry, WorkflowSpec, builtin_registry
+from .enterprise_specs import (
+    CoverageProfile,
+    SpecRegistry,
+    WorkflowSpec,
+    builtin_registry,
+)
 from .ids import content_key
 from .models import Model
 
