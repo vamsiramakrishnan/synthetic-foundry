@@ -144,6 +144,62 @@ def enterprise_evals_validate(path: Path) -> None:
         raise typer.Exit(1)
     typer.echo("valid")
 
+
+@enterprise_evals_app.command("build")
+def enterprise_evals_build(
+    world_path: Path,
+    output: Path,
+    strength: int = typer.Option(2, min=1, max=4),
+    limit: int | None = None,
+) -> None:
+    """Plan, materialize, validate, and export a connector corpus."""
+    from .enterprise_corpus import materialize_corpus, validate_corpus
+    from .enterprise_io import export_corpus
+    from .enterprise_queries import plan_queries
+    from .enterprise_specs import CoverageProfile
+    from .world import World
+
+    world = World.load(world_path)
+    queries, report = plan_queries(
+        world, profile=CoverageProfile(strengths=strength), limit=limit
+    )
+    corpus = materialize_corpus(world, queries)
+    findings = validate_corpus(corpus)
+    if findings:
+        for finding in findings:
+            typer.echo(finding, err=True)
+        raise typer.Exit(1)
+    export_corpus(corpus, output)
+    typer.echo(
+        json.dumps(
+            {
+                "queries": len(corpus.queries),
+                "records": len(corpus.connector_data.records),
+                "coverage": report.model_dump(mode="json") if report else None,
+            },
+            sort_keys=True,
+        )
+    )
+
+
+@enterprise_evals_app.command("score")
+def enterprise_evals_score(
+    query_path: Path,
+    trace_path: Path,
+) -> None:
+    """Score an MCP trace against one planned query's semantic DAG."""
+    from .enterprise_corpus import TraceCall, score_trace
+    from .enterprise_queries import PlannedEnterpriseQuery
+
+    query = PlannedEnterpriseQuery.model_validate_json(
+        query_path.read_text(encoding="utf-8")
+    )
+    calls = [
+        TraceCall.model_validate(item)
+        for item in json.loads(trace_path.read_text(encoding="utf-8"))
+    ]
+    typer.echo(score_trace(query, calls).model_dump_json())
+
 console = Console()
 err = Console(stderr=True)
 
