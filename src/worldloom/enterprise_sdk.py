@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal
 
+from .connector_data import ConnectorProjectionRegistry
 from .enterprise_corpus import EnterpriseCorpus, materialize_corpus
 from .enterprise_queries import CoverageReport, PlannedEnterpriseQuery, plan_queries
 from .enterprise_runner import shard_queries
@@ -28,6 +29,7 @@ class EnterpriseEvalHarness:
     profile: CoverageProfile
     strategy: Literal["covering", "exhaustive"] = "covering"
     limit: int | None = None
+    projections: ConnectorProjectionRegistry | None = None
 
     @classmethod
     def from_world(cls, world: World) -> EnterpriseEvalHarness:
@@ -56,6 +58,11 @@ class EnterpriseEvalHarness:
     def exhaustive(self) -> EnterpriseEvalHarness:
         return replace(self, strategy="exhaustive")
 
+    def with_projections(
+        self, projections: ConnectorProjectionRegistry
+    ) -> EnterpriseEvalHarness:
+        return replace(self, projections=projections)
+
     def take(self, count: int) -> EnterpriseEvalHarness:
         return replace(self, limit=count)
 
@@ -65,7 +72,12 @@ class EnterpriseEvalHarness:
 
     def build(self) -> tuple[EnterpriseCorpus, CoverageReport | None]:
         queries, report = self.plan()
-        return materialize_corpus(self.world, queries), report
+        return (
+            materialize_corpus(
+                self.world, queries, projections=self.projections
+            ),
+            report,
+        )
 
     def shard(
         self, index: int, count: int
