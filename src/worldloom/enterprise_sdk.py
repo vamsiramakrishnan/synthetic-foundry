@@ -11,7 +11,9 @@ from .enterprise_runner import shard_queries
 from .enterprise_specs import (
     CoverageProfile,
     EnterpriseEvalSpec,
+    ScenarioProfile,
     SpecRegistry,
+    apply_scenario_profile,
     builtin_registry,
 )
 
@@ -42,6 +44,13 @@ class EnterpriseEvalHarness:
             self,
             registry=SpecRegistry(spec.connectors, spec.workflows, spec.processes),
             profile=spec.coverage,
+        )
+
+    def with_scenario(self, profile: ScenarioProfile) -> EnterpriseEvalHarness:
+        return replace(
+            self,
+            registry=apply_scenario_profile(self.registry, profile),
+            profile=profile.coverage,
         )
 
     def exhaustive(self) -> EnterpriseEvalHarness:
