@@ -45,7 +45,7 @@ Use `.exhaustive().take(n)` for deterministic shards/smoke sets. The exhaustive 
 worldloom enterprise-evals space
 worldloom enterprise-evals plan dist/retail-close queries.jsonl --strength 2
 worldloom enterprise-evals plan dist/retail-close shard.jsonl --exhaustive --limit 10000
-worldloom enterprise-evals build dist/retail-close dist/enterprise-evals --limit 500 --profile examples/enterprise-evals/financial-services.json
+worldloom enterprise-evals build dist/retail-close dist/enterprise-evals --limit 500 --render-limit 50 --profile examples/enterprise-evals/financial-services.json
 worldloom enterprise-evals validate corpus.json
 worldloom enterprise-evals score query.json trace.json
 ```
@@ -57,3 +57,7 @@ Every query includes grounded customer language, dimensions, generation requirem
 The scorer measures required semantic calls, dependency order, write verification, provenance, and idempotency. MCP-specific tool names stay in the runner adapter so one corpus can test different MCP implementations.
 
 `ConnectorProjectionRegistry` is the extension point for company-specific or custom connectors. `RunnerConfig` binds semantic DAG nodes to concrete MCP tool names. `execute_query` checkpoints after every node, stops on failed writes, and resumes safely from deterministic query and node IDs.
+
+`render_corpus_artifacts` produces real XLSX, DOCX, PPTX, and PDF files. XLSX output contains structured evidence, chart data, a native chart, and provenance; PPTX output includes native charts and source slides. Optional imports preserve the package's bare-install contract.
+
+`ConnectorSimulator` is an executable in-memory MCP target for harness tests. It applies fixture permissions, stale versions, missing identifiers, ambiguous joins, partial writes, version conflicts, idempotent writes, and dependency-based readback instead of merely carrying failure labels.
