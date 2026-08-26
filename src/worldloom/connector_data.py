@@ -520,7 +520,12 @@ def generate_salesforce(world: World) -> list[ConnectorRecord]:
             entity="account",
             external_id=f"001{content_key('salesforce-account', world.company.id)[:15].upper()}",
             title=world.company.name,
-            fields={"name": world.company.name, "company_id": world.company.id, "reporting_period": world.period},
+            fields={
+                "id": f"001{content_key('salesforce-account', world.company.id)[:15].upper()}",
+                "name": world.company.name,
+                "company_id": world.company.id,
+                "reporting_period": world.period,
+            },
         )
     ]
     facts = _facts_by_event(world)
