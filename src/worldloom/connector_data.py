@@ -151,6 +151,24 @@ CAPABILITIES = [
     ),
     *[
         ConnectorCapability(
+            connector="salesforce",
+            entity=entity,
+            verbs=(
+                ConnectorVerb.SEARCH,
+                ConnectorVerb.LIST,
+                ConnectorVerb.READ,
+                ConnectorVerb.CREATE,
+                ConnectorVerb.UPDATE,
+                ConnectorVerb.PATCH,
+                ConnectorVerb.UPSERT,
+            ),
+            content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
+            stable_id_field="id",
+        )
+        for entity in ("account", "opportunity")
+    ],
+    *[
+        ConnectorCapability(
             connector=connector,
             entity=entity,
             verbs=(
@@ -234,6 +252,34 @@ def _email_address(name: str, company: str) -> str:
 def generate_jira(world: World) -> list[ConnectorRecord]:
     facts = _facts_by_event(world)
     records: list[ConnectorRecord] = []
+    if world.tasks:
+        for index, task in enumerate(sorted(world.tasks, key=lambda item: (item.created_at, item.id)), start=1):
+            key = f"WL-{index}"
+            record_id = content_key("jira", world.seed, task.id)
+            records.append(
+                ConnectorRecord(
+                    id=f"CONN-JIRA-{record_id[:12].upper()}",
+                    connector="jira",
+                    entity="issue",
+                    external_id=key,
+                    title=task.title,
+                    fields={
+                        "key": key,
+                        "summary": task.title,
+                        "description": f"{task.kind.replace('_', ' ').title()} for {world.company.name}.",
+                        "status": {"open": "To Do", "assigned": "In Progress", "closed": "Done"}.get(task.state, "To Do"),
+                        "priority": "High" if task.addresses == "control" else "Medium",
+                        "labels": ["worldloom", task.domain, task.kind],
+                        "assignee_id": task.owner_id,
+                        "reporter_id": task.created_by,
+                        "due_at": task.due_at.isoformat() if task.due_at else None,
+                        "subject_ref": task.subject_ref,
+                    },
+                    fact_ids=sorted(task.fact_ids),
+                    source_artifact_ids=_artifact_ids(world, set(task.fact_ids)),
+                )
+            )
+        return records
     for index, event in enumerate(world.timeline(), start=1):
         linked = facts.get(event.id, [])
         fact_ids = sorted(fact.id for fact in linked)
@@ -444,6 +490,48 @@ def generate_artifact_projection(
     return records
 
 
+def generate_salesforce(world: World) -> list[ConnectorRecord]:
+    records = [
+        ConnectorRecord(
+            id=f"CONN-SALESFORCE-{content_key('salesforce-account', world.company.id)[:12].upper()}",
+            connector="salesforce",
+            entity="account",
+            external_id=f"001{content_key('salesforce-account', world.company.id)[:15].upper()}",
+            title=world.company.name,
+            fields={"name": world.company.name, "company_id": world.company.id, "reporting_period": world.period},
+        )
+    ]
+    facts = _facts_by_event(world)
+    for index, event in enumerate(world.timeline(), start=1):
+        lowered = f"{event.kind} {event.summary}".lower()
+        if not any(token in lowered for token in ("customer", "sale", "renew", "opportun", "case", "support", "escalat")):
+            continue
+        entity = "case" if any(token in lowered for token in ("case", "support", "escalat")) else "opportunity"
+        prefix = "500" if entity == "case" else "006"
+        key = content_key("salesforce", world.seed, event.id, entity)
+        linked = facts.get(event.id, [])
+        records.append(
+            ConnectorRecord(
+                id=f"CONN-SALESFORCE-{key[:12].upper()}",
+                connector="salesforce",
+                entity=entity,
+                external_id=f"{prefix}{key[:15].upper()}",
+                title=event.summary,
+                fields={
+                    "id": f"{prefix}{key[:15].upper()}",
+                    "name": event.summary,
+                    "stage": "Closed Won" if any(not fact.is_superseded for fact in linked) else "Qualification",
+                    "account_id": records[0].external_id,
+                    "event_id": event.id,
+                    "occurred_at": event.occurred_at.isoformat(),
+                },
+                fact_ids=sorted(fact.id for fact in linked),
+                event_ids=[event.id],
+            )
+        )
+    return records
+
+
 def generate_connector_data(
     world: World,
     connectors: tuple[str, ...] = (
@@ -463,7 +551,7 @@ def generate_connector_data(
         "confluence": lambda value: generate_artifact_projection(value, "confluence"),
         "sharepoint": lambda value: generate_artifact_projection(value, "sharepoint"),
         "drive": lambda value: generate_artifact_projection(value, "drive"),
-        "salesforce": lambda value: generate_artifact_projection(value, "salesforce"),
+        "salesforce": generate_salesforce,
     }
     unknown = set(connectors) - set(generators)
     if unknown:
