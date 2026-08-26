@@ -63,6 +63,31 @@ def materialize_corpus(world: World, queries: Iterable[PlannedEnterpriseQuery]) 
             continue
         record_id = content_key("query-required-record", connector, entity, world.company.id)
         records.append(ConnectorRecord(id=record_id, connector=connector, entity=entity, external_id=record_id, title=f"{world.company.name} {entity.replace('_', ' ')}", fields={"company_id": world.company.id, "period": world.period, "stable_id": record_id, "generated_for_query_requirements": True}))
+    destinations: dict[tuple[str, str], str] = {}
+    for query in planned:
+        mutation = query.generation.mutation
+        if not mutation.preexisting_record:
+            continue
+        key = (mutation.connector, mutation.entity)
+        if key in destinations:
+            continue
+        record_id = content_key("query-destination-record", *key, world.company.id)
+        destinations[key] = record_id
+        records.append(
+            ConnectorRecord(
+                id=record_id,
+                connector=mutation.connector,
+                entity=mutation.entity,
+                external_id=record_id,
+                title=f"Existing {mutation.entity.replace('_', ' ')} for {world.company.name}",
+                fields={
+                    "stable_id": record_id,
+                    "version": 1,
+                    "etag": content_key("etag", record_id, "1"),
+                    "manual_content": "Preserve this manually authored content.",
+                },
+            )
+        )
     data = ConnectorDataset(capabilities=data.capabilities, records=records)
     fixtures: list[QueryFixture] = []
     for query in planned:
@@ -71,7 +96,7 @@ def materialize_corpus(world: World, queries: Iterable[PlannedEnterpriseQuery]) 
             matches = tuple(record.id for record in data.records if record.connector == requirement.connector and record.entity == requirement.entity)
             inputs[f"{requirement.connector}:{requirement.entity}"] = matches[: max(requirement.minimum, 3)]
         mutation = query.generation.mutation
-        destination_id = content_key("fixture-destination", query.id, mutation.connector, mutation.entity) if mutation.preexisting_record else None
+        destination_id = destinations.get((mutation.connector, mutation.entity))
         overrides = tuple(_override(kind, query, inputs) for kind in query.generation.state_overrides)
         effects = (f"{mutation.operation}:{mutation.connector}:{mutation.entity}", f"verify:{mutation.connector}:{mutation.entity}")
         fixtures.append(QueryFixture(query_id=query.id, input_record_ids=inputs, destination_record_id=destination_id, overrides=overrides, expected_side_effects=effects))
