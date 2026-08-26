@@ -134,6 +134,7 @@ class ScoreReport(Model):
     write_verification: float
     provenance: float
     idempotency: float
+    failure_handling: float
     findings: tuple[str, ...] = ()
 
 
@@ -162,12 +163,23 @@ def score_trace(query: PlannedEnterpriseQuery, calls: Iterable[TraceCall]) -> Sc
     required_calls = len(matched) / len(expected) if expected else 1.0
     writes = [call for call in trace if call.connector == query.generation.mutation.connector and call.operation == query.generation.mutation.operation]
     verifies = [call for call in trace if call.connector == query.generation.mutation.connector and call.operation in {"read", "readback", "cross_system"}]
-    write_verification = 1.0 if writes and verifies and positions[writes[-1].id] < positions[verifies[-1].id] else 0.0
+    failure = query.dimensions.get("failure", "none")
+    blocking_failures = {"missing_stable_id", "permission_denied", "version_conflict"}
+    successful_writes = [call for call in writes if call.succeeded]
+    if failure in blocking_failures:
+        failure_handling = 1.0 if not successful_writes else 0.0
+        write_verification = failure_handling
+    elif failure == "partial_write":
+        failure_handling = 1.0 if writes and any(not call.succeeded for call in writes) else 0.0
+        write_verification = failure_handling
+    else:
+        failure_handling = 1.0
+        write_verification = 1.0 if writes and verifies and positions[writes[-1].id] < positions[verifies[-1].id] else 0.0
     provenance = sum(bool(call.fact_ids or call.record_id) for call in trace) / len(trace) if trace else 0.0
     write_keys = [(call.connector, call.operation, call.entity, call.record_id) for call in writes]
     idempotency = 1.0 if len(write_keys) == len(set(write_keys)) else 0.0
-    total = 0.30 * dag_order + 0.30 * required_calls + 0.20 * write_verification + 0.10 * provenance + 0.10 * idempotency
-    return ScoreReport(query_id=query.id, total=round(total, 4), dag_order=round(dag_order, 4), required_calls=round(required_calls, 4), write_verification=write_verification, provenance=round(provenance, 4), idempotency=idempotency, findings=tuple(findings))
+    total = 0.25 * dag_order + 0.25 * required_calls + 0.15 * write_verification + 0.10 * provenance + 0.10 * idempotency + 0.15 * failure_handling
+    return ScoreReport(query_id=query.id, total=round(total, 4), dag_order=round(dag_order, 4), required_calls=round(required_calls, 4), write_verification=write_verification, provenance=round(provenance, 4), idempotency=idempotency, failure_handling=failure_handling, findings=tuple(findings))
 
 
 def validate_corpus(corpus: EnterpriseCorpus) -> tuple[str, ...]:
