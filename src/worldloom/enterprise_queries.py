@@ -140,26 +140,29 @@ def valid_rows(registry: SpecRegistry | None = None, profile: CoverageProfile | 
 
 
 def constrained_cover(rows: Iterable[dict[str, str]], strength: int) -> tuple[tuple[dict[str, str], ...], CoverageReport]:
-    """Deterministic greedy t-way cover over valid rows only."""
-    candidates = tuple(rows)
-    if not candidates:
-        return (), CoverageReport(strength=strength, candidates=0, selected=0, required_interactions=0, covered_interactions=0)
-    if strength > len(candidates[0]):
-        raise ValueError("coverage strength exceeds dimension count")
-    row_interactions = tuple(_subsets(row, strength) for row in candidates)
-    uncovered = set().union(*row_interactions)
-    required = len(uncovered)
+    """One-pass deterministic t-way cover over valid rows only.
+
+    A row is retained exactly when it introduces a previously unseen
+    interaction. This is intentionally streaming: massive spaces do not keep
+    every candidate and its interaction set resident in memory.
+    """
+    covered: set[tuple[tuple[str, str], ...]] = set()
     chosen: list[dict[str, str]] = []
-    remaining = set(range(len(candidates)))
-    while uncovered:
-        best = max(remaining, key=lambda index: (len(row_interactions[index] & uncovered), -index))
-        gain = row_interactions[best] & uncovered
-        if not gain:
-            break
-        chosen.append(candidates[best])
-        uncovered.difference_update(gain)
-        remaining.remove(best)
-    report = CoverageReport(strength=strength, candidates=len(candidates), selected=len(chosen), required_interactions=required, covered_interactions=required - len(uncovered), holes=tuple(sorted(uncovered)))
+    candidate_count = 0
+    dimension_count: int | None = None
+    for row in rows:
+        candidate_count += 1
+        if dimension_count is None:
+            dimension_count = len(row)
+            if strength > dimension_count:
+                raise ValueError("coverage strength exceeds dimension count")
+        interactions = _subsets(row, strength)
+        if interactions - covered:
+            chosen.append(row)
+            covered.update(interactions)
+    if candidate_count == 0:
+        return (), CoverageReport(strength=strength, candidates=0, selected=0, required_interactions=0, covered_interactions=0)
+    report = CoverageReport(strength=strength, candidates=candidate_count, selected=len(chosen), required_interactions=len(covered), covered_interactions=len(covered))
     return tuple(chosen), report
 
 
