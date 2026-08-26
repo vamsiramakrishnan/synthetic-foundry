@@ -84,6 +84,65 @@ benchmark_app = typer.Typer(
     help="Run an executable agent against the corpus's own benchmark, scored on IDs alone.",
 )
 app.add_typer(benchmark_app, name="benchmark")
+enterprise_evals_app = typer.Typer(
+    no_args_is_help=True,
+    help="Plan, generate, and validate multi-connector enterprise agent evaluations.",
+)
+app.add_typer(enterprise_evals_app, name="enterprise-evals")
+
+
+@enterprise_evals_app.command("space")
+def enterprise_evals_space(
+    max_candidates: int = typer.Option(1_000_000, min=1),
+) -> None:
+    """Count semantically valid query candidates without generating fixtures."""
+    from .enterprise_queries import valid_rows
+    from .enterprise_specs import CoverageProfile, builtin_registry
+
+    profile = CoverageProfile(max_candidates=max_candidates)
+    count = sum(1 for _ in valid_rows(builtin_registry(), profile))
+    typer.echo(json.dumps({"profile": profile.name, "valid_candidates": count}, sort_keys=True))
+
+
+@enterprise_evals_app.command("plan")
+def enterprise_evals_plan(
+    world_path: Path,
+    output: Path,
+    strength: int = typer.Option(2, min=1, max=4),
+    limit: int | None = None,
+    exhaustive: bool = False,
+) -> None:
+    """Write grounded query plans as JSONL."""
+    from .enterprise_queries import plan_queries
+    from .enterprise_specs import CoverageProfile
+    from .world import World
+
+    world = World.load(world_path)
+    queries, report = plan_queries(
+        world,
+        profile=CoverageProfile(strengths=strength),
+        strategy="exhaustive" if exhaustive else "covering",
+        limit=limit,
+    )
+    with output.open("w", encoding="utf-8") as handle:
+        for query in queries:
+            handle.write(query.model_dump_json() + "\n")
+    if report is not None:
+        typer.echo(report.model_dump_json())
+
+
+@enterprise_evals_app.command("validate")
+def enterprise_evals_validate(path: Path) -> None:
+    """Validate a materialized enterprise evaluation corpus."""
+    from .enterprise_corpus import EnterpriseCorpus, validate_corpus
+
+    corpus = EnterpriseCorpus.model_validate_json(path.read_text(encoding="utf-8"))
+    findings = validate_corpus(corpus)
+    if findings:
+        for finding in findings:
+            typer.echo(finding, err=True)
+        raise typer.Exit(1)
+    typer.echo("valid")
 
 console = Console()
 err = Console(stderr=True)
