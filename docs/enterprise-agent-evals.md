@@ -20,11 +20,16 @@ Company names, process vocabulary, source authority, prompt wording, entity choi
 
 ```python
 from worldloom.enterprise_sdk import EnterpriseEvalHarness
+from worldloom.enterprise_specs import ScenarioProfile
 from worldloom.world import World
 
 world = World.load("retail-close")
+profile = ScenarioProfile.model_validate_json(
+    Path("examples/enterprise-evals/financial-services.json").read_text()
+)
 corpus, coverage = (
     EnterpriseEvalHarness.from_world(world)
+    .with_scenario(profile)
     .take(500)
     .build()
 )
@@ -40,7 +45,9 @@ Use `.exhaustive().take(n)` for deterministic shards/smoke sets. The exhaustive 
 worldloom enterprise-evals space
 worldloom enterprise-evals plan dist/retail-close queries.jsonl --strength 2
 worldloom enterprise-evals plan dist/retail-close shard.jsonl --exhaustive --limit 10000
+worldloom enterprise-evals build dist/retail-close dist/enterprise-evals --limit 500
 worldloom enterprise-evals validate corpus.json
+worldloom enterprise-evals score query.json trace.json
 ```
 
 ## Query and fixture contract
@@ -48,3 +55,5 @@ worldloom enterprise-evals validate corpus.json
 Every query includes grounded customer language, dimensions, generation requirements, and an ordered semantic DAG. Materialization generates only records demanded by the plan. Failure dimensions mutate fixture state: stale versions, duplicate join candidates, missing IDs, denied principals, partial writes, and ETag conflicts.
 
 The scorer measures required semantic calls, dependency order, write verification, provenance, and idempotency. MCP-specific tool names stay in the runner adapter so one corpus can test different MCP implementations.
+
+`ConnectorProjectionRegistry` is the extension point for company-specific or custom connectors. `RunnerConfig` binds semantic DAG nodes to concrete MCP tool names. `execute_query` checkpoints after every node, stops on failed writes, and resumes safely from deterministic query and node IDs.
