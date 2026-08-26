@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Literal
 
 from .enterprise_corpus import EnterpriseCorpus, materialize_corpus
 from .enterprise_queries import CoverageReport, PlannedEnterpriseQuery, plan_queries
+from .enterprise_runner import shard_queries
 from .enterprise_specs import CoverageProfile, SpecRegistry, builtin_registry
 
 if TYPE_CHECKING:
@@ -44,3 +45,9 @@ class EnterpriseEvalHarness:
     def build(self) -> tuple[EnterpriseCorpus, CoverageReport | None]:
         queries, report = self.plan()
         return materialize_corpus(self.world, queries), report
+
+    def shard(
+        self, index: int, count: int
+    ) -> tuple[tuple[PlannedEnterpriseQuery, ...], CoverageReport | None]:
+        queries, report = self.plan()
+        return shard_queries(queries, index, count), report
