@@ -43,6 +43,25 @@ Read `docs/build-order.md` before adding a subsystem. It sequences the work and
 states an exit gate for each step, and the ordering is deliberate — several steps
 exist specifically to stop a later one from being built on guesses.
 
+## Enterprise connector evaluation harness
+
+Use the enterprise harness when the deliverable is a grounded multi-connector
+query corpus rather than Worldloom's native retrieval benchmark:
+
+```bash
+worldloom enterprise-evals space
+worldloom enterprise-evals plan dist/world queries.jsonl --profile examples/enterprise-evals/omnichannel-retailer.json --exhaustive --limit 2000
+worldloom enterprise-evals build dist/world dist/enterprise-evals --profile examples/enterprise-evals/omnichannel-retailer.json --exhaustive --limit 2000 --render-limit 30
+worldloom enterprise-evals validate dist/enterprise-evals
+worldloom enterprise-evals simulate dist/enterprise-evals --limit 500
+worldloom enterprise-evals score query.json trace.json
+```
+
+Industry workflows belong in a `ScenarioProfile` as `additional_workflows` and
+`additional_processes`; do not add industry names to the query planner. Use
+covering mode to prove t-way coverage and bounded exhaustive mode to stream a
+large, balanced corpus. Both routes must remain deterministic.
+
 ## Checking determinism somewhere other than seed 8128
 
 CI proves byte-identity on four builds at one seed, on every push. That is one

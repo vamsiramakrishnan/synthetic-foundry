@@ -6,6 +6,7 @@ import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
+from .connector_data import ConnectorDataset
 from .enterprise_corpus import EnterpriseCorpus, QueryFixture
 from .enterprise_queries import PlannedEnterpriseQuery
 
@@ -55,3 +56,14 @@ def iter_fixtures(path: Path) -> Iterator[QueryFixture]:
                 yield QueryFixture.model_validate_json(line)
             except ValueError as error:
                 raise ValueError(f"{path}:{line_number}: invalid query fixture") from error
+
+
+def load_exported_corpus(directory: Path) -> EnterpriseCorpus:
+    """Load the stable multi-file enterprise interchange as one SDK model."""
+    return EnterpriseCorpus(
+        queries=tuple(iter_queries(directory / "queries.jsonl")),
+        connector_data=ConnectorDataset.model_validate_json(
+            (directory / "connector-data.json").read_text(encoding="utf-8")
+        ),
+        fixtures=tuple(iter_fixtures(directory / "fixtures.jsonl")),
+    )

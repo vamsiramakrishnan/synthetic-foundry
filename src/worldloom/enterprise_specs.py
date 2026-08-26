@@ -80,6 +80,7 @@ class DestinationRole(CascadeModel):
 class WorkflowSpec(CascadeModel):
     name: str
     purpose: str
+    process: str = "delivery_work"
     sources: tuple[SourceRole, ...]
     destinations: tuple[DestinationRole, ...]
     content_actions: tuple[ContentAction, ...]
@@ -131,6 +132,8 @@ class ScenarioProfile(CascadeModel):
     industry: str
     company_description: str
     workflows: tuple[str, ...] = ()
+    additional_workflows: tuple[WorkflowSpec, ...] = ()
+    additional_processes: tuple[ProcessSpec, ...] = ()
     connectors: tuple[str, ...] = ()
     vocabulary: dict[str, str] = Field(default_factory=dict)
     coverage: CoverageProfile = Field(default_factory=CoverageProfile)
@@ -215,6 +218,11 @@ def _workflow(name: str, purpose: str, sources: tuple[SourceRole, ...], destinat
     return WorkflowSpec(
         name=name,
         purpose=purpose,
+        process=(
+            "service_management"
+            if name in {"incident_review", "change_assurance"}
+            else "customer_lifecycle" if name == "customer_health" else "delivery_work"
+        ),
         sources=sources,
         destinations=destinations,
         content_actions=actions,
@@ -290,10 +298,18 @@ def builtin_spec() -> EnterpriseEvalSpec:
 def apply_scenario_profile(
     registry: SpecRegistry, profile: ScenarioProfile
 ) -> SpecRegistry:
+    merged_workflows = {**registry.workflows}
+    merged_workflows.update(
+        {workflow.name: workflow for workflow in profile.additional_workflows}
+    )
+    merged_processes = {**registry.processes}
+    merged_processes.update(
+        {process.name: process for process in profile.additional_processes}
+    )
     connectors = set(profile.connectors) or set(registry.connectors)
-    workflows = set(profile.workflows) or set(registry.workflows)
+    workflows = set(profile.workflows) or set(merged_workflows)
     selected_workflows = []
-    for workflow in registry.workflows.values():
+    for workflow in merged_workflows.values():
         if workflow.name not in workflows:
             continue
         sources = tuple(role for role in workflow.sources if role.connector in connectors)
@@ -316,11 +332,15 @@ def apply_scenario_profile(
                 }
             )
         )
-    return SpecRegistry(
+    selected = SpecRegistry(
         (item for name, item in registry.connectors.items() if name in connectors),
         selected_workflows,
-        registry.processes.values(),
+        merged_processes.values(),
     )
+    findings = selected.review()
+    if findings:
+        refuse("enterprise scenario profile", findings)
+    return selected
 
 
 def _replace_vocabulary(value: str, vocabulary: dict[str, str]) -> str:

@@ -33,7 +33,7 @@ class ConnectorSimulator:
             return {"succeeded": True, "content": arguments["generation_requirement"], "fact_ids": []}
         if any(item.kind == "permission_denied" and item.connector == connector for item in overrides):
             return {"succeeded": False, "status": 403, "error": "permission_denied"}
-        if operation in {"read", "readback", "search", "list"}:
+        if operation in {"read", "readback", "cross_system", "search", "list"}:
             identifiers = [identifier for values in fixture.input_record_ids.values() for identifier in values]
             if fixture.destination_record_id:
                 identifiers.append(fixture.destination_record_id)

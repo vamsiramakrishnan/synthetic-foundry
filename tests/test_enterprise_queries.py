@@ -4,9 +4,14 @@ import itertools
 
 from worldloom.enterprise_queries import constrained_cover, valid_rows
 from worldloom.enterprise_specs import (
+    ContentAction,
     CoverageProfile,
+    DestinationRole,
     EnterpriseEvalSpec,
+    Operation,
     ScenarioProfile,
+    SourceRole,
+    WorkflowSpec,
     apply_scenario_profile,
     builtin_registry,
     builtin_spec,
@@ -60,3 +65,54 @@ def test_scenario_profile_filters_registry() -> None:
     selected = apply_scenario_profile(builtin_registry(), profile)
     assert set(selected.workflows) == {"incident_review"}
     assert set(selected.connectors) == {"jira", "servicenow", "email"}
+
+
+def test_scenario_profile_can_author_an_industry_workflow() -> None:
+    retail = WorkflowSpec(
+        name="merchandising_review",
+        purpose="category and inventory performance review",
+        process="retail_merchandising",
+        sources=(SourceRole(connector="sharepoint", entities=("file",)),),
+        destinations=(
+            DestinationRole(
+                connector="drive",
+                entities=("file",),
+                operations=(Operation.CREATE,),
+                formats=("xlsx",),
+            ),
+        ),
+        content_actions=(ContentAction.RECONCILE, ContentAction.GENERATE),
+        audiences=("category_manager",),
+        prompt_template=(
+            "Prepare {purpose} for {company}. Use {sources}. "
+            "{action_instruction} {output_label} in {destination}, then "
+            "{verification_instruction}.{failure_instruction}"
+        ),
+    )
+    profile = ScenarioProfile(
+        name="retailer",
+        industry="retail",
+        company_description="An omnichannel retailer.",
+        workflows=("merchandising_review",),
+        connectors=("sharepoint", "drive"),
+        additional_workflows=(retail,),
+    )
+
+    selected = apply_scenario_profile(builtin_registry(), profile)
+
+    assert selected.workflows["merchandising_review"].process == "retail_merchandising"
+
+
+def test_bounded_prefix_is_balanced_across_major_dimensions() -> None:
+    profile = CoverageProfile()
+    rows = tuple(itertools.islice(valid_rows(builtin_registry(), profile), 1000))
+
+    assert {row["workflow"] for row in rows} == set(builtin_registry().workflows)
+    assert {row["failure"] for row in rows} == set(profile.failures)
+    assert {row["topology"] for row in rows} == {
+        "chain",
+        "fan_in",
+        "fan_out",
+        "diamond",
+    }
+    assert {row["verification"] for row in rows} == {"readback", "cross_system"}

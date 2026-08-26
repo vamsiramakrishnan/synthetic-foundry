@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+from collections import deque
 from collections.abc import Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -118,12 +119,21 @@ def _source_variants(
     yield from itertools.product(*options)
 
 
-def valid_rows(registry: SpecRegistry | None = None, profile: CoverageProfile | None = None) -> Iterator[dict[str, str]]:
-    """Stream only rows supported by the selected workflow and connector specs."""
-    registry = registry or builtin_registry()
-    profile = profile or CoverageProfile()
-    emitted = 0
+def _rotated(values: Iterable[Any], key: str, slot: int) -> tuple[Any, ...]:
+    ordered = tuple(values)
+    if not ordered:
+        return ()
+    start = int(key[slot * 2 : slot * 2 + 4], 16) % len(ordered)
+    return ordered[start:] + ordered[:start]
+
+
+def _row_lanes(
+    registry: SpecRegistry, profile: CoverageProfile
+) -> list[list[Iterator[dict[str, str]]]]:
+    """Independent valid-row streams, one per semantic connector lane."""
+    lanes_by_workflow: list[list[Iterator[dict[str, str]]]] = []
     for workflow in registry.workflows.values():
+        workflow_lanes: list[Iterator[dict[str, str]]] = []
         for sources in _source_combinations(workflow, profile):
             for variants in _source_variants(sources, registry):
                 source_set = "+".join(item[0] for item in variants)
@@ -139,28 +149,43 @@ def valid_rows(registry: SpecRegistry | None = None, profile: CoverageProfile | 
                             op for op in destination.operations if op in entity.operations
                         )
                         formats = destination.formats or entity.formats or ("record",)
-                        combinations = itertools.product(
-                            operations,
-                            formats,
-                            workflow.content_actions,
-                            workflow.audiences,
-                            workflow.topologies,
-                            profile.failures,
-                            workflow.verification,
+                        lane_key = content_key(
+                            "enterprise-lane", workflow.name, source_set,
+                            source_entities, input_formats, destination.connector,
+                            entity_name,
                         )
-                        for operation, output_format, action, audience, topology, failure, verification in combinations:
-                            if operation.value in {"update", "patch"} and failure == "missing_stable_id":
-                                continue
-                            if failure == "version_conflict" and operation.value not in {"update", "patch", "upsert"}:
-                                continue
-                            if output_format == "xlsx" and action.value not in {"extract", "compare", "reconcile", "generate", "render"}:
-                                continue
-                            yield {
+                        def lane(
+                            *, workflow: WorkflowSpec = workflow,
+                            source_set: str = source_set,
+                            source_entities: str = source_entities,
+                            input_formats: str = input_formats,
+                            destination: str = destination.connector,
+                            entity_name: str = entity_name,
+                            operations: tuple = _rotated(operations, lane_key, 0),
+                            formats: tuple = _rotated(formats, lane_key, 1),
+                            actions: tuple = _rotated(workflow.content_actions, lane_key, 2),
+                            audiences: tuple = _rotated(workflow.audiences, lane_key, 3),
+                            topologies: tuple = _rotated(workflow.topologies, lane_key, 4),
+                            failures: tuple = _rotated(profile.failures, lane_key, 5),
+                            verification: tuple = _rotated(workflow.verification, lane_key, 6),
+                        ) -> Iterator[dict[str, str]]:
+                            combinations = itertools.product(
+                                operations, formats, actions, audiences, topologies,
+                                failures, verification,
+                            )
+                            for operation, output_format, action, audience, topology, failure, verification in combinations:
+                                if operation.value in {"update", "patch"} and failure == "missing_stable_id":
+                                    continue
+                                if failure == "version_conflict" and operation.value not in {"update", "patch", "upsert"}:
+                                    continue
+                                if output_format == "xlsx" and action.value not in {"extract", "compare", "reconcile", "generate", "render"}:
+                                    continue
+                                yield {
                                 "workflow": workflow.name,
                                 "source_set": source_set,
                                 "source_entities": source_entities,
                                 "input_formats": input_formats,
-                                "destination": destination.connector,
+                                "destination": destination,
                                 "destination_entity": entity_name,
                                 "operation": operation.value,
                                 "output_format": output_format,
@@ -169,10 +194,46 @@ def valid_rows(registry: SpecRegistry | None = None, profile: CoverageProfile | 
                                 "topology": topology,
                                 "failure": failure,
                                 "verification": verification,
-                            }
-                            emitted += 1
-                            if emitted > profile.max_candidates:
-                                raise ValueError(f"valid candidate count exceeds max_candidates={profile.max_candidates}; narrow the profile")
+                                }
+
+                        workflow_lanes.append(lane())
+        lanes_by_workflow.append(workflow_lanes)
+    return lanes_by_workflow
+
+
+def valid_rows(registry: SpecRegistry | None = None, profile: CoverageProfile | None = None) -> Iterator[dict[str, str]]:
+    """Stream supported rows fairly across semantic connector lanes.
+
+    Round-robin ordering makes a bounded exhaustive prefix representative: a
+    2,000-row corpus reaches every workflow and connector shape instead of
+    spending its whole budget inside the first workflow's first source tuple.
+    """
+    registry = registry or builtin_registry()
+    profile = profile or CoverageProfile()
+    # Two-level fairness: rotate workflows, then rotate semantic connector
+    # lanes inside that workflow. This prevents a workflow with more possible
+    # connector permutations from dominating every bounded prefix.
+    active = deque(deque(group) for group in _row_lanes(registry, profile) if group)
+    emitted = 0
+    while active:
+        workflow_lanes = active.popleft()
+        row = None
+        while workflow_lanes and row is None:
+            lane = workflow_lanes.popleft()
+            try:
+                row = next(lane)
+            except StopIteration:
+                continue
+            workflow_lanes.append(lane)
+        if row is None:
+            continue
+        yield row
+        emitted += 1
+        if emitted > profile.max_candidates:
+            raise ValueError(
+                f"valid candidate count exceeds max_candidates={profile.max_candidates}; narrow the profile"
+            )
+        active.append(workflow_lanes)
 
 
 def constrained_cover(rows: Iterable[dict[str, str]], strength: int) -> tuple[tuple[dict[str, str], ...], CoverageReport]:
@@ -200,14 +261,6 @@ def constrained_cover(rows: Iterable[dict[str, str]], strength: int) -> tuple[tu
         return (), CoverageReport(strength=strength, candidates=0, selected=0, required_interactions=0, covered_interactions=0)
     report = CoverageReport(strength=strength, candidates=candidate_count, selected=len(chosen), required_interactions=len(covered), covered_interactions=len(covered))
     return tuple(chosen), report
-
-
-def _process_for(row: Mapping[str, str]) -> str:
-    if row["workflow"] in {"incident_review", "change_assurance"}:
-        return "service_management"
-    if row["workflow"] == "customer_health":
-        return "customer_lifecycle"
-    return "delivery_work"
 
 
 def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str]) -> str:
@@ -281,7 +334,7 @@ def _plan(world: World, row: dict[str, str], registry: SpecRegistry) -> PlannedE
     write = {"id": "write", "kind": row["operation"], "connector": row["destination"], "entity": row["destination_entity"], "depends_on": ["transform"]}
     verify = {"id": "verify", "kind": row["verification"], "connector": row["destination"], "entity": row["destination_entity"], "depends_on": ["write"]}
     identifier = content_key("enterprise-query", *[f"{key}={row[key]}" for key in sorted(row)])
-    return PlannedEnterpriseQuery(id=identifier, workflow=workflow.name, query=_render(world, workflow, row), dimensions=row, generation=GenerationRequirement(process=_process_for(row), source_requirements=sources, mutation=mutation, artifact=artifact, state_overrides=states), expected_dag=read_nodes + (transform, write, verify))
+    return PlannedEnterpriseQuery(id=identifier, workflow=workflow.name, query=_render(world, workflow, row), dimensions=row, generation=GenerationRequirement(process=workflow.process, source_requirements=sources, mutation=mutation, artifact=artifact, state_overrides=states), expected_dag=read_nodes + (transform, write, verify))
 
 
 def plan_queries(
