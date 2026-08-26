@@ -41,7 +41,7 @@ class AgentEvaluationCase(Model):
     assertions: list[str]
 
     @model_validator(mode="after")
-    def _closed_dag(self) -> "AgentEvaluationCase":
+    def _closed_dag(self) -> AgentEvaluationCase:
         seen: set[str] = set()
         for node in self.nodes:
             missing = set(node.depends_on) - seen
@@ -138,7 +138,7 @@ _WORKFLOWS: dict[str, dict[str, Any]] = {
 }
 
 
-def _evidence(world: "World") -> tuple[list[str], list[str]]:
+def _evidence(world: World) -> tuple[list[str], list[str]]:
     records = tuple(world.artifacts) or tuple(world.artifact_intents)
     selected = sorted(records, key=lambda item: item.id)[:12]
     artifact_ids = [item.id for item in selected]
@@ -153,7 +153,7 @@ def _evidence(world: "World") -> tuple[list[str], list[str]]:
 
 
 def _request(
-    world: "World", spec: dict[str, Any], destination: str, update: bool
+    world: World, spec: dict[str, Any], destination: str, update: bool
 ) -> str:
     sources = [_SOURCE_TEXT[name] for name in spec["sources"]]
     source_clause = ", ".join(sources[:-1]) + f", and {sources[-1]}"
@@ -173,7 +173,7 @@ def _request(
 
 
 def compile_agent_evals(
-    world: "World", seed: WorkflowSeed | None = None
+    world: World, seed: WorkflowSeed | None = None
 ) -> tuple[AgentEvaluationCase, ...]:
     """Compile business requests while keeping formats and MCP calls hidden."""
     seed = seed or WorkflowSeed()
@@ -329,7 +329,7 @@ def compile_agent_evals(
 
 
 def export_agent_evals(
-    world: "World", destination: str | Path, seed: WorkflowSeed | None = None
+    world: World, destination: str | Path, seed: WorkflowSeed | None = None
 ) -> Path:
     target = Path(destination)
     target.parent.mkdir(parents=True, exist_ok=True)
