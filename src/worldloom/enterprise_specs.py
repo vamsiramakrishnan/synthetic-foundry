@@ -134,7 +134,11 @@ class SpecRegistry:
     def review(self) -> tuple[Finding, ...]:
         findings: list[Finding] = []
         for workflow in self.workflows.values():
-            for role in (*workflow.sources, *workflow.destinations):
+            roles: tuple[SourceRole | DestinationRole, ...] = (
+                *workflow.sources,
+                *workflow.destinations,
+            )
+            for role in roles:
                 connector = self.connectors.get(role.connector)
                 if connector is None:
                     findings.append(f"workflow {workflow.name}: replace unknown connector {role.connector}")
