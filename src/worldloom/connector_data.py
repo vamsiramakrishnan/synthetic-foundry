@@ -316,7 +316,12 @@ def generate_servicenow(world: World) -> list[ConnectorRecord]:
     incident_number = 1
     change_number = 1
     for event in world.timeline():
-        is_incident = "incident" in event.kind or "failure" in event.kind
+        classifier = f"{event.kind} {event.summary}".lower()
+        incident_tokens = ("incident", "outage", "failure", "degradation")
+        change_tokens = ("change", "release", "deploy", "maintenance")
+        if not any(token in classifier for token in incident_tokens + change_tokens):
+            continue
+        is_incident = any(token in classifier for token in incident_tokens)
         entity = "incident" if is_incident else "change_request"
         prefix = "INC" if is_incident else "CHG"
         ordinal = incident_number if is_incident else change_number
@@ -339,7 +344,11 @@ def generate_servicenow(world: World) -> list[ConnectorRecord]:
                     "number": f"{prefix}{ordinal:07d}",
                     "short_description": event.summary,
                     "description": f"{event.kind.replace('_', ' ').title()} affecting {world.company.name}.",
-                    "state": "Closed" if any(not fact.is_superseded for fact in linked) else "New",
+                    "state": (
+                        "Resolved"
+                        if any(token in classifier for token in ("resolved", "recovered", "closed"))
+                        else "In Progress"
+                    ),
                     "priority": "1" if is_incident else "3",
                     "correlation_id": event.id,
                     "service_ids": event.services,
