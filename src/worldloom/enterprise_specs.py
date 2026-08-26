@@ -126,6 +126,16 @@ class EnterpriseEvalSpec(CascadeModel):
     coverage: CoverageProfile = Field(default_factory=CoverageProfile)
 
 
+class ScenarioProfile(CascadeModel):
+    name: str
+    industry: str
+    company_description: str
+    workflows: tuple[str, ...] = ()
+    connectors: tuple[str, ...] = ()
+    vocabulary: dict[str, str] = Field(default_factory=dict)
+    coverage: CoverageProfile = Field(default_factory=CoverageProfile)
+
+
 class SpecRegistry:
     """Explicit registry; callers can replace every built-in decision."""
 
@@ -252,3 +262,48 @@ def builtin_spec() -> EnterpriseEvalSpec:
         workflows=BUILTIN_WORKFLOWS,
         processes=BUILTIN_PROCESSES,
     )
+
+
+def apply_scenario_profile(
+    registry: SpecRegistry, profile: ScenarioProfile
+) -> SpecRegistry:
+    connectors = set(profile.connectors) or set(registry.connectors)
+    workflows = set(profile.workflows) or set(registry.workflows)
+    selected_workflows = []
+    for workflow in registry.workflows.values():
+        if workflow.name not in workflows:
+            continue
+        sources = tuple(role for role in workflow.sources if role.connector in connectors)
+        destinations = tuple(
+            role for role in workflow.destinations if role.connector in connectors
+        )
+        if not sources or not destinations:
+            continue
+        selected_workflows.append(
+            workflow.model_copy(
+                update={
+                    "sources": sources,
+                    "destinations": destinations,
+                    "purpose": _replace_vocabulary(
+                        workflow.purpose, profile.vocabulary
+                    ),
+                    "prompt_template": _replace_vocabulary(
+                        workflow.prompt_template, profile.vocabulary
+                    ),
+                }
+            )
+        )
+    return SpecRegistry(
+        (item for name, item in registry.connectors.items() if name in connectors),
+        selected_workflows,
+        registry.processes.values(),
+    )
+
+
+def _replace_vocabulary(value: str, vocabulary: dict[str, str]) -> str:
+    rendered = value
+    for source, replacement in sorted(
+        vocabulary.items(), key=lambda item: (-len(item[0]), item[0])
+    ):
+        rendered = rendered.replace(source.replace("_", " "), replacement)
+    return rendered
