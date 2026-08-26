@@ -152,20 +152,43 @@ class SpecRegistry:
     def review(self) -> tuple[Finding, ...]:
         findings: list[Finding] = []
         for workflow in self.workflows.values():
-            roles: tuple[SourceRole | DestinationRole, ...] = (
-                *workflow.sources,
-                *workflow.destinations,
-            )
-            for role in roles:
+            for role in workflow.sources:
                 connector = self.connectors.get(role.connector)
                 if connector is None:
                     findings.append(f"workflow {workflow.name}: replace unknown connector {role.connector}")
                     continue
                 for entity in role.entities:
                     try:
-                        connector.entity(entity)
+                        entity_spec = connector.entity(entity)
                     except KeyError:
                         findings.append(f"workflow {workflow.name}: replace unknown {role.connector} entity {entity}")
+                        continue
+                    unsupported = set(role.operations) - set(entity_spec.operations)
+                    if unsupported:
+                        findings.append(
+                            f"workflow {workflow.name}: remove unsupported {role.connector}.{entity} source operations {sorted(item.value for item in unsupported)}"
+                        )
+            for role in workflow.destinations:
+                connector = self.connectors.get(role.connector)
+                if connector is None:
+                    findings.append(f"workflow {workflow.name}: replace unknown connector {role.connector}")
+                    continue
+                for entity in role.entities:
+                    try:
+                        entity_spec = connector.entity(entity)
+                    except KeyError:
+                        findings.append(f"workflow {workflow.name}: replace unknown {role.connector} entity {entity}")
+                        continue
+                    unsupported = set(role.operations) - set(entity_spec.operations)
+                    if unsupported:
+                        findings.append(
+                            f"workflow {workflow.name}: remove unsupported {role.connector}.{entity} destination operations {sorted(item.value for item in unsupported)}"
+                        )
+                    unsupported_formats = set(role.formats) - set(entity_spec.formats)
+                    if entity_spec.formats and unsupported_formats:
+                        findings.append(
+                            f"workflow {workflow.name}: remove unsupported {role.connector}.{entity} formats {sorted(unsupported_formats)}"
+                        )
         return tuple(findings)
 
 
