@@ -16,7 +16,7 @@ app = typer.Typer(help="Plan, generate, and validate enterprise MCP workflow eva
 
 
 @app.command("space")
-def space(max_candidates: int = typer.Option(1_000_000, min=1)) -> None:
+def space(max_candidates: int = typer.Option(10_000_000, min=1)) -> None:
     """Count semantically valid candidates without creating connector fixtures."""
     profile = CoverageProfile(max_candidates=max_candidates)
     typer.echo(json.dumps({"valid_candidates": sum(1 for _ in valid_rows(builtin_registry(), profile)), "profile": profile.name}, sort_keys=True))
