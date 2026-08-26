@@ -147,6 +147,7 @@ def _evidence(world: World) -> tuple[list[str], list[str]]:
         fact_ids.extend(
             getattr(item, "supporting_fact_ids", None)
             or getattr(item, "required_fact_ids", ())
+            or ()
         )
     reachable = set(world.facts.ids())
     return artifact_ids, sorted(set(fact_ids) & reachable)[:64]
