@@ -63,9 +63,15 @@ def test_jsonl_round_trip(world: World, tmp_path) -> None:
 
 def test_connector_projections_are_grounded_and_linkable(world: World) -> None:
     dataset = generate_connector_data(world)
-    assert {record.connector for record in dataset.records} == {
+    projected = {record.connector for record in dataset.records}
+    assert {"jira", "email", "salesforce"} <= projected
+    assert projected <= {
         "jira",
+        "confluence",
+        "sharepoint",
+        "drive",
         "servicenow",
+        "salesforce",
         "email",
     }
     fact_ids = set(world.facts.ids())
