@@ -183,8 +183,8 @@ def enterprise_evals_build(
     render_limit: int = typer.Option(0, "--render-limit", min=0),
 ) -> None:
     """Plan, materialize, validate, export, and optionally render a connector corpus."""
-    from .enterprise_corpus import materialize_corpus, validate_corpus
     from .enterprise_artifacts import render_corpus_artifacts
+    from .enterprise_corpus import materialize_corpus, validate_corpus
     from .enterprise_io import export_corpus
     from .enterprise_queries import plan_queries
     from .enterprise_specs import (
