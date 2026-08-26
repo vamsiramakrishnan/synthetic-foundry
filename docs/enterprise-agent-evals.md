@@ -45,7 +45,7 @@ Use `.exhaustive().take(n)` for deterministic shards/smoke sets. The exhaustive 
 worldloom enterprise-evals space
 worldloom enterprise-evals plan dist/retail-close queries.jsonl --strength 2
 worldloom enterprise-evals plan dist/retail-close shard.jsonl --exhaustive --limit 10000
-worldloom enterprise-evals build dist/retail-close dist/enterprise-evals --limit 500
+worldloom enterprise-evals build dist/retail-close dist/enterprise-evals --limit 500 --profile examples/enterprise-evals/financial-services.json
 worldloom enterprise-evals validate corpus.json
 worldloom enterprise-evals score query.json trace.json
 ```
