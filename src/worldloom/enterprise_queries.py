@@ -167,11 +167,11 @@ def _row_lanes(
                             audiences: tuple = _rotated(workflow.audiences, lane_key, 3),
                             topologies: tuple = _rotated(workflow.topologies, lane_key, 4),
                             failures: tuple = _rotated(profile.failures, lane_key, 5),
-                            verification: tuple = _rotated(workflow.verification, lane_key, 6),
+                            verification_policies: tuple = _rotated(workflow.verification, lane_key, 6),
                         ) -> Iterator[dict[str, str]]:
                             combinations = itertools.product(
                                 operations, formats, actions, audiences, topologies,
-                                failures, verification,
+                                failures, verification_policies,
                             )
                             for operation, output_format, action, audience, topology, failure, verification in combinations:
                                 if operation.value in {"update", "patch"} and failure == "missing_stable_id":
