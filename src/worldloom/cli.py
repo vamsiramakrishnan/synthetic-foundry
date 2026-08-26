@@ -84,6 +84,259 @@ benchmark_app = typer.Typer(
     help="Run an executable agent against the corpus's own benchmark, scored on IDs alone.",
 )
 app.add_typer(benchmark_app, name="benchmark")
+enterprise_evals_app = typer.Typer(
+    no_args_is_help=True,
+    help="Plan, generate, and validate multi-connector enterprise agent evaluations.",
+)
+app.add_typer(enterprise_evals_app, name="enterprise-evals")
+
+
+@enterprise_evals_app.command("space")
+def enterprise_evals_space(
+    max_candidates: int = typer.Option(10_000_000, min=1),
+) -> None:
+    """Count semantically valid query candidates without generating fixtures."""
+    from .enterprise_queries import valid_rows
+    from .enterprise_specs import CoverageProfile, builtin_registry
+
+    profile = CoverageProfile(max_candidates=max_candidates)
+    count = sum(1 for _ in valid_rows(builtin_registry(), profile))
+    typer.echo(json.dumps({"profile": profile.name, "valid_candidates": count}, sort_keys=True))
+
+
+@enterprise_evals_app.command("plan")
+def enterprise_evals_plan(
+    world_path: Path,
+    output: Path,
+    strength: int = typer.Option(2, min=1, max=4),
+    limit: int | None = None,
+    exhaustive: bool = False,
+    profile_path: Path | None = typer.Option(None, "--profile"),
+    shard_index: int | None = typer.Option(None, "--shard-index"),
+    shard_count: int | None = typer.Option(None, "--shard-count"),
+) -> None:
+    """Write grounded query plans as JSONL."""
+    from .enterprise_queries import plan_queries
+    from .enterprise_specs import (
+        CoverageProfile,
+        ScenarioProfile,
+        apply_scenario_profile,
+        builtin_registry,
+    )
+    from .world import World
+
+    world = World.load(world_path)
+    scenario = (
+        ScenarioProfile.model_validate_json(profile_path.read_text(encoding="utf-8"))
+        if profile_path
+        else None
+    )
+    registry = (
+        apply_scenario_profile(builtin_registry(), scenario)
+        if scenario
+        else builtin_registry()
+    )
+    coverage = (
+        scenario.coverage.model_copy(update={"strengths": strength})
+        if scenario
+        else CoverageProfile(strengths=strength)
+    )
+    queries, report = plan_queries(
+        world,
+        registry=registry,
+        profile=coverage,
+        strategy="exhaustive" if exhaustive else "covering",
+        limit=limit,
+        shard_index=shard_index,
+        shard_count=shard_count,
+    )
+    with output.open("w", encoding="utf-8") as handle:
+        for query in queries:
+            handle.write(query.model_dump_json() + "\n")
+    if report is not None:
+        typer.echo(report.model_dump_json())
+
+
+@enterprise_evals_app.command("validate")
+def enterprise_evals_validate(path: Path) -> None:
+    """Validate a materialized enterprise evaluation corpus."""
+    from .enterprise_corpus import EnterpriseCorpus, validate_corpus
+    from .enterprise_io import load_exported_corpus
+
+    corpus = (
+        load_exported_corpus(path)
+        if path.is_dir()
+        else EnterpriseCorpus.model_validate_json(path.read_text(encoding="utf-8"))
+    )
+    findings = validate_corpus(corpus)
+    if findings:
+        for finding in findings:
+            typer.echo(finding, err=True)
+        raise typer.Exit(1)
+    typer.echo("valid")
+
+
+@enterprise_evals_app.command("build")
+def enterprise_evals_build(
+    world_path: Path,
+    output: Path,
+    strength: int = typer.Option(2, min=1, max=4),
+    limit: int | None = None,
+    exhaustive: bool = False,
+    profile_path: Path | None = typer.Option(None, "--profile"),
+    shard_index: int | None = typer.Option(None, "--shard-index"),
+    shard_count: int | None = typer.Option(None, "--shard-count"),
+    render_limit: int = typer.Option(0, "--render-limit", min=0),
+) -> None:
+    """Plan, materialize, validate, export, and optionally render a connector corpus."""
+    from .enterprise_artifacts import render_corpus_artifacts
+    from .enterprise_corpus import materialize_corpus, validate_corpus
+    from .enterprise_io import export_corpus
+    from .enterprise_queries import plan_queries
+    from .enterprise_specs import (
+        CoverageProfile,
+        ScenarioProfile,
+        apply_scenario_profile,
+        builtin_registry,
+    )
+    from .world import World
+
+    world = World.load(world_path)
+    scenario = (
+        ScenarioProfile.model_validate_json(profile_path.read_text(encoding="utf-8"))
+        if profile_path
+        else None
+    )
+    registry = (
+        apply_scenario_profile(builtin_registry(), scenario)
+        if scenario
+        else builtin_registry()
+    )
+    coverage = (
+        scenario.coverage.model_copy(update={"strengths": strength})
+        if scenario
+        else CoverageProfile(strengths=strength)
+    )
+    queries, report = plan_queries(
+        world,
+        registry=registry,
+        profile=coverage,
+        strategy="exhaustive" if exhaustive else "covering",
+        limit=limit,
+        shard_index=shard_index,
+        shard_count=shard_count,
+    )
+    corpus = materialize_corpus(world, queries)
+    findings = validate_corpus(corpus)
+    if findings:
+        for finding in findings:
+            typer.echo(finding, err=True)
+        raise typer.Exit(1)
+    export_corpus(corpus, output)
+    rendered = render_corpus_artifacts(
+        corpus, output / "artifacts", limit=render_limit
+    ) if render_limit else ()
+    if rendered:
+        (output / "rendered-artifacts.json").write_text(
+            json.dumps([item.model_dump(mode="json") for item in rendered], indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    typer.echo(
+        json.dumps(
+            {
+                "queries": len(corpus.queries),
+                "records": len(corpus.connector_data.records),
+                "rendered_artifacts": len(rendered),
+                "coverage": report.model_dump(mode="json") if report else None,
+            },
+            sort_keys=True,
+        )
+    )
+
+
+@enterprise_evals_app.command("score")
+def enterprise_evals_score(
+    query_path: Path,
+    trace_path: Path,
+) -> None:
+    """Score an MCP trace against one planned query's semantic DAG."""
+    from .enterprise_corpus import TraceCall, score_trace
+    from .enterprise_queries import PlannedEnterpriseQuery
+
+    query = PlannedEnterpriseQuery.model_validate_json(
+        query_path.read_text(encoding="utf-8")
+    )
+    calls = [
+        TraceCall.model_validate(item)
+        for item in json.loads(trace_path.read_text(encoding="utf-8"))
+    ]
+    typer.echo(score_trace(query, calls).model_dump_json())
+
+
+@enterprise_evals_app.command("simulate")
+def enterprise_evals_simulate(
+    corpus_path: Path,
+    limit: int | None = typer.Option(None, min=1),
+) -> None:
+    """Execute exported query DAGs against the in-memory MCP simulator."""
+    import asyncio
+
+    from .enterprise_corpus import score_trace
+    from .enterprise_io import load_exported_corpus
+    from .enterprise_runner import RunnerConfig, ToolBinding, execute_query
+    from .enterprise_simulator import ConnectorSimulator
+
+    corpus = load_exported_corpus(corpus_path)
+    queries = corpus.queries[:limit]
+    fixtures = {fixture.query_id: fixture for fixture in corpus.fixtures}
+    bindings = tuple(
+        ToolBinding(
+            connector=connector,
+            operation=operation,
+            entity=entity,
+            tool_name=f"{connector}.{operation}",
+        )
+        for connector, operation, entity in sorted(
+            {
+                (node["connector"], node["kind"], node["entity"])
+                for query in queries
+                for node in query.expected_dag
+                if node["connector"] != "model"
+            }
+        )
+    )
+    config = RunnerConfig(bindings=bindings)
+    simulator = ConnectorSimulator(corpus)
+
+    async def run() -> list[tuple[Any, Any]]:
+        results = []
+        for query in queries:
+            result = await execute_query(
+                query, fixtures[query.id], config, simulator.invoke
+            )
+            results.append((result, score_trace(query, result.calls)))
+        return results
+
+    results = asyncio.run(run())
+    completed = sum(result.completed for result, _ in results)
+    blocked = sum(not result.completed for result, _ in results)
+    average = (
+        round(sum(score.total for _, score in results) / len(results), 4)
+        if results
+        else 0.0
+    )
+    typer.echo(
+        json.dumps(
+            {
+                "queries": len(results),
+                "completed": completed,
+                "blocked_by_injected_failure": blocked,
+                "average_dag_score": average,
+                "simulator_records": len(simulator.records),
+            },
+            sort_keys=True,
+        )
+    )
 
 console = Console()
 err = Console(stderr=True)
@@ -2109,6 +2362,23 @@ def build(
             f"[dim]access:[/dim] {access} — {moved} of"
             f" {len(world.artifact_intents)} document(s) re-gated\n"
         )
+
+    # Conversations are derived inside each episode, while distractors and
+    # archive messiness deliberately run after every episode. Refresh the
+    # append-only knowledge ledger once all document-producing passes finish so
+    # their authors are not left citing records the settled ledger says they
+    # never knew. Existing observer/fact pairs and messages are deduplicated by
+    # `derive`; builds without conversations remain byte-identical.
+    if conversations:
+        from .conversation import derive as derive_conversation
+        from .ids import Minter
+
+        refresh = derive_conversation(world, minter=world._minter or Minter())
+        if refresh.observations or refresh.messages:
+            world = world.extend(
+                observations=refresh.observations,
+                messages=refresh.messages,
+            )
 
     if narrate or replay is not None:
         from . import recipe as recipe_module

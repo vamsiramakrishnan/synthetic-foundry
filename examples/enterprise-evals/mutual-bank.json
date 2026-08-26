@@ -1,0 +1,49 @@
+{
+  "name": "mutual-bank-enterprise",
+  "industry": "banking",
+  "company_description": "A regulated mutual bank with member banking, prudential capital, liquidity, operational risk and regulatory reporting.",
+  "workflows": ["prudential_capital_assurance", "liquidity_risk_review", "regulatory_lodgement", "operational_resilience", "member_service_risk", "executive_digest"],
+  "connectors": ["jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email"],
+  "additional_processes": [
+    {"name": "prudential_reporting", "event_kinds": ["capital_return", "liquidity_observation", "regulatory_challenge", "lodgement"], "connector_entities": {"jira": "issue", "servicenow": "change_request"}},
+    {"name": "member_banking", "event_kinds": ["member_case", "hardship", "complaint", "service_recovery"], "connector_entities": {"salesforce": "case", "email": "thread"}}
+  ],
+  "additional_workflows": [
+    {
+      "name": "prudential_capital_assurance", "purpose": "capital adequacy, RWA and second-line assurance review", "process": "prudential_reporting",
+      "sources": [{"connector": "sharepoint", "entities": ["file"]}, {"connector": "confluence", "entities": ["page"]}, {"connector": "jira", "entities": ["issue"]}, {"connector": "email", "entities": ["thread"]}],
+      "destinations": [{"connector": "sharepoint", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["xlsx", "docx", "pdf"]}, {"connector": "email", "entities": ["message"], "operations": ["draft", "reply"], "formats": ["html"]}],
+      "content_actions": ["extract", "compare", "reconcile", "generate"], "audiences": ["prudential_reporting", "second_line_risk", "board_risk_committee"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Reconcile return, exposure and control identifiers; preserve review challenges and lineage, then {verification_instruction}.{failure_instruction}"
+    },
+    {
+      "name": "liquidity_risk_review", "purpose": "liquidity coverage, funding concentration and limit review", "process": "prudential_reporting",
+      "sources": [{"connector": "drive", "entities": ["file"]}, {"connector": "sharepoint", "entities": ["file"]}, {"connector": "servicenow", "entities": ["incident"]}, {"connector": "email", "entities": ["thread"]}],
+      "destinations": [{"connector": "drive", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["xlsx", "pptx", "pdf"]}, {"connector": "confluence", "entities": ["page"], "operations": ["create", "update"], "formats": ["html", "markdown"]}],
+      "content_actions": ["extract", "compare", "reconcile", "generate", "render"], "audiences": ["treasury", "asset_liability_committee", "risk_executive"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Preserve observation dates, denominators, limits and source lineage; separate confirmed breaches from data issues, then {verification_instruction}.{failure_instruction}"
+    },
+    {
+      "name": "regulatory_lodgement", "purpose": "regulatory return approval and lodgement evidence pack", "process": "prudential_reporting",
+      "sources": [{"connector": "jira", "entities": ["issue"]}, {"connector": "sharepoint", "entities": ["file"]}, {"connector": "confluence", "entities": ["page"]}, {"connector": "email", "entities": ["thread"]}],
+      "destinations": [{"connector": "servicenow", "entities": ["change_request"], "operations": ["create", "update", "patch", "upsert"]}, {"connector": "sharepoint", "entities": ["file"], "operations": ["create", "update"], "formats": ["docx", "xlsx", "pdf"]}],
+      "content_actions": ["summarize", "extract", "reconcile", "generate"], "audiences": ["accountable_executive", "regulatory_reporting", "internal_audit"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Retain maker-checker approvals, evidence versions, exceptions and submission identifiers, then {verification_instruction}.{failure_instruction}"
+    },
+    {
+      "name": "operational_resilience", "purpose": "critical service resilience, incident and change assurance pack", "process": "service_management",
+      "sources": [{"connector": "servicenow", "entities": ["incident", "change_request"]}, {"connector": "jira", "entities": ["issue"]}, {"connector": "confluence", "entities": ["page"]}],
+      "destinations": [{"connector": "sharepoint", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["docx", "xlsx", "pptx", "pdf"]}, {"connector": "confluence", "entities": ["page"], "operations": ["create", "update"], "formats": ["html", "markdown"]}],
+      "content_actions": ["summarize", "extract", "reconcile", "generate"], "audiences": ["service_owner", "operational_risk", "executive_risk_committee"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Map incidents and changes to critical services and impact tolerances; preserve ownership and evidence links, then {verification_instruction}.{failure_instruction}"
+    },
+    {
+      "name": "member_service_risk", "purpose": "member complaints, hardship and service-risk review", "process": "member_banking",
+      "sources": [{"connector": "salesforce", "entities": ["account", "contact", "case"]}, {"connector": "email", "entities": ["thread"]}, {"connector": "servicenow", "entities": ["incident"]}],
+      "destinations": [{"connector": "salesforce", "entities": ["case", "account"], "operations": ["update", "patch", "upsert"]}, {"connector": "drive", "entities": ["file"], "operations": ["create", "update"], "formats": ["xlsx", "pdf"]}, {"connector": "email", "entities": ["message"], "operations": ["draft", "reply"], "formats": ["html"]}],
+      "content_actions": ["summarize", "extract", "classify", "generate"], "audiences": ["member_services", "conduct_risk", "complaints_executive"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Join member records only by stable identifiers, minimize personal data, retain hardship and consent controls, then {verification_instruction}.{failure_instruction}"
+    }
+  ],
+  "coverage": {"name": "banking-pairwise", "strengths": 2, "connector_counts": [1, 2, 4, 6], "failures": ["none", "ambiguous_join", "missing_stable_id", "permission_denied", "partial_write", "stale_source", "version_conflict"], "max_candidates": 10000000}
+}

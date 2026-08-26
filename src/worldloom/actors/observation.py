@@ -205,6 +205,29 @@ def observations_for(
             readable_artifacts[artifact.id] = artifact.created_at
             artifact_facts[artifact.id] = list(artifact.supporting_fact_ids)
 
+    # Conversation derivation runs before compilation, so the manifest above
+    # is normally empty. An author's own intent is nevertheless direct evidence
+    # that they held its cited facts by the document's written date. Treat the
+    # authored plan as the same artifact channel the compiled document becomes;
+    # otherwise enabling conversations retroactively makes standing policies
+    # and earlier-period documents epistemically impossible.
+    from ..documents import written_at
+
+    facts = {fact.id: fact for fact in world.facts}
+    for intent in world.artifact_intents:
+        if intent.author_id != actor_id:
+            continue
+        try:
+            created_at = written_at(intent, facts)
+        except ValueError:
+            continue
+        if created_at <= at:
+            # The artifact channel adds its ordinary reading lag below. The
+            # author necessarily knew the cited material no later than the
+            # written timestamp, so move the channel origin back by that lag.
+            readable_artifacts[intent.id] = created_at - _LAG["artifact"]
+            artifact_facts[intent.id] = list(intent.required_fact_ids)
+
     out: list[Observation] = []
     for fact in world.facts:
         if fact.valid_from > at or (actor_id, fact.id) in known:

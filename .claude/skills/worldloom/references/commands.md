@@ -200,6 +200,81 @@ Say whether this installation can do what the docs promise.
 | --- | --- |
 | `--json` | Emit the check list as JSON. |
 
+### `worldloom enterprise-evals`
+
+Plan, generate, and validate multi-connector enterprise agent evaluations.
+
+### `worldloom enterprise-evals build`
+
+Plan, materialize, validate, export, and optionally render a connector corpus.
+
+```
+worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exhaustive` |  |
+| `--limit` |  |
+| `--profile` |  |
+| `--render-limit` |  |
+| `--shard-count` |  |
+| `--shard-index` |  |
+| `--strength` |  |
+
+### `worldloom enterprise-evals plan`
+
+Write grounded query plans as JSONL.
+
+```
+worldloom enterprise-evals plan <WORLD_PATH> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exhaustive` |  |
+| `--limit` |  |
+| `--profile` |  |
+| `--shard-count` |  |
+| `--shard-index` |  |
+| `--strength` |  |
+
+### `worldloom enterprise-evals score`
+
+Score an MCP trace against one planned query's semantic DAG.
+
+```
+worldloom enterprise-evals score <QUERY_PATH> <TRACE_PATH>
+```
+
+### `worldloom enterprise-evals simulate`
+
+Execute exported query DAGs against the in-memory MCP simulator.
+
+```
+worldloom enterprise-evals simulate <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--limit` |  |
+
+### `worldloom enterprise-evals space`
+
+Count semantically valid query candidates without generating fixtures.
+
+| Option | Purpose |
+| --- | --- |
+| `--max-candidates` |  |
+
+### `worldloom enterprise-evals validate`
+
+Validate a materialized enterprise evaluation corpus.
+
+```
+worldloom enterprise-evals validate <PATH>
+```
+
 ### `worldloom evals`
 
 Work with a corpus's evaluation set.

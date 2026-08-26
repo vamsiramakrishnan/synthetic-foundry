@@ -194,6 +194,10 @@ def cases(
         and (eligible is None or fact_id in eligible)
         and len(held) >= 2
         and held[-1].learned_at > held[0].learned_at
+        and (
+            facts[fact_id].valid_to is None
+            or facts[fact_id].valid_to > held[-1].learned_at
+        )
     ]
     # Widest spread first, then most observers, then the id — so the selection
     # is a property of the world rather than of dictionary order, and a rebuild
