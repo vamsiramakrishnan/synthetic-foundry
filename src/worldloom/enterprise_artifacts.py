@@ -56,7 +56,7 @@ def _render_xlsx(
     query: PlannedEnterpriseQuery, records: tuple[ConnectorRecord, ...], path: Path
 ) -> None:
     try:
-        import xlsxwriter
+        import xlsxwriter  # type: ignore[import-untyped]
     except ImportError as error:
         raise RuntimeError("XLSX rendering requires worldloom[xlsx]") from error
     workbook = xlsxwriter.Workbook(path)
@@ -116,7 +116,7 @@ def _render_docx(
     document.add_heading("Sources", level=1)
     for record in records:
         document.add_paragraph(f"{record.connector}:{record.external_id} — facts: {', '.join(record.fact_ids) or 'none'}", style="List Bullet")
-    document.save(path)
+    document.save(str(path))
 
 
 def _render_pptx(
@@ -148,7 +148,7 @@ def _render_pptx(
     sources = deck.slides.add_slide(deck.slide_layouts[1])
     sources.shapes.title.text = "Sources"
     sources.placeholders[1].text = "\n".join(f"{record.connector}:{record.external_id} — {record.title}" for record in records[:20])
-    deck.save(path)
+    deck.save(str(path))
 
 
 def _render_pdf(
@@ -189,7 +189,7 @@ def render_corpus_artifacts(
     corpus: EnterpriseCorpus, directory: Path, *, limit: int | None = None
 ) -> tuple[RenderedEvalArtifact, ...]:
     fixtures = {fixture.query_id: fixture for fixture in corpus.fixtures}
-    rendered = []
+    rendered: list[RenderedEvalArtifact] = []
     for query in corpus.queries:
         if limit is not None and len(rendered) >= limit:
             break
