@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .connector_data import ConnectorProjectionRegistry
+from .enterprise_artifacts import RenderedEvalArtifact, render_corpus_artifacts
 from .enterprise_corpus import EnterpriseCorpus, materialize_corpus
 from .enterprise_queries import CoverageReport, PlannedEnterpriseQuery, plan_queries
 from .enterprise_specs import (
@@ -77,6 +79,19 @@ class EnterpriseEvalHarness:
             ),
             report,
         )
+
+    def build_and_render(
+        self, directory: Path, *, render_limit: int | None = None
+    ) -> tuple[
+        EnterpriseCorpus,
+        CoverageReport | None,
+        tuple[RenderedEvalArtifact, ...],
+    ]:
+        corpus, report = self.build()
+        rendered = render_corpus_artifacts(
+            corpus, directory, limit=render_limit
+        )
+        return corpus, report, rendered
 
     def shard(
         self, index: int, count: int
