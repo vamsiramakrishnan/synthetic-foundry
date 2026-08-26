@@ -5,8 +5,13 @@ import itertools
 from worldloom.enterprise_queries import constrained_cover, valid_rows
 from worldloom.enterprise_specs import (
     CoverageProfile,
+    EnterpriseEvalSpec,
+    ScenarioProfile,
+    apply_scenario_profile,
+    builtin_spec,
     builtin_registry,
     canonical_action,
+    load_enterprise_spec,
 )
 
 
@@ -35,3 +40,23 @@ def test_constrained_cover_proves_coverage_over_valid_rows() -> None:
     assert selected
     assert report.complete
     assert report.covered_interactions == report.required_interactions
+
+
+def test_builtin_spec_round_trips_through_authoring_loader() -> None:
+    original = builtin_spec()
+    loaded = load_enterprise_spec(original.model_dump(mode="json"))
+    assert isinstance(loaded, EnterpriseEvalSpec)
+    assert loaded == original
+
+
+def test_scenario_profile_filters_registry() -> None:
+    profile = ScenarioProfile(
+        name="service-desk",
+        industry="technology",
+        company_description="A managed technology provider.",
+        workflows=("incident_review",),
+        connectors=("jira", "servicenow", "email"),
+    )
+    selected = apply_scenario_profile(builtin_registry(), profile)
+    assert set(selected.workflows) == {"incident_review"}
+    assert set(selected.connectors) == {"jira", "servicenow", "email"}
