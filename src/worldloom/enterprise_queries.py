@@ -10,8 +10,8 @@ from pydantic import Field, model_validator
 
 from .enterprise_specs import (
     CoverageProfile,
-    SpecRegistry,
     SourceRole,
+    SpecRegistry,
     WorkflowSpec,
     builtin_registry,
 )
