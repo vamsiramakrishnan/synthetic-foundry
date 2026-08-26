@@ -99,3 +99,40 @@ def test_runner_respects_dag_dependencies() -> None:
     result = asyncio.run(execute_query(query, fixture, config, invoke))
     assert result.completed
     assert invocations == ["sharepoint.create_file", "sharepoint.read_file"]
+
+
+def test_runner_stops_after_failed_write() -> None:
+    query = _query("Q-2")
+    fixture = QueryFixture(
+        query_id=query.id,
+        input_record_ids={},
+        destination_record_id=None,
+        overrides=(),
+        expected_side_effects=(),
+    )
+    config = RunnerConfig(
+        bindings=(
+            ToolBinding(
+                connector="sharepoint",
+                operation="create",
+                entity="file",
+                tool_name="sharepoint.create_file",
+            ),
+            ToolBinding(
+                connector="sharepoint",
+                operation="readback",
+                entity="file",
+                tool_name="sharepoint.read_file",
+            ),
+        )
+    )
+
+    async def invoke(
+        tool_name: str, arguments: Mapping[str, Any]
+    ) -> dict[str, object]:
+        return {"succeeded": False}
+
+    result = asyncio.run(execute_query(query, fixture, config, invoke))
+    assert not result.completed
+    assert result.finding == "node write failed"
+    assert len(result.calls) == 1
