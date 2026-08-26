@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
 
-from .connector_data import ConnectorDataset, ConnectorRecord, generate_connector_data
+from .connector_data import (
+    ConnectorDataset,
+    ConnectorProjectionRegistry,
+    ConnectorRecord,
+    generate_connector_data,
+)
 from .enterprise_queries import PlannedEnterpriseQuery
 from .ids import content_key
 from .models import Model
@@ -52,10 +57,17 @@ def _override(kind: str, query: PlannedEnterpriseQuery, record_ids: Mapping[str,
     return StateOverride(kind=kind, connector=connector, record_id=first, details=details)
 
 
-def materialize_corpus(world: World, queries: Iterable[PlannedEnterpriseQuery]) -> EnterpriseCorpus:
+def materialize_corpus(
+    world: World,
+    queries: Iterable[PlannedEnterpriseQuery],
+    *,
+    projections: ConnectorProjectionRegistry | None = None,
+) -> EnterpriseCorpus:
     planned = tuple(queries)
     needed = tuple(sorted({requirement.connector for query in planned for requirement in query.generation.source_requirements} | {query.generation.mutation.connector for query in planned}))
-    data = generate_connector_data(world, connectors=needed)
+    data = generate_connector_data(
+        world, connectors=needed, projections=projections
+    )
     records = list(data.records)
     required_pairs = sorted({(requirement.connector, requirement.entity) for query in planned for requirement in query.generation.source_requirements})
     for connector, entity in required_pairs:
