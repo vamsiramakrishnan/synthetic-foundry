@@ -40,14 +40,15 @@ class EnterpriseCorpus(Model):
 def _override(kind: str, query: PlannedEnterpriseQuery, record_ids: Mapping[str, tuple[str, ...]]) -> StateOverride:
     connector = query.generation.mutation.connector
     first = next((ids[0] for ids in record_ids.values() if ids), None)
-    details = {
+    details_by_kind: dict[str, dict[str, Any]] = {
         "ambiguous_join": {"duplicate_candidate": first, "resolution": "human_review"},
         "missing_stable_id": {"remove_field": "stable_id", "resolution": "skip_and_report"},
         "permission_denied": {"principal": "requesting_actor", "access": "denied"},
         "partial_write": {"fail_after": 1, "rollback": False},
         "stale_source": {"version_delta": -1, "authoritative_copy_available": True},
         "version_conflict": {"etag": "newer-than-read", "expected_status": 409},
-    }[kind]
+    }
+    details = details_by_kind[kind]
     return StateOverride(kind=kind, connector=connector, record_id=first, details=details)
 
 
