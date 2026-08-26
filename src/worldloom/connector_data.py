@@ -312,7 +312,7 @@ def generate_email(world: World) -> list[ConnectorRecord]:
     people = {person.id: person for person in world.people}
     fallback = list(world.people)[:2]
     facts = _facts_by_event(world)
-    records = []
+    records: list[ConnectorRecord] = []
     for index, event in enumerate(world.timeline(), start=1):
         actors = [people[actor] for actor in event.actors if actor in people]
         sender = actors[0] if actors else (fallback[0] if fallback else None)
