@@ -14,8 +14,9 @@ Use this skill when a task concerns realistic enterprise prompts, connector fixt
 3. Choose a `CoverageProfile`. Use constrained covering for routine evals; exhaustive generation must stream and normally use a limit or shard.
 4. Call `plan_queries(...)`. Treat each query's `generation` requirements and `expected_dag` as contracts.
 5. Call `materialize_corpus(...)`; validate with `validate_corpus(...)` before execution.
-6. Execute MCP calls without leaking connector implementation jargon into the customer request.
-7. Record `TraceCall` objects and score them with `score_trace(...)`.
+6. Render real office/PDF artifacts with `render_corpus_artifacts(...)` when the query requires them.
+7. Execute against an MCP server or `ConnectorSimulator` without leaking connector implementation jargon into the customer request.
+8. Record `TraceCall` objects and score them with `score_trace(...)`.
 
 ## Non-negotiable rules
 
