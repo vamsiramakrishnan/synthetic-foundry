@@ -37,10 +37,19 @@ class MutationRequirement(Model):
     verify_after_write: bool = True
 
 
+class ArtifactRequirement(Model):
+    format: str
+    sections: tuple[str, ...] = ()
+    sheets: tuple[str, ...] = ()
+    slides: tuple[str, ...] = ()
+    charts: tuple[str, ...] = ()
+
+
 class GenerationRequirement(Model):
     process: str
     source_requirements: tuple[SourceRequirement, ...]
     mutation: MutationRequirement
+    artifact: ArtifactRequirement | None = None
     state_overrides: tuple[str, ...] = ()
 
 
@@ -203,13 +212,22 @@ def _plan(world: World, row: dict[str, str], registry: SpecRegistry) -> PlannedE
     workflow = registry.workflows[row["workflow"]]
     sources = tuple(SourceRequirement(connector=value.split(":", 1)[0], entity=value.split(":", 1)[1]) for value in row["source_entities"].split("+"))
     mutation = MutationRequirement(connector=row["destination"], entity=row["destination_entity"], operation=row["operation"], output_format=row["output_format"], preexisting_record=row["operation"] in {"update", "patch", "upsert", "reply"})
+    artifact = {
+        "xlsx": ArtifactRequirement(format="xlsx", sheets=("Summary", "Detail", "Exceptions", "Provenance"), charts=("status_breakdown", "period_trend")),
+        "pptx": ArtifactRequirement(format="pptx", slides=("Title", "Executive summary", "Metrics", "Risks", "Actions", "Sources"), charts=("status_breakdown", "period_trend")),
+        "docx": ArtifactRequirement(format="docx", sections=("Executive summary", "Findings", "Risks", "Actions", "Sources")),
+        "pdf": ArtifactRequirement(format="pdf", sections=("Executive summary", "Findings", "Risks", "Actions", "Sources")),
+        "csv": ArtifactRequirement(format="csv", sections=("detail_rows",)),
+        "html": ArtifactRequirement(format="html", sections=("Summary", "Findings", "Actions", "Sources")),
+        "markdown": ArtifactRequirement(format="markdown", sections=("Summary", "Findings", "Actions", "Sources")),
+    }.get(row["output_format"])
     states = () if row["failure"] == "none" else (row["failure"],)
     read_nodes = tuple({"id": f"read-{index}", "kind": "read", "connector": source.connector, "entity": source.entity, "depends_on": []} for index, source in enumerate(sources))
     transform = {"id": "transform", "kind": row["content_action"], "connector": "model", "entity": row["output_format"], "depends_on": [node["id"] for node in read_nodes]}
     write = {"id": "write", "kind": row["operation"], "connector": row["destination"], "entity": row["destination_entity"], "depends_on": ["transform"]}
     verify = {"id": "verify", "kind": row["verification"], "connector": row["destination"], "entity": row["destination_entity"], "depends_on": ["write"]}
     identifier = content_key("enterprise-query", *[f"{key}={row[key]}" for key in sorted(row)])
-    return PlannedEnterpriseQuery(id=identifier, workflow=workflow.name, query=_render(world, workflow, row), dimensions=row, generation=GenerationRequirement(process=_process_for(row), source_requirements=sources, mutation=mutation, state_overrides=states), expected_dag=read_nodes + (transform, write, verify))
+    return PlannedEnterpriseQuery(id=identifier, workflow=workflow.name, query=_render(world, workflow, row), dimensions=row, generation=GenerationRequirement(process=_process_for(row), source_requirements=sources, mutation=mutation, artifact=artifact, state_overrides=states), expected_dag=read_nodes + (transform, write, verify))
 
 
 def plan_queries(
