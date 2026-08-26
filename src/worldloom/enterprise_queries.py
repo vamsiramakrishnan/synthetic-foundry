@@ -11,6 +11,7 @@ from pydantic import Field, model_validator
 from .enterprise_specs import (
     CoverageProfile,
     SpecRegistry,
+    SourceRole,
     WorkflowSpec,
     builtin_registry,
 )
@@ -25,6 +26,7 @@ class SourceRequirement(Model):
     connector: str
     entity: str
     minimum: int = Field(default=1, ge=1)
+    input_format: str = "record"
     required_fields: tuple[str, ...] = ()
 
 
@@ -92,11 +94,28 @@ def _subsets(row: Mapping[str, str], strength: int) -> set[tuple[tuple[str, str]
     }
 
 
-def _source_combinations(workflow: WorkflowSpec, profile: CoverageProfile) -> Iterator[tuple[Any, ...]]:
+def _source_combinations(
+    workflow: WorkflowSpec, profile: CoverageProfile
+) -> Iterator[tuple[SourceRole, ...]]:
     roles = workflow.sources
     counts = sorted({min(count, len(roles)) for count in profile.connector_counts if count <= len(roles)} | {len(roles)})
     for count in counts:
         yield from itertools.combinations(roles, count)
+
+
+def _source_variants(
+    sources: tuple[SourceRole, ...], registry: SpecRegistry
+) -> Iterator[tuple[tuple[str, str, str], ...]]:
+    options = []
+    for role in sources:
+        connector = registry.connectors[role.connector]
+        role_options = []
+        for entity_name in role.entities:
+            entity = connector.entity(entity_name)
+            for input_format in entity.formats or ("record",):
+                role_options.append((role.connector, entity_name, input_format))
+        options.append(tuple(role_options))
+    yield from itertools.product(*options)
 
 
 def valid_rows(registry: SpecRegistry | None = None, profile: CoverageProfile | None = None) -> Iterator[dict[str, str]]:
@@ -106,46 +125,54 @@ def valid_rows(registry: SpecRegistry | None = None, profile: CoverageProfile | 
     emitted = 0
     for workflow in registry.workflows.values():
         for sources in _source_combinations(workflow, profile):
-            source_set = "+".join(role.connector for role in sources)
-            source_entities = "+".join(f"{role.connector}:{role.entities[0]}" for role in sources)
-            for destination in workflow.destinations:
-                spec = registry.connectors[destination.connector]
-                for entity_name in destination.entities:
-                    entity = spec.entity(entity_name)
-                    operations = tuple(op for op in destination.operations if op in entity.operations)
-                    formats = destination.formats or entity.formats or ("record",)
-                    for operation, output_format, action, audience, topology, failure, verification in itertools.product(
-                        operations,
-                        formats,
-                        workflow.content_actions,
-                        workflow.audiences,
-                        workflow.topologies,
-                        profile.failures,
-                        workflow.verification,
-                    ):
-                        if operation.value in {"update", "patch"} and failure == "missing_stable_id":
-                            continue
-                        if failure == "version_conflict" and operation.value not in {"update", "patch", "upsert"}:
-                            continue
-                        if output_format == "xlsx" and action.value not in {"extract", "compare", "reconcile", "generate", "render"}:
-                            continue
-                        yield {
-                            "workflow": workflow.name,
-                            "source_set": source_set,
-                            "source_entities": source_entities,
-                            "destination": destination.connector,
-                            "destination_entity": entity_name,
-                            "operation": operation.value,
-                            "output_format": output_format,
-                            "content_action": action.value,
-                            "audience": audience,
-                            "topology": topology,
-                            "failure": failure,
-                            "verification": verification,
-                        }
-                        emitted += 1
-                        if emitted > profile.max_candidates:
-                            raise ValueError(f"valid candidate count exceeds max_candidates={profile.max_candidates}; narrow the profile")
+            for variants in _source_variants(sources, registry):
+                source_set = "+".join(item[0] for item in variants)
+                source_entities = "+".join(
+                    f"{connector}:{entity}" for connector, entity, _ in variants
+                )
+                input_formats = "+".join(item[2] for item in variants)
+                for destination in workflow.destinations:
+                    spec = registry.connectors[destination.connector]
+                    for entity_name in destination.entities:
+                        entity = spec.entity(entity_name)
+                        operations = tuple(
+                            op for op in destination.operations if op in entity.operations
+                        )
+                        formats = destination.formats or entity.formats or ("record",)
+                        combinations = itertools.product(
+                            operations,
+                            formats,
+                            workflow.content_actions,
+                            workflow.audiences,
+                            workflow.topologies,
+                            profile.failures,
+                            workflow.verification,
+                        )
+                        for operation, output_format, action, audience, topology, failure, verification in combinations:
+                            if operation.value in {"update", "patch"} and failure == "missing_stable_id":
+                                continue
+                            if failure == "version_conflict" and operation.value not in {"update", "patch", "upsert"}:
+                                continue
+                            if output_format == "xlsx" and action.value not in {"extract", "compare", "reconcile", "generate", "render"}:
+                                continue
+                            yield {
+                                "workflow": workflow.name,
+                                "source_set": source_set,
+                                "source_entities": source_entities,
+                                "input_formats": input_formats,
+                                "destination": destination.connector,
+                                "destination_entity": entity_name,
+                                "operation": operation.value,
+                                "output_format": output_format,
+                                "content_action": action.value,
+                                "audience": audience,
+                                "topology": topology,
+                                "failure": failure,
+                                "verification": verification,
+                            }
+                            emitted += 1
+                            if emitted > profile.max_candidates:
+                                raise ValueError(f"valid candidate count exceeds max_candidates={profile.max_candidates}; narrow the profile")
 
 
 def constrained_cover(rows: Iterable[dict[str, str]], strength: int) -> tuple[tuple[dict[str, str], ...], CoverageReport]:
@@ -184,7 +211,24 @@ def _process_for(row: Mapping[str, str]) -> str:
 
 
 def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str]) -> str:
-    source_names = [registry_name.replace("servicenow", "ServiceNow").replace("sharepoint", "SharePoint").replace("jira", "Jira").replace("salesforce", "Salesforce").replace("confluence", "Confluence").replace("drive", "Drive").replace("email", "email") for registry_name in row["source_set"].split("+")]
+    formats = row["input_formats"].split("+")
+    entities = [value.split(":", 1)[1] for value in row["source_entities"].split("+")]
+    source_names = []
+    for connector, entity, input_format in zip(
+        row["source_set"].split("+"), entities, formats, strict=True
+    ):
+        display = connector.replace("servicenow", "ServiceNow").replace("sharepoint", "SharePoint").replace("jira", "Jira").replace("salesforce", "Salesforce").replace("confluence", "Confluence").replace("drive", "Drive").replace("email", "email")
+        format_label = {
+            "xlsx": "Excel workbook",
+            "pptx": "presentation",
+            "docx": "Word document",
+            "pdf": "PDF",
+            "csv": "CSV export",
+            "html": "page",
+            "markdown": "page",
+            "record": entity.replace("_", " "),
+        }.get(input_format, input_format)
+        source_names.append(f"the relevant {display} {format_label}")
     sources = source_names[0] if len(source_names) == 1 else ", ".join(source_names[:-1]) + f", and {source_names[-1]}"
     operation = row["operation"]
     action_instruction = {
@@ -210,7 +254,17 @@ def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str]) -> str
 
 def _plan(world: World, row: dict[str, str], registry: SpecRegistry) -> PlannedEnterpriseQuery:
     workflow = registry.workflows[row["workflow"]]
-    sources = tuple(SourceRequirement(connector=value.split(":", 1)[0], entity=value.split(":", 1)[1]) for value in row["source_entities"].split("+"))
+    input_formats = row["input_formats"].split("+")
+    sources = tuple(
+        SourceRequirement(
+            connector=value.split(":", 1)[0],
+            entity=value.split(":", 1)[1],
+            input_format=input_format,
+        )
+        for value, input_format in zip(
+            row["source_entities"].split("+"), input_formats, strict=True
+        )
+    )
     mutation = MutationRequirement(connector=row["destination"], entity=row["destination_entity"], operation=row["operation"], output_format=row["output_format"], preexisting_record=row["operation"] in {"update", "patch", "upsert", "reply"})
     artifact = {
         "xlsx": ArtifactRequirement(format="xlsx", sheets=("Summary", "Detail", "Exceptions", "Provenance"), charts=("status_breakdown", "period_trend")),
