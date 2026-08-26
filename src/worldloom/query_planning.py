@@ -103,7 +103,7 @@ class QueryDrivenCorpus(Model):
 
 
 def _source_sets() -> tuple[str, ...]:
-    values = []
+    values: list[str] = []
     for count in (1, 2, 3, 4, 6):
         values.extend("+".join(combo) for combo in itertools.combinations(CONNECTORS, count))
     return tuple(values)
