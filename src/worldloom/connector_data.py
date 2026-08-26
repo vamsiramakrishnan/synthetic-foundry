@@ -313,6 +313,40 @@ def generate_email(world: World) -> list[ConnectorRecord]:
     fallback = list(world.people)[:2]
     facts = _facts_by_event(world)
     records: list[ConnectorRecord] = []
+    if world.messages:
+        prior_by_thread: dict[str, str] = {}
+        for message in sorted(world.messages, key=lambda item: (item.sent_at, item.id)):
+            sender = people.get(message.sender_id)
+            recipients = [people[item] for item in message.recipient_ids if item in people]
+            sender_name = sender.name if sender else "System Operations"
+            recipient_names = [item.name for item in recipients] or ["Programme Office"]
+            thread_id = content_key("email-thread", message.subject_ref or message.id)
+            message_key = content_key("email", world.seed, message.id)
+            external_id = f"<{message_key}@worldloom.example>"
+            records.append(
+                ConnectorRecord(
+                    id=f"CONN-EMAIL-{message_key[:12].upper()}",
+                    connector="email",
+                    entity="message",
+                    external_id=external_id,
+                    title=message.text.splitlines()[0][:120] or message.kind.replace("_", " ").title(),
+                    fields={
+                        "message_id": external_id,
+                        "thread_id": thread_id,
+                        "from": _email_address(sender_name, world.company.name),
+                        "to": [_email_address(name, world.company.name) for name in recipient_names],
+                        "subject": message.subject_ref or message.kind.replace("_", " ").title(),
+                        "body": message.text,
+                        "sent_at": message.sent_at.isoformat(),
+                        "in_reply_to": prior_by_thread.get(thread_id),
+                        "labels": ["worldloom", message.kind, world.period or "current"],
+                    },
+                    fact_ids=sorted(message.disclosed_fact_ids),
+                    source_artifact_ids=_artifact_ids(world, set(message.disclosed_fact_ids)),
+                )
+            )
+            prior_by_thread[thread_id] = external_id
+        return records
     for index, event in enumerate(world.timeline(), start=1):
         actors = [people[actor] for actor in event.actors if actor in people]
         sender = actors[0] if actors else (fallback[0] if fallback else None)
