@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING, Literal
 from .enterprise_corpus import EnterpriseCorpus, materialize_corpus
 from .enterprise_queries import CoverageReport, PlannedEnterpriseQuery, plan_queries
 from .enterprise_runner import shard_queries
-from .enterprise_specs import CoverageProfile, SpecRegistry, builtin_registry
+from .enterprise_specs import (
+    CoverageProfile,
+    EnterpriseEvalSpec,
+    SpecRegistry,
+    builtin_registry,
+)
 
 if TYPE_CHECKING:
     from .world import World
@@ -31,6 +36,13 @@ class EnterpriseEvalHarness:
 
     def with_profile(self, profile: CoverageProfile) -> EnterpriseEvalHarness:
         return replace(self, profile=profile)
+
+    def with_spec(self, spec: EnterpriseEvalSpec) -> EnterpriseEvalHarness:
+        return replace(
+            self,
+            registry=SpecRegistry(spec.connectors, spec.workflows, spec.processes),
+            profile=spec.coverage,
+        )
 
     def exhaustive(self) -> EnterpriseEvalHarness:
         return replace(self, strategy="exhaustive")
