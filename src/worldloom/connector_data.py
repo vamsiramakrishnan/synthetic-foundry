@@ -173,7 +173,7 @@ CAPABILITIES = [
             content_verbs=(ContentVerb.SUMMARIZE, ContentVerb.EXTRACT),
             stable_id_field="id",
         )
-        for entity in ("account", "opportunity")
+        for entity in ("account", "contact", "opportunity")
     ],
     *[
         ConnectorCapability(
@@ -278,6 +278,10 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                         "status": {"open": "To Do", "assigned": "In Progress", "closed": "Done"}.get(task.state, "To Do"),
                         "priority": "High" if task.addresses == "control" else "Medium",
                         "labels": ["worldloom", task.domain, task.kind],
+                        "project_key": "WL",
+                        "issue_type": "Epic" if task.kind == "programme" else "Task",
+                        "epic_key": f"WL-EPIC-{task.domain.upper()}",
+                        "sprint_id": content_key("jira-sprint", world.period or "current", task.domain),
                         "assignee_id": task.owner_id,
                         "reporter_id": task.created_by,
                         "due_at": task.due_at.isoformat() if task.due_at else None,
@@ -305,6 +309,10 @@ def generate_jira(world: World) -> list[ConnectorRecord]:
                     "status": "Done" if any(not fact.is_superseded for fact in linked) else "Open",
                     "priority": "Highest" if "incident" in event.kind else "Medium",
                     "labels": ["worldloom", event.kind, world.period or "current"],
+                    "project_key": "WL",
+                    "issue_type": "Bug" if "incident" in event.kind else "Task",
+                    "epic_key": f"WL-EPIC-{event.kind.split('_')[0].upper()}",
+                    "sprint_id": content_key("jira-sprint", world.period or "current", event.kind),
                     "linked_event_id": event.id,
                     "service_ids": event.services,
                     "system_ids": event.systems,
@@ -359,6 +367,10 @@ def generate_servicenow(world: World) -> list[ConnectorRecord]:
                     ),
                     "priority": "1" if is_incident else "3",
                     "correlation_id": event.id,
+                    "assignment_group": "Major Incident Management" if is_incident else "Change Advisory Board",
+                    "cmdb_ci_ids": sorted(event.systems),
+                    "related_service_ids": sorted(event.services),
+                    "approval": "not_requested" if is_incident else "approved",
                     "service_ids": event.services,
                     "system_ids": event.systems,
                     "opened_at": event.occurred_at.isoformat(),
@@ -403,6 +415,10 @@ def generate_email(world: World) -> list[ConnectorRecord]:
                         "sent_at": message.sent_at.isoformat(),
                         "in_reply_to": prior_by_thread.get(thread_id),
                         "labels": ["worldloom", message.kind, world.period or "current"],
+                        "attachments": [
+                            {"artifact_id": item, "name": f"{item}.attachment"}
+                            for item in _artifact_ids(world, set(message.disclosed_fact_ids))
+                        ],
                     },
                     fact_ids=sorted(message.disclosed_fact_ids),
                     source_artifact_ids=_artifact_ids(world, set(message.disclosed_fact_ids)),
@@ -500,6 +516,18 @@ def generate_artifact_projection(
                     "version": getattr(artifact, "version", 1),
                     "world_artifact_id": artifact.id,
                     "reporting_period": world.period,
+                    "parent_path": f"/{artifact.domain}/{world.period or 'current'}",
+                    "permissions": {
+                        "owner": artifact.author_id,
+                        "audience": artifact.audience,
+                        "inherit": True,
+                    },
+                    "version_history": [
+                        {
+                            "version": getattr(artifact, "version", 1),
+                            "author_id": artifact.author_id,
+                        }
+                    ],
                 },
                 fact_ids=fact_ids,
                 event_ids=sorted(
@@ -513,23 +541,55 @@ def generate_artifact_projection(
 
 
 def generate_salesforce(world: World) -> list[ConnectorRecord]:
-    records = [
-        ConnectorRecord(
-            id=f"CONN-SALESFORCE-{content_key('salesforce-account', world.company.id)[:12].upper()}",
-            connector="salesforce",
-            entity="account",
-            external_id=f"001{content_key('salesforce-account', world.company.id)[:15].upper()}",
-            title=world.company.name,
-            fields={
-                "id": f"001{content_key('salesforce-account', world.company.id)[:15].upper()}",
-                "name": world.company.name,
-                "company_id": world.company.id,
-                "reporting_period": world.period,
-            },
+    customers = tuple(getattr(world.masterdata, "customers", ()))
+    accounts = customers or (world.company,)
+    records: list[ConnectorRecord] = []
+    account_ids: list[str] = []
+    for customer in accounts:
+        customer_id = str(getattr(customer, "id", world.company.id))
+        customer_name = str(getattr(customer, "name", world.company.name))
+        key = content_key("salesforce-account", customer_id)
+        account_id = f"001{key[:15].upper()}"
+        account_ids.append(account_id)
+        records.append(
+            ConnectorRecord(
+                id=f"CONN-SALESFORCE-{key[:12].upper()}",
+                connector="salesforce",
+                entity="account",
+                external_id=account_id,
+                title=customer_name,
+                fields={
+                    "id": account_id,
+                    "name": customer_name,
+                    "customer_id": customer_id,
+                    "segment": getattr(customer, "segment", "enterprise"),
+                    "billing_address": getattr(customer, "address", None),
+                    "payment_terms": getattr(customer, "payment_terms", None),
+                    "reporting_period": world.period,
+                },
+            )
         )
-    ]
+        contact_email = getattr(customer, "contact_email", None)
+        if contact_email:
+            contact_key = content_key("salesforce-contact", customer_id, contact_email)
+            contact_id = f"003{contact_key[:15].upper()}"
+            records.append(
+                ConnectorRecord(
+                    id=f"CONN-SALESFORCE-{contact_key[:12].upper()}",
+                    connector="salesforce",
+                    entity="contact",
+                    external_id=contact_id,
+                    title=str(getattr(customer, "contact_name", contact_email)),
+                    fields={
+                        "id": contact_id,
+                        "account_id": account_id,
+                        "name": getattr(customer, "contact_name", contact_email),
+                        "email": contact_email,
+                    },
+                )
+            )
     facts = _facts_by_event(world)
-    for event in world.timeline():
+    for index, event in enumerate(world.timeline()):
         lowered = f"{event.kind} {event.summary}".lower()
         if not any(token in lowered for token in ("customer", "sale", "renew", "opportun", "case", "support", "escalat")):
             continue
@@ -548,7 +608,7 @@ def generate_salesforce(world: World) -> list[ConnectorRecord]:
                     "id": f"{prefix}{key[:15].upper()}",
                     "name": event.summary,
                     "stage": "Closed Won" if any(not fact.is_superseded for fact in linked) else "Qualification",
-                    "account_id": records[0].external_id,
+                    "account_id": account_ids[(len(records) + index) % len(account_ids)],
                     "event_id": event.id,
                     "occurred_at": event.occurred_at.isoformat(),
                 },
