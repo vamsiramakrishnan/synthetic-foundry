@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 
 from worldloom.connector_data import ConnectorDataset
+from worldloom.enterprise_artifacts import render_corpus_artifacts
 from worldloom.enterprise_corpus import EnterpriseCorpus, QueryFixture, StateOverride
 from worldloom.enterprise_queries import (
+    ArtifactRequirement,
     GenerationRequirement,
     MutationRequirement,
     PlannedEnterpriseQuery,
@@ -28,6 +30,9 @@ def _corpus(failure: str = "none") -> tuple[EnterpriseCorpus, QueryFixture]:
                 operation="create",
                 output_format="docx",
                 preexisting_record=False,
+            ),
+            artifact=ArtifactRequirement(
+                format="docx", sections=("Summary", "Sources")
             ),
         ),
         expected_dag=(
@@ -112,3 +117,13 @@ def test_simulator_executes_version_conflict() -> None:
     assert not result.completed
     assert result.finding == "node write failed"
     assert not result.calls[0].succeeded
+
+
+def test_renderer_writes_real_docx(tmp_path) -> None:
+    corpus, _ = _corpus()
+    rendered = render_corpus_artifacts(
+        corpus, tmp_path, limit=1
+    )
+    assert len(rendered) == 1
+    path = tmp_path / f"{corpus.queries[0].id}.docx"
+    assert path.read_bytes().startswith(b"PK")
