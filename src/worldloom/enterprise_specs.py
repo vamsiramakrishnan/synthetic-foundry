@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 from pydantic import Field, model_validator
 
-from .cascade import Brief, CascadeModel, Finding
+from .cascade import Brief, CascadeModel, Finding, load, refuse
 
 
 class Operation(StrEnum):
@@ -118,6 +119,13 @@ class CoverageProfile(CascadeModel):
     max_candidates: int = Field(default=1_000_000, ge=1)
 
 
+class EnterpriseEvalSpec(CascadeModel):
+    connectors: tuple[ConnectorSpec, ...]
+    workflows: tuple[WorkflowSpec, ...]
+    processes: tuple[ProcessSpec, ...]
+    coverage: CoverageProfile = Field(default_factory=CoverageProfile)
+
+
 class SpecRegistry:
     """Explicit registry; callers can replace every built-in decision."""
 
@@ -225,4 +233,22 @@ def registry_from_dict(payload: dict[str, Any]) -> SpecRegistry:
         (ConnectorSpec.model_validate(item) for item in payload.get("connectors", ())),
         (WorkflowSpec.model_validate(item) for item in payload.get("workflows", ())),
         (ProcessSpec.model_validate(item) for item in payload.get("processes", ())),
+    )
+
+
+def load_enterprise_spec(
+    source: str | Path | dict[str, Any],
+) -> EnterpriseEvalSpec:
+    spec = load(source, EnterpriseEvalSpec)
+    findings = SpecRegistry(spec.connectors, spec.workflows, spec.processes).review()
+    if findings:
+        refuse("enterprise evaluation specification", findings)
+    return spec
+
+
+def builtin_spec() -> EnterpriseEvalSpec:
+    return EnterpriseEvalSpec(
+        connectors=BUILTIN_CONNECTORS,
+        workflows=BUILTIN_WORKFLOWS,
+        processes=BUILTIN_PROCESSES,
     )
