@@ -111,16 +111,38 @@ def enterprise_evals_plan(
     strength: int = typer.Option(2, min=1, max=4),
     limit: int | None = None,
     exhaustive: bool = False,
+    profile_path: Path | None = typer.Option(None, "--profile"),
 ) -> None:
     """Write grounded query plans as JSONL."""
     from .enterprise_queries import plan_queries
-    from .enterprise_specs import CoverageProfile
+    from .enterprise_specs import (
+        CoverageProfile,
+        ScenarioProfile,
+        apply_scenario_profile,
+        builtin_registry,
+    )
     from .world import World
 
     world = World.load(world_path)
+    scenario = (
+        ScenarioProfile.model_validate_json(profile_path.read_text(encoding="utf-8"))
+        if profile_path
+        else None
+    )
+    registry = (
+        apply_scenario_profile(builtin_registry(), scenario)
+        if scenario
+        else builtin_registry()
+    )
+    coverage = (
+        scenario.coverage.model_copy(update={"strengths": strength})
+        if scenario
+        else CoverageProfile(strengths=strength)
+    )
     queries, report = plan_queries(
         world,
-        profile=CoverageProfile(strengths=strength),
+        registry=registry,
+        profile=coverage,
         strategy="exhaustive" if exhaustive else "covering",
         limit=limit,
     )
@@ -151,17 +173,38 @@ def enterprise_evals_build(
     output: Path,
     strength: int = typer.Option(2, min=1, max=4),
     limit: int | None = None,
+    profile_path: Path | None = typer.Option(None, "--profile"),
 ) -> None:
     """Plan, materialize, validate, and export a connector corpus."""
     from .enterprise_corpus import materialize_corpus, validate_corpus
     from .enterprise_io import export_corpus
     from .enterprise_queries import plan_queries
-    from .enterprise_specs import CoverageProfile
+    from .enterprise_specs import (
+        CoverageProfile,
+        ScenarioProfile,
+        apply_scenario_profile,
+        builtin_registry,
+    )
     from .world import World
 
     world = World.load(world_path)
+    scenario = (
+        ScenarioProfile.model_validate_json(profile_path.read_text(encoding="utf-8"))
+        if profile_path
+        else None
+    )
+    registry = (
+        apply_scenario_profile(builtin_registry(), scenario)
+        if scenario
+        else builtin_registry()
+    )
+    coverage = (
+        scenario.coverage.model_copy(update={"strengths": strength})
+        if scenario
+        else CoverageProfile(strengths=strength)
+    )
     queries, report = plan_queries(
-        world, profile=CoverageProfile(strengths=strength), limit=limit
+        world, registry=registry, profile=coverage, limit=limit
     )
     corpus = materialize_corpus(world, queries)
     findings = validate_corpus(corpus)
