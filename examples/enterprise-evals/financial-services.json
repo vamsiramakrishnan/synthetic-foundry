@@ -36,6 +36,6 @@
       "stale_source",
       "version_conflict"
     ],
-    "max_candidates": 1000000
+    "max_candidates": 10000000
   }
 }
