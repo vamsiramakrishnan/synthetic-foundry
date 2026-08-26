@@ -291,6 +291,8 @@ def plan_queries(
     profile: CoverageProfile | None = None,
     strategy: Literal["covering", "exhaustive"] = "covering",
     limit: int | None = None,
+    shard_index: int | None = None,
+    shard_count: int | None = None,
 ) -> tuple[Iterator[PlannedEnterpriseQuery], CoverageReport | None]:
     registry = registry or builtin_registry()
     profile = profile or CoverageProfile()
@@ -302,6 +304,12 @@ def plan_queries(
     if strategy == "covering":
         selected, report = constrained_cover(rows, profile.strengths)
         rows = selected
+    if (shard_index is None) != (shard_count is None):
+        raise ValueError("shard_index and shard_count must be supplied together")
+    if shard_index is not None and shard_count is not None:
+        if shard_count < 1 or not 0 <= shard_index < shard_count:
+            raise ValueError("shard requires count >= 1 and 0 <= index < count")
+        rows = itertools.islice(rows, shard_index, None, shard_count)
     if limit is not None:
         rows = itertools.islice(rows, limit)
     return (_plan(world, row, registry) for row in rows), report
