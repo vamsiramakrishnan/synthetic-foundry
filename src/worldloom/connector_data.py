@@ -512,7 +512,7 @@ def generate_salesforce(world: World) -> list[ConnectorRecord]:
         )
     ]
     facts = _facts_by_event(world)
-    for index, event in enumerate(world.timeline(), start=1):
+    for event in world.timeline():
         lowered = f"{event.kind} {event.summary}".lower()
         if not any(token in lowered for token in ("customer", "sale", "renew", "opportun", "case", "support", "escalat")):
             continue
