@@ -7,6 +7,39 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Added — operational relational synthesis
+
+- Opt-in `worldloom.synthesis` SDK and `worldloom synth` commands. Frozen,
+  typed causal programs generate related entities and lagged state with keyed
+  noise, integer arithmetic, hard constraints and operator-owned work limits.
+- Retail inventory/replenishment and banking loan-servicing programs. Paired
+  interventions preserve identity and exogenous noise. Streaming exports carry
+  replayable recipes, checksums and counts; verified shard merges reproduce
+  unsharded bytes. Completed shards can be resumed without trusting markers.
+- Quality-diversity parameter search measures behavior, retains niche champions
+  and audits held-out seeds. Candidate code cannot alter the evaluator.
+- Designer/critic executable teams share measured feedback and a bounded archive.
+  Immutable receipts support checkpointed reuse and offline, no-process replay.
+- Grounded operational case projections, industry-specific enterprise query
+  profiles, and strict source mode that refuses missing source records.
+- Skill, operator documentation, invariant, counterfactual, replay, search,
+  executable-contract and enterprise integration regression tests.
+
+### Fixed — reference narration build contract
+
+- CI and the reference README explicitly select the historical outline settings
+  expected by the authored grocery narration. The prose and acceptance rules are
+  unchanged. A new CLI integration test pins this path, not only the SDK path.
+
+### Generation compatibility
+
+- Existing World recipes, default World generation and golden corpora are not
+  changed by operational synthesis. Its recipe namespace is
+  `worldloom.synthesis/v1`. Strict enterprise source admission is opt-in.
+- The operational simulators are declared assumptions, not statistically fitted
+  customer models. They do not imply privacy guarantees or reconciliation to
+  an attached World's macro financial totals.
+
 ### Added — a real-model writer behind the agent seam
 
 - **`tools/model_narrator.py`** turns `claude -p` or `codex exec` into the

@@ -77,6 +77,8 @@ DOCUMENTS = (
     # same executable-surface gate as the agent procedure: a stale flag in an
     # enterprise runbook produces the wrong dataset just as surely as one in a
     # skill does.
+    "docs/operational-synthesis.md",
+    ".claude/skills/worldloom-synthesis/SKILL.md",
     "docs/architecture.md",
     "docs/enterprise-corpus.md",
     "docs/sdk.md",

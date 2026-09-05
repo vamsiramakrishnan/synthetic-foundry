@@ -122,7 +122,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--systems-end` | Exact active system count in the final period. |
 | `--timeline` | Sample a history rather than repeating a month: `quiet`, `steady` or `turbulent`. `--periods 6` runs six closes signed by the same twenty-three people, drawn from the same distribution — six identical months with the dates changed. A density schedules incidents and org changes across those periods instead, so a controller who departs in period 2 means periods 3-6 are signed by their successor and "which month went wrong" becomes answerable from the corpus. Needs --periods to have room to work in. Costs: the schedule states incidents in *both* directions once it schedules any, so it and --incident cannot both decide; and hires are not sampled, because a new post's title is a business decision and a sampler inventing one would write the least plausible sentence in the corpus. |
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
-| `--variant-bias` | Rotate which authored outline variant each document gets. Two tenants built from one engine with different biases disagree about every document's shape, which is most of what stops a mosaic sharing one shape vocabulary. Only rotates among variants a type already ships; pass 0 to pin every document to variant zero. |
+| `--variant-bias` | Rotate which authored outline variant each document gets. Two tenants built from one engine with different biases disagree about every document's shape, which is most of what stops a mosaic sharing one shape vocabulary. Only rotates among variants a type already ships; pass 0 for the historical hash-selected variants. |
 | `--vary-incidents` | Rotate the incident's storyline across periods — a stale FX table one month, a duplicated goods receipt the next — instead of the same failure retold monthly. Surface only: causality, fact ids and machine values are identical either way, and each period's storyline is recorded on its recipe step so --replay reproduces it. Off (the default) rebuilds every existing corpus byte for byte. |
 
 ### `worldloom compose`
@@ -829,6 +829,104 @@ worldloom status <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit machine-readable state instead of the table. |
+
+### `worldloom synth`
+
+Generate relational operational records from executable causal specifications.
+
+### `worldloom synth build`
+
+Generate a checksummed JSONL export. Resume verifies, rather than trusts, existing output.
+
+```
+worldloom synth build <SPECIFICATION> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--resume` |  |
+| `--seed` |  |
+| `--shard-count` |  |
+| `--shard-index` |  |
+
+### `worldloom synth check`
+
+Check graph, expressions, constraints and resource budgets before generation.
+
+```
+worldloom synth check <SPECIFICATION>
+```
+
+### `worldloom synth compare`
+
+Emit exact paired cell deltas as JSONL; reject mismatched populations.
+
+```
+worldloom synth compare <DIRECTORY> <COUNTERFACTUAL>
+```
+
+### `worldloom synth example`
+
+Write an editable retail or banking specification; refuse to overwrite.
+
+```
+worldloom synth example <VERTICAL> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--entities` |  |
+| `--ticks` |  |
+
+### `worldloom synth intervene`
+
+Build a paired world using a JSON array of explicit do-interventions.
+
+```
+worldloom synth intervene <DIRECTORY> <INTERVENTIONS> <OUTPUT>
+```
+
+### `worldloom synth merge`
+
+Verify a complete shard set and merge in canonical order.
+
+```
+worldloom synth merge <OUTPUT> <SHARDS>
+```
+
+### `worldloom synth search`
+
+Evolve bounded parameters, retain behavior niches, then audit held-out seeds.
+
+```
+worldloom synth search <SPECIFICATION> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--evaluator` |  |
+| `--proposals` |  |
+
+### `worldloom synth team`
+
+Run configured designer/critic executables, or replay their ledger without calls.
+
+```
+worldloom synth team <SPECIFICATION> <EVALUATOR> <AGENTS> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--checkpoint` |  |
+| `--replay-ledger` |  |
+
+### `worldloom synth verify`
+
+Replay the recipe and verify every record, identifier and byte commitment.
+
+```
+worldloom synth verify <DIRECTORY>
+```
 
 ### `worldloom topology`
 

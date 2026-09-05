@@ -20,6 +20,8 @@ from .enterprise_specs import (
 )
 
 if TYPE_CHECKING:
+    from .synthesis.connectors import IncidentRule
+    from .synthesis.engine import Simulator
     from .world import World
 
 
@@ -31,6 +33,7 @@ class EnterpriseEvalHarness:
     strategy: Literal["covering", "exhaustive"] = "covering"
     limit: int | None = None
     projections: ConnectorProjectionRegistry | None = None
+    strict_sources: bool = False
 
     @classmethod
     def from_world(cls, world: World) -> EnterpriseEvalHarness:
@@ -64,6 +67,20 @@ class EnterpriseEvalHarness:
     ) -> EnterpriseEvalHarness:
         return replace(self, projections=projections)
 
+    def with_operational_data(
+        self, simulator: Simulator, rule: IncidentRule, *, include_world_records: bool = True
+    ) -> EnterpriseEvalHarness:
+        """Use stateful operational cases, and refuse absent query sources."""
+        from .synthesis.connectors import operational_projections
+
+        return replace(self, projections=operational_projections(
+            simulator, rule, include_world_records=include_world_records
+        ), strict_sources=True)
+
+    def require_sources(self) -> EnterpriseEvalHarness:
+        """Refuse missing source evidence instead of generating placeholder rows."""
+        return replace(self, strict_sources=True)
+
     def take(self, count: int) -> EnterpriseEvalHarness:
         return replace(self, limit=count)
 
@@ -75,7 +92,7 @@ class EnterpriseEvalHarness:
         queries, report = self.plan()
         return (
             materialize_corpus(
-                self.world, queries, projections=self.projections
+                self.world, queries, projections=self.projections, strict_sources=self.strict_sources
             ),
             report,
         )
