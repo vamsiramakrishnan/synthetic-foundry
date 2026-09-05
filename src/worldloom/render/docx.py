@@ -445,6 +445,49 @@ def _cover(document, ir: ArtifactIR, g: StyleGenome) -> None:  # type: ignore[no
     notice.runs[0].font.color.rgb = _rgb(_MUTED)
 
 
+
+def _genre_front_matter(document, ir: ArtifactIR, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
+    """Render native control rows from existing ecology metadata only."""
+    if ir.metadata.get("realism_profile") != "ecology/v1":
+        return
+    genre = ir.metadata.get("artifact_genre")
+    if genre not in {"decision_memo", "controlled_document", "incident_rca"}:
+        return
+
+    from datetime import datetime
+
+    from docx.shared import Pt
+
+    created = ir.metadata.get("worldloom_created")
+    date = datetime.fromisoformat(created).strftime("%d %b %Y") if created else ""
+    if genre == "decision_memo":
+        rows = (("From", ir.metadata.get("author", "")), ("Date", date), ("Subject", ir.title))
+    else:
+        rows = (
+            ("Status", ir.metadata.get("lifecycle", "").replace("_", " ").title()),
+            ("Revision", ir.metadata.get("revision", "")),
+            ("Date", date),
+        )
+    rows = tuple((label, value) for label, value in rows if value)
+    if not rows:
+        return
+
+    table = document.add_table(rows=0, cols=2)
+    _apply_table_borders(table, "horizontal", g.rule_weight)
+    _apply_cell_padding(table, _cell_padding_pt(g))
+    for label, value in rows:
+        cells = table.add_row().cells
+        cells[0].text = label
+        cells[1].text = value
+        for run in cells[0].paragraphs[0].runs:
+            run.bold = True
+        for cell in cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(_heading_pt(g, _TS_BODY))
+                    run.font.color.rgb = _rgb(g.colour_roles["body_text"])
+
+
 def _contents(document, ir: ArtifactIR, g: StyleGenome) -> None:  # type: ignore[no-untyped-def]
     """A contents field, on documents long enough to need one.
 
@@ -1010,6 +1053,7 @@ def render(
     _page_setup(document)
     _running_heads(document, ir, g)
     _cover(document, ir, g)
+    _genre_front_matter(document, ir, g)
     _contents(document, ir, g)
 
     # One counter for the whole document, not one per section — `wp:docPr`'s
