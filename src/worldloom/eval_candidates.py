@@ -135,10 +135,14 @@ def _check_revision_chain(
         for artifact_id, record in artifacts.items()
         if _matches(record, requirement.selector)
     }
+    # Revision identity is an ArtifactIntent semantic, not a presentation
+    # lifecycle guess. ``revises`` means a new version of the same document;
+    # ``supersedes`` means a different document replaced it and must not make a
+    # revision eval pass.
     predecessors = {
-        item.artifact_id: item.predecessor_id
-        for item in realism.lifecycles
-        if item.artifact_id in eligible and item.predecessor_id in eligible
+        intent.id: intent.revises
+        for intent in world.artifact_intents
+        if intent.id in eligible and intent.revises in eligible
     }
     longest: tuple[str, ...] = ()
     for artifact_id in sorted(eligible):
