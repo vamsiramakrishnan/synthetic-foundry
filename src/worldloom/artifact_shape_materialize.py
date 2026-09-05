@@ -9,7 +9,6 @@ exercise paging, extraction, file-size and context behavior.
 from __future__ import annotations
 
 import hashlib
-import math
 import zipfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -146,9 +145,9 @@ def _materialize_pptx(
         if is_evidence and ppt_locator.element in {"text", "table", "hidden_slide"}:
             body.text_frame.text = evidence_text
         if is_evidence and ppt_locator.element == "hidden_slide":
-            slide._element.set("show", "0")  # noqa: SLF001 - OOXML has no public hidden-slide setter.
+            slide._element.set("show", "0")
         elif hidden_budget > 0 and ordinal > slides - hidden_budget:
-            slide._element.set("show", "0")  # noqa: SLF001
+            slide._element.set("show", "0")
 
         needs_notes = ordinal <= note_budget or (
             is_evidence and ppt_locator is not None and ppt_locator.element == "speaker_notes"
