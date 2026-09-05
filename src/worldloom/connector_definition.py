@@ -2,8 +2,8 @@
 
 A connector definition is the thin waist between Worldloom's canonical records
 and every connector-specific consumer: loader, emulator, query compiler,
-payload shaper, trace grader, MCP surface, and eval generation.  Product
-semantics live in data.  Engines stay generic.
+payload shaper, trace grader, MCP surface, and eval generation. Product
+semantics live in data. Engines stay generic.
 """
 
 from __future__ import annotations
@@ -117,7 +117,11 @@ class ConnectorAclDefinition(Model):
 class ConnectorDefinition(Model):
     """One complete, versioned connector contract."""
 
-    schema: Literal["worldloom.connector-definition/v1"] = CONNECTOR_DEFINITION_SCHEMA
+    definition_schema: Literal["worldloom.connector-definition/v1"] = Field(
+        default=CONNECTOR_DEFINITION_SCHEMA,
+        alias="schema",
+        serialization_alias="schema",
+    )
     connector: str
     version: str
     vendor_product: str
@@ -178,6 +182,11 @@ class ConnectorDefinition(Model):
                 f"{self.connector}/{entity} does not define operation {operation!r}"
             ) from error
         return self.canonical_tool(target)
+
+    def wire_dict(self) -> dict[str, object]:
+        """Serialize using stable on-disk field names, not Python attribute names."""
+
+        return self.model_dump(mode="json", by_alias=True)
 
 
 def parse_connector_definition(data: str | bytes) -> ConnectorDefinition:
