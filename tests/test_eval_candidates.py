@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
+
 from worldloom.eval_candidates import generate_candidates, validate_candidate
 from worldloom.eval_design import (
     EvalSpec,
@@ -55,6 +59,15 @@ def test_eval_is_compiled_before_candidate_worlds_are_generated() -> None:
     assert len(candidates) == 2
     assert all(candidate.validation.accepted for candidate in candidates)
     assert [candidate.world.seed for candidate in candidates] == [plan.seed for plan in expected_plans]
+
+
+def test_candidate_builder_must_use_plan_seed() -> None:
+    spec = _spec(WorldRequirement(id="facts", kind=RequirementKind.FACT))
+    plan = plan_candidates(spec, count=1)[0]
+    wrong_world = replace(_build(plan), seed=plan.seed + 1)
+
+    with pytest.raises(ValueError, match="does not match plan seed"):
+        validate_candidate(plan, spec, wrong_world)
 
 
 def test_hard_unsatisfied_requirement_rejects_candidate() -> None:
