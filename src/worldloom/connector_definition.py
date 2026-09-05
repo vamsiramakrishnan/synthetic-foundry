@@ -16,7 +16,9 @@ from pydantic import Field, model_validator
 
 from .models import Model
 
-CONNECTOR_DEFINITION_SCHEMA = "worldloom.connector-definition/v1"
+CONNECTOR_DEFINITION_SCHEMA: Literal["worldloom.connector-definition/v1"] = (
+    "worldloom.connector-definition/v1"
+)
 REFERENCE_CONNECTORS = (
     "jira",
     "servicenow",
@@ -212,8 +214,8 @@ class ConnectorDefinition(Model):
             missing = set(tool.entities) - entity_names
             if missing:
                 raise ValueError(f"tool {name!r} references unknown entities {sorted(missing)}")
-        for entity_name, entity in self.entities.items():
-            missing = set(entity.ops.values()) - tool_names
+        for entity_name, entity_definition in self.entities.items():
+            missing = set(entity_definition.ops.values()) - tool_names
             if missing:
                 raise ValueError(
                     f"entity {entity_name!r} references unknown tools {sorted(missing)}"
@@ -237,13 +239,13 @@ class ConnectorDefinition(Model):
         unknown_manifests = set(self.field_manifests) - entity_names
         if unknown_manifests:
             raise ValueError(f"field manifests reference unknown entities {sorted(unknown_manifests)}")
-        for entity, fields_for_entity in self.field_manifests.items():
+        for manifest_entity, fields_for_entity in self.field_manifests.items():
             ids = [field.id for field in fields_for_entity]
             canonicals = [field.canonical for field in fields_for_entity]
             if len(ids) != len(set(ids)):
-                raise ValueError(f"{entity}: field ids must be unique")
+                raise ValueError(f"{manifest_entity}: field ids must be unique")
             if len(canonicals) != len(set(canonicals)):
-                raise ValueError(f"{entity}: canonical field names must be unique")
+                raise ValueError(f"{manifest_entity}: canonical field names must be unique")
         for error_name in ("not_found", "denied", "validation", "bad_transition"):
             if error_name not in self.errors:
                 raise ValueError(f"missing connector error contract {error_name!r}")
