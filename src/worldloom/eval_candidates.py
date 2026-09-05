@@ -14,7 +14,13 @@ from typing import TYPE_CHECKING, Any
 
 from .artifact_ecology import RealismProfile, profile as realism_profile
 from .connector_data import ConnectorRecord, builtin_projections
-from .eval_design import CandidatePlan, EvalSpec, RequirementKind, WorldRequirement, plan_candidates
+from .eval_design import (
+    CandidatePlan,
+    EvalSpec,
+    RequirementKind,
+    WorldRequirement,
+    plan_candidates,
+)
 from .models import Model
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -235,10 +241,7 @@ def validate_candidate(plan: CandidatePlan, spec: EvalSpec, world: World) -> Can
         check_requirement(requirement, world, realism=realism)
         for requirement in plan.requirements
     )
-    hard = {
-        requirement.id: requirement.hard
-        for requirement in plan.requirements
-    }
+    hard = {requirement.id: requirement.hard for requirement in plan.requirements}
     accepted = all(check.satisfied or not hard[check.requirement_id] for check in checks)
     return CandidateValidation(
         eval_spec_id=spec.id,
