@@ -21,7 +21,16 @@ jobs:
         with:
           python-version: '3.11'
       - name: Apply narrow source changes
-        run: python .github/close-contracts/apply.py
+        run: |
+          python .github/close-contracts/apply.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/worldloom/epistemics.py')
+          text = p.read_text()
+          old = 'self._observations = tuple(observations)'
+          assert text.count(old) == 1
+          p.write_text(text.replace(old, 'self._observations: tuple[FactRow, ...] = tuple(observations)'))
+          PY
       - name: Install checks
         run: |
           python -m pip install uv
