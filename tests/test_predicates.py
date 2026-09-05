@@ -4,9 +4,12 @@ from worldloom.predicates import (
     FieldPredicate,
     Predicate,
     PredicateOp,
+    distance,
     evaluate,
     matching,
+    satisfy,
     selectivity,
+    spoil,
 )
 
 
@@ -56,6 +59,60 @@ def test_matching_and_selectivity_share_evaluator() -> None:
 
     assert tuple(row["id"] for row in matching(predicate, records)) == ("1", "3")
     assert selectivity(predicate, records) == 0.5
+
+
+def test_satisfy_constructs_one_witness_for_same_evaluator() -> None:
+    predicate = Predicate(
+        entity="incident",
+        where=(
+            FieldPredicate(field="priority", value="P1"),
+            FieldPredicate(field="age_days", op=PredicateOp.GT, value=7),
+            FieldPredicate(field="group", op=PredicateOp.IN, value=("Payments-SRE", "Core-SRE")),
+        ),
+    )
+
+    witness = satisfy(predicate, base={"summary": "gateway timeout"})
+
+    assert witness == {
+        "summary": "gateway timeout",
+        "priority": "P1",
+        "age_days": 8,
+        "group": "Payments-SRE",
+    }
+    assert evaluate(predicate, witness, entity="incident")
+    assert distance(predicate, witness) == 0
+
+
+def test_spoil_fails_exactly_one_clause_and_distance_measures_it() -> None:
+    predicate = Predicate.equalities(
+        {"priority": "P1", "status": "open", "assignment_group": "Payments-SRE"}
+    )
+    witness = satisfy(predicate)
+
+    near_miss = spoil(predicate, witness, field="priority", alternative="P2")
+
+    assert not evaluate(predicate, near_miss)
+    assert distance(predicate, near_miss) == 1
+    assert near_miss["status"] == "open"
+    assert near_miss["assignment_group"] == "Payments-SRE"
+
+
+def test_spoil_refuses_an_alternative_that_still_matches() -> None:
+    predicate = Predicate.equalities({"priority": "P1"})
+    witness = satisfy(predicate)
+
+    with pytest.raises(ValueError, match="exact one-clause near miss"):
+        spoil(predicate, witness, field="priority", alternative="P1")
+
+
+def test_ne_construction_requires_domain_alternative() -> None:
+    predicate = Predicate(
+        where=(FieldPredicate(field="status", op=PredicateOp.NE, value="closed"),)
+    )
+
+    with pytest.raises(ValueError, match="explicit alternative"):
+        satisfy(predicate)
+    assert satisfy(predicate, alternatives={"status": "open"})["status"] == "open"
 
 
 def test_duplicate_field_constraint_refuses_until_boolean_language_exists() -> None:
