@@ -8,7 +8,7 @@ is organized by the job being done, not by the source tree.
 
 | Goal | Start here | Then read |
 | --- | --- | --- |
-| Design an eval, then generate candidate corpora for it | [Eval-first generation](eval-first.md) | [Enterprise corpus generation](enterprise-corpus.md) and [Python SDK](sdk.md) |
+| Design an eval, then generate candidate corpora for it | [Eval-first generation](eval-first.md) | [Eval-first world compilation](eval-first-world-compilation.md) and [Python SDK](sdk.md) |
 | Build one corpus | [README quickstart](../README.md#quickstart-one-coherent-enterprise) | [Architecture and invariants](architecture.md) |
 | Generate operational records and counterfactuals | [Operational synthesis](operational-synthesis.md) | [Agent skills](skills.md) |
 | Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
@@ -27,7 +27,15 @@ is organized by the job being done, not by the source tree.
         | task DAG | capability | world predicates       |
         +------------------------+-----------------------+
                                  |
-                         candidate plans
+                         demand compiler
+                                 |
+                                 v
+                         WORLD OBLIGATIONS
+        +------------------------------------------------+
+        | evidence | search | artifact | ACL | time      |
+        +------------------------+-----------------------+
+                                 |
+                    tactics + candidate plans
                                  |
                                  v
                          AUTHORING TIME
@@ -49,6 +57,8 @@ is organized by the job being done, not by the source tree.
                                  |             |
                                  |             v
                                  |       bound eval oracle
+                                 |             |
+                                 |       reference execution
                                  |             |
                                  +-------------+
                                                |
@@ -76,11 +86,15 @@ is organized by the job being done, not by the source tree.
 ```
 
 For benchmark construction, evaluation design owns the problem before a corpus
-exists. Candidate generators own attempts. Independent validators decide whether
-an attempt really makes the eval solvable. The accepted world then owns the
-oracle. Agent handshakes may improve judgement or wording under bounded
-contracts, but no model gets to rewrite facts, hard predicates, or acceptance
-rules.
+exists. The demand compiler turns that problem into constructive world
+obligations. Candidate generators own attempts. Independent validators decide
+whether an attempt really makes the eval statically valid; reference execution
+then proves the task is executable against an isolated fork. The accepted world
+owns the oracle.
+
+Agent handshakes may improve generation recipes, judgement, or wording under
+bounded contracts, but no model gets to rewrite facts, hard predicates, oracle
+rules, or acceptance gates.
 
 World-first evaluation generation remains useful when inspecting an existing
 corpus for what it happens to test. Eval-first generation is the preferred path
@@ -91,6 +105,9 @@ when the goal is to construct the benchmark deliberately.
 - [Eval-first generation](eval-first.md) explains `EvalSpec`, deterministic
   candidate plans, accepted/rejected campaign runs, oracle binding, paired
   eval+corpus export, and validity-first outcome diversity.
+- [Eval-first world compilation](eval-first-world-compilation.md) explains the
+  demand compiler, constructive witnesses and near-misses, constraint cover,
+  frozen time, forked execution, proof gates, and unsat handling.
 - [Architecture and invariants](architecture.md) explains the thin waist, fact
   ownership, artifact cohesion, temporal semantics, replay, and independent
   validation.
@@ -110,6 +127,9 @@ These documents preserve design rationale and extension contracts:
 | Document | Answers |
 | --- | --- |
 | [eval-first.md](eval-first.md) | How an eval defines the world conditions its candidate corpora must satisfy |
+| [eval-first-world-compilation.md](eval-first-world-compilation.md) | How eval requirements become constructive world obligations and executable proofs |
+| [design/eval-demand-compiler.md](design/eval-demand-compiler.md) | The thin-waist contract for demand normalization, tactics, and constraint cover |
+| [design/reference-execution.md](design/reference-execution.md) | How isolated world forks prove generated evals are executable |
 | [generation-model.md](generation-model.md) | Which engine owns each decision, and why |
 | [lore.md](lore.md) | How historical priors constrain generated state |
 | [artifact-compiler.md](artifact-compiler.md) | How one resolved IR becomes diverse native artifacts without semantic drift |
