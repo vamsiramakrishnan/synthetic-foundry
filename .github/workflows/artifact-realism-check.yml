@@ -1,0 +1,18 @@
+name: artifact realism check
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - run: ruff check src/worldloom/artifact_realism.py src/worldloom/artifact_ecology.py src/worldloom/connector_realism.py src/worldloom/ecology.py src/worldloom/realism.py tests/test_artifact_realism.py tests/test_ecology_sdk.py
+      - run: mypy src/worldloom/artifact_realism.py src/worldloom/connector_realism.py src/worldloom/ecology.py src/worldloom/realism.py
+      - run: pytest -q tests/test_artifact_realism.py tests/test_ecology_sdk.py
