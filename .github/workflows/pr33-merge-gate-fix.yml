@@ -28,6 +28,9 @@ jobs:
         run: |
           pip install uv
           uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]" ruff==0.15.8 mypy==2.3.1
+      - name: Canonicalize known fixable lint debt
+        run: |
+          ruff check --fix src/worldloom/process_catalogue.py tools/finalize_process_catalogue.py tests/test_pr33_merge_gate.py
       - name: Lint and type gates
         run: |
           ruff check
@@ -46,7 +49,7 @@ jobs:
         run: |
           git config user.name 'worldloom-merge-gate-bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add src/worldloom/eval_candidates.py src/worldloom/eval_instances.py src/worldloom/eval_reference.py src/worldloom/artifact_ecology.py src/worldloom/render/pdf.py src/worldloom/world_transforms.py src/worldloom/recipe.py CHANGELOG.md tests/test_pr33_merge_gate.py
+          git add src/worldloom/eval_candidates.py src/worldloom/eval_instances.py src/worldloom/eval_reference.py src/worldloom/artifact_ecology.py src/worldloom/render/pdf.py src/worldloom/world_transforms.py src/worldloom/recipe.py src/worldloom/process_catalogue.py tools/finalize_process_catalogue.py CHANGELOG.md tests/test_pr33_merge_gate.py
           git rm tools/fix_pr33_merge_gate.py .github/workflows/pr33-merge-gate-fix.yml
           git diff --cached --check
           git commit -m 'Fix PR review correctness and replay merge gates'
