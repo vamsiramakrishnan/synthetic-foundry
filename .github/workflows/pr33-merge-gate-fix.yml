@@ -1,0 +1,53 @@
+name: PR33 merge gate fix
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths:
+      - .github/workflows/pr33-merge-gate-fix.yml
+permissions:
+  contents: write
+concurrency:
+  group: pr33-merge-gate-fix
+  cancel-in-progress: false
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Apply semantic review fixes
+        run: python tools/fix_pr33_merge_gate.py
+      - name: Install full CI dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]" ruff==0.15.8 mypy==2.3.1
+      - name: Lint and type gates
+        run: |
+          ruff check
+          mypy
+      - name: Focused review regressions
+        run: |
+          pytest -q tests/test_pr33_merge_gate.py tests/test_eval_candidates.py tests/test_eval_reference.py tests/test_pdf_ecology.py
+      - name: Full unit suite
+        run: pytest -q
+      - name: CLI docs and coherence smoke gates
+        run: |
+          worldloom docs --check
+          worldloom validate retail-close
+          worldloom build --seed 8128 --out "${{ runner.temp }}/generated"
+      - name: Commit only after gates pass
+        run: |
+          git config user.name 'worldloom-merge-gate-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/eval_candidates.py src/worldloom/eval_instances.py src/worldloom/eval_reference.py src/worldloom/artifact_ecology.py src/worldloom/render/pdf.py src/worldloom/world_transforms.py src/worldloom/recipe.py CHANGELOG.md tests/test_pr33_merge_gate.py
+          git rm tools/fix_pr33_merge_gate.py .github/workflows/pr33-merge-gate-fix.yml
+          git diff --cached --check
+          git commit -m 'Fix PR review correctness and replay merge gates'
+          git push origin HEAD:codex/worldloom-artifact-realism
