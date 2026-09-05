@@ -1,13 +1,14 @@
 # Worldloom documentation
 
 Worldloom is a deterministic, library-first compiler for synthetic enterprise
-corpora. The documentation is organized by the job being done, not by the source
-tree.
+corpora and the evaluations those corpora are built to support. The documentation
+is organized by the job being done, not by the source tree.
 
 ## Choose a path
 
 | Goal | Start here | Then read |
 | --- | --- | --- |
+| Design an eval, then generate candidate corpora for it | [Eval-first generation](eval-first.md) | [Enterprise corpus generation](enterprise-corpus.md) and [Python SDK](sdk.md) |
 | Build one corpus | [README quickstart](../README.md#quickstart-one-coherent-enterprise) | [Architecture and invariants](architecture.md) |
 | Generate operational records and counterfactuals | [Operational synthesis](operational-synthesis.md) | [Agent skills](skills.md) |
 | Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
@@ -21,6 +22,14 @@ tree.
 ## System map
 
 ```text
+                         EVALUATION DESIGN
+        +------------------------------------------------+
+        | task DAG | capability | world predicates       |
+        +------------------------+-----------------------+
+                                 |
+                         candidate plans
+                                 |
+                                 v
                          AUTHORING TIME
         +------------------------------------------------+
         | company spec | pack | facets | lore | process |
@@ -32,10 +41,21 @@ tree.
         | world | graph | events | facts | access | evals|
         +------------------------+-----------------------+
                                  |
-                       intents + bounded requests
+                    independent requirement checks
                                  |
-                                 v
-                         AGENT HANDSHAKES
+                       +---------+---------+
+                       | reject / search  | accept
+                       +---------+---------+
+                                 |             |
+                                 |             v
+                                 |       bound eval oracle
+                                 |             |
+                                 +-------------+
+                                               |
+                                     intents + bounded requests
+                                               |
+                                               v
+                                      AGENT HANDSHAKES
         +------------------------------------------------+
         | plan | act | narrate | compose | probe         |
         +------------------------+-----------------------+
@@ -55,12 +75,22 @@ tree.
         +---------+---------+---------+---------+--------+
 ```
 
-The deterministic core owns correctness. Agent handshakes own judgement under a
-bounded contract. Renderers own presentation. No layer is allowed to re-decide a
-fact owned by an earlier layer.
+For benchmark construction, evaluation design owns the problem before a corpus
+exists. Candidate generators own attempts. Independent validators decide whether
+an attempt really makes the eval solvable. The accepted world then owns the
+oracle. Agent handshakes may improve judgement or wording under bounded
+contracts, but no model gets to rewrite facts, hard predicates, or acceptance
+rules.
+
+World-first evaluation generation remains useful when inspecting an existing
+corpus for what it happens to test. Eval-first generation is the preferred path
+when the goal is to construct the benchmark deliberately.
 
 ## Operator guides
 
+- [Eval-first generation](eval-first.md) explains `EvalSpec`, deterministic
+  candidate plans, accepted/rejected campaign runs, oracle binding, paired
+  eval+corpus export, and validity-first outcome diversity.
 - [Architecture and invariants](architecture.md) explains the thin waist, fact
   ownership, artifact cohesion, temporal semantics, replay, and independent
   validation.
@@ -79,6 +109,7 @@ These documents preserve design rationale and extension contracts:
 
 | Document | Answers |
 | --- | --- |
+| [eval-first.md](eval-first.md) | How an eval defines the world conditions its candidate corpora must satisfy |
 | [generation-model.md](generation-model.md) | Which engine owns each decision, and why |
 | [lore.md](lore.md) | How historical priors constrain generated state |
 | [artifact-compiler.md](artifact-compiler.md) | How one resolved IR becomes diverse native artifacts without semantic drift |
