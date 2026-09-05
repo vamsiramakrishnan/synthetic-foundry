@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .artifact_ecology import RealismProfile, profile as realism_profile
+from .artifact_ecology import profile as realism_profile
 from .connector_data import ConnectorRecord, builtin_projections
 from .eval_design import (
     CandidatePlan,
@@ -24,6 +24,7 @@ from .eval_design import (
 from .models import Model
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .artifact_ecology import RealismProfile
     from .world import World
 
 
