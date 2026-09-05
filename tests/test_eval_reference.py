@@ -1,9 +1,19 @@
 from dataclasses import replace
 
 from worldloom.eval_candidates import generate_candidates
-from worldloom.eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
+from worldloom.eval_design import (
+    EvalSpec,
+    EvalStepSpec,
+    RequirementKind,
+    WorldRequirement,
+)
 from worldloom.eval_instances import bind_eval_instance
-from worldloom.eval_reference import ExecutionStep, ProofStatus, execute_isolated, execute_reference
+from worldloom.eval_reference import (
+    ExecutionStep,
+    ProofStatus,
+    execute_isolated,
+    execute_reference,
+)
 from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose
 
@@ -58,7 +68,10 @@ def test_write_task_requires_observed_effect() -> None:
     proof = execute_reference(instance, world, no_effect)
 
     assert proof.status == ProofStatus.PROVEN_UNSAT
-    assert any(result.assertion_type == "side_effect_occurred" and not result.passed for result in proof.assertion_results)
+    assert any(
+        result.assertion_type == "side_effect_occurred" and not result.passed
+        for result in proof.assertion_results
+    )
 
 
 def test_each_eval_starts_from_same_world_snapshot() -> None:
