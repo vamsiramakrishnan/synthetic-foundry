@@ -336,7 +336,9 @@ def enrich_world(world: World) -> World:
     irs = tuple(enrich_ir(staged, staged.artifact_intents.by_id(ir.intent_id), ir) for ir in staged.artifact_irs)
     recipe = dict(staged.recipe)
     recipe["artifact_realism"] = "ecology/v1"
-    return staged.extend(artifact_irs=irs, recipe=recipe)
+    from dataclasses import replace
+
+    return replace(staged, _artifact_irs=irs, _recipe=recipe)
 
 
 def episode_graph(world: World) -> EpisodeGraph:
