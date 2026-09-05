@@ -1,0 +1,157 @@
+"""Compile an eval design into constructive world obligations.
+
+This module is intentionally pre-data. It never generates IDs, records, or
+connector fixtures. It only normalizes what a candidate world must make true.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+from typing import TypeAlias
+
+from pydantic import Field
+
+from .eval_design import EvalSpec, RequirementKind
+from .models import Model
+
+Scalar: TypeAlias = str | int | bool
+
+
+class DemandKind(StrEnum):
+    EVIDENCE = "evidence"
+    SEARCH = "search"
+    ARTIFACT = "artifact"
+    ABSENCE = "absence"
+    PERMISSION = "permission"
+    STATE = "state"
+    CARDINALITY = "cardinality"
+    TEMPORAL = "temporal"
+    MUTATION = "mutation"
+
+
+class WorldDemand(Model):
+    id: str
+    kind: DemandKind
+    source_requirement_ids: tuple[str, ...] = ()
+    source_step_ids: tuple[str, ...] = ()
+    selector: dict[str, Scalar] = Field(default_factory=dict)
+    minimum: int = Field(default=1, ge=1)
+    hard: bool = True
+
+
+class DemandSet(Model):
+    eval_spec_id: str
+    design_digest: str
+    demands: tuple[WorldDemand, ...]
+
+
+_REQUIREMENT_KIND: dict[RequirementKind, DemandKind] = {
+    RequirementKind.FACT: DemandKind.EVIDENCE,
+    RequirementKind.EVENT: DemandKind.STATE,
+    RequirementKind.ARTIFACT: DemandKind.ARTIFACT,
+    RequirementKind.CONNECTOR: DemandKind.SEARCH,
+    RequirementKind.REVISION_CHAIN: DemandKind.STATE,
+    RequirementKind.PERMISSION: DemandKind.PERMISSION,
+    RequirementKind.DISTRACTOR: DemandKind.CARDINALITY,
+    RequirementKind.TEMPORAL_RELATION: DemandKind.TEMPORAL,
+}
+
+
+def _key(demand: WorldDemand) -> tuple[DemandKind, tuple[tuple[str, Scalar], ...]]:
+    return demand.kind, tuple(sorted(demand.selector.items()))
+
+
+def _from_requirements(spec: EvalSpec) -> list[WorldDemand]:
+    demands: list[WorldDemand] = []
+    for requirement in spec.requirements:
+        selector: dict[str, Scalar] = dict(requirement.selector)
+        selector.setdefault("requirement_kind", requirement.kind.value)
+        demands.append(
+            WorldDemand(
+                id=f"demand:{requirement.id}",
+                kind=_REQUIREMENT_KIND[requirement.kind],
+                source_requirement_ids=(requirement.id,),
+                selector=selector,
+                minimum=requirement.minimum,
+                hard=requirement.hard,
+            )
+        )
+    return demands
+
+
+def _from_steps(spec: EvalSpec) -> list[WorldDemand]:
+    """Extract obligations implied by the task graph itself.
+
+    A declared write needs a mutable precondition even if an author forgot to
+    repeat that fact in ``requirements``. Search/list/find operations need a
+    searchable witness. These are construction obligations, not oracle answers.
+    """
+
+    demands: list[WorldDemand] = []
+    for step in spec.steps:
+        selector: dict[str, Scalar] = {"capability": step.capability}
+        if step.connector:
+            selector["connector"] = step.connector
+        if step.operation:
+            selector["operation"] = step.operation
+        operation = (step.operation or step.capability).lower()
+        if step.effect == "write":
+            demands.append(
+                WorldDemand(
+                    id=f"step:{step.id}:mutation",
+                    kind=DemandKind.MUTATION,
+                    source_step_ids=(step.id,),
+                    selector=selector,
+                )
+            )
+        elif any(token in operation for token in ("search", "find", "list", "query")):
+            demands.append(
+                WorldDemand(
+                    id=f"step:{step.id}:search",
+                    kind=DemandKind.SEARCH,
+                    source_step_ids=(step.id,),
+                    selector=selector,
+                )
+            )
+    return demands
+
+
+def _normalize(demands: list[WorldDemand]) -> tuple[WorldDemand, ...]:
+    grouped: dict[tuple[DemandKind, tuple[tuple[str, Scalar], ...]], list[WorldDemand]] = {}
+    for demand in demands:
+        grouped.setdefault(_key(demand), []).append(demand)
+
+    normalized: list[WorldDemand] = []
+    for key in sorted(grouped, key=lambda item: (item[0].value, repr(item[1]))):
+        group = grouped[key]
+        source_requirements = tuple(sorted({item for d in group for item in d.source_requirement_ids}))
+        source_steps = tuple(sorted({item for d in group for item in d.source_step_ids}))
+        minimum = max(d.minimum for d in group)
+        hard = any(d.hard for d in group)
+        first = group[0]
+        normalized.append(
+            WorldDemand(
+                id="demand:" + "+".join(source_requirements or source_steps),
+                kind=first.kind,
+                source_requirement_ids=source_requirements,
+                source_step_ids=source_steps,
+                selector=dict(first.selector),
+                minimum=minimum,
+                hard=hard,
+            )
+        )
+    return tuple(normalized)
+
+
+def compile_demands(spec: EvalSpec) -> DemandSet:
+    """Deterministically compile *spec* into normalized constructive demands."""
+
+    from .eval_design import design_digest
+
+    demands = _normalize(_from_requirements(spec) + _from_steps(spec))
+    if not demands:
+        raise ValueError(f"{spec.id}: eval compiled to no world demands")
+    return DemandSet(eval_spec_id=spec.id, design_digest=design_digest(spec), demands=demands)
+
+
+__all__ = ["DemandKind", "DemandSet", "WorldDemand", "compile_demands"]
