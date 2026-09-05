@@ -56,6 +56,9 @@ _REQUIREMENT_KIND: dict[RequirementKind, DemandKind] = {
     RequirementKind.TEMPORAL_RELATION: DemandKind.TEMPORAL,
 }
 
+_IDENTITY_KEYS = ("id", "entity_id", "record_id", "artifact_id", "object_id")
+_EXCLUSIVE_KEYS = ("state", "status", "effect")
+
 
 def _key(demand: WorldDemand) -> tuple[DemandKind, tuple[tuple[str, Scalar], ...]]:
     return demand.kind, tuple(sorted(demand.selector.items()))
@@ -143,6 +146,49 @@ def _normalize(demands: list[WorldDemand]) -> tuple[WorldDemand, ...]:
     return tuple(normalized)
 
 
+def _reject_obvious_conflicts(demands: tuple[WorldDemand, ...]) -> None:
+    """Reject same-object hard state contradictions before generation.
+
+    This intentionally catches only conflicts that are statically unambiguous:
+    both demands identify the same concrete object and disagree on one exclusive
+    state field with no temporal qualifier. Rich temporal/state solving belongs
+    in tactics or a future solver rather than in this conservative preflight.
+    """
+
+    hard = [demand for demand in demands if demand.hard]
+    temporal_keys = {"at", "before", "after", "period", "timestamp", "time"}
+    for index, left in enumerate(hard):
+        for right in hard[index + 1 :]:
+            if left.kind != right.kind:
+                continue
+            identity = next(
+                (
+                    key
+                    for key in _IDENTITY_KEYS
+                    if key in left.selector
+                    and key in right.selector
+                    and left.selector[key] == right.selector[key]
+                ),
+                None,
+            )
+            if identity is None or temporal_keys & (set(left.selector) | set(right.selector)):
+                continue
+            for exclusive in _EXCLUSIVE_KEYS:
+                if exclusive not in left.selector or exclusive not in right.selector:
+                    continue
+                if left.selector[exclusive] == right.selector[exclusive]:
+                    continue
+                comparable_keys = (
+                    set(left.selector) | set(right.selector)
+                ) - {exclusive}
+                if all(left.selector.get(key) == right.selector.get(key) for key in comparable_keys):
+                    raise ValueError(
+                        "conflicting hard demands for "
+                        f"{identity}={left.selector[identity]!r}: "
+                        f"{exclusive}={left.selector[exclusive]!r} vs {right.selector[exclusive]!r}"
+                    )
+
+
 def compile_demands(spec: EvalSpec) -> DemandSet:
     """Deterministically compile *spec* into normalized constructive demands."""
 
@@ -151,6 +197,7 @@ def compile_demands(spec: EvalSpec) -> DemandSet:
     demands = _normalize(_from_requirements(spec) + _from_steps(spec))
     if not demands:
         raise ValueError(f"{spec.id}: eval compiled to no world demands")
+    _reject_obvious_conflicts(demands)
     return DemandSet(eval_spec_id=spec.id, design_digest=design_digest(spec), demands=demands)
 
 
