@@ -33,11 +33,57 @@ REFERENCE_CONNECTORS = (
 )
 
 ConnectorMaturity = Literal["ga", "beta", "eap", "product_surface"]
+ConnectorFieldType = Literal[
+    "text",
+    "rich_text",
+    "integer",
+    "number",
+    "boolean",
+    "date",
+    "datetime",
+    "option",
+    "multi_option",
+    "user",
+    "multi_user",
+    "cascading",
+    "reference",
+    "url",
+    "json",
+]
 
 
 class ConnectorIdDefinition(Model):
     field: str
     pattern: str
+
+
+class ConnectorFieldDefinition(Model):
+    """One harvested or synthetic field in a connector entity schema."""
+
+    id: str
+    canonical: str
+    name: str
+    aliases: tuple[str, ...] = ()
+    field_type: ConnectorFieldType = "text"
+    options: tuple[str, ...] = ()
+    required_for: tuple[str, ...] = ()
+    screens: tuple[str, ...] = ()
+    fill_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    cardinality: int | None = Field(default=None, ge=0)
+    deprecated: bool = False
+    queryable: bool = True
+    writable: bool = True
+    query_name: str | None = None
+    payload_name: str | None = None
+    average_bytes: int = Field(default=32, ge=0)
+
+    @model_validator(mode="after")
+    def _field_shape(self) -> ConnectorFieldDefinition:
+        if self.field_type in {"option", "multi_option", "cascading"} and not self.options:
+            raise ValueError(f"{self.id}: option-like fields need a non-empty option domain")
+        if self.cardinality is not None and self.options and self.cardinality < len(self.options):
+            raise ValueError(f"{self.id}: cardinality cannot be smaller than the option domain")
+        return self
 
 
 class ConnectorWorkflow(Model):
@@ -146,6 +192,9 @@ class ConnectorDefinition(Model):
     faults: tuple[str, ...] = ()
     options: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     custom_fields: dict[str, str] = Field(default_factory=dict)
+    field_manifests: dict[str, tuple[ConnectorFieldDefinition, ...]] = Field(
+        default_factory=dict
+    )
     state_codes: dict[str, dict[str, int | str]] = Field(default_factory=dict)
     validation_rules: dict[str, tuple[ConnectorValidationRule, ...]] = Field(
         default_factory=dict
@@ -171,6 +220,16 @@ class ConnectorDefinition(Model):
         bad_aliases = set(self.aliases.values()) - tool_names
         if bad_aliases:
             raise ValueError(f"aliases reference unknown tools {sorted(bad_aliases)}")
+        unknown_manifests = set(self.field_manifests) - entity_names
+        if unknown_manifests:
+            raise ValueError(f"field manifests reference unknown entities {sorted(unknown_manifests)}")
+        for entity, fields_for_entity in self.field_manifests.items():
+            ids = [field.id for field in fields_for_entity]
+            canonicals = [field.canonical for field in fields_for_entity]
+            if len(ids) != len(set(ids)):
+                raise ValueError(f"{entity}: field ids must be unique")
+            if len(canonicals) != len(set(canonicals)):
+                raise ValueError(f"{entity}: canonical field names must be unique")
         for error_name in ("not_found", "denied", "validation", "bad_transition"):
             if error_name not in self.errors:
                 raise ValueError(f"missing connector error contract {error_name!r}")
@@ -200,6 +259,49 @@ class ConnectorDefinition(Model):
         except KeyError as error:
             raise KeyError(f"unknown {self.connector} entity {entity!r}") from error
         return definition.query_name or entity
+
+    def fields_for(self, entity: str) -> tuple[ConnectorFieldDefinition, ...]:
+        if entity not in self.entities:
+            raise KeyError(f"unknown {self.connector} entity {entity!r}")
+        return self.field_manifests.get(entity, ())
+
+    def resolve_field(self, entity: str, name: str) -> ConnectorFieldDefinition | None:
+        folded = name.casefold()
+        for field in self.fields_for(entity):
+            names = (field.id, field.canonical, field.name, *field.aliases)
+            if any(candidate.casefold() == folded for candidate in names):
+                return field
+        return None
+
+    def with_fields(
+        self,
+        entity: str,
+        fields_to_add: tuple[ConnectorFieldDefinition, ...],
+    ) -> ConnectorDefinition:
+        """Return a new definition with an immutable field-manifest overlay."""
+
+        if entity not in self.entities:
+            raise KeyError(f"unknown {self.connector} entity {entity!r}")
+        existing = {field.id: field for field in self.fields_for(entity)}
+        for field in fields_to_add:
+            existing[field.id] = field
+        merged = tuple(sorted(existing.values(), key=lambda field: field.id))
+        manifests = dict(self.field_manifests)
+        manifests[entity] = merged
+        compatibility = dict(self.custom_fields)
+        query_fields = dict(self.query_fields)
+        for field in merged:
+            compatibility[field.canonical] = field.payload_name or field.id
+            if field.queryable:
+                query_fields[field.canonical] = field.query_name or field.id
+        return self.model_copy(
+            update={
+                "field_manifests": manifests,
+                "custom_fields": compatibility,
+                "query_fields": query_fields,
+            },
+            deep=True,
+        )
 
     def wire_dict(self) -> dict[str, object]:
         """Serialize using stable on-disk field names, not Python attribute names."""
@@ -236,6 +338,8 @@ __all__ = [
     "ConnectorAclDefinition",
     "ConnectorDefinition",
     "ConnectorEntityDefinition",
+    "ConnectorFieldDefinition",
+    "ConnectorFieldType",
     "ConnectorIdDefinition",
     "ConnectorIdempotency",
     "ConnectorMaturity",
