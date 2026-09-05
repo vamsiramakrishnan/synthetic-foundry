@@ -1,14 +1,13 @@
 """Bitemporal, per-observer views over Worldloom facts.
 
-This module is additive: existing ``CanonicalFact`` remains the durable truth
-record, while ``FactObservation`` adds transaction time and observer identity so
-an eval can distinguish what was true, what a system recorded, and what an
-actor believed at a point in time.
+This module is a compatibility layer while observer and transaction-time fields
+move into the canonical fact ledger. Consumers should call ``FactLedger.view``;
+nothing downstream should select raw rows and reinvent temporal/observer rules.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from datetime import datetime
 
 from pydantic import model_validator
@@ -52,12 +51,7 @@ class FactObservation(Model):
 
     @classmethod
     def from_fact(cls, fact: CanonicalFact) -> FactObservation:
-        """Lift a legacy canonical fact without changing existing corpora.
-
-        Legacy facts have no separate transaction time. Treat their valid-from
-        instant as the moment they entered the ledger and preserve source-system
-        provenance. New generators should emit explicit observations instead.
-        """
+        """Lift a legacy canonical fact without changing existing corpora."""
 
         return cls(
             id=f"obs:{fact.id}",
@@ -83,18 +77,16 @@ class FactLedger:
     def __init__(self, observations: Iterable[FactObservation]) -> None:
         self._observations = tuple(observations)
 
-    def __iter__(self):  # type: ignore[no-untyped-def]
+    def __iter__(self) -> Iterator[FactObservation]:
         return iter(self._observations)
 
     def __len__(self) -> int:
         return len(self._observations)
 
     def known_at(self, recorded_at: datetime) -> FactLedger:
-        """Claims that had entered the ledger by transaction time."""
         return FactLedger(item for item in self if item.known_at(recorded_at))
 
     def valid_at(self, valid_at: datetime) -> FactLedger:
-        """Claims about state that held at the requested valid time."""
         return FactLedger(item for item in self if item.holds_at(valid_at))
 
     def observed_by(self, observer_id: str) -> FactLedger:
@@ -104,17 +96,48 @@ class FactLedger:
         return FactLedger(item for item in self if item.source_system == source_system)
 
     def as_known(self, *, valid_at: datetime, recorded_at: datetime) -> FactLedger:
-        """Bitemporal cut: what was known by one time about another time."""
         return self.valid_at(valid_at).known_at(recorded_at)
 
+    @staticmethod
+    def _semantic_key(item: FactObservation) -> tuple[str, str, str | None]:
+        return item.subject, item.kind, item.period
+
+    @staticmethod
+    def _rank(item: FactObservation) -> tuple[int, datetime, str]:
+        return AUTHORITY_RANK[item.authority], item.recorded_at, item.id
+
+    def view(
+        self,
+        observer: str,
+        *,
+        valid_at: datetime,
+        tx_at: datetime,
+    ) -> FactLedger:
+        """Resolve what *observer* could see at ``tx_at`` about ``valid_at``.
+
+        ``observer='*'`` is the retrospective authoritative view across all
+        sources. A named observer sees its own rows plus observer-neutral rows
+        (legacy/canonical facts). For each semantic fact key only the highest
+        authority/latest row in that view survives.
+        """
+
+        cut = self.as_known(valid_at=valid_at, recorded_at=tx_at)
+        if observer != "*":
+            cut = FactLedger(
+                item for item in cut if item.observer_id in {None, observer}
+            )
+        winners: dict[tuple[str, str, str | None], FactObservation] = {}
+        for item in cut:
+            key = self._semantic_key(item)
+            current = winners.get(key)
+            if current is None or self._rank(item) > self._rank(current):
+                winners[key] = item
+        return FactLedger(winners[key] for key in sorted(winners))
+
     def best(self) -> FactObservation | None:
-        """Most authoritative/latest observation in this already-filtered cut."""
         if not self._observations:
             return None
-        return max(
-            self._observations,
-            key=lambda item: (AUTHORITY_RANK[item.authority], item.recorded_at, item.id),
-        )
+        return max(self._observations, key=self._rank)
 
     def for_subject(self, subject: str, *, kind: str | None = None) -> FactLedger:
         return FactLedger(
@@ -128,7 +151,6 @@ class FactLedger:
 
 
 def ledger_from_facts(facts: Iterable[CanonicalFact]) -> FactLedger:
-    """Compatibility bridge for existing worlds."""
     return FactLedger(FactObservation.from_fact(fact) for fact in facts)
 
 
