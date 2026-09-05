@@ -1,3 +1,5 @@
+import pytest
+
 from worldloom.eval_demands import DemandKind, compile_demands
 from worldloom.eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
 
@@ -106,3 +108,28 @@ def test_hard_requirement_dominates_equivalent_soft_requirement() -> None:
     demand = next(d for d in compile_demands(spec).demands if d.source_requirement_ids)
     assert demand.hard is True
     assert demand.source_requirement_ids == ("hard", "soft")
+
+
+def test_obvious_same_object_state_conflict_refuses_before_generation() -> None:
+    spec = EvalSpec(
+        id="EVALSPEC-CONFLICT",
+        capability="state_reasoning",
+        persona="operator",
+        request_template="Inspect the incident.",
+        steps=(EvalStepSpec(id="find", capability="find"),),
+        requirements=(
+            WorldRequirement(
+                id="open",
+                kind=RequirementKind.EVENT,
+                selector={"entity_id": "INC-42", "status": "open"},
+            ),
+            WorldRequirement(
+                id="closed",
+                kind=RequirementKind.EVENT,
+                selector={"entity_id": "INC-42", "status": "closed"},
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="conflicting hard demands"):
+        compile_demands(spec)
