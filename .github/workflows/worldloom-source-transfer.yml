@@ -1,0 +1,87 @@
+name: materialize reviewed synthesis source
+on:
+  push:
+    branches: [codex/worldloom-operational-synthesis]
+    paths:
+      - .github/workflows/worldloom-source-transfer.yml
+      - tools/.worldloom-source/**
+permissions:
+  contents: write
+jobs:
+  source-objects:
+    if: github.repository == 'vamsiramakrishnan/synthetic-foundry' && github.ref == 'refs/heads/codex/worldloom-operational-synthesis'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the reviewed patch and upload unattached source objects
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import lzma
+          import os
+          from pathlib import Path, PurePosixPath
+          import subprocess
+          import urllib.request
+
+          base = '4bcd1ed947e852f48acdbc83378b4acf2e3076b9'
+          digest = 'c5e4ab54437a46205fc29832d98c333069ad500864ee1100bf4ff94cc0d974b4'
+          repo = 'vamsiramakrishnan/synthetic-foundry'
+          assert os.environ['GITHUB_REPOSITORY'] == repo
+          assert os.environ['GITHUB_REF'] == 'refs/heads/codex/worldloom-operational-synthesis'
+          subprocess.run(['git', 'merge-base', '--is-ancestor', base, 'HEAD'], check=True)
+          staging = {
+              '.github/workflows/worldloom-review-tools.yml',
+              '.github/workflows/worldloom-source-transfer.yml',
+              *(f'tools/.worldloom-source/{i:02d}.b64' for i in range(7)),
+          }
+          changed = subprocess.check_output(['git', 'diff', '--name-only', base, 'HEAD'], text=True).splitlines()
+          assert set(changed) <= staging, changed
+          encoded = ''.join(Path(f'tools/.worldloom-source/{i:02d}.b64').read_text() for i in range(7))
+          raw = lzma.decompress(base64.b64decode(encoded, validate=True), memlimit=256 * 1024 * 1024)
+          assert hashlib.sha256(raw).hexdigest() == digest
+          payload = json.loads(raw)
+          assert payload['base'] == base
+          assert len(payload['files']) == 26
+          for name in payload['files']:
+              path = PurePosixPath(name)
+              assert not path.is_absolute() and '..' not in path.parts and '.git' not in path.parts
+              assert name not in staging
+          patch = payload['patch'].encode('utf-8')
+          subprocess.run(['git', 'apply', '--check'], input=patch, check=True)
+          subprocess.run(['git', 'apply'], input=patch, check=True)
+          modified = subprocess.check_output(['git', 'diff', '--name-only', base], text=True).splitlines()
+          assert set(modified) <= staging | set(payload['files'])
+          objects = []
+          for name, expected in sorted(payload['files'].items()):
+              path = Path(name)
+              assert path.is_file() and not path.is_symlink()
+              data = path.read_bytes()
+              assert hashlib.sha256(data).hexdigest() == expected, name
+              git_sha = hashlib.sha1(f'blob {len(data)}\0'.encode() + data).hexdigest()
+              body = json.dumps({'encoding': 'base64', 'content': base64.b64encode(data).decode()}).encode()
+              request = urllib.request.Request(
+                  f'https://api.github.com/repos/{repo}/git/blobs', data=body,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'Accept': 'application/vnd.github+json',
+                           'Content-Type': 'application/json',
+                           'X-GitHub-Api-Version': '2022-11-28'}, method='POST')
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  result = json.load(response)
+              assert result['sha'] == git_sha, name
+              objects.append({'path': name, 'mode': '100644', 'type': 'blob', 'sha': git_sha})
+              print(name, git_sha, flush=True)
+          Path('source-objects.json').write_text(json.dumps({'base': base, 'objects': objects}, indent=2) + '\n')
+          print('All 26 source objects verified. No branch or commit was changed.')
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: worldloom-source-objects
+          path: source-objects.json
+          retention-days: 3
