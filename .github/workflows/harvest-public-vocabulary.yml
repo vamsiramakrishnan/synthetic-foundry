@@ -1,0 +1,57 @@
+name: harvest public vocabulary
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths:
+      - .github/workflows/harvest-public-vocabulary.yml
+      - tools/harvest_external_vocab.py
+      - src/worldloom/_data/vocabulary-sources.json
+permissions:
+  contents: write
+jobs:
+  bpi-2020:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - name: Download BPI 2020 travel-permit XES
+        run: |
+          mkdir -p /tmp/worldloom-source
+          curl --fail --location --retry 3 \
+            --output /tmp/worldloom-source/PermitLog.xes.gz \
+            'https://data.4tu.nl/file/db35afac-2133-40f3-a565-2dc77a9329a3/12b48cc1-18a8-4089-ae01-7078fc5e8f90'
+          echo 'b6e9ff00d946f6ad4c91eb6fb550aee4  /tmp/worldloom-source/PermitLog.xes.gz' | md5sum --check -
+      - name: Derive compact priors
+        run: |
+          rm -rf /tmp/worldloom-harvest
+          python tools/harvest_external_vocab.py --out /tmp/worldloom-harvest xes \
+            /tmp/worldloom-source/PermitLog.xes.gz --source bpi-2020-travel-permit
+          mkdir -p src/worldloom/_data/priors src/worldloom/_data/lexicon
+          cp /tmp/worldloom-harvest/bpi-2020-travel-permit-priors.json src/worldloom/_data/priors/
+          cp /tmp/worldloom-harvest/bpi-2020-travel-permit-activities.jsonl src/worldloom/_data/lexicon/
+          cp /tmp/worldloom-harvest/licenses.jsonl src/worldloom/_data/bpi-licenses.jsonl
+      - name: Validate derived files
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('src/worldloom/_data/priors/bpi-2020-travel-permit-priors.json').read_text())
+          assert p['cases'] == 7065, p['cases']
+          assert p['events'] == 86581, p['events']
+          assert p['state_transitions']
+          assert 0 <= p['rework_case_rate'] <= 1
+          PY
+      - name: Commit compact evidence
+        run: |
+          if git diff --quiet -- src/worldloom/_data; then
+            echo 'Derived evidence unchanged.'
+            exit 0
+          fi
+          git config user.name 'worldloom-source-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/_data
+          git commit -m 'Harvest BPI 2020 process priors'
+          git push origin HEAD:codex/worldloom-artifact-realism
