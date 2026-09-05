@@ -21,6 +21,7 @@ from .connector_data import (
 )
 from .ids import content_key
 from .models import Model
+from .predicates import Predicate, evaluate
 from .world import World
 
 
@@ -39,7 +40,7 @@ class ToolResult:
 
 
 class ToolSurface:
-    """Forkable exact-match CRUD surface over connector projections."""
+    """Forkable CRUD/search surface over connector projections."""
 
     def __init__(self, dataset: ConnectorDataset) -> None:
         self._dataset = dataset
@@ -73,24 +74,44 @@ class ToolSession:
             raise ValueError(f"{connector}/{entity} does not support {verb.value}")
 
     @staticmethod
-    def _matches(record: ConnectorRecord, criteria: Mapping[str, Any]) -> bool:
-        for key, expected in criteria.items():
-            if key in {"id", "external_id", "title", "connector", "entity"}:
-                actual = getattr(record, key)
-            else:
-                actual = record.fields.get(key)
-            if actual != expected:
-                return False
-        return True
+    def _predicate_record(record: ConnectorRecord) -> dict[str, Any]:
+        """Flatten native record fields into the predicate namespace."""
 
-    def search(self, connector: str, entity: str, **criteria: Any) -> ToolResult:
+        return {
+            **record.fields,
+            "id": record.id,
+            "external_id": record.external_id,
+            "title": record.title,
+            "connector": record.connector,
+            "entity": record.entity,
+        }
+
+    def search(
+        self,
+        connector: str,
+        entity: str,
+        *,
+        predicate: Predicate | None = None,
+        **criteria: Any,
+    ) -> ToolResult:
+        """Search through the same predicate evaluator used by fixture construction.
+
+        Keyword criteria are the compatibility surface and compile to equality
+        predicates. Callers needing ranges or membership pass ``predicate``.
+        """
+
         self._require(connector, entity, ConnectorVerb.SEARCH)
+        if predicate is not None and criteria:
+            raise ValueError("pass either predicate or keyword criteria, not both")
+        active = predicate or Predicate.equalities(criteria, entity=entity)
+        if active.entity is not None and active.entity != entity:
+            return ToolResult(records=())
         matches = tuple(
             record
             for key, record in sorted(self._records.items())
             if key[0] == connector
             and key[1] == entity
-            and self._matches(record, criteria)
+            and evaluate(active, self._predicate_record(record), entity=entity)
         )
         return ToolResult(records=matches)
 
