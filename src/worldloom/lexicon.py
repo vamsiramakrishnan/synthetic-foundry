@@ -24,6 +24,7 @@ class EvidenceClass(StrEnum):
     MEASURED = "measured"
     CUSTOMER_AGGREGATE = "customer_aggregate"
     CUSTOMER_METADATA = "customer_metadata"
+    HARVESTED_CORPUS = "harvested_corpus"
     HARVESTED_TAXONOMY = "harvested_taxonomy"
     AUTHORED_PRIOR = "authored_prior"
 
