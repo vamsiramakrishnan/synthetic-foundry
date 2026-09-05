@@ -24,6 +24,12 @@ REFERENCE_CONNECTORS = (
     "confluence",
     "sharepoint",
     "drive",
+    "outlook",
+    "onedrive",
+    "teams",
+    "slack",
+    "teamwork_graph",
+    "rovo",
 )
 
 ConnectorMaturity = Literal["ga", "beta", "eap", "product_surface"]
