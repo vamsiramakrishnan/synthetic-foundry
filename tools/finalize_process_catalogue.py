@@ -6,6 +6,8 @@ connector can commit text files but cannot stream a local binary upload. The
 actual runtime has no dependency on this script.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
 
@@ -21,6 +23,10 @@ def main() -> None:
     source = source.replace(
         "import csv\nimport io\nimport json\nimport zipfile\n",
         "import base64\nimport csv\nimport hashlib\nimport io\nimport json\nimport zlib\n",
+    )
+    source = source.replace(
+        'def unique_units_and_countries(self) -> "CompanyProcessSpec":',
+        "def unique_units_and_countries(self) -> CompanyProcessSpec:",
     )
 
     start = source.index("def _resource(*parts: str) -> Any:")
