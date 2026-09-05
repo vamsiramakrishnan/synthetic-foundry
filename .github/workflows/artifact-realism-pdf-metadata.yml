@@ -1,4 +1,4 @@
-name: add pdf ecology metadata
+name: add pdf ecology metadata v2
 on:
   push:
     branches: [codex/worldloom-artifact-realism]
