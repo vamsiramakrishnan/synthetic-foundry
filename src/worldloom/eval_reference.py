@@ -80,7 +80,15 @@ def _assertion_result(
             and positions[assertion.before] < positions[assertion.after]
         )
     elif assertion.type == "capability_invoked":
-        passed = assertion.step_id in by_step
+        step = by_step.get(assertion.step_id or "")
+        expected_operation = assertion.operation or assertion.capability
+        operation_ok = bool(
+            step and (expected_operation is None or step.operation == expected_operation)
+        )
+        evidence_ok = bool(
+            step and set(assertion.evidence_ids) <= set(step.output_ids)
+        )
+        passed = operation_ok and evidence_ok
     elif assertion.type == "side_effect_occurred":
         step = by_step.get(assertion.step_id or "")
         passed = bool(step and step.effect_ids)

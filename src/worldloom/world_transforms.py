@@ -55,6 +55,8 @@ class AddIrrelevantFacts:
         self.count = count
 
     def apply(self, world: World, *, seed: int) -> TransformResult:
+        from .recipe import with_step
+
         transform_id = content_key("transform", "add-irrelevant-facts", seed, self.count)
         if not self.count:
             return TransformResult(
@@ -62,6 +64,9 @@ class AddIrrelevantFacts:
                 transform_id=transform_id,
                 oracle_effect=OracleEffect.PRESERVE,
             )
+        recorded_recipe = with_step(
+            world.recipe, "AddIrrelevantFacts", seed=seed, count=self.count
+        )
         anchor = min((fact.valid_from for fact in world.facts), default=None)
         if anchor is None:
             raise ValueError("cannot add deterministic noise to a world without a fact clock")
@@ -82,7 +87,11 @@ class AddIrrelevantFacts:
                     source_system="worldloom-metamorphic",
                 )
             )
-        transformed = replace(world, _facts=world._facts + tuple(additions))
+        transformed = replace(
+            world,
+            _facts=world._facts + tuple(additions),
+            _recipe=recorded_recipe,
+        )
         return TransformResult(
             world=transformed,
             transform_id=transform_id,

@@ -7,6 +7,13 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Generation — artifact ecology v1
+
+- Opt-in `artifact_realism=ecology/v1` changes native artifact metadata, style
+  selection, connector lifecycle history and output bytes for a fixed seed.
+  PDF outputs persist machine-readable realism, lifecycle, revision and family
+  markers. Recipes record replayable metamorphic noise transforms.
+
 ### Added — source-backed process catalogue
 
 - `worldloom.process_bindings` compiles the supplied 12-industry catalogue into

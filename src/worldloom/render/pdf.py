@@ -1077,6 +1077,17 @@ def render(
         ))
 
     buffer = BytesIO()
+    keywords = ["synthetic", "worldloom", f"seed={ir.metadata.get('worldloom_seed', '')}"]
+    if ir.metadata.get("realism_profile"):
+        keywords.append("worldloom-realism=ecology/v1")
+        for key, label in (
+            ("lifecycle", "lifecycle"),
+            ("revision", "revision"),
+            ("artifact_family", "family"),
+        ):
+            value = ir.metadata.get(key)
+            if value is not None:
+                keywords.append(f"{label}={value}")
     doc = BaseDocTemplate(
         buffer,
         pagesize=(plan.page_width_pt, plan.page_height_pt),
@@ -1088,7 +1099,7 @@ def render(
         author=ir.metadata.get("author") or "Worldloom",
         subject=ir.subtitle or "",
         creator="Worldloom",
-        keywords=["synthetic", "worldloom", f"seed={ir.metadata.get('worldloom_seed', '')}"],
+        keywords=keywords,
         # `invariant` is reportlab's own documented determinism switch — it
         # substitutes a fixed instant for `time.time()` everywhere the library
         # would otherwise reach for the clock, including the digest that seeds

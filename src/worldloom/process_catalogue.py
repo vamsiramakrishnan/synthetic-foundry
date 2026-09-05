@@ -25,7 +25,6 @@ from typing import Any
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
-
 _DATA_DIR = ("_data", "process-catalogue")
 _ACTIVITY_COLUMNS = (
     "id",
@@ -85,7 +84,7 @@ class CompanyProcessSpec(BaseModel):
     landscape: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def unique_units_and_countries(self) -> "CompanyProcessSpec":
+    def unique_units_and_countries(self) -> CompanyProcessSpec:
         unit_names = [unit.name for unit in self.business_units]
         if len(unit_names) != len(set(unit_names)):
             raise ValueError("business unit names must be unique")
@@ -531,7 +530,7 @@ def load_default(industry: str) -> ProcessCompilation:
 def verify_defaults() -> dict[str, Any]:
     """Prove the source compiler and bundled precompiled defaults still agree."""
     mismatches: list[str] = []
-    totals = Counter()
+    totals: Counter[str] = Counter()
     for industry in industries():
         live = compile_company(default_spec(industry))
         archived = load_default(industry)

@@ -63,6 +63,18 @@ def _model_record(item: Any) -> dict[str, Any]:
     return vars(item)
 
 
+def _predicate_record(item: Any) -> dict[str, Any]:
+    """Flatten connector payload fields without letting them shadow the envelope."""
+
+    record = item if isinstance(item, Mapping) else _model_record(item)
+    nested = record.get("fields")
+    if not isinstance(nested, Mapping):
+        return dict(record)
+    flattened = dict(nested)
+    flattened.update(record)
+    return flattened
+
+
 def _artifact_records(world: World, realism: RealismProfile) -> list[dict[str, Any]]:
     lifecycle = {item.artifact_id: item for item in realism.lifecycles}
     records: list[dict[str, Any]] = []
@@ -103,7 +115,7 @@ def _check_records(
     predicate = _selector_predicate(requirement.selector)
     matches: list[str] = []
     for item in records:
-        record = item if isinstance(item, Mapping) else _model_record(item)
+        record = _predicate_record(item)
         if evaluate(predicate, record):
             identifier = record.get(id_field) or record.get("external_id") or "evidence"
             matches.append(str(identifier))
@@ -162,11 +174,15 @@ def _check_revision_chain(
 def _check_temporal_relation(
     requirement: WorldRequirement, realism: RealismProfile
 ) -> RequirementCheck:
-    edge_kind = requirement.selector.get("edge_kind")
+    selector = dict(requirement.selector)
+    edge_kind = selector.pop("edge_kind", None)
+    if edge_kind is not None:
+        selector["kind"] = edge_kind
+    predicate = _selector_predicate(selector)
     edges = [
         edge
         for edge in realism.graph.edges
-        if edge_kind is None or edge.kind == edge_kind
+        if evaluate(predicate, _model_record(edge))
     ]
     observed = len(edges)
     evidence = tuple(f"{edge.source}->{edge.target}:{edge.kind}" for edge in edges)
@@ -244,7 +260,10 @@ def validate_candidate(plan: CandidatePlan, spec: EvalSpec, world: World) -> Can
         for requirement in plan.requirements
     )
     hard = {requirement.id: requirement.hard for requirement in plan.requirements}
-    accepted = all(check.satisfied or not hard[check.requirement_id] for check in checks)
+    coherence = world.validate()
+    accepted = coherence.ok and all(
+        check.satisfied or not hard[check.requirement_id] for check in checks
+    )
     return CandidateValidation(
         eval_spec_id=spec.id,
         candidate_seed=plan.seed,

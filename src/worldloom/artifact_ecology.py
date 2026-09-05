@@ -438,7 +438,13 @@ def review_proposal(world: World, proposal: ArtifactProposal) -> tuple[ProposalF
         findings.append(ProposalFinding(code="unsupported_fact_reference", message=f"facts outside artifact evidence: {sorted(invented)}"))
     if not proposal.family.strip():
         findings.append(ProposalFinding(code="missing_family", message="layout family is required"))
-    numeric = re.compile(r"(?<![A-Za-z0-9_-])(?:[$£€]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|[$£€]?\d+\.\d+%?)(?![A-Za-z0-9_-])")
+    numeric = re.compile(
+        r"(?<![A-Za-z0-9_-])(?:"
+        r"\d{4}-\d{2}-\d{2}"
+        r"|(?:[$£€]\s*)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+        r"(?:%|\s*[A-Za-z]{1,8})?"
+        r")(?![A-Za-z0-9_-])"
+    )
     if any(numeric.search(block) for block in proposal.copy_blocks):
         findings.append(ProposalFinding(code="bare_numeric_claim", message="model copy must resolve numeric claims from facts"))
     return tuple(findings)
@@ -458,18 +464,34 @@ def enrich_connector_records(world: World, records: list[Any]) -> list[Any]:
             def at(minutes: int, base=anchor) -> str | None:
                 return (base + timedelta(minutes=minutes)).isoformat() if base else None
 
-            final = str(fields.get("state", "")).lower()
-            states = ["New", "In Progress"] + (["Resolved", "Closed"] if final in {"resolved", "closed", "complete"} else [])
+            final = str(fields.get("state", "New")).strip().lower()
+            state_paths = {
+                "new": ["New"],
+                "open": ["New"],
+                "in progress": ["New", "In Progress"],
+                "in_progress": ["New", "In Progress"],
+                "resolved": ["New", "In Progress", "Resolved"],
+                "closed": ["New", "In Progress", "Resolved", "Closed"],
+                "complete": ["New", "In Progress", "Resolved", "Closed"],
+                "completed": ["New", "In Progress", "Resolved", "Closed"],
+            }
+            states = state_paths.get(final, [str(fields.get("state") or "New")])
             fields.setdefault("impact", rng.choice(("1", "2", "2", "3")))
             fields.setdefault("urgency", rng.choice(("1", "2", "2", "3")))
             fields.setdefault("business_service", (fields.get("related_service_ids") or [None])[0])
             fields.setdefault("sla", {"name": "P1 Restoration" if str(fields.get("priority")) == "1" else "Standard Resolution", "breached": False})
-            fields.setdefault("state_history", [{"state": state, "sequence": i, "at": at(i * 30)} for i, state in enumerate(states)])
-            fields.setdefault("work_notes", [
-                {"sequence": 1, "at": at(10), "kind": "triage", "text": "Impact confirmed; investigation opened."},
-                {"sequence": 2, "at": at(45), "kind": "diagnosis", "text": "Evidence linked to correlated business event."},
-                {"sequence": 3, "at": at(120), "kind": "closure", "text": "Resolution recorded against source evidence."},
+            fields.setdefault("state_history", [
+                {"state": state, "sequence": i, "at": at(i * 30)}
+                for i, state in enumerate(states)
             ])
+            notes: list[dict[str, Any]] = []
+            if len(states) >= 2:
+                notes.append({"sequence": 1, "at": at(10), "kind": "triage", "text": "Impact confirmed; investigation opened."})
+            if len(states) >= 3:
+                notes.append({"sequence": 2, "at": at(45), "kind": "diagnosis", "text": "Evidence linked to correlated business event."})
+            if states[-1] == "Closed":
+                notes.append({"sequence": 3, "at": at(120), "kind": "closure", "text": "Resolution recorded against source evidence."})
+            fields.setdefault("work_notes", notes)
             fields.setdefault("related_records", {"problem": f"PRB-{content_key(record.id, 'problem')[:10].upper()}", "change": f"CHG-{content_key(record.id, 'change')[:10].upper()}"})
         elif record.connector == "jira":
             status = fields.get("status", "To Do")

@@ -84,6 +84,7 @@ def _assertions(
                 capability=step.capability,
                 connector=step.connector,
                 operation=step.operation,
+                evidence_ids=fact_ids if step.effect in {"read", "verify"} else (),
             )
         )
         if step.effect == "write":
