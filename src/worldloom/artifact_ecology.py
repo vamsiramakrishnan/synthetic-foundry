@@ -458,8 +458,10 @@ def enrich_connector_records(world: "World", records: list[Any]) -> list[Any]:
         elif record.connector == "jira":
             status = fields.get("status", "To Do")
             history = [{"from": None, "to": "To Do", "sequence": 0}]
-            if status != "To Do": history.append({"from": "To Do", "to": "In Progress", "sequence": 1})
-            if status == "Done": history.append({"from": "In Progress", "to": "Done", "sequence": 2})
+            if status != "To Do":
+                history.append({"from": "To Do", "to": "In Progress", "sequence": 1})
+            if status == "Done":
+                history.append({"from": "In Progress", "to": "Done", "sequence": 2})
             fields.setdefault("status_history", history)
             fields.setdefault("links", [{"type": "relates to", "target": event_id} for event_id in record.event_ids])
             fields.setdefault("activity", [{"kind": "comment", "sequence": 1, "text": "Scope confirmed against source evidence."}])
