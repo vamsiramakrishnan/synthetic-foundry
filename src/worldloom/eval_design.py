@@ -18,7 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -147,25 +147,30 @@ class EvalShape(Model):
 class EvalStepSpec(Model):
     """One abstract operation in the task skeleton.
 
-    Concrete record ids and expected facts are intentionally absent. Those are
-    bound only after a candidate world exists.
+    Concrete record ids and expected facts are intentionally absent. The
+    connector/entity/operation triple is enough to bind the step to one concrete
+    connector tool; record ids are bound only after a candidate world exists.
     """
 
     id: str
     capability: str
     depends_on: tuple[str, ...] = ()
     connector: str | None = None
+    entity: str | None = None
     operation: str | None = None
     effect: Literal["read", "transform", "write", "verify"] = "read"
 
+    @model_validator(mode="after")
+    def _connector_tuple(self) -> EvalStepSpec:
+        if self.entity is not None and self.connector is None:
+            raise ValueError(f"{self.id}: entity needs connector")
+        if self.operation is not None and self.connector is None:
+            raise ValueError(f"{self.id}: operation needs connector")
+        return self
+
 
 class WorldRequirement(Model):
-    """A predicate a generated candidate world must satisfy.
-
-    ``selector`` is a small declarative filter over Worldloom's own typed
-    records, e.g. ``{"artifact_type": "finance_workbook"}``. It is data, not
-    executable code. Candidate validation owns its interpretation.
-    """
+    """A predicate a generated candidate world must satisfy."""
 
     id: str
     kind: RequirementKind
@@ -222,15 +227,21 @@ class CandidatePlan(Model):
     design_digest: str
 
 
-def _canonical_design(spec: EvalSpec) -> bytes:
+def _canonical_design_payload(spec: EvalSpec) -> dict[str, Any]:
     payload = spec.model_dump(mode="json")
-    # Compatibility invariant: adding shape support must not reshuffle every
-    # pre-existing eval/candidate family. An empty shape serializes exactly as
-    # the old schema did; a non-empty shape intentionally changes the digest.
+    # Compatibility invariant: adding shape/entity support must not reshuffle
+    # old eval families whose designs did not contain those fields.
     if spec.shape.empty:
         payload.pop("shape", None)
+    for step in payload.get("steps", []):
+        if step.get("entity") is None:
+            step.pop("entity", None)
+    return payload
+
+
+def _canonical_design(spec: EvalSpec) -> bytes:
     return json.dumps(
-        payload,
+        _canonical_design_payload(spec),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=True,
