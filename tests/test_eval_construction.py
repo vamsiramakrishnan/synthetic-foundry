@@ -1,6 +1,12 @@
 from worldloom.eval_candidates import validate_candidate
 from worldloom.eval_construction import apply_revision_family
-from worldloom.eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
+from worldloom.eval_design import (
+    EvalSpec,
+    EvalStepSpec,
+    RequirementKind,
+    WorldRequirement,
+    plan_candidates,
+)
 from worldloom.eval_tactics import TacticKind, TacticProposal
 from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose
@@ -50,7 +56,6 @@ def test_revision_tactic_makes_revision_eval_valid() -> None:
         candidate_count=1,
     )
     plan = spec.model_copy(update={"candidate_count": 1})
-    from worldloom.eval_design import plan_candidates
 
     candidate_plan = plan_candidates(plan)[0]
     world = _world(candidate_plan.seed)
