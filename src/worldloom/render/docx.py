@@ -165,7 +165,7 @@ def _genome_for(ir: ArtifactIR) -> StyleGenome:
     genome — this is not a second source of truth, just the one handle this
     function's signature actually has on it.
     """
-    raw = ir.metadata.get("worldloom_seed")
+    raw = ir.metadata.get("style_seed") or ir.metadata.get("worldloom_seed")
     seed = int(raw) if raw and raw != "None" else 0
     return genome(Rng(seed).derive("style"))
 

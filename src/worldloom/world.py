@@ -799,6 +799,10 @@ class World:
             raise ValueError("nothing to render — run a scenario first to plan artifacts")
 
         staged = self if self._artifact_irs else self.compile()
+        if staged.recipe.get("artifact_realism") == "ecology/v1":
+            from .artifact_ecology import enrich_world
+
+            staged = enrich_world(staged)
         irs = staged._artifact_irs
 
         rendered: list[render_module.Rendered] = []

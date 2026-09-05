@@ -75,7 +75,7 @@ def _genome_for(ir: ArtifactIR) -> StyleGenome:
     """
     from ..rng import Rng
 
-    raw = ir.metadata.get("worldloom_seed")
+    raw = ir.metadata.get("style_seed") or ir.metadata.get("worldloom_seed")
     seed = int(raw) if raw and raw != "None" else 0
     return genome(Rng(seed).derive("style"))
 
