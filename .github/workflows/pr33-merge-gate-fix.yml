@@ -28,11 +28,12 @@ jobs:
         run: |
           pip install uv
           uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]" ruff==0.15.8 mypy==2.3.1
-      - name: Canonicalize known catalogue gate debt
+      - name: Canonicalize merge-gate debt and compatibility contracts
         run: |
           ruff check --fix src/worldloom/process_catalogue.py tools/finalize_process_catalogue.py tests/test_pr33_merge_gate.py
           python - <<'PY'
           from pathlib import Path
+
           path = Path('src/worldloom/process_catalogue.py')
           text = path.read_text(encoding='utf-8')
           old = '    totals = Counter()\n'
@@ -41,6 +42,7 @@ jobs:
               if old not in text:
                   raise SystemExit('missing expected Counter type-debt anchor')
               path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
           pdf = Path('src/worldloom/render/pdf.py')
           text = pdf.read_text(encoding='utf-8')
           old = '("lifecycle_version", "lifecycle"),'
@@ -49,6 +51,19 @@ jobs:
               if old not in text:
                   raise SystemExit('missing expected PDF lifecycle metadata anchor')
               pdf.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          transform = Path('src/worldloom/world_transforms.py')
+          text = transform.read_text(encoding='utf-8')
+          old = '''        recorded_recipe = with_step(\n            world.recipe, "AddIrrelevantFacts", seed=seed, count=self.count\n        )\n        if not self.count:\n            return TransformResult(\n                world=replace(world, _recipe=recorded_recipe),\n'''
+          new = '''        if not self.count:\n            return TransformResult(\n                world=world,\n'''
+          if old not in text:
+              raise SystemExit('missing expected zero-noise recipe anchor')
+          text = text.replace(old, new, 1)
+          old = '''                oracle_effect=OracleEffect.PRESERVE,\n            )\n        anchor = min((fact.valid_from for fact in world.facts), default=None)\n'''
+          new = '''                oracle_effect=OracleEffect.PRESERVE,\n            )\n        recorded_recipe = with_step(\n            world.recipe, "AddIrrelevantFacts", seed=seed, count=self.count\n        )\n        anchor = min((fact.valid_from for fact in world.facts), default=None)\n'''
+          if old not in text:
+              raise SystemExit('missing expected nonzero-noise recipe anchor')
+          transform.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
       - name: Lint and type gates
         run: |
@@ -56,7 +71,7 @@ jobs:
           mypy
       - name: Focused review regressions
         run: |
-          pytest -q tests/test_pr33_merge_gate.py tests/test_eval_candidates.py tests/test_eval_reference.py tests/test_pdf_ecology.py
+          pytest -q tests/test_pr33_merge_gate.py tests/test_eval_candidates.py tests/test_eval_reference.py tests/test_pdf_ecology.py tests/test_world_transforms.py
       - name: Full unit suite
         run: pytest -q
       - name: CLI docs and coherence smoke gates
