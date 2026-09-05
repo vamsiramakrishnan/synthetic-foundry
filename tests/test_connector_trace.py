@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from worldloom.connector_trace import executed_dag, grade_trace, shape_assertions
-from worldloom.eval_design import EvalShape, RecordShapeRequirement, ThreadShapeRequirement
+from worldloom.eval_design import (
+    EvalShape,
+    RecordShapeRequirement,
+    ThreadShapeRequirement,
+)
 
 
 def _row() -> dict[str, object]:
