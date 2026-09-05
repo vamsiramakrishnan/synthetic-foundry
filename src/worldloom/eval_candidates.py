@@ -240,6 +240,10 @@ def validate_candidate(plan: CandidatePlan, spec: EvalSpec, world: World) -> Can
         raise ValueError(
             f"candidate plan belongs to {plan.eval_spec_id!r}, not eval {spec.id!r}"
         )
+    if world.seed != plan.seed:
+        raise ValueError(
+            f"candidate world seed {world.seed!r} does not match plan seed {plan.seed}"
+        )
     realism = realism_profile(world)
     checks = tuple(
         check_requirement(requirement, world, realism=realism)
@@ -265,8 +269,8 @@ def generate_candidates(
     """Generate candidate worlds *after* the eval and retain only valid ones.
 
     The builder receives the complete candidate plan, including its deterministic
-    seed and world predicates.  It may use a normal vertical builder, an
-    evolutionary harness, or a bespoke scenario compiler.  Acceptance remains
+    seed and world predicates. It may use a normal vertical builder, an
+    evolutionary harness, or a bespoke scenario compiler. Acceptance remains
     here, outside that generator.
     """
 
