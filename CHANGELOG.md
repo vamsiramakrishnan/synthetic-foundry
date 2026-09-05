@@ -7,6 +7,15 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Generation — canonical bitemporal views
+
+- Add opt-in observer, source and transaction-time fields to canonical facts.
+  Unset fields retain legacy serialized bytes. Explicit latent channels do not
+  leak into employee views; late corrections cannot enter earlier narration.
+- Historical predicates and bounded joins share a frozen query context.
+  Missing fields are distinct from null; booleans are not numeric witnesses.
+  Unsupported historical construction refuses rather than inventing state.
+
 ### Generation — artifact ecology v1
 
 - Opt-in `artifact_realism=ecology/v1` changes native artifact metadata, style

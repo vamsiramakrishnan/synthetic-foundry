@@ -184,6 +184,14 @@ def _request_for(
     # later RCA discuss the hypothesis that triage got wrong.
     cutoff = manifest.created_at if manifest else None
 
+    # Keep legacy request bytes stable. Explicit observer/transaction metadata
+    # narrows new requests before a writer sees them; historic evidence remains
+    # citable, but a backdated correction cannot arrive before its record time.
+    allowed = [fact_id for fact_id in allowed
+               if facts[fact_id].visible_to(author.id)
+               and (facts[fact_id].tx_from is None or cutoff is None
+                    or facts[fact_id].recorded_at <= cutoff)]
+
     required = [
         fact_id
         for fact_id in intent.required_fact_ids
@@ -196,7 +204,11 @@ def _request_for(
     # movement the writer worked out in their head. Without this the harness
     # would be right to reject "the third consecutive month" — there would be
     # nothing supporting it.
-    comparators = _comparators(allowed, facts, cutoff)
+    comparators = {
+        key: value for key, value in _comparators(allowed, facts, cutoff).items()
+        if facts[value].visible_to(author.id)
+        and (cutoff is None or facts[value].recorded_at <= cutoff)
+    }
     allowed = allowed + [c for c in comparators.values() if c not in allowed]
 
     return NarrativeRequest(

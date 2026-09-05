@@ -9,10 +9,21 @@ from worldloom.collections import FactCollection
 from worldloom.epistemics import AmbiguousFactView, ledger_from_facts
 from worldloom.models import Authority, CanonicalFact, Quantity
 from worldloom.narrative.claims import validate
-from worldloom.narrative.requests import GeneratedClaim, GeneratedNarrative, NarrativeRequest
+from worldloom.narrative.requests import (
+    GeneratedClaim,
+    GeneratedNarrative,
+    NarrativeRequest,
+)
 from worldloom.predicates import (
-    AsOf, FieldPredicate, JoinPredicate, Predicate, PredicateOp, QueryContext,
-    RelativeTime, evaluate, selectivity,
+    AsOf,
+    FieldPredicate,
+    JoinPredicate,
+    Predicate,
+    PredicateOp,
+    QueryContext,
+    RelativeTime,
+    evaluate,
+    selectivity,
 )
 
 T = datetime(2026, 9, 1, tzinfo=UTC)
