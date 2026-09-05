@@ -29,3 +29,4 @@ jobs:
           git add src/worldloom/render/docx.py
           git commit -m 'Add native front matter to enterprise documents'
           git push origin HEAD:codex/worldloom-artifact-realism
+# one-shot validation; delete after renderer commit
