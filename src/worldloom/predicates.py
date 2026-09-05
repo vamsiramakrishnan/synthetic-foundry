@@ -139,13 +139,111 @@ def selectivity(
     return hits / len(pool)
 
 
+def distance(predicate: Predicate, record: Mapping[str, Any]) -> int:
+    """Number of predicate clauses the record fails.
+
+    This is intentionally clause distance, not lexical distance or retriever
+    difficulty. It gives fixture construction and difficulty measurement the same
+    exact notion of a one-dimensional near miss.
+    """
+
+    return sum(1 for item in predicate.where if not evaluate_field(item, record))
+
+
+def satisfy(
+    predicate: Predicate,
+    *,
+    base: Mapping[str, Any] | None = None,
+    alternatives: Mapping[str, Scalar] | None = None,
+) -> dict[str, Any]:
+    """Construct the smallest record patch that satisfies *predicate*.
+
+    Operators with no canonical witness (currently ``ne``) require an explicit
+    domain alternative. This is deliberate: construction refuses rather than
+    minting impossible business values.
+    """
+
+    result = dict(base or {})
+    choices = alternatives or {}
+    for item in predicate.where:
+        if evaluate_field(item, result):
+            continue
+        if item.op is PredicateOp.EQ:
+            result[item.field] = item.value
+        elif item.op is PredicateOp.IN:
+            assert isinstance(item.value, tuple)
+            if not item.value:
+                raise ValueError(f"{item.field}: cannot satisfy an empty in predicate")
+            result[item.field] = item.value[0]
+        elif item.op in {PredicateOp.GT, PredicateOp.GTE, PredicateOp.LT, PredicateOp.LTE}:
+            assert not isinstance(item.value, tuple)
+            if not isinstance(item.value, (int, float)) or isinstance(item.value, bool):
+                raise ValueError(f"{item.field}: ordered construction requires a numeric operand")
+            if item.op is PredicateOp.GT:
+                result[item.field] = item.value + 1
+            elif item.op is PredicateOp.GTE:
+                result[item.field] = item.value
+            elif item.op is PredicateOp.LT:
+                result[item.field] = item.value - 1
+            else:
+                result[item.field] = item.value
+        elif item.op is PredicateOp.CONTAINS:
+            assert not isinstance(item.value, tuple)
+            if not isinstance(item.value, str):
+                raise ValueError(f"{item.field}: contains construction requires a string operand")
+            result[item.field] = item.value
+        elif item.op is PredicateOp.NE:
+            if item.field not in choices:
+                raise ValueError(f"{item.field}: ne construction requires an explicit alternative")
+            candidate = choices[item.field]
+            if candidate == item.value:
+                raise ValueError(f"{item.field}: alternative must differ from forbidden value")
+            result[item.field] = candidate
+        else:
+            raise AssertionError(f"unsupported predicate operator: {item.op}")
+    if not evaluate(predicate, result):
+        raise ValueError("constructed record does not satisfy predicate")
+    return result
+
+
+def spoil(
+    predicate: Predicate,
+    record: Mapping[str, Any],
+    *,
+    field: str,
+    alternative: Scalar,
+) -> dict[str, Any]:
+    """Create a controlled near-miss that fails exactly *field*.
+
+    Callers own domain-valid alternatives. Worldloom guarantees the mutation is
+    minimal and verifies that unrelated predicate clauses remain satisfied.
+    """
+
+    if not evaluate(predicate, record):
+        raise ValueError("spoil requires a matching source record")
+    constrained = {item.field: item for item in predicate.where}
+    if field not in constrained:
+        raise ValueError(f"field {field!r} is not constrained by predicate")
+    spoiled = dict(record)
+    spoiled[field] = alternative
+    failed = [item.field for item in predicate.where if not evaluate_field(item, spoiled)]
+    if failed != [field]:
+        raise ValueError(
+            f"alternative does not create an exact one-clause near miss; failed={failed}"
+        )
+    return spoiled
+
+
 __all__ = [
     "FieldPredicate",
     "Predicate",
     "PredicateOp",
     "Scalar",
+    "distance",
     "evaluate",
     "evaluate_field",
     "matching",
+    "satisfy",
     "selectivity",
+    "spoil",
 ]
