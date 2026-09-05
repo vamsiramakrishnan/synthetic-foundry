@@ -5,7 +5,12 @@ from dataclasses import replace
 import pytest
 
 from worldloom.eval_candidates import GeneratedCandidate, generate_candidates
-from worldloom.eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
+from worldloom.eval_design import (
+    EvalSpec,
+    EvalStepSpec,
+    RequirementKind,
+    WorldRequirement,
+)
 from worldloom.eval_instances import bind_eval_instance
 from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose
