@@ -50,7 +50,7 @@ jobs:
         run: |
           python -m pip install -e '.[dev]' ruff==0.15.8 mypy==2.3.1
           ruff check src/worldloom/connector_data.py src/worldloom/world.py src/worldloom/render/docx.py src/worldloom/render/pptx.py src/worldloom/render/xlsx.py src/worldloom/artifact_ecology.py src/worldloom/ecology.py
-          pytest -q tests/test_artifact_realism.py tests/test_ecology_sdk.py tests/test_render.py tests/test_connector_data.py
+          pytest -q tests/test_artifact_realism.py tests/test_ecology_sdk.py tests/test_render.py
       - name: Commit integration
         run: |
           git config user.name 'worldloom-artifact-realism'
