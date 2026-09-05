@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from worldloom.artifact_shape import plan_artifact_shape
 from worldloom.artifact_shape_materialize import materialize_artifact_shape
@@ -15,7 +15,7 @@ def _fact() -> CanonicalFact:
         kind="q3_spend",
         subject="finance:apac",
         value=Quantity(amount=881000, unit="SGD"),
-        valid_from=datetime(2026, 8, 31, tzinfo=timezone.utc),
+        valid_from=datetime(2026, 8, 31, tzinfo=UTC),
         authority=Authority.SYSTEM_OF_RECORD,
         source_system="erp",
     )
@@ -58,7 +58,7 @@ def test_pptx_shape_has_exact_slide_notes_and_real_file_weight(tmp_path) -> None
     assert isinstance(locator, PptxLocator)
     assert locator.slide == 27
     assert "881000" in presentation.slides[26].notes_slide.notes_text_frame.text
-    assert sum(1 for slide in presentation.slides if slide._element.get("show") == "0") >= 2  # noqa: SLF001
+    assert sum(1 for slide in presentation.slides if slide._element.get("show") == "0") >= 2
     assert sum(
         1
         for slide in presentation.slides
