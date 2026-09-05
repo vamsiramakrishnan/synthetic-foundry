@@ -41,6 +41,14 @@ jobs:
               if old not in text:
                   raise SystemExit('missing expected Counter type-debt anchor')
               path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          pdf = Path('src/worldloom/render/pdf.py')
+          text = pdf.read_text(encoding='utf-8')
+          old = '("lifecycle_version", "lifecycle"),'
+          new = '("lifecycle", "lifecycle"),'
+          if new not in text:
+              if old not in text:
+                  raise SystemExit('missing expected PDF lifecycle metadata anchor')
+              pdf.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
       - name: Lint and type gates
         run: |
