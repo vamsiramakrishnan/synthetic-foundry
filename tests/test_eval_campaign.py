@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from worldloom.evals import (
     EvalCampaign,
     EvalSpec,
@@ -28,6 +30,10 @@ def _campaign() -> EvalCampaign:
     )
 
 
+def _builder(plan):  # type: ignore[no-untyped-def]
+    return RetailWorld(seed=plan.seed).build().run(MonthEndClose(period="2026-03"))
+
+
 def test_plans_exist_without_running_builder() -> None:
     campaign = _campaign()
     called = False
@@ -50,7 +56,7 @@ def test_campaign_instantiates_only_after_candidate_generation() -> None:
 
     def builder(plan):  # type: ignore[no-untyped-def]
         seen.append(plan.seed)
-        return RetailWorld(seed=plan.seed).build().run(MonthEndClose(period="2026-03"))
+        return _builder(plan)
 
     instances = campaign.instantiate(builder)
 
@@ -58,3 +64,25 @@ def test_campaign_instantiates_only_after_candidate_generation() -> None:
     assert seen == [campaign.plans()[0].seed]
     assert instances[0].candidate_seed == seen[0]
     assert instances[0].oracle.fact_ids
+
+
+def test_campaign_export_pairs_eval_with_exact_candidate_corpus(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    campaign = _campaign()
+    root = campaign.export(_builder, tmp_path / "campaign")
+
+    spec = json.loads((root / "eval-spec.json").read_text())
+    manifest = json.loads((root / "manifest.json").read_text())
+    assert spec["id"] == campaign.spec.id
+    assert manifest["schema"] == "worldloom.eval-campaign/v1"
+    assert manifest["candidate_count"] == 1
+
+    candidate_dir = root / manifest["candidates"][0]["path"]
+    instance = json.loads((candidate_dir / "eval-instance.json").read_text())
+    world = json.loads((candidate_dir / "corpus" / "world.json").read_text())
+    validation = json.loads((candidate_dir / "candidate-validation.json").read_text())
+
+    assert instance["candidate_seed"] == world["seed"]
+    assert instance["candidate_seed"] == manifest["candidates"][0]["seed"]
+    assert validation["accepted"] is True
+    assert set(instance["oracle"]["fact_ids"])
+    assert (candidate_dir / "corpus" / "facts.jsonl").is_file()
