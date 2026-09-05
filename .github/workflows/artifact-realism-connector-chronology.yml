@@ -1,4 +1,4 @@
-name: add connector ecology chronology
+name: add connector lifecycle chronology
 on:
   push:
     branches: [codex/worldloom-artifact-realism]
