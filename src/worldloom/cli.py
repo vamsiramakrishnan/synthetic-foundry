@@ -90,6 +90,11 @@ enterprise_evals_app = typer.Typer(
 )
 app.add_typer(enterprise_evals_app, name="enterprise-evals")
 
+# Keep operational generation in its own command module, not this monolith.
+from .synthesis_cli import app as synthesis_app
+
+app.add_typer(synthesis_app, name="synth")
+
 
 @enterprise_evals_app.command("space")
 def enterprise_evals_space(
@@ -371,6 +376,7 @@ def _install_domains() -> None:
 #: conflict rules like `unknown_facet` and `no_overlap`), the same name is
 #: reused here rather than inventing a synonym.
 _REFUSALS: dict[str, str] = {
+    "synthesis_failed": "the operational synthesis contract was refused; data.finding names the rule",
     "access_profile_failed": "the corpus's documents could not be re-gated under the asked-for access profile",
     "actor_episode_failed": "the actor episode could not run to completion",
     "bad_physics": "a physics override names an unknown parameter or an impossible span",
@@ -761,7 +767,7 @@ def build(
             "tenants built from one engine with different biases disagree about "
             "every document's shape, which is most of what stops a mosaic "
             "sharing one shape vocabulary. Only rotates among variants a type "
-            "already ships; pass 0 to pin every document to variant zero."
+            "already ships; pass 0 for the historical hash-selected variants."
         ),
     ),
     employees: int = typer.Option(None, "--employees", help="Override the archetype's stated headcount."),

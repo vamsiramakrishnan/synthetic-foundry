@@ -62,6 +62,7 @@ def materialize_corpus(
     queries: Iterable[PlannedEnterpriseQuery],
     *,
     projections: ConnectorProjectionRegistry | None = None,
+    strict_sources: bool = False,
 ) -> EnterpriseCorpus:
     planned = tuple(queries)
     needed = tuple(sorted({requirement.connector for query in planned for requirement in query.generation.source_requirements} | {query.generation.mutation.connector for query in planned}))
@@ -77,6 +78,8 @@ def materialize_corpus(
     for connector, entity in required_pairs:
         if any(record.connector == connector and record.entity == entity for record in records):
             continue
+        if strict_sources:
+            raise ValueError(f"missing_source: {connector}:{entity}; generate operational evidence before planning this query")
         record_id = content_key("query-required-record", connector, entity, world.company.id)
         stable_field = stable_fields.get((connector, entity), "stable_id")
         records.append(ConnectorRecord(id=record_id, connector=connector, entity=entity, external_id=record_id, title=f"{world.company.name} {entity.replace('_', ' ')}", fields={"company_id": world.company.id, "period": world.period, stable_field: record_id, "generated_for_query_requirements": True}))
@@ -113,6 +116,8 @@ def materialize_corpus(
         inputs: dict[str, tuple[str, ...]] = {}
         for requirement in query.generation.source_requirements:
             matches = tuple(record.id for record in data.records if record.connector == requirement.connector and record.entity == requirement.entity)
+            if strict_sources and len(matches) < requirement.minimum:
+                raise ValueError(f"insufficient_sources: {requirement.connector}:{requirement.entity} needs {requirement.minimum}, found {len(matches)}")
             inputs[f"{requirement.connector}:{requirement.entity}"] = matches[: max(requirement.minimum, 3)]
         mutation = query.generation.mutation
         destination_id = destinations.get((mutation.connector, mutation.entity))

@@ -6,7 +6,8 @@ pass. It is not a corpus; it is the *answer* to one, and it reproduces:
 
 ```bash
 worldloom build --seed 8128 --incident --archetype australian_grocery \
-  --comparatives 11 --out ./corpus
+  --comparatives 11 --section-omission 0 --outline-synthesis 0 --variant-bias 0 \
+  --out ./corpus
 worldloom narrate accept ./corpus --from examples/grocery-close/narration.json \
   --model-id claude-opus-5
 worldloom render ./corpus -f docx -f xlsx -f markdown

@@ -161,10 +161,13 @@ jobs:
       # collective label: the file's prose has been written by more than one
       # Claude model over time (the close artifacts first, the fan-out layer's
       # commentary and thread later), each accepted through this same gate.
+      # This authored reference predates the CLI's varying-outline defaults.
+      # Pin its recipe; a different shape correctly rejects its section IDs.
       - name: The reference narration is still accepted
         run: |
           worldloom build --seed 8128 --incident --archetype australian_grocery \
-            --comparatives 11 --out "${{ runner.temp }}/reference"
+            --comparatives 11 --section-omission 0 --outline-synthesis 0 --variant-bias 0 \
+            --out "${{ runner.temp }}/reference"
           worldloom narrate accept "${{ runner.temp }}/reference" \
             --from examples/grocery-close/narration.json --model-id claude-agents
           worldloom render "${{ runner.temp }}/reference" -f docx -f xlsx -f markdown

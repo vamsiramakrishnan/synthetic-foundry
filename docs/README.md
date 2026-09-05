@@ -9,6 +9,7 @@ tree.
 | Goal | Start here | Then read |
 | --- | --- | --- |
 | Build one corpus | [README quickstart](../README.md#quickstart-one-coherent-enterprise) | [Architecture and invariants](architecture.md) |
+| Generate operational records and counterfactuals | [Operational synthesis](operational-synthesis.md) | [Agent skills](skills.md) |
 | Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
 | Use Worldloom from Python | [Python SDK](sdk.md) | [Episode grammar](episode-grammar.md) |
 | Drive Worldloom with a coding agent | [Agent skills](skills.md) | [AGENTS.md](../AGENTS.md) |

@@ -73,6 +73,16 @@ title, author, period, evidence and numbers without coordinating.
 world state --> events --> canonical facts --> artifact plan --> prose --> files
 ```
 
+## Operational records, not only documents
+
+Generate store-product inventory or loan-servicing trajectories with explicit
+relationships, state transitions and conservation checks. Run paired
+interventions, search behavior regimes, then use the resulting exception
+histories as grounded connector sources. The layer is opt-in; existing World
+recipes do not change. See [operational synthesis](docs/operational-synthesis.md)
+for the SDK, CLI, sharding, held-out evaluation and coding-harness contracts.
+
+
 ## ⚡ Quickstart
 
 From zero to a complete, validated corpus (PyPI release pending, so install

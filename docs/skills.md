@@ -337,3 +337,11 @@ The harness-doc test parses documented invocations and rejects unknown commands
 or flags. New operator pages are included in that gate, and their local links are
 verified. A skill that advertises an obsolete option is a product bug because it
 causes an agent to build the wrong corpus while believing the request succeeded.
+
+## Operational data and behavioral search
+
+The `worldloom-synthesis` skill covers causal record programs, conservation
+checks, paired interventions, deterministic sharding, behavioral archives and
+designer/critic executable teams. See [operational synthesis](operational-synthesis.md).
+Ordinary generation and replay do not call a model. External commands execute
+only when explicitly configured; critics cannot override mechanical acceptance.
