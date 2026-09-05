@@ -64,7 +64,7 @@ jobs:
           assert sum(len(p.rows) for p in plans) == 6975
           assert all(baseline_parity(p) for p in plans)
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: process-bindings-audit
           path: /tmp/processes-one/

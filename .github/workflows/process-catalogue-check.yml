@@ -52,7 +52,7 @@ jobs:
           mkdir -p /tmp/worldloom-source
           git archive --format=tar.gz HEAD > /tmp/worldloom-source/source.tar.gz
           git rev-parse HEAD > /tmp/worldloom-source/commit.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: process-catalogue-source
           path: /tmp/worldloom-source/
