@@ -1,0 +1,46 @@
+name: wire artifact storyboard into pptx
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths: [.github/workflows/artifact-realism-storyboard-wire.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Gate ecology decks with artifact grammar
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/worldloom/render/pptx.py')
+          text = path.read_text()
+          old = 'from ..compiler.compose import compose, plan_from_ir\n'
+          new = 'from ..artifact_grammar import storyboard, validate_storyboard\nfrom ..compiler.compose import compose, plan_from_ir\n'
+          if old not in text:
+              raise SystemExit('pptx import seam changed')
+          text = text.replace(old, new, 1)
+          old = '''    plan = plan_from_ir(\n        ir,\n        artifact_type="executive_summary",\n'''
+          new = '''    if ir.metadata.get("realism_profile") == "ecology/v1":\n        violations = validate_storyboard(storyboard(ir, "executive_summary"))\n        if violations:\n            raise RenderError(f"{ir.id}: artifact grammar: " + "; ".join(violations))\n\n    plan = plan_from_ir(\n        ir,\n        artifact_type="executive_summary",\n'''
+          if old not in text:
+              raise SystemExit('pptx planning seam changed')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - run: |
+          python -m pip install -e '.[dev,pptx]' ruff==0.15.8
+          ruff check src/worldloom/render/pptx.py tests/test_pptx_storyboard.py
+          pytest -q tests/test_pptx_storyboard.py tests/test_pptx.py
+      - name: Commit only storyboard wiring
+        run: |
+          git config user.name 'worldloom-artifact-realism'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/render/pptx.py
+          git commit -m 'Gate ecology decks with artifact grammar'
+          git push origin HEAD:codex/worldloom-artifact-realism
