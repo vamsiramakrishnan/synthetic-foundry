@@ -1,13 +1,12 @@
 """Artifact-ecology connector projection.
 
 The legacy connector projection remains byte-stable. Call this surface when a
-recipe opts into ``artifact_realism=ecology/v1``; it enriches the same records
-with product-specific workflow history instead of inventing another data path.
+recipe opts into ``artifact_realism=ecology/v1``; the ordinary connector engine
+then adds product-specific workflow history exactly once.
 """
 
 from __future__ import annotations
 
-from .artifact_ecology import enrich_connector_records
 from .connector_data import (
     ConnectorDataset,
     ConnectorProjectionRegistry,
@@ -30,12 +29,11 @@ def generate_realistic_connector_data(
     *,
     projections: ConnectorProjectionRegistry | None = None,
 ) -> ConnectorDataset:
-    """Generate connector records and apply ecology detail when enabled.
+    """Generate connector records through the ecology-aware core path.
 
-    Keeping this as a wrapper gives callers a migration seam: old corpus recipes
-    keep their exact records, while an ecology recipe gains histories, SLAs,
-    conversation metadata, backlinks, and product-specific workflow semantics.
+    ``connector_data.generate_connector_data`` owns enrichment once the recipe
+    carries ``artifact_realism=ecology/v1``. Keeping this wrapper thin prevents
+    histories or comments from being appended twice while preserving an obvious
+    SDK entry point for callers that want realistic enterprise connectors.
     """
-    base = generate_connector_data(world, connectors, projections=projections)
-    enriched = enrich_connector_records(world, base.records)
-    return ConnectorDataset(capabilities=base.capabilities, records=enriched)
+    return generate_connector_data(world, connectors, projections=projections)
