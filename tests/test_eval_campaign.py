@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from worldloom.evals import (
     EvalCampaign,
     EvalSpec,
@@ -13,7 +15,7 @@ from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose
 
 
-def _campaign() -> EvalCampaign:
+def _campaign(*, candidate_count: int = 1) -> EvalCampaign:
     return EvalCampaign(
         EvalSpec(
             id="EVALSPEC-CAMPAIGN",
@@ -25,7 +27,7 @@ def _campaign() -> EvalCampaign:
                 EvalStepSpec(id="verify", capability="verify", depends_on=("find",), effect="verify"),
             ),
             requirements=(WorldRequirement(id="facts", kind=RequirementKind.FACT),),
-            candidate_count=1,
+            candidate_count=candidate_count,
         )
     )
 
@@ -94,6 +96,19 @@ def test_campaign_run_keeps_rejected_attempts_as_search_feedback() -> None:
     assert len(run.rejected) == 2
     assert not run.instances
     assert run.failed_requirements == {0: ("revision-chain",), 1: ("revision-chain",)}
+
+
+def test_campaign_can_select_diverse_valid_worlds_by_outcome() -> None:
+    run = _campaign(candidate_count=3).run(_builder)
+
+    selected = run.diverse(2)
+
+    assert len(selected) == 2
+    assert all(candidate.validation.accepted for candidate in selected)
+    assert len({candidate.plan.ordinal for candidate in selected}) == 2
+    assert run.diverse(2) == selected
+    with pytest.raises(ValueError, match="cannot select"):
+        run.diverse(4)
 
 
 def test_campaign_export_pairs_eval_with_exact_candidate_corpus(tmp_path) -> None:  # type: ignore[no-untyped-def]
