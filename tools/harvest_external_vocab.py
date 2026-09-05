@@ -15,9 +15,11 @@ import hashlib
 import json
 import re
 import xml.etree.ElementTree as ET
-from collections import Counter, defaultdict
+from collections import Counter
+from collections.abc import Iterable
+from itertools import pairwise
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 
 def slug(value: str) -> str:
@@ -243,7 +245,7 @@ def harvest_xes(path: Path, out: Path, *, source: str) -> int:
                     activities[name] += 1
             if len({name for name, _ in sequence}) < len(sequence):
                 rework_cases += 1
-            for (left, left_ts), (right, right_ts) in zip(sequence, sequence[1:], strict=False):
+            for (left, left_ts), (right, right_ts) in pairwise(sequence):
                 transitions[f"{left} -> {right}"] += 1
                 if left_ts and right_ts:
                     try:
@@ -271,7 +273,8 @@ def harvest_xes(path: Path, out: Path, *, source: str) -> int:
     ]
     write_jsonl(out / f"{source}-activities.jsonl", activity_rows)
     ordered = sorted(durations_seconds)
-    quantile = lambda q: ordered[min(int(q * (len(ordered) - 1)), len(ordered) - 1)] if ordered else None
+    def quantile(q: float) -> float | None:
+        return ordered[min(int(q * (len(ordered) - 1)), len(ordered) - 1)] if ordered else None
     stats = {
         "source": source,
         "cases": cases,

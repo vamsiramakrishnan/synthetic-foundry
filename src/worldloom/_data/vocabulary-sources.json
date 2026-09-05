@@ -13,7 +13,11 @@
       "format": "xlsx",
       "access": "manual-license",
       "license": "APQC PCF terms; attribution required; verify terms included with download",
-      "take": ["process", "activity", "hierarchy"]
+      "take": [
+        "process",
+        "activity",
+        "hierarchy"
+      ]
     },
     {
       "id": "apqc-banking",
@@ -22,7 +26,11 @@
       "format": "xlsx",
       "access": "manual-license",
       "license": "APQC/IBM PCF terms included with download",
-      "take": ["process", "activity", "hierarchy"]
+      "take": [
+        "process",
+        "activity",
+        "hierarchy"
+      ]
     },
     {
       "id": "apqc-industry-pcfs",
@@ -31,8 +39,18 @@
       "format": "xlsx",
       "access": "manual-license",
       "license": "Framework-specific APQC or APQC/partner terms included with each download",
-      "variants": ["insurance", "retail", "telecommunication", "energy-utility", "life-sciences"],
-      "take": ["process", "activity", "hierarchy"]
+      "variants": [
+        "insurance",
+        "retail",
+        "telecommunication",
+        "energy-utility",
+        "life-sciences"
+      ],
+      "take": [
+        "process",
+        "activity",
+        "hierarchy"
+      ]
     },
     {
       "id": "esco-1.2.1",
@@ -42,7 +60,12 @@
       "format": "csv-or-rdf",
       "access": "email-gated-csv-or-direct-rdf",
       "license": "European Commission ESCO reuse terms; dataset downloadable free of charge",
-      "take": ["occupation", "skill", "isco-crosswalk", "multilingual-label"]
+      "take": [
+        "occupation",
+        "skill",
+        "isco-crosswalk",
+        "multilingual-label"
+      ]
     },
     {
       "id": "public-jira-anonymised-2025-06-23",
@@ -52,7 +75,13 @@
       "access": "public-bulk",
       "size_bytes": 5800000000,
       "license": "See Zenodo record and dataset terms",
-      "take": ["custom-field-name", "fill-rate", "issue-type-mix", "link-type-frequency", "comment-length"]
+      "take": [
+        "custom-field-name",
+        "fill-rate",
+        "issue-type-mix",
+        "link-type-frequency",
+        "comment-length"
+      ]
     },
     {
       "id": "bpi-2020-travel-permit",
@@ -62,7 +91,12 @@
       "format": "xes.gz",
       "access": "public",
       "license": "CC BY-NC 4.0",
-      "take": ["activity-frequency", "transition-frequency", "inter-activity-duration", "rework"]
+      "take": [
+        "activity-frequency",
+        "transition-frequency",
+        "inter-activity-duration",
+        "rework"
+      ]
     },
     {
       "id": "bpi-event-log-collection",
@@ -70,9 +104,22 @@
       "url": "https://data.4tu.nl/collections/IEEE_Task_Force_on_Process_Mining_-_Event_Logs/5065541",
       "format": "xes",
       "access": "public",
-      "variants": ["2012-loan", "2013-it-incidents", "2014-itil", "2017-loan", "2019-purchase-to-pay", "2020-travel-expense"],
+      "variants": [
+        "2012-loan",
+        "2013-it-incidents",
+        "2014-itil",
+        "2017-loan",
+        "2019-purchase-to-pay",
+        "2020-travel-expense"
+      ],
       "license": "Per-log license and DOI; preserve each source's terms",
-      "take": ["activity-frequency", "transition-frequency", "inter-activity-duration", "rework", "resource-handover"]
+      "take": [
+        "activity-frequency",
+        "transition-frequency",
+        "inter-activity-duration",
+        "rework",
+        "resource-handover"
+      ]
     },
     {
       "id": "sec-edgar",
@@ -82,7 +129,30 @@
       "format": "json-html",
       "access": "public-api-no-key",
       "license": "US Government public data; comply with SEC fair-access policy",
-      "take": ["segment-name", "subsidiary-name", "business-unit-naming-pattern"]
+      "take": [
+        "segment-name",
+        "subsidiary-name",
+        "business-unit-naming-pattern"
+      ]
+    },
+    {
+      "id": "user-process-catalogue-0.1",
+      "kind": "authored-pack",
+      "access": "user-supplied",
+      "format": "json-csv-jsonl",
+      "path": "_data/process-catalogue/catalogue.json",
+      "provenance": "_data/process-catalogue/provenance.json",
+      "evidence": "authored_prior",
+      "license": "NOASSERTION",
+      "take": [
+        "activity-structure",
+        "ownership-rules",
+        "system-landscape",
+        "regional-variants",
+        "channel-priors",
+        "eval-demand-templates"
+      ],
+      "note": "User-supplied, not a harvested APQC PCF. APQC hints and source calibration targets are unverified. Original uploaded coverage and compiled baselines are retained in provenance."
     }
   ]
 }

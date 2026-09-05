@@ -123,3 +123,18 @@ def test_duplicate_field_constraint_refuses_until_boolean_language_exists() -> N
                 FieldPredicate(field="age_days", op=PredicateOp.LTE, value=30),
             )
         )
+
+
+def test_satisfy_materializes_explicit_null_instead_of_omitting_field() -> None:
+    predicate = Predicate.equalities({"optional_reference": None})
+    assert satisfy(predicate) == {"optional_reference": None}
+
+
+def test_satisfy_preserves_explicit_ne_witness_but_rejects_absence() -> None:
+    predicate = Predicate(where=(FieldPredicate(field="status", op=PredicateOp.NE, value="closed"),))
+    assert satisfy(predicate, base={"status": "open"}) == {"status": "open"}
+    assert satisfy(predicate, base={"status": None}) == {"status": None}
+    with pytest.raises(ValueError, match="explicit alternative"):
+        satisfy(predicate, base={"priority": "P1"})
+    with pytest.raises(ValueError, match="must differ"):
+        satisfy(predicate, alternatives={"status": "closed"})

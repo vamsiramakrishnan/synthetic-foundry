@@ -12,8 +12,9 @@ import argparse
 import hashlib
 import json
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 _EMPTY = (None, "", [], {})
 

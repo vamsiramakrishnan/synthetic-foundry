@@ -166,7 +166,11 @@ def satisfy(
     result = dict(base or {})
     choices = alternatives or {}
     for item in predicate.where:
-        if evaluate_field(item, result):
+        # A missing field is not a constructed witness. evaluate_field uses
+        # get(), so absence compares as None and can satisfy NE (or EQ None)
+        # without producing a domain value. Preserve existing explicit values,
+        # but require the construction branch to materialize an absent field.
+        if item.field in result and evaluate_field(item, result):
             continue
         if item.op is PredicateOp.EQ:
             result[item.field] = item.value

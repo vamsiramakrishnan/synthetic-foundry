@@ -59,7 +59,7 @@ def main() -> None:
     parser.add_argument("--source", default="esco-1.2.0")
     args = parser.parse_args()
 
-    from rdflib import Graph, Namespace, RDF, URIRef
+    from rdflib import RDF, Graph, Namespace, URIRef
 
     graph = Graph()
     graph.parse(args.rdf)

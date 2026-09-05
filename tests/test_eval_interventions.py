@@ -1,8 +1,13 @@
-from datetime import UTC, datetime
 import json
+from datetime import UTC, datetime
 
 from worldloom.eval_demands import compile_demands
-from worldloom.eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
+from worldloom.eval_design import (
+    EvalSpec,
+    EvalStepSpec,
+    RequirementKind,
+    WorldRequirement,
+)
 from worldloom.eval_interventions import demand_events, intervene
 from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose

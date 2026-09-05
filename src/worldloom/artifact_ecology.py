@@ -266,11 +266,19 @@ _FAMILIES: dict[Surface, tuple[str, ...]] = {
 
 def lifecycle_for(world: World, intent: ArtifactIntent, manifest: ArtifactManifestEntry | None = None) -> ArtifactLifecycle:
     """Derive review history from simulated time, never wall clock."""
-    created = manifest.created_at if manifest else intent.created_at
+    # Intent declares that an artifact should exist; only the compiled manifest
+    # owns its timestamp, revision and lifecycle. Looking for these fields on
+    # ArtifactIntent invents a second contract and crashes before compilation.
+    manifest = manifest or world.artifacts.get(intent.id)
+    if manifest is None:
+        raise ValueError(f"{intent.id}: lifecycle requires a compiled artifact manifest")
+    if manifest.id != intent.id:
+        raise ValueError(f"{intent.id}: lifecycle manifest belongs to another artifact")
+    created = manifest.created_at
     author = intent.author_id
-    revision = getattr(manifest, "version", 1) if manifest else getattr(intent, "revision", 1)
-    current = getattr(manifest, "lifecycle", None) or getattr(intent, "lifecycle", Lifecycle.DRAFT)
-    approver = getattr(intent, "approver_id", None)
+    revision = manifest.version
+    current = manifest.lifecycle
+    approver = intent.approver_id
     history = [LifecycleStep(state=Lifecycle.DRAFT, at=created.isoformat(), actor_id=author, note="Authored from resolved source evidence.")]
     sequence = [Lifecycle.REVIEWED, Lifecycle.APPROVED, Lifecycle.PUBLISHED]
     if current in sequence or current in {Lifecycle.SUPERSEDED, Lifecycle.ARCHIVED}:

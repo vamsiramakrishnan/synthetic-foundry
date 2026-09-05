@@ -7,6 +7,38 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Added — source-backed process catalogue
+
+- `worldloom.process_bindings` compiles the supplied 12-industry catalogue into
+  typed company activity bindings, lexicon records, process-authoring briefs and
+  a read-only connector dataset. The installed module CLI and the checkout
+  `tools/compile_process_bindings.py` wrapper share the same compiler.
+- Preserve all 6,975 supplied bindings and all 215 original coverage cells.
+  Surface the missing utilities billing definition as an additional coverage
+  cell. Treat the 63 source-labelled calibration cells as unresolved targets,
+  not measured priors. Keep APQC IDs as hints and the input license as NOASSERTION.
+- Export 55,800 authoring demand slots, with ownership oracles only for exact
+  structural bindings. Other templates require runtime state, controls and
+  executable eval construction. Source and export commitments support offline
+  parity checks and full replay, including projected files.
+- Generation compatibility: opt-in namespace `worldloom.process-catalogue/v1`.
+  Existing World recipes, operational programs and golden corpora are unchanged.
+
+### Fixed — constructive predicate witnesses
+
+- `satisfy` no longer treats a missing field as a constructed witness for
+  `ne` or `eq null`. Explicit existing values still use the shared evaluator;
+  absent fields must be materialized by a valid construction or a caller's
+  domain alternative. Existing predicate tests now pass without weakening
+  matching semantics or manufacturing a status value.
+
+### Fixed — artifact lifecycle source contract
+
+- Artifact ecology resolves timestamps, versions and state from the compiled
+  manifest. A missing or mismatched manifest is an explicit refusal, not an
+  access to fields that ArtifactIntent does not define. Existing compiled
+  artifact lifecycles are unchanged.
+
 ### Generation - opt-in authored process planning
 
 - Integrate the supplied 12-industry factors with typed company, owner, country and system bindings, named-stream channel draws, source-attested lexicon records and pinned offline replay. Existing world builds and the source-reference catalogue API do not change.

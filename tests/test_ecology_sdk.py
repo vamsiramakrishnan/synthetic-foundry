@@ -56,3 +56,16 @@ def test_realistic_connector_projection_preserves_base_identity(world) -> None: 
         assert message.fields["message_id"] == message.external_id
         assert "conversation_index" in message.fields
         assert "signature_style" in message.fields
+
+
+def test_lifecycle_resolves_manifest_and_refuses_uncompiled_intent(world) -> None:  # type: ignore[no-untyped-def]
+    from worldloom.artifact_ecology import lifecycle_for
+    compiled = world.compile()
+    intent = compiled.artifact_intents[0]
+    manifest = compiled.artifacts.by_id(intent.id)
+    assert lifecycle_for(compiled, intent) == lifecycle_for(compiled, intent, manifest)
+    uncompiled = intent.model_copy(update={"id": "ART-UNCOMPILED"})
+    with pytest.raises(ValueError, match="requires a compiled artifact manifest"):
+        lifecycle_for(compiled, uncompiled)
+    with pytest.raises(ValueError, match="belongs to another artifact"):
+        lifecycle_for(compiled, uncompiled, manifest)

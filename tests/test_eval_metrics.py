@@ -1,4 +1,9 @@
-from worldloom.eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
+from worldloom.eval_design import (
+    EvalSpec,
+    EvalStepSpec,
+    RequirementKind,
+    WorldRequirement,
+)
 from worldloom.eval_metrics import DifficultyCalibrator, features_for
 
 
