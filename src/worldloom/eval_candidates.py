@@ -1,6 +1,6 @@
 """Candidate-world validation for eval-first generation.
 
-The eval owns the requirements.  Generators are free to satisfy those
+The eval owns the requirements. Generators are free to satisfy those
 requirements however their vertical needs, but a candidate is accepted only by
 an independent pass over the completed World and its deterministic connector
 projections.
@@ -22,6 +22,7 @@ from .eval_design import (
     plan_candidates,
 )
 from .models import Model
+from .predicates import Predicate, evaluate
 
 if TYPE_CHECKING:  # pragma: no cover
     from .artifact_ecology import RealismProfile
@@ -56,23 +57,9 @@ class GeneratedCandidate:
 CandidateBuilder = Callable[[CandidatePlan], "World"]
 
 
-def _scalar(value: Any) -> Any:
-    return getattr(value, "value", value)
-
-
-def _matches(record: Mapping[str, Any], selector: Mapping[str, str | int | bool]) -> bool:
-    for key, expected in selector.items():
-        if key == "connector":
-            continue
-        actual = record.get(key)
-        if _scalar(actual) != expected:
-            return False
-    return True
-
-
 def _model_record(item: Any) -> dict[str, Any]:
     if hasattr(item, "model_dump"):
-        return item.model_dump(mode="python")
+        return item.model_dump(mode="json")
     return vars(item)
 
 
@@ -94,12 +81,17 @@ def _artifact_records(world: World, realism: RealismProfile) -> list[dict[str, A
 
 def _connector_records(world: World, connector: str) -> list[ConnectorRecord]:
     records = builtin_projections().project(connector, world)
-    # Artifact ecology only enriches workflow detail; it does not mint evidence.
     if world.recipe.get("artifact_realism") == "ecology/v1":
         from .artifact_ecology import enrich_connector_records
 
         records = enrich_connector_records(world, records)
     return records
+
+
+def _selector_predicate(selector: Mapping[str, str | int | bool]) -> Predicate:
+    """Compile the legacy declarative selector to the shared predicate language."""
+
+    return Predicate.equalities(selector)
 
 
 def _check_records(
@@ -108,10 +100,11 @@ def _check_records(
     *,
     id_field: str = "id",
 ) -> RequirementCheck:
+    predicate = _selector_predicate(requirement.selector)
     matches: list[str] = []
     for item in records:
         record = item if isinstance(item, Mapping) else _model_record(item)
-        if _matches(record, requirement.selector):
+        if evaluate(predicate, record):
             identifier = record.get(id_field) or record.get("external_id") or "evidence"
             matches.append(str(identifier))
     observed = len(matches)
@@ -130,15 +123,12 @@ def _check_revision_chain(
     realism: RealismProfile,
 ) -> RequirementCheck:
     artifacts = {record["id"]: record for record in _artifact_records(world, realism)}
+    predicate = _selector_predicate(requirement.selector)
     eligible = {
         artifact_id
         for artifact_id, record in artifacts.items()
-        if _matches(record, requirement.selector)
+        if evaluate(predicate, record)
     }
-    # Revision identity is an ArtifactIntent semantic, not a presentation
-    # lifecycle guess. ``revises`` means a new version of the same document;
-    # ``supersedes`` means a different document replaced it and must not make a
-    # revision eval pass.
     predecessors = {
         intent.id: intent.revises
         for intent in world.artifact_intents
@@ -270,13 +260,7 @@ def generate_candidates(
     count: int | None = None,
     keep_rejected: bool = False,
 ) -> tuple[GeneratedCandidate, ...]:
-    """Generate candidate worlds *after* the eval and retain only valid ones.
-
-    The builder receives the complete candidate plan, including its deterministic
-    seed and world predicates. It may use a normal vertical builder, an
-    evolutionary harness, or a bespoke scenario compiler. Acceptance remains
-    here, outside that generator.
-    """
+    """Generate candidate worlds *after* the eval and retain only valid ones."""
 
     generated: list[GeneratedCandidate] = []
     for plan in plan_candidates(spec, count=count):
