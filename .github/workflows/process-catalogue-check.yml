@@ -1,0 +1,32 @@
+name: process catalogue check
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths:
+      - .github/workflows/process-catalogue-check.yml
+      - src/worldloom/process_catalogue/**
+      - src/worldloom/_data/process-catalogue/**
+      - tests/test_process_catalogue.py
+      - tools/compile_processes.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  catalogue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Capture exact source for offline reproducibility
+        run: |
+          mkdir -p /tmp/worldloom-source
+          git archive --format=tar.gz HEAD > /tmp/worldloom-source/source.tar.gz
+          git rev-parse HEAD > /tmp/worldloom-source/commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: process-catalogue-source
+          path: /tmp/worldloom-source/
+          retention-days: 7
+          if-no-files-found: error
