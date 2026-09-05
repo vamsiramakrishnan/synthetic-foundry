@@ -18,7 +18,6 @@ from worldloom.process_catalogue import (
     ProcessCompilation,
     compile_company,
     coverage_matrix,
-    default_spec,
     industries,
     load_default,
     verify_defaults,
