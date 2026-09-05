@@ -249,6 +249,20 @@ _SIZE_CLASS = "small"
 _DENSITY_PROFILE = "balanced"
 
 
+def _density_profile(ir: ArtifactIR) -> str:
+    """Translate ecology's visual density into the semantic compiler axis.
+
+    Legacy IR has no ecology metadata and remains balanced byte-for-byte. The
+    mapping changes component selection, not facts: compact decks can reach
+    metric/table components whose density bands correctly exclude sparse prose.
+    """
+    return {
+        "airy": "sparse",
+        "balanced": "balanced",
+        "compact": "dense",
+    }.get(ir.metadata.get("artifact_density", ""), _DENSITY_PROFILE)
+
+
 def _plan(ir: ArtifactIR,
           profile: PresentationProfile = DEFAULT_PRESENTATION) -> PresentationPlan:
     """``ArtifactIR`` -> ``PresentationPlan``, by way of the compiler.
@@ -264,7 +278,7 @@ def _plan(ir: ArtifactIR,
         ir,
         artifact_type="executive_summary",
         size_class=_SIZE_CLASS,
-        density_profile=_DENSITY_PROFILE,
+        density_profile=_density_profile(ir),
     )
     composition = compose(plan, fmt="pptx")
     if not composition.ok:
