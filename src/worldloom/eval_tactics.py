@@ -110,7 +110,7 @@ def propose_tactics(demands: DemandSet) -> tuple[TacticProposal, ...]:
         if len(group) < 2:
             continue
         covered = tuple(sorted(demand.id for demand in group))
-        parameters = {name: value for name, value in key}
+        parameters: dict[str, str | int | bool] = {name: value for name, value in key}
         proposals.append(
             TacticProposal(
                 id="tactic:evidence_episode:" + "+".join(covered),
