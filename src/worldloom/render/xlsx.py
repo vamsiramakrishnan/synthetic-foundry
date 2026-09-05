@@ -303,6 +303,10 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
             )
 
         sheet.freeze_panes = sheet.cell(row=rows_of[table.key], column=2)
+        if ir.metadata.get("realism_profile") == "ecology/v1" and table.rows:
+            last_column = _column_letter(len(table.columns) + 1)
+            last_row = rows_of[table.key] + len(table.rows) - 1
+            sheet.auto_filter.ref = f"A{_HEADER_ROW}:{last_column}{last_row}"
 
     for table in detail:
         _detail_sheet(workbook, ir, table, header_font=header_font,
@@ -331,6 +335,25 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
                     )
 
     _add_charts(workbook, ir, layout, sheet_of)
+
+    if ir.metadata.get("realism_profile") == "ecology/v1":
+        control = workbook.create_sheet(title="Document Control")
+        control.sheet_state = "hidden"
+        control_rows = (
+            ("Realism profile", ir.metadata.get("realism_profile")),
+            ("Artifact family", ir.metadata.get("artifact_family")),
+            ("Lifecycle", ir.metadata.get("lifecycle")),
+            ("Revision", ir.metadata.get("revision")),
+            ("Department style", ir.metadata.get("department_style")),
+            ("Artifact density", ir.metadata.get("artifact_density")),
+            ("Style seed", ir.metadata.get("style_seed")),
+            ("Source contract", "Artifact IR and cited facts; no independent business values"),
+        )
+        for row, (label, value) in enumerate(control_rows, start=1):
+            control.cell(row=row, column=1, value=label)
+            control.cell(row=row, column=2, value=value)
+        control.column_dimensions["A"].width = 22
+        control.column_dimensions["B"].width = 64
 
     workbook.properties.title = ir.title
     workbook.properties.subject = ir.subtitle or ""
@@ -408,6 +431,10 @@ def _detail_sheet(workbook, ir, table, *, header_font, header_fill,
     for index, width in enumerate(widths, start=1):
         sheet.column_dimensions[_column_letter(index)].width = width
     sheet.freeze_panes = sheet.cell(row=first, column=1)
+    if ir.metadata.get("realism_profile") == "ecology/v1" and table.rows and table.columns:
+        sheet.auto_filter.ref = (
+            f"A{_HEADER_ROW}:{_column_letter(len(table.columns))}{total_row - 1}"
+        )
 
 
 def render_all(world: World) -> list[Rendered]:
