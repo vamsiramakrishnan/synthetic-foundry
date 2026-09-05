@@ -1,0 +1,52 @@
+name: add pdf ecology metadata
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths: [.github/workflows/artifact-realism-pdf-metadata.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Add deterministic PDF lifecycle metadata
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/worldloom/render/pdf.py')
+          text = path.read_text()
+          old = '''    raw = ir.metadata.get("worldloom_seed")\n    seed = int(raw) if raw and raw != "None" else 0\n    return genome(Rng(seed).derive("style"))\n'''
+          new = '''    raw = ir.metadata.get("style_seed") or ir.metadata.get("worldloom_seed")\n    seed = int(raw) if raw and raw != "None" else 0\n    return genome(Rng(seed).derive("style"))\n'''
+          if old not in text:
+              raise SystemExit('PDF style seed seam changed')
+          text = text.replace(old, new, 1)
+
+          old = '''    doc = BaseDocTemplate(\n        buffer,\n        pagesize=(plan.page_width_pt, plan.page_height_pt),\n'''
+          new = '''    keywords = ["synthetic", "worldloom", f"seed={ir.metadata.get('worldloom_seed', '')}"]\n    if ir.metadata.get("realism_profile") == "ecology/v1":\n        keywords.extend((\n            "worldloom-realism=ecology/v1",\n            f"lifecycle={ir.metadata.get('lifecycle', 'draft')}",\n            f"revision={ir.metadata.get('revision', '1')}",\n            f"family={ir.metadata.get('artifact_family', 'document')}",\n        ))\n\n    doc = BaseDocTemplate(\n        buffer,\n        pagesize=(plan.page_width_pt, plan.page_height_pt),\n'''
+          if old not in text:
+              raise SystemExit('PDF document seam changed')
+          text = text.replace(old, new, 1)
+          old = '''        keywords=["synthetic", "worldloom", f"seed={ir.metadata.get('worldloom_seed', '')}"],\n'''
+          new = '''        keywords=keywords,\n'''
+          if old not in text:
+              raise SystemExit('PDF keyword seam changed')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - run: |
+          python -m pip install -e '.[dev]' ruff==0.15.8
+          ruff check src/worldloom/render/pdf.py tests/test_pdf_ecology.py
+          pytest -q tests/test_pdf_ecology.py tests/test_render.py
+      - name: Commit only PDF metadata
+        run: |
+          git config user.name 'worldloom-artifact-realism'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/render/pdf.py
+          git commit -m 'Add lifecycle metadata to ecology PDFs'
+          git push origin HEAD:codex/worldloom-artifact-realism
