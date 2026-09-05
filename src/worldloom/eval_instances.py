@@ -63,12 +63,16 @@ class EvalInstance(Model):
 
 def _instance_id(spec: EvalSpec, candidate: GeneratedCandidate) -> str:
     digest = hashlib.sha256(
-        f"{candidate.plan.design_digest}\0{candidate.plan.seed}\0{spec.id}".encode("utf-8")
+        f"{candidate.plan.design_digest}\0{candidate.plan.seed}\0{spec.id}".encode()
     ).hexdigest()
     return f"EVAL-{digest[:16].upper()}"
 
 
-def _assertions(spec: EvalSpec, evidence: dict[str, tuple[str, ...]], fact_ids: tuple[str, ...]) -> tuple[EvalAssertion, ...]:
+def _assertions(
+    spec: EvalSpec,
+    evidence: dict[str, tuple[str, ...]],
+    fact_ids: tuple[str, ...],
+) -> tuple[EvalAssertion, ...]:
     assertions: list[EvalAssertion] = [EvalAssertion(type="dag_acyclic")]
     for step in spec.steps:
         for dependency in step.depends_on:
