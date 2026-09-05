@@ -7,6 +7,12 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Generation — reusable narration programs
+
+- Add opt-in family-level prose authoring and deterministic clause expansion. Existing per-instance narration remains unchanged.
+- Persist program sources and clause dependencies in the normal ledger and restore them during recipe replay. Bound-fact changes invalidate only dependent expansions.
+- Enforce measured near-duplicate budgets and optional blind-reader findings through existing claim validation. Expansion and replay make no model calls.
+
 ### Generation — canonical bitemporal views
 
 - Add opt-in observer, source and transaction-time fields to canonical facts.
