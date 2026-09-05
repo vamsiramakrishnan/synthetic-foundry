@@ -105,7 +105,6 @@ jobs:
                   density_profile=density,  # type: ignore[arg-type]
               )
           ''')
-          # Both regular and closing slides derive their footer from this exact expression.
           p = Path('src/worldloom/render/pptx.py')
           text = p.read_text()
           needle = '''    footer_text = f"{plan.metadata.get('company', '')} · {plan.title}"\n'''
@@ -171,7 +170,6 @@ jobs:
                               {"type": "content-by-label", "label": intent.domain},
                           ],
           ''')
-          # bundles.py already imports models indirectly; add Lifecycle explicitly for the default above.
           p = Path('src/worldloom/render/bundles.py')
           text = p.read_text()
           if 'from ..models import Lifecycle' not in text:
@@ -195,7 +193,6 @@ jobs:
               if profile is not None:
           ''')
 
-          # Delete transport-only files/workflows. They are not part of the feature.
           import shutil
           shutil.rmtree('.github/artifact-realism-transfer', ignore_errors=True)
           for name in ('artifact-realism-apply.yml', 'artifact-realism-build.yml', 'artifact-realism-integrate.yml'):
@@ -206,6 +203,7 @@ jobs:
           python -m pip install -U pip
           python -m pip install -e '.[dev,polars,xlsx,docx,pdf,pptx]'
           python -m pip install ruff==0.15.8 mypy==2.3.1
+          ruff check --fix src/worldloom/artifact_ecology.py src/worldloom/realism.py src/worldloom/render/docx.py src/worldloom/render/pptx.py src/worldloom/render/xlsx.py src/worldloom/render/bundles.py
           ruff check src/worldloom/artifact_ecology.py src/worldloom/realism.py src/worldloom/render/docx.py src/worldloom/render/pptx.py src/worldloom/render/xlsx.py src/worldloom/render/bundles.py
           mypy src/worldloom/artifact_ecology.py src/worldloom/realism.py
           pytest -q tests/test_docx.py tests/test_pptx.py tests/test_render.py
