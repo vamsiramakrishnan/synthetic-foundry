@@ -1,3 +1,6 @@
+import pytest
+
+from worldloom.compiler.compose import CompositionError
 from worldloom.models import ArtifactIR, ArtifactSection, Table
 from worldloom.storyboard import VisualKind, build
 
@@ -31,7 +34,7 @@ def test_storyboard_preserves_compiler_order_and_section_identity() -> None:
     assert [beat.visual for beat in board.beats] == [VisualKind.PROSE, VisualKind.TABLE]
 
 
-def test_storyboard_exposes_existing_grammar_failure_without_new_rules() -> None:
+def test_storyboard_preserves_existing_compiler_refusal() -> None:
     ir = ArtifactIR(
         id="deck",
         intent_id="intent",
@@ -39,17 +42,11 @@ def test_storyboard_exposes_existing_grammar_failure_without_new_rules() -> None
         sections=[ArtifactSection(heading="Controls", body="Detail.", semantic_role="control")],
     )
 
-    board = build(
-        ir,
-        artifact_type="executive_summary",
-        fmt="pptx",
-        size_class="small",
-        density_profile="balanced",
-    )
-
-    assert not board.ok
-    assert {violation.code for violation in board.composition.violations} >= {
-        "wrong_opening",
-        "missing_role",
-        "forbidden_role",
-    }
+    with pytest.raises(CompositionError, match="no component that fits"):
+        build(
+            ir,
+            artifact_type="executive_summary",
+            fmt="pptx",
+            size_class="small",
+            density_profile="balanced",
+        )
