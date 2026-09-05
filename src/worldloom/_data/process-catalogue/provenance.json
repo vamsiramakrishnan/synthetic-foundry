@@ -1,0 +1,46 @@
+{
+  "archive_note": "ZIP container metadata was normalised; its digest differs from the original upload.",
+  "assets": {
+    "catalogue.json": "fc6a8f8167b385a06cf2a2adc2085f3b2a03bbf601c5ee7d372acac8ccccc908",
+    "coverage.csv": "017903639576a64bf8e613223df1c16c45167fed948cf5503b126ed19ae80b28",
+    "defaults.zip": "f798c129e8a0a5d7edd7348ca457c382524f0d334f365ed26f8908a8fdb6bba7"
+  },
+  "evidence_note": "Source coverage labels are preserved for reference parity, not asserted as applied calibration.",
+  "members": {
+    "default-banking.jsonl": "25b6518d7e6b893ac3c056c260a2a09a35f5546e89c868225685eed386b036b5",
+    "default-consumer_products.jsonl": "3c34fc86dd72fcc6f36e1a689c15100724f877357036cacaa20c5fbc5722b683",
+    "default-healthcare.jsonl": "7c5565c1f39c4cd6154bfed700512e29abb7caeae07cd73ae956a7ed13a285b9",
+    "default-insurance.jsonl": "4db0b6c3f67ec46dab1d13d665698cb6c57129b95ad168d4aba479d949c74406",
+    "default-life_sciences.jsonl": "0db7aa821b9151c930382dcfe6aeb3070fcd54229eda03319be540908ebfd46e",
+    "default-logistics.jsonl": "20a09285920cb5638bd1b6ae5567f1d506950ee3fbc95abff8f406eb790beeee",
+    "default-manufacturing.jsonl": "9de298f616000a43ce67205e2ffa2843bc373a0267f1cb9845826e18290b4021",
+    "default-public_sector.jsonl": "53e13dc3a55355bae6c46d2d3bc9f8c30f4f608833c298a0b7e86be600aa44ae",
+    "default-retail.jsonl": "d0c091a4a722c67137b3408909e51473f500273376dd59cd8a1fd7c0e2382c02",
+    "default-technology_saas.jsonl": "72c86a2485fb00185ec18143dd0e5c8150e0ede507cad8199abf407b994d51bc",
+    "default-telecom.jsonl": "842da80e2a38fb59a37d0874d1255dd56a7236b600c7438f0aa85480cea6070f",
+    "default-utilities.jsonl": "0eac96ffb2b90e7e027b83c237841e183844339dd327bc79bacbbddd16555c56"
+  },
+  "source_inputs": {
+    "VOCABULARY.md": {
+      "bytes": 11686,
+      "sha256": "5abbef63160f04539b492f1738f1fa595b663ebf97b4ec0d1c8fbe1b0e472c61"
+    },
+    "all-12-industries.zip": {
+      "bytes": 167391,
+      "sha256": "bc85279e36ec65fd82b0012ad6d1139ecf55453b10acdc82f064f0cd89b3d3d1"
+    },
+    "catalogue.json": {
+      "bytes": 64703,
+      "sha256": "fc6a8f8167b385a06cf2a2adc2085f3b2a03bbf601c5ee7d372acac8ccccc908"
+    },
+    "compile_processes.py": {
+      "bytes": 10615,
+      "sha256": "fe4104036b4acc917d52396ca8408e7e9373670ca27bb3364696bafeb16f0f16"
+    },
+    "coverage.csv": {
+      "bytes": 9186,
+      "sha256": "017903639576a64bf8e613223df1c16c45167fed948cf5503b126ed19ae80b28"
+    }
+  },
+  "verification": "Every JSONL member is byte-identical to its uploaded member SHA-256."
+}

@@ -154,3 +154,7 @@ pytest -q tests/test_harness_docs.py
 When prose and implementation disagree, implementation is not silently treated
 as truth. Either the documentation is stale or the public surface regressed; the
 failing check forces that decision into the change that caused it.
+
+## Authored industry process planning
+
+[Compile company process plans](process-catalogue.md) from the supplied 12-industry factors. Bind activities to owners, countries, systems and seeded channels; inspect coverage and evidence boundaries; replay pinned exports; feed the existing process authoring cascade. The source-reference catalogue API remains unchanged.

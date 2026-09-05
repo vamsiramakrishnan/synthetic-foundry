@@ -1,0 +1,1406 @@
+{
+  "inputs": {
+    "VOCABULARY.md": {
+      "bytes": 11686,
+      "sha256": "5abbef63160f04539b492f1738f1fa595b663ebf97b4ec0d1c8fbe1b0e472c61"
+    },
+    "all-12-industries.zip": {
+      "bytes": 167391,
+      "sha256": "bc85279e36ec65fd82b0012ad6d1139ecf55453b10acdc82f064f0cd89b3d3d1"
+    },
+    "catalogue.json": {
+      "bytes": 64703,
+      "sha256": "fc6a8f8167b385a06cf2a2adc2085f3b2a03bbf601c5ee7d372acac8ccccc908"
+    },
+    "compile_processes.py": {
+      "bytes": 10615,
+      "sha256": "fe4104036b4acc917d52396ca8408e7e9373670ca27bb3364696bafeb16f0f16"
+    },
+    "coverage.csv": {
+      "bytes": 9186,
+      "sha256": "017903639576a64bf8e613223df1c16c45167fed948cf5503b126ed19ae80b28"
+    }
+  },
+  "legacy_coverage": [
+    {
+      "activities": "7",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "7",
+      "industry": "banking",
+      "status": "corpus_calibrated",
+      "stream": "apply_to_disburse"
+    },
+    {
+      "activities": "6",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "banking",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "9",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "banking",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "banking",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "banking",
+      "status": "overlay",
+      "stream": "initiate_to_settle"
+    },
+    {
+      "activities": "7",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "6",
+      "industry": "banking",
+      "status": "overlay",
+      "stream": "onboard_to_monitor"
+    },
+    {
+      "activities": "13",
+      "industry": "banking",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "banking",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "banking",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "7",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "6",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "consumer_products",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "9",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "consumer_products",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "consumer_products",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "13",
+      "industry": "consumer_products",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "consumer_products",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "consumer_products",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "7",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "6",
+      "industry": "healthcare",
+      "status": "overlay",
+      "stream": "admit_to_discharge"
+    },
+    {
+      "activities": "6",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "healthcare",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "9",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "healthcare",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "5",
+      "industry": "healthcare",
+      "status": "overlay",
+      "stream": "incident_to_rca"
+    },
+    {
+      "activities": "10",
+      "industry": "healthcare",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "13",
+      "industry": "healthcare",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "healthcare",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "healthcare",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "7",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "6",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "insurance",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "insurance",
+      "status": "overlay",
+      "stream": "claim_to_settle"
+    },
+    {
+      "activities": "7",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "9",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "insurance",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "insurance",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "13",
+      "industry": "insurance",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "insurance",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "6",
+      "industry": "insurance",
+      "status": "overlay",
+      "stream": "quote_to_bind"
+    },
+    {
+      "activities": "10",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "5",
+      "industry": "insurance",
+      "status": "overlay",
+      "stream": "reserve_to_report"
+    },
+    {
+      "activities": "8",
+      "industry": "insurance",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "7",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "6",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "life_sciences",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "9",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "life_sciences",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "life_sciences",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "13",
+      "industry": "life_sciences",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "life_sciences",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "life_sciences",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "7",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "6",
+      "industry": "logistics",
+      "status": "overlay",
+      "stream": "book_to_deliver"
+    },
+    {
+      "activities": "6",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "logistics",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "5",
+      "industry": "logistics",
+      "status": "overlay",
+      "stream": "declare_to_clear"
+    },
+    {
+      "activities": "9",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "logistics",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "logistics",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "13",
+      "industry": "logistics",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "logistics",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "logistics",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "7",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "6",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "manufacturing",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "9",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "manufacturing",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "manufacturing",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "5",
+      "industry": "manufacturing",
+      "status": "overlay",
+      "stream": "ncr_to_close"
+    },
+    {
+      "activities": "13",
+      "industry": "manufacturing",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "manufacturing",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "manufacturing",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "7",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "5",
+      "industry": "public_sector",
+      "status": "overlay",
+      "stream": "apply_to_grant"
+    },
+    {
+      "activities": "6",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "public_sector",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "5",
+      "industry": "public_sector",
+      "status": "overlay",
+      "stream": "draft_to_decision"
+    },
+    {
+      "activities": "9",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "public_sector",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "public_sector",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "13",
+      "industry": "public_sector",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "public_sector",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "public_sector",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "5",
+      "industry": "public_sector",
+      "status": "overlay",
+      "stream": "tender_to_award"
+    },
+    {
+      "activities": "7",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "6",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "retail",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "7",
+      "industry": "retail",
+      "status": "overlay",
+      "stream": "forecast_to_replenish"
+    },
+    {
+      "activities": "9",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "retail",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "retail",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "13",
+      "industry": "retail",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "retail",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "6",
+      "industry": "retail",
+      "status": "overlay",
+      "stream": "promo_to_evaluate"
+    },
+    {
+      "activities": "10",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "retail",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "7",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "7",
+      "industry": "technology_saas",
+      "status": "corpus_calibrated",
+      "stream": "alert_to_postmortem"
+    },
+    {
+      "activities": "6",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "technology_saas",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "6",
+      "industry": "technology_saas",
+      "status": "overlay",
+      "stream": "health_to_renewal"
+    },
+    {
+      "activities": "9",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "technology_saas",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "technology_saas",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "13",
+      "industry": "technology_saas",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "technology_saas",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "technology_saas",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "7",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "6",
+      "industry": "telecom",
+      "status": "corpus_calibrated",
+      "stream": "alarm_to_restore"
+    },
+    {
+      "activities": "6",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "telecom",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "9",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "telecom",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "telecom",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "7",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "6",
+      "industry": "telecom",
+      "status": "overlay",
+      "stream": "order_to_activate"
+    },
+    {
+      "activities": "13",
+      "industry": "telecom",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "telecom",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "telecom",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    },
+    {
+      "activities": "6",
+      "industry": "telecom",
+      "status": "overlay",
+      "stream": "usage_to_bill"
+    },
+    {
+      "activities": "7",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "acquire_to_retire"
+    },
+    {
+      "activities": "6",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "budget_to_forecast"
+    },
+    {
+      "activities": "8",
+      "industry": "utilities",
+      "status": "corpus_calibrated",
+      "stream": "change_to_deploy"
+    },
+    {
+      "activities": "7",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "contract_to_renewal"
+    },
+    {
+      "activities": "6",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "data_to_insight"
+    },
+    {
+      "activities": "7",
+      "industry": "utilities",
+      "status": "overlay",
+      "stream": "fault_to_restore"
+    },
+    {
+      "activities": "9",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "hire_to_retire"
+    },
+    {
+      "activities": "8",
+      "industry": "utilities",
+      "status": "corpus_calibrated",
+      "stream": "idea_to_market"
+    },
+    {
+      "activities": "10",
+      "industry": "utilities",
+      "status": "corpus_calibrated",
+      "stream": "incident_to_resolution"
+    },
+    {
+      "activities": "5",
+      "industry": "utilities",
+      "status": "overlay",
+      "stream": "inspect_to_maintain"
+    },
+    {
+      "activities": "7",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "issue_to_resolution"
+    },
+    {
+      "activities": "9",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "lead_to_order"
+    },
+    {
+      "activities": "13",
+      "industry": "utilities",
+      "status": "corpus_calibrated",
+      "stream": "order_to_cash"
+    },
+    {
+      "activities": "7",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "plan_to_produce"
+    },
+    {
+      "activities": "13",
+      "industry": "utilities",
+      "status": "corpus_calibrated",
+      "stream": "procure_to_pay"
+    },
+    {
+      "activities": "10",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "record_to_report"
+    },
+    {
+      "activities": "5",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "request_to_fulfil"
+    },
+    {
+      "activities": "8",
+      "industry": "utilities",
+      "status": "backbone",
+      "stream": "risk_to_compliance"
+    }
+  ],
+  "note": "Legacy corpus_calibrated labels are supplied claims, not runtime evidence. Positional compiler constants were read with AST literal_eval; uploaded Python was not executed.",
+  "reference_outputs": {
+    "default-banking.jsonl": {
+      "distinct_activities": 153,
+      "rows": 789,
+      "sha256": "25b6518d7e6b893ac3c056c260a2a09a35f5546e89c868225685eed386b036b5",
+      "streams": 19,
+      "structural_sha256": "014353d59a635cd3b2d2f50a2c1b4c21e7fcf1fc56e4b85b12649314bfca9d18"
+    },
+    "default-consumer_products.jsonl": {
+      "distinct_activities": 133,
+      "rows": 724,
+      "sha256": "3c34fc86dd72fcc6f36e1a689c15100724f877357036cacaa20c5fbc5722b683",
+      "streams": 16,
+      "structural_sha256": "7ed918f7516dd49e0b2b0906ffa366ee82bac77e47da8d2d475e6cbee7098006"
+    },
+    "default-healthcare.jsonl": {
+      "distinct_activities": 144,
+      "rows": 180,
+      "sha256": "7c5565c1f39c4cd6154bfed700512e29abb7caeae07cd73ae956a7ed13a285b9",
+      "streams": 18,
+      "structural_sha256": "c833745f9be73ace4eb72d8e4734fc9ca97ef9216ede3487615b20cedb214350"
+    },
+    "default-insurance.jsonl": {
+      "distinct_activities": 151,
+      "rows": 564,
+      "sha256": "4db0b6c3f67ec46dab1d13d665698cb6c57129b95ad168d4aba479d949c74406",
+      "streams": 19,
+      "structural_sha256": "20f88cc9edd95f286d4f8fda8a5d1711e569a73101ab166d3d02c73679005368"
+    },
+    "default-life_sciences.jsonl": {
+      "distinct_activities": 133,
+      "rows": 543,
+      "sha256": "0db7aa821b9151c930382dcfe6aeb3070fcd54229eda03319be540908ebfd46e",
+      "streams": 16,
+      "structural_sha256": "9c86bb8f949def2c317f6f1f6817b4431e07188e7efb750b0f8aad434c33e9d8"
+    },
+    "default-logistics.jsonl": {
+      "distinct_activities": 144,
+      "rows": 1472,
+      "sha256": "20a09285920cb5638bd1b6ae5567f1d506950ee3fbc95abff8f406eb790beeee",
+      "streams": 18,
+      "structural_sha256": "0733ba8fbfe24c817927f945e04765c390cac70873da6c213be623a57fc60b22"
+    },
+    "default-manufacturing.jsonl": {
+      "distinct_activities": 138,
+      "rows": 747,
+      "sha256": "9de298f616000a43ce67205e2ffa2843bc373a0267f1cb9845826e18290b4021",
+      "streams": 17,
+      "structural_sha256": "07e52969088755a6e6f0cb2bbde3b498d7be61922e1b0578037dc8ce122e7df2"
+    },
+    "default-public_sector.jsonl": {
+      "distinct_activities": 148,
+      "rows": 148,
+      "sha256": "53e13dc3a55355bae6c46d2d3bc9f8c30f4f608833c298a0b7e86be600aa44ae",
+      "streams": 19,
+      "structural_sha256": "7e8e1e2d4eecf812cca27fc13deff38a8b8618bcc5cc2f7815457a805ac7bdf6"
+    },
+    "default-retail.jsonl": {
+      "distinct_activities": 146,
+      "rows": 362,
+      "sha256": "d0c091a4a722c67137b3408909e51473f500273376dd59cd8a1fd7c0e2382c02",
+      "streams": 18,
+      "structural_sha256": "8f5fe66c6b309f385298a6ba688a709826b1075ab531123ced0ecabdc4679d54"
+    },
+    "default-technology_saas.jsonl": {
+      "distinct_activities": 146,
+      "rows": 1060,
+      "sha256": "72c86a2485fb00185ec18143dd0e5c8150e0ede507cad8199abf407b994d51bc",
+      "streams": 18,
+      "structural_sha256": "7f478d184ee073d952f0b475ea1d3aea699ce234a87f31b66dac6f9d958f3f1c"
+    },
+    "default-telecom.jsonl": {
+      "distinct_activities": 151,
+      "rows": 209,
+      "sha256": "842da80e2a38fb59a37d0874d1255dd56a7236b600c7438f0aa85480cea6070f",
+      "streams": 19,
+      "structural_sha256": "736256e1ed16be9a9bcfec151a2fd825267576574b4b3f96a8c0f2ad7fdaf552"
+    },
+    "default-utilities.jsonl": {
+      "distinct_activities": 145,
+      "rows": 177,
+      "sha256": "0eac96ffb2b90e7e027b83c237841e183844339dd327bc79bacbbddd16555c56",
+      "streams": 18,
+      "structural_sha256": "68b183fd144bcda1259c2bed20443a4585519308728284e3247bfac245c004db"
+    }
+  },
+  "source_activity_instances": 6975,
+  "source_industry_stream_cells": 215,
+  "source_legacy_calibrated_claims": 63
+}

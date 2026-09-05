@@ -7,6 +7,13 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Generation - opt-in authored process planning
+
+- Integrate the supplied 12-industry factors with typed company, owner, country and system bindings, named-stream channel draws, source-attested lexicon records and pinned offline replay. Existing world builds and the source-reference catalogue API do not change.
+- Feed activity context into the existing process authoring cascade without bypassing its validation gates. APQC references remain hints; calibration names remain requests; template pairs are not executable evaluations.
+- Expose missing streams, fallback owners and unresolved system schemas. Retain source hashes, licence declarations, coverage and replay manifests.
+
+
 ### Added — operational relational synthesis
 
 - Opt-in `worldloom.synthesis` SDK and `worldloom synth` commands. Frozen,
