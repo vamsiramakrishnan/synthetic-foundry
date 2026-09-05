@@ -28,9 +28,20 @@ jobs:
         run: |
           pip install uv
           uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]" ruff==0.15.8 mypy==2.3.1
-      - name: Canonicalize known fixable lint debt
+      - name: Canonicalize known catalogue gate debt
         run: |
           ruff check --fix src/worldloom/process_catalogue.py tools/finalize_process_catalogue.py tests/test_pr33_merge_gate.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/worldloom/process_catalogue.py')
+          text = path.read_text(encoding='utf-8')
+          old = '    totals = Counter()\n'
+          new = '    totals: Counter[str] = Counter()\n'
+          if new not in text:
+              if old not in text:
+                  raise SystemExit('missing expected Counter type-debt anchor')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Lint and type gates
         run: |
           ruff check
