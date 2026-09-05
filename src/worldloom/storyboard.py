@@ -8,6 +8,7 @@ beats instead of re-deriving that mapping themselves.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -30,6 +31,7 @@ class StoryboardBeat:
     component_id: str
     semantic_role: str
     section_index: int
+    heading: str
     visual: VisualKind
     hidden: bool
 
@@ -54,6 +56,26 @@ def _visual(section: ArtifactSection) -> VisualKind:
     if section.quote is not None:
         return VisualKind.QUOTE
     return VisualKind.PROSE
+
+
+def _heading(ir: ArtifactIR, section: ArtifactSection, role: str) -> str:
+    """Use existing prose as an assertion heading when the style asks for it.
+
+    This is deliberately conservative: no prose is generated, unresolved fact
+    references stay in the body, and evidence/table/appendix sections keep their
+    authored labels. The renderer receives a presentation choice, not new truth.
+    """
+    if ir.metadata.get("title_register") != "assertion":
+        return section.heading
+    if role not in {"summary", "position", "explanation", "decision", "recommendation", "management"}:
+        return section.heading
+    body = (section.body or "").strip()
+    if not body or "{{fact:" in body:
+        return section.heading
+    first = re.split(r"(?<=[.!?])\s+", body, maxsplit=1)[0].strip()
+    if 18 <= len(first) <= 110 and "\n" not in first:
+        return first
+    return section.heading
 
 
 def build(
@@ -84,6 +106,7 @@ def build(
             component_id=component_id,
             semantic_role=role_by_key[key],
             section_index=section_by_key[key][0],
+            heading=_heading(ir, section_by_key[key][1], role_by_key[key]),
             visual=_visual(section_by_key[key][1]),
             hidden=section_by_key[key][1].hidden,
         )
