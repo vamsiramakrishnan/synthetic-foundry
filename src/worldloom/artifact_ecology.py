@@ -7,7 +7,7 @@ workflow policy only. It never mints business facts or numeric values.
 from __future__ import annotations
 
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -444,29 +444,38 @@ def enrich_connector_records(world: World, records: list[Any]) -> list[Any]:
         rng = Rng(world.seed or 0).derive(f"artifact-ecology/connector/{record.id}")
         if record.connector == "servicenow":
             opened = fields.get("opened_at") or fields.get("created_at")
+            anchor = datetime.fromisoformat(str(opened)) if opened else (world.timeline()[0].occurred_at if world.timeline() else None)
+            def at(minutes: int, base=anchor) -> str | None:
+                return (base + timedelta(minutes=minutes)).isoformat() if base else None
+
             final = str(fields.get("state", "")).lower()
             states = ["New", "In Progress"] + (["Resolved", "Closed"] if final in {"resolved", "closed", "complete"} else [])
             fields.setdefault("impact", rng.choice(("1", "2", "2", "3")))
             fields.setdefault("urgency", rng.choice(("1", "2", "2", "3")))
             fields.setdefault("business_service", (fields.get("related_service_ids") or [None])[0])
             fields.setdefault("sla", {"name": "P1 Restoration" if str(fields.get("priority")) == "1" else "Standard Resolution", "breached": False})
-            fields.setdefault("state_history", [{"state": state, "sequence": i, "at": opened} for i, state in enumerate(states)])
+            fields.setdefault("state_history", [{"state": state, "sequence": i, "at": at(i * 30)} for i, state in enumerate(states)])
             fields.setdefault("work_notes", [
-                {"sequence": 1, "kind": "triage", "text": "Impact confirmed; investigation opened."},
-                {"sequence": 2, "kind": "diagnosis", "text": "Evidence linked to correlated business event."},
-                {"sequence": 3, "kind": "closure", "text": "Resolution recorded against source evidence."},
+                {"sequence": 1, "at": at(10), "kind": "triage", "text": "Impact confirmed; investigation opened."},
+                {"sequence": 2, "at": at(45), "kind": "diagnosis", "text": "Evidence linked to correlated business event."},
+                {"sequence": 3, "at": at(120), "kind": "closure", "text": "Resolution recorded against source evidence."},
             ])
             fields.setdefault("related_records", {"problem": f"PRB-{content_key(record.id, 'problem')[:10].upper()}", "change": f"CHG-{content_key(record.id, 'change')[:10].upper()}"})
         elif record.connector == "jira":
             status = fields.get("status", "To Do")
-            history = [{"from": None, "to": "To Do", "sequence": 0}]
+            created = fields.get("created_at")
+            anchor = datetime.fromisoformat(str(created)) if created else (world.timeline()[0].occurred_at if world.timeline() else None)
+            def jira_at(minutes: int, base=anchor) -> str | None:
+                return (base + timedelta(minutes=minutes)).isoformat() if base else None
+
+            history = [{"from": None, "to": "To Do", "sequence": 0, "at": jira_at(0)}]
             if status != "To Do":
-                history.append({"from": "To Do", "to": "In Progress", "sequence": 1})
+                history.append({"from": "To Do", "to": "In Progress", "sequence": 1, "at": jira_at(20)})
             if status == "Done":
-                history.append({"from": "In Progress", "to": "Done", "sequence": 2})
+                history.append({"from": "In Progress", "to": "Done", "sequence": 2, "at": jira_at(180)})
             fields.setdefault("status_history", history)
             fields.setdefault("links", [{"type": "relates to", "target": event_id} for event_id in record.event_ids])
-            fields.setdefault("activity", [{"kind": "comment", "sequence": 1, "text": "Scope confirmed against source evidence."}])
+            fields.setdefault("activity", [{"kind": "comment", "sequence": 1, "at": jira_at(35), "text": "Scope confirmed against source evidence."}])
         elif record.connector == "confluence":
             page_id = fields.get("page_id", record.external_id)
             fields.setdefault("space_key", "OPS" if "ops" in record.title.lower() else "KNOW")
