@@ -8,7 +8,6 @@ same :class:`worldloom.predicates.Predicate` instead of six private filter DSLs.
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from .connector_definition import ConnectorDefinition
 from .predicates import FieldPredicate, Predicate, PredicateOp, Scalar
