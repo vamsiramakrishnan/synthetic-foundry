@@ -1,3 +1,4 @@
+from worldloom.predicates import FieldPredicate, Predicate, PredicateOp
 from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose
 from worldloom.tool_surface import ToolSurface
@@ -39,6 +40,38 @@ def test_search_matches_native_and_field_values() -> None:
     result = session.search("servicenow", "incident", priority="P1", state="open")
 
     assert any(record.external_id == "INC9001" for record in result.records)
+
+
+def test_search_accepts_same_typed_predicate_used_by_eval_construction() -> None:
+    surface = ToolSurface.from_world(_world())
+    session = surface.fork()
+    session.create(
+        "servicenow",
+        "incident",
+        external_id="INC9002",
+        title="Payments slow",
+        fields={"priority": "P1", "age_days": 21},
+    )
+    session.create(
+        "servicenow",
+        "incident",
+        external_id="INC9003",
+        title="Payments slow",
+        fields={"priority": "P1", "age_days": 3},
+    )
+    predicate = Predicate(
+        entity="incident",
+        where=(
+            FieldPredicate(field="priority", value="P1"),
+            FieldPredicate(field="age_days", op=PredicateOp.GT, value=7),
+        ),
+    )
+
+    result = session.search("servicenow", "incident", predicate=predicate)
+
+    ids = {record.external_id for record in result.records}
+    assert "INC9002" in ids
+    assert "INC9003" not in ids
 
 
 def test_update_returns_effect_and_preserves_original_fork() -> None:
