@@ -325,6 +325,9 @@ def enrich_ir(world: World, intent: ArtifactIntent, ir: ArtifactIR) -> ArtifactI
         "realism_profile": "ecology/v1", "style_seed": str(org.style_seed),
         "style_archetype": org.visual_archetype, "artifact_family": plan.family,
         "artifact_density": plan.density, "artifact_voice": plan.voice,
+        "artifact_type": intent.artifact_type, "artifact_surface": plan.surface.value,
+        "artifact_genre": plan.genre.value, "title_register": org.title_register,
+        "chart_preference": org.chart_preference,
         "lifecycle": lifecycle.current.value, "revision": str(lifecycle.revision),
         "department_style": plan.metadata["department_style"],
     })
@@ -382,7 +385,6 @@ def episode_graph(world: World) -> EpisodeGraph:
             intent = staged.artifact_intents.by_id(artifact_id)
             if set(intent.required_fact_ids) & set(message.disclosed_fact_ids):
                 edges.append(EvidenceEdge(source=artifact_node, target=node_id, kind="attached_to"))
-    # Stable de-duplication keeps replay bytes independent of traversal overlap.
     unique = {(edge.source, edge.target, edge.kind): edge for edge in edges}
     return EpisodeGraph(episode_id=episode_id, nodes=tuple(nodes), edges=tuple(unique[key] for key in sorted(unique)))
 
