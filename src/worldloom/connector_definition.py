@@ -71,6 +71,7 @@ class ConnectorEntityDefinition(Model):
     workflow: ConnectorWorkflow | None = None
     required_on_create: tuple[str, ...] = ()
     searchable: str | tuple[str, ...] = "*"
+    query_name: str | None = None
 
 
 class ConnectorIdempotency(Model):
@@ -182,6 +183,13 @@ class ConnectorDefinition(Model):
                 f"{self.connector}/{entity} does not define operation {operation!r}"
             ) from error
         return self.canonical_tool(target)
+
+    def query_name_for(self, entity: str) -> str:
+        try:
+            definition = self.entities[entity]
+        except KeyError as error:
+            raise KeyError(f"unknown {self.connector} entity {entity!r}") from error
+        return definition.query_name or entity
 
     def wire_dict(self) -> dict[str, object]:
         """Serialize using stable on-disk field names, not Python attribute names."""
