@@ -1,7 +1,12 @@
 import pytest
 
 from worldloom.eval_demands import DemandKind, compile_demands
-from worldloom.eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
+from worldloom.eval_design import (
+    EvalSpec,
+    EvalStepSpec,
+    RequirementKind,
+    WorldRequirement,
+)
 
 
 def _spec() -> EvalSpec:
