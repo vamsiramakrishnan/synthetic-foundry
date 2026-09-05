@@ -12,7 +12,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: python -m pip install -e '.[dev]'
+      - run: python -m pip install -e '.[dev]' ruff==0.15.8 mypy==2.3.1
       - run: ruff check src/worldloom/artifact_realism.py src/worldloom/artifact_ecology.py src/worldloom/connector_realism.py src/worldloom/ecology.py src/worldloom/realism.py tests/test_artifact_realism.py tests/test_ecology_sdk.py
       - run: mypy src/worldloom/artifact_realism.py src/worldloom/connector_realism.py src/worldloom/ecology.py src/worldloom/realism.py
       - run: pytest -q tests/test_artifact_realism.py tests/test_ecology_sdk.py
