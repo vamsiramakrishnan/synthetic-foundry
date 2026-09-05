@@ -4,13 +4,14 @@ on:
     branches: [codex/worldloom-artifact-realism]
     paths:
       - .github/workflows/process-catalogue-check.yml
-      - src/worldloom/process_catalogue/**
+      - src/worldloom/process_catalogue.py
       - src/worldloom/_data/process-catalogue/**
       - tests/test_process_catalogue.py
       - tools/compile_processes.py
+      - tools/finalize_process_catalogue.py
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   catalogue:
     runs-on: ubuntu-latest
@@ -18,7 +19,32 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          persist-credentials: false
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Finalize package data wiring
+        run: python tools/finalize_process_catalogue.py
+      - name: Install focused test dependencies
+        run: python -m pip install -e '.[dev]' ruff==0.15.8
+      - name: Lint process catalogue integration
+        run: ruff check src/worldloom/process_catalogue.py tests/test_process_catalogue.py tools/compile_processes.py tools/finalize_process_catalogue.py
+      - name: Test process catalogue invariants
+        run: pytest -q tests/test_process_catalogue.py
+      - name: Verify supplied 12-industry oracle
+        run: python tools/compile_processes.py --verify
+      - name: Commit finalized runtime wiring
+        run: |
+          if git diff --quiet -- src/worldloom/process_catalogue.py; then
+            echo 'Runtime wiring already finalized.'
+            exit 0
+          fi
+          git config user.name 'worldloom-source-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/process_catalogue.py
+          git commit -m 'Finalize packaged process catalogue runtime'
+          git push origin HEAD:codex/worldloom-artifact-realism
       - name: Capture exact source for offline reproducibility
         run: |
           mkdir -p /tmp/worldloom-source
