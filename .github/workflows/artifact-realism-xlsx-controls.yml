@@ -1,0 +1,48 @@
+name: add xlsx ecology controls
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths: [.github/workflows/artifact-realism-xlsx-controls.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Add analyst workbook control semantics
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/worldloom/render/xlsx.py')
+          text = path.read_text()
+
+          old = '''    _add_charts(workbook, ir, layout, sheet_of)\n\n    workbook.properties.title = ir.title\n'''
+          new = '''    _add_charts(workbook, ir, layout, sheet_of)\n\n    if ir.metadata.get("realism_profile") == "ecology/v1":\n        control = workbook.create_sheet(title="Document Control")\n        control.sheet_state = "hidden"\n        control_rows = (\n            ("Realism profile", ir.metadata.get("realism_profile")),\n            ("Artifact family", ir.metadata.get("artifact_family")),\n            ("Lifecycle", ir.metadata.get("lifecycle")),\n            ("Revision", ir.metadata.get("revision")),\n            ("Department style", ir.metadata.get("department_style")),\n            ("Artifact density", ir.metadata.get("artifact_density")),\n            ("Style seed", ir.metadata.get("style_seed")),\n            ("Source contract", "Artifact IR and cited facts; no independent business values"),\n        )\n        for row, (label, value) in enumerate(control_rows, start=1):\n            control.cell(row=row, column=1, value=label)\n            control.cell(row=row, column=2, value=value)\n        control.column_dimensions["A"].width = 22\n        control.column_dimensions["B"].width = 64\n\n    workbook.properties.title = ir.title\n'''
+          if old not in text:
+              raise SystemExit('xlsx control-sheet seam changed')
+          text = text.replace(old, new, 1)
+
+          old = '''    sheet.freeze_panes = sheet.cell(row=first, column=1)\n\n\ndef render_all(world: World) -> list[Rendered]:\n'''
+          new = '''    sheet.freeze_panes = sheet.cell(row=first, column=1)\n    if table.rows and table.columns:\n        sheet.auto_filter.ref = (\n            f"A{_HEADER_ROW}:{_column_letter(len(table.columns))}{total_row - 1}"\n        )\n\n\ndef render_all(world: World) -> list[Rendered]:\n'''
+          if old not in text:
+              raise SystemExit('xlsx detail-filter seam changed')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - run: |
+          python -m pip install -e '.[dev]' ruff==0.15.8
+          ruff check src/worldloom/render/xlsx.py tests/test_xlsx_ecology.py
+          pytest -q tests/test_xlsx_ecology.py tests/test_render.py
+      - name: Commit only XLSX controls
+        run: |
+          git config user.name 'worldloom-artifact-realism'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/render/xlsx.py
+          git commit -m 'Add controlled analyst workbook metadata'
+          git push origin HEAD:codex/worldloom-artifact-realism
