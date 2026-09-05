@@ -52,6 +52,19 @@ def test_plans_exist_without_running_builder() -> None:
     assert builder is not None
 
 
+def test_campaign_compiles_demands_and_tactics_before_data() -> None:
+    campaign = _campaign()
+
+    demands = campaign.demands()
+    tactics = campaign.tactics()
+
+    assert demands.eval_spec_id == campaign.spec.id
+    assert demands.demands
+    assert tactics.eval_spec_id == campaign.spec.id
+    assert tactics.complete
+    assert tactics.proposals
+
+
 def test_campaign_instantiates_only_after_candidate_generation() -> None:
     campaign = _campaign()
     seen = []
@@ -116,13 +129,20 @@ def test_campaign_export_pairs_eval_with_exact_candidate_corpus(tmp_path) -> Non
     root = campaign.export(_builder, tmp_path / "campaign")
 
     spec = json.loads((root / "eval-spec.json").read_text())
+    demands = json.loads((root / "demand-set.json").read_text())
+    tactics = json.loads((root / "tactic-plan.json").read_text())
     manifest = json.loads((root / "manifest.json").read_text())
     assert spec["id"] == campaign.spec.id
+    assert demands["eval_spec_id"] == campaign.spec.id
+    assert tactics["eval_spec_id"] == campaign.spec.id
+    assert tactics["proposals"]
     assert manifest["schema"] == "worldloom.eval-campaign/v1"
     assert manifest["attempt_count"] == 1
     assert manifest["candidate_count"] == 1
     assert manifest["rejected_count"] == 0
     assert manifest["failed_requirements"] == {}
+    assert manifest["tactic_count"] == len(tactics["proposals"])
+    assert manifest["demand_digest"] == tactics["demand_digest"]
 
     candidate_dir = root / manifest["candidates"][0]["path"]
     instance = json.loads((candidate_dir / "eval-instance.json").read_text())
