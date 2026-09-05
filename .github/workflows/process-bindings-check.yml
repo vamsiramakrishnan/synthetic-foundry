@@ -1,0 +1,56 @@
+name: process catalogue check
+on:
+  pull_request:
+    paths:
+      - .github/workflows/process-bindings-check.yml
+      - src/worldloom/process_bindings/**
+      - src/worldloom/_data/process-catalogue/**
+      - tests/test_process_bindings.py
+      - tools/compile_process_bindings.py
+  push:
+    branches: [main, codex/worldloom-artifact-realism]
+    paths:
+      - .github/workflows/process-bindings-check.yml
+      - src/worldloom/process_bindings/**
+      - src/worldloom/_data/process-catalogue/**
+      - tests/test_process_bindings.py
+      - tools/compile_process_bindings.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  catalogue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install checks
+        run: python -m pip install -e '.[dev]' ruff==0.15.8 mypy==2.3.1
+      - name: Lint and type check
+        run: |
+          ruff check src/worldloom/process_bindings tools/compile_process_bindings.py tests/test_process_bindings.py
+          mypy src/worldloom/process_bindings
+      - name: Source parity, adapters, evidence and tamper tests
+        run: python -m pytest -q tests/test_process_bindings.py tests/test_lexicon.py tests/test_predicates.py tests/test_tool_surface.py tests/test_process.py
+      - name: Recompile all twelve industries twice
+        run: |
+          python -m worldloom.process_bindings --all --out /tmp/processes-one
+          python -m worldloom.process_bindings --all --out /tmp/processes-two
+          diff -r /tmp/processes-one /tmp/processes-two
+          python - <<'PY'
+          from pathlib import Path
+          from worldloom.process_bindings import verify_export
+          for directory in sorted(Path('/tmp/processes-one').glob('company-*')):
+              verify_export(directory)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: process-catalogue-audit
+          path: /tmp/processes-one/
+          retention-days: 7
+          if-no-files-found: error
