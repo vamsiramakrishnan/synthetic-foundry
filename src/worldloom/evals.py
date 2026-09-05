@@ -66,6 +66,33 @@ class CampaignRun:
             for candidate in self.rejected
         }
 
+    def diverse(self, count: int) -> tuple[GeneratedCandidate, ...]:
+        """Select valid candidates that are far apart in measured corpus outcomes.
+
+        Validity always happens first. The selector is Worldloom's existing
+        outcome-space max-min traversal; this layer does not introduce a second
+        diversity objective or optimize against a particular retriever.
+        """
+
+        accepted = self.accepted
+        if count < 1:
+            raise ValueError("diverse candidate count must be at least one")
+        if count > len(accepted):
+            raise ValueError(f"cannot select {count} from {len(accepted)} accepted candidates")
+
+        from . import outcomes
+
+        readings = tuple(
+            outcomes.read(
+                candidate.world.compile(),
+                name=f"candidate-{candidate.plan.ordinal:04d}",
+                seed=candidate.plan.seed,
+            )
+            for candidate in accepted
+        )
+        chosen = outcomes.select(readings, count)
+        return tuple(accepted[index] for index in chosen)
+
 
 @dataclass(frozen=True)
 class EvalCampaign:
