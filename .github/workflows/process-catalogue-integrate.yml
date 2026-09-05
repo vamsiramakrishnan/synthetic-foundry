@@ -97,11 +97,13 @@ jobs:
           PY
       - name: Install checks
         run: python -m pip install -e '.[dev]' ruff==0.15.8 mypy==2.3.1
+      - name: Restore independently attested reference assets
+        run: python tools/restore_process_reference.py
       - name: Lint and type-check integration
         shell: bash
         run: |
           set -o pipefail
-          python -m ruff check src/worldloom/process_planning src/worldloom/process.py tools/compile_process_plans.py tools/import_process_plans.py tests/test_process_planning.py | tee /tmp/process-lint.txt
+          python -m ruff check src/worldloom/process_planning src/worldloom/process.py tools/compile_process_plans.py tools/import_process_plans.py tools/restore_process_reference.py tests/test_process_planning.py | tee /tmp/process-lint.txt
           python -m mypy src/worldloom/process_planning src/worldloom/process.py | tee /tmp/process-types.txt
       - name: Exercise source parity and authoring regression tests
         shell: bash
@@ -156,8 +158,8 @@ jobs:
           git config user.name 'worldloom-source-bot'
           git config user.email 'actions@users.noreply.github.com'
           git rm -r .github/process-catalogue-transfer
-          git rm .github/workflows/process-catalogue-integrate.yml
-          git add src/worldloom/process_planning src/worldloom/_data/processes src/worldloom/process.py tools/compile_process_plans.py tools/import_process_plans.py tests/test_process_planning.py docs/process-catalogue.md docs/design/vocabulary-input.md docs/README.md CHANGELOG.md .claude/skills/worldloom-process-catalogue/SKILL.md
+          git add src/worldloom/process_planning src/worldloom/_data/processes src/worldloom/process.py tools/compile_process_plans.py tools/import_process_plans.py tools/restore_process_reference.py tests/test_process_planning.py docs/process-catalogue.md docs/design/vocabulary-input.md docs/README.md CHANGELOG.md .claude/skills/worldloom-process-catalogue/SKILL.md
+          git add -f src/worldloom/_data/process-catalogue/catalogue.json src/worldloom/_data/process-catalogue/coverage.csv src/worldloom/_data/process-catalogue/defaults.zip src/worldloom/_data/process-catalogue/provenance.json
           git diff --cached --check
           git commit -m 'Integrate supplied twelve-industry process planning with replay and evidence boundaries'
           git push origin HEAD:codex/worldloom-artifact-realism
