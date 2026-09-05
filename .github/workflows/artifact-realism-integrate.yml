@@ -192,11 +192,6 @@ jobs:
                       _refuse("realism_failed", f"[red]error:[/red] {escape(str(exc))}")
               if profile is not None:
           ''')
-
-          import shutil
-          shutil.rmtree('.github/artifact-realism-transfer', ignore_errors=True)
-          for name in ('artifact-realism-apply.yml', 'artifact-realism-build.yml', 'artifact-realism-integrate.yml'):
-              Path('.github/workflows', name).unlink(missing_ok=True)
           PY
       - name: Install and verify
         run: |
@@ -205,7 +200,7 @@ jobs:
           python -m pip install ruff==0.15.8 mypy==2.3.1
           ruff check --fix src/worldloom/artifact_ecology.py src/worldloom/realism.py src/worldloom/render/docx.py src/worldloom/render/pptx.py src/worldloom/render/xlsx.py src/worldloom/render/bundles.py
           ruff check src/worldloom/artifact_ecology.py src/worldloom/realism.py src/worldloom/render/docx.py src/worldloom/render/pptx.py src/worldloom/render/xlsx.py src/worldloom/render/bundles.py
-          mypy src/worldloom/artifact_ecology.py src/worldloom/realism.py
+          mypy --python-version 3.12 src/worldloom/artifact_ecology.py src/worldloom/realism.py
           pytest -q tests/test_docx.py tests/test_pptx.py tests/test_render.py
           python - <<'PY'
           from worldloom.retail import RetailWorld
@@ -221,7 +216,7 @@ jobs:
         run: |
           git config user.name 'worldloom-artifact-realism-bot'
           git config user.email 'worldloom-artifact-realism-bot@users.noreply.github.com'
-          git add -A
+          git add src/worldloom/artifact_ecology.py src/worldloom/realism.py src/worldloom/connector_data.py src/worldloom/world.py src/worldloom/render/docx.py src/worldloom/render/pptx.py src/worldloom/render/xlsx.py src/worldloom/render/bundles.py src/worldloom/cli.py
           git diff --cached --check
           git commit -m 'Wire artifact ecology into enterprise renderers and bundles'
           git push origin HEAD:codex/worldloom-artifact-realism
