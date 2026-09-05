@@ -9,8 +9,10 @@ choose how one region/company says it.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from enum import StrEnum
+from importlib.resources import files
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -77,6 +79,20 @@ class DistributionPrior(BaseModel):
         return self
 
 
+class ProcessPrior(BaseModel):
+    """Measured process-shape prior derived from an event log."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: str
+    cases: int = Field(ge=0)
+    events: int = Field(ge=0)
+    rework_case_rate: float = Field(ge=0.0, le=1.0)
+    state_transitions: dict[str, int]
+    inter_activity_seconds: dict[str, float | None]
+    evidence: EvidenceClass = EvidenceClass.MEASURED
+
+
 class SurfacePack(BaseModel):
     """Company/region surface-form priors, explicitly not empirical truth."""
 
@@ -97,3 +113,18 @@ def canonical_index(records: Iterable[LexiconRecord]) -> dict[str, tuple[Lexicon
     for record in records:
         grouped.setdefault(record.concept, []).append(record)
     return {key: tuple(value) for key, value in grouped.items()}
+
+
+def load_process_prior(name: str) -> ProcessPrior:
+    """Load a compact process prior shipped with the package."""
+    resource = files("worldloom").joinpath("_data", "priors", f"{name}.json")
+    return ProcessPrior.model_validate_json(resource.read_text(encoding="utf-8"))
+
+
+def source_catalog() -> dict[str, Any]:
+    """Return the auditable catalogue of external evidence inputs."""
+    resource = files("worldloom").joinpath("_data", "vocabulary-sources.json")
+    payload = json.loads(resource.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("vocabulary source catalog must be an object")
+    return payload
