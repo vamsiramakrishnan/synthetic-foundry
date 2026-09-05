@@ -66,6 +66,36 @@ def test_campaign_instantiates_only_after_candidate_generation() -> None:
     assert instances[0].oracle.fact_ids
 
 
+def test_campaign_run_keeps_rejected_attempts_as_search_feedback() -> None:
+    campaign = EvalCampaign(
+        EvalSpec(
+            id="EVALSPEC-REJECTION-FEEDBACK",
+            capability="revision_reasoning",
+            persona="controller",
+            request_template="Find the approved workbook and compare it with its predecessor.",
+            steps=(EvalStepSpec(id="find", capability="search"),),
+            requirements=(
+                WorldRequirement(id="facts", kind=RequirementKind.FACT),
+                WorldRequirement(
+                    id="revision-chain",
+                    kind=RequirementKind.REVISION_CHAIN,
+                    selector={"artifact_type": "finance_workbook"},
+                    minimum=2,
+                ),
+            ),
+            candidate_count=2,
+        )
+    )
+
+    run = campaign.run(_builder)
+
+    assert len(run.attempts) == 2
+    assert not run.accepted
+    assert len(run.rejected) == 2
+    assert not run.instances
+    assert run.failed_requirements == {0: ("revision-chain",), 1: ("revision-chain",)}
+
+
 def test_campaign_export_pairs_eval_with_exact_candidate_corpus(tmp_path) -> None:  # type: ignore[no-untyped-def]
     campaign = _campaign()
     root = campaign.export(_builder, tmp_path / "campaign")
@@ -74,7 +104,10 @@ def test_campaign_export_pairs_eval_with_exact_candidate_corpus(tmp_path) -> Non
     manifest = json.loads((root / "manifest.json").read_text())
     assert spec["id"] == campaign.spec.id
     assert manifest["schema"] == "worldloom.eval-campaign/v1"
+    assert manifest["attempt_count"] == 1
     assert manifest["candidate_count"] == 1
+    assert manifest["rejected_count"] == 0
+    assert manifest["failed_requirements"] == {}
 
     candidate_dir = root / manifest["candidates"][0]["path"]
     instance = json.loads((candidate_dir / "eval-instance.json").read_text())
