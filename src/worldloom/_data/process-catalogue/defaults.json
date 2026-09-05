@@ -1,0 +1,325 @@
+{
+  "COLS": [
+    "id",
+    "name",
+    "apqc",
+    "function",
+    "sor_class",
+    "type",
+    "control",
+    "exception",
+    "tags"
+  ],
+  "DEFAULT_LANDSCAPE": {
+    "ADMS": "GE ADMS",
+    "BI": "Power BI",
+    "CPQ": "Salesforce CPQ",
+    "CRM": "Salesforce",
+    "Chat": "Microsoft Teams",
+    "Claims": "Guidewire ClaimCenter",
+    "Consolidation": "OneStream",
+    "CoreBanking": "Temenos T24",
+    "DMS": "SharePoint",
+    "EMR": "Epic",
+    "EPM": "Anaplan",
+    "ERP-FI": "SAP S/4HANA",
+    "ERP-MM": "SAP S/4HANA",
+    "ERP-SD": "SAP S/4HANA",
+    "Email": "Exchange Online",
+    "HRIS": "Workday",
+    "ITSM": "ServiceNow",
+    "MES": "Siemens Opcenter",
+    "Minutes": "Confluence",
+    "P2P-suite": "Coupa",
+    "PLM": "PTC Windchill",
+    "Payroll": "ADP",
+    "PolicyAdmin": "Guidewire PolicyCenter",
+    "TMS": "SAP TM",
+    "TelcoBilling": "Amdocs",
+    "Treasury": "Kyriba",
+    "WMS": "Manhattan Active WM",
+    "Wiki": "Confluence",
+    "e-invoicing": "PEPPOL access point",
+    "portal": "PEPPOL access point"
+  },
+  "DEFAULT_ORGS": {
+    "banking": {
+      "bus": [
+        {
+          "archetype": "customer_segment",
+          "name": "Consumer Banking"
+        },
+        {
+          "archetype": "customer_segment",
+          "name": "Institutional Banking"
+        },
+        {
+          "archetype": "product_line",
+          "name": "Wealth"
+        },
+        {
+          "archetype": "group_function",
+          "name": "Group Finance"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "name": "Global Business Services"
+        }
+      ],
+      "countries": [
+        "SG",
+        "IN",
+        "HK"
+      ],
+      "operating_model": "federated"
+    },
+    "consumer_products": {
+      "bus": [
+        {
+          "archetype": "product_line",
+          "name": "Beverages"
+        },
+        {
+          "archetype": "product_line",
+          "name": "Snacks"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "name": "APAC Shared Services"
+        }
+      ],
+      "countries": [
+        "ID",
+        "TH",
+        "VN",
+        "MY"
+      ],
+      "operating_model": "federated"
+    },
+    "healthcare": {
+      "bus": [
+        {
+          "archetype": "product_line",
+          "name": "Acute Hospitals"
+        },
+        {
+          "archetype": "product_line",
+          "name": "Primary Care"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "name": "Corporate Services"
+        }
+      ],
+      "countries": [
+        "SG"
+      ],
+      "operating_model": "centralised"
+    },
+    "insurance": {
+      "bus": [
+        {
+          "archetype": "product_line",
+          "name": "Personal Lines"
+        },
+        {
+          "archetype": "product_line",
+          "name": "Commercial Lines"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "name": "Claims"
+        },
+        {
+          "archetype": "group_function",
+          "name": "Group Finance"
+        }
+      ],
+      "countries": [
+        "AU",
+        "NZ",
+        "SG"
+      ],
+      "operating_model": "centralised"
+    },
+    "life_sciences": {
+      "bus": [
+        {
+          "archetype": "product_line",
+          "name": "Pharma"
+        },
+        {
+          "archetype": "product_line",
+          "name": "Devices"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "name": "Global Business Services"
+        }
+      ],
+      "countries": [
+        "SG",
+        "JP",
+        "AU"
+      ],
+      "operating_model": "federated"
+    },
+    "logistics": {
+      "bus": [
+        {
+          "archetype": "product_line",
+          "name": "Freight Forwarding"
+        },
+        {
+          "archetype": "product_line",
+          "name": "Contract Logistics"
+        },
+        {
+          "archetype": "legal_entity",
+          "name": "Singapore"
+        }
+      ],
+      "countries": [
+        "SG",
+        "HK",
+        "MY",
+        "ID"
+      ],
+      "operating_model": "decentralised"
+    },
+    "manufacturing": {
+      "bus": [
+        {
+          "archetype": "legal_entity",
+          "name": "Plant Taoyuan"
+        },
+        {
+          "archetype": "legal_entity",
+          "name": "Plant Penang"
+        },
+        {
+          "archetype": "group_function",
+          "name": "Group"
+        }
+      ],
+      "countries": [
+        "TW",
+        "CN",
+        "MY"
+      ],
+      "operating_model": "decentralised"
+    },
+    "public_sector": {
+      "bus": [
+        {
+          "archetype": "group_function",
+          "name": "Ministry"
+        },
+        {
+          "archetype": "legal_entity",
+          "name": "Statutory Board A"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "name": "Whole-of-Government Platforms"
+        }
+      ],
+      "countries": [
+        "SG"
+      ],
+      "operating_model": "centralised"
+    },
+    "retail": {
+      "bus": [
+        {
+          "archetype": "product_line",
+          "name": "Supermarkets"
+        },
+        {
+          "archetype": "channel",
+          "name": "Online"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "name": "Supply Chain"
+        },
+        {
+          "archetype": "group_function",
+          "name": "Group Finance"
+        }
+      ],
+      "countries": [
+        "AU",
+        "NZ"
+      ],
+      "operating_model": "centralised"
+    },
+    "technology_saas": {
+      "bus": [
+        {
+          "archetype": "group_function",
+          "name": "Product & Engineering"
+        },
+        {
+          "archetype": "customer_segment",
+          "name": "Customer Success"
+        },
+        {
+          "archetype": "geography",
+          "name": "APAC Sales"
+        }
+      ],
+      "countries": [
+        "SG",
+        "AU",
+        "IN",
+        "JP"
+      ],
+      "operating_model": "decentralised"
+    },
+    "telecom": {
+      "bus": [
+        {
+          "archetype": "customer_segment",
+          "name": "Consumer Mobile"
+        },
+        {
+          "archetype": "customer_segment",
+          "name": "Enterprise"
+        },
+        {
+          "archetype": "shared_service_centre",
+          "name": "Network"
+        },
+        {
+          "archetype": "group_function",
+          "name": "Group Finance"
+        }
+      ],
+      "countries": [
+        "IN"
+      ],
+      "operating_model": "federated"
+    },
+    "utilities": {
+      "bus": [
+        {
+          "archetype": "product_line",
+          "name": "Distribution"
+        },
+        {
+          "archetype": "customer_segment",
+          "name": "Retail Energy"
+        },
+        {
+          "archetype": "group_function",
+          "name": "Corporate"
+        }
+      ],
+      "countries": [
+        "AU"
+      ],
+      "operating_model": "centralised"
+    }
+  }
+}

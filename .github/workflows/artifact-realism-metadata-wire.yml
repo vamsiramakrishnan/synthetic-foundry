@@ -1,0 +1,41 @@
+name: wire renderer-facing ecology metadata
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths: [.github/workflows/artifact-realism-metadata-wire.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Expose existing ecology policy to renderers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/worldloom/artifact_ecology.py')
+          text = path.read_text()
+          old = '''        "realism_profile": "ecology/v1", "style_seed": str(org.style_seed),\n        "style_archetype": org.visual_archetype, "artifact_family": plan.family,\n        "artifact_density": plan.density, "artifact_voice": plan.voice,\n        "lifecycle": lifecycle.current.value, "revision": str(lifecycle.revision),\n        "department_style": plan.metadata["department_style"],\n'''
+          new = '''        "realism_profile": "ecology/v1", "style_seed": str(org.style_seed),\n        "style_archetype": org.visual_archetype, "artifact_family": plan.family,\n        "artifact_density": plan.density, "artifact_voice": plan.voice,\n        "artifact_type": intent.artifact_type, "artifact_surface": plan.surface.value,\n        "artifact_genre": plan.genre.value, "title_register": org.title_register,\n        "chart_preference": org.chart_preference,\n        "lifecycle": lifecycle.current.value, "revision": str(lifecycle.revision),\n        "department_style": plan.metadata["department_style"],\n'''
+          if old not in text:
+              raise SystemExit('ecology metadata seam changed')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - run: |
+          python -m pip install -e '.[dev]' ruff==0.15.8
+          ruff check src/worldloom/artifact_ecology.py tests/test_ecology_sdk.py
+          pytest -q tests/test_ecology_sdk.py
+      - name: Commit only ecology metadata
+        run: |
+          git config user.name 'worldloom-artifact-realism'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/artifact_ecology.py
+          git commit -m 'Expose ecology policy to artifact renderers'
+          git push origin HEAD:codex/worldloom-artifact-realism

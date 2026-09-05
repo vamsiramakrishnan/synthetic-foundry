@@ -1,0 +1,47 @@
+name: refactor pptx onto storyboard projection
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths: [.github/workflows/artifact-realism-storyboard-refactor.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Replace renderer-local beat mapping
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/worldloom/render/pptx.py')
+          text = path.read_text()
+          old = 'from ..compiler.compose import compose, plan_from_ir\n'
+          new = 'from ..storyboard import build as build_storyboard\n'
+          if old not in text:
+              raise SystemExit('pptx compiler import seam changed')
+          text = text.replace(old, new, 1)
+          old = '''    plan = plan_from_ir(\n        ir,\n        artifact_type="executive_summary",\n        size_class=_SIZE_CLASS,\n        density_profile=_density_profile(ir),\n    )\n    composition = compose(plan, fmt="pptx")\n    if not composition.ok:\n        raise RenderError(\n            f"{ir.id}: component sequence is not a grammatical executive_summary: "\n            + "; ".join(str(v) for v in composition.violations)\n        )\n\n    # `plan.beats` and `ir.sections` are built 1:1, in order, by `plan_from_ir`\n    # — one beat per section, nothing filtered before `compose` runs — so\n    # zipping them is the correct way back to the section a beat came from,\n    # without re-deriving the beat-key slug `compose` computes internally.\n    section_by_beat = {beat.key: section for beat, section in zip(plan.beats, ir.sections)}\n\n    slides: list[SlidePlan] = [SlidePlan(kind="cover", component_id="cover", heading=ir.title)]\n    appendix_opened = False\n    for component_id, beat_key in zip(composition.components, composition.beats):\n        section = section_by_beat[beat_key]\n'''
+          new = '''    board = build_storyboard(\n        ir,\n        artifact_type="executive_summary",\n        fmt="pptx",\n        size_class=_SIZE_CLASS,\n        density_profile=_density_profile(ir),\n    )\n    if not board.ok:\n        raise RenderError(\n            f"{ir.id}: component sequence is not a grammatical executive_summary: "\n            + "; ".join(str(v) for v in board.composition.violations)\n        )\n\n    slides: list[SlidePlan] = [SlidePlan(kind="cover", component_id="cover", heading=ir.title)]\n    appendix_opened = False\n    for beat in board.beats:\n        section = ir.sections[beat.section_index]\n        component_id = beat.component_id\n'''
+          if old not in text:
+              raise SystemExit('pptx planning block changed')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - run: |
+          python -m pip install -e '.[dev,pptx]' ruff==0.15.8
+          ruff check --fix src/worldloom/render/pptx.py
+          ruff check src/worldloom/storyboard.py src/worldloom/render/pptx.py tests/test_storyboard.py tests/test_pptx.py
+          pytest -q tests/test_storyboard.py tests/test_pptx.py
+      - name: Commit only renderer refactor
+        run: |
+          git config user.name 'worldloom-artifact-realism'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/render/pptx.py
+          git commit -m 'Render PPTX from the shared storyboard projection'
+          git push origin HEAD:codex/worldloom-artifact-realism

@@ -1,0 +1,565 @@
+{
+  "meta": {
+    "version": "0.1",
+    "authored": true,
+    "columns": {"activity": ["id", "name", "apqc", "function", "sor_class", "type", "control", "exception", "tags"]},
+    "note": "Factors are small and composable; compile_processes.py produces the per-company product. APQC ids are hints against PCF 7.2 cross-industry numbering; replace with parsed ids after ingesting the PCF files. Regional variants and product objects are from public vendor and regulator documentation; verify before shipping a pack."
+  },
+
+  "function_families": {
+    "sales": "Sales", "sales_ops": "Sales Operations", "marketing": "Marketing", "credit": "Credit & Collections", "billing": "Billing",
+    "treasury": "Treasury", "customer_service": "Customer Service", "fulfilment": "Fulfilment & Logistics", "warehouse": "Warehouse",
+    "procurement": "Procurement", "ap": "Accounts Payable", "controllership": "Controllership", "fpa": "FP&A", "tax": "Tax",
+    "hr": "Human Resources", "payroll": "Payroll", "it_service_desk": "IT Service Desk", "it_ops": "IT Operations / SRE",
+    "change_mgmt": "Change & Release", "product": "Product Management", "engineering": "Engineering", "legal": "Legal",
+    "risk": "Risk", "compliance": "Compliance", "audit": "Internal Audit", "data": "Data & Analytics", "facilities": "Facilities & Assets",
+    "planning": "Supply & Demand Planning", "production": "Production", "quality": "Quality"
+  },
+
+  "bu_archetypes": ["product_line", "geography", "customer_segment", "channel", "shared_service_centre", "legal_entity", "group_function"],
+
+  "operating_models": {
+    "centralised": {
+      "BU": ["sales", "sales_ops", "marketing", "customer_service", "product", "engineering", "production", "planning"],
+      "shared_service": ["credit", "billing", "ap", "controllership", "payroll", "procurement", "it_service_desk", "it_ops", "change_mgmt", "warehouse", "fulfilment", "facilities", "data", "quality"],
+      "group_function": ["treasury", "fpa", "tax", "hr", "legal", "risk", "compliance", "audit"]
+    },
+    "federated": {
+      "BU": ["sales", "sales_ops", "marketing", "customer_service", "product", "engineering", "production", "planning", "fulfilment", "warehouse", "credit", "billing", "quality", "data"],
+      "shared_service": ["ap", "payroll", "it_service_desk", "it_ops", "change_mgmt", "procurement", "facilities"],
+      "group_function": ["treasury", "fpa", "tax", "hr", "legal", "risk", "compliance", "audit", "controllership"]
+    },
+    "decentralised": {
+      "BU": ["sales", "sales_ops", "marketing", "customer_service", "product", "engineering", "production", "planning", "fulfilment", "warehouse", "credit", "billing", "ap", "procurement", "controllership", "it_service_desk", "it_ops", "change_mgmt", "data", "quality", "facilities", "payroll", "fpa"],
+      "shared_service": [],
+      "group_function": ["treasury", "tax", "hr", "legal", "risk", "compliance", "audit"]
+    }
+  },
+
+  "channel_types": ["system_record", "workflow_approval", "email", "chat", "ticket", "document", "minutes", "portal_filing", "report"],
+  "channel_priors": {
+    "capture":   {"system_record": 1.0, "email": 0.5, "document": 0.4, "chat": 0.1},
+    "approve":   {"system_record": 1.0, "workflow_approval": 0.9, "email": 0.6, "chat": 0.2},
+    "execute":   {"system_record": 1.0, "email": 0.2, "chat": 0.2, "document": 0.2},
+    "reconcile": {"system_record": 1.0, "report": 0.8, "email": 0.4, "document": 0.3},
+    "notify":    {"system_record": 0.6, "email": 0.9, "chat": 0.4, "portal_filing": 0.1},
+    "escalate":  {"ticket": 0.8, "email": 0.8, "chat": 0.6, "minutes": 0.2},
+    "decide":    {"minutes": 0.8, "email": 0.7, "document": 0.5, "workflow_approval": 0.4},
+    "report":    {"report": 1.0, "document": 0.6, "email": 0.5, "portal_filing": 0.3}
+  },
+
+  "sor_classes": {
+    "ERP-SD": {"products": {
+      "SAP S/4HANA": {"SalesOrder": {"table": "VBAK/VBAP", "tcode": "VA01", "id": "SO{10d}"}, "Delivery": {"table": "LIKP/LIPS", "tcode": "VL01N", "id": "DL{10d}"}, "BillingDoc": {"table": "VBRK/VBRP", "tcode": "VF01", "id": "BD{10d}"}, "CreditBlock": {"table": "VBAK-CMGST", "tcode": "VKM1"}},
+      "Oracle Fusion Cloud": {"SalesOrder": {"object": "Order Header", "id": "{6d}"}, "Shipment": {"object": "Shipment"}, "Invoice": {"object": "Receivables Invoice"}},
+      "NetSuite": {"SalesOrder": {"record": "salesorder", "id": "SO{5d}"}, "Delivery": {"record": "itemfulfillment"}, "Invoice": {"record": "invoice", "id": "INV{5d}"}},
+      "Dynamics 365": {"SalesOrder": {"entity": "salesorder"}, "Invoice": {"entity": "invoice"}}}},
+    "ERP-MM": {"products": {
+      "SAP S/4HANA": {"PurchaseRequisition": {"table": "EBAN", "tcode": "ME51N", "id": "PR{8d}"}, "PurchaseOrder": {"table": "EKKO/EKPO", "tcode": "ME21N", "id": "45{8d}"}, "GoodsReceipt": {"table": "MKPF/MSEG", "tcode": "MIGO"}, "InvoiceReceipt": {"table": "RBKP/RSEG", "tcode": "MIRO"}},
+      "Coupa": {"Requisition": {"object": "requisition"}, "PurchaseOrder": {"object": "order_header"}, "Invoice": {"object": "invoice"}},
+      "SAP Ariba": {"Requisition": {"object": "Requisition"}, "PurchaseOrder": {"object": "Order"}, "Invoice": {"object": "Invoice"}},
+      "Oracle Procurement Cloud": {"PurchaseOrder": {"object": "Purchase Order"}, "Receipt": {"object": "Receipt"}}}},
+    "ERP-FI": {"products": {
+      "SAP S/4HANA": {"JournalEntry": {"table": "BKPF/BSEG (ACDOCA)", "tcode": "FB50"}, "AROpenItem": {"table": "BSID", "tcode": "FBL5N"}, "APOpenItem": {"table": "BSIK", "tcode": "FBL1N"}, "IncomingPayment": {"tcode": "F-28"}, "PaymentRun": {"tcode": "F110"}, "Dunning": {"tcode": "F150"}},
+      "Oracle Fusion Cloud": {"JournalEntry": {"object": "Journal"}, "ARInvoice": {"object": "Receivables Invoice"}, "Receipt": {"object": "Receipt"}},
+      "NetSuite": {"JournalEntry": {"record": "journalentry"}, "CustomerPayment": {"record": "customerpayment"}, "VendorBill": {"record": "vendorbill"}}}},
+    "CRM": {"products": {
+      "Salesforce": {"Lead": {"object": "Lead"}, "Opportunity": {"object": "Opportunity", "id": "006{15}"}, "Quote": {"object": "Quote"}, "Order": {"object": "Order"}, "Contract": {"object": "Contract"}, "Case": {"object": "Case", "id": "{8d}"}, "Account": {"object": "Account"}},
+      "Dynamics 365 Sales": {"Lead": {"entity": "lead"}, "Opportunity": {"entity": "opportunity"}, "Quote": {"entity": "quote"}},
+      "HubSpot": {"Deal": {"object": "deal"}, "Ticket": {"object": "ticket"}}}},
+    "CPQ": {"products": {"Salesforce CPQ": {"Quote": {"object": "SBQQ__Quote__c"}}, "Conga": {"Quote": {"object": "Quote"}}}},
+    "ITSM": {"products": {
+      "ServiceNow": {"Incident": {"table": "incident", "id": "INC{7d}"}, "Change": {"table": "change_request", "id": "CHG{7d}"}, "Problem": {"table": "problem", "id": "PRB{7d}"}, "Request": {"table": "sc_request", "id": "REQ{7d}"}, "KB": {"table": "kb_knowledge", "id": "KB{7d}"}, "CI": {"table": "cmdb_ci"}},
+      "Jira Service Management": {"Incident": {"issuetype": "Incident"}, "Change": {"issuetype": "Change"}, "Request": {"issuetype": "Service Request"}},
+      "BMC Helix": {"Incident": {"form": "HPD:Help Desk"}, "Change": {"form": "CHG:Infrastructure Change"}}}},
+    "HRIS": {"products": {"Workday": {"Worker": {"object": "Worker"}, "Position": {"object": "Position"}, "JobRequisition": {"object": "Job Requisition"}}, "SAP SuccessFactors": {"Employee": {"object": "EmpJob"}, "Requisition": {"object": "JobRequisition"}}, "Oracle HCM": {"Worker": {"object": "Worker"}}}},
+    "Payroll": {"products": {"ADP": {"PayRun": {"object": "Pay Run"}}, "Workday Payroll": {"PayRun": {"object": "Pay Calculation"}}, "SAP Payroll": {"PayRun": {"tcode": "PC00_M"}}}},
+    "P2P-suite": {"products": {"Coupa": {}, "SAP Ariba": {}, "Zycus": {}}},
+    "WMS": {"products": {"Manhattan Active WM": {"Wave": {"object": "Wave"}, "Pick": {"object": "Pick Task"}}, "Blue Yonder WMS": {"Task": {"object": "Task"}}, "SAP EWM": {"WarehouseOrder": {"table": "/SCWM/ORDIM_O"}}}},
+    "TMS": {"products": {"SAP TM": {"FreightOrder": {"object": "Freight Order"}}, "Oracle OTM": {"Shipment": {"object": "Shipment"}}, "CargoWise": {"Shipment": {"object": "Shipment", "id": "S{8d}"}}}},
+    "PLM": {"products": {"PTC Windchill": {"Part": {"object": "WTPart"}, "ChangeNotice": {"object": "WTChangeOrder2"}}, "Siemens Teamcenter": {"Item": {"object": "Item"}}}},
+    "MES": {"products": {"Siemens Opcenter": {"WorkOrder": {"object": "Work Order"}}, "Rockwell FactoryTalk": {"Batch": {"object": "Batch"}}}},
+    "EPM": {"products": {"Anaplan": {"Model": {"object": "Model"}}, "OneStream": {"Cube": {"object": "Cube"}}, "SAP Analytics Cloud": {"Plan": {"object": "Planning Model"}}}},
+    "Consolidation": {"products": {"OneStream": {"Consolidation": {"object": "Consolidation"}}, "Oracle FCCS": {"Consolidation": {"object": "Consolidation"}}, "SAP Group Reporting": {"Consolidation": {"table": "ACDOCU"}}}},
+    "e-invoicing": {"products": {"PEPPOL access point": {"Invoice": {"format": "UBL 2.1 BIS Billing 3.0"}}, "India IRP": {"Invoice": {"format": "GST e-invoice JSON", "id": "IRN{64hex}"}}, "Malaysia MyInvois": {"Invoice": {"format": "UBL 2.1"}}, "Korea e-Tax": {"Invoice": {"format": "NTS e-Tax XML"}}}},
+    "Treasury": {"products": {"Kyriba": {"BankStatement": {"object": "Statement", "format": "camt.053"}}, "SAP TRM": {"CashPosition": {"object": "Cash Position"}}}},
+    "DMS": {"products": {"SharePoint": {"Document": {"object": "Drive item"}, "List": {"object": "List"}}, "Google Drive": {"File": {"object": "File"}}, "Box": {"File": {"object": "File"}}}},
+    "Wiki": {"products": {"Confluence": {"Page": {"object": "page"}}, "Notion": {"Page": {"object": "page"}}}},
+    "Email": {"products": {"Exchange Online": {"Message": {"object": "message"}}, "Gmail": {"Message": {"object": "message"}}}},
+    "Chat": {"products": {"Microsoft Teams": {"Message": {"object": "chatMessage"}}, "Slack": {"Message": {"object": "message"}}}},
+    "BI": {"products": {"Power BI": {"Report": {"object": "Report"}}, "Looker": {"Look": {"object": "Look"}}, "Tableau": {"Workbook": {"object": "Workbook"}}}},
+    "CoreBanking": {"products": {"Temenos T24": {"Account": {"table": "ACCOUNT"}, "Loan": {"table": "AA.ARRANGEMENT"}}, "Finacle": {"Account": {"object": "Account"}, "Loan": {"object": "Loan Account"}}, "Oracle FLEXCUBE": {"Account": {"object": "Account"}}}},
+    "PolicyAdmin": {"products": {"Guidewire PolicyCenter": {"Policy": {"object": "Policy"}, "Submission": {"object": "Submission"}}, "Duck Creek": {"Policy": {"object": "Policy"}}}},
+    "Claims": {"products": {"Guidewire ClaimCenter": {"Claim": {"object": "Claim", "id": "{3d}-{2d}-{6d}"}, "Exposure": {"object": "Exposure"}}}},
+    "TelcoBilling": {"products": {"Amdocs": {"Bill": {"object": "Bill"}, "Order": {"object": "Order"}}, "Netcracker": {"Order": {"object": "Customer Order"}}}},
+    "EMR": {"products": {"Epic": {"Encounter": {"object": "Encounter"}, "Order": {"object": "Order"}}, "Cerner": {"Encounter": {"object": "Encounter"}}}},
+    "ADMS": {"products": {"GE ADMS": {"Outage": {"object": "Outage"}}, "Schneider ADMS": {"Outage": {"object": "Outage"}}}}
+  },
+
+  "value_streams": {
+    "lead_to_order": {"name": "Lead to Order", "apqc": ["3.4", "3.5"], "objects": ["Lead", "Opportunity", "Quote", "Contract"], "calibrate": [],
+      "activities": [
+        ["l2o.01", "Capture lead", "3.4.1", "marketing", "CRM", "capture", "consent recorded", "duplicate lead", ["personal_data"]],
+        ["l2o.02", "Qualify lead", "3.4.2", "sales", "CRM", "decide", "qualification criteria", "no budget", []],
+        ["l2o.03", "Create opportunity", "3.5.1", "sales", "CRM", "capture", "stage definitions", "missing close date", []],
+        ["l2o.04", "Build quote", "3.5.2", "sales_ops", "CPQ", "capture", "price list version", "unapproved discount", []],
+        ["l2o.05", "Approve discount", "3.5.2", "sales", "CPQ", "approve", "discount approval matrix", "exceeds limit", []],
+        ["l2o.06", "Negotiate terms", "3.5.3", "sales", "Email", "decide", "standard terms deviation log", "non-standard payment terms", ["contract"]],
+        ["l2o.07", "Legal review", "12.x", "legal", "DMS", "approve", "clause library", "liability cap change", ["contract"]],
+        ["l2o.08", "Sign contract", "3.5.3", "sales", "DMS", "execute", "signatory authority", "unsigned counterparty", ["contract"]],
+        ["l2o.09", "Convert to order", "3.5.4", "sales_ops", "CRM", "execute", "order matches quote", "quote expired", []]
+      ]},
+    "order_to_cash": {"name": "Order to Cash", "apqc": ["3.5", "4.3", "4.4", "9.2", "6.1"], "objects": ["SalesOrder", "OrderLine", "Delivery", "BillingDoc", "AROpenItem", "Payment", "Dispute"], "calibrate": ["ocel2-order-management"],
+      "activities": [
+        ["o2c.01", "Capture sales order", "3.5.4", "sales_ops", "ERP-SD", "capture", "PO reference mandatory", "incomplete customer PO", []],
+        ["o2c.02", "Credit check", "9.2.2", "credit", "ERP-SD", "decide", "credit limit vs exposure", "credit block", []],
+        ["o2c.03", "Release credit block", "9.2.2", "credit", "ERP-SD", "approve", "override authority by amount", "override without approval", []],
+        ["o2c.04", "Confirm availability (ATP)", "4.3.1", "planning", "ERP-SD", "execute", "ATP rule", "backorder", []],
+        ["o2c.05", "Pick and pack", "4.4.2", "warehouse", "WMS", "execute", "pick confirmation", "short pick", []],
+        ["o2c.06", "Ship and post goods issue", "4.4.3", "fulfilment", "ERP-SD", "execute", "PGI within 24h of pick", "carrier no-show", []],
+        ["o2c.07", "Issue invoice", "9.2.3", "billing", "ERP-FI", "execute", "invoice equals delivered qty x price", "price mismatch", ["invoice", "tax"]],
+        ["o2c.08", "Transmit e-invoice", "9.2.3", "billing", "e-invoicing", "notify", "regime-specific validation", "portal rejection", ["invoice", "e_invoicing"]],
+        ["o2c.09", "Apply cash", "9.2.4", "treasury", "ERP-FI", "reconcile", "auto-match rate", "unapplied cash", ["payment"]],
+        ["o2c.10", "Dun overdue items", "9.2.4", "credit", "ERP-FI", "notify", "dunning levels", "disputed item dunned", []],
+        ["o2c.11", "Handle dispute", "6.1.3", "customer_service", "CRM", "escalate", "dispute reason codes", "credit note without approval", []],
+        ["o2c.12", "Issue credit note", "9.2.3", "billing", "ERP-FI", "approve", "credit note approval limit", "duplicate credit", ["invoice"]],
+        ["o2c.13", "Write off", "9.2.4", "controllership", "ERP-FI", "approve", "write-off authority", "write-off above limit", []]
+      ]},
+    "procure_to_pay": {"name": "Procure to Pay", "apqc": ["4.2", "10.1", "9.3"], "objects": ["PurchaseRequisition", "PurchaseOrder", "GoodsReceipt", "VendorInvoice", "Payment", "Vendor"], "calibrate": ["bpi-2019"],
+      "activities": [
+        ["p2p.01", "Raise requisition", "4.2.1", "procurement", "P2P-suite", "capture", "budget check", "no cost centre", []],
+        ["p2p.02", "Approve requisition", "4.2.1", "procurement", "P2P-suite", "approve", "approval limit by role", "self-approval", []],
+        ["p2p.03", "Source (RFQ / catalogue)", "4.2.2", "procurement", "P2P-suite", "execute", "three quotes above threshold", "single-source justification", []],
+        ["p2p.04", "Create purchase order", "4.2.3", "procurement", "ERP-MM", "capture", "PO before invoice", "retrospective PO", []],
+        ["p2p.05", "Approve purchase order", "4.2.3", "procurement", "ERP-MM", "approve", "delegation of authority", "split PO to avoid limit", []],
+        ["p2p.06", "Send PO to vendor", "4.2.3", "procurement", "Email", "notify", "PO acknowledgement", "no acknowledgement", ["vendor"]],
+        ["p2p.07", "Receive goods / services", "4.2.4", "warehouse", "ERP-MM", "execute", "GR against PO", "over-receipt", []],
+        ["p2p.08", "Capture vendor invoice", "9.3.1", "ap", "ERP-MM", "capture", "invoice references PO", "invoice without PO", ["invoice", "e_invoicing"]],
+        ["p2p.09", "Three-way match", "9.3.1", "ap", "ERP-MM", "reconcile", "tolerance 2% / 100", "price or quantity variance", []],
+        ["p2p.10", "Resolve invoice exception", "9.3.1", "ap", "Email", "escalate", "exception owner by variance type", "aged exception > 30 days", []],
+        ["p2p.11", "Approve payment run", "9.3.2", "treasury", "ERP-FI", "approve", "dual authorisation", "urgent payment outside run", ["payment"]],
+        ["p2p.12", "Execute payment", "9.3.2", "treasury", "Treasury", "execute", "bank file signed", "returned payment", ["payment"]],
+        ["p2p.13", "Maintain vendor master", "9.3.3", "ap", "ERP-MM", "approve", "bank detail change verification", "bank detail fraud", ["vendor", "personal_data"]]
+      ]},
+    "record_to_report": {"name": "Record to Report", "apqc": ["9.1", "9.2", "9.4", "9.5"], "objects": ["JournalEntry", "Accrual", "Reconciliation", "TrialBalance", "Consolidation", "ManagementPack"], "calibrate": [],
+      "activities": [
+        ["r2r.01", "Close sub-ledgers", "9.2.1", "controllership", "ERP-FI", "execute", "close calendar", "late sub-ledger", []],
+        ["r2r.02", "Post accruals", "9.2.1", "controllership", "ERP-FI", "approve", "accrual support attached", "unsupported accrual", []],
+        ["r2r.03", "Intercompany reconciliation", "9.2.5", "controllership", "Consolidation", "reconcile", "IC differences below threshold", "unmatched IC balance", []],
+        ["r2r.04", "Bank reconciliation", "9.4.1", "treasury", "ERP-FI", "reconcile", "all items cleared", "unreconciled item > 30 days", ["payment"]],
+        ["r2r.05", "FX revaluation", "9.2.1", "controllership", "ERP-FI", "execute", "rates from treasury", "wrong rate date", []],
+        ["r2r.06", "Review journals", "9.2.1", "controllership", "ERP-FI", "approve", "preparer-reviewer separation", "self-review", []],
+        ["r2r.07", "Consolidate", "9.2.5", "controllership", "Consolidation", "execute", "elimination completeness", "minority interest error", []],
+        ["r2r.08", "Prepare management pack", "9.1.4", "fpa", "EPM", "report", "variance commentary", "commentary contradicts numbers", []],
+        ["r2r.09", "Statutory reporting", "9.5.1", "controllership", "Consolidation", "report", "reporting standard", "restatement", ["statutory"]],
+        ["r2r.10", "Tax provision", "9.5.2", "tax", "ERP-FI", "execute", "effective rate reconciliation", "uncertain tax position", ["tax"]]
+      ]},
+    "budget_to_forecast": {"name": "Budget to Forecast", "apqc": ["9.1"], "objects": ["Budget", "Forecast", "Variance"], "calibrate": [],
+      "activities": [
+        ["b2f.01", "Issue planning assumptions", "9.1.1", "fpa", "EPM", "notify", "assumption sign-off", "stale FX assumption", []],
+        ["b2f.02", "Collect BU submissions", "9.1.1", "fpa", "EPM", "capture", "template version", "late submission", []],
+        ["b2f.03", "Challenge and consolidate", "9.1.1", "fpa", "EPM", "decide", "challenge log", "unreconciled headcount", []],
+        ["b2f.04", "Approve budget", "9.1.1", "fpa", "EPM", "approve", "board approval", "post-approval change", []],
+        ["b2f.05", "Monthly variance analysis", "9.1.4", "fpa", "BI", "report", "variance thresholds", "unexplained variance", []],
+        ["b2f.06", "Reforecast", "9.1.2", "fpa", "EPM", "execute", "reforecast cadence", "forecast bias", []]
+      ]},
+    "hire_to_retire": {"name": "Hire to Retire", "apqc": ["7.2", "7.3", "7.4", "7.6"], "objects": ["JobRequisition", "Candidate", "Worker", "Position", "PayRun", "Leave"], "calibrate": [],
+      "activities": [
+        ["h2r.01", "Raise job requisition", "7.2.1", "hr", "HRIS", "capture", "headcount plan", "unbudgeted role", []],
+        ["h2r.02", "Approve requisition", "7.2.1", "hr", "HRIS", "approve", "approval chain", "backfill without approval", []],
+        ["h2r.03", "Screen and interview", "7.2.2", "hr", "HRIS", "execute", "structured interview", "missing scorecard", ["personal_data"]],
+        ["h2r.04", "Make offer", "7.2.3", "hr", "HRIS", "approve", "compensation band", "out-of-band offer", ["personal_data"]],
+        ["h2r.05", "Onboard (accounts, equipment)", "7.2.4", "it_service_desk", "ITSM", "execute", "day-one access", "late laptop", ["personal_data"]],
+        ["h2r.06", "Run payroll", "7.4.2", "payroll", "Payroll", "execute", "payroll reconciliation", "off-cycle payment", ["payment", "personal_data"]],
+        ["h2r.07", "Manage leave", "7.4.1", "hr", "HRIS", "approve", "leave policy", "negative balance", []],
+        ["h2r.08", "Performance review", "7.3.2", "hr", "HRIS", "decide", "calibration", "rating without evidence", ["personal_data"]],
+        ["h2r.09", "Offboard", "7.6.1", "hr", "HRIS", "execute", "access revoked same day", "orphaned access", ["personal_data"]]
+      ]},
+    "incident_to_resolution": {"name": "Incident to Resolution", "apqc": ["8.6"], "objects": ["Incident", "Problem", "KB", "CI"], "calibrate": ["uci-498", "bpi-2013"],
+      "activities": [
+        ["i2r.01", "Detect and log", "8.6.1", "it_service_desk", "ITSM", "capture", "mandatory CI", "no CI", []],
+        ["i2r.02", "Categorise and prioritise", "8.6.1", "it_service_desk", "ITSM", "decide", "priority matrix", "wrong priority", []],
+        ["i2r.03", "Assign", "8.6.1", "it_service_desk", "ITSM", "execute", "routing rules", "reassignment loop", []],
+        ["i2r.04", "Diagnose", "8.6.2", "it_ops", "ITSM", "execute", "runbook referenced", "no work notes", []],
+        ["i2r.05", "Escalate (major incident)", "8.6.2", "it_ops", "Chat", "escalate", "MI criteria", "late declaration", []],
+        ["i2r.06", "Communicate status", "8.6.2", "it_ops", "Email", "notify", "comms cadence", "stale status", []],
+        ["i2r.07", "Resolve", "8.6.3", "it_ops", "ITSM", "execute", "resolution code", "resolved without cause", []],
+        ["i2r.08", "Close with user confirmation", "8.6.3", "it_service_desk", "ITSM", "execute", "auto-close after N days", "reopen", []],
+        ["i2r.09", "Post-incident review", "8.6.4", "it_ops", "Wiki", "decide", "PIR within 5 days", "actions unowned", []],
+        ["i2r.10", "Raise problem record", "8.6.4", "it_ops", "ITSM", "capture", "recurrence threshold", "problem without incidents", []]
+      ]},
+    "request_to_fulfil": {"name": "Request to Fulfil", "apqc": ["8.5"], "objects": ["Request", "Task", "Approval"], "calibrate": [],
+      "activities": [
+        ["r2f.01", "Submit catalogue request", "8.5.1", "it_service_desk", "ITSM", "capture", "catalogue item", "free-text request", []],
+        ["r2f.02", "Approve request", "8.5.1", "it_service_desk", "ITSM", "approve", "manager approval", "approver on leave", []],
+        ["r2f.03", "Provision access", "8.5.2", "it_ops", "ITSM", "execute", "least privilege", "excess entitlement", ["personal_data"]],
+        ["r2f.04", "Fulfil hardware", "8.5.2", "it_service_desk", "ITSM", "execute", "asset tagged", "untagged asset", []],
+        ["r2f.05", "Confirm and close", "8.5.3", "it_service_desk", "ITSM", "execute", "requester confirmation", "silent close", []]
+      ]},
+    "change_to_deploy": {"name": "Change to Deploy", "apqc": ["8.4"], "objects": ["Change", "Release", "Deployment", "Rollback"], "calibrate": ["public-jira"],
+      "activities": [
+        ["c2d.01", "Raise change request", "8.4.1", "change_mgmt", "ITSM", "capture", "change type classification", "emergency misuse", []],
+        ["c2d.02", "Assess risk and impact", "8.4.1", "change_mgmt", "ITSM", "decide", "risk score", "unassessed dependency", []],
+        ["c2d.03", "CAB approval", "8.4.2", "change_mgmt", "ITSM", "approve", "CAB quorum", "approval after implementation", []],
+        ["c2d.04", "Schedule in window", "8.4.2", "change_mgmt", "ITSM", "execute", "freeze calendar", "change in freeze", []],
+        ["c2d.05", "Deploy", "8.4.3", "engineering", "Wiki", "execute", "deployment checklist", "failed deploy", []],
+        ["c2d.06", "Validate", "8.4.3", "it_ops", "ITSM", "execute", "post-implementation test", "silent regression", []],
+        ["c2d.07", "Rollback", "8.4.3", "it_ops", "ITSM", "execute", "backout plan", "no backout", []],
+        ["c2d.08", "Close and review", "8.4.4", "change_mgmt", "ITSM", "report", "change success rate", "unclosed change", []]
+      ]},
+    "idea_to_market": {"name": "Idea to Market", "apqc": ["2.1", "2.2", "2.3"], "objects": ["Idea", "Epic", "Requirement", "Release", "Launch"], "calibrate": ["public-jira"],
+      "activities": [
+        ["i2m.01", "Capture idea / request", "2.1.1", "product", "Wiki", "capture", "intake form", "duplicate idea", []],
+        ["i2m.02", "Prioritise roadmap", "2.1.2", "product", "Wiki", "decide", "scoring model", "executive override", []],
+        ["i2m.03", "Write PRD", "2.2.1", "product", "DMS", "capture", "PRD template", "no success metric", []],
+        ["i2m.04", "Break into epics and stories", "2.2.2", "engineering", "ITSM", "execute", "definition of ready", "story without criteria", []],
+        ["i2m.05", "Build", "2.2.3", "engineering", "ITSM", "execute", "code review", "unreviewed merge", []],
+        ["i2m.06", "Test", "2.2.4", "quality", "ITSM", "execute", "test coverage", "untested path", []],
+        ["i2m.07", "Launch readiness", "2.3.1", "product", "Wiki", "decide", "go/no-go checklist", "launch without support readiness", []],
+        ["i2m.08", "Launch and communicate", "2.3.2", "marketing", "Email", "notify", "comms plan", "customer surprise", []]
+      ]},
+    "plan_to_produce": {"name": "Plan to Produce", "apqc": ["4.1", "4.3"], "objects": ["DemandForecast", "SupplyPlan", "ProductionOrder", "WorkOrder", "Inventory"], "calibrate": [],
+      "activities": [
+        ["p2pr.01", "Forecast demand", "4.1.1", "planning", "EPM", "execute", "forecast accuracy", "bias", []],
+        ["p2pr.02", "S&OP review", "4.1.2", "planning", "Minutes", "decide", "S&OP cadence", "unresolved constraint", []],
+        ["p2pr.03", "Create production order", "4.3.2", "production", "ERP-MM", "capture", "BOM version", "obsolete BOM", []],
+        ["p2pr.04", "Schedule and release", "4.3.2", "production", "MES", "execute", "capacity check", "overload", []],
+        ["p2pr.05", "Execute and confirm", "4.3.3", "production", "MES", "execute", "confirmation per operation", "missing confirmation", []],
+        ["p2pr.06", "Quality inspection", "4.3.4", "quality", "MES", "decide", "sampling plan", "hold lot", []],
+        ["p2pr.07", "Post goods receipt to stock", "4.3.5", "warehouse", "ERP-MM", "execute", "GR matches confirmation", "yield variance", []]
+      ]},
+    "acquire_to_retire": {"name": "Acquire to Retire", "apqc": ["10.1", "10.2", "10.3"], "objects": ["Asset", "CI", "Lease", "Disposal"], "calibrate": [],
+      "activities": [
+        ["a2r.01", "Request asset", "10.1.1", "facilities", "ITSM", "capture", "asset class", "unclassified asset", []],
+        ["a2r.02", "Approve capex", "10.1.1", "fpa", "EPM", "approve", "capex limit", "opex disguised as capex", []],
+        ["a2r.03", "Procure and receive", "10.1.2", "procurement", "ERP-MM", "execute", "asset tag on receipt", "untagged asset", []],
+        ["a2r.04", "Register in asset ledger and CMDB", "10.2.1", "controllership", "ERP-FI", "capture", "ledger equals CMDB", "CMDB drift", []],
+        ["a2r.05", "Maintain", "10.2.2", "facilities", "ITSM", "execute", "maintenance schedule", "overdue maintenance", []],
+        ["a2r.06", "Depreciate", "10.2.3", "controllership", "ERP-FI", "execute", "useful life policy", "wrong life", []],
+        ["a2r.07", "Dispose", "10.3.1", "facilities", "ERP-FI", "approve", "disposal approval and data wipe", "disposed without wipe", ["personal_data"]]
+      ]},
+    "contract_to_renewal": {"name": "Contract to Renewal", "apqc": ["12.1", "3.5.3"], "objects": ["Contract", "Obligation", "Renewal", "Amendment"], "calibrate": [],
+      "activities": [
+        ["c2r.01", "Draft contract", "12.1.1", "legal", "DMS", "capture", "template version", "off-template", ["contract"]],
+        ["c2r.02", "Negotiate", "12.1.1", "legal", "Email", "decide", "deviation log", "unlogged deviation", ["contract"]],
+        ["c2r.03", "Approve and sign", "12.1.2", "legal", "DMS", "approve", "signatory matrix", "unauthorised signatory", ["contract"]],
+        ["c2r.04", "Register obligations", "12.1.3", "legal", "Wiki", "capture", "obligation register", "unregistered SLA", ["contract"]],
+        ["c2r.05", "Monitor performance", "12.1.3", "procurement", "BI", "report", "scorecard cadence", "missed review", ["vendor"]],
+        ["c2r.06", "Renewal decision", "12.1.4", "procurement", "Minutes", "decide", "notice period tracked", "auto-renewal missed", ["contract"]],
+        ["c2r.07", "Amend or terminate", "12.1.4", "legal", "DMS", "execute", "amendment approval", "termination without notice", ["contract"]]
+      ]},
+    "issue_to_resolution": {"name": "Issue to Resolution (customer)", "apqc": ["6.1", "6.2"], "objects": ["Case", "Complaint", "Refund", "SLA"], "calibrate": [],
+      "activities": [
+        ["i2res.01", "Log case", "6.1.1", "customer_service", "CRM", "capture", "mandatory category", "miscategorised", ["personal_data"]],
+        ["i2res.02", "Triage and assign", "6.1.1", "customer_service", "CRM", "decide", "severity matrix", "wrong severity", []],
+        ["i2res.03", "Investigate", "6.1.2", "customer_service", "CRM", "execute", "case notes", "no notes", []],
+        ["i2res.04", "Escalate to engineering", "6.1.2", "customer_service", "ITSM", "escalate", "escalation criteria", "premature escalation", []],
+        ["i2res.05", "Offer remedy (refund / credit)", "6.1.3", "customer_service", "CRM", "approve", "remedy authority", "remedy above limit", ["payment"]],
+        ["i2res.06", "Resolve and confirm", "6.1.3", "customer_service", "CRM", "execute", "customer confirmation", "silent close", []],
+        ["i2res.07", "Regulatory complaint handling", "6.2.1", "compliance", "CRM", "report", "regulator timelines", "late acknowledgement", ["regulatory"]]
+      ]},
+    "risk_to_compliance": {"name": "Risk to Compliance", "apqc": ["11.1", "11.2", "11.3"], "objects": ["Risk", "Control", "Finding", "Filing", "Policy"], "calibrate": [],
+      "activities": [
+        ["r2c.01", "Identify and assess risk", "11.1.1", "risk", "Wiki", "capture", "risk taxonomy", "unrated risk", []],
+        ["r2c.02", "Design control", "11.1.2", "risk", "Wiki", "decide", "control objective", "control without owner", []],
+        ["r2c.03", "Test control", "11.1.3", "audit", "DMS", "execute", "sampling", "ineffective control", []],
+        ["r2c.04", "Log finding", "11.1.3", "audit", "ITSM", "capture", "finding severity", "overdue finding", []],
+        ["r2c.05", "Remediate", "11.1.4", "risk", "ITSM", "execute", "remediation plan", "missed date", []],
+        ["r2c.06", "Regulatory filing", "11.2.1", "compliance", "Consolidation", "report", "filing calendar", "late filing", ["regulatory", "statutory"]],
+        ["r2c.07", "Policy attestation", "11.3.1", "compliance", "HRIS", "execute", "annual attestation", "non-attester", ["personal_data"]],
+        ["r2c.08", "Incident (regulatory) notification", "11.2.2", "compliance", "Email", "notify", "notification window", "late notification", ["regulatory"]]
+      ]},
+    "data_to_insight": {"name": "Data to Insight", "apqc": ["8.2", "13.3"], "objects": ["DataRequest", "Dataset", "Report", "Dashboard"], "calibrate": [],
+      "activities": [
+        ["d2i.01", "Request report / data", "8.2.1", "data", "ITSM", "capture", "request form", "vague request", []],
+        ["d2i.02", "Approve data access", "8.2.2", "data", "ITSM", "approve", "data classification", "PII without approval", ["personal_data"]],
+        ["d2i.03", "Build dataset", "8.2.3", "data", "BI", "execute", "lineage recorded", "no lineage", []],
+        ["d2i.04", "Validate against source", "8.2.3", "data", "BI", "reconcile", "reconciliation to ERP", "number mismatch", []],
+        ["d2i.05", "Publish dashboard", "13.3.1", "data", "BI", "report", "certified dataset", "uncertified dashboard", []],
+        ["d2i.06", "Decommission", "8.2.4", "data", "BI", "execute", "usage threshold", "orphan report", []]
+      ]}
+  },
+
+  "industry_overlays": {
+    "banking": {"pcf": "APQC Banking PCF", "sector_framework": "BIAN", "core_streams": ["apply_to_disburse", "initiate_to_settle", "onboard_to_monitor", "order_to_cash", "issue_to_resolution"], "support_streams": "all_universal",
+      "specific": {
+        "apply_to_disburse": {"name": "Apply to Disburse (lending)", "objects": ["Application", "CreditDecision", "Facility", "Disbursement"], "calibrate": ["bpi-2017"],
+          "activities": [
+            ["a2d.01", "Receive application", "5.x", "sales", "CoreBanking", "capture", "completeness check", "incomplete documents", ["personal_data"]],
+            ["a2d.02", "Assess credit", "5.x", "credit", "CoreBanking", "decide", "scorecard + policy", "policy exception", []],
+            ["a2d.03", "Value collateral", "5.x", "credit", "DMS", "execute", "independent valuation", "stale valuation", []],
+            ["a2d.04", "Credit committee approval", "5.x", "credit", "Minutes", "approve", "delegated authority", "approval above authority", []],
+            ["a2d.05", "Prepare and sign documentation", "5.x", "legal", "DMS", "execute", "standard facility agreement", "missing security", ["contract"]],
+            ["a2d.06", "Disburse", "5.x", "treasury", "CoreBanking", "execute", "conditions precedent met", "disbursed before CP", ["payment"]],
+            ["a2d.07", "Post-disbursement review", "5.x", "risk", "Wiki", "report", "review cadence", "covenant breach unnoticed", []]
+          ]},
+        "initiate_to_settle": {"name": "Initiate to Settle (payments)", "objects": ["PaymentInstruction", "ScreeningHit", "ClearingMessage", "Settlement", "Repair"], "calibrate": [],
+          "activities": [
+            ["i2s.01", "Initiate payment", "5.x", "customer_service", "CoreBanking", "capture", "authentication", "mule indicators", ["payment", "personal_data"]],
+            ["i2s.02", "Sanctions screening", "11.x", "compliance", "CoreBanking", "decide", "hit review within SLA", "false positive backlog", ["regulatory"]],
+            ["i2s.03", "Funds check", "5.x", "it_ops", "CoreBanking", "execute", "available balance", "overdraft", ["payment"]],
+            ["i2s.04", "Submit to clearing", "5.x", "it_ops", "CoreBanking", "execute", "message format (ISO 20022)", "rejected message", ["payment", "rails"]],
+            ["i2s.05", "Settle", "5.x", "treasury", "Treasury", "execute", "nostro reconciliation", "unsettled", ["payment"]],
+            ["i2s.06", "Repair exception", "5.x", "customer_service", "Email", "escalate", "repair queue SLA", "aged repair", []],
+            ["i2s.07", "Reconcile and report", "9.x", "controllership", "ERP-FI", "reconcile", "daily break report", "unreconciled break", []]
+          ]},
+        "onboard_to_monitor": {"name": "Onboard to Monitor (KYC/AML)", "objects": ["Customer", "KYCReview", "Alert", "SAR"], "calibrate": [],
+          "activities": [
+            ["o2m.01", "Collect identity documents", "6.x", "customer_service", "CRM", "capture", "document checklist", "expired ID", ["personal_data"]],
+            ["o2m.02", "Screen and risk-rate", "11.x", "compliance", "CoreBanking", "decide", "risk-rating model", "PEP unflagged", ["regulatory"]],
+            ["o2m.03", "Approve or refer", "11.x", "compliance", "Wiki", "approve", "enhanced due diligence", "onboarded before EDD", []],
+            ["o2m.04", "Periodic review", "11.x", "compliance", "CRM", "execute", "review cycle by risk", "overdue review", []],
+            ["o2m.05", "Investigate alert", "11.x", "compliance", "CRM", "execute", "alert SLA", "alert backlog", []],
+            ["o2m.06", "File suspicious transaction report", "11.x", "compliance", "Email", "report", "filing window", "late STR", ["regulatory"]]
+          ]}
+      }},
+    "insurance": {"pcf": "APQC Insurance PCF", "sector_framework": "ACORD", "core_streams": ["quote_to_bind", "claim_to_settle", "reserve_to_report", "issue_to_resolution"], "support_streams": "all_universal",
+      "specific": {
+        "quote_to_bind": {"name": "Quote to Bind", "objects": ["Submission", "Quote", "Policy", "Endorsement"], "calibrate": [],
+          "activities": [
+            ["q2b.01", "Receive submission", "3.x", "sales", "PolicyAdmin", "capture", "broker of record", "duplicate submission", ["personal_data"]],
+            ["q2b.02", "Assess risk", "5.x", "credit", "PolicyAdmin", "decide", "underwriting guidelines", "outside appetite", []],
+            ["q2b.03", "Price", "5.x", "fpa", "PolicyAdmin", "execute", "rating engine version", "manual rate override", []],
+            ["q2b.04", "Refer", "5.x", "risk", "Email", "escalate", "referral triggers", "unreferred large risk", []],
+            ["q2b.05", "Quote", "3.x", "sales", "PolicyAdmin", "notify", "quote validity", "expired quote bound", []],
+            ["q2b.06", "Bind and issue", "5.x", "sales_ops", "PolicyAdmin", "execute", "premium received", "bound without premium", ["invoice"]]
+          ]},
+        "claim_to_settle": {"name": "Claim to Settle", "objects": ["Claim", "Exposure", "Reserve", "Payment", "Recovery"], "calibrate": [],
+          "activities": [
+            ["c2s.01", "First notice of loss", "6.x", "customer_service", "Claims", "capture", "policy in force", "late notification", ["personal_data"]],
+            ["c2s.02", "Verify coverage", "6.x", "customer_service", "Claims", "decide", "policy terms", "excluded peril", []],
+            ["c2s.03", "Set reserve", "9.x", "controllership", "Claims", "execute", "reserving guideline", "under-reserved", []],
+            ["c2s.04", "Investigate and assess", "6.x", "customer_service", "Claims", "execute", "assessor report", "fraud indicators", []],
+            ["c2s.05", "Approve settlement", "6.x", "customer_service", "Claims", "approve", "settlement authority", "above authority", ["payment"]],
+            ["c2s.06", "Pay", "9.x", "treasury", "ERP-FI", "execute", "payee verification", "duplicate payment", ["payment"]],
+            ["c2s.07", "Recover / subrogate", "6.x", "legal", "Claims", "execute", "recovery threshold", "missed recovery", []]
+          ]},
+        "reserve_to_report": {"name": "Reserve to Report", "objects": ["Triangle", "Estimate", "ReserveDecision"], "calibrate": [],
+          "activities": [
+            ["r2rp.01", "Develop triangles", "9.x", "fpa", "EPM", "execute", "data cut-off", "late claims data", []],
+            ["r2rp.02", "Estimate emergence", "9.x", "fpa", "EPM", "decide", "method selection", "method change unexplained", []],
+            ["r2rp.03", "Held vs central estimate", "9.x", "controllership", "Minutes", "decide", "margin policy", "release without evidence", []],
+            ["r2rp.04", "Committee sign-off", "9.x", "risk", "Minutes", "approve", "quorum", "unsigned reserve", []],
+            ["r2rp.05", "Report to regulator", "11.x", "compliance", "Consolidation", "report", "filing calendar", "late return", ["regulatory", "statutory"]]
+          ]}
+      }},
+    "retail": {"pcf": "APQC Retail PCF", "sector_framework": "GS1", "core_streams": ["forecast_to_replenish", "promo_to_evaluate", "order_to_cash", "issue_to_resolution", "procure_to_pay"], "support_streams": "all_universal",
+      "specific": {
+        "forecast_to_replenish": {"name": "Forecast to Replenish", "objects": ["Forecast", "OrderProposal", "DCOrder", "StoreReceipt", "Waste"], "calibrate": [],
+          "activities": [
+            ["f2r.01", "Forecast store demand", "4.x", "planning", "EPM", "execute", "forecast accuracy", "event unmodelled", []],
+            ["f2r.02", "Generate order proposal", "4.x", "planning", "ERP-MM", "execute", "min/max parameters", "stale parameters", []],
+            ["f2r.03", "Approve order", "4.x", "planning", "ERP-MM", "approve", "buyer approval above threshold", "over-order", []],
+            ["f2r.04", "DC pick and dispatch", "4.x", "warehouse", "WMS", "execute", "pick accuracy", "short delivery", []],
+            ["f2r.05", "Store receipt", "4.x", "fulfilment", "ERP-MM", "execute", "receipt scan", "unscanned receipt", []],
+            ["f2r.06", "Shelf fill and availability check", "4.x", "fulfilment", "BI", "report", "on-shelf availability", "gap unreported", []],
+            ["f2r.07", "Waste and markdown", "4.x", "fulfilment", "ERP-MM", "execute", "markdown policy", "unrecorded waste", []]
+          ]},
+        "promo_to_evaluate": {"name": "Promo to Evaluate", "objects": ["Promotion", "VendorFunding", "PriceFile", "Evaluation"], "calibrate": [],
+          "activities": [
+            ["p2e.01", "Agree vendor funding", "3.x", "procurement", "Email", "decide", "funding agreement signed", "verbal agreement", ["vendor", "contract"]],
+            ["p2e.02", "Plan promotion", "3.x", "marketing", "ERP-MM", "capture", "promo calendar", "clash", []],
+            ["p2e.03", "Update price file", "3.x", "sales_ops", "ERP-SD", "execute", "price effective date", "wrong shelf price", []],
+            ["p2e.04", "Print tickets", "3.x", "fulfilment", "BI", "execute", "ticket compliance", "missing ticket", []],
+            ["p2e.05", "Compliance check", "11.x", "compliance", "BI", "report", "pricing law", "misleading price", ["regulatory"]],
+            ["p2e.06", "Post-promo evaluation", "3.x", "fpa", "BI", "report", "uplift model", "cannibalisation ignored", []]
+          ]}
+      }},
+    "consumer_products": {"pcf": "APQC Consumer Products PCF", "sector_framework": "GS1", "core_streams": ["plan_to_produce", "order_to_cash", "procure_to_pay", "idea_to_market"], "support_streams": "all_universal", "specific": {}},
+    "telecom": {"pcf": "APQC Telecommunications PCF", "sector_framework": "TM Forum eTOM", "core_streams": ["order_to_activate", "alarm_to_restore", "usage_to_bill", "issue_to_resolution"], "support_streams": "all_universal",
+      "specific": {
+        "order_to_activate": {"name": "Order to Activate", "objects": ["CustomerOrder", "ServiceOrder", "Provisioning", "Port"], "calibrate": [],
+          "activities": [
+            ["o2a.01", "Capture order", "5.x", "sales", "CRM", "capture", "serviceability check", "unserviceable address", ["personal_data"]],
+            ["o2a.02", "Credit check", "9.x", "credit", "TelcoBilling", "decide", "credit scoring", "deposit required", []],
+            ["o2a.03", "Decompose to service orders", "5.x", "it_ops", "TelcoBilling", "execute", "product catalogue", "orphan service order", []],
+            ["o2a.04", "Provision network", "5.x", "it_ops", "ITSM", "execute", "provisioning success", "fallout", []],
+            ["o2a.05", "Port number", "5.x", "customer_service", "TelcoBilling", "execute", "porting SLA", "port rejection", ["regulatory"]],
+            ["o2a.06", "Activate and notify", "5.x", "customer_service", "Email", "notify", "welcome comms", "activated but unbilled", []]
+          ]},
+        "alarm_to_restore": {"name": "Alarm to Restore", "objects": ["Alarm", "NetworkIncident", "Restoration", "PIR"], "calibrate": ["uci-498"],
+          "activities": [
+            ["a2rs.01", "Correlate alarms", "8.x", "it_ops", "ITSM", "capture", "correlation rules", "alarm storm", []],
+            ["a2rs.02", "Create network incident", "8.x", "it_ops", "ITSM", "capture", "impact assessment", "customer impact unknown", []],
+            ["a2rs.03", "Engage vendor", "8.x", "it_ops", "Email", "escalate", "vendor SLA", "vendor unresponsive", ["vendor"]],
+            ["a2rs.04", "Restore", "8.x", "it_ops", "ITSM", "execute", "restoration confirmed", "partial restoration", []],
+            ["a2rs.05", "Customer communications", "6.x", "customer_service", "Email", "notify", "outage comms", "silent outage", []],
+            ["a2rs.06", "Regulatory outage report", "11.x", "compliance", "Email", "report", "reporting threshold", "late report", ["regulatory"]]
+          ]},
+        "usage_to_bill": {"name": "Usage to Bill", "objects": ["UsageRecord", "RatedEvent", "Bill", "Dispute"], "calibrate": [],
+          "activities": [
+            ["u2b.01", "Collect usage", "9.x", "it_ops", "TelcoBilling", "execute", "mediation completeness", "dropped CDRs", []],
+            ["u2b.02", "Rate", "9.x", "billing", "TelcoBilling", "execute", "rate plan version", "misrated", []],
+            ["u2b.03", "Run bill cycle", "9.x", "billing", "TelcoBilling", "execute", "bill run checks", "bill run failure", ["invoice"]],
+            ["u2b.04", "Validate bills", "9.x", "billing", "BI", "reconcile", "variance thresholds", "bill shock", []],
+            ["u2b.05", "Dispatch", "9.x", "billing", "Email", "notify", "e-bill consent", "undelivered bill", ["invoice"]],
+            ["u2b.06", "Handle bill dispute", "6.x", "customer_service", "CRM", "escalate", "dispute SLA", "credit without cause", []]
+          ]}
+      }},
+    "utilities": {"pcf": "APQC Utilities PCF", "sector_framework": "IEC CIM", "core_streams": ["fault_to_restore", "inspect_to_maintain", "usage_to_bill", "procure_to_pay"], "support_streams": "all_universal",
+      "specific": {
+        "fault_to_restore": {"name": "Fault to Restore", "objects": ["Fault", "Outage", "SwitchingPlan", "CrewDispatch", "RegulatoryReport"], "calibrate": [],
+          "activities": [
+            ["f2rs.01", "Detect fault", "5.x", "it_ops", "ADMS", "capture", "SCADA alarm", "false alarm", []],
+            ["f2rs.02", "Create outage and assess impact", "5.x", "it_ops", "ADMS", "capture", "customers affected", "impact understated", []],
+            ["f2rs.03", "Prepare switching plan", "5.x", "it_ops", "ADMS", "approve", "switching authority", "unsafe switching", []],
+            ["f2rs.04", "Dispatch crew", "5.x", "fulfilment", "ITSM", "execute", "crew availability", "crew delay", []],
+            ["f2rs.05", "Restore", "5.x", "fulfilment", "ADMS", "execute", "restoration confirmed", "partial", []],
+            ["f2rs.06", "Notify customers", "6.x", "customer_service", "Email", "notify", "notification SLA", "late notification", []],
+            ["f2rs.07", "Report to regulator", "11.x", "compliance", "Consolidation", "report", "SAIDI/SAIFI reporting", "misreported", ["regulatory"]]
+          ]},
+        "inspect_to_maintain": {"name": "Inspect to Maintain", "objects": ["Asset", "Inspection", "WorkOrder", "Defect"], "calibrate": [],
+          "activities": [
+            ["i2mt.01", "Schedule inspection", "10.x", "facilities", "ERP-MM", "capture", "inspection cycle", "overdue inspection", []],
+            ["i2mt.02", "Inspect and record condition", "10.x", "facilities", "ERP-MM", "execute", "condition score", "unscored asset", []],
+            ["i2mt.03", "Raise defect work order", "10.x", "facilities", "ERP-MM", "capture", "defect priority", "unprioritised defect", []],
+            ["i2mt.04", "Plan and approve", "10.x", "planning", "ERP-MM", "approve", "outage window", "unplanned outage", []],
+            ["i2mt.05", "Execute and close", "10.x", "facilities", "ERP-MM", "execute", "close-out evidence", "closed without evidence", []]
+          ]}
+      }},
+    "life_sciences": {"pcf": "APQC Life Sciences PCF", "sector_framework": "ICH/GxP", "core_streams": ["idea_to_market", "plan_to_produce", "procure_to_pay", "risk_to_compliance"], "support_streams": "all_universal", "specific": {}},
+    "logistics": {"pcf": "cross-industry + SCOR", "sector_framework": "SCOR / UN/CEFACT", "core_streams": ["book_to_deliver", "declare_to_clear", "order_to_cash", "procure_to_pay"], "support_streams": "all_universal",
+      "specific": {
+        "book_to_deliver": {"name": "Book to Deliver", "objects": ["Booking", "Shipment", "Consolidation", "Leg", "POD"], "calibrate": [],
+          "activities": [
+            ["b2d.01", "Book shipment", "4.x", "customer_service", "TMS", "capture", "booking completeness", "missing HS code", []],
+            ["b2d.02", "Plan route and carrier", "4.x", "planning", "TMS", "decide", "carrier allocation rules", "capacity shortfall", []],
+            ["b2d.03", "Pickup and consolidate", "4.x", "fulfilment", "WMS", "execute", "scan events", "missing scan", []],
+            ["b2d.04", "Line haul", "4.x", "fulfilment", "TMS", "execute", "milestone updates", "stale ETA", []],
+            ["b2d.05", "Deliver and capture POD", "4.x", "fulfilment", "TMS", "execute", "POD within 24h", "POD missing", []],
+            ["b2d.06", "Bill shipment", "9.x", "billing", "ERP-FI", "execute", "rate card", "accessorial dispute", ["invoice"]]
+          ]},
+        "declare_to_clear": {"name": "Declare to Clear (customs)", "objects": ["Declaration", "Classification", "Duty", "Inspection"], "calibrate": [],
+          "activities": [
+            ["d2c.01", "Classify goods", "11.x", "compliance", "TMS", "decide", "HS classification review", "misclassification", ["regulatory"]],
+            ["d2c.02", "Lodge declaration", "11.x", "compliance", "TMS", "execute", "declaration accuracy", "rejected declaration", ["regulatory"]],
+            ["d2c.03", "Calculate and pay duty", "9.x", "treasury", "ERP-FI", "execute", "duty reconciliation", "underpaid duty", ["payment", "tax"]],
+            ["d2c.04", "Handle inspection", "11.x", "compliance", "Email", "escalate", "inspection response time", "demurrage", []],
+            ["d2c.05", "Release and record", "11.x", "compliance", "TMS", "execute", "release evidence", "released without record", []]
+          ]}
+      }},
+    "healthcare": {"pcf": "cross-industry + HL7 workflows", "sector_framework": "HL7 / IHE", "core_streams": ["admit_to_discharge", "incident_to_rca", "procure_to_pay", "hire_to_retire"], "support_streams": "all_universal",
+      "specific": {
+        "admit_to_discharge": {"name": "Admit to Discharge", "objects": ["Encounter", "Order", "Result", "Discharge", "Bill"], "calibrate": [],
+          "activities": [
+            ["a2dc.01", "Triage", "5.x", "customer_service", "EMR", "decide", "triage category", "mis-triage", ["personal_data"]],
+            ["a2dc.02", "Register", "5.x", "customer_service", "EMR", "capture", "identity verified", "duplicate MRN", ["personal_data"]],
+            ["a2dc.03", "Allocate bed", "5.x", "planning", "EMR", "execute", "bed board", "boarding in ED", []],
+            ["a2dc.04", "Clinical orders and results", "5.x", "production", "EMR", "execute", "order set", "unacknowledged result", ["personal_data"]],
+            ["a2dc.05", "Discharge planning", "5.x", "customer_service", "EMR", "decide", "discharge criteria", "delayed discharge", []],
+            ["a2dc.06", "Bill and claim", "9.x", "billing", "ERP-FI", "execute", "coding accuracy", "claim denial", ["invoice", "personal_data"]]
+          ]},
+        "incident_to_rca": {"name": "Clinical Incident to RCA", "objects": ["ClinicalIncident", "Disclosure", "RCA", "Recommendation"], "calibrate": [],
+          "activities": [
+            ["ci2r.01", "Report incident", "11.x", "quality", "ITSM", "capture", "severity assessment", "unreported near-miss", ["personal_data"]],
+            ["ci2r.02", "Open disclosure", "11.x", "customer_service", "Email", "notify", "disclosure within 24h", "late disclosure", ["regulatory"]],
+            ["ci2r.03", "Root cause analysis", "11.x", "quality", "DMS", "decide", "RCA method", "blame-based RCA", []],
+            ["ci2r.04", "Recommendations and tracking", "11.x", "quality", "ITSM", "execute", "action owner", "action unowned", []],
+            ["ci2r.05", "Committee review", "11.x", "risk", "Minutes", "approve", "quorum", "unreviewed serious incident", []]
+          ]}
+      }},
+    "manufacturing": {"pcf": "cross-industry + ISA-95", "sector_framework": "ISA-95 / SCOR", "core_streams": ["plan_to_produce", "ncr_to_close", "order_to_cash", "procure_to_pay"], "support_streams": "all_universal",
+      "specific": {
+        "ncr_to_close": {"name": "Nonconformance to Close (8D)", "objects": ["NCR", "Containment", "RootCause", "CorrectiveAction"], "calibrate": [],
+          "activities": [
+            ["n2c.01", "Raise NCR", "11.x", "quality", "MES", "capture", "defect code", "uncoded NCR", []],
+            ["n2c.02", "Contain", "11.x", "production", "MES", "execute", "containment within 24h", "escaped product", []],
+            ["n2c.03", "Root cause (8D)", "11.x", "quality", "DMS", "decide", "8D template", "no verification", []],
+            ["n2c.04", "Corrective action", "11.x", "engineering", "PLM", "execute", "change notice", "action without change control", []],
+            ["n2c.05", "Verify and close", "11.x", "quality", "MES", "approve", "effectiveness check", "closed without evidence", []]
+          ]}
+      }},
+    "public_sector": {"pcf": "cross-industry + government function taxonomy", "sector_framework": "AGIFT / WOG", "core_streams": ["apply_to_grant", "tender_to_award", "draft_to_decision", "request_to_fulfil"], "support_streams": "all_universal",
+      "specific": {
+        "apply_to_grant": {"name": "Apply to Grant", "objects": ["Application", "Assessment", "Approval", "Disbursement", "Acquittal"], "calibrate": [],
+          "activities": [
+            ["a2g.01", "Receive application", "5.x", "customer_service", "CRM", "capture", "eligibility criteria", "ineligible applicant", ["personal_data"]],
+            ["a2g.02", "Assess", "5.x", "planning", "DMS", "decide", "assessment rubric", "conflict of interest", []],
+            ["a2g.03", "Panel decision", "5.x", "planning", "Minutes", "approve", "panel quorum", "decision unrecorded", []],
+            ["a2g.04", "Disburse", "9.x", "treasury", "ERP-FI", "execute", "grant agreement signed", "paid before agreement", ["payment"]],
+            ["a2g.05", "Acquit and audit", "11.x", "audit", "DMS", "report", "acquittal deadline", "unacquitted grant", []]
+          ]},
+        "tender_to_award": {"name": "Tender to Award", "objects": ["ApprovalToProcure", "Tender", "Evaluation", "Award", "Contract"], "calibrate": [],
+          "activities": [
+            ["t2a.01", "Approval to procure", "10.x", "procurement", "DMS", "approve", "delegate approval", "procure without approval", []],
+            ["t2a.02", "Publish tender", "10.x", "procurement", "portal", "notify", "publication period", "short period", ["regulatory"]],
+            ["t2a.03", "Evaluate", "10.x", "procurement", "DMS", "decide", "evaluation plan", "probity breach", []],
+            ["t2a.04", "Award", "10.x", "procurement", "Minutes", "approve", "award authority", "unsuccessful not notified", []],
+            ["t2a.05", "Contract and manage", "12.x", "legal", "DMS", "execute", "contract register", "variation unapproved", ["contract"]]
+          ]},
+        "draft_to_decision": {"name": "Draft to Decision (submissions)", "objects": ["Submission", "Consultation", "Clearance", "Decision"], "calibrate": [],
+          "activities": [
+            ["d2d.01", "Draft submission", "1.x", "planning", "DMS", "capture", "template", "missing options", []],
+            ["d2d.02", "Inter-agency consultation", "1.x", "planning", "Email", "notify", "consultation window", "agency not consulted", []],
+            ["d2d.03", "Legal clearance", "1.x", "legal", "DMS", "approve", "legal sign-off", "unsigned", []],
+            ["d2d.04", "Minister's office review", "1.x", "planning", "Email", "decide", "brief format", "returned for rework", []],
+            ["d2d.05", "Decision and implementation tracking", "1.x", "planning", "ITSM", "execute", "decision register", "untracked action", []]
+          ]}
+      }},
+    "technology_saas": {"pcf": "cross-industry", "sector_framework": "none", "core_streams": ["alert_to_postmortem", "change_to_deploy", "idea_to_market", "health_to_renewal", "issue_to_resolution"], "support_streams": "all_universal",
+      "specific": {
+        "alert_to_postmortem": {"name": "Alert to Postmortem", "objects": ["Alert", "Incident", "StatusUpdate", "Postmortem", "ActionItem"], "calibrate": ["uci-498"],
+          "activities": [
+            ["a2p.01", "Alert fires", "8.x", "it_ops", "ITSM", "capture", "alert routing", "noisy alert", []],
+            ["a2p.02", "Declare severity and IC", "8.x", "it_ops", "Chat", "decide", "severity rubric", "late declaration", []],
+            ["a2p.03", "Mitigate", "8.x", "engineering", "Chat", "execute", "runbook", "unlogged mitigation", []],
+            ["a2p.04", "Status page update", "6.x", "customer_service", "portal", "notify", "update cadence", "stale status", []],
+            ["a2p.05", "Resolve", "8.x", "it_ops", "ITSM", "execute", "resolution confirmed", "premature resolve", []],
+            ["a2p.06", "Postmortem", "8.x", "engineering", "Wiki", "decide", "blameless template", "no action items", []],
+            ["a2p.07", "Track action items", "8.x", "engineering", "ITSM", "execute", "due dates", "overdue actions", []]
+          ]},
+        "health_to_renewal": {"name": "Health to Renewal", "objects": ["HealthScore", "RenewalRisk", "Proposal", "Renewal"], "calibrate": [],
+          "activities": [
+            ["h2rn.01", "Compute health score", "3.x", "data", "BI", "execute", "score inputs", "stale usage data", []],
+            ["h2rn.02", "Flag renewal risk", "3.x", "customer_service", "CRM", "decide", "risk threshold", "unflagged churn", []],
+            ["h2rn.03", "Exec sponsor call", "3.x", "sales", "Email", "notify", "sponsor mapped", "no sponsor", []],
+            ["h2rn.04", "Proposal", "3.x", "sales_ops", "CPQ", "capture", "price book", "unapproved discount", []],
+            ["h2rn.05", "Negotiate and close", "3.x", "sales", "CRM", "decide", "terms deviation", "auto-renew missed", ["contract"]],
+            ["h2rn.06", "Hand off to onboarding", "3.x", "customer_service", "CRM", "notify", "handoff checklist", "dropped handoff", []]
+          ]}
+      }}
+  },
+
+  "industry_crosswalk": {
+    "NAICS 52": "banking", "NAICS 5241": "insurance", "NAICS 44-45": "retail", "NAICS 311-312": "consumer_products", "NAICS 517": "telecom",
+    "NAICS 22": "utilities", "NAICS 3254": "life_sciences", "NAICS 48-49": "logistics", "NAICS 62": "healthcare", "NAICS 31-33": "manufacturing",
+    "NAICS 92": "public_sector", "NAICS 5132": "technology_saas", "NAICS 5415": "technology_saas", "NAICS 23": "manufacturing", "NAICS 61": "public_sector",
+    "NAICS 71-72": "retail", "NAICS 53": "retail", "NAICS 54": "technology_saas", "NAICS 11": "consumer_products", "NAICS 21": "utilities",
+    "ANZSIC K": "banking", "ANZSIC G": "retail", "ANZSIC J": "telecom", "ANZSIC D": "utilities", "ANZSIC I": "logistics", "ANZSIC Q": "healthcare", "ANZSIC C": "manufacturing", "ANZSIC O": "public_sector",
+    "ISIC K": "banking", "ISIC G": "retail", "ISIC J": "telecom", "ISIC D": "utilities", "ISIC H": "logistics", "ISIC Q": "healthcare", "ISIC C": "manufacturing", "ISIC O": "public_sector"
+  },
+
+  "regional_variants": {
+    "SG": {"tax": "GST 9%", "e_invoicing": "InvoiceNow (PEPPOL); GST-registered phased mandate from 2025", "rails": ["PayNow", "FAST", "GIRO", "MEPS+"], "privacy": "PDPA", "fy_start": "01-01", "regulators": ["MAS", "IRAS", "PDPC", "ACRA"], "invoice_lang": "en", "currency": "SGD"},
+    "AU": {"tax": "GST 10%", "e_invoicing": "PEPPOL; Commonwealth agencies mandated, private voluntary", "rails": ["NPP/PayID", "BPAY", "Direct Entry"], "privacy": "Privacy Act 1988", "fy_start": "07-01", "regulators": ["ATO", "ASIC", "APRA", "OAIC", "ACCC"], "invoice_lang": "en", "currency": "AUD"},
+    "IN": {"tax": "GST (CGST/SGST/IGST)", "e_invoicing": "IRP e-invoice with IRN; mandatory above turnover threshold (INR 5 crore)", "rails": ["UPI", "NEFT", "RTGS", "IMPS"], "privacy": "DPDP Act 2023", "fy_start": "04-01", "regulators": ["RBI", "SEBI", "CBIC", "MCA"], "invoice_lang": "en", "currency": "INR"},
+    "JP": {"tax": "JCT 10% / 8% reduced", "e_invoicing": "Qualified Invoice System (Oct 2023); PEPPOL JP PINT", "rails": ["Zengin", "Zengin More Time", "Furikomi"], "privacy": "APPI", "fy_start": "04-01", "regulators": ["FSA", "NTA", "PPC", "METI"], "invoice_lang": "ja", "currency": "JPY"},
+    "KR": {"tax": "VAT 10%", "e_invoicing": "e-Tax invoice via NTS (mandatory for corporations)", "rails": ["KFTC", "BankNet", "Open Banking"], "privacy": "PIPA", "fy_start": "01-01", "regulators": ["FSC", "FSS", "NTS", "PIPC"], "invoice_lang": "ko", "currency": "KRW"},
+    "TH": {"tax": "VAT 7%", "e_invoicing": "e-Tax Invoice & e-Receipt (voluntary, RD)", "rails": ["PromptPay", "BAHTNET", "ORFT"], "privacy": "PDPA", "fy_start": "01-01", "regulators": ["BOT", "SEC", "Revenue Department", "PDPC"], "invoice_lang": "th", "currency": "THB"},
+    "HK": {"tax": "no VAT/GST", "e_invoicing": "voluntary", "rails": ["FPS", "CHATS", "Autopay"], "privacy": "PDPO", "fy_start": "04-01", "regulators": ["HKMA", "SFC", "IRD", "PCPD"], "invoice_lang": "en", "currency": "HKD"},
+    "ID": {"tax": "VAT 11%", "e_invoicing": "e-Faktur (mandatory for PKP)", "rails": ["BI-FAST", "SKNBI", "RTGS"], "privacy": "PDP Law 2022", "fy_start": "01-01", "regulators": ["OJK", "BI", "DJP"], "invoice_lang": "id", "currency": "IDR"},
+    "MY": {"tax": "SST", "e_invoicing": "MyInvois (LHDN), phased mandate 2024-2025", "rails": ["DuitNow", "RENTAS", "IBG"], "privacy": "PDPA 2010", "fy_start": "01-01", "regulators": ["BNM", "SC", "LHDN"], "invoice_lang": "en/ms", "currency": "MYR"},
+    "PH": {"tax": "VAT 12%", "e_invoicing": "EIS pilot (BIR)", "rails": ["InstaPay", "PESONet", "PhilPaSS"], "privacy": "Data Privacy Act 2012", "fy_start": "01-01", "regulators": ["BSP", "SEC", "BIR", "NPC"], "invoice_lang": "en", "currency": "PHP"},
+    "VN": {"tax": "VAT 10%", "e_invoicing": "mandatory e-invoice (GDT) since 2022", "rails": ["NAPAS", "IBFT"], "privacy": "Decree 13/2023", "fy_start": "01-01", "regulators": ["SBV", "GDT"], "invoice_lang": "vi", "currency": "VND"},
+    "NZ": {"tax": "GST 15%", "e_invoicing": "PEPPOL; central government agencies", "rails": ["SBI", "Direct Credit"], "privacy": "Privacy Act 2020", "fy_start": "04-01", "regulators": ["IRD", "FMA", "RBNZ"], "invoice_lang": "en", "currency": "NZD"},
+    "TW": {"tax": "VAT 5%", "e_invoicing": "e-GUI (MOF) mandatory", "rails": ["FISC", "eACH"], "privacy": "PDPA", "fy_start": "01-01", "regulators": ["FSC", "MOF"], "invoice_lang": "zh", "currency": "TWD"},
+    "CN": {"tax": "VAT 13%/9%/6%", "e_invoicing": "Fully digitalised e-fapiao (STA) rolling out", "rails": ["CNAPS", "IBPS"], "privacy": "PIPL", "fy_start": "01-01", "regulators": ["PBOC", "STA", "CAC"], "invoice_lang": "zh", "currency": "CNY"},
+    "US": {"tax": "sales tax (state)", "e_invoicing": "voluntary (DBNAlliance pilot)", "rails": ["ACH", "FedNow", "RTP", "Fedwire"], "privacy": "state laws (CCPA)", "fy_start": "01-01", "regulators": ["IRS", "SEC", "FTC"], "invoice_lang": "en", "currency": "USD"}
+  },
+
+  "variant_tags": {
+    "invoice": ["tax", "e_invoicing", "invoice_lang", "currency"], "e_invoicing": ["e_invoicing"], "payment": ["rails", "currency"], "tax": ["tax", "regulators"],
+    "personal_data": ["privacy"], "regulatory": ["regulators"], "statutory": ["fy_start", "regulators"], "contract": ["invoice_lang"], "vendor": ["e_invoicing"], "rails": ["rails"]
+  },
+
+  "eval_templates": [
+    {"id": "ownership", "text": "Who owns {activity} for {bu} in {country}, and in which system is it recorded?", "answer_from": "compiled.owner, compiled.sor", "difficulty_features": ["operating_model", "bu_count"]},
+    {"id": "queue", "text": "Which {object}s are at {stage} beyond the SLA class for {bu}?", "answer_from": "records where stage == X and age > sla", "difficulty_features": ["selectivity", "near_miss_density"]},
+    {"id": "reconciliation", "text": "List {object_a} without a matching {object_b} for {bu} this period.", "answer_from": "anti-join over linked objects", "difficulty_features": ["cross_system", "temporal_window"]},
+    {"id": "evidence_chase", "text": "Find the approval for the {exception} on {object} and say who approved it and where.", "answer_from": "channel projections of the approve event", "difficulty_features": ["channel_count", "distractors"]},
+    {"id": "belief", "text": "What did {function} believe about {object} on {date}, and what does {system} show now?", "answer_from": "view(observer, valid_at, tx_at) vs view(*, now, now)", "difficulty_features": ["temporal_distance", "observer_mismatch"]},
+    {"id": "action", "text": "Advance {object} past {stage} if {control} is satisfied; otherwise stop and state why.", "answer_from": "control evaluation + write node", "difficulty_features": ["write_complexity", "control_evaluable"]},
+    {"id": "policy", "text": "What is the {threshold} that applies to {activity} in {bu}?", "answer_from": "policy facts (delegation of authority)", "difficulty_features": ["policy_depth"]},
+    {"id": "handoff", "text": "Who receives {object} after {activity} in {bu}, and through which channel?", "answer_from": "compiled.next_owner, channel prior", "difficulty_features": ["operating_model"]}
+  ]
+}

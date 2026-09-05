@@ -1,13 +1,14 @@
 # Worldloom documentation
 
 Worldloom is a deterministic, library-first compiler for synthetic enterprise
-corpora. The documentation is organized by the job being done, not by the source
-tree.
+corpora and the evaluations those corpora are built to support. The documentation
+is organized by the job being done, not by the source tree.
 
 ## Choose a path
 
 | Goal | Start here | Then read |
 | --- | --- | --- |
+| Design an eval, then generate candidate corpora for it | [Eval-first generation](eval-first.md) | [Eval-first world compilation](eval-first-world-compilation.md) and [Python SDK](sdk.md) |
 | Build one corpus | [README quickstart](../README.md#quickstart-one-coherent-enterprise) | [Architecture and invariants](architecture.md) |
 | Generate operational records and counterfactuals | [Operational synthesis](operational-synthesis.md) | [Agent skills](skills.md) |
 | Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
@@ -21,6 +22,22 @@ tree.
 ## System map
 
 ```text
+                         EVALUATION DESIGN
+        +------------------------------------------------+
+        | task DAG | capability | world predicates       |
+        +------------------------+-----------------------+
+                                 |
+                         demand compiler
+                                 |
+                                 v
+                         WORLD OBLIGATIONS
+        +------------------------------------------------+
+        | evidence | search | artifact | ACL | time      |
+        +------------------------+-----------------------+
+                                 |
+                    tactics + candidate plans
+                                 |
+                                 v
                          AUTHORING TIME
         +------------------------------------------------+
         | company spec | pack | facets | lore | process |
@@ -32,10 +49,23 @@ tree.
         | world | graph | events | facts | access | evals|
         +------------------------+-----------------------+
                                  |
-                       intents + bounded requests
+                    independent requirement checks
                                  |
-                                 v
-                         AGENT HANDSHAKES
+                       +---------+---------+
+                       | reject / search  | accept
+                       +---------+---------+
+                                 |             |
+                                 |             v
+                                 |       bound eval oracle
+                                 |             |
+                                 |       reference execution
+                                 |             |
+                                 +-------------+
+                                               |
+                                     intents + bounded requests
+                                               |
+                                               v
+                                      AGENT HANDSHAKES
         +------------------------------------------------+
         | plan | act | narrate | compose | probe         |
         +------------------------+-----------------------+
@@ -55,12 +85,29 @@ tree.
         +---------+---------+---------+---------+--------+
 ```
 
-The deterministic core owns correctness. Agent handshakes own judgement under a
-bounded contract. Renderers own presentation. No layer is allowed to re-decide a
-fact owned by an earlier layer.
+For benchmark construction, evaluation design owns the problem before a corpus
+exists. The demand compiler turns that problem into constructive world
+obligations. Candidate generators own attempts. Independent validators decide
+whether an attempt really makes the eval statically valid; reference execution
+then proves the task is executable against an isolated fork. The accepted world
+owns the oracle.
+
+Agent handshakes may improve generation recipes, judgement, or wording under
+bounded contracts, but no model gets to rewrite facts, hard predicates, oracle
+rules, or acceptance gates.
+
+World-first evaluation generation remains useful when inspecting an existing
+corpus for what it happens to test. Eval-first generation is the preferred path
+when the goal is to construct the benchmark deliberately.
 
 ## Operator guides
 
+- [Eval-first generation](eval-first.md) explains `EvalSpec`, deterministic
+  candidate plans, accepted/rejected campaign runs, oracle binding, paired
+  eval+corpus export, and validity-first outcome diversity.
+- [Eval-first world compilation](eval-first-world-compilation.md) explains the
+  demand compiler, constructive witnesses and near-misses, constraint cover,
+  frozen time, forked execution, proof gates, and unsat handling.
 - [Architecture and invariants](architecture.md) explains the thin waist, fact
   ownership, artifact cohesion, temporal semantics, replay, and independent
   validation.
@@ -79,6 +126,10 @@ These documents preserve design rationale and extension contracts:
 
 | Document | Answers |
 | --- | --- |
+| [eval-first.md](eval-first.md) | How an eval defines the world conditions its candidate corpora must satisfy |
+| [eval-first-world-compilation.md](eval-first-world-compilation.md) | How eval requirements become constructive world obligations and executable proofs |
+| [design/eval-demand-compiler.md](design/eval-demand-compiler.md) | The thin-waist contract for demand normalization, tactics, and constraint cover |
+| [design/reference-execution.md](design/reference-execution.md) | How isolated world forks prove generated evals are executable |
 | [generation-model.md](generation-model.md) | Which engine owns each decision, and why |
 | [lore.md](lore.md) | How historical priors constrain generated state |
 | [artifact-compiler.md](artifact-compiler.md) | How one resolved IR becomes diverse native artifacts without semantic drift |
@@ -103,3 +154,12 @@ pytest -q tests/test_harness_docs.py
 When prose and implementation disagree, implementation is not silently treated
 as truth. Either the documentation is stale or the public surface regressed; the
 failing check forces that decision into the change that caused it.
+
+## Authored industry process planning
+
+[Compile company process plans](process-catalogue.md) from the supplied 12-industry factors. Bind activities to owners, countries, systems and seeded channels; inspect coverage and evidence boundaries; replay pinned exports; feed the existing process authoring cascade. The source-reference catalogue API remains unchanged.
+
+
+## Audited process bindings
+
+[Inspect activity bindings and evidence](process-bindings.md): shared-predicate search, structural ownership proofs, explicit coverage gaps and full export replay. The source-reference and operational planning APIs remain available.

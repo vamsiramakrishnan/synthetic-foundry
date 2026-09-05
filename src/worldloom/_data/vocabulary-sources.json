@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "raw_bulk_data": "external",
+    "derived_outputs": "versioned when compact and redistributable",
+    "license_ledger_required": true
+  },
+  "sources": [
+    {
+      "id": "apqc-cross-industry",
+      "kind": "taxonomy",
+      "url": "https://www.apqc.org/resource-library/resource-listing/apqc-process-classification-framework-pcf-cross-industry-excel-7",
+      "format": "xlsx",
+      "access": "manual-license",
+      "license": "APQC PCF terms; attribution required; verify terms included with download",
+      "take": [
+        "process",
+        "activity",
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "apqc-banking",
+      "kind": "taxonomy",
+      "url": "https://www.apqc.org/resource-library/resource-listing/apqc-process-classification-framework-pcf-banking-pcf-excel-2",
+      "format": "xlsx",
+      "access": "manual-license",
+      "license": "APQC/IBM PCF terms included with download",
+      "take": [
+        "process",
+        "activity",
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "apqc-industry-pcfs",
+      "kind": "taxonomy",
+      "url": "https://www.apqc.org/process-frameworks/industry-specific-process-frameworks",
+      "format": "xlsx",
+      "access": "manual-license",
+      "license": "Framework-specific APQC or APQC/partner terms included with each download",
+      "variants": [
+        "insurance",
+        "retail",
+        "telecommunication",
+        "energy-utility",
+        "life-sciences"
+      ],
+      "take": [
+        "process",
+        "activity",
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "esco-1.2.1",
+      "kind": "taxonomy",
+      "url": "https://esco.ec.europa.eu/en/use-esco/download",
+      "direct_rdf_1_2_0": "https://ec.europa.eu/esco/download/ESCO%20dataset%20-%20v1.2.0%20-%20classification%20-%20%20-%20rdf.zip",
+      "format": "csv-or-rdf",
+      "access": "email-gated-csv-or-direct-rdf",
+      "license": "European Commission ESCO reuse terms; dataset downloadable free of charge",
+      "take": [
+        "occupation",
+        "skill",
+        "isco-crosswalk",
+        "multilingual-label"
+      ]
+    },
+    {
+      "id": "public-jira-anonymised-2025-06-23",
+      "kind": "distribution",
+      "url": "https://zenodo.org/records/15719919",
+      "format": "mongodb-dump-zip",
+      "access": "public-bulk",
+      "size_bytes": 5800000000,
+      "license": "See Zenodo record and dataset terms",
+      "take": [
+        "custom-field-name",
+        "fill-rate",
+        "issue-type-mix",
+        "link-type-frequency",
+        "comment-length"
+      ]
+    },
+    {
+      "id": "bpi-2020-travel-permit",
+      "kind": "distribution",
+      "url": "https://data.4tu.nl/articles/dataset/BPI_Challenge_2020_Travel_Permit_Data/12718178/1",
+      "doi": "10.4121/uuid:ea03d361-a7cd-4f5e-83d8-5fbdf0362550",
+      "format": "xes.gz",
+      "access": "public",
+      "license": "CC BY-NC 4.0",
+      "take": [
+        "activity-frequency",
+        "transition-frequency",
+        "inter-activity-duration",
+        "rework"
+      ]
+    },
+    {
+      "id": "bpi-event-log-collection",
+      "kind": "distribution",
+      "url": "https://data.4tu.nl/collections/IEEE_Task_Force_on_Process_Mining_-_Event_Logs/5065541",
+      "format": "xes",
+      "access": "public",
+      "variants": [
+        "2012-loan",
+        "2013-it-incidents",
+        "2014-itil",
+        "2017-loan",
+        "2019-purchase-to-pay",
+        "2020-travel-expense"
+      ],
+      "license": "Per-log license and DOI; preserve each source's terms",
+      "take": [
+        "activity-frequency",
+        "transition-frequency",
+        "inter-activity-duration",
+        "rework",
+        "resource-handover"
+      ]
+    },
+    {
+      "id": "sec-edgar",
+      "kind": "surface-corpus",
+      "url": "https://www.sec.gov/search-filings/edgar-application-programming-interfaces",
+      "api": "https://data.sec.gov/",
+      "format": "json-html",
+      "access": "public-api-no-key",
+      "license": "US Government public data; comply with SEC fair-access policy",
+      "take": [
+        "segment-name",
+        "subsidiary-name",
+        "business-unit-naming-pattern"
+      ]
+    },
+    {
+      "id": "user-process-catalogue-0.1",
+      "kind": "authored-pack",
+      "access": "user-supplied",
+      "format": "json-csv-jsonl",
+      "path": "_data/process-catalogue/catalogue.json",
+      "provenance": "_data/process-catalogue/provenance.json",
+      "evidence": "authored_prior",
+      "license": "NOASSERTION",
+      "take": [
+        "activity-structure",
+        "ownership-rules",
+        "system-landscape",
+        "regional-variants",
+        "channel-priors",
+        "eval-demand-templates"
+      ],
+      "note": "User-supplied, not a harvested APQC PCF. APQC hints and source calibration targets are unverified. Original uploaded coverage and compiled baselines are retained in provenance."
+    }
+  ]
+}

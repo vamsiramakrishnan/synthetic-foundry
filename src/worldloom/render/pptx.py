@@ -40,7 +40,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..compiler.compose import compose, plan_from_ir
 from ..compiler.style import StyleGenome, genome
 from ..locales import DEFAULT as DEFAULT_LOCALE
 from ..locales import Locale
@@ -50,6 +49,7 @@ from ..presentation import DEFAULT as DEFAULT_PRESENTATION
 from ..presentation import Presentation as PresentationProfile
 from ..presentation import of as presentation_of
 from ..rng import Rng
+from ..storyboard import build as build_storyboard
 from . import Rendered, RenderError, fonts, ooxml, slug_for
 from .values import corpus_locale, format_value
 
@@ -249,6 +249,20 @@ _SIZE_CLASS = "small"
 _DENSITY_PROFILE = "balanced"
 
 
+def _density_profile(ir: ArtifactIR) -> str:
+    """Translate ecology's visual density into the semantic compiler axis.
+
+    Legacy IR has no ecology metadata and remains balanced byte-for-byte. The
+    mapping changes component selection, not facts: compact decks can reach
+    metric/table components whose density bands correctly exclude sparse prose.
+    """
+    return {
+        "airy": "sparse",
+        "balanced": "balanced",
+        "compact": "dense",
+    }.get(ir.metadata.get("artifact_density", ""), _DENSITY_PROFILE)
+
+
 def _plan(ir: ArtifactIR,
           profile: PresentationProfile = DEFAULT_PRESENTATION) -> PresentationPlan:
     """``ArtifactIR`` -> ``PresentationPlan``, by way of the compiler.
@@ -260,29 +274,24 @@ def _plan(ir: ArtifactIR,
     cover, appendix divider, closing — that the compiler has no opinion about
     because they carry no beat of the argument.
     """
-    plan = plan_from_ir(
+    board = build_storyboard(
         ir,
         artifact_type="executive_summary",
+        fmt="pptx",
         size_class=_SIZE_CLASS,
-        density_profile=_DENSITY_PROFILE,
+        density_profile=_density_profile(ir),
     )
-    composition = compose(plan, fmt="pptx")
-    if not composition.ok:
+    if not board.ok:
         raise RenderError(
             f"{ir.id}: component sequence is not a grammatical executive_summary: "
-            + "; ".join(str(v) for v in composition.violations)
+            + "; ".join(str(v) for v in board.composition.violations)
         )
-
-    # `plan.beats` and `ir.sections` are built 1:1, in order, by `plan_from_ir`
-    # — one beat per section, nothing filtered before `compose` runs — so
-    # zipping them is the correct way back to the section a beat came from,
-    # without re-deriving the beat-key slug `compose` computes internally.
-    section_by_beat = {beat.key: section for beat, section in zip(plan.beats, ir.sections)}
 
     slides: list[SlidePlan] = [SlidePlan(kind="cover", component_id="cover", heading=ir.title)]
     appendix_opened = False
-    for component_id, beat_key in zip(composition.components, composition.beats):
-        section = section_by_beat[beat_key]
+    for beat in board.beats:
+        section = ir.sections[beat.section_index]
+        component_id = beat.component_id
         if section.hidden and profile.appendix != "append":
             # Dropped before the divider is considered, so a deck whose only
             # hidden sections are omitted does not open an appendix and then
@@ -301,7 +310,7 @@ def _plan(ir: ArtifactIR,
             SlidePlan(
                 kind="content",
                 component_id=component_id,
-                heading=section.heading,
+                heading=beat.heading,
                 body=section.body,
                 table=section.table,
                 hidden=section.hidden,
@@ -402,7 +411,7 @@ def _genome_for(ir: ArtifactIR) -> StyleGenome:
         from ..rng import Rng
         g = genome(Rng(world.seed).derive("style"))
     """
-    raw = ir.metadata.get("worldloom_seed")
+    raw = ir.metadata.get("style_seed") or ir.metadata.get("worldloom_seed")
     seed = int(raw) if raw and raw != "None" else 0
     return genome(Rng(seed).derive("style"))
 

@@ -104,6 +104,7 @@ STEPS: dict[str, tuple[str, ...]] = {
     # "how it was made" document it is meant to be rather than growing a copy
     # of the answer.
     "Compose": ("ledger_key",),
+    "AddIrrelevantFacts": ("seed", "count"),
 }
 
 #: Single-episode verticals' own scenario, by name — banking's
@@ -957,6 +958,12 @@ def rebuild(
             world = compose_module.replay(
                 world, ledger_key=step["ledger_key"], ledger=ledger,
             )
+        elif name == "AddIrrelevantFacts":
+            from .world_transforms import AddIrrelevantFacts
+
+            world = AddIrrelevantFacts(count=step["count"]).apply(
+                world, seed=step["seed"]
+            ).world
         elif name in _STEP_REGISTRY:
             _, build = _STEP_REGISTRY[name]
             kwargs = {key: value for key, value in step.items() if key != "scenario"}

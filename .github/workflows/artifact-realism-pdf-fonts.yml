@@ -1,0 +1,40 @@
+name: wire valid pdf base14 faces
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths: [.github/workflows/artifact-realism-pdf-fonts.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Use the base-14 italic resolver
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/worldloom/render/pdf.py')
+          text = path.read_text()
+          needle = 'f"{body}-Oblique"'
+          if needle not in text:
+              raise SystemExit('PDF italic face seam changed')
+          path.write_text(text.replace(needle, 'fonts.pdf_italic(body)'))
+          PY
+      - run: |
+          python -m pip install -e '.[dev]' ruff==0.15.8
+          ruff check src/worldloom/render/fonts.py src/worldloom/render/pdf.py tests/test_pdf_font_faces.py tests/test_pdf_ecology.py
+          pytest -q tests/test_pdf_font_faces.py tests/test_pdf_ecology.py tests/test_render.py
+      - name: Commit only PDF face integration
+        run: |
+          git config user.name 'worldloom-artifact-realism'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/render/pdf.py
+          git commit -m 'Use valid base-14 italic faces in PDFs'
+          git push origin HEAD:codex/worldloom-artifact-realism

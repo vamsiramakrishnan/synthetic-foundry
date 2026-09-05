@@ -686,4 +686,8 @@ def generate_connector_data(
         for capability in CAPABILITIES
         if capability.connector in connectors
     ]
+    if world.recipe.get("artifact_realism") == "ecology/v1":
+        from .artifact_ecology import enrich_connector_records
+
+        records = enrich_connector_records(world, records)
     return ConnectorDataset(capabilities=capabilities, records=records)

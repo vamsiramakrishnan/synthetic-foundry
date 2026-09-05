@@ -1,0 +1,70 @@
+name: harvest esco taxonomy
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths:
+      - .github/workflows/harvest-esco.yml
+      - tools/harvest_esco_rdf.py
+permissions:
+  contents: write
+jobs:
+  esco-1-2-0:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Download official ESCO all-language RDF
+        run: |
+          mkdir -p /tmp/esco
+          curl --fail --location --retry 3 \
+            --output /tmp/esco/esco-rdf.zip \
+            'https://ec.europa.eu/esco/download/ESCO%20dataset%20-%20v1.2.0%20-%20classification%20-%20%20-%20rdf.zip'
+          unzip -q /tmp/esco/esco-rdf.zip -d /tmp/esco/unpacked
+          find /tmp/esco/unpacked -type f -maxdepth 3 -print
+      - name: Derive compact multilingual concepts
+        run: |
+          python -m pip install 'rdflib>=7,<8'
+          RDF_FILE="$(find /tmp/esco/unpacked -type f \( -name '*.rdf' -o -name '*.xml' \) | head -n 1)"
+          test -n "$RDF_FILE"
+          mkdir -p src/worldloom/_data/lexicon
+          python tools/harvest_esco_rdf.py "$RDF_FILE" \
+            --out src/worldloom/_data/lexicon/esco-1.2.0.jsonl.gz
+          sha256sum /tmp/esco/esco-rdf.zip > /tmp/esco-sha.txt
+      - name: Validate derived concepts
+        run: |
+          python - <<'PY'
+          import gzip, json
+          from collections import Counter
+          path = 'src/worldloom/_data/lexicon/esco-1.2.0.jsonl.gz'
+          rows = []
+          with gzip.open(path, 'rt', encoding='utf-8') as fh:
+              for line in fh:
+                  rows.append(json.loads(line))
+          kinds = Counter(row['type'] for row in rows)
+          multilingual = sum(bool(row['alt_labels']) for row in rows)
+          assert len(rows) > 10_000, len(rows)
+          assert kinds['title'] > 1_000, kinds
+          assert kinds['activity'] > 5_000, kinds
+          assert multilingual > 1_000, multilingual
+          print({'rows': len(rows), 'kinds': kinds, 'multilingual': multilingual})
+          PY
+      - name: Write provenance and commit
+        run: |
+          SHA="$(cut -d' ' -f1 /tmp/esco-sha.txt)"
+          printf '%s\n' "{\"source\":\"esco-1.2.0\",\"input\":\"official-all-language-rdf\",\"sha256\":\"$SHA\",\"license\":\"European Commission ESCO reuse terms\"}" \
+            > src/worldloom/_data/esco-license.jsonl
+          if [ -z "$(git status --porcelain -- src/worldloom/_data)" ]; then
+            echo 'ESCO evidence unchanged.'
+            exit 0
+          fi
+          git config user.name 'worldloom-source-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/_data
+          git commit -m 'Harvest ESCO 1.2.0 multilingual taxonomy'
+          git push origin HEAD:codex/worldloom-artifact-realism

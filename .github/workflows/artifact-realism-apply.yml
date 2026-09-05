@@ -1,0 +1,55 @@
+name: apply artifact realism implementation
+on:
+  push:
+    branches: [codex/worldloom-artifact-realism]
+    paths:
+      - .github/workflows/artifact-realism-apply.yml
+      - .github/artifact-realism-transfer/**
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.repository == 'vamsiramakrishnan/synthetic-foundry'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/worldloom-artifact-realism
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply hash-contained implementation
+        run: |
+          set -euo pipefail
+          cat .github/artifact-realism-transfer/part* | base64 -d > /tmp/artifact-realism-transfer.tgz
+          rm -rf /tmp/artifact-realism-transfer
+          mkdir -p /tmp/artifact-realism-transfer
+          tar -xzf /tmp/artifact-realism-transfer.tgz -C /tmp/artifact-realism-transfer
+          cp -a /tmp/artifact-realism-transfer/new/. ./
+          sed -e 's#--- /tmp/worig/#--- a/#' -e 's#+++ /tmp/wsrc/#+++ b/#' /tmp/artifact-realism-transfer/existing.patch > /tmp/existing.patch
+          git apply --check /tmp/existing.patch
+          git apply /tmp/existing.patch
+          rm -rf .github/artifact-realism-transfer
+          rm -f .github/workflows/artifact-realism-apply.yml .github/workflows/artifact-realism-build.yml
+      - name: Install gates
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e '.[dev,polars,xlsx,docx,pdf,pptx]'
+          python -m pip install ruff==0.15.8 mypy==2.3.1
+      - name: Verify
+        run: |
+          set -euo pipefail
+          ruff check src/worldloom/artifact_ecology.py src/worldloom/realism.py tests/test_artifact_ecology.py
+          mypy src/worldloom/artifact_ecology.py src/worldloom/realism.py
+          pytest -q tests/test_artifact_ecology.py tests/test_docx.py tests/test_pptx.py tests/test_render.py
+      - name: Commit implementation
+        run: |
+          set -euo pipefail
+          git config user.name 'worldloom-artifact-realism-bot'
+          git config user.email 'worldloom-artifact-realism-bot@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Add lifecycle-aware artifact ecology and realism gates'
+          git push origin HEAD:codex/worldloom-artifact-realism

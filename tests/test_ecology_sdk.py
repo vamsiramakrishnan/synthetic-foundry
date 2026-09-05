@@ -1,0 +1,71 @@
+import pytest
+
+from worldloom import MonthEndClose, RetailWorld
+from worldloom.ecology import connectors, prepare
+
+
+@pytest.fixture(scope="module")
+def world():  # type: ignore[no-untyped-def]
+    return RetailWorld(seed=8128).build().run(
+        MonthEndClose(period="2026-03", include_operational_incident=True)
+    )
+
+
+def test_prepare_marks_recipe_and_builds_realism_profile(world) -> None:  # type: ignore[no-untyped-def]
+    result = prepare(world)
+    assert result.world.recipe["artifact_realism"] == "ecology/v1"
+    assert result.profile.organisation.key
+    assert result.profile.plans
+    assert 0.0 <= result.realism.score <= 1.0
+    assert all(
+        ir.metadata.get("realism_profile") == "ecology/v1"
+        for ir in result.world.artifact_irs
+    )
+
+
+def test_prepare_exposes_only_renderer_facing_ecology_policy(world) -> None:  # type: ignore[no-untyped-def]
+    result = prepare(world)
+    for ir in result.world.artifact_irs:
+        metadata = ir.metadata
+        assert metadata["artifact_type"]
+        assert metadata["artifact_surface"] in {
+            "pptx", "docx", "xlsx", "servicenow", "jira", "confluence", "email"
+        }
+        assert metadata["artifact_genre"]
+        assert metadata["title_register"] in {"sentence", "label", "assertion"}
+        assert metadata["chart_preference"] in {"bar", "column", "line_first", "table_first"}
+
+
+def test_realistic_connector_projection_enriches_servicenow(world) -> None:  # type: ignore[no-untyped-def]
+    dataset = connectors(world, ("servicenow",))
+    incidents = [record for record in dataset.records if record.entity == "incident"]
+    assert incidents
+    fields = incidents[0].fields
+    assert "state_history" in fields
+    assert "work_notes" in fields
+    assert "sla" in fields
+    assert "related_records" in fields
+
+
+def test_realistic_connector_projection_preserves_base_identity(world) -> None:  # type: ignore[no-untyped-def]
+    dataset = connectors(world, ("email",))
+    messages = [record for record in dataset.records if record.entity == "message"]
+    assert messages
+    for message in messages:
+        assert message.id.startswith("CONN-EMAIL-")
+        assert message.fields["message_id"] == message.external_id
+        assert "conversation_index" in message.fields
+        assert "signature_style" in message.fields
+
+
+def test_lifecycle_resolves_manifest_and_refuses_uncompiled_intent(world) -> None:  # type: ignore[no-untyped-def]
+    from worldloom.artifact_ecology import lifecycle_for
+    compiled = world.compile()
+    intent = compiled.artifact_intents[0]
+    manifest = compiled.artifacts.by_id(intent.id)
+    assert lifecycle_for(compiled, intent) == lifecycle_for(compiled, intent, manifest)
+    uncompiled = intent.model_copy(update={"id": "ART-UNCOMPILED"})
+    with pytest.raises(ValueError, match="requires a compiled artifact manifest"):
+        lifecycle_for(compiled, uncompiled)
+    with pytest.raises(ValueError, match="belongs to another artifact"):
+        lifecycle_for(compiled, uncompiled, manifest)
