@@ -26,6 +26,8 @@ REFERENCE_CONNECTORS = (
     "drive",
 )
 
+ConnectorMaturity = Literal["ga", "beta", "eap", "product_surface"]
+
 
 class ConnectorIdDefinition(Model):
     field: str
@@ -126,6 +128,8 @@ class ConnectorDefinition(Model):
     connector: str
     version: str
     vendor_product: str
+    maturity: ConnectorMaturity = "ga"
+    capability_notes: tuple[str, ...] = ()
     clock: str
     id: ConnectorIdDefinition
     payload_shape: str
@@ -228,6 +232,7 @@ __all__ = [
     "ConnectorEntityDefinition",
     "ConnectorIdDefinition",
     "ConnectorIdempotency",
+    "ConnectorMaturity",
     "ConnectorToolDefinition",
     "ConnectorValidationRule",
     "ConnectorWorkflow",
