@@ -13,7 +13,8 @@ jobs:
         with:
           python-version: '3.13'
       - name: Download the repository's pinned gates for offline review
-        run: python -m pip download --only-binary=:all: --dest wheels ruff==0.15.8 mypy==2.3.1 hypothesis
+        run: |
+          python -m pip download --only-binary=:all: --dest wheels ruff==0.15.8 mypy==2.3.1 hypothesis
       - uses: actions/upload-artifact@v7
         with:
           name: worldloom-review-tools
