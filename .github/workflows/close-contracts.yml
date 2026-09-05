@@ -1,0 +1,54 @@
+name: close unfinished contracts
+on:
+  push:
+    branches: [codex/worldloom-close-open-contracts]
+    paths: [.github/workflows/close-contracts.yml]
+permissions:
+  contents: write
+concurrency:
+  group: close-unfinished-contracts
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Apply narrow source changes
+        run: python .github/close-contracts/apply.py
+      - name: Install checks
+        run: |
+          python -m pip install uv
+          uv pip install --system -e '.[dev,polars,xlsx,docx,pdf,pptx]' ruff==0.15.8 mypy==2.3.1
+      - name: Static gates
+        run: |
+          ruff check --fix src/worldloom/models.py src/worldloom/collections.py src/worldloom/epistemics.py src/worldloom/predicates.py src/worldloom/narrative/claims.py src/worldloom/narrative/compiler.py tests/test_temporal_contract.py .github/close-contracts/apply.py
+          ruff check
+          mypy
+      - name: Focused and legacy regressions
+        run: pytest -q tests/test_temporal_contract.py tests/test_epistemics.py tests/test_predicates.py tests/test_narrative.py tests/test_narration_reference.py tests/test_determinism_hygiene.py
+      - name: Full unit suite and unchanged golden corpus
+        run: |
+          pytest -q
+          worldloom docs --check
+          worldloom validate retail-close
+      - name: Commit verified source and remove scaffolding
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+        run: |
+          actual=$(git ls-remote origin refs/heads/codex/worldloom-close-open-contracts | cut -f1)
+          test "$actual" = "$EXPECTED_HEAD"
+          git config user.name worldloom-contracts-bot
+          git config user.email actions@users.noreply.github.com
+          git add src/worldloom/models.py src/worldloom/collections.py src/worldloom/narrative/claims.py src/worldloom/narrative/compiler.py src/worldloom/epistemics.py src/worldloom/predicates.py tests/test_temporal_contract.py CHANGELOG.md
+          git diff --cached --check
+          git commit -m 'Connect canonical fact views and narration transaction cutoffs'
+          git rm -r .github/close-contracts .github/workflows/close-contracts.yml
+          git commit -m 'Remove completed temporal integration scaffolding'
+          git push origin HEAD:codex/worldloom-close-open-contracts
