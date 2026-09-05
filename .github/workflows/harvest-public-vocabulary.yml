@@ -46,7 +46,7 @@ jobs:
           PY
       - name: Commit compact evidence
         run: |
-          if git diff --quiet -- src/worldloom/_data; then
+          if [ -z "$(git status --porcelain -- src/worldloom/_data)" ]; then
             echo 'Derived evidence unchanged.'
             exit 0
           fi
