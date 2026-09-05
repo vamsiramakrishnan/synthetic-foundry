@@ -23,6 +23,19 @@ def test_prepare_marks_recipe_and_builds_realism_profile(world) -> None:  # type
     )
 
 
+def test_prepare_exposes_only_renderer_facing_ecology_policy(world) -> None:  # type: ignore[no-untyped-def]
+    result = prepare(world)
+    for ir in result.world.artifact_irs:
+        metadata = ir.metadata
+        assert metadata["artifact_type"]
+        assert metadata["artifact_surface"] in {
+            "pptx", "docx", "xlsx", "servicenow", "jira", "confluence", "email"
+        }
+        assert metadata["artifact_genre"]
+        assert metadata["title_register"] in {"sentence", "label", "assertion"}
+        assert metadata["chart_preference"] in {"bar", "column", "line_first", "table_first"}
+
+
 def test_realistic_connector_projection_enriches_servicenow(world) -> None:  # type: ignore[no-untyped-def]
     dataset = connectors(world, ("servicenow",))
     incidents = [record for record in dataset.records if record.entity == "incident"]
