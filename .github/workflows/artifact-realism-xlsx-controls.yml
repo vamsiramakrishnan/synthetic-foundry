@@ -29,8 +29,14 @@ jobs:
               raise SystemExit('xlsx control-sheet seam changed')
           text = text.replace(old, new, 1)
 
+          old = '''        sheet.freeze_panes = sheet.cell(row=rows_of[table.key], column=2)\n\n    for table in detail:\n'''
+          new = '''        sheet.freeze_panes = sheet.cell(row=rows_of[table.key], column=2)\n        if ir.metadata.get("realism_profile") == "ecology/v1" and table.rows:\n            last_column = _column_letter(len(table.columns) + 1)\n            last_row = rows_of[table.key] + len(table.rows) - 1\n            sheet.auto_filter.ref = f"A{_HEADER_ROW}:{last_column}{last_row}"\n\n    for table in detail:\n'''
+          if old not in text:
+              raise SystemExit('xlsx fact-table filter seam changed')
+          text = text.replace(old, new, 1)
+
           old = '''    sheet.freeze_panes = sheet.cell(row=first, column=1)\n\n\ndef render_all(world: World) -> list[Rendered]:\n'''
-          new = '''    sheet.freeze_panes = sheet.cell(row=first, column=1)\n    if table.rows and table.columns:\n        sheet.auto_filter.ref = (\n            f"A{_HEADER_ROW}:{_column_letter(len(table.columns))}{total_row - 1}"\n        )\n\n\ndef render_all(world: World) -> list[Rendered]:\n'''
+          new = '''    sheet.freeze_panes = sheet.cell(row=first, column=1)\n    if ir.metadata.get("realism_profile") == "ecology/v1" and table.rows and table.columns:\n        sheet.auto_filter.ref = (\n            f"A{_HEADER_ROW}:{_column_letter(len(table.columns))}{total_row - 1}"\n        )\n\n\ndef render_all(world: World) -> list[Rendered]:\n'''
           if old not in text:
               raise SystemExit('xlsx detail-filter seam changed')
           path.write_text(text.replace(old, new, 1))
