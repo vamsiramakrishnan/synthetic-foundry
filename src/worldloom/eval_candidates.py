@@ -145,8 +145,11 @@ def _check_revision_chain(
         chain: list[str] = [artifact_id]
         seen = {artifact_id}
         cursor = artifact_id
-        while predecessors.get(cursor) and predecessors[cursor] not in seen:
-            cursor = predecessors[cursor]  # type: ignore[assignment]
+        while True:
+            predecessor = predecessors.get(cursor)
+            if predecessor is None or predecessor in seen:
+                break
+            cursor = predecessor
             seen.add(cursor)
             chain.append(cursor)
         candidate = tuple(reversed(chain))
