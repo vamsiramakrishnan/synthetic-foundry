@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from worldloom.eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
+from worldloom.eval_design import (
+    EvalSpec,
+    EvalStepSpec,
+    RequirementKind,
+    WorldRequirement,
+)
 from worldloom.eval_search import CandidateContext, search_candidates
 from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose
