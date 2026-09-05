@@ -200,6 +200,7 @@ class ConnectorDefinition(Model):
         default_factory=dict
     )
     entities: dict[str, ConnectorEntityDefinition]
+    entity_aliases: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     tools: dict[str, ConnectorToolDefinition]
     aliases: dict[str, str] = Field(default_factory=dict)
 
@@ -217,6 +218,19 @@ class ConnectorDefinition(Model):
                 raise ValueError(
                     f"entity {entity_name!r} references unknown tools {sorted(missing)}"
                 )
+        alias_targets = {
+            target for targets in self.entity_aliases.values() for target in targets
+        }
+        unknown_entity_aliases = alias_targets - entity_names
+        if unknown_entity_aliases:
+            raise ValueError(
+                f"entity aliases reference unknown entities {sorted(unknown_entity_aliases)}"
+            )
+        overlapping_aliases = set(self.entity_aliases) & entity_names
+        if overlapping_aliases:
+            raise ValueError(
+                f"entity aliases shadow canonical entities {sorted(overlapping_aliases)}"
+            )
         bad_aliases = set(self.aliases.values()) - tool_names
         if bad_aliases:
             raise ValueError(f"aliases reference unknown tools {sorted(bad_aliases)}")
@@ -244,26 +258,54 @@ class ConnectorDefinition(Model):
     def tool(self, name: str) -> ConnectorToolDefinition:
         return self.tools[self.canonical_tool(name)]
 
-    def tool_for(self, entity: str, operation: str) -> str:
-        try:
-            target = self.entities[entity].ops[operation]
-        except KeyError as error:
-            raise KeyError(
-                f"{self.connector}/{entity} does not define operation {operation!r}"
-            ) from error
-        return self.canonical_tool(target)
+    def entity_members(self, entity: str) -> tuple[str, ...]:
+        """Canonical entity kinds represented by an alias or canonical name."""
 
-    def query_name_for(self, entity: str) -> str:
+        if entity in self.entities:
+            return (entity,)
         try:
-            definition = self.entities[entity]
+            return self.entity_aliases[entity]
         except KeyError as error:
             raise KeyError(f"unknown {self.connector} entity {entity!r}") from error
-        return definition.query_name or entity
+
+    def entity_matches(self, requested: str, actual: str) -> bool:
+        return actual in self.entity_members(requested)
+
+    def tool_for(self, entity: str, operation: str) -> str:
+        members = self.entity_members(entity)
+        targets = {
+            self.entities[member].ops[operation]
+            for member in members
+            if operation in self.entities[member].ops
+        }
+        if not targets:
+            raise KeyError(
+                f"{self.connector}/{entity} does not define operation {operation!r}"
+            )
+        if len(targets) != 1:
+            raise KeyError(
+                f"{self.connector}/{entity} maps {operation!r} to multiple tools: "
+                f"{sorted(targets)}"
+            )
+        return self.canonical_tool(targets.pop())
+
+    def query_name_for(self, entity: str) -> str:
+        members = self.entity_members(entity)
+        names = {self.entities[member].query_name or member for member in members}
+        if len(names) != 1:
+            raise KeyError(
+                f"{self.connector}/{entity} has multiple native query names: {sorted(names)}"
+            )
+        return names.pop()
 
     def fields_for(self, entity: str) -> tuple[ConnectorFieldDefinition, ...]:
-        if entity not in self.entities:
-            raise KeyError(f"unknown {self.connector} entity {entity!r}")
-        return self.field_manifests.get(entity, ())
+        members = self.entity_members(entity)
+        if len(members) != 1:
+            # Alias field manifests are intentionally not unioned. A 300-field
+            # bug is a meaningful shape; a 300-field synthetic union of every
+            # issue type is not.
+            return ()
+        return self.field_manifests.get(members[0], ())
 
     def resolve_field(self, entity: str, name: str) -> ConnectorFieldDefinition | None:
         folded = name.casefold()
@@ -280,14 +322,18 @@ class ConnectorDefinition(Model):
     ) -> ConnectorDefinition:
         """Return a new definition with an immutable field-manifest overlay."""
 
-        if entity not in self.entities:
-            raise KeyError(f"unknown {self.connector} entity {entity!r}")
-        existing = {field.id: field for field in self.fields_for(entity)}
+        members = self.entity_members(entity)
+        if len(members) != 1:
+            raise ValueError(
+                f"field manifests need one canonical entity, not alias {entity!r}"
+            )
+        canonical_entity = members[0]
+        existing = {field.id: field for field in self.fields_for(canonical_entity)}
         for field in fields_to_add:
             existing[field.id] = field
         merged = tuple(sorted(existing.values(), key=lambda field: field.id))
         manifests = dict(self.field_manifests)
-        manifests[entity] = merged
+        manifests[canonical_entity] = merged
         compatibility = dict(self.custom_fields)
         query_fields = dict(self.query_fields)
         for field in merged:
