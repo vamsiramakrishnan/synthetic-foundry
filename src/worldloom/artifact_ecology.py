@@ -95,7 +95,7 @@ class ArtifactLifecycle(Model):
     history: tuple[LifecycleStep, ...]
 
     @model_validator(mode="after")
-    def _chronological(self) -> "ArtifactLifecycle":
+    def _chronological(self) -> ArtifactLifecycle:
         times = [step.at for step in self.history]
         if times != sorted(times):
             raise ValueError(f"{self.artifact_id}: lifecycle is not chronological")
@@ -142,7 +142,7 @@ class EpisodeGraph(Model):
     edges: tuple[EvidenceEdge, ...] = ()
 
     @model_validator(mode="after")
-    def _closed(self) -> "EpisodeGraph":
+    def _closed(self) -> EpisodeGraph:
         ids = {node.id for node in self.nodes}
         if len(ids) != len(self.nodes):
             raise ValueError("duplicate evidence node ids")
@@ -264,7 +264,7 @@ _FAMILIES: dict[Surface, tuple[str, ...]] = {
 }
 
 
-def lifecycle_for(world: "World", intent: "ArtifactIntent", manifest: "ArtifactManifestEntry | None" = None) -> ArtifactLifecycle:
+def lifecycle_for(world: World, intent: ArtifactIntent, manifest: ArtifactManifestEntry | None = None) -> ArtifactLifecycle:
     """Derive review history from simulated time, never wall clock."""
     created = manifest.created_at if manifest else intent.created_at
     author = intent.author_id
@@ -286,7 +286,7 @@ def lifecycle_for(world: "World", intent: "ArtifactIntent", manifest: "ArtifactM
     )
 
 
-def plan_for(world: "World", intent: "ArtifactIntent", ir: ArtifactIR, surface: Surface | None = None) -> SurfacePlan:
+def plan_for(world: World, intent: ArtifactIntent, ir: ArtifactIR, surface: Surface | None = None) -> SurfacePlan:
     surface = surface or _surface(intent.artifact_type)
     org = organisation_dna(world.seed or 0, world.company.id, world.company.industry)
     person = world.people.get(intent.author_id)
@@ -315,7 +315,7 @@ def plan_for(world: "World", intent: "ArtifactIntent", ir: ArtifactIR, surface: 
     )
 
 
-def enrich_ir(world: "World", intent: "ArtifactIntent", ir: ArtifactIR) -> ArtifactIR:
+def enrich_ir(world: World, intent: ArtifactIntent, ir: ArtifactIR) -> ArtifactIR:
     """Add style/lifecycle metadata only; sections, facts and formulas remain untouched."""
     org = organisation_dna(world.seed or 0, world.company.id, world.company.industry)
     plan = plan_for(world, intent, ir)
@@ -331,7 +331,7 @@ def enrich_ir(world: "World", intent: "ArtifactIntent", ir: ArtifactIR) -> Artif
     return ir.model_copy(update={"metadata": metadata})
 
 
-def enrich_world(world: "World") -> "World":
+def enrich_world(world: World) -> World:
     staged = world if world.artifact_irs else world.compile()
     irs = tuple(enrich_ir(staged, staged.artifact_intents.by_id(ir.intent_id), ir) for ir in staged.artifact_irs)
     recipe = dict(staged.recipe)
@@ -339,7 +339,7 @@ def enrich_world(world: "World") -> "World":
     return staged.extend(artifact_irs=irs, recipe=recipe)
 
 
-def episode_graph(world: "World") -> EpisodeGraph:
+def episode_graph(world: World) -> EpisodeGraph:
     staged = world if world.artifact_irs else world.compile()
     episode_id = f"EP-{content_key(staged.seed, staged.company.id, staged.period or 'current')[:12].upper()}"
     nodes: list[EvidenceNode] = []
@@ -385,7 +385,7 @@ def episode_graph(world: "World") -> EpisodeGraph:
     return EpisodeGraph(episode_id=episode_id, nodes=tuple(nodes), edges=tuple(unique[key] for key in sorted(unique)))
 
 
-def profile(world: "World") -> RealismProfile:
+def profile(world: World) -> RealismProfile:
     staged = world if world.artifact_irs else world.compile()
     functions = sorted({person.function for person in staged.people})
     plans: list[SurfacePlan] = []
@@ -416,7 +416,7 @@ class ProposalFinding(Model):
     message: str
 
 
-def review_proposal(world: "World", proposal: ArtifactProposal) -> tuple[ProposalFinding, ...]:
+def review_proposal(world: World, proposal: ArtifactProposal) -> tuple[ProposalFinding, ...]:
     intent = world.artifact_intents.get(proposal.artifact_id)
     if intent is None:
         return (ProposalFinding(code="unknown_artifact", message=proposal.artifact_id),)
@@ -432,7 +432,7 @@ def review_proposal(world: "World", proposal: ArtifactProposal) -> tuple[Proposa
     return tuple(findings)
 
 
-def enrich_connector_records(world: "World", records: list[Any]) -> list[Any]:
+def enrich_connector_records(world: World, records: list[Any]) -> list[Any]:
     """Add product-specific workflow detail only when artifact realism is enabled."""
     if world.recipe.get("artifact_realism") != "ecology/v1":
         return records
