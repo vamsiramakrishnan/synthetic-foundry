@@ -47,7 +47,13 @@ class TacticPlan(Model):
 
 
 def _selector_key(demand: WorldDemand) -> tuple[tuple[str, str], ...]:
-    return tuple(sorted((key, str(value)) for key, value in demand.selector.items()))
+    return tuple(
+        sorted(
+            (key, str(value))
+            for key, value in demand.selector.items()
+            if key != "requirement_kind"
+        )
+    )
 
 
 def _proposal_for(demand: WorldDemand) -> TacticProposal:
@@ -104,7 +110,7 @@ def propose_tactics(demands: DemandSet) -> tuple[TacticProposal, ...]:
         if len(group) < 2:
             continue
         covered = tuple(sorted(demand.id for demand in group))
-        parameters = {name: value for name, value in key if name != "requirement_kind"}
+        parameters = {name: value for name, value in key}
         proposals.append(
             TacticProposal(
                 id="tactic:evidence_episode:" + "+".join(covered),
