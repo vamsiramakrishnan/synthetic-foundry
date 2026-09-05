@@ -3,6 +3,8 @@
 The surface is intentionally small::
 
     campaign = EvalCampaign(spec)
+    demands = campaign.demands()
+    tactics = campaign.tactics()
     run = campaign.run(builder)
     instances = run.instances
 
@@ -15,10 +17,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .corpus import write_json
 from .eval_candidates import CandidateBuilder, GeneratedCandidate, generate_candidates
+from .eval_demands import DemandSet, compile_demands
 from .eval_design import (
     CandidatePlan,
     EvalSpec,
@@ -28,6 +31,10 @@ from .eval_design import (
     plan_candidates,
 )
 from .eval_instances import EvalInstance, bind_eval_instance
+from .eval_tactics import TacticPlan, plan_tactics
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .eval_reference import ExecutionProof, StepExecutor
 
 
 @dataclass(frozen=True)
@@ -98,6 +105,16 @@ class CampaignRun:
 class EvalCampaign:
     spec: EvalSpec
 
+    def demands(self) -> DemandSet:
+        """Compile the eval into normalized world obligations without data."""
+
+        return compile_demands(self.spec)
+
+    def tactics(self) -> TacticPlan:
+        """Plan a minimal deterministic cover over the current world demands."""
+
+        return plan_tactics(self.demands())
+
     def plans(self, *, count: int | None = None) -> tuple[CandidatePlan, ...]:
         """Candidate plans without generating any synthetic data."""
 
@@ -142,6 +159,24 @@ class EvalCampaign:
 
         return self.run(builder, count=count).instances
 
+    def prove(
+        self,
+        builder: CandidateBuilder,
+        executor: StepExecutor,
+        *,
+        count: int | None = None,
+    ) -> tuple[ExecutionProof, ...]:
+        """Reference-execute every accepted instance against its own world fork."""
+
+        from .eval_reference import execute_reference
+
+        run = self.run(builder, count=count)
+        instance_by_seed = {instance.candidate_seed: instance for instance in run.instances}
+        return tuple(
+            execute_reference(instance_by_seed[candidate.plan.seed], candidate.world, executor)
+            for candidate in run.accepted
+        )
+
     def export(
         self,
         builder: CandidateBuilder,
@@ -167,7 +202,11 @@ class EvalCampaign:
         root.mkdir(parents=True, exist_ok=True)
 
         run = self.run(builder, count=count)
+        demands = self.demands()
+        tactics = self.tactics()
         write_json(root / "eval-spec.json", self.spec.model_dump(mode="json"))
+        write_json(root / "demand-set.json", demands.model_dump(mode="json"))
+        write_json(root / "tactic-plan.json", tactics.model_dump(mode="json"))
 
         manifest_candidates: list[dict[str, Any]] = []
         instance_by_seed = {instance.candidate_seed: instance for instance in run.instances}
@@ -198,6 +237,8 @@ class EvalCampaign:
                 "schema": "worldloom.eval-campaign/v1",
                 "eval_spec_id": self.spec.id,
                 "design_digest": run.attempts[0].plan.design_digest if run.attempts else "",
+                "demand_digest": tactics.demand_digest,
+                "tactic_count": len(tactics.proposals),
                 "attempt_count": len(run.attempts),
                 "candidate_count": len(run.accepted),
                 "rejected_count": len(run.rejected),
@@ -214,10 +255,12 @@ class EvalCampaign:
 __all__ = [
     "CampaignRun",
     "CandidatePlan",
+    "DemandSet",
     "EvalCampaign",
     "EvalInstance",
     "EvalSpec",
     "EvalStepSpec",
     "RequirementKind",
+    "TacticPlan",
     "WorldRequirement",
 ]
