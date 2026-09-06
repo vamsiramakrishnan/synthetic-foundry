@@ -248,7 +248,7 @@ def _render_for(world: World, proposal: TacticProposal, definition: ConnectorDef
     suffixes = {".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx", ".pdf": "pdf",
                 ".md": "markdown", ".html": "html"}
     existing = {
-        suffixes[suffix] for suffix in {Path(item.path).suffix for item in world._rendered}
+        suffixes[suffix] for suffix in sorted({Path(item.path).suffix for item in world._rendered})
         if suffix in suffixes
     }
     if entity in existing:
