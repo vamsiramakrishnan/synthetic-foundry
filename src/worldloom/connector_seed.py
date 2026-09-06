@@ -11,13 +11,19 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import Field
 
 from .connector_data import ConnectorRecord
 from .connector_definition import ConnectorDefinition
 from .connector_emulator import ConnectorEmulator
 from .connector_payload import shape_payload
 from .models import Model
+
+CONNECTOR_SEED_SCHEMA: Literal["worldloom.connector-seed/v1"] = (
+    "worldloom.connector-seed/v1"
+)
 
 
 class ConnectorSeedRecord(Model):
@@ -34,10 +40,17 @@ class ConnectorSeedRecord(Model):
 
 
 class ConnectorSeedManifest(Model):
-    schema: str = "worldloom.connector-seed/v1"
+    manifest_schema: Literal["worldloom.connector-seed/v1"] = Field(
+        default=CONNECTOR_SEED_SCHEMA,
+        alias="schema",
+        serialization_alias="schema",
+    )
     connector: str
     definition_version: str
     records: tuple[ConnectorSeedRecord, ...]
+
+    def wire_dict(self) -> dict[str, Any]:
+        return self.model_dump(mode="json", by_alias=True)
 
 
 def _canonical(record: ConnectorRecord | Mapping[str, Any], connector: str) -> dict[str, Any]:
@@ -145,6 +158,7 @@ def hydrate_emulator(
 
 
 __all__ = [
+    "CONNECTOR_SEED_SCHEMA",
     "ConnectorSeedManifest",
     "ConnectorSeedRecord",
     "compile_seed_manifest",
