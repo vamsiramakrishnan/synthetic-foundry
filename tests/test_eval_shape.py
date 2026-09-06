@@ -44,6 +44,12 @@ def test_empty_shape_preserves_legacy_design_digest() -> None:
     spec = _base_spec()
     legacy_payload = spec.model_dump(mode="json")
     legacy_payload.pop("shape")
+    # ``entity`` was added to EvalStepSpec with the connector thin waist. A
+    # legacy design did not serialize that field at all, so None must not change
+    # the candidate family merely because a newer Worldloom reads it.
+    for step in legacy_payload["steps"]:
+        if step["entity"] is None:
+            step.pop("entity")
     expected = hashlib.sha256(
         json.dumps(
             legacy_payload,
