@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from worldloom.connector_data import ConnectorDataset
 from worldloom.enterprise_artifacts import render_corpus_artifacts
 from worldloom.enterprise_corpus import EnterpriseCorpus, QueryFixture, StateOverride
@@ -78,9 +80,7 @@ def test_simulator_compatibility_name_uses_product_shaped_runtime() -> None:
     corpus, fixture = _corpus()
     simulator = ConnectorSimulator(corpus)
     result = asyncio.run(
-        execute_query(
-            corpus.queries[0], fixture, RunnerConfig(), simulator.invoke
-        )
+        execute_query(corpus.queries[0], fixture, RunnerConfig(), simulator.invoke)
     )
 
     assert result.completed
@@ -91,25 +91,32 @@ def test_simulator_compatibility_name_uses_product_shaped_runtime() -> None:
     assert "webUrl" in write_payload
 
 
-def test_simulator_executes_version_conflict() -> None:
-    corpus, fixture = _corpus("version_conflict")
+@pytest.mark.parametrize(
+    ("failure", "status"),
+    [
+        ("permission_denied", 403),
+        ("version_conflict", 409),
+        ("partial_write", 207),
+    ],
+)
+def test_simulator_compiles_failure_overlays_into_emulator_faults(
+    failure: str, status: int
+) -> None:
+    corpus, fixture = _corpus(failure)
     simulator = ConnectorSimulator(corpus)
     result = asyncio.run(
-        execute_query(
-            corpus.queries[0], fixture, RunnerConfig(), simulator.invoke
-        )
+        execute_query(corpus.queries[0], fixture, RunnerConfig(), simulator.invoke)
     )
+
     assert not result.completed
     assert result.finding == "node write failed"
     assert not result.calls[0].succeeded
-    assert result.outputs["write"]["status"] == 409
+    assert result.outputs["write"]["status"] == status
 
 
 def test_renderer_writes_real_docx(tmp_path) -> None:  # type: ignore[no-untyped-def]
     corpus, _ = _corpus()
-    rendered = render_corpus_artifacts(
-        corpus, tmp_path, limit=1
-    )
+    rendered = render_corpus_artifacts(corpus, tmp_path, limit=1)
     assert len(rendered) == 1
     path = tmp_path / f"{corpus.queries[0].id}.docx"
     assert path.read_bytes().startswith(b"PK")
