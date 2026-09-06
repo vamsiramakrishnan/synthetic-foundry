@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from .connector_definition import (
     ConnectorDefinition,
     ConnectorMaturity,
+    ConnectorWorkflow,
     builtin_connector_definitions,
 )
 from .eval_design import EvalSpec, EvalStepSpec
@@ -42,11 +43,13 @@ class EvalToolBinding(Model):
 def _infer_entity(spec: EvalSpec, step: EvalStepSpec) -> str | None:
     if step.entity is not None:
         return step.entity
-    candidates = {
-        requirement.entity
-        for requirement in (*spec.shape.records, *spec.shape.threads)
-        if requirement.connector == step.connector
-    }
+    candidates: set[str] = set()
+    for record_requirement in spec.shape.records:
+        if record_requirement.connector == step.connector:
+            candidates.add(record_requirement.entity)
+    for thread_requirement in spec.shape.threads:
+        if thread_requirement.connector == step.connector:
+            candidates.add(thread_requirement.entity)
     for requirement in spec.requirements:
         if requirement.selector.get("connector") == step.connector:
             value = requirement.selector.get("entity")
@@ -75,24 +78,45 @@ def _infer_operation(step: EvalStepSpec) -> str | None:
     return None
 
 
+def _validate_shape_reference(
+    spec: EvalSpec,
+    definitions: Mapping[str, ConnectorDefinition],
+    *,
+    connector: str,
+    entity: str,
+) -> None:
+    try:
+        definition = definitions[connector]
+    except KeyError as error:
+        raise ValueError(
+            f"{spec.id}: shape references unknown connector {connector!r}"
+        ) from error
+    try:
+        definition.entity_members(entity)
+    except KeyError as error:
+        raise ValueError(
+            f"{spec.id}: shape references unknown {connector}/{entity}"
+        ) from error
+
+
 def _validate_shape(
     spec: EvalSpec,
     definitions: Mapping[str, ConnectorDefinition],
 ) -> None:
-    for requirement in (*spec.shape.records, *spec.shape.threads):
-        try:
-            definition = definitions[requirement.connector]
-        except KeyError as error:
-            raise ValueError(
-                f"{spec.id}: shape references unknown connector {requirement.connector!r}"
-            ) from error
-        try:
-            definition.entity_members(requirement.entity)
-        except KeyError as error:
-            raise ValueError(
-                f"{spec.id}: shape references unknown "
-                f"{requirement.connector}/{requirement.entity}"
-            ) from error
+    for record_requirement in spec.shape.records:
+        _validate_shape_reference(
+            spec,
+            definitions,
+            connector=record_requirement.connector,
+            entity=record_requirement.entity,
+        )
+    for thread_requirement in spec.shape.threads:
+        _validate_shape_reference(
+            spec,
+            definitions,
+            connector=thread_requirement.connector,
+            entity=thread_requirement.entity,
+        )
     for requirement in spec.shape.records:
         if not requirement.projection_required:
             continue
@@ -157,8 +181,11 @@ def bind_eval_connectors(
             raise ValueError(f"{spec.id}/{step.id}: {error.args[0]}") from error
         tool = definition.tool(tool_name)
         members = definition.entity_members(entity)
-        workflows = [definition.entities[member].workflow for member in members]
-        workflows = [workflow for workflow in workflows if workflow is not None]
+        workflows: tuple[ConnectorWorkflow, ...] = tuple(
+            workflow
+            for member in members
+            if (workflow := definition.entities[member].workflow) is not None
+        )
         workflow_field: str | None = None
         states: tuple[str, ...] = ()
         if workflows:
