@@ -316,6 +316,25 @@ class ConnectorEmulator:
                 raise ConnectorError(504, "Gateway timeout", "timeout")
             if "rate_limit_429" in active_faults:
                 raise ConnectorError(429, "Too many requests", "rate_limit")
+            if "permission_denied" in active_faults:
+                raise self._error("denied")
+            write_ops = {
+                "create",
+                "update",
+                "transition",
+                "comment",
+                "delete",
+                "transform",
+                "send",
+                "post",
+                "reply",
+                "forward",
+                "upload",
+            }
+            if tool.op in write_ops and "version_conflict" in active_faults:
+                raise ConnectorError(409, "Version conflict", "version_conflict")
+            if tool.op in write_ops and "partial_write" in active_faults:
+                raise ConnectorError(207, "Partial write", "partial_write")
             handler_op = {
                 "send": "create",
                 "post": "create",
