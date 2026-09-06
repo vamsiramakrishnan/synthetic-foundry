@@ -1,0 +1,136 @@
+# one-shot repair gate; deletes itself after verified commits
+name: repair eval-first replay contracts
+on:
+  push:
+    branches: [codex/structural-uplift]
+    paths:
+      - .github/workflows/eval-contract-repair.yml
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/structural-uplift
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Repair abstract operation and revision replay contracts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              assert count == 1, f"{path}: expected one match, found {count}: {old!r}"
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/worldloom/eval_design.py',
+              '''    @model_validator(mode="after")
+              def _connector_tuple(self) -> EvalStepSpec:
+                  if self.entity is not None and self.connector is None:
+                      raise ValueError(f"{self.id}: entity needs connector")
+                  if self.operation is not None and self.connector is None:
+                      raise ValueError(f"{self.id}: operation needs connector")
+                  return self
+          ''',
+              '''    @model_validator(mode="after")
+              def _connector_tuple(self) -> EvalStepSpec:
+                  # Operation is intentionally allowed before connector binding. Eval-first
+                  # design says what must happen before a candidate world or product surface
+                  # has been selected. Entity, by contrast, is product vocabulary and needs
+                  # the connector namespace that gives it meaning.
+                  if self.entity is not None and self.connector is None:
+                      raise ValueError(f"{self.id}: entity needs connector")
+                  return self
+          ''',
+          )
+
+          replace_once(
+              'src/worldloom/eval_construction.py',
+              'def apply_revision_family(world: World, proposal: TacticProposal) -> World:\n',
+              'def apply_revision_family(\n    world: World, proposal: TacticProposal, *, record_recipe: bool = True\n) -> World:\n',
+          )
+          replace_once(
+              'src/worldloom/eval_construction.py',
+              '''    recipe = with_step(world.recipe, "EvalRevisionFamily", proposal=proposal.model_dump(mode="json"))
+              applied = set(recipe.get("eval_tactics", []))
+          ''',
+              '''    recipe = (
+                  with_step(
+                      world.recipe,
+                      "EvalRevisionFamily",
+                      proposal=proposal.model_dump(mode="json"),
+                  )
+                  if record_recipe
+                  else dict(world.recipe)
+              )
+              applied = set(recipe.get("eval_tactics", []))
+          ''',
+          )
+
+          recipe = Path('src/worldloom/recipe.py')
+          text = recipe.read_text()
+          step_anchor = '    "AddIrrelevantFacts": ("seed", "count"),\n}'
+          assert text.count(step_anchor) == 1
+          text = text.replace(
+              step_anchor,
+              '    "AddIrrelevantFacts": ("seed", "count"),\n'
+              '    "EvalRevisionFamily": ("proposal",),\n}',
+              1,
+          )
+          replay_anchor = '''        elif name == "NarrationPrograms":
+              from .narrative import programs
+
+              world = programs.replay(world, keys=step["keys"], ledger=ledger)
+          elif name in _STEP_REGISTRY:
+          '''
+          replay = '''        elif name == "NarrationPrograms":
+              from .narrative import programs
+
+              world = programs.replay(world, keys=step["keys"], ledger=ledger)
+          elif name == "EvalRevisionFamily":
+              from .eval_construction import apply_revision_family
+              from .eval_tactics import TacticProposal
+
+              world = apply_revision_family(
+                  world,
+                  TacticProposal.model_validate(step["proposal"]),
+                  record_recipe=False,
+              )
+          elif name in _STEP_REGISTRY:
+          '''
+          assert text.count(replay_anchor) == 1
+          recipe.write_text(text.replace(replay_anchor, replay, 1))
+          PY
+      - name: Install validation dependencies
+        run: |
+          python -m pip install uv
+          uv pip install --system -e '.[dev,polars,xlsx,docx,pdf,pptx]' ruff==0.15.8 mypy==2.3.1
+      - name: Validate repaired contracts
+        run: |
+          ruff check
+          mypy
+          pytest -q \
+            tests/test_eval_design.py \
+            tests/test_eval_reference.py \
+            tests/test_eval_construction.py \
+            tests/test_recipe.py
+      - name: Commit repairs separately
+        run: |
+          git config user.name 'worldloom-source-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/eval_design.py
+          git commit -m 'Allow abstract eval operations before connector binding'
+          git add src/worldloom/eval_construction.py src/worldloom/recipe.py
+          git commit -m 'Make revision-family construction replayable'
+          git rm .github/workflows/eval-contract-repair.yml
+          git commit -m 'Remove completed eval contract repair gate'
+          git push origin HEAD:codex/structural-uplift
