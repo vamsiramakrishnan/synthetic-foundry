@@ -31,44 +31,38 @@ jobs:
               assert count == 1, f"{path}: expected one match, found {count}: {old!r}"
               p.write_text(text.replace(old, new, 1))
 
-          # Eval-first design may know the operation before a product surface is
-          # selected. Entity is connector vocabulary; operation is not.
           replace_once(
               'src/worldloom/eval_design.py',
-              '''        if self.operation is not None and self.connector is None:
-              raise ValueError(f"{self.id}: operation needs connector")
-          ''',
+              '        if self.operation is not None and self.connector is None:\n'
+              '            raise ValueError(f"{self.id}: operation needs connector")\n',
               '',
           )
 
-          # Construction records its tactic during ordinary generation, but replay
-          # re-applies the recorded tactic without appending the same recipe step.
           replace_once(
               'src/worldloom/eval_construction.py',
               'def apply_revision_family(world: World, proposal: TacticProposal) -> World:\n',
-              'def apply_revision_family(\n    world: World, proposal: TacticProposal, *, record_recipe: bool = True\n) -> World:\n',
+              'def apply_revision_family(\n'
+              '    world: World, proposal: TacticProposal, *, record_recipe: bool = True\n'
+              ') -> World:\n',
           )
           replace_once(
               'src/worldloom/eval_construction.py',
-              '''    recipe = with_step(world.recipe, "EvalRevisionFamily", proposal=proposal.model_dump(mode="json"))
-              applied = set(recipe.get("eval_tactics", []))
-          ''',
-              '''    recipe = (
-                  with_step(
-                      world.recipe,
-                      "EvalRevisionFamily",
-                      proposal=proposal.model_dump(mode="json"),
-                  )
-                  if record_recipe
-                  else dict(world.recipe)
-              )
-              applied = set(recipe.get("eval_tactics", []))
-          ''',
+              '    recipe = with_step(world.recipe, "EvalRevisionFamily", proposal=proposal.model_dump(mode="json"))\n'
+              '    applied = set(recipe.get("eval_tactics", []))\n',
+              '    recipe = (\n'
+              '        with_step(\n'
+              '            world.recipe,\n'
+              '            "EvalRevisionFamily",\n'
+              '            proposal=proposal.model_dump(mode="json"),\n'
+              '        )\n'
+              '        if record_recipe\n'
+              '        else dict(world.recipe)\n'
+              '    )\n'
+              '    applied = set(recipe.get("eval_tactics", []))\n',
           )
 
           recipe = Path('src/worldloom/recipe.py')
           text = recipe.read_text()
-
           step_line = '    "AddIrrelevantFacts": ("seed", "count"),\n'
           assert text.count(step_line) == 1
           text = text.replace(
@@ -79,16 +73,17 @@ jobs:
 
           registry_fallback = '        elif name in _STEP_REGISTRY:\n'
           assert text.count(registry_fallback) == 1
-          replay_branch = '''        elif name == "EvalRevisionFamily":
-              from .eval_construction import apply_revision_family
-              from .eval_tactics import TacticProposal
-
-              world = apply_revision_family(
-                  world,
-                  TacticProposal.model_validate(step["proposal"]),
-                  record_recipe=False,
-              )
-          '''
+          replay_branch = (
+              '        elif name == "EvalRevisionFamily":\n'
+              '            from .eval_construction import apply_revision_family\n'
+              '            from .eval_tactics import TacticProposal\n'
+              '\n'
+              '            world = apply_revision_family(\n'
+              '                world,\n'
+              '                TacticProposal.model_validate(step["proposal"]),\n'
+              '                record_recipe=False,\n'
+              '            )\n'
+          )
           text = text.replace(
               registry_fallback,
               replay_branch + registry_fallback,
