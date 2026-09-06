@@ -1,0 +1,21 @@
+name: structural ledger read-path audit
+on:
+  push:
+    branches: [codex/structural-uplift]
+    paths:
+      - .github/workflows/structural-ledger-audit.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/structural-uplift
+      - name: Show direct fact and compatibility-ledger reads
+        run: |
+          echo '=== direct .facts reads ==='
+          rg -n --glob '*.py' '\.(facts|_facts)\b' src/worldloom || true
+          echo '=== epistemics adapter use ==='
+          rg -n --glob '*.py' 'FactObservation|ledger_from_facts|FactLedger' src/worldloom || true
