@@ -1,13 +1,11 @@
 # The generation model
 
-Worldloom has two engines. The boundary between them is the most important design decision in the project, and this document fixes it.
+Worldloom resolves generation inputs into canonical state, facts, artifact
+intents, and rendered outputs. This page explains the choices made at each
+stage and which extension point owns them.
 
-> The LLM owns what benefits from synthesis, judgment, narrative, and plausibility.
-> It owns nothing that benefits from arithmetic, identity, or graph integrity.
-
-The **deterministic engine** owns anything that must be *correct*. The **generative engine** owns anything that must be *plausible*. A thing is never owned by both.
-
----
+Keep proposals from external writers separate from accepted state. The seed,
+recipe, accepted ledger, and compatible code revision define a replay.
 
 ## Why the boundary is where it is
 

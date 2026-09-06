@@ -1,10 +1,11 @@
 # Artifact ecology
 
-Worldloom does not make a realistic enterprise corpus by rendering each file independently.
+Design a set of artifacts around the roles, events, and business processes
+that produce them. Use the coverage and relationship checks below to identify
+missing context before generating more files.
 
-A business episode happens once. Different systems observe different parts of it. An incident ticket, an email thread, a Confluence page, an analyst workbook, and an executive deck may all refer to the same underlying facts without containing the same prose or having the same authority.
-
-Artifact ecology is the opt-in layer that models that behavior.
+File count, format count, and functional breadth measure different properties.
+Assess them separately and retain the admission result with the corpus.
 
 ```text
 World facts + events + actors

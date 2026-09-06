@@ -22,44 +22,47 @@ Worldloom CLI -----> deterministic request
 The agent is not given unrestricted access to mutate a `World`. It receives the
 bounded projection required for one decision and proposes a typed response.
 
-## Discovery
+## Start with any coding agent
 
-When a coding harness opens the repository root, it can discover:
+Read [AGENTS.md](../AGENTS.md), then select the procedure for the current task.
+The portable interface is the CLI and its JSON request/accept protocol. A
+terminal-capable agent can use it without slash-command support.
 
-- `.claude/commands/`: stage-oriented slash commands;
-- `.claude/skills/`: specialist procedures with trigger descriptions;
-- `.claude/skills/worldloom/references/`: progressively disclosed operational
-  detail and the generated CLI reference;
-- `AGENTS.md`: the harness-wide truth, narration, determinism, and extension
-  contract.
+| Task | Commands | Procedure |
+|---|---|---|
+| Build a decided world | `worldloom build`, `worldloom status` | [Company specification](agents/company-specification.md) |
+| Propose an employee action | `worldloom act requests`, `worldloom act accept` | [Actors](agents/actors.md) |
+| Write fact-scoped prose | `worldloom narrate requests`, `worldloom narrate accept` | [Writing responses](agents/writing-responses.md) |
+| Render and inspect files | `worldloom render`, `worldloom validate` | [Artifact compiler](artifact-compiler.md) |
+| Measure the result | `worldloom evaluate`, `worldloom diversity` | [Enterprise corpus gates](enterprise-corpus.md#quality-gates) |
+| Generate many configurations | `worldloom mosaic`, `worldloom fleet` | [Fleets](agents/fleets.md) |
 
-No files need to be copied into generated corpora. They are the procedure for the
-agent operating the repository.
+Report the stage result and relevant receipt. A build count, narration
+acceptance, coherence result, and retrieval score answer different questions.
+When a request is rejected, use its code and diagnostic to revise the proposal.
+Do not edit the canonical ledger to bypass acceptance.
 
-For another coding harness, point it to [AGENTS.md](../AGENTS.md) and let it drive
-the same commands. No harness-specific API participates in corpus generation.
+## Optional host discovery
 
-## Stage commands
+The repository currently stores slash commands in `.claude/commands/` and
+specialist procedures in `.claude/skills/`. Those are distribution paths, not
+runtime requirements. The generated CLI reference is under
+`.claude/skills/worldloom/references/`; its paths remain stable for existing
+installations and documentation checks.
 
-Use a stage command when the company and task are already decided.
+A host that understands those paths can discover the procedures automatically.
+Other hosts can read the same files through [AGENTS.md](../AGENTS.md) and the
+links below. No procedure files need to be copied into generated corpora.
 
-| Command | Responsibility | Reads next |
-| --- | --- | --- |
-| `/worldloom-build` | Build a deterministic world and report its actual shape | `references/building.md` |
-| `/worldloom-act` | Become each employee in a bounded actor episode | `references/acting.md` |
-| `/worldloom-narrate` | Write fact-scoped sections until accepted | `references/writing-prose.md` |
-| `/worldloom-render` | Materialize native artifacts and validate | `references/rendering.md` |
-| `/worldloom-evaluate` | Measure difficulty, shape, diversity, and retrieval behavior | `references/evaluating.md` and `references/diversity.md` |
-
-The agent should surface the result of every gate rather than silently running the
-whole pipeline. Build counts, actor observations, narration refusals, validation
-check counts, diversity readings, and per-family evaluation scores are part of
-the deliverable.
+The slash commands `/worldloom-build`, `/worldloom-act`, `/worldloom-narrate`,
+`/worldloom-render`, and `/worldloom-evaluate` package the corresponding rows
+above. Use their CLI equivalents when the host has no slash-command loader.
 
 ## Open-ended design
 
-Use `/worldloom-design` when the request names a purpose or industry but not a
-fully decided seed, shape, hardness profile, narrative mode, and output set.
+When the request names a purpose or industry, first resolve the company shape,
+output set, evaluation target, and narration mode. The optional
+`/worldloom-design` command packages that procedure for compatible hosts.
 
 ```text
 decide --> author if necessary --> build --> measure --> select

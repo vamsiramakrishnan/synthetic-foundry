@@ -36,18 +36,19 @@ Each request looks like this:
 }
 ```
 
-Answer it like this, one entry per request, `id` matching exactly:
+Answer with one entry per request and an exactly matching `id`. This response
+uses only `FACT-0020`, the fact supplied in the request above:
 
 ```json
 {
   "responses": [
     {
       "id": "ART-0003/By business unit",
-      "text": "Food finished {{fact:FACT-0028}} against plan, the largest of the three shortfalls.",
+      "text": "Revenue was {{fact:FACT-0020}}.",
       "claims": [
         {
-          "text": "Food finished below plan by the largest margin.",
-          "supporting_fact_ids": ["FACT-0028", "FACT-0029", "FACT-0030"]
+          "text": "Revenue is the reported actual amount.",
+          "supporting_fact_ids": ["FACT-0020"]
         }
       ]
     }

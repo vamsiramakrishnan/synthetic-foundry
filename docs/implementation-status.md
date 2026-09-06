@@ -1,5 +1,10 @@
 # Closing unfinished contracts
 
+Use this status reference to distinguish implemented mechanisms from partial
+support and planned work. A named command or generated file is not sufficient
+evidence of an end-to-end capability. Follow the tests and receipts associated
+with the specific path you intend to use.
+
 Baseline: `cee774688412530593ee10653cd7b60bcdd676db` (PR #33).
 
 A green merge gate proves the shipped tests passed. It does not prove the earlier roadmap was implemented. This ledger distinguishes working contracts from designs and disconnected helpers.

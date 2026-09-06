@@ -7,17 +7,15 @@ tags: [validate, refusals, json-output, exit-codes]
 
 # Why the sharpest checks exist
 
-The last three rules `worldloom validate` enforces (a fact a document was asked
-to carry and does not carry, a table cell that names a fact and states nothing,
-fewer compiled documents than the plan asked for) are one rule looked at from
-three sides, and they exist because the worst defect this project has had passed
-everything above them. A workbook that looked its figures up at the wrong month
-rendered with *every cell empty* and validated clean, because a reconciliation
-check compares a cell against a fact and two absent numbers agree. So the plan
-is now compared against the compiled document, per document rather than over the
-union of all of them: an intent's `required_fact_ids` against its own
-`ArtifactIR.fact_ids()`. It found four more of the same shape on its first run
-across the four verticals.
+Validation compares each intent's required facts with the facts present in
+that intent's compiled artifact. It also checks empty referenced cells and
+missing compiled documents. Comparing only the union of facts across the
+corpus would allow one document to conceal another document's omission.
+
+These checks were added after an incorrect reporting-period lookup produced
+empty workbook cells that passed reconciliation. Retain per-artifact checks
+when adding a format or changing compilation; an empty value is not evidence
+that the requested fact was rendered.
 
 # Machine-readable refusals
 

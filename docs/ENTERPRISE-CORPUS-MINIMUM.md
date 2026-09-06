@@ -1,12 +1,12 @@
 # Enterprise corpus minimum
 
-Worldloom coherence proves that a corpus agrees with itself. It does not prove
-that the corpus represents enough of a company to deserve the label
-"enterprise corpus". Artifact volume is not a substitute for functional
-breadth, and declared entities are not useful unless they reach readable
-records.
+Use the enterprise admission audit to check whether a corpus covers the
+required business functions and exposes their records. Coherence checks test
+consistency against canonical state; they do not establish sufficient breadth,
+realism, or downstream task performance.
 
-The executable admission rule is:
+A single coherent month-end-close episode is a pilot. Increasing its file
+count does not add workforce, customer, procurement, or security coverage.
 
 ```bash
 python -m evals.enterprise_minimum ./corpus-fleet \

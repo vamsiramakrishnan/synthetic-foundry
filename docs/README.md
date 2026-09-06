@@ -1,8 +1,11 @@
 # Worldloom documentation
 
-Worldloom is a deterministic, library-first compiler for synthetic enterprise
-corpora and the evaluations those corpora are built to support. The documentation
-is organized by the job being done, not by the source tree.
+Choose documentation by the result you need: a corpus, authored documents,
+an evaluation workload, or a reproducible fleet. Worldloom generates canonical
+state first, then validates artifacts and evaluation evidence against it.
+
+For a first run, use [the repository quickstart](../README.md#quickstart).
+For an enterprise dataset, define breadth and admission criteria before scaling.
 
 ## Choose a path
 
