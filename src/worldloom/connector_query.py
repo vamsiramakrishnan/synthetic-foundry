@@ -2,7 +2,7 @@
 
 Connector definitions own field bindings and native entity names. This module
 owns syntax only. Search construction, emulation and grading therefore speak the
-same :class:`worldloom.predicates.Predicate` instead of six private filter DSLs.
+same :class:`worldloom.predicates.Predicate` instead of private filter DSLs.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from .connector_definition import ConnectorDefinition
 from .predicates import FieldPredicate, Predicate, PredicateOp, Scalar
 
 _SUPPORTED_LANGUAGES = frozenset(
-    {"jql", "soql", "encoded_query", "cql", "odata", "drive_q"}
+    {"jql", "soql", "encoded_query", "cql", "odata", "drive_q", "cypher"}
 )
 
 
@@ -36,19 +36,42 @@ def _quote(value: Scalar) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
+def _comparison_token(op: PredicateOp, language: str) -> str:
+    symbols = {
+        PredicateOp.EQ: "=",
+        PredicateOp.NE: "!=",
+        PredicateOp.GT: ">",
+        PredicateOp.GTE: ">=",
+        PredicateOp.LT: "<",
+        PredicateOp.LTE: "<=",
+    }
+    if language == "odata":
+        return {
+            PredicateOp.EQ: "eq",
+            PredicateOp.NE: "ne",
+            PredicateOp.GT: "gt",
+            PredicateOp.GTE: "ge",
+            PredicateOp.LT: "lt",
+            PredicateOp.LTE: "le",
+        }[op]
+    return symbols[op]
+
+
 def _compile_standard(field: str, item: FieldPredicate, *, language: str) -> str:
     value = item.value
     if item.op is PredicateOp.EQ:
         if value is None:
             return f"{field} is EMPTY" if language == "jql" else f"{field} = null"
-        return f"{field} = {_quote(value)}"
+        assert not isinstance(value, tuple)
+        return f"{field} {_comparison_token(item.op, language)} {_quote(value)}"
     if item.op is PredicateOp.NE:
         if value is None:
             return f"{field} is not EMPTY" if language == "jql" else f"{field} != null"
-        return f"{field} != {_quote(value)}"
+        assert not isinstance(value, tuple)
+        return f"{field} {_comparison_token(item.op, language)} {_quote(value)}"
     if item.op in {PredicateOp.GT, PredicateOp.GTE, PredicateOp.LT, PredicateOp.LTE}:
         assert not isinstance(value, tuple)
-        return f"{field} {item.op.value} {_quote(value)}"
+        return f"{field} {_comparison_token(item.op, language)} {_quote(value)}"
     if item.op is PredicateOp.IN:
         assert isinstance(value, tuple)
         return f"{field} in ({', '.join(_quote(part) for part in value)})"
@@ -64,18 +87,26 @@ def _compile_standard(field: str, item: FieldPredicate, *, language: str) -> str
             return f"contains({field},{_quote(value)})"
         if language == "drive_q":
             return f"{field} contains {_quote(value)}"
+        if language == "cypher":
+            return f"{field} CONTAINS {_quote(value)}"
     raise AssertionError(f"unsupported predicate operator {item.op}")
 
 
 def _compile_encoded(field: str, item: FieldPredicate) -> str:
     value = item.value
     if item.op is PredicateOp.EQ:
-        return f"{field}ISEMPTY" if value is None else f"{field}={_atom(value)}"
+        if value is None:
+            return f"{field}ISEMPTY"
+        assert not isinstance(value, tuple)
+        return f"{field}={_atom(value)}"
     if item.op is PredicateOp.NE:
-        return f"{field}ISNOTEMPTY" if value is None else f"{field}!={_atom(value)}"
+        if value is None:
+            return f"{field}ISNOTEMPTY"
+        assert not isinstance(value, tuple)
+        return f"{field}!={_atom(value)}"
     if item.op in {PredicateOp.GT, PredicateOp.GTE, PredicateOp.LT, PredicateOp.LTE}:
         assert not isinstance(value, tuple)
-        return f"{field}{item.op.value}{_atom(value)}"
+        return f"{field}{_comparison_token(item.op, 'standard')}{_atom(value)}"
     if item.op is PredicateOp.IN:
         assert isinstance(value, tuple)
         return f"{field}IN{','.join(_atom(part) for part in value)}"
@@ -119,6 +150,11 @@ def compile_native(
             if language == "encoded_query"
             else _compile_standard(field, item, language=language)
         )
+
+    if language == "jql" and selected_entity is not None:
+        # JQL has no FROM clause. Carry the semantic entity through issueType so
+        # compile -> parse preserves the Predicate rather than dropping its kind.
+        clauses.insert(0, f"issuetype = {_quote(selected_entity)}")
 
     body = ("^" if language == "encoded_query" else " AND ").join(clauses)
     if language == "soql":
@@ -184,6 +220,24 @@ def _parse_atom(raw: str) -> Scalar:
             return float(value)
         except ValueError:
             return value
+
+
+def _parse_bound_atom(definition: ConnectorDefinition, field: str, raw: str) -> Scalar:
+    """Parse an atom while respecting a definition's declared string domains."""
+
+    value = raw.strip()
+    options = definition.options.get(field)
+    if options and value in options:
+        return value
+    return _parse_atom(raw)
+
+
+def _split_bound_csv(
+    definition: ConnectorDefinition, field: str, raw: str
+) -> tuple[Scalar, ...]:
+    if field in definition.options:
+        return tuple(part.strip().strip("'\"") for part in raw.split(",") if part.strip())
+    return _split_csv(raw)
 
 
 def _infer_entity(definition: ConnectorDefinition, native: str) -> str | None:
@@ -266,25 +320,34 @@ def _parse_standard_clause(
         return FieldPredicate(
             field=field,
             op=PredicateOp.IN,
-            value=_split_csv(member.group(2)),
+            value=_split_bound_csv(definition, field, member.group(2)),
         )
 
     comparison = re.fullmatch(
-        r"([A-Za-z_][\w.\[\]/]*)\s*(>=|<=|!=|=|>|<)\s*(.+)", clause
+        r"([A-Za-z_][\w.\[\]/]*)\s*(>=|<=|!=|=|>|<|eq|ne|gt|ge|lt|le)\s*(.+)",
+        clause,
+        flags=re.IGNORECASE,
     )
     if comparison:
         op = {
             "=": PredicateOp.EQ,
+            "eq": PredicateOp.EQ,
             "!=": PredicateOp.NE,
+            "ne": PredicateOp.NE,
             ">": PredicateOp.GT,
+            "gt": PredicateOp.GT,
             ">=": PredicateOp.GTE,
+            "ge": PredicateOp.GTE,
             "<": PredicateOp.LT,
+            "lt": PredicateOp.LT,
             "<=": PredicateOp.LTE,
-        }[comparison.group(2)]
+            "le": PredicateOp.LTE,
+        }[comparison.group(2).casefold()]
+        field = _semantic_field(definition, comparison.group(1))
         return FieldPredicate(
-            field=_semantic_field(definition, comparison.group(1)),
+            field=field,
             op=op,
-            value=_parse_atom(comparison.group(3)),
+            value=_parse_bound_atom(definition, field, comparison.group(3)),
         )
     raise ValueError(f"unsupported {language} query clause {clause!r}")
 
@@ -307,7 +370,11 @@ def _parse_encoded_clause(
             return FieldPredicate(field=field, op=PredicateOp.EQ, value=None)
         if op == "LIKE":
             return FieldPredicate(field=field, op=PredicateOp.CONTAINS, value=raw)
-        return FieldPredicate(field=field, op=PredicateOp.IN, value=_split_csv(raw))
+        return FieldPredicate(
+            field=field,
+            op=PredicateOp.IN,
+            value=_split_bound_csv(definition, field, raw),
+        )
 
     comparison = re.fullmatch(r"([A-Za-z_][\w.]*)\s*(>=|<=|!=|=|>|<)(.*)", clause)
     if comparison:
@@ -319,10 +386,11 @@ def _parse_encoded_clause(
             "<": PredicateOp.LT,
             "<=": PredicateOp.LTE,
         }[comparison.group(2)]
+        field = _semantic_field(definition, comparison.group(1))
         return FieldPredicate(
-            field=_semantic_field(definition, comparison.group(1)),
+            field=field,
             op=op,
-            value=_parse_atom(comparison.group(3)),
+            value=_parse_bound_atom(definition, field, comparison.group(3)),
         )
     raise ValueError(f"unsupported encoded query clause {clause!r}")
 
@@ -361,6 +429,17 @@ def parse_native(
             native_entity = _parse_atom(match.group(1))
             if isinstance(native_entity, str):
                 inferred = inferred or _infer_entity(definition, native_entity)
+            body = body[match.end() :]
+    elif language == "jql":
+        match = re.match(
+            r"issuetype\s*=\s*('(?:\\.|[^'])*'|\"(?:\\.|[^\"])*\"|[\w-]+)\s*(?:AND\s*)?",
+            body,
+            flags=re.IGNORECASE,
+        )
+        if match is not None:
+            native_entity = _parse_atom(match.group(1))
+            if isinstance(native_entity, str):
+                inferred = inferred or native_entity
             body = body[match.end() :]
 
     clauses = _split_clauses(language, body)
