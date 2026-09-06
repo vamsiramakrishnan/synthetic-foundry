@@ -59,7 +59,7 @@ SEED = 8128
 #: because "a corpus with no pack behaves exactly as it did" is the half of
 #: this change that has to be provably *inert*, and a structural assertion
 #: alone would still pass if the install path had begun contributing a check
-#: to every corpus in the repository. The figure is the one CLAUDE.md's
+#: to every corpus in the repository. The figure is the one AGENTS.md's
 #: pre-commit `worldloom validate retail-close` prints.
 PACKLESS_CHECKS = 1283
 

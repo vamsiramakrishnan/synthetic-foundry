@@ -57,6 +57,26 @@ def _override(kind: str, query: PlannedEnterpriseQuery, record_ids: Mapping[str,
     return StateOverride(kind=kind, connector=connector, record_id=first, details=details)
 
 
+def _entity_matches(connector: str, requested: str, actual: str) -> bool:
+    """Alias-aware: a source role asking for a ``file`` is met by a ``docx``.
+
+    File connectors project one record per artifact and format, under the
+    definition's entity for that format; the role vocabulary still says
+    ``file``, which the definition resolves through its alias.
+    """
+
+    if requested == actual:
+        return True
+    from .connector_definition import REFERENCE_CONNECTORS, load_connector_definition
+
+    if connector not in REFERENCE_CONNECTORS:
+        return False
+    try:
+        return load_connector_definition(connector).entity_matches(requested, actual)
+    except KeyError:
+        return False
+
+
 def materialize_corpus(
     world: World,
     queries: Iterable[PlannedEnterpriseQuery],
@@ -76,7 +96,8 @@ def materialize_corpus(
     }
     required_pairs = sorted({(requirement.connector, requirement.entity) for query in planned for requirement in query.generation.source_requirements})
     for connector, entity in required_pairs:
-        if any(record.connector == connector and record.entity == entity for record in records):
+        if any(record.connector == connector and _entity_matches(connector, entity, record.entity)
+               for record in records):
             continue
         if strict_sources:
             raise ValueError(f"missing_source: {connector}:{entity}; generate operational evidence before planning this query")

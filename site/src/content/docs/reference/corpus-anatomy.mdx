@@ -40,7 +40,7 @@ artifacts. You need Worldloom to build and validate it, not to read it.
 
 | File | What it holds |
 | --- | --- |
-| `world.json` | The company, its entities, the recipe, and the schema version. The recipe is how the corpus [rebuilds itself](/synthetic-foundry/concepts/determinism/). |
+| `world.json` | The company, its entities, the recipe, and the schema version. The recipe is how the corpus [rebuilds itself](/worldloom/concepts/determinism/). |
 | `lore.jsonl` | Historical priors and constraints. Lore is an input: it dates business units and shapes generation. |
 | `events.jsonl` | The append-only enterprise timeline. Events mint facts and make documents necessary. |
 | `facts.jsonl` | Canonical and superseded facts. The ledger every document is checked against. One row per fact, with subject, kind, value, authority, and validity window. |
@@ -50,7 +50,7 @@ artifacts. You need Worldloom to build and validate it, not to read it.
 | `artifact-ir.jsonl` | The resolved intermediate representation: tables, sections, claims. Every renderer reads this and nothing else. |
 | `artifact-manifest.jsonl` | Rendered files and their provenance. An empty path means compiled but not rendered in this format set. |
 | `evals.jsonl` | Evaluation cases: questions, expected fact IDs, distractors, temporal cutoffs, abstention labels. |
-| `intentional-errors.jsonl` | The labelled, mechanically explainable mess `--messiness` added. See [Messiness](/synthetic-foundry/guides/messiness/). |
+| `intentional-errors.jsonl` | The labelled, mechanically explainable mess `--messiness` added. See [Messiness](/worldloom/guides/messiness/). |
 | `generation-ledger.jsonl` | Every accepted generative decision, content-addressed. The replay key and the save file. |
 | `actor-*.jsonl` | Observations, messages, tasks, and tool calls, when the corpus was built with `--actors` or `--conversations`. |
 | `artifacts/` | The rendered files: XLSX, DOCX, PDF, PPTX, Markdown, and the Jira, Confluence, and ServiceNow bundles. |
@@ -79,5 +79,5 @@ worldloom inspect ./corpus --artifacts
 
 No API keys, no service state, no model weights. The flat `artifacts/` folder
 carries none of the corpus's knowledge about folders, owners, or permissions;
-`worldloom workspace` [projects that tree](/synthetic-foundry/guides/rendering/) from the
+`worldloom workspace` [projects that tree](/worldloom/guides/rendering/) from the
 manifest, the roster, and the access policies without touching the corpus.

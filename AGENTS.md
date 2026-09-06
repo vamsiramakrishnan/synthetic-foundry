@@ -1,13 +1,12 @@
 # Repository Guidelines
 
-Working guide for AI assistants in this repository (Worldloom, published from
-`synthetic-foundry`). Read before editing anything.
+Working guide for coding agents in this repository. Read before editing anything.
 
 ## Project Overview
 
 Python library + CLI (`worldloom`, entry point `src/worldloom/cli.py:app`) that
-deterministically generates coherent synthetic enterprise corpora — facts,
-timelines, org graphs, business processes — and materialises them as realistic
+deterministically generates coherent synthetic enterprise corpora (facts,
+timelines, org graphs, business processes) and materialises them as realistic
 documents (xlsx/docx/pdf/pptx/markdown/html), evaluation sets, and permissioned
 drive layouts.
 
@@ -15,14 +14,14 @@ The harness never calls a language model; **the agent is the writer**. The loop:
 
 1. `worldloom narrate requests ./corpus -o requests.json` hands you bounded prose
    requests (allowed facts, temporal cutoff).
-2. You write `responses.json` — every figure referenced as `{{fact:ID}}`, never
-   typed out (the most common rejection is `bare_number`; percentages and dates
-   count as figures). Contract details: `docs/agents/writing-responses.md`.
+2. You write `responses.json`. Every figure is referenced as `{{fact:ID}}`, never
+   typed out: the most common rejection is `bare_number`, and percentages and
+   dates count as figures. Contract details: `docs/agents/writing-responses.md`.
 3. `worldloom narrate accept ./corpus --from responses.json --model-id <model>`
    checks every claim against the corpus and commits or rejects with the violated
    rule.
 
-Rejection is normal — read the violation, fix that specific thing, resubmit.
+Rejection is normal. Read the violation, fix that specific thing, resubmit.
 Never make a validator pass by editing a fixture, relaxing a check, or working
 around a refusal. Deep material is routed one-topic-per-file in `docs/agents/`
 (16 files, each says when to read it); the index is `docs/README.md`.
@@ -33,7 +32,7 @@ rebuilds corpora and byte-compares them on every push.
 ## Architecture & Data Flow
 
 Layered pipeline around an immutable `World` (frozen dataclass,
-`src/worldloom/world.py`) — the single entry point for load/build/validate.
+`src/worldloom/world.py`), the single entry point for load/build/validate.
 No layer re-decides a fact an earlier layer owns. The thin waist is
 `src/worldloom/models.py`: every subsystem speaks only in frozen pydantic models
 (`ConfigDict(frozen=True, extra="forbid")`, `StrEnum` vocabularies); nothing
@@ -45,7 +44,7 @@ format- or provider-aware crosses it.
 2. `documents.py` compiles `ArtifactIntent` → `ArtifactIR` (structure and
    tables, no prose); `compiler/` (plan/components/grammar) is the deterministic
    artifact compiler where a model may only choose a content-addressed *plan*.
-3. `narrative/` — `requests.py` (contract) → `prompts.py` (versioned registry) →
+3. `narrative/`: `requests.py` (contract) → `prompts.py` (versioned registry) →
    providers → `claims.py` validation → `compiler.py` (ledger, retries, the only
    ThreadPoolExecutor; all ids minted single-threaded *before* threads spin up).
 4. `render/` turns IR → bytes; `workspace.py` exports the corpus as a
@@ -70,7 +69,7 @@ Determinism spine:
 
 | Path | Purpose |
 |---|---|
-| `src/worldloom/` | The package; `cli.py`, `world.py`, `models.py`, `validate.py`, `documents.py`, `episodes.py` are load-bearing |
+| `src/worldloom/` | The package; `cli.py`, `world.py`, `models.py`, `validate.py`, `documents.py`, `episodes.py` are the modules everything else depends on |
 | `src/worldloom/generators/` | Vertical generators (retail, banking, insurance, procurement, org, estate, …) |
 | `src/worldloom/{narrative,render,evaluate,compiler,actors}/` | Pipeline stages above |
 | `src/worldloom/{connectors,evals,pipeline}/` | The three library seams `worldloom seams` names: product-shaped connector emulation and trace grading; eval-first design → demands → candidates → proof; typed orchestration shared by SDK, CLI and skills |
@@ -78,7 +77,7 @@ Determinism spine:
 | `tests/` | ~225 pytest files; scripted agent stand-ins (`scripted_composer.py`, `scripted_actor.py`, `scripted_agent.py`) |
 | `tools/` | Dev-only scripts (`sweep.py` determinism sweep, `measure_retrievers.py`, `outcome_selection.py`); stdlib-only, never imported from `src/` |
 | `docs/`, `docs/agents/` | Operator guides; 16 agent topic files |
-| `examples/` | `retail-close/` golden corpus (CI-validated, hand-authored — never regenerate or "fix" it), `grocery-close/` reference narration, `packs/`, `episodes/`, `artifact-types/` |
+| `examples/` | `retail-close/` golden corpus (CI-validated and hand-authored; never regenerate or "fix" it), `grocery-close/` reference narration, `packs/`, `episodes/`, `artifact-types/` |
 | `evals/` | Checkout-only eval harnesses (enterprise_minimum, executive_narration, alphaevolve) |
 | `.claude/skills/`, `.claude/commands/` | 16 skills + 6 slash commands driving the loop; every skill is indexed in `docs/skills.md` |
 | `site/` | Astro/Starlight docs site (npm, GitHub Pages) |
@@ -125,11 +124,11 @@ it over `src/`):
 - No `random`, `uuid`, wall clock (`datetime.now()` and friends), or builtin
   `hash()` for identity. Draws via `rng.derive("<stable-name>")`; ids via
   `ids.Minter`/`format_id`; content addresses via `ids.content_key` (SHA-256).
-- No dict/set iteration order reaching output — sort before emitting; JSON/JSONL
+- No dict/set iteration order reaching output: sort before emitting. JSON/JSONL
   writes go through `corpus.write_jsonl`/`write_json` (sort_keys, pinned
   newlines).
-- Prompts are versioned data (`narrative/prompts.py`, key `name@version`):
-  never edit a template in place — bump the version; it is a ledger-key
+- Prompts are versioned data (`narrative/prompts.py`, key `name@version`).
+  Never edit a template in place; bump the version, which is a ledger-key
   component.
 - Anything that changes what a seed generates is a **Generation** change:
   CHANGELOG entry under its own heading, treated as breaking for
@@ -140,22 +139,22 @@ it over `src/`):
 `register_domain_checks` (`validate.py`), `register_artifact_types`
 (`documents.py`), `registries.declare` (per-corpus tables beside the code that
 writes them), `narrative/prompts.register`. A new vertical registers from its
-own module AND must be imported unconditionally from `__init__._install()` —
-lazy registration makes coherence depend on import order.
+own module AND must be imported unconditionally from `__init__._install()`,
+because lazy registration makes coherence depend on import order.
 
 **Error handling**: named exceptions (`CorpusError`, `CoherenceError`,
 `RecipeError`, `NarrationError`, `RenderError`) plus the `ValidationReport`
 envelope (`raise_if_failed()`; violations vs advisories). CLI refusals go
-through the `_REFUSALS` code registry in `cli.py` — codes are a stable wire
+through the `_REFUSALS` code registry in `cli.py`; codes are a stable wire
 format.
 
 **Style**:
 
-- Comments argue *why*, not *what* — including the defect that motivated a
+- Comments argue *why*, not *what*, including the defect that motivated a
   check. Match that; don't strip it when editing.
 - No formatter by design. E501 is ignored (prose comments run long); E402 is
   ignored (late imports are the registration seam, not accidents); `zip()`
-  without `strict=` is a ratchet — new code should say `strict=`.
+  without `strict=` is a ratchet, so new code should say `strict=`.
 - `from __future__ import annotations` everywhere; frozen dataclasses for value
   objects, pydantic `Model` for serialized entities; `__all__` grouped
   semantically; `TYPE_CHECKING` blocks for import-only types.
@@ -166,12 +165,13 @@ format.
 
 | File | Role |
 |---|---|
-| `pyproject.toml` | All gates: extras, ruff, mypy (incl. the `ignore_errors` debt ledger — fix a module, delete its line; never add one), pytest config |
-| `src/worldloom/__init__.py` | Version (hatch reads it — bump here only) + `_install()` registration |
+| `pyproject.toml` | All gates: extras, ruff, mypy (incl. the `ignore_errors` debt ledger: fix a module, delete its line; never add one), pytest config |
+| `src/worldloom/__init__.py` | Version (hatch reads it; bump here only) + `_install()` registration |
 | `src/worldloom/ids.py`, `rng.py`, `corpus.py` | Deterministic ids, RNG streams, byte-identical IO |
 | `src/worldloom/validate.py` | Coherence gate; `register_domain_checks` |
+| `src/worldloom/eval_witnesses.py`, `eval_execution.py` | The eval drives generation: one executor per tactic kind, each a recipe verb; the emulator-backed reference executor |
 | `src/worldloom/narrative/prompts.py` | Versioned prompt registry |
-| `.claude/skills/worldloom/references/commands.md` | GENERATED CLI reference — regenerate with `worldloom docs`, never hand-edit |
+| `.claude/skills/worldloom/references/commands.md` | GENERATED CLI reference; regenerate with `worldloom docs`, never hand-edit |
 | `examples/retail-close/` | Golden corpus; its empty generation ledger is asserted by a test |
 | `tests/test_determinism_hygiene.py`, `tests/test_properties.py` | Determinism AST gate; hypothesis properties |
 | `CONTRIBUTING.md`, `RELEASING.md`, `CHANGELOG.md` | PR gates; tag-driven release steps; changelog format |
@@ -183,11 +183,11 @@ format.
 - pip + hatchling; version single-sourced from `src/worldloom/__init__.py`.
 - Optional extras unlock features, and `worldloom doctor` names the missing pip
   extra per format: `xlsx`, `docx`, `pdf`, `pptx`, `polars`, `mcp`,
-  `embeddings` (downloads weights — deliberately never core), `all`, `dev`.
+  `embeddings` (downloads weights, so it is never core), `all`, `dev`.
 - `tools/` scripts run as `python3 tools/<name>.py` (they sys.path-insert
   `src/`); stdlib-only, dev-only.
 - Site tooling is npm/Node (Astro 5 + Starlight), isolated to `site/`.
-- `.gitattributes` pins LF everywhere — byte-identity fixtures depend on it.
+- `.gitattributes` pins LF everywhere; byte-identity fixtures depend on it.
 
 ## Testing & QA
 
@@ -209,10 +209,10 @@ format.
   validator tests corrupt one fact and expect the named violation.
 - Before committing: `pytest -q`, `ruff check .`, `mypy`,
   `worldloom validate retail-close`, `worldloom docs --check`. CI additionally
-  byte-replays corpora — anything nondeterministic fails there even when local
+  byte-replays corpora, so anything nondeterministic fails there even when local
   tests pass.
 - Changed the CLI surface (command or flag)? Run `worldloom docs` from the root
   and commit the regenerated reference. `tests/test_harness_docs.py` requires
   every real command to be mentioned in an agent-facing document and rejects
-  fenced examples naming commands or flags that don't exist — **this file is on
+  fenced examples naming commands or flags that don't exist. **This file is on
   that checked list.**

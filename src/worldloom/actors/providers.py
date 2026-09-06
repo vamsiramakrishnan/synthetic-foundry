@@ -2,7 +2,7 @@
 
 A provider turns one bounded observation into one chosen action. That is the
 entire interface, and it is deliberately the same size as ``narrative.Provider``
-for the same reason: a real adapter — Claude Code, Codex, the Antigravity SDK,
+for the same reason: a real adapter (a coding harness, an SDK,
 anything that can read JSON and answer with JSON — should be a thin wrapper over
 whatever it already has, not an integration.
 

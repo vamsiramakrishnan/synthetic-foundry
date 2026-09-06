@@ -52,7 +52,7 @@ import pytest
 # not in the runtime dependencies, and a package installed for use rather than
 # for development should not report a broken test suite for lacking a test-only
 # tool. Every gate that matters runs it — `pip install -e ".[dev]"` is what
-# CLAUDE.md's `pytest -q` assumes.
+# AGENTS.md's `pytest -q` assumes.
 pytest.importorskip("hypothesis")
 
 from hypothesis import HealthCheck, assume, given, settings

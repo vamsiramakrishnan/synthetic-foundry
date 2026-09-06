@@ -192,6 +192,7 @@ def _install() -> None:
     # the verb into `recipe.py` never ran.
     from . import eval_construction as _eval_construction  # noqa: F401
     from . import eval_interventions as _eval_interventions  # noqa: F401
+    from . import eval_witnesses as _eval_witnesses  # noqa: F401
 
     # Same contract again, one level up: importing this is what registers the
     # `Imperfections` recipe verb, and a corpus built with a messiness profile

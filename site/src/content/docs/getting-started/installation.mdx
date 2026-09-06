@@ -3,12 +3,18 @@ title: Installation
 description: Install Worldloom from a checkout, and pick the extras you need.
 ---
 
-Worldloom is a Python package. It needs Python 3.11 or later. It is not on
-PyPI yet, so you install it from a checkout.
+Worldloom is a Python package. It needs Python 3.11 or later.
 
 ```bash
-git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
-cd synthetic-foundry
+pip install "worldloom[all]"
+worldloom --help
+```
+
+For development, install from a checkout instead:
+
+```bash
+git clone https://github.com/vamsiramakrishnan/worldloom.git
+cd worldloom
 pip install -e ".[dev]"
 worldloom --help
 ```
@@ -53,7 +59,7 @@ protocol, not the capability.
 ## No model SDK
 
 There is no extra for a language model. Worldloom never calls one. Your agent
-writes prose through the [narration handshake](/synthetic-foundry/guides/narration/), as shell
+writes prose through the [narration handshake](/worldloom/guides/narration/), as shell
 commands and JSON files.
 
 ## Check the install

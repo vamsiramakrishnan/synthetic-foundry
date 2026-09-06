@@ -9,10 +9,10 @@ tags: [worldloom, process, lob, slot-bindings, participation]
 
 The company's half lives on the LOB: `lob.SlotBinding(process=..., slot=...,
 role_key=...)` rows in `Lob.slot_bindings`. Lint them with
-`lob.lint_bindings(my_lob, spec)` — an unbound **required** slot and a binding
+`lob.lint_bindings(my_lob, spec)`. An unbound **required** slot and a binding
 to a role the LOB lacks are both refused.
 
-Who is *in* a process is never a table — it is the join of the LOB's
+Who is *in* a process is never a table: it is the join of the LOB's
 responsibility edges against the kinds the process's steps mint (dot-prefix
 semantics: answering for `financial.revenue` meets minting
 `financial.revenue.actual`), plus the slot bindings:
@@ -30,5 +30,5 @@ blueprint.participation("HrOnboarding") # {lob_name: participants}, spec must be
 
 The blueprint's `bind` adds `SlotBinding` rows to the attached copy without
 editing the LOB; a binding naming a role the LOB lacks is refused at that
-call. `lob.describe` covers *installed* LOBs only — it returns `None` for a
+call. `lob.describe` covers *installed* LOBs only: it returns `None` for a
 name never passed to `lob.install`.

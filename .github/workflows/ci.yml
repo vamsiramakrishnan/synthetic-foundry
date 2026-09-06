@@ -159,7 +159,7 @@ jobs:
       # the requests rather than the prose — a change that makes a request harder
       # to answer well shows up here and nowhere else. The model id is a
       # collective label: the file's prose has been written by more than one
-      # Claude model over time (the close artifacts first, the fan-out layer's
+      # model over time (the close artifacts first, the fan-out layer's
       # commentary and thread later), each accepted through this same gate.
       # This authored reference predates the CLI's varying-outline defaults.
       # Pin its recipe; a different shape correctly rejects its section IDs.

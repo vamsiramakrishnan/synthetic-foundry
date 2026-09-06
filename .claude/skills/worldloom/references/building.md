@@ -1,6 +1,6 @@
 ---
 title: Building a World
-description: Choose the build surface that owns each decision — seed, archetype, spec, facets, pack, periods, scale
+description: Choose the build surface that owns each decision, from seed, archetype, spec, and facets to pack, periods, and scale
 read-when: About to run worldloom build and deciding which flags state the request completely
 tags: [build, seeds, archetypes, packs, periods, determinism]
 ---
@@ -98,10 +98,11 @@ worldloom build --employees 80000 --out ./corpus
 decision-making graph: authors, owners, approvers, actors, and reporting lines.
 Worldloom does not mint one `Employee` object per payroll row.
 
-The separation is load-bearing, not cosmetic. Explicit workforce scale changes
-sampled incident, departure, and reorganization density logarithmically. It never
-permits active named employees to exceed aggregate headcount; sampling, scenario
-review, direct hires, and corpus validation all enforce that invariant.
+The separation is not cosmetic: incident, departure, and reorganization density
+depend on it. Explicit workforce scale changes those sampled densities
+logarithmically. It never permits active named employees to exceed aggregate
+headcount; sampling, scenario review, direct hires, and corpus validation all
+enforce that invariant.
 
 ## Periods and vertical scope
 

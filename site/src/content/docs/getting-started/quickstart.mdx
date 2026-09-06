@@ -31,7 +31,7 @@ target length, a knowledge cutoff, and the facts the section may use.
 
 Read `requests.json`. Write `responses.json`: one entry per request, prose plus
 the facts each claim rests on. This step is yours. The
-[narration guide](/synthetic-foundry/guides/narration/) covers the rules and the JSON shapes.
+[narration guide](/worldloom/guides/narration/) covers the rules and the JSON shapes.
 
 ## 4. Submit
 
@@ -50,7 +50,7 @@ worldloom render ./corpus -f xlsx -f docx -f markdown
 ```
 
 Add `-f jira -f confluence -f servicenow` for the business-system bundles. See
-[Rendering](/synthetic-foundry/guides/rendering/) for what each format carries.
+[Rendering](/worldloom/guides/rendering/) for what each format carries.
 
 ## 6. Validate
 
@@ -60,7 +60,7 @@ worldloom validate ./corpus
 
 On this corpus the validator passes 8,877 checks. It fails on any total that
 does not sum, any citation of a fact that did not yet exist, any reference to
-an entity that does not. See [Validation](/synthetic-foundry/concepts/validation/).
+an entity that does not. See [Validation](/worldloom/concepts/validation/).
 
 ## 7. Measure hardness
 
@@ -71,7 +71,7 @@ worldloom evaluate ./corpus
 The BM25 baseline scores 26 of 51 on this corpus. It passes every direct
 lookup and fails every abstention case. That shape is the intended result:
 the corpus is hard where hardness was designed in. See
-[Evaluation](/synthetic-foundry/concepts/evaluation/).
+[Evaluation](/worldloom/concepts/evaluation/).
 
 ## 8. Lay it out as a drive
 

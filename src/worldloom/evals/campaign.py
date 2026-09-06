@@ -10,6 +10,7 @@ modules during the compatibility release.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -18,6 +19,7 @@ from ..eval_candidates import CandidateBuilder, GeneratedCandidate, generate_can
 from ..eval_demands import DemandSet, compile_demands
 from ..eval_design import CandidatePlan, EvalSpec, plan_candidates
 from ..eval_instances import EvalInstance, bind_eval_instance
+from ..eval_interventions import ConstructionResult
 from ..eval_tactics import TacticPlan, plan_tactics
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -31,6 +33,13 @@ class CampaignRun:
     spec: EvalSpec
     attempts: tuple[GeneratedCandidate, ...]
     instances: tuple[EvalInstance, ...]
+    constructions: tuple[ConstructionResult, ...] = ()
+    """Per attempt, what the constructive layer did and what it refused.
+
+    Empty when the run used a plain builder. A refused construction is the
+    reason a candidate was rejected, in the words of the seam that should have
+    produced the state, which is what a harness needs to act on.
+    """
 
     @property
     def accepted(self) -> tuple[GeneratedCandidate, ...]:
@@ -116,6 +125,34 @@ class EvalCampaign:
             keep_rejected=keep_rejected,
         )
 
+    def construct(
+        self,
+        base: CandidateBuilder,
+        *,
+        count: int | None = None,
+        occurred_at: datetime | None = None,
+    ) -> CampaignRun:
+        """Build each candidate, then make it satisfy the eval, then validate.
+
+        The eval drives generation: *base* supplies a world the way a vertical
+        builds one, and ``construct_candidate`` executes one tactic per demand
+        the design compiled to. The validator that accepts the result is the
+        same one ``run`` uses and knows nothing about the constructions, so a
+        tactic cannot accept its own output.
+        """
+
+        from ..eval_interventions import construct_candidate
+
+        constructions = tuple(
+            construct_candidate(self.spec, plan, base(plan), occurred_at=occurred_at)
+            for plan in self.plans(count=count)
+        )
+        attempts = tuple(result.candidate for result in constructions)
+        accepted = tuple(candidate for candidate in attempts if candidate.validation.accepted)
+        instances = tuple(bind_eval_instance(self.spec, candidate) for candidate in accepted)
+        return CampaignRun(spec=self.spec, attempts=attempts, instances=instances,
+                           constructions=constructions)
+
     def run(
         self,
         builder: CandidateBuilder,
@@ -171,8 +208,17 @@ class EvalCampaign:
         count: int | None = None,
         formats: tuple[str, ...] = (),
         overwrite: bool = False,
+        construct: bool = False,
+        occurred_at: datetime | None = None,
     ) -> Path:
-        """Write accepted eval instances beside their exact synthetic corpora."""
+        """Write accepted eval instances beside their exact synthetic corpora.
+
+        With ``construct`` the builder is the *base* and each candidate is made
+        to satisfy the design before validation (see ``construct``); the
+        manifest then carries what every attempt's constructions did and
+        refused, so a harness reading the export knows which seam to go to for
+        a rejected candidate rather than only that it was rejected.
+        """
 
         root = Path(out)
         if root.exists() and any(root.iterdir()) and not overwrite:
@@ -181,7 +227,10 @@ class EvalCampaign:
             )
         root.mkdir(parents=True, exist_ok=True)
 
-        run = self.run(builder, count=count)
+        run = (
+            self.construct(builder, count=count, occurred_at=occurred_at)
+            if construct else self.run(builder, count=count)
+        )
         demands = self.demands()
         tactics = self.tactics()
         write_json(root / "eval-spec.json", self.spec.model_dump(mode="json"))
@@ -233,6 +282,15 @@ class EvalCampaign:
                     str(ordinal): list(requirements)
                     for ordinal, requirements in run.failed_requirements.items()
                 },
+                "constructions": [
+                    {
+                        "ordinal": result.candidate.plan.ordinal,
+                        "seed": result.candidate.plan.seed,
+                        "applied": list(result.applied_tactic_ids),
+                        "findings": [finding.model_dump(mode="json") for finding in result.findings],
+                    }
+                    for result in run.constructions
+                ],
                 "candidates": manifest_candidates,
             },
         )

@@ -27,7 +27,7 @@ accepted World
 EvalInstance + Oracle + derived assertions
 ```
 
-The ordering is load-bearing.
+The ordering is the contract.
 
 An eval states the capability being tested, its abstract task DAG, and the conditions a valid synthetic world must contain. No concrete fact, ticket, document, person, or connector record exists yet.
 
@@ -108,7 +108,25 @@ def build_candidate(plan):
 instances = campaign.instantiate(build_candidate)
 ```
 
-A builder is expected to inspect `plan.requirements` and choose or tune a scenario capable of satisfying them. The simple example above deliberately does not pretend that a generic retail close can satisfy the revision-chain eval; such candidates are rejected until the builder produces the required state.
+A plain builder is expected to inspect `plan.requirements` and choose or tune a scenario capable of satisfying them. A generic retail close does not satisfy the revision-chain eval above, so `instantiate` rejects every candidate.
+
+The constructive path makes the eval drive generation instead:
+
+```python
+run = campaign.construct(build_candidate)
+run.instances          # bound evals for the accepted candidates
+run.constructions      # per attempt: tactics applied, and refusals naming the owning seam
+```
+
+`construct` takes the same builder as a *base* and executes one tactic per demand the design compiled to: records the connector must hold (with one near miss per constrained field), the destination a write step needs, artifact families, access policies, events, revision chains. Each construction is a recipe verb, so the candidate rebuilds from its own recipe. The validator that accepts the result knows nothing about the constructions and cannot be satisfied by them alone: a demand the base already meets is left to the engine, and a demand no tactic can honour (a fact, which belongs to an episode; a derived artifact field) comes back as a finding naming the seam that produces it.
+
+From the shell:
+
+```bash
+worldloom evals construct design.json --out ./campaign --archetype omnichannel_retailer -f markdown
+```
+
+The campaign directory holds the accepted candidates' corpora, their bound evals, and a manifest recording what every attempt applied and refused.
 
 ## Contracts
 

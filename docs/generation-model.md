@@ -11,7 +11,7 @@ The **deterministic engine** owns anything that must be *correct*. The **generat
 
 ## Why the boundary is where it is
 
-Language models are excellent at plausibility and unreliable at bookkeeping. Ask one to invent a retail company's culture and it will do better than a human with a spreadsheet. Ask it to make ninety-one line items sum to a total that also appears on slide 4 of a board deck and in a variance report filed six weeks later, and it will fail — not always, but often enough that no downstream artifact can be trusted.
+Language models are excellent at plausibility and unreliable at bookkeeping. Ask one to invent a retail company's culture and it will do better than a human with a spreadsheet. Ask it to make ninety-one line items sum to a total that also appears on slide 4 of a board deck and in a variance report filed six weeks later, and it will fail. Not always, but often enough that no downstream artifact can be trusted.
 
 The failure modes Worldloom exists to eliminate are exactly the ones an unconstrained LLM introduces:
 
@@ -78,7 +78,7 @@ Every generative call is content-addressed and written to the world's **generati
 - the model identifier
 - the prompt template version
 
-`from_seed()` replays the ledger. A key that hits is never re-prompted, so regeneration touches no model at all and is byte-identical, offline, and free. A world ships with its ledger; that is what makes a corpus citable — a seed in a paper regenerates exactly what was measured.
+`from_seed()` replays the ledger. A key that hits is never re-prompted, so regeneration touches no model at all and is byte-identical, offline, and free. A world ships with its ledger; that is what makes a corpus citable: a seed in a paper regenerates exactly what was measured.
 
 Changing the model or a prompt template changes the keys, and therefore produces a *different world*. That is correct and it is explicit: pinning both is part of pinning a world. Worldloom will not silently re-prompt and hand back something that no longer matches the seed it was asked for.
 
@@ -94,25 +94,25 @@ Rejections are cheap and expected. A proposal that fails validation is regenerat
 
 ## When generation happens
 
-Note the ordering carefully, because "facts before prose" is easily misread as "structure before narrative", which is backwards. The **priors** — what the company is, its history and culture — are generated *first*, because no org graph, service catalogue, or financial model is decidable without them. They are then frozen, and every later phase reads them:
+Note the ordering carefully, because "facts before prose" is easily misread as "structure before narrative", which is backwards. The **priors**, what the company is, its history and culture, are generated *first*, because no org graph, service catalogue, or financial model is decidable without them. They are then frozen, and every later phase reads them:
 
 ```
 integer seed + intent (industry, scale, inspiration)
         ↓
-[generative]     Priors — identity, lore, strategy, org intent, tech posture
+[generative]     Priors: identity, lore, strategy, org intent, tech posture
         ↓        frozen into the ledger, immutable thereafter
-[deterministic]  Structure — org graph, services, financial model, timeline
+[deterministic]  Structure: org graph, services, financial model, timeline
         ↓
-[interleaved]    Simulation — events fire, model explains, validator commits
+[interleaved]    Simulation: events fire, model explains, validator commits
         ↓
 [deterministic]  Facts
         ↓
 [generative]     Prose
 ```
 
-Coherence comes from every phase reading one frozen priors document that none may contradict. If the priors could drift mid-generation, the result would be exactly the incoherence Worldloom exists to eliminate — so freezing them before structure is built is the mechanism, not a limitation.
+Coherence comes from every phase reading one frozen priors document that none may contradict. If the priors could drift mid-generation, the result would be exactly the incoherence Worldloom exists to eliminate. Freezing them before structure is built is therefore the mechanism, not a limitation.
 
-Priors→structure is not a clean waterfall, either: priors can propose infeasible things (nine business units for two hundred people, a service graph that cannot support the claimed uptime). So it is [rule 3](#3-the-llm-never-writes-to-the-graph) applied one level up — priors state *targets*, the deterministic layer checks feasibility and pushes back, and the negotiation is recorded.
+Priors→structure is not a clean waterfall, either: priors can propose infeasible things (nine business units for two hundred people, a service graph that cannot support the claimed uptime). So it is [rule 3](#3-the-llm-never-writes-to-the-graph) applied one level up: priors state *targets*, the deterministic layer checks feasibility and pushes back, and the negotiation is recorded.
 
 The twenty generation areas do not all run at the same time, and *when* an area runs determines its caching, its cost, and its blast radius. Grouped by phase:
 
@@ -127,7 +127,7 @@ The twenty generation areas do not all run at the same time, and *when* an area 
 
 ---
 
-# Part I — Authoring time
+# Part I: Authoring time
 
 Generated offline, reviewed by a human, and committed to the repository as data. Never generated during `simulate()` or `generate()`, because anything produced at authoring time is a *dependency* of reproducibility rather than a product of it.
 
@@ -135,15 +135,15 @@ Generated offline, reviewed by a human, and committed to the repository as data.
 
 Industry-specific knowledge, authored once per vertical and loaded as a plugin.
 
-**Retail** — store operations · inventory · promotions · loyalty · distribution · merchandising
+**Retail:** store operations · inventory · promotions · loyalty · distribution · merchandising
 
-**IT services** — delivery · bench · utilisation · staffing · SOW · margin
+**IT services:** delivery · bench · utilisation · staffing · SOW · margin
 
-**Healthcare** — clinical workflows · care pathways · compliance · population health
+**Healthcare:** clinical workflows · care pathways · compliance · population health
 
-**Banking** — lending · deposits · AML · risk · treasury
+**Banking:** lending · deposits · AML · risk · treasury
 
-**Manufacturing** — plants · BOM · supply chain · maintenance · quality
+**Manufacturing:** plants · BOM · supply chain · maintenance · quality
 
 A pack contributes vocabulary, entity types, scenario templates, artifact recipes, and the metric definitions that make the vertical's arithmetic correct. The arithmetic itself is deterministic; the pack supplies the definitions, not the numbers.
 
@@ -164,7 +164,7 @@ The LLM extends the platform itself, generating:
 - new event chains
 - new simulation rules
 
-This is the highest-leverage use of a model in the project — it is how Worldloom broadens coverage without hand-coding every domain — and it is also the one place where the platform could destroy its own guarantees. A simulation rule invented at runtime is a simulation rule that cannot be reviewed, cannot be diffed, and makes the seed meaningless.
+This is the highest-leverage use of a model in the project: it is how Worldloom broadens coverage without hand-coding every domain. It is also the one place where the platform could destroy its own guarantees. A simulation rule invented at runtime is a simulation rule that cannot be reviewed, cannot be diffed, and makes the seed meaningless.
 
 So meta-generation is a **development-time activity with a human in the loop**, and its output is code and data checked into a repository, versioned, and diffable:
 
@@ -177,9 +177,9 @@ So meta-generation is a **development-time activity with a human in the loop**, 
 
 ---
 
-# Part II — Seed time
+# Part II: Seed time
 
-Generated once, when the world is created. These outputs *are* the `WorldSeed` — a frozen priors document, distinct from the integer seed that drives randomness. Every later phase reads it and none may contradict it. Expensive, cached permanently, and the reason `World()` construction is lazy — none of this runs until `.generate()`.
+Generated once, when the world is created. These outputs *are* the `WorldSeed`: a frozen priors document, distinct from the integer seed that drives randomness. Every later phase reads it and none may contradict it. Expensive, cached permanently, and the reason `World()` construction is lazy: none of this runs until `.generate()`.
 
 Areas 1–3 and 5 are the [lore](lore.md) layer, and lore is a constraint graph rather than a story: every commitment must constrain a downstream decision or it fails validation.
 
@@ -189,7 +189,7 @@ The "who are we?" layer.
 
 Company name · brand architecture · mission · vision · corporate values · operating philosophy · industry archetype · market positioning · competitive landscape · company culture · leadership style · organisational maturity · transformation stage · public perception · corporate language and terminology · internal abbreviations · naming conventions
 
-Note the distinction the top-level rule leaves implicit: the model owns *brand* identity — what the company is called and how it talks about itself. The deterministic layer owns *entity* identity — the stable ID behind every employee, service, and project, and the guarantee that a reference to one always resolves. The model names things. It does not assign identity.
+Note the distinction the top-level rule leaves implicit: the model owns *brand* identity, meaning what the company is called and how it talks about itself. The deterministic layer owns *entity* identity: the stable ID behind every employee, service, and project, and the guarantee that a reference to one always resolves. The model names things. It does not assign identity.
 
 Terminology and naming conventions generated here are binding. Once the world decides its warehouses are "DCs" and its quarters run July–June, every artifact in every format obeys, because the renderer reads the same conventions.
 
@@ -211,7 +211,7 @@ Executive priorities, and the disagreements about them.
 
 Annual objectives · multi-year strategy · transformation themes · executive concerns · board priorities · competitive threats · innovation areas · cost pressures · growth initiatives · risk appetite · success metrics · political tensions · cross-functional disagreements
 
-Political tension is load-bearing. Two executives who disagree about cost versus growth produce genuinely different documents about the same programme — and that is the difference between a corpus that tests retrieval and one that tests reasoning.
+Political tension shapes what gets written down. Two executives who disagree about cost versus growth produce genuinely different documents about the same programme, and that is the difference between a corpus that tests retrieval and one that tests reasoning.
 
 *Deterministic:* metric definitions and targets, budget envelopes, which objectives own which programmes.
 
@@ -219,7 +219,7 @@ Political tension is load-bearing. Two executives who disagree about cost versus
 
 Revenue streams · cost drivers · customer segments · distribution channels · value proposition · product portfolio · service catalogue · partner ecosystem · vendor landscape · internal chargeback models · budget ownership philosophy
 
-The model generates the *shape* of the economics — what drives revenue, how cost is allocated, who owns which budget. It does not generate the economics.
+The model generates the *shape* of the economics: what drives revenue, how cost is allocated, who owns which budget. It does not generate the economics.
 
 *Deterministic:* the entire financial model. Revenue, cost, allocation, chargeback, margin, cash flow, and every aggregation over them.
 
@@ -227,13 +227,13 @@ The model generates the *shape* of the economics — what drives revenue, how co
 
 Executive team · business units · departments · team purposes · reporting philosophy · committee structures · governance forums · RACI patterns · decision rights · ownership boundaries · matrix relationships · internal politics · collaboration patterns
 
-The model proposes structure and the human texture of it — what a team is *for*, who really decides, which two departments cooperate badly. The graph itself is built and validated deterministically: every person has exactly one reporting line, the hierarchy is acyclic, spans of control are plausible, and every service and project has an owner who exists.
+The model proposes structure and the human texture of it: what a team is *for*, who really decides, which two departments cooperate badly. The graph itself is built and validated deterministically: every person has exactly one reporting line, the hierarchy is acyclic, spans of control are plausible, and every service and project has an owner who exists.
 
 *Deterministic:* the org graph, headcount roll-ups, span and depth constraints, ownership completeness.
 
 ## 6. Technology landscape
 
-Deliberately not exact products.
+Posture, not exact products.
 
 Technology philosophy · modernisation maturity · platform strategy · build versus buy philosophy · cloud adoption journey · architecture principles · engineering culture · release philosophy · security posture · reliability priorities · data strategy · AI adoption maturity
 
@@ -243,7 +243,7 @@ Generating a posture rather than a product list is what keeps worlds free of rea
 
 ## 7. Information ecosystem
 
-How information actually moves — the layer that decides what a corpus *looks* like.
+How information actually moves: the layer that decides what a corpus *looks* like.
 
 Which teams create documentation · documentation quality · wiki culture · ticket hygiene · approval processes · meeting cadence · reporting hierarchy · knowledge sharing habits · preferred communication style · documentation ownership
 
@@ -257,13 +257,13 @@ Every author should read differently.
 
 Writing style · vocabulary · sentence complexity · technical depth · biases · optimism versus pessimism · risk tolerance · political awareness · preferred document structure · favourite phrases · review habits · escalation style
 
-A persona is attached to every artifact as its author, and it is the same persona every time that employee writes. Consistency across hundreds of documents is what makes authorship a signal a system can actually learn — and what makes an optimistic status report from a known optimist something a reasoning system can discount.
+A persona is attached to every artifact as its author, and it is the same persona every time that employee writes. Consistency across hundreds of documents is what makes authorship a signal a system can actually learn. It is also what makes an optimistic status report from a known optimist something a reasoning system can discount.
 
 *Deterministic:* author assignment, who could have written what given role and permissions, timestamps.
 
 ---
 
-# Part III — Simulation time
+# Part III: Simulation time
 
 Runs per tick as the world advances. The deterministic engine decides *what happened*. The model explains it and lets the organisation drift.
 
@@ -273,7 +273,7 @@ Possibly the highest-value generative use in the project. Every simulated month:
 
 New priorities · new tensions · organisational drift · cultural changes · leadership messaging · strategic pivots · new terminology · emerging risks · technical debt accumulation · policy evolution
 
-A frozen enterprise is the tell of synthetic data. Real organisations drift: language changes, priorities move, reorganisations land, debt accrues, a risk that was theoretical in March is a programme by September. Evolution is what makes a temporal cut-off meaningful — the world of 2023 genuinely differs from the world of 2026, so a question answered correctly at one cut-off is answered differently at another.
+A frozen enterprise is the tell of synthetic data. Real organisations drift: language changes, priorities move, reorganisations land, debt accrues, a risk that was theoretical in March is a programme by September. Evolution is what makes a temporal cut-off meaningful: the world of 2023 genuinely differs from the world of 2026, so a question answered correctly at one cut-off is answered differently at another.
 
 Drift is proposed and then validated, because an organisation may drift but not teleport: headcount moves continuously, reorganisations preserve people, terminology changes are recorded with effective dates so older artifacts keep using the older word.
 
@@ -281,7 +281,7 @@ Drift is proposed and then validated, because an organisation may drift but not 
 
 ## 10. Scenario design
 
-Templates are authored offline (Part I). Instantiation happens here — the model decides how *this* scenario lands in *this* world.
+Templates are authored offline (Part I). Instantiation happens here: the model decides how *this* scenario lands in *this* world.
 
 Product launch · AI rollout · ERP migration · warehouse automation · customer escalation · vendor bankruptcy · security incident · budget freeze · merger · audit · regulatory change · major outage · supply chain disruption
 
@@ -297,15 +297,15 @@ The deterministic engine creates events. The model explains them.
 
 Causes · consequences · executive summaries · timeline explanations · lessons learned · meeting discussions · decision rationale · trade-offs · assumptions · open questions · risk commentary
 
-Explanation is generated *once per event* and every artifact about that event reads it. This is why an incident has one root cause across eight documents rather than eight root causes — the explanation is a fact in the ledger, not a per-document improvisation.
+Explanation is generated *once per event* and every artifact about that event reads it. This is why an incident has one root cause across eight documents rather than eight root causes: the explanation is a fact in the ledger, not a per-document improvisation.
 
-Where documents *should* disagree — an initial diagnosis that was wrong, a status report written before the real cause was known — the disagreement is generated deliberately and labelled (§15), with the artifact's knowledge cut off at its own timestamp.
+Where documents *should* disagree, such as an initial diagnosis that was wrong or a status report written before the real cause was known, the disagreement is generated and labelled (§15), with the artifact's knowledge cut off at its own timestamp.
 
 *Deterministic:* what happened, when, to which services, with what measured impact, and who was involved.
 
 ---
 
-# Part IV — Planning time
+# Part IV: Planning time
 
 Judgment about what should exist and how it should be shaped, before a word of prose is written.
 
@@ -315,7 +315,7 @@ The model answers one question: *if this happened, in this organisation, what do
 
 A SEV1 outage might produce an incident record, an RCA, a chat discussion, an executive memo, a board update, engineering tasks, a knowledge article, and an audit note.
 
-**Not every incident deserves every artifact.** This is the whole point of asking a model rather than a rule. A template that emits eight artifacts per incident produces a corpus with no signal — every incident looks identical and important. Real organisations are selective and inconsistent: most incidents get a ticket and nothing else, some get an RCA nobody finished, a few reach the board. Plausible *selectivity* is a judgment call, and it is the difference between a corpus that tests retrieval and one that just has a lot of files in it.
+**Not every incident deserves every artifact.** This is why the choice is made by a model rather than a rule. A template that emits eight artifacts per incident produces a corpus with no signal: every incident looks identical and important. Real organisations are selective and inconsistent: most incidents get a ticket and nothing else, some get an RCA nobody finished, a few reach the board. Plausible *selectivity* is a judgment call, and it is the difference between a corpus that tests retrieval and one that just has a lot of files in it.
 
 The information ecosystem (§7) constrains this directly: a team with poor documentation culture generates fewer artifacts, later, and worse.
 
@@ -327,7 +327,7 @@ Structure before prose.
 
 Sections · ordering · audience · required tables · charts · appendices · references · attachments · reviewers
 
-Outlining separately is what lets the deterministic layer resolve every table, chart, and reference *before* generation — so prose is written against data that already exists, and a promised appendix is always present.
+Outlining separately is what lets the deterministic layer resolve every table, chart, and reference *before* generation. Prose is then written against data that already exists, and a promised appendix is always present.
 
 *Deterministic:* table and chart data, reference resolution, attachment existence, reviewer eligibility.
 
@@ -337,15 +337,15 @@ Intent, not pixels.
 
 Deck structure · information density · story flow · chart recommendations · table recommendations · executive versus engineering presentation style · slide hierarchy · appendix planning
 
-The model recommends that a trend belongs in a line chart with the appendix carrying the detail table. Renderers decide pixels. This keeps design intent portable — the same intent renders to PPTX or to a Confluence page without regeneration.
+The model recommends that a trend belongs in a line chart with the appendix carrying the detail table. Renderers decide pixels. This keeps design intent portable: the same intent renders to PPTX or to a Confluence page without regeneration.
 
 *Deterministic:* chart data, axis ranges, layout, pagination, whether the content physically fits.
 
 ---
 
-# Part V — Render time
+# Part V: Render time
 
-Prose, at last — the part everyone assumes is the whole job. It is five of twenty areas, and it runs last.
+Prose, at last: the part everyone assumes is the whole job. It is five of twenty areas, and it runs last.
 
 ## 13. Narrative generation
 
@@ -357,7 +357,7 @@ Generated against a resolved outline, a bound fact set, an assigned persona, and
 
 ## 14. Cross-document style
 
-Consistency, generated deliberately.
+Consistency, not coincidence.
 
 Finance writes differently from engineering. Operations writes differently from HR. Board papers differ from incident reports. Every domain gets its own language, and it keeps it across thousands of artifacts.
 
@@ -371,7 +371,7 @@ Realistic noise, on purpose.
 
 Wrong assumptions · initial diagnosis · stale documentation · political wording · overly optimistic status · missing details · contradictory terminology · duplicate tickets · incomplete meeting notes · human mistakes
 
-A corpus without mess flatters whatever you point at it. The mess is therefore generated deliberately — and every instance is **labelled and traceable**, which is what separates a test case from a bug:
+A corpus without mess flatters whatever you point at it. The mess is therefore never accidental: every instance is **labelled and traceable**, which is what separates a test case from a bug:
 
 ```python
 world.artifacts().where(stale=True)
@@ -384,15 +384,15 @@ Every imperfection records what it contradicts and why, so an evaluation can ask
 
 ---
 
-# Part VI — Evaluation time
+# Part VI: Evaluation time
 
 ## 16. Evaluation generation
 
 Questions · distractors · alternative phrasings · follow-up questions · multi-hop questions · ambiguous questions · clarification prompts · incorrect hypotheses · expected reasoning chains
 
-The model writes the questions. The world already knows the answers — they are facts, with citations, because every artifact records the facts that justify it. Ground truth is never generated, which is what makes the eval set trustworthy: a graded answer is checked against the ledger, not against another model's opinion.
+The model writes the questions. The world already knows the answers: they are facts, with citations, because every artifact records the facts that justify it. Ground truth is never generated, which is what makes the eval set trustworthy: a graded answer is checked against the ledger, not against another model's opinion.
 
-Distractors are drawn from real artifacts that are plausibly relevant and actually wrong — superseded reports, stale pages, the incident with a similar signature — so retrieval failure is a genuine near-miss rather than a random file.
+Distractors are drawn from real artifacts that are plausibly relevant and actually wrong: superseded reports, stale pages, the incident with a similar signature. That makes a retrieval failure a genuine near-miss rather than a random file.
 
 *Deterministic:* answers, citations, reasoning-chain validity, difficulty, whether a question is answerable at a given cut-off or permission level.
 

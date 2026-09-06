@@ -10,7 +10,7 @@ a period like 2026-03; default to seed 8128 and period 2026-03 if not given).
 worldloom build --seed <SEED> --period <PERIOD> --incident --out ./corpus
 ```
 
-The high-impact choices are worth asking about rather than defaulting silently:
+Ask about the high-impact choices rather than defaulting silently:
 
 - `--archetype <NAME>` picks a registered company shape; `worldloom archetypes`
   is authoritative. `--inspired-by` borrows shape only and performs no lookup.
@@ -31,7 +31,7 @@ artifacts are planned and their tables resolved, but the prose is not written. P
 them at `/worldloom-narrate` to write it.
 
 Omit `--incident` if the user wants the seed and the world's lore to decide whether
-the operational incident happens — that is the more interesting behaviour, since it
+the operational incident happens. That is the more interesting behaviour, since it
 makes a 2026 close go wrong because of a decision recorded in 2024.
 
 For scale, trajectories, company surfaces, comparatives, locale, estate, or

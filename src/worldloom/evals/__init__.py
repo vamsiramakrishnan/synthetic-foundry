@@ -14,8 +14,15 @@ from ..eval_design import (
     RequirementKind,
     WorldRequirement,
 )
+from ..eval_execution import emulator_executor
 from ..eval_instances import EvalInstance
+from ..eval_interventions import (
+    ConstructionFinding,
+    ConstructionResult,
+    construct_candidate,
+)
 from ..eval_tactics import TacticPlan
+from ..eval_witnesses import ConstructionRefused
 from .campaign import CampaignRun, EvalCampaign
 
 __worldloom_seam__ = {
@@ -34,6 +41,8 @@ __worldloom_seam__ = {
         "worldloom.eval_shape",
         "worldloom.eval_tactics",
         "worldloom.eval_connectors",
+        "worldloom.eval_witnesses",
+        "worldloom.eval_execution",
         "worldloom.connector_eval_runtime",
     ],
 }
@@ -74,6 +83,9 @@ __all__ = [
     "CampaignRun",
     "CandidateBuilder",
     "CandidatePlan",
+    "ConstructionFinding",
+    "ConstructionRefused",
+    "ConstructionResult",
     "DemandSet",
     "EvalCampaign",
     "EvalInstance",
@@ -83,5 +95,7 @@ __all__ = [
     "RequirementKind",
     "TacticPlan",
     "WorldRequirement",
+    "construct_candidate",
+    "emulator_executor",
     "seam_contract",
 ]

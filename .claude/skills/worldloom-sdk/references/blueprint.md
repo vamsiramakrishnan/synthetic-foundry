@@ -1,15 +1,15 @@
 ---
 title: Blueprint Methods
-description: Compose a Blueprint beyond seed, org and calendar — every builder method and what it sets.
+description: Compose a Blueprint beyond seed, org and calendar, every builder method and what it sets.
 read-when: Composing a blueprint beyond seed, org and calendar.
 tags: [worldloom, sdk, blueprints, python, refusals]
 ---
 
-# Blueprint composition — every builder method and what it sets
+# Blueprint composition: every builder method and what it sets
 
 Everything is a value until you say `build()`: each method returns a new `Blueprint`, and
-`.describe()` returns what one says — engine, seed, shape, calendar, physics,
-facets — without building it.
+`.describe()` returns what one says (engine, seed, shape, calendar, physics,
+facets) without building it.
 
 `sdk.company(name)` is the registry-driven front door (`retail`, `banking`,
 `insurance`, `procurement`, or anything installed). `sdk.retail()`,
@@ -18,7 +18,7 @@ facets — without building it.
 | method | what it sets |
 |---|---|
 | `.seeded(n)` | the world seed |
-| `.org(headcount=, span=, levels=, functions=)` | the organisation's shape — partial, so `.org(span=8)` leaves the rest |
+| `.org(headcount=, span=, levels=, functions=)` | the organisation's shape: partial, so `.org(span=8)` leaves the rest |
 | `.calendar(name)` | trading year (`flat`, `harvest`, `fiscal_year_end`, `southern_summer`, `retail_christmas`) |
 | `.estate(size, vocabulary=)` | technology landscape: `small`/`medium`/`large` |
 | `.physics(retail_margin_erosion=(0.10, 0.15))` | any registry range; underscores stand for dots |
@@ -35,7 +35,7 @@ Bad names are refused at the call, not at build: an unknown calendar or locale
 raises immediately with the known set in the message, so a field of forty
 blueprints cannot get thirty-nine worlds deep before discovering a typo.
 
-Refusals at `build()` are the engine's own — a role table missing a key the
+Refusals at `build()` are the engine's own: a role table missing a key the
 engine looks up by name, physics that would close the held-versus-central gap
 the insurance vertical exists to pose, an organisation whose headcount, span
 and depth cannot all hold at once. Read the error: it names the rule and

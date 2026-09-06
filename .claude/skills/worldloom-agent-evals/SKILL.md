@@ -8,7 +8,16 @@ tags: [worldloom, evals, mcp, connectors, workflows, scoring]
 
 Use this skill when a task concerns realistic enterprise prompts, connector fixtures, multi-tool DAGs, coverage plans, or agent-trajectory scoring.
 
-## Workflow
+## Eval-first: the design drives the corpus
+
+When the deliverable is a benchmark, start from the design, not from a corpus:
+
+1. Write an `EvalSpec` (steps with `depends_on`, `connector`, `entity`, `operation`, `effect`; `WorldRequirement`s with a `kind` and a selector of field equalities). Read `docs/eval-first.md` for the contracts.
+2. Run `worldloom evals construct design.json --out ./campaign` (or `EvalCampaign(spec).construct(base_builder)` from Python). Every demand the design compiles to is constructed on a base world: witnesses the connector search finds plus one near miss per constrained field, the write step's precondition record, artifact families, access policies, events, revision chains. A demand for a file format is met by rendering it.
+3. Read the manifest's `constructions`. A refusal names the seam that owns the missing state (a fact belongs to an episode; a derived artifact field belongs to a revision chain). Change the design or the base, never the validator.
+4. Prove each instance through the emulated connectors with `emulator_executor()` and `execute_reference`; a proof that fails is a defect found before any model runs.
+
+## Workflow: from an existing world
 
 1. Load and validate a `World`; never invent company facts outside it.
 2. Start from `builtin_registry()` or author connector, process, and workflow specs. Run `registry.review()` and resolve every finding.
