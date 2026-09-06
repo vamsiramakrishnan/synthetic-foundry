@@ -18,7 +18,7 @@ from collections.abc import Iterator
 def _hash_stream(seed: str) -> Iterator[bytes]:
     counter = 0
     while True:
-        yield hashlib.sha256(f"{seed}\0{counter}".encode("utf-8")).digest()
+        yield hashlib.sha256(f"{seed}\0{counter}".encode()).digest()
         counter += 1
 
 
