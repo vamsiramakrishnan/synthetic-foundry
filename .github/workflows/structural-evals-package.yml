@@ -1,4 +1,4 @@
-# one-shot gate; deletes itself after the eval package conversion is verified
+# one-shot gate; final rerun after campaign import cleanup
 name: structural evals package gate
 on:
   push:
