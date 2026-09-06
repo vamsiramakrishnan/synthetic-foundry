@@ -163,3 +163,8 @@ failing check forces that decision into the change that caused it.
 ## Audited process bindings
 
 [Inspect activity bindings and evidence](process-bindings.md): shared-predicate search, structural ownership proofs, explicit coverage gaps and full export replay. The source-reference and operational planning APIs remain available.
+
+
+## Reusable narration
+
+[Narration programs](narration-programs.md) covers family-level authoring, bounded fact substitution, dependency caches, measured diversity, blind reader checks and offline replay.

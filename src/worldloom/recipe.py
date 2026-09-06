@@ -104,6 +104,7 @@ STEPS: dict[str, tuple[str, ...]] = {
     # "how it was made" document it is meant to be rather than growing a copy
     # of the answer.
     "Compose": ("ledger_key",),
+    "NarrationPrograms": ("keys",),
     "AddIrrelevantFacts": ("seed", "count"),
 }
 
@@ -964,6 +965,10 @@ def rebuild(
             world = AddIrrelevantFacts(count=step["count"]).apply(
                 world, seed=step["seed"]
             ).world
+        elif name == "NarrationPrograms":
+            from .narrative import programs
+
+            world = programs.replay(world, keys=step["keys"], ledger=ledger)
         elif name in _STEP_REGISTRY:
             _, build = _STEP_REGISTRY[name]
             kwargs = {key: value for key, value in step.items() if key != "scenario"}

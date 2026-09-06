@@ -8,6 +8,7 @@ are shorthand for whole sets, not a second query language.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
+from datetime import datetime
 from typing import Any, Generic, Self, TypeVar
 
 from .models import Model
@@ -223,6 +224,18 @@ class EmployeeCollection(Collection):
 
 class FactCollection(Collection):
     """Facts, with temporal and authority helpers."""
+
+    def view(self, observer: str, *, valid_at: datetime, tx_at: datetime) -> FactCollection:
+        """The same bitemporal read boundary used by predicates and narration."""
+        from .epistemics import ledger_from_facts
+
+        return FactCollection(ledger_from_facts(self).view(
+            observer, valid_at=valid_at, tx_at=tx_at,
+        ))
+
+    def known_by(self, observer: str, *, tx_at: datetime) -> FactCollection:
+        """Active records accessible to this observer at transaction time."""
+        return self.filter(lambda fact: fact.visible_to(observer) and fact.known_at(tx_at))
 
     def at(self, moment) -> FactCollection:  # type: ignore[no-untyped-def]
         """Only the facts current at *moment* — the temporal cut-off primitive."""
