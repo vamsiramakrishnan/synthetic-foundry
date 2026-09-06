@@ -59,10 +59,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/vamsiramakrishnan/synthetic-foundry"
-Documentation = "https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/README.md"
-Changelog = "https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/CHANGELOG.md"
-Issues = "https://github.com/vamsiramakrishnan/synthetic-foundry/issues"
+Homepage = "https://github.com/vamsiramakrishnan/worldloom"
+Documentation = "https://github.com/vamsiramakrishnan/worldloom/blob/main/docs/README.md"
+Changelog = "https://github.com/vamsiramakrishnan/worldloom/blob/main/CHANGELOG.md"
+Issues = "https://github.com/vamsiramakrishnan/worldloom/issues"
 
 [project.optional-dependencies]
 xlsx = ["openpyxl>=3.1"]
@@ -313,7 +313,7 @@ markers = [
     "slow: a full multi-period, high-density build — the shape a large corpus actually is, not a fixture-sized stand-in for it. Excluded from the default run by `addopts` below; opt in with `pytest -m slow`.",
 ]
 # `-m 'not slow'` is the opt-out, not the opt-in: `pytest -q` (the house
-# gate in CLAUDE.md/AGENTS.md) must stay fast, so a test exercising a shape
+# gate in AGENTS.md) must stay fast, so a test exercising a shape
 # CI only needs occasionally is deselected here rather than skipped inside
 # the test itself — a skip still pays the collection and fixture cost, a
 # deselect does not.

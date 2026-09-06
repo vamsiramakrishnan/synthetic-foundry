@@ -4,7 +4,7 @@ Eight work items that close the gap between "excellent engine" and "product
 that installs in ten seconds and measures its own users." Written to be
 executed by a model session (Sonnet or Haiku) one item per session, one item
 per pull request. Read this whole file before starting any item, then read
-[AGENTS.md](../../AGENTS.md) — it is the harness contract and nothing here
+[AGENTS.md](../../AGENTS.md): it is the harness contract and nothing here
 overrides it.
 
 Two further items are **operator actions** for a human and are listed at the
@@ -19,7 +19,7 @@ end. Do not attempt them.
   PR as a draft. Do not combine items.
 - **Sizing.** Each item is one focused session. If an item is not converging
   inside one session, stop, commit what passes gates, and record what remains
-  in the PR body — do not thrash.
+  in the PR body: do not thrash.
 - **The gates run before every commit**, not once at the end:
 
   ```bash
@@ -36,7 +36,7 @@ end. Do not attempt them.
   opt-in; the default build's bytes never move.
 - **New CLI commands** must be mentioned in AGENTS.md (one honest paragraph,
   in its voice) or `tests/test_harness_docs.py::test_every_command_is_documented`
-  fails — and `worldloom docs` must be re-run to refresh the generated
+  fails, and `worldloom docs` must be re-run to refresh the generated
   reference.
 - **The lint CI job runs on Python 3.11** (the package floor) so failures
   reproduce locally. If mypy passes for you but fails in CI, check your
@@ -54,7 +54,7 @@ CI caught the violation once:
    (`worldloom.ids.content_key`).
 3. Never let a flag be silently ignored. A flag either acts or refuses with
    the reason (`tests/test_flag_reach.py` is the pattern to copy).
-4. Never assert on Rich console output with raw substring matches — Rich
+4. Never assert on Rich console output with raw substring matches: Rich
    wraps lines. Collapse whitespace first (see `_flat()` in
    `tests/test_flag_reach.py`).
 5. Never mark an item done with a test skipped, a check loosened, or a
@@ -65,7 +65,7 @@ CI caught the violation once:
 
 ---
 
-## W1 — Refusals as data
+## W1: Refusals as data
 
 **Goal.** Every CLI refusal can be consumed as one-line JSON instead of
 prose, behind an opt-in that leaves default output byte-identical.
@@ -85,10 +85,10 @@ best feature and has no wire format.
   ```
 
   Default mode: print the *exact existing* rich message to stderr (pass the
-  current string through unchanged — many tests assert on these strings).
+  current string through unchanged, since many tests assert on these strings).
   When `WORLDLOOM_OUTPUT=json` is set in the environment: print one line of
-  JSON to stderr instead — `{"refusal": code, "message": ..., "fix": ...,
-  "data": {...}}` — same exit code. An env var, not a global flag, because
+  JSON to stderr instead: `{"refusal": code, "message": ..., "fix": ...,
+  "data": {...}}`, same exit code. An env var, not a global flag, because
   per-command `--json` flags already exist with a different meaning (success
   payloads) and must not be disturbed.
 - Codes are snake_case, stable, and registered in one module-level dict
@@ -113,15 +113,15 @@ and byte-for-byte where a test already pinned it.
 AGENTS.md has one short paragraph documenting `WORLDLOOM_OUTPUT=json`.
 
 **Refuse and ask if** you find a refusal whose message is built from a Rich
-table (not a string) — do not flatten it lossily; leave it unconverted and
+table (not a string): do not flatten it lossily; leave it unconverted and
 list it in the PR body.
 
 ---
 
-## W2 — `worldloom verify`: the trust demo as one verb
+## W2: `worldloom verify`, the trust demo as one verb
 
 **Goal.** `worldloom verify ./corpus` = rebuild from the corpus's own recipe
-and ledger, byte-compare every file, then validate — one command, exit 0.
+and ledger, byte-compare every file, then validate: one command, exit 0.
 
 **Design.**
 
@@ -130,27 +130,27 @@ and ledger, byte-compare every file, then validate — one command, exit 0.
   directory through the same path `build --replay` uses (read that
   implementation first; do not invent a second replay). Byte-compare with the
   file-set-then-bytes logic of
-  `.github/scripts/dispersed_replay.py::_assert_byte_identical` — factor that
+  `.github/scripts/dispersed_replay.py::_assert_byte_identical`; factor that
   helper into `src/worldloom/corpus.py` (or reuse if an equivalent exists)
   rather than copying it a third time; update the script to import it.
-- Output: `✓ verified — N files byte-identical, M checks passed`, or exit 1
+- Output: `✓ verified: N files byte-identical, M checks passed`, or exit 1
   naming the first diverging path and whether it is missing, extra, or
   different. Support `--json`.
 - Note in the command's docstring: rendered artifact files are compared only
-  if present in the corpus — verify never renders.
+  if present in the corpus: verify never renders.
 
 **Tests** (`tests/test_verify_cli.py`): green path on a fresh
-`--seed`-built-and-narrated corpus; red path — copy the corpus, flip one byte
+`--seed`-built-and-narrated corpus; red path: copy the corpus, flip one byte
 in `facts.jsonl`, assert exit 1 and the filename in stderr; a plan-only
 corpus with no recipe refuses with `no_recipe`.
 
 **Done when** tests pass, README's "Determinism and replay" section shows the
-one-liner (keep the existing three-command block too — it explains the
+one-liner (keep the existing three-command block too; it explains the
 mechanism), AGENTS.md mentions the command, docs regenerated.
 
 ---
 
-## W3 — `worldloom doctor`: install-level health
+## W3: `worldloom doctor`, install-level health
 
 **Goal.** One command that says whether this installation can do what the
 docs promise, and names the exact fix for everything it cannot.
@@ -162,12 +162,12 @@ docs promise, and names the exact fix for everything it cannot.
      not hardcode).
   2. Each render format → its importable dependency. **Read the renderer
      registry in `src/worldloom/render/` to enumerate formats and their
-     imports** — do not hardcode a table that drifts. The fix string names
+     imports**: do not hardcode a table that drifts. The fix string names
      the pip extra (`pip install -e ".[render]"` or whichever extra
      `pyproject.toml` declares for that import).
   3. The pinned example corpus validates (`retail-close`, 1,283 checks).
   4. The generated command reference is current (same check `docs --check`
-     runs — import and call it, don't shell out).
+     runs; import and call it, don't shell out).
 - Exit 0 all-green, exit 1 otherwise. `--json` emits the check list. No
   network access, ever.
 
@@ -180,7 +180,7 @@ missing renderer dep simulated by monkeypatching the import to raise
 
 ---
 
-## W4 — Narration verdicts: persist, then read
+## W4: Narration verdicts, persist, then read
 
 **Goal.** `worldloom narrate stats` answers "what is model X's first-pass
 acceptance rate and what does it fail on" from recorded verdicts.
@@ -197,7 +197,7 @@ Therefore verdicts live **outside the corpus**, opt-in.
   When set, append one JSON line per submitted section per attempt:
   `{"model_id": ..., "section": ..., "attempt": N, "accepted": bool,
   "violations": ["bare_number", ...], "response_key": content_key(text)}`.
-  No timestamps — the attempt ordinal is the order. Find the accept
+  No timestamps: the attempt ordinal is the order. Find the accept
   implementation in `src/worldloom/narrative/handshake.py` (the
   `Verdict`/`Violation` models around line 140) and the CLI's accept command;
   write at the CLI layer, not inside the handshake, so the library stays
@@ -208,7 +208,7 @@ Therefore verdicts live **outside the corpus**, opt-in.
 
 **Tests** (`tests/test_narrate_verdicts.py`): drive requests/accept with the
 deterministic provider's responses plus one deliberately bad response (a
-typed-out figure) submitted first — assert the verdicts file records the
+typed-out figure) submitted first: assert the verdicts file records the
 rejection with `bare_number`-family violation and then the acceptance;
 assert stats aggregates it correctly; assert **no** verdicts file appears
 without the flag; assert a corpus built with the flag is byte-identical to
@@ -219,7 +219,7 @@ gains a short paragraph, docs regenerated.
 
 ---
 
-## W5 — The `--exec` seam: `narrate loop` and `benchmark run`
+## W5: The `--exec` seam, `narrate loop` and `benchmark run`
 
 **Goal.** Treat the model as an executable. One subprocess contract makes
 "real prose in one command" and "score an actual agent against its own
@@ -235,37 +235,38 @@ run without a shell (list argv via `shlex.split`); `--shell` opts into
 **`worldloom narrate loop CORPUS --exec CMD [--max-rounds 8] [--verdicts PATH]`**
 
 - Round: generate requests for all unaccepted sections (the same document
-  `narrate requests` writes — reuse that code path, do not re-derive);
+  `narrate requests` writes; reuse that code path, do not re-derive);
   feed to CMD; parse the responses document (same schema `narrate accept
   --from` reads); run acceptance in-process; repeat with only the still-
   unaccepted sections. Stop when all accepted (exit 0, print rounds taken and
   totals) or max-rounds (exit 1, print every outstanding violation).
 - Composes with W4's `--verdicts`.
 - Document (in the command help) the adapter expectation with one concrete
-  example: a shell script wrapping `claude -p` that reads stdin and prints
-  the responses JSON. Do not special-case any vendor in code.
+  example: a shell script wrapping a coding harness's non-interactive CLI
+  that reads stdin and prints the responses JSON. Do not special-case any
+  vendor in code.
 
 **`worldloom benchmark run CORPUS --exec CMD [-k 5] [--limit N]`**
 
 - Per evaluation case: payload `{"question": ..., "passages": [top-k from
   the same BM25 index `worldloom search` uses, with passage_id and text]}`.
   The child returns `{"answer_passage_ids": [...], "abstain": bool}`.
-- Scoring is **id-based only, never text similarity** — deterministic
+- Scoring is **id-based only, never text similarity**: deterministic
   scoring is the house rule, and grading free text would smuggle a judge into
   a system whose whole point is mechanical ground truth. A case scores
   correct when the returned passages carry the expected fact IDs (reuse the
-  coverage logic in `src/worldloom/evaluate/score.py` — read it first) and
+  coverage logic in `src/worldloom/evaluate/score.py`, read it first) and
   the abstention flag matches the case's expectation.
 - Output: the same scorecard shape `evaluate` prints, labelled with the exec
   command, plus `--json`.
 
 **Tests** (`tests/test_exec_seam.py`): the fake model is a tiny Python
-script the test writes to tmp — deterministic, no network. For the loop: a
+script the test writes to tmp, deterministic, no network. For the loop: a
 responder that answers correctly except one section where its first attempt
-types a figure out and its second attempt cites it — assert two rounds, then
+types a figure out and its second attempt cites it: assert two rounds, then
 acceptance, and that the corpus validates. For benchmark: a responder that
 returns the passage containing the expected fact for even-numbered cases and
-abstains on the rest — assert the scorecard splits exactly as constructed.
+abstains on the rest: assert the scorecard splits exactly as constructed.
 Also: child that exits non-zero → refusal carrying its stderr; child that
 prints garbage → refusal; timeout path with a sleeping child and
 `--timeout 1`.
@@ -274,12 +275,12 @@ prints garbage → refusal; timeout path with a sleeping child and
 from its own ledger (accepted prose is ledgered; prove it in a test),
 AGENTS.md documents both commands, docs regenerated.
 
-**Refuse and ask if** you find yourself wanting to grade answer *text* — that
+**Refuse and ask if** you find yourself wanting to grade answer *text*: that
 is a design boundary, not an implementation gap.
 
 ---
 
-## W6 — The startup budget
+## W6: The startup budget
 
 **Goal.** `worldloom --help` cold start drops from the measured 0.64–0.86s
 to ≤0.25s, and CI holds the line thereafter.
@@ -293,16 +294,16 @@ would make every other item's diff conflict.
   -t'|' -k2 -rn | head -30`. Record the top offenders in the PR body.
 - Defer heavy imports (the world/model stack, numpy-touching modules,
   renderers, evaluate) from module level into the command bodies that use
-  them — the pattern most commands already follow; the offenders are the
+  them: the pattern most commands already follow; the offenders are the
   stragglers. Check `src/worldloom/__init__.py` for eager re-exports and make
   them lazy via module `__getattr__` (PEP 562) if they pull the heavy stack.
 - Guard: `tests/test_startup_budget.py` spawns `python -c "import
   worldloom.cli"` three times and asserts the **minimum** wall time is under
-  a ceiling generous enough for CI noise (0.5s) — the test exists to catch
+  a ceiling generous enough for CI noise (0.5s): the test exists to catch
   eager-import regressions, not to benchmark. Comment that intent.
 
 **Gates beyond the standard ones:** byte-identity (imports moving can change
-nothing about bytes — prove it), and `python -m mypy src/worldloom/` clean —
+nothing about bytes, prove it), and `python -m mypy src/worldloom/` clean:
 lazy imports are where type checking usually breaks first.
 
 **Done when** the measured min-of-3 for `worldloom --help` is ≤0.25s in your
@@ -311,7 +312,7 @@ importtime tables.
 
 ---
 
-## W7 — A Windows CI leg
+## W7: A Windows CI leg
 
 **Goal.** The test suite runs on `windows-latest`, and the bugs it finds are
 fixed rather than skipped.
@@ -324,7 +325,7 @@ fixed rather than skipped.
    `determinism-sweep.yml` for the shape.
 2. Second PR: fix what it found and flip `continue-on-error` off. Expect the
    failures to be: **newline discipline** (any JSONL/text write without
-   `newline="\n"` produces CRLF on Windows and breaks byte-identity — grep
+   `newline="\n"` produces CRLF on Windows and breaks byte-identity: grep
    `open(` and `write_text` in `src/worldloom/corpus.py` and everywhere
    corpus files are written; pin `newline="\n"` with a why-comment),
    hardcoded `/tmp` (must use `tempfile`), and path-separator assumptions in
@@ -336,23 +337,23 @@ written out, and there should be almost none.
 
 **Done when** the leg is green and required, and byte-identity is proven
 cross-OS: a corpus built on the Windows runner diffs clean against one built
-on Linux (add this as a CI artifact comparison step — the macOS sweep may
+on Linux (add this as a CI artifact comparison step; the macOS sweep may
 already have the pattern).
 
 ---
 
-## W8 — The migration guarantee
+## W8: The migration guarantee
 
 **Goal.** No published corpus is ever stranded by a schema bump.
 
 **Design.**
 
-- Find the schema version field (`world.json` — see `World.load` in
+- Find the schema version field (`world.json`, see `World.load` in
   `src/worldloom/world.py` and `src/worldloom/corpus.py`). Establish the
   policy as executable tests:
   1. A frozen fixture corpus at the **current** schema version lives in
      `tests/fixtures/` (small: plan-only retail, one period). A test loads
-     it and validates. When a future PR bumps the schema, this test fails —
+     it and validates. When a future PR bumps the schema, this test fails,
      which is the point: the bumping PR must then (a) move the old fixture
      to a versioned name, (b) freeze a new fixture, (c) extend `migrate`.
      Write that instruction into the test's docstring.
@@ -361,7 +362,7 @@ already have the pattern).
      the versions named. Its structure (a chain of version→version steps)
      is the deliverable; the first real step arrives with the first bump.
 - Note: `examples/retail-close` is current-version and CI-validated, but it
-  is hand-authored and load-bearing for other tests — freeze a *separate*
+  is hand-authored and other tests depend on it: freeze a *separate*
   minimal fixture rather than repointing it.
 
 **Tests**: fixture loads and validates; `migrate` on the fixture is
@@ -376,14 +377,14 @@ docs regenerated.
 ## Sequencing
 
 ```
-W1 (refusal envelope)        — first: W2/W3/W5 want it
-  ├─ W2 (verify)             — independent after W1, small
-  ├─ W3 (doctor)             — independent after W1, small
-  ├─ W4 (verdicts + stats)   — independent of W2/W3
-  └─ W5 (exec seam)          — after W1; composes with W4's --verdicts
-W6 (startup budget)          — LAST of the cli.py items (import refactor)
-W7 (Windows leg)             — any time, independent
-W8 (migration)               — any time, independent
+W1 (refusal envelope)        : first, W2/W3/W5 want it
+  ├─ W2 (verify)             : independent after W1, small
+  ├─ W3 (doctor)             : independent after W1, small
+  ├─ W4 (verdicts + stats)   : independent of W2/W3
+  └─ W5 (exec seam)          : after W1; composes with W4's --verdicts
+W6 (startup budget)          : LAST of the cli.py items (import refactor)
+W7 (Windows leg)             : any time, independent
+W8 (migration)               : any time, independent
 ```
 
 Safe to run in parallel sessions: {W2, W3}, {W4}, {W7}, {W8}. Never run two
@@ -391,7 +392,7 @@ sessions that both edit `cli.py` at the same time.
 
 ---
 
-## Operator actions (human only — do not attempt)
+## Operator actions (human only, do not attempt)
 
 - **O1: Publish to PyPI.** Claim the `worldloom` name, wire the repo's
   trusted publishing (`.github/workflows/release.yml` is ready), push a

@@ -1,6 +1,6 @@
 ---
 title: Profile Authoring
-description: Write profile.json — overrides, what the lint refuses, the Python cascade, what replays.
+description: Write profile.json: overrides, what the lint refuses, the Python cascade, what replays.
 read-when: When none of the three shipped profiles fits and you are writing profile.json.
 tags: [worldloom, presentation, profiles, lint, recipes]
 ---
@@ -24,17 +24,17 @@ the only way to say that is two corpora.
 
 Every finding at once, as sentences to act on:
 
-- A knob set to a value outside its vocabulary — the finding names the value
+- A knob set to a value outside its vocabulary: the finding names the value
   and the allowed set. A *misspelled knob* (`appendx`) is refused by name too,
   but earlier and alone, at parse: the seed forbids unknown fields, so a typo
   can never be a silent no-op.
 - An override on a doctype the corpus does not mint (checked when `--corpus`
-  is given, which is why you pass it) — a rule that silently does nothing is
+  is given, which is why you pass it): a rule that silently does nothing is
   the failure mode a typo produces.
 - Any `scaled` setting whose rescaled figures cannot round-trip to the ledger
   figure exactly. The comparison is exact, never within-epsilon: a tolerance
   would be the lint deciding how much of a figure a reader may lose.
-- A name already registered with different settings — a corpus that asked for
+- A name already registered with different settings: a corpus that asked for
   that name before must still get what it asked for.
 
 ## In Python
@@ -49,7 +49,7 @@ world.render("docx", "pdf")
 
 ## What replays
 
-The profile is written onto the **recipe**, by value and never by name — the
+The profile is written onto the **recipe**, by value and never by name; the
 same seam `locale` rides, and for the same three reasons: the recipe is the
 only singular document a corpus has, so two artifacts cannot disagree; it
 survives the round trip to disk; and it replays. By value rather than by name

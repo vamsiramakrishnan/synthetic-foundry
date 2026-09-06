@@ -5,14 +5,14 @@ import starlightLlmsTxt from 'starlight-llms-txt';
 import starlightLinksValidator from 'starlight-links-validator';
 
 // `site` is required by starlight-llms-txt: llms.txt links are absolute.
-// It matches the GitHub Pages origin for vamsiramakrishnan/synthetic-foundry.
+// It matches the GitHub Pages origin for vamsiramakrishnan/worldloom.
 // `base` is required because this is a *project* Pages site, served under
-// /synthetic-foundry/ — without it every asset and internal link resolves
-// against the origin root and 404s. `site` includes the base so sitemap and
+// /worldloom/. Without it every asset and internal link resolves against
+// the origin root and 404s. `site` includes the base so sitemap and
 // llms.txt links are absolute to the real deployed pages.
 export default defineConfig({
-  site: 'https://vamsiramakrishnan.github.io/synthetic-foundry',
-  base: '/synthetic-foundry',
+  site: 'https://vamsiramakrishnan.github.io/worldloom',
+  base: '/worldloom',
   integrations: [
     starlight({
       title: 'Worldloom',
@@ -22,7 +22,7 @@ export default defineConfig({
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/vamsiramakrishnan/synthetic-foundry',
+          href: 'https://github.com/vamsiramakrishnan/worldloom',
         },
       ],
       customCss: ['./src/styles/rams.css'],

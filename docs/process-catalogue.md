@@ -194,7 +194,7 @@ and schema enrichment intentionally differ from the supplied compiler.
 | Manufacturing | 138 | 747 | 17 |
 | Public sector | 148 | 148 | 19 |
 | Technology SaaS | 146 | 1,060 | 18 |
-| **Total** | — | **6,975** | **215** |
+| **Total** | n/a | **6,975** | **215** |
 
 Utilities declares `usage_to_bill` as a core stream but provides no definition.
 The supplied compiler omitted it. Coverage now adds a 216th cell with status

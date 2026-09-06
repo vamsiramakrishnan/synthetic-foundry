@@ -1,6 +1,6 @@
 ---
 title: Vertical Traps
-description: Avoid the multi-period and ordering traps, then prove the vertical done — byte-diff and replay.
+description: Avoid the multi-period and ordering traps, then prove the vertical done: byte-diff and replay.
 read-when: Before the first multi-period run, and again before calling the vertical done.
 tags: [worldloom, vertical, determinism, multi-period, replay]
 ---
@@ -13,8 +13,8 @@ Each trap below cost somebody a debugging session.
 
 - **Multi-period is not free, and it is the difference between a corpus and a
   demonstration.** Insurance refuses a second run and therefore cannot reach
-  any scale. Everything a later period inherits — a rate card, a policy, a
-  counterparty, a balance carried forward — must be resolved from the *world's
+  any scale. Everything a later period inherits (a rate card, a policy, a
+  counterparty, a balance carried forward) must be resolved from the *world's
   own record* (`world.authoritative`), never from a counter threaded through
   the recipe. Then filter the reused facts back out before `world.extend`,
   which is append-only.
@@ -58,6 +58,6 @@ worldloom build -a midsize_general_insurer  --seed 8128 -o OUT
 ```
 
 And prove yours replays: build it, rebuild it from its own recipe, export both,
-`diff -r`. Then read it four ways — `validate`, `evaluate`, `topology`,
-`series`, `diversity` — because a corpus that validates is coherent and not yet
+`diff -r`. Then read it four ways: `validate`, `evaluate`, `topology`,
+`series`, `diversity`, because a corpus that validates is coherent and not yet
 known to be hard.

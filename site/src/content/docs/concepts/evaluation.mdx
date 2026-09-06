@@ -68,17 +68,17 @@ worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
 BM25 and TF-IDF are two families and one idea: relevance is word overlap.
 `all` adds a dense retriever and names, per family, one of four readings:
 
-- **genuinely hard** — lexical and semantic both fail. The result worth
+- **genuinely hard**: lexical and semantic both fail. The result worth
   having.
-- **lexical trap** — the semantic retriever solves it. The family was never
+- **lexical trap**: the semantic retriever solves it. The family was never
   difficulty, and a corpus card counting it overstates itself.
-- **semantic blind spot** — an exact token a dense vector smooths away.
-- **solved by everything** — the floor families, as expected.
+- **semantic blind spot**: an exact token a dense vector smooths away.
+- **solved by everything**: the floor families, as expected.
 
 The dense retriever needs `pip install "worldloom[embeddings]"`. Without it
 the dense column is skipped with a message. Its vectors are pinned to a model
 revision and cached as quantised integers, so the measurement
-[replays offline](/synthetic-foundry/concepts/determinism/).
+[replays offline](/worldloom/concepts/determinism/).
 
 ## Exporting the answer key
 
@@ -88,8 +88,8 @@ worldloom stats ./corpus
 ```
 
 `evals export` writes one case per line, sorted keys: the format to score an
-external retrieval system against. `stats` reports what the corpus contains —
-document counts, lengths, vocabulary, citation graph, near-duplicate rate —
-and compares it against nothing. There is no published, auditable figure for
-"a real enterprise corpus", so `stats` reports rather than grades. The one
-comparison it makes is `--against` a second corpus that also exists.
+external retrieval system against. `stats` reports what the corpus contains:
+document counts, lengths, vocabulary, citation graph, near-duplicate rate.
+There is no published, auditable figure for "a real enterprise corpus", so
+`stats` reports rather than grades. The one comparison it makes is `--against`
+a second corpus that also exists.

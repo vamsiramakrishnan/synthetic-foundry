@@ -30,7 +30,7 @@ It is:
 worldloom demo retail-close
 ```
 
-That command produces one small but completely coherent corpus that proves the product thesis. The interview is the most demonstrable feature and the least load-bearing; building it first lets prompt behaviour anchor the architecture.
+That command produces one small but completely coherent corpus that proves the product thesis. The interview is the most demonstrable feature, and the one the rest of the system depends on least: building it first lets prompt behaviour anchor the architecture.
 
 ---
 
@@ -99,7 +99,7 @@ IntentionalError
 GenerationLedgerEntry
 ```
 
-**Persona is in the thin waist** because "who wrote this, and could they have known it" is load-bearing for the temporal and authority questions at step 11 — and because `NarrativeRequest` at step 6 takes a persona, so the concept is required either way.
+**Persona is in the thin waist** because the temporal and authority questions at step 11 depend on "who wrote this, and could they have known it", and because `NarrativeRequest` at step 6 takes a persona, so the concept is required either way.
 
 **The generation ledger is in the thin waist**, not an implementation detail of the LLM client. Reproducibility is the product's central promise, and a world must *ship* with its ledger for a corpus to be citable. As a cache it belongs to a provider; as a thin-waist object it belongs to the artifact you hand someone. See [the ledger contract](generation-model.md#2-every-generative-call-is-recorded-so-worlds-replay).
 
@@ -164,7 +164,7 @@ evals.jsonl
 
 ### Two fixture requirements
 
-**Write some evaluation questions before the corpus.** Authoring questions after the corpus guarantees they are answerable by it — the interesting failure modes get selected out. Write a subset first, especially the expected-abstention cases, so the corpus is built against questions rather than the reverse.
+**Write some evaluation questions before the corpus.** Authoring questions after the corpus guarantees they are answerable by it: the interesting failure modes get selected out. Write a subset first, especially the expected-abstention cases, so the corpus is built against questions rather than the reverse.
 
 **Include a supersession chain in the facts.** Not a flat list: an initial hypothesis, its supersession, and a confirmed cause, with distinct validity and authority states. Supersession is the hardest part of the schema and the most likely to be wrong, so it must be exercised by the fixture rather than deferred to step 3.
 
@@ -172,7 +172,7 @@ The fact count is driven by what the episode has to prove, not by a target. Reco
 
 ### Lore, minimally
 
-The episode says engineering identifies stale product hierarchy data. On its own that is an unexplained coincidence. Three or four lore commitments make it a consequence — a 2024 category restructure left a manual mapping table, ownership of it is ambiguous, and finance tolerates workarounds under close pressure. The [worked example](lore.md#worked-example-the-smallest-useful-lore) is exactly this episode.
+The episode says engineering identifies stale product hierarchy data. On its own that is an unexplained coincidence. Three or four lore commitments make it a consequence: a 2024 category restructure left a manual mapping table, ownership of it is ambiguous, and finance tolerates workarounds under close pressure. The [worked example](lore.md#worked-example-the-smallest-useful-lore) is exactly this episode.
 
 The point at this step is the *mechanism*, not the volume. Lore feeds the org generator, the persona model, and the artifact planner; adding it once all three exist means touching all three. The full lore pack waits for step 8.
 
@@ -234,15 +234,15 @@ The corpus loads, queries, validates, round-trips, and exports without informati
 
 ## 3. Replace the handcrafted episode with deterministic generation
 
-Once the static corpus contract is stable, replace its facts and events with generators — only the generators the retail-close episode requires.
+Once the static corpus contract is stable, replace its facts and events with generators: only the generators the retail-close episode requires.
 
-**Organisation generator** — company · business units · finance team · engineering team · service operations team · reporting lines · cost-centre ownership.
+**Organisation generator**: company · business units · finance team · engineering team · service operations team · reporting lines · cost-centre ownership.
 
-**Financial generator** — budget · forecast · actuals · business-unit P&L · revenue variance · margin variance · operating expenditure variance.
+**Financial generator**: budget · forecast · actuals · business-unit P&L · revenue variance · margin variance · operating expenditure variance.
 
-**Operational generator** — data pipeline · inventory service · scheduled close job · incident detection · triage · recovery · root cause · remediation.
+**Operational generator**: data pipeline · inventory service · scheduled close job · incident detection · triage · recovery · root cause · remediation.
 
-**Lore application** — the step-1 commitments now *drive* generation rather than sitting beside it: event likelihood, approval depth, persona traits, artifact density. This is the smallest test that the constraint vocabulary works.
+**Lore application**: the step-1 commitments now *drive* generation rather than sitting beside it, covering event likelihood, approval depth, persona traits, artifact density. This is the smallest test that the constraint vocabulary works.
 
 ### Event ledger
 
@@ -292,7 +292,7 @@ episode = world.run(
 
 The same seed produces the same IDs, entities, facts, events, financial values, artifact plan, and evaluation answers. Changing the seed alters the world while preserving every invariant.
 
-**Structural equivalence, not byte equality.** The generator is not asked to reproduce the hand-authored fixture. Doing so would mean encoding arbitrary authored choices — that a particular person has a particular name — to satisfy a test, which corrupts the generator to flatter the fixture. The fixture stays frozen as the regression corpus and the stable benchmark. A generated world's equivalence is that it passes the same validator and answers the same exit-gate questions.
+**Structural equivalence, not byte equality.** The generator is not asked to reproduce the hand-authored fixture. Doing so would mean encoding arbitrary authored choices (that a particular person has a particular name) to satisfy a test, which corrupts the generator to flatter the fixture. The fixture stays frozen as the regression corpus and the stable benchmark. A generated world's equivalence is that it passes the same validator and answers the same exit-gate questions.
 
 **A step-3 world carries intents, not manifest entries.** Bodies arrive with the renderers at step 5 and prose at step 6, so `ArtifactIntent` is the output here: the decision that a document should exist, its author, audience, and the facts it must be able to cite. Nothing has been rendered, so there is nothing for a manifest to describe.
 
@@ -325,7 +325,7 @@ A team can immediately generate a corpus, index it with their retrieval system, 
 
 ### Ship a baseline retriever
 
-[Gate B](#gate-b--utility) as stated depends on an external system, which makes the gate that proves utility impossible to verify on demand. Build a deliberately mediocre in-repo baseline — naive chunking, embedding search, no reranking — so Gate B is a test that can be run, and so regressions in corpus quality surface as score movement.
+[Gate B](#gate-b-utility) as stated depends on an external system, which makes the gate that proves utility impossible to verify on demand. Build a deliberately mediocre in-repo baseline (naive chunking, embedding search, no reranking) so Gate B is a test that can be run, and so regressions in corpus quality surface as score movement.
 
 ### Exit gate
 
@@ -376,7 +376,7 @@ These add workflows, ownership, status history, comments, page hierarchy, operat
 
 The first rich narrative artifact: CFO variance memo · incident RCA · programme status report. One sober template. No general Office theme engine yet.
 
-**Landed.** `worldloom.render.docx` handles the six document-shaped types — CFO
+**Landed.** `worldloom.render.docx` handles the six document-shaped types: CFO
 variance memo, executive summary, incident RCA, working note, knowledge article,
 close calendar. A workbook is not among them (flattening a spreadsheet into Word
 loses every formula that made it a source), and neither is a Confluence page
@@ -388,7 +388,7 @@ Three things this forced:
 a fixture.** The claim is that Word and Markdown of one memo say the same thing.
 So the test extracts prose and table cells from the finished `.docx` and requires
 every section heading, every prose fragment, and every formatted cell to be
-present — dropping the hidden appendix from Word fails three tests, which is what
+present. Dropping the hidden appendix from Word fails three tests, which is what
 it should do.
 
 **The number formatter has to be shared, not duplicated.** Word and Markdown both
@@ -396,7 +396,7 @@ write a figure as characters. Two copies of that rounding logic is two documents
 that can disagree about one fact, so `render/values.py` holds one
 `format_value` and both call it.
 
-**Document dates come from the world.** python-docx does not stamp `now()` — it
+**Document dates come from the world.** python-docx does not stamp `now()`: it
 ships its template's own 2013 timestamps, a smaller lie than the clock and still
 a wrong one. The IR now carries `worldloom_created`, derived from the newest fact
 the artifact cites plus its type's lag, and the renderer stamps that. It equals
@@ -408,7 +408,7 @@ that fix moved to `render/ooxml.py` and both formats call it. PPTX will too.
 
 ### 5.4 PPTX after DOCX
 
-One concise executive deck — executive summary · financial performance · variance drivers · operational issue · remediation · decisions required — projected from the same facts as the workbook and memo.
+One concise executive deck (executive summary · financial performance · variance drivers · operational issue · remediation · decisions required) projected from the same facts as the workbook and memo.
 
 ### 5.5 PDF last
 
@@ -416,11 +416,11 @@ Derived from DOCX and PPTX. Do not create a parallel PDF narrative path; that is
 
 ### Exit gate
 
-A single run produces the XLSX source model, Jira bundle, Confluence bundle, ServiceNow bundle, DOCX memo, PPTX summary, PDF snapshot, and evaluation JSONL — all agreeing, because all compiled from the same fact ledger.
+A single run produces the XLSX source model, Jira bundle, Confluence bundle, ServiceNow bundle, DOCX memo, PPTX summary, PDF snapshot, and evaluation JSONL, all agreeing, because all compiled from the same fact ledger.
 
 **Formulas are declared in the IR, not invented by a renderer.** *Which* cells are computed, and from what, is a semantic fact the compiler knows. So the IR carries `sum`, `difference`, `ratio_pct`, and `reference` declarations, and each renderer decides only how to spell them: XLSX emits `=SUM(C4:C6)`, Markdown emits the literal. Both agree because both read one declaration.
 
-**The reconciliation sheet must compare against the ledger, not against itself.** Subtracting the P&L's group cell from a sum of the units is tautological when the group cell is itself `=SUM(units)` — it can never disagree, so it proves nothing. The check has to compare the computed sum against the value the fact ledger *states*. That is what makes it a check on the corpus rather than on the spreadsheet's own arithmetic.
+**The reconciliation sheet must compare against the ledger, not against itself.** Subtracting the P&L's group cell from a sum of the units is tautological when the group cell is itself `=SUM(units)`: it can never disagree, so it proves nothing. The check has to compare the computed sum against the value the fact ledger *states*. That is what makes it a check on the corpus rather than on the spreadsheet's own arithmetic.
 
 **Test the formulas, not the file.** A spreadsheet library stores formulas without evaluating them, so a renderer can emit syntactically valid nonsense and every naive test still passes. The suite carries a small evaluator for the formula shapes the renderer is allowed to produce, and asserts each one resolves to the fact it came from. An unrecognised shape fails the evaluator rather than being skipped.
 
@@ -490,13 +490,13 @@ The deterministic fake provider is what makes the whole pipeline testable in CI 
 
 No generated numerical, temporal, or entity claim is accepted without fact support. The LLM may choose emphasis and wording. It may not choose reality.
 
-**Land the interface and the fake provider; ship no real adapter.** The whole pipeline — request shaping, claim extraction, the validation loop, ledger write and replay — is then testable with no key, no network, and no spend, and the first real adapter is written against a contract that already works. The fake is a contract fixture, not a stand-in for quality: it composes sentences from templates keyed on fact kind, and any judgement about prose has to wait for a real model.
+**Land the interface and the fake provider; ship no real adapter.** The whole pipeline (request shaping, claim extraction, the validation loop, ledger write and replay) is then testable with no key, no network, and no spend, and the first real adapter is written against a contract that already works. The fake is a contract fixture, not a stand-in for quality: it composes sentences from templates keyed on fact kind, and any judgement about prose has to wait for a real model.
 
-**Prove replay against the files, not the objects.** The artifact a user hands to someone else is a directory. So the test generates a corpus, regenerates it from its ledger with the provider made unreachable, and diffs the two directories byte for byte — including the XLSX. CI runs it on every push.
+**Prove replay against the files, not the objects.** The artifact a user hands to someone else is a directory. So the test generates a corpus, regenerates it from its ledger with the provider made unreachable, and diffs the two directories byte for byte, including the XLSX. CI runs it on every push.
 
-**Knowability is `valid_from <= cutoff`, not `holds_at(cutoff)`.** Those are different questions: whether a fact was *true* at a moment, and whether an author writing later may *refer* to it. An RCA is largely about a belief that turned out to be wrong, so testing currency makes the most important document in the corpus unwritable. A superseded fact is legitimate material for a later document — it simply has to read as history rather than as the current position.
+**Knowability is `valid_from <= cutoff`, not `holds_at(cutoff)`.** Those are different questions: whether a fact was *true* at a moment, and whether an author writing later may *refer* to it. An RCA is largely about a belief that turned out to be wrong, so testing currency makes the most important document in the corpus unwritable. A superseded fact is legitimate material for a later document: it simply has to read as history rather than as the current position.
 
-**Sections partition the facts.** An outline whose every section receives the same fact set produces a document that says the same thing five times. Each heading declares the fact kinds it is *about*, and a section with nothing to say is dropped rather than left empty — the plan follows the episode, the same rule as artifact planning.
+**Sections partition the facts.** An outline whose every section receives the same fact set produces a document that says the same thing five times. Each heading declares the fact kinds it is *about*, and a section with nothing to say is dropped rather than left empty: the plan follows the episode, the same rule as artifact planning.
 
 ---
 
@@ -536,7 +536,7 @@ worldloom.retail
 worldloom.it_services
 ```
 
-Extract a generic abstraction only after both implementations require it. Do not design a universal scenario DSL before this stage — before two verticals it encodes guesses rather than recurring structure.
+Extract a generic abstraction only after both implementations require it. Do not design a universal scenario DSL before this stage: before two verticals it encodes guesses rather than recurring structure.
 
 ### Exit gate
 
@@ -545,12 +545,12 @@ Both verticals share the fact ledger, event model, artifact IR, manifest, evalua
 ### Decided, and landed: banking
 
 The decision below resolved in banking's favour, and the vertical shipped as
-`worldloom.banking` — `BankingWorld` plus the `QuarterlyCapitalReturn` episode
+`worldloom.banking`: `BankingWorld` plus the `QuarterlyCapitalReturn` episode
 ("The Challenged Return": a second-line challenge filed over by a lodgement
 norm, the daily liquidity cadence catching the quarterly cadence's error, and a
 restatement whose original stays on the record). What decided it: the three
 structures listed below are exactly what the A10 measurement said the retail
-episode could not generate, and `restates` — the fourth relationship — was
+episode could not generate, and `restates` (the fourth relationship) was
 already core schema waiting for its first user. The exit gate held: zero core
 model changes; banking's checks, artifact types, and archetype all arrive
 through registration seams (`validate.register_domain_checks`,
@@ -562,7 +562,7 @@ kept because it documents what the choice was made against.
 
 There is a case for **banking / regulatory** instead, and it is worth stating so the decision is made rather than inherited. IT services differs from retail in its *nouns and economics* while sharing retail's rhythm and its authority shape: a monthly cycle, a simple preparer-to-approver chain. Banking differs in three things nothing has yet tested:
 
-- **Cadence.** Four rhythms at once — daily liquidity, monthly close, quarterly capital, annual ICAAP — where retail has one. Scenario scheduling currently assumes a single period cadence.
+- **Cadence.** Four rhythms at once (daily liquidity, monthly close, quarterly capital, annual ICAAP) where retail has one. Scenario scheduling currently assumes a single period cadence.
 - **Authority topology.** Three lines of defence means a document has a preparer, an independent reviewer and audit, with genuinely different standing. `Authority` and `AccessPolicy` assume the retail chain.
 - **Immutability.** A filed regulatory return cannot be edited; a correction is a *restatement*, which is a fourth artifact relationship beside `supersedes`, `derived_from` and `revises`.
 
@@ -577,13 +577,13 @@ The measured retail coupling, for whichever is chosen:
 | `models.py` | 16 |
 | `narrative/providers.py` | 9 |
 
-`documents.py` is the largest by a wide margin, and almost all of it is the hard-coded `_OUTLINES`. The plan handshake removes that coupling as a side effect of the diversity work — which is why the sequence below puts diversity first. Diversity and multi-industry are the same refactor approached from two directions.
+`documents.py` is the largest by a wide margin, and almost all of it is the hard-coded `_OUTLINES`. The plan handshake removes that coupling as a side effect of the diversity work, which is why the sequence below puts diversity first. Diversity and multi-industry are the same refactor approached from two directions.
 
 ---
 
 ## 7a. Sequence, confirmed
 
-1. **Diversity** (artifact compiler §14.B) — style genomes, layout families, fingerprints and batch quotas, and the plan handshake that lets a model propose structure under grammar validation. The measured baseline it must beat: a 12-period corpus of 120 artifacts carries only **11 distinct section shapes**, and DOCX sizes across 72 files span 38,658–40,618 bytes. Every close pack in the estate is the same document with different numbers.
+1. **Diversity** (artifact compiler §14.B): style genomes, layout families, fingerprints and batch quotas, and the plan handshake that lets a model propose structure under grammar validation. The measured baseline it must beat: a 12-period corpus of 120 artifacts carries only **11 distinct section shapes**, and DOCX sizes across 72 files span 38,658–40,618 bytes. Every close pack in the estate is the same document with different numbers.
 
    *The measurement side is now complete, and the selection side has its
    missing half.* `compiler.diversity.collisions` names which artifacts share
@@ -593,7 +593,7 @@ The measured retail coupling, for whichever is chosen:
    through the exact similarity join in `similarity.py` (which returns
    precisely the pairs a full pairwise scan would and is fast enough for the
    §12 Gate 1 corpus, where the pairwise scan was not). On the selection side,
-   `select` was only ever *per artifact* — it spreads the alternatives offered
+   `select` was only ever *per artifact*: it spreads the alternatives offered
    for one document and is silent about the batch, so running it independently
    across a hundred artifacts is itself a mechanism for producing the 11-shape
    result. `assign` is the batch-level counterpart, carrying what earlier
@@ -601,7 +601,7 @@ The measured retail coupling, for whichever is chosen:
    about: wiring `assign` into generation, which moves bytes and therefore
    needs its own flag and its own gate.
 2. **The second vertical**, per the open question above.
-3. **Extract the industry-pack interface from the two**, never before. A pack API designed against one industry encodes that industry's assumptions in the shape of the abstraction — the same reason there is still no scenario DSL.
+3. **Extract the industry-pack interface from the two**, never before. A pack API designed against one industry encodes that industry's assumptions in the shape of the abstraction, the same reason there is still no scenario DSL.
 
    *Partially done, mechanically.* Once banking landed, the mechanism the two
    verticals genuinely repeat was extracted: `generators/org_builder.py` (role
@@ -618,7 +618,7 @@ The measured retail coupling, for whichever is chosen:
    exceptions ledger, where each entry is either a registry seed or a named
    debt with its extraction. Paying a debt down forces its ledger entry to be
    deleted, so the measurement cannot go stale. Anything an LLM generates
-   lands as schema — a pack, a registered type, a check group — validated at
+   lands as schema (a pack, a registered type, a check group), validated at
    a handshake and, where generated per-corpus, recorded in the generation
    ledger for replay; core stays a machine that has never heard of an
    industry, and the ratchet is what makes "stays" true.
@@ -626,31 +626,31 @@ The measured retail coupling, for whichever is chosen:
    **The de-hardcoding ladder**, in extraction order, each gated on a second
    consumer:
 
-   1. *Episode surface text* — **done.** Every event sentence and prose fact
+   1. *Episode surface text*: **done.** Every event sentence and prose fact
       is a keyed template in the engine's `TEXT` table (extracted verbatim by
       AST, so stock corpora stayed byte-identical, proven by stash-diff on
       both engines); packs override through `episode_text`, slot-checked at
       lint and at build, published by `worldloom pack texts`. Machine values
-      — statuses, dates, "unassigned" — are deliberately not templates,
+      (statuses, dates, "unassigned") are deliberately not templates,
       because other checks match on them.
-   2. *Role tables as pack data* — engines publish required role keys
+   2. *Role tables as pack data*: engines publish required role keys
       (episodes index by them); packs add or retitle the rest. The voices
       surface already proved the publish-and-lint half.
-   3. *Evaluation phrasing* — **done.** Every question and authored answer
+   3. *Evaluation phrasing*: **done.** Every question and authored answer
       is a keyed template in the engine's `EVAL_TEXT` table (same verbatim
       extraction, same stash-diff proof); packs override through
       `evaluation_text`, and `pack texts --json` publishes both tables.
-      What stays code: reasoning strings and bare fact playback — a value
+      What stays code: reasoning strings and bare fact playback; a value
       read straight off the ledger has no authored wrapper to re-voice.
       This paid down rung 1's known residue (retail evaluation answers that
       hardcoded their phrasing).
-   4. *Name pools* — **done.** `generators/names.py`'s `GIVEN`/`FAMILY` and
+   4. *Name pools*: **done.** `generators/names.py`'s `GIVEN`/`FAMILY` and
       `generators/hierarchy.py`'s `REGIONS` are the engine defaults, extracted
       verbatim (proven by stash-diff on both engines, same discipline as
       rungs 1 and 3); `packs.Pack.name_pools`, `.headquarters`, and `.regions`
       are the authored form, threaded through
       `organisation.generate`/`banking_org.generate` on the same override
-      contract as `company_name` — drawn regardless, replaced after, so a
+      contract as `company_name`: drawn regardless, replaced after, so a
       pack that sets or skips any of them never reshuffles a downstream draw
       relative to one that does the opposite. The second consumer this rung
       was gated on is the pack surface itself: the placeholder `names.py` had
@@ -658,26 +658,26 @@ The measured retail coupling, for whichever is chosen:
       Python) until `packs.py` became a second, and at that point "the pools
       a maintainer edits in this file" and "the pools a pack edits in JSON"
       had to be one set of pools, not two that could drift apart. `pack
-      check` lints a pool narrower than the archetype's headcount — a pool
+      check` lints a pool narrower than the archetype's headcount: a pool
       that recycles a name mid-corpus turns two people into one, which is a
       coherence bug, not a smaller cast. Currency rode along: three
       generators (`finance.py`, `operations.py`, `regulatory.py`) minted every
       financial fact in a hardcoded `"AUD_thousands"`/`"AUD_millions"`
-      regardless of what `Company.currency`/`currency_unit` — already a pack
-      field — actually said, invisible only because every registered
+      regardless of what `Company.currency`/`currency_unit` (already a pack
+      field) actually said, invisible only because every registered
       archetype happens to use one of those two units; a `money_unit`
       parameter on each, derived from the archetype, closed it. What stays
       code: the company-name pools (`COMPANY_FIRST`/`COMPANY_SECOND`,
-      banking's `_BANK_SUFFIX`) — `Pack.company_name` is required, so no pack
-      ever reaches them — and the system-name pools (`ERP`/`MDM`/`PLATFORM`/…,
-      banking's `_CORE`/`_COLLATERAL`/…) — a pack already gets a strictly
+      banking's `_BANK_SUFFIX`), since `Pack.company_name` is required, so no pack
+      ever reaches them, and the system-name pools (`ERP`/`MDM`/`PLATFORM`/…,
+      banking's `_CORE`/`_COLLATERAL`/…), since a pack already gets a strictly
       stronger override for those in `system_brands` (one exact name per
       slot, which is what an author actually wants, not a pool to draw an
       exact name from).
-   5. *The scenario DSL* — still not justified; two episodes share a
+   5. *The scenario DSL*: still not justified; two episodes share a
       prologue and an epilogue and nothing in between. The third vertical is
-      now decided — insurance reserving, `docs/design/insurance-reserving.md`
-      — and was deliberately shaped to fit inside `single_episode`, so the
+      now decided (insurance reserving, `docs/design/insurance-reserving.md`)
+      and was shaped to fit inside `single_episode`, so the
       DSL stays unjustified until the committed follow-on (a second episode
       interleaved on the retail engine, same decision record) produces the
       second data point.
@@ -695,7 +695,7 @@ large_omnichannel_retailer
 global_it_services_provider
 ```
 
-Each pack defines its economic model · organisational topology · entity distributions · technology landscape · service catalogue patterns · project types · operating calendar · financial metrics · event families · artifact preferences · persona families · terminology — and pairs with a [lore pack](lore.md#lore-packs) supplying the interrogation script, constraint vocabulary, and critics.
+Each pack defines its economic model · organisational topology · entity distributions · technology landscape · service catalogue patterns · project types · operating calendar · financial metrics · event families · artifact preferences · persona families · terminology, and pairs with a [lore pack](lore.md#lore-packs) supplying the interrogation script, constraint vocabulary, and critics.
 
 ```python
 world = (
@@ -719,14 +719,14 @@ A configuration file produces different coherent retailers and IT-services compa
 
 The retail half is in: `worldloom.archetypes` holds `Archetype`, and
 `RetailWorld(seed=..., archetype=...)` builds from it. `--archetype` and
-`--inspired-by` reach it from the CLI. Two shapes are registered — a mid-size
+`--inspired-by` reach it from the CLI. Two shapes are registered: a mid-size
 omnichannel retailer and a large Australian supermarket group.
 
 Three things this forced that were not obvious from the plan:
 
 **An archetype has to carry the reporting hierarchy, not just the org chart.** A
 world with three business units and a five-row P&L is a proof of mechanism, not a
-corpus — nobody asks "which division moved", they ask "which category". So the
+corpus: nobody asks "which division moved", they ask "which category". So the
 archetype carries merchandise categories with their own margin profiles and a store
 estate with formats and regions, and both are first-class entities (`CAT-`, `SITE-`)
 rather than strings on a fact. A category has a buyer who is accountable for it; a
@@ -736,8 +736,8 @@ store has a region that explains it.
 stores are independent cuts of the same unit revenue, and both must reach the same
 total. Drawing each and summing gives two contradictory answers; allocating the unit
 total with largest-remainder gives one, exactly, with no residual line. The validator
-now checks every roll-up in the hierarchy — categories→unit, stores→unit,
-units→group — rather than only the last of them.
+now checks every roll-up in the hierarchy (categories→unit, stores→unit,
+units→group) rather than only the last of them.
 
 **Fan-out to the model has to be bounded separately from fan-out to the workbook.**
 The finance generator returns two views: the whole hierarchy for the workbook, and a
@@ -755,7 +755,7 @@ constants, and the lore pack pairing.
 
 ## 9. Add the Socratic world composer
 
-The interview comes after the target schema is proven. Its job is not to make the system generative — the system is already generative. Its job is to make world construction accessible, intentional, and differentiated.
+The interview comes after the target schema is proven. Its job is not to make the system generative: the system is already generative. Its job is to make world construction accessible, intentional, and differentiated.
 
 ```
 User intent
@@ -792,7 +792,7 @@ Two different objects are easily confused, and they should not share a word:
 | Term | Is |
 | --- | --- |
 | **seed** | An integer. `8128`. Drives seeded randomness |
-| **WorldSeed** | The frozen priors document — identity, lore, strategy, org intent — produced by the interview or an archetype |
+| **WorldSeed** | The frozen priors document (identity, lore, strategy, org intent) produced by the interview or an archetype |
 
 A world is reproduced from *both*, plus the generation ledger and generator version.
 
@@ -911,11 +911,11 @@ That is where the corpus becomes genuinely useful for enterprise retrieval and a
 
 Do not optimise for a million artifacts while the meaning of an artifact is still changing.
 
-**Gate 1 — 10,000 artifacts.** A single process supports deterministic generation · bounded memory · local filesystem · JSONL · Parquet · cached LLM responses · resumable stages.
+**Gate 1: 10,000 artifacts.** A single process supports deterministic generation · bounded memory · local filesystem · JSONL · Parquet · cached LLM responses · resumable stages.
 
-**Gate 2 — 100,000 artifacts.** Add partitioned storage · streaming manifests · process pools · renderer workers · batch LLM calls · content-addressed artifacts · incremental validation · failure isolation.
+**Gate 2: 100,000 artifacts.** Add partitioned storage · streaming manifests · process pools · renderer workers · batch LLM calls · content-addressed artifacts · incremental validation · failure isolation.
 
-**Gate 3 — 1,000,000 artifacts.** Only then consider distributed workers · queue-backed execution · remote object storage · metadata database · run coordination · workload partitioning · tenant isolation.
+**Gate 3: 1,000,000 artifacts.** Only then consider distributed workers · queue-backed execution · remote object storage · metadata database · run coordination · workload partitioning · tenant isolation.
 
 The default architecture stays local and library-first.
 
@@ -961,7 +961,7 @@ A five-to-seven-person team organises around the same vertical slice, not around
 | **Evaluation and quality** | Evaluation cases · validators · golden corpus · baseline retriever · corpus inspection |
 | **Runtime and developer experience** | Storage · CLI · Python API · resume · parallelism |
 
-Do not create independent "PPTX", "Jira", and "ServiceNow" teams. That recreates the exact silo problem Worldloom exists to solve — the org chart reproducing the product's own failure mode.
+Do not create independent "PPTX", "Jira", and "ServiceNow" teams. That recreates the exact silo problem Worldloom exists to solve: the org chart reproducing the product's own failure mode.
 
 Every workstream continuously integrates against the same golden episode.
 
@@ -969,19 +969,19 @@ Every workstream continuously integrates against the same golden episode.
 
 ## The four release gates
 
-### Gate A — Coherence
+### Gate A: Coherence
 
 One enterprise episode is consistent across facts, events, systems, and artifacts. No accidental contradictions · no broken references · all financials reconcile · the same seed reproduces the corpus.
 
-### Gate B — Utility
+### Gate B: Utility
 
 An external RAG or agent system ingests the corpus and runs grounded evaluations: questions · answers · required sources · distractors · citations · temporal cut-offs. The in-repo baseline retriever from step 4 makes this gate self-testable rather than dependent on a third party.
 
-### Gate C — Generality
+### Gate C: Generality
 
 A second industry works without contaminating the core with industry-specific fields. Retail and IT services, same kernel, different domain packs.
 
-### Gate D — Scale
+### Gate D: Scale
 
 The pipeline produces large corpora without changing semantics or losing reproducibility. 10K → 100K → 1M artifacts.
 

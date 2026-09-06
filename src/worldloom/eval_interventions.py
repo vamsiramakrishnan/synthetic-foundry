@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from .eval_demands import DemandSet, WorldDemand, compile_demands
-from .eval_design import CandidatePlan, EvalSpec, RequirementKind, design_digest
+from .eval_design import CandidatePlan, EvalSpec, design_digest
 from .eval_tactics import TacticKind, TacticProposal
 from .ids import content_key
 from .models import EnterpriseEvent, Model
@@ -86,51 +86,121 @@ class ConstructionResult:
     applied_tactic_ids: tuple[str, ...]
 
 
-def construct_candidate(spec: EvalSpec, plan: CandidatePlan, base: World, *,
-                        occurred_at: datetime) -> ConstructionResult:
-    """Use the base as-is where possible; construct missing revision witnesses.
+def _default_clock(world: World) -> datetime:
+    """When the constructions happen: after the last thing the world recorded.
 
-    The revision tactic is implemented, not a promise that every proposed tactic
-    has an executor. Other missing requirements return explicit findings and an
-    independently rejected candidate. The eval and its acceptance rules never
-    change to make an unsupported construction appear successful.
+    Derived from the world rather than read from a clock, so two constructions
+    of the same candidate mint the same event ids. A world with no events has
+    no timeline to be after; refusing is better than inventing an epoch.
     """
+
+    from datetime import timedelta
+
+    events = tuple(world.events)
+    if not events:
+        raise ValueError("cannot intervene on a world with no events; run an episode first")
+    return max(event.occurred_at for event in events) + timedelta(hours=1)
+
+
+def _step_demand_is_moot(world: World, demand: WorldDemand) -> bool:
+    """Whether a step-derived demand has nothing left to construct.
+
+    A step with no connector is abstract until the eval binds one, so there is
+    no surface to mint a witness on; that is the design allowing abstract
+    operations before binding, not a defect. A search step whose connector
+    already holds a record of the entity is satisfiable as it stands.
+    """
+
+    from .eval_candidates import _connector_records
+    from .eval_demands import DemandKind
+
+    connector = demand.selector.get("connector")
+    if not isinstance(connector, str) or not connector:
+        return True
+    if demand.kind is not DemandKind.SEARCH:
+        return False
+    entity = demand.selector.get("entity")
+    try:
+        records = _connector_records(world, connector)
+    except ValueError:
+        return False
+    return any(entity is None or record.entity == entity for record in records)
+
+
+def construct_candidate(spec: EvalSpec, plan: CandidatePlan, base: World, *,
+                        occurred_at: datetime | None = None) -> ConstructionResult:
+    """Make the base world satisfy the eval, one tactic per demand, then re-check.
+
+    This is where the eval drives generation. The demand compiler says what
+    must be true; each demand's tactic is executed through ``eval_witnesses``
+    (witness records, preconditions, artifact families, access policies,
+    events, revision chains), every construction is a recipe verb so the
+    candidate replays, and the independent validator still has the last word:
+    nothing here can accept its own output.
+
+    A tactic that cannot run returns a finding naming the seam to use instead
+    (a fact belongs to an episode, a lifecycle to a revision chain); it never
+    stubs a record to make a check pass. A requirement that is already
+    satisfied by the base world is left alone, so a vertical that happens to
+    produce the state is preferred over a minted witness.
+    """
+
     from .eval_candidates import (
         GeneratedCandidate,
         check_requirement,
         validate_candidate,
     )
-    from .eval_construction import apply_revision_family
+    from .eval_tactics import proposal_for
+    from .eval_witnesses import ConstructionRefused, executors
 
     if (plan.eval_spec_id != spec.id or plan.design_digest != design_digest(spec)
             or plan.requirements != spec.requirements or plan.seed != base.seed):
         raise ValueError("candidate plan, world and immutable eval design disagree")
     demands = compile_demands(spec)
-    world = intervene(base, demands, occurred_at=occurred_at)
+    clock = occurred_at or _default_clock(base)
+    world = intervene(base, demands, occurred_at=clock)
     events = {json.loads(event.summary)["demand_id"]: event.id
-              for event in demand_events(demands, occurred_at=occurred_at)}
+              for event in demand_events(demands, occurred_at=clock)}
+    requirements = {requirement.id: requirement for requirement in spec.requirements}
+    table = executors()
     findings: list[ConstructionFinding] = []
     applied: list[str] = []
-    for requirement in spec.requirements:
-        if check_requirement(requirement, world).satisfied:
+    # Requirement-backed demands first: a step's search is satisfiable once the
+    # requirement it reads has minted its witnesses, and the check below asks
+    # the world, so order decides whether a bare witness gets minted for
+    # nothing.
+    ordered = sorted(demands.demands, key=lambda d: (not d.source_requirement_ids, d.id))
+    for demand in ordered:
+        sources = [requirements[rid] for rid in demand.source_requirement_ids if rid in requirements]
+        if sources and all(check_requirement(r, world).satisfied for r in sources):
             continue
-        if requirement.kind is not RequirementKind.REVISION_CHAIN:
-            findings.append(ConstructionFinding(requirement_id=requirement.id,
-                            code="unsupported_construction", detail=requirement.kind.value))
+        if not sources and _step_demand_is_moot(world, demand):
             continue
-        demand = next(d for d in demands.demands if requirement.id in d.source_requirement_ids)
-        parameters = dict(requirement.selector)
-        parameters.update(minimum=requirement.minimum, source_event_id=events[demand.id])
-        proposal = TacticProposal(
-            id="tactic:revision:" + content_key(demands.design_digest, demand.id)[:20],
-            kind=TacticKind.REVISION_FAMILY, covers=(demand.id,),
-            cost=2 + requirement.minimum, parameters=parameters,
-        )
+        proposal = proposal_for(demand)
+        requirement_kind = demand.selector.get("requirement_kind")
+        if requirement_kind is not None:
+            proposal = proposal.model_copy(update={
+                "parameters": {**proposal.parameters, "requirement_kind": requirement_kind},
+            })
+        if proposal.kind is TacticKind.REVISION_FAMILY:
+            parameters = dict(proposal.parameters)
+            parameters.update(minimum=demand.minimum, source_event_id=events[demand.id])
+            proposal = TacticProposal(
+                id="tactic:revision:" + content_key(demands.design_digest, demand.id)[:20],
+                kind=TacticKind.REVISION_FAMILY, covers=(demand.id,),
+                cost=2 + demand.minimum, parameters=parameters,
+            )
+        executor = table.get(proposal.kind)
+        owner = demand.source_requirement_ids[0] if demand.source_requirement_ids else demand.id
+        if executor is None:
+            findings.append(ConstructionFinding(requirement_id=owner,
+                            code="unsupported_construction", detail=proposal.kind.value))
+            continue
         try:
-            world = apply_revision_family(world, proposal)
+            world = executor(world, proposal, occurred_at=clock)
             applied.append(proposal.id)
-        except ValueError as error:
-            findings.append(ConstructionFinding(requirement_id=requirement.id,
+        except (ConstructionRefused, ValueError) as error:
+            findings.append(ConstructionFinding(requirement_id=owner,
                             code="construction_refused", detail=str(error)))
     validation = validate_candidate(plan, spec, world)
     return ConstructionResult(candidate=GeneratedCandidate(plan=plan, world=world, validation=validation),

@@ -1902,7 +1902,7 @@ def evaluation_cases(
     taxonomy.across_episodes()
     taxonomy.abstentions()
     # Appended after every existing family so an `EVAL-` id already minted by
-    # one of them never shifts — see AGENTS.md/CLAUDE.md on id stability.
+    # one of them never shifts — see AGENTS.md on id stability.
     taxonomy.org_state_over_time()
     taxonomy.succession()
     taxonomy.milestone_provenance()

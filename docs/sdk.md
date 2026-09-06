@@ -282,8 +282,8 @@ worlds = sdk.outcome_selected(candidates, 5)      # returns Built, not Blueprint
 Every candidate is built, run for one episode, compiled and read; the same
 farthest-first traversal then runs over the measurement vector rather than over
 the configuration vector. Nothing is narrated or rendered, so a candidate costs
-a build rather than a corpus — a pool of thirty retail worlds measures in about
-five seconds.
+a build rather than a corpus, so a pool of thirty retail worlds measures in
+about five seconds.
 
 The measurement vector is `worldloom.outcomes.read()`: the eight numbers of
 `Built.measure()`, plus `stats.measure` repetition and shape counts,

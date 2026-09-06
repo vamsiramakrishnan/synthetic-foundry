@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Callable, Mapping
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
@@ -467,15 +469,83 @@ def generate_email(world: World) -> list[ConnectorRecord]:
     return records
 
 
+#: Render formats that are files a connector can hold, by the suffix the
+#: renderer writes. Markdown and HTML are kept out on purpose: a Confluence
+#: page or a SharePoint site page is its own entity with its own tools, not a
+#: file in a library.
+_FILE_FORMAT_BY_SUFFIX = {".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx", ".pdf": "pdf"}
+
+
+def file_formats(connector: str) -> tuple[str, ...]:
+    """The render formats *connector* can hold as files, in definition order.
+
+    The connector is the tool surface and the container; the format is how an
+    artifact's body is materialised. One SharePoint library holds a workbook,
+    a deck and a PDF of the same pack, and an agent asked for "the deck" has to
+    tell them apart by format, not by connector. The definition says which
+    formats the product accepts through its ``file`` alias, or, for a
+    definition without the alias, through the entities that carry a mime
+    type; this is the intersection of that list with what Worldloom renders.
+    """
+
+    from .connector_definition import REFERENCE_CONNECTORS, load_connector_definition
+
+    if connector not in REFERENCE_CONNECTORS:
+        return ()
+    definition = load_connector_definition(connector)
+    try:
+        members = definition.entity_members("file")
+    except KeyError:
+        members = tuple(definition.entities)
+    renderable = set(_FILE_FORMAT_BY_SUFFIX.values())
+    return tuple(member for member in members if member in renderable)
+
+
+def rendered_files(world: World) -> dict[str, list[Any]]:
+    """Rendered bodies by artifact id, main files only (no citation sidecars)."""
+
+    by_artifact: dict[str, list[Any]] = {}
+    for item in world._rendered:
+        if not item.artifact_id or item.path.endswith(".citations.md"):
+            continue
+        by_artifact.setdefault(item.artifact_id, []).append(item)
+    return by_artifact
+
+
+def rendered_payload(world: World, record: ConnectorRecord | Mapping[str, Any]) -> bytes | None:
+    """The bytes behind a file record, when the world has rendered them."""
+
+    path = record.fields.get("path") if isinstance(record, ConnectorRecord) else record.get("path")
+    if not path:
+        return None
+    for item in world._rendered:
+        if item.path == path:
+            return bytes(item.payload)
+    return None
+
+
 def generate_artifact_projection(
     world: World, connector: str
 ) -> list[ConnectorRecord]:
-    entity = {
+    """Artifacts as the records a document store or page space would hold.
+
+    File connectors (SharePoint, Drive) project one record per artifact *and
+    format* once the world is rendered: the docx and the xlsx of one pack are
+    two items in the library, each with the rendered file's path, size and
+    hash, and each under the entity the definition gives that format. Before
+    rendering there is nothing to hold, so the projection is the one planned
+    ``file`` item per artifact it always was; a corpus that never renders
+    projects byte-for-byte as before.
+    """
+
+    container = {
         "confluence": "page",
         "sharepoint": "file",
         "drive": "file",
         "salesforce": "case",
     }[connector]
+    formats = file_formats(connector) if container == "file" else ()
+    rendered = rendered_files(world) if formats else {}
     artifacts = tuple(world.artifacts) or tuple(world.artifact_intents)
     records = []
     for index, artifact in enumerate(sorted(artifacts, key=lambda item: item.id), start=1):
@@ -484,59 +554,87 @@ def generate_artifact_projection(
             or getattr(artifact, "required_fact_ids", ())
             or ()
         )
-        key = content_key(connector, world.seed, artifact.id)
-        external_id = {
-            "confluence": str(10_000_000 + index),
-            "sharepoint": key,
-            "drive": key,
-            "salesforce": f"500{key[:15].upper()}",
-        }[connector]
         title = getattr(artifact, "title", None) or (
             f"{artifact.artifact_type.replace('_', ' ').title()} - "
             f"{world.period or 'current'}"
         )
-        records.append(
-            ConnectorRecord(
-                id=f"CONN-{connector.upper()}-{key[:12].upper()}",
-                connector=connector,
-                entity=entity,
-                external_id=external_id,
-                title=title,
-                fields={
-                    {
-                        "confluence": "page_id",
-                        "sharepoint": "item_id",
-                        "drive": "file_id",
-                    }[connector]: external_id,
-                    "name": title,
-                    "artifact_type": artifact.artifact_type,
-                    "domain": artifact.domain,
-                    "author_id": artifact.author_id,
-                    "audience": artifact.audience,
-                    "version": getattr(artifact, "version", 1),
-                    "world_artifact_id": artifact.id,
-                    "reporting_period": world.period,
-                    "parent_path": f"/{artifact.domain}/{world.period or 'current'}",
-                    "permissions": {
-                        "owner": artifact.author_id,
-                        "audience": artifact.audience,
-                        "inherit": True,
-                    },
-                    "version_history": [
+        bodies = [
+            (fmt, item)
+            for item in rendered.get(artifact.id, ())
+            for fmt in (_FILE_FORMAT_BY_SUFFIX.get(Path(item.path).suffix),)
+            if fmt in formats
+        ]
+        variants: list[tuple[str, str, dict[str, Any]]] = []
+        if not bodies and rendered:
+            # The world rendered file formats and none of them claimed this
+            # artifact (a ticket bundle, a page): it is not a file in this
+            # library. Listing it as one would hand an agent an item with no
+            # bytes behind it, the defect this projection exists to remove.
+            continue
+        if bodies:
+            for fmt, item in sorted(bodies, key=lambda pair: pair[0]):
+                payload = bytes(item.payload)
+                variants.append((fmt, fmt, {
+                    "format": fmt,
+                    "media_type": item.media_type,
+                    "path": item.path,
+                    "size_bytes": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "name": Path(item.path).name,
+                }))
+        else:
+            variants.append(("", container, {"name": title}))
+        for fmt, entity, extra in variants:
+            key = content_key(connector, world.seed, artifact.id, fmt) if fmt else content_key(connector, world.seed, artifact.id)
+            external_id = {
+                "confluence": str(10_000_000 + index),
+                "sharepoint": key,
+                "drive": key,
+                "salesforce": f"500{key[:15].upper()}",
+            }[connector]
+            records.append(
+                ConnectorRecord(
+                    id=f"CONN-{connector.upper()}-{key[:12].upper()}",
+                    connector=connector,
+                    entity=entity,
+                    external_id=external_id,
+                    title=title,
+                    fields={
                         {
-                            "version": getattr(artifact, "version", 1),
-                            "author_id": artifact.author_id,
-                        }
-                    ],
-                },
-                fact_ids=fact_ids,
-                event_ids=sorted(
-                    getattr(artifact, "event_ids", ())
-                    or getattr(artifact, "triggered_by", ())
-                ),
-                source_artifact_ids=[artifact.id],
+                            "confluence": "page_id",
+                            "sharepoint": "item_id",
+                            "drive": "file_id",
+                            "salesforce": "case_id",
+                        }[connector]: external_id,
+                        "artifact_type": artifact.artifact_type,
+                        "domain": artifact.domain,
+                        "author_id": artifact.author_id,
+                        "audience": artifact.audience,
+                        "version": getattr(artifact, "version", 1),
+                        "world_artifact_id": artifact.id,
+                        "reporting_period": world.period,
+                        "parent_path": f"/{artifact.domain}/{world.period or 'current'}",
+                        "permissions": {
+                            "owner": artifact.author_id,
+                            "audience": artifact.audience,
+                            "inherit": True,
+                        },
+                        "version_history": [
+                            {
+                                "version": getattr(artifact, "version", 1),
+                                "author_id": artifact.author_id,
+                            }
+                        ],
+                        **extra,
+                    },
+                    fact_ids=fact_ids,
+                    event_ids=sorted(
+                        getattr(artifact, "event_ids", ())
+                        or getattr(artifact, "triggered_by", ())
+                    ),
+                    source_artifact_ids=[artifact.id],
+                )
             )
-        )
     return records
 
 
@@ -622,22 +720,78 @@ def generate_salesforce(world: World) -> list[ConnectorRecord]:
 Projection = Callable[[Any], list[ConnectorRecord]]
 
 
+def generate_witnesses(world: World, connector: str) -> list[ConnectorRecord]:
+    """Records the eval-first constructive layer minted for *connector*.
+
+    A witness is a world event carrying an ``eval-witness/v1`` document (see
+    ``eval_witnesses``); this is its projection. It sits beside the engine's
+    own projections rather than inside the eval code so that the validator, the
+    emulator, the exporters and the eval generator all see one record set: a
+    witness found by a search the eval did not write is the whole point.
+    """
+
+    from .eval_witnesses import witness_payload
+
+    records: list[ConnectorRecord] = []
+    for event in world.events:
+        payload = witness_payload(event)
+        if payload is None or payload.get("connector") != connector:
+            continue
+        entity = str(payload["entity"])
+        key = content_key("witness", world.seed, event.id)
+        fields: dict[str, Any] = dict(payload["fields"])
+        title = str(fields.get("title") or fields.get("name") or fields.get("summary")
+                    or f"{entity.replace('_', ' ')} {payload['ordinal'] + 1}")
+        fields.update({
+            "world_event_id": event.id,
+            "eval_tactic_id": payload["tactic_id"],
+            "witness_role": payload["role"],
+            "near_miss_of": payload["near_miss_of"],
+            "opened_at": event.occurred_at.isoformat(),
+        })
+        records.append(
+            ConnectorRecord(
+                id=f"CONN-{connector.upper()}-W{key[:11].upper()}",
+                connector=connector,
+                entity=entity,
+                external_id=f"W-{key[:10].upper()}",
+                title=title,
+                fields=fields,
+                event_ids=[event.id],
+            )
+        )
+    return records
+
+
+def _defined_connectors() -> tuple[str, ...]:
+    from .connector_definition import REFERENCE_CONNECTORS
+
+    return REFERENCE_CONNECTORS
+
+
 class ConnectorProjectionRegistry:
-    """Harness-owned mapping from semantic connector names to projections."""
+    """Harness-owned mapping from semantic connector names to projections.
+
+    Every projection is followed by the witness projection, and a connector
+    that has a definition but no engine projection (Teams, Slack, OneDrive,
+    ...) projects witnesses alone. That is what lets an eval demand a record on
+    any defined connector and have the demand constructed, checked and searched
+    through one path.
+    """
 
     def __init__(self, projections: Mapping[str, Projection]) -> None:
         self._projections = dict(projections)
 
     def project(self, connector: str, world: World) -> list[ConnectorRecord]:
-        try:
-            projection = self._projections[connector]
-        except KeyError as error:
-            raise ValueError(f"unknown connector projection {connector!r}") from error
-        return projection(world)
+        projection = self._projections.get(connector)
+        if projection is None and connector not in _defined_connectors():
+            raise ValueError(f"unknown connector projection {connector!r}")
+        base = projection(world) if projection is not None else []
+        return [*base, *generate_witnesses(world, connector)]
 
     @property
     def names(self) -> tuple[str, ...]:
-        return tuple(sorted(self._projections))
+        return tuple(sorted(set(self._projections) | set(_defined_connectors())))
 
 
 def builtin_projections() -> ConnectorProjectionRegistry:

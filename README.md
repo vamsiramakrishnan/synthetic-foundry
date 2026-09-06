@@ -6,12 +6,12 @@ It creates the company state, events, facts, relationships, and timelines first.
 
 That ordering lets the validator check cross-artifact claims instead of asking a model to keep independently generated files consistent.
 
-[![ci](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/ci.yml/badge.svg)](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/ci.yml)
-[![determinism sweep](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/determinism-sweep.yml/badge.svg)](https://github.com/vamsiramakrishnan/synthetic-foundry/actions/workflows/determinism-sweep.yml)
-[![docs](https://img.shields.io/badge/docs-site-blue)](https://vamsiramakrishnan.github.io/synthetic-foundry/)
+[![ci](https://github.com/vamsiramakrishnan/worldloom/actions/workflows/ci.yml/badge.svg)](https://github.com/vamsiramakrishnan/worldloom/actions/workflows/ci.yml)
+[![determinism sweep](https://github.com/vamsiramakrishnan/worldloom/actions/workflows/determinism-sweep.yml/badge.svg)](https://github.com/vamsiramakrishnan/worldloom/actions/workflows/determinism-sweep.yml)
+[![docs](https://img.shields.io/badge/docs-site-blue)](https://vamsiramakrishnan.github.io/worldloom/)
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Status: pre-release. Install from a clone. The library does not call an LLM service by itself.
+Status: 0.1.0, the first release. The library never calls an LLM service by itself.
 
 ## What it produces
 
@@ -30,9 +30,7 @@ The current default retail seed used by the repository examples produces 615 fac
 ## Quickstart
 
 ```bash
-git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
-cd synthetic-foundry
-pip install -e ".[all]"
+pip install "worldloom[all]"
 
 worldloom doctor
 worldloom build --seed 8128 --incident --narrate --out ./corpus
@@ -158,7 +156,7 @@ See [`docs/operational-synthesis.md`](docs/operational-synthesis.md).
 
 ## Calibration, causal mess and fidelity
 
-Three proposal seams sit outside the deterministic boundary, each leaving a content-addressed receipt: `worldloom calibrate` learns physics ranges from a sensitive table under differential privacy (only ranges cross, never rows) for `build --priors`; `build --causal` drives the archive's stale and disagreeing documents from a declared cause — a DAG whose every derived value the validator recomputes — and records the trace as `causal.jsonl`; `worldloom fidelity` compares a synthetic table with a real one as a vector, never a score. Vendor registers gain checksum-valid, locale-correct identifiers with `"master_data": {"identifiers": 1}`.
+Three proposal seams sit outside the deterministic boundary, each leaving a content-addressed receipt: `worldloom calibrate` learns physics ranges from a sensitive table under differential privacy (only ranges cross, never rows) for `build --priors`; `build --causal` drives the archive's stale and disagreeing documents from a declared cause (a DAG whose every derived value the validator recomputes) and records the trace as `causal.jsonl`; `worldloom fidelity` compares a synthetic table with a real one as a vector, never a score. Vendor registers gain checksum-valid, locale-correct identifiers with `"master_data": {"identifiers": 1}`.
 
 See [`docs/extension-seams.md`](docs/extension-seams.md).
 
@@ -219,13 +217,13 @@ docs/             guides and architecture notes
 evals/            mechanism and benchmark receipts
 ```
 
-For the full API and command reference, use the [documentation site](https://vamsiramakrishnan.github.io/synthetic-foundry/).
+For the full API and command reference, use the [documentation site](https://vamsiramakrishnan.github.io/worldloom/).
 
 ## Development
 
 ```bash
-git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
-cd synthetic-foundry
+git clone https://github.com/vamsiramakrishnan/worldloom.git
+cd worldloom
 pip install -e ".[all,dev]"
 pytest
 ```

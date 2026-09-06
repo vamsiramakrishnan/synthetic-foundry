@@ -1,9 +1,9 @@
 # Extension seams: proposal engines behind the compiler boundary
 
 Worldloom is the final authority on identity, arithmetic, chronology, causality,
-provenance and replay. Everything outside that boundary — a distribution learned
+provenance and replay. Everything outside that boundary (a distribution learned
 from real data, a locale's postcode grammar, rows a statistical model proposes,
-events a domain simulator exports — is welcome *as a proposal*. This page is the
+events a domain simulator exports) is welcome *as a proposal*. This page is the
 contract under which proposals get in, and the four things that were built on
 it first.
 
@@ -18,15 +18,15 @@ names four more seams on exactly that pattern.
 | --- | --- | --- | --- |
 | `PriorEstimator` | Physics *ranges* (`parameters.Span`) from data it may not copy | Any row, any entity, any fact | `calibrate.LaplaceHistogramEstimator` |
 | `SurfaceValueProvider` | Leaf values on an entity the world minted: postcode, phone, registration number, bank account | Identity, relationships, outcomes | `surface.Vendored` |
-| `DetailSynthesizer` | Candidate transaction rows | Any total the ledger states — `accept` reconciles them | `providers.EvenSynthesizer` (a contract fixture) |
-| `DomainImporter` | Neutral `ImportedEvent`s from an external export | What the world does with them (a vertical's business) | none yet — the seam is declared |
+| `DetailSynthesizer` | Candidate transaction rows | Any total the ledger states, `accept` reconciles them | `providers.EvenSynthesizer` (a contract fixture) |
+| `DomainImporter` | Neutral `ImportedEvent`s from an external export | What the world does with them (a vertical's business) | none yet, the seam is declared |
 
 ## The receipt
 
 Every external execution leaves a `Receipt`: backend and version, the operation,
 digests of configuration, source, candidate and accepted output, the seed if any,
 and a `PrivacyReceipt` when a privacy budget was spent. Its `key` is a content
-address over all of it — the same discipline as `GenerationLedgerEntry.key`, for
+address over all of it, the same discipline as `GenerationLedgerEntry.key`, for
 the same reason. **Digests, never data**: no receipt field carries a value from
 the source, so a receipt is safe to ship in a corpus precisely because it proves
 what happened without repeating any of it.
@@ -63,7 +63,7 @@ individual's contribution by truncation, releases a Laplace-noised histogram
 under sequential composition, and reads the span's low and high off the noised
 distribution at the declared quantiles. The snapshot is exactly the `overrides`
 document `--physics` reads, plus the receipt, plus a per-column **quality**
-reading — how many values were read and what share of the released histogram is
+reading, how many values were read and what share of the released histogram is
 expected to be noise. When that share is high, the CLI says so: the release is
 still valid, it is just not informative, and the fix is more rows, more ε, or
 wider bins.
@@ -83,7 +83,7 @@ Two things are deliberate and worth knowing:
 
 Four locales ship with regions, cities, names and number punctuation, and none
 could put a postcode on an address or an ABN on a vendor. `surface.py` fills
-those from rules vendored in `data/surface/rules.json` — versioned, and every
+those from rules vendored in `data/surface/rules.json`, versioned, and every
 value a pure function of a `StableKey`: `seed / rules version / entity type /
 entity id / field`. The version is *in the path*, so bumping the rules moves
 values only for keys built under the new version; no two fields share a stream,
@@ -111,9 +111,9 @@ versions. Recording the package version would detect the drift, not prevent it.
 ## Causal models: `build --causal`
 
 `messiness.py` made *how much* imperfection a corpus carries a named dimension.
-A causal model says *why*. It is a DAG of named quantities — exogenous nodes
+A causal model says *why*. It is a DAG of named quantities (exogenous nodes
 drawn from physics spans or held constant, derived nodes a **linear** function
-of their parents, clamped and rounded — with dated **interventions** (`do()`:
+of their parents, clamped and rounded) with dated **interventions** (`do()`:
 "the ERP migration happened in April") and **drives** that make a node's value,
 scaled, an imperfection kind's budget. The stale pages in the archive are then a
 consequence the model computed, not a number an author typed.
@@ -126,14 +126,14 @@ worldloom build --seed 8128 --periods 6 --incident --causal model.json --out ./c
 ```
 
 Linear only, on purpose: it is `FactKindSpec.derive`'s closed-vocabulary
-argument — a derivation the validator cannot recompute is a figure nothing
+argument, a derivation the validator cannot recompute is a figure nothing
 checks. The whole trace lands on the corpus as `causal.jsonl`; each intervention
 mints a `causal.intervention` event on the timeline; the `Causal` recipe verb
 replays the model under the recorded physics; and the `causal` validator group
 recomputes every derived value from its recorded parents, refuses a trace that
 drifted, holds delivery to the budget, and requires each intervention's event.
 The imperfections themselves ride `apply_messiness`, so each one is still
-establishable from the corpus by the audit trail `messiness.py` promises — and
+establishable from the corpus by the audit trail `messiness.py` promises, and
 now traceable to the node that sized its budget. `--causal` and `--messiness`
 cannot be combined when the model drives imperfections: two passes would spend
 the same corrections twice.
@@ -142,7 +142,7 @@ the same corrections twice.
 
 `stats.py` reports and refuses to grade, because there is no auditable reference
 for "a real enterprise corpus". When the user has a real table of their own, the
-comparison has a subject, and `fidelity` makes it — as a vector, never a score.
+comparison has a subject, and `fidelity` makes it, as a vector, never a score.
 
 ```bash
 worldloom fidelity actuals.csv ./corpus --table order_lines --slices region --json

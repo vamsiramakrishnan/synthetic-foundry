@@ -95,6 +95,8 @@ P2,  3d, Payments-SRE     distance 2
 
 This makes retrieval hardness measurable. Mutation operators must remain domain-aware; arbitrary strings or impossible state transitions are not valid distractors.
 
+This is implemented for equality selectors by `eval_witnesses`. A search or connector demand mints `minimum` witnesses and, for every constrained field, one near miss that fails that field alone, through the shared predicate language's `satisfy` and `spoil`. Picklist fields take another value the connector definition lists, so a near miss is something the product would accept. Witnesses are world events; the connector projection turns them into records, which is why the validator, the emulator and the exporters see the same set. A demand for a file in a format (a deck in SharePoint) is met by rendering that format rather than by a witness, because the record for a docx is the docx. Ordered predicates (`age_days > 7`) and joins are refused with a finding until the interventions that construct them exist.
+
 ## One episode should satisfy many demands
 
 The naive implementation creates one filler object per requirement. That produces a Frankenstein corpus.
@@ -196,7 +198,7 @@ This keeps document realism and eval solvability aligned.
 
 World scale and evaluation scale are different axes.
 
-A few thousand richly connected enterprise objects can support hundreds of thousands of valid tasks. The useful combinatorics come from task topology, predicates, connectors, temporal state, permissions, lifecycle, and mutation behavior—not from blindly generating more files.
+A few thousand richly connected enterprise objects can support hundreds of thousands of valid tasks. The useful combinatorics come from task topology, predicates, connectors, temporal state, permissions, lifecycle, and mutation behavior, not from blindly generating more files.
 
 ## What belongs where
 

@@ -25,7 +25,7 @@ question/answer turns, and a session that holds the loop itself beats being
 called once per question.
 
 Run it with ``worldloom mcp``; ``.mcp.json`` at the repository root wires it into
-Claude Code automatically. Every tool takes its subject's path explicitly, so one
+any MCP client that reads ``.mcp.json``. Every tool takes its subject's path explicitly, so one
 server serves however many corpora a session is working on.
 """
 

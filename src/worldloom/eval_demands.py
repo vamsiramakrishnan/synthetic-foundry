@@ -95,6 +95,11 @@ def _from_steps(spec: EvalSpec) -> list[WorldDemand]:
         selector: dict[str, Scalar] = {"capability": step.capability}
         if step.connector:
             selector["connector"] = step.connector
+        if step.entity:
+            # The entity the step names is the entity its witness must be. A
+            # Teams search for channel messages constructed a `team` before
+            # this line, because the selector never said otherwise.
+            selector["entity"] = step.entity
         if step.operation:
             selector["operation"] = step.operation
         operation = (step.operation or step.capability).lower()

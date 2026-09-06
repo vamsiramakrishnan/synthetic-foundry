@@ -50,7 +50,12 @@ class _Hygiene(ast.NodeVisitor):
         self._in_hash_dunder = 0
 
     def _flag(self, node: ast.AST, what: str) -> None:
-        self.violations.append(f"{self.rel}:{node.lineno}: {what}")
+        # `ast.comprehension` carries no position of its own; its iterable
+        # does. Without this the first set-comprehension violation crashed
+        # the scanner with an AttributeError instead of naming the line, which
+        # is how a real violation in eval_witnesses announced itself.
+        located = node.iter if isinstance(node, ast.comprehension) else node
+        self.violations.append(f"{self.rel}:{located.lineno}: {what}")
 
     # -- imports ------------------------------------------------------------
 
