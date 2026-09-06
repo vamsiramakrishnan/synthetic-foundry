@@ -29,36 +29,34 @@ jobs:
 
           path = Path('src/worldloom/connector_emulator.py')
           text = path.read_text()
-          old = '''            if "rate_limit_429" in active_faults:
-              raise ConnectorError(429, "Too many requests", "rate_limit")
-          handler_op = {
-          '''
-          new = '''            if "rate_limit_429" in active_faults:
-              raise ConnectorError(429, "Too many requests", "rate_limit")
-          if "permission_denied" in active_faults:
-              raise self._error("denied")
-          write_ops = {
-              "create",
-              "update",
-              "transition",
-              "comment",
-              "delete",
-              "transform",
-              "send",
-              "post",
-              "reply",
-              "forward",
-              "upload",
-          }
-          if tool.op in write_ops and "version_conflict" in active_faults:
-              raise ConnectorError(409, "Version conflict", "version_conflict")
-          if tool.op in write_ops and "partial_write" in active_faults:
-              raise ConnectorError(207, "Partial write", "partial_write")
-          handler_op = {
-          '''
-          count = text.count(old)
-          assert count == 1, f'expected one emulator fault anchor, found {count}'
-          path.write_text(text.replace(old, new, 1))
+          needle = 'handler_op = {'
+          assert text.count(needle) == 1
+          index = text.index(needle)
+          line_start = text.rfind('\n', 0, index) + 1
+          indent = text[line_start:index]
+          block = [
+              'if "permission_denied" in active_faults:',
+              '    raise self._error("denied")',
+              'write_ops = {',
+              '    "create",',
+              '    "update",',
+              '    "transition",',
+              '    "comment",',
+              '    "delete",',
+              '    "transform",',
+              '    "send",',
+              '    "post",',
+              '    "reply",',
+              '    "forward",',
+              '    "upload",',
+              '}',
+              'if tool.op in write_ops and "version_conflict" in active_faults:',
+              '    raise ConnectorError(409, "Version conflict", "version_conflict")',
+              'if tool.op in write_ops and "partial_write" in active_faults:',
+              '    raise ConnectorError(207, "Partial write", "partial_write")',
+          ]
+          insertion = ''.join(indent + line + '\n' for line in block)
+          path.write_text(text[:line_start] + insertion + text[line_start:])
           PY
       - name: Install validation dependencies
         run: |
