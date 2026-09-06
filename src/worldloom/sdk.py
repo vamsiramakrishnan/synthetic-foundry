@@ -185,6 +185,18 @@ class Blueprint:
             resolved[name] = value if isinstance(value, Span) else Span(*value)
         return replace(self, physics_overrides=resolved)
 
+    def priors(self, snapshot: Any) -> Blueprint:
+        """Physics calibrated from data by ``worldloom.calibrate`` — a
+        ``PriorSnapshot`` or the path of one — under whatever ``physics()``
+        set explicitly. Same precedence as the CLI: a range stated on purpose
+        outranks one measured in general."""
+        from .calibrate import PriorSnapshot
+
+        resolved = snapshot if isinstance(snapshot, PriorSnapshot) else PriorSnapshot.read(snapshot)
+        merged = dict(resolved.overrides())
+        merged.update(self.physics_overrides)
+        return replace(self, physics_overrides=merged)
+
     def org(
         self,
         *,
@@ -684,6 +696,16 @@ class Built:
         for scenario in scenarios:
             world = world.run(scenario)
         return replace(self, world=world)
+
+    def causal(self, model: Any) -> Built:
+        """Run a causal model (``worldloom.causal``) over the built world —
+        after the episodes, because its drives spend the corrections they
+        recorded. Under the blueprint's own physics, so an exogenous node
+        draws from the same ranges the episodes did."""
+        from . import causal as causal_module
+
+        document = causal_module.from_document(model).model_dump(mode="json")
+        return self.run(causal_module.Causal(model=document, physics=self.blueprint.parameters))
 
     # -- measurement, so a loop can filter on what came out ----------------
 

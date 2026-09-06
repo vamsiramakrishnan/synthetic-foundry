@@ -7,6 +7,52 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Proposal engines behind the compiler boundary
+
+- **`providers.py`** — four extension seams on the pattern `narrative.providers`
+  and `actors.providers` already set: `PriorEstimator`, `SurfaceValueProvider`,
+  `DetailSynthesizer`, `DomainImporter`. Each is a small `Protocol` with an `id`
+  and `version`; each execution leaves a **`Receipt`** whose `key` is a content
+  address over backend, operation, configuration, source, candidate and accepted
+  digests — digests, never data. `accept` makes a synthesizer's proposal into
+  data by refusing rows that violate a constraint and then reconciling every
+  declared total by largest remainder at the declared precision. A deterministic
+  fake (`EvenSynthesizer`) proves the contract with no backend.
+- **`calibrate.py` / `worldloom calibrate` / `build --priors`** — physics
+  ranges learned from a sensitive table under differential privacy. The built-in
+  Laplace-histogram estimator clips, bounds contributions by truncation, noises
+  under sequential composition and reads spans off the noised CDF. The
+  `PriorSnapshot` is exactly the `--physics` overrides document plus the receipt
+  and a per-column **noise-share** reading; the CLI names parameters whose
+  release was more noise than signal. Noise is system entropy by default — a
+  calibration is not reproducible, the corpus is — and a `--noise-seed`
+  snapshot says in three places that it is not a private release.
+- **`surface.py`** — postcodes, phones, registration numbers and bank accounts
+  from versioned rules in `data/surface/rules.json`, every value a pure function
+  of `seed / rules version / entity type / entity id / field`. Checksums are the
+  issuing bodies' own (ABN, USt-IdNr, Austrian UID, UK VAT, NZBN, IBAN) and are
+  tested against their published examples. `master_data` takes `"identifiers": 1`;
+  an un-opted register writes the same bytes it always did.
+- **`causal.py` / `build --causal` / `worldloom causal check|trace`** — a DAG
+  of named quantities with linear effects, dated interventions (`do()`) and
+  drives that make a node's value an imperfection kind's budget. The trace
+  lands on the corpus as **`causal.jsonl`**; interventions mint
+  `causal.intervention` events; the `Causal` recipe verb replays byte for byte;
+  the `causal` validator group recomputes every derived value from its recorded
+  parents and refuses drift, over-delivery, or a missing event. Linear only —
+  `FactKindSpec.derive`'s closed-vocabulary argument.
+- **`fidelity.py` / `worldloom fidelity`** — a synthetic table against a real
+  one as a vector: KS and Wasserstein, Jensen–Shannon and total variation,
+  cardinality and unseen share, correlation error, contingency distance, a
+  nearest-neighbour two-sample statistic beside its baseline, exact-match rate
+  and distance-to-closest-record against the real set's own. Per slice on
+  request. No aggregate score, by design. Reads CSV, JSONL, JSON, or a corpus's
+  detail table.
+- **Generation**: no corpus built without `--causal`, `--priors` or
+  `identifiers` changes a byte. `CORE_PREFIXES` gains `CAUSE`.
+- `docs/extension-seams.md` is the contract; the SDK gains
+  `Blueprint.priors()` and `Built.causal()`.
+
 ### Generation — a document type may argue its case more than one way
 
 - **`documents._OUTLINE_VARIANTS`** — a six-period corpus produced **32 distinct

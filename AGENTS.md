@@ -1136,6 +1136,39 @@ Two consequences for you:
 
 ---
 
+## Calibrating, causing, measuring — optionally
+
+Three things sit outside the deterministic boundary and are let in as
+*proposals*, each leaving a content-addressed receipt. `docs/extension-seams.md`
+is the contract; this is the loop.
+
+```bash
+# Physics learned from a sensitive table, under a privacy budget. Only ranges
+# cross — no row, no mean — and the snapshot carries the receipt (mechanism,
+# ε, clipping, contribution bound) plus a per-column noise reading.
+worldloom calibrate --template > schema.json
+worldloom calibrate --from actuals.csv --schema schema.json --epsilon 1.0 --out priors.json
+worldloom build --seed 8128 --priors priors.json --out ./corpus
+
+# Mess with a cause. A DAG of named quantities, dated interventions and the
+# imperfection kinds they drive; the whole trace lands on the corpus and the
+# validator recomputes every derived value.
+worldloom causal check --template > model.json
+worldloom causal trace model.json --periods 6 --period 2026-01
+worldloom build --seed 8128 --periods 6 --incident --causal model.json --out ./corpus
+
+# How a synthetic table compares with a real one — a vector, never a score.
+worldloom fidelity actuals.csv ./corpus --table order_lines --slices region --json
+```
+
+`--causal` and `--messiness` cannot be combined when the model drives
+imperfections: two passes would spend the same corrections twice. A calibration
+made with `--noise-seed` is a deterministic summary and says so; it is not a
+private release. Postcodes, phones, registration numbers and bank accounts on
+the vendor register come from `"master_data": {"vendors": 2000, "identifiers": 1}`
+on a spec — checksum-valid, locale-correct, and derived from versioned rules in
+this repository rather than from a package that can move under a pip upgrade.
+
 ## Where things are
 
 | Path | What |
@@ -1147,6 +1180,11 @@ Two consequences for you:
 | `src/worldloom/recipe.py` | How a world was made, so a corpus can rebuild itself |
 | `src/worldloom/render/` | Formats. Read the IR and nothing else |
 | `src/worldloom/validate.py` | The guardrails. Start here to understand the rules |
+| `src/worldloom/providers.py` | The four extension seams and the receipt every external execution leaves |
+| `src/worldloom/calibrate.py` | Physics ranges from data the corpus may never contain, under a privacy budget |
+| `src/worldloom/causal.py` | Causal models: why the archive is as messy as it is, recomputable |
+| `src/worldloom/surface.py` | Postcodes, phones, registration numbers, bank accounts — vendored, checksum-valid |
+| `src/worldloom/fidelity.py` | A synthetic table against a real one, as a vector |
 | `examples/retail-close/` | The hand-authored reference corpus. Frozen |
 | `examples/grocery-close/` | Real agent-written prose, accepted whole. Replayed by CI |
 | `.claude/skills/worldloom/` | The procedure, progressively disclosed by stage |

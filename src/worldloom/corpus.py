@@ -17,6 +17,7 @@ Layout::
     ├── intentional-errors.jsonl
     ├── evals.jsonl
     ├── detail.jsonl              transaction-level rows under the facts
+    ├── causal.jsonl              a causal model's trace: node values, interventions, budgets
 
     ├── actor-observations.jsonl  who knew what, when, and how
     ├── actor-messages.jsonl      what one employee told another
@@ -51,6 +52,10 @@ EVALS_FILE = "evals.jsonl"
 # Written only when a recipe produced any, so a corpus without one is
 # byte-identical to what it was.
 DETAIL_FILE = "detail.jsonl"
+# A causal model's trace (see `causal.py`): the model, every period's node
+# values, the interventions in force and the imperfection budgets they sized.
+# Same posture as detail: written only when a model ran.
+CAUSAL_FILE = "causal.jsonl"
 LEDGER_FILE = "generation-ledger.jsonl"
 # The actor layer, written only when an episode ran. Four files rather than one
 # because they answer four different questions — who knew what, who was told

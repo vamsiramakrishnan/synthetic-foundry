@@ -1,0 +1,457 @@
+{
+  "about": "Surface-value rules for surface.py, by country: how a postcode is shaped and which range a city sits in, how a landline and a mobile are formatted and which area code a city carries, which registration-number scheme a business carries (checksums are computed in code, only the body is drawn), and what a bank account looks like. Country names match the second half of each locale's (city, country) pairs. Patterns: '#' is a drawn digit, '@' is the city's area code. Versioned: a change to any rule bumps `version`, because every value is derived under a path that carries it, and an old corpus must keep replaying under the rules it was built with.",
+  "version": "1",
+  "countries": {
+    "Australia": {
+      "postcode": {
+        "kind": "range_by_city",
+        "width": 4,
+        "default": [
+          2000,
+          7999
+        ],
+        "cities": {
+          "Sydney": [
+            2000,
+            2249
+          ],
+          "Melbourne": [
+            3000,
+            3207
+          ],
+          "Brisbane": [
+            4000,
+            4179
+          ],
+          "Perth": [
+            6000,
+            6199
+          ],
+          "Adelaide": [
+            5000,
+            5199
+          ],
+          "Hobart": [
+            7000,
+            7099
+          ],
+          "Canberra": [
+            2600,
+            2617
+          ],
+          "Darwin": [
+            800,
+            899
+          ]
+        }
+      },
+      "phone": {
+        "landline": "(0@) #### ####",
+        "mobile": "04## ### ###",
+        "area_default": "2",
+        "area_by_city": {
+          "Sydney": "2",
+          "Canberra": "2",
+          "Melbourne": "3",
+          "Hobart": "3",
+          "Brisbane": "7",
+          "Perth": "8",
+          "Adelaide": "8",
+          "Darwin": "8"
+        }
+      },
+      "business_identifier": {
+        "kind": "abn"
+      },
+      "bank_account": {
+        "kind": "pattern",
+        "pattern": "BSB ###-### Acc ########"
+      }
+    },
+    "New Zealand": {
+      "postcode": {
+        "kind": "range_by_city",
+        "width": 4,
+        "default": [
+          1010,
+          9999
+        ],
+        "cities": {
+          "Auckland": [
+            1010,
+            1072
+          ],
+          "Wellington": [
+            6011,
+            6037
+          ],
+          "Christchurch": [
+            8011,
+            8083
+          ]
+        }
+      },
+      "phone": {
+        "landline": "0@ ### ####",
+        "mobile": "02# ### ####",
+        "area_default": "9",
+        "area_by_city": {
+          "Auckland": "9",
+          "Wellington": "4",
+          "Christchurch": "3"
+        }
+      },
+      "business_identifier": {
+        "kind": "nzbn"
+      },
+      "bank_account": {
+        "kind": "pattern",
+        "pattern": "##-####-#######-##"
+      }
+    },
+    "Germany": {
+      "postcode": {
+        "kind": "range_by_city",
+        "width": 5,
+        "default": [
+          10000,
+          99999
+        ],
+        "cities": {
+          "Berlin": [
+            10115,
+            14199
+          ],
+          "Hamburg": [
+            20095,
+            21149
+          ],
+          "München": [
+            80331,
+            81929
+          ],
+          "Köln": [
+            50667,
+            51149
+          ],
+          "Frankfurt am Main": [
+            60306,
+            60599
+          ],
+          "Stuttgart": [
+            70173,
+            70629
+          ],
+          "Düsseldorf": [
+            40210,
+            40629
+          ],
+          "Leipzig": [
+            4103,
+            4357
+          ],
+          "Dresden": [
+            1067,
+            1328
+          ],
+          "Hannover": [
+            30159,
+            30669
+          ],
+          "Nürnberg": [
+            90402,
+            90491
+          ],
+          "Bremen": [
+            28195,
+            28779
+          ]
+        }
+      },
+      "phone": {
+        "landline": "+49 @ ### ####",
+        "mobile": "+49 1## #######",
+        "area_default": "30",
+        "area_by_city": {
+          "Berlin": "30",
+          "Hamburg": "40",
+          "München": "89",
+          "Köln": "221",
+          "Frankfurt am Main": "69",
+          "Stuttgart": "711",
+          "Düsseldorf": "211",
+          "Leipzig": "341",
+          "Dresden": "351",
+          "Hannover": "511",
+          "Nürnberg": "911",
+          "Bremen": "421"
+        }
+      },
+      "business_identifier": {
+        "kind": "de_ustid"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "DE",
+        "bban": "##################"
+      }
+    },
+    "Austria": {
+      "postcode": {
+        "kind": "range_by_city",
+        "width": 4,
+        "default": [
+          1010,
+          9999
+        ],
+        "cities": {
+          "Wien": [
+            1010,
+            1230
+          ],
+          "Graz": [
+            8010,
+            8055
+          ],
+          "Linz": [
+            4020,
+            4048
+          ],
+          "Salzburg": [
+            5020,
+            5083
+          ]
+        }
+      },
+      "phone": {
+        "landline": "+43 @ ### ####",
+        "mobile": "+43 6## ######",
+        "area_default": "1",
+        "area_by_city": {
+          "Wien": "1",
+          "Graz": "316",
+          "Linz": "732",
+          "Salzburg": "662"
+        }
+      },
+      "business_identifier": {
+        "kind": "at_uid"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "AT",
+        "bban": "################"
+      }
+    },
+    "United Kingdom": {
+      "postcode": {
+        "kind": "uk",
+        "default": [
+          "B",
+          "M",
+          "LS",
+          "G",
+          "EH",
+          "BS",
+          "L",
+          "CF",
+          "BT",
+          "NE",
+          "S",
+          "NG"
+        ],
+        "cities": {
+          "London": [
+            "E",
+            "EC",
+            "N",
+            "NW",
+            "SE",
+            "SW",
+            "W",
+            "WC"
+          ],
+          "Manchester": [
+            "M"
+          ],
+          "Birmingham": [
+            "B"
+          ],
+          "Leeds": [
+            "LS"
+          ],
+          "Glasgow": [
+            "G"
+          ],
+          "Edinburgh": [
+            "EH"
+          ],
+          "Bristol": [
+            "BS"
+          ],
+          "Liverpool": [
+            "L"
+          ],
+          "Cardiff": [
+            "CF"
+          ],
+          "Belfast": [
+            "BT"
+          ],
+          "Newcastle": [
+            "NE"
+          ],
+          "Sheffield": [
+            "S"
+          ],
+          "Nottingham": [
+            "NG"
+          ]
+        }
+      },
+      "phone": {
+        "landline": "0@ ### ####",
+        "mobile": "07### ######",
+        "area_default": "121",
+        "area_by_city": {
+          "London": "20",
+          "Manchester": "161",
+          "Birmingham": "121",
+          "Leeds": "113",
+          "Glasgow": "141",
+          "Edinburgh": "131",
+          "Bristol": "117",
+          "Liverpool": "151",
+          "Cardiff": "29",
+          "Belfast": "28",
+          "Newcastle": "191",
+          "Sheffield": "114",
+          "Nottingham": "115"
+        },
+        "landline_by_city": {
+          "London": "020 #### ####",
+          "Cardiff": "029 #### ####",
+          "Belfast": "028 #### ####"
+        }
+      },
+      "business_identifier": {
+        "kind": "gb_vat"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "GB",
+        "bban": "WLBK##############"
+      }
+    },
+    "United Arab Emirates": {
+      "postcode": {
+        "kind": "po_box",
+        "low": 1000,
+        "high": 99999
+      },
+      "phone": {
+        "landline": "+971 @ ### ####",
+        "mobile": "+971 5# ### ####",
+        "area_default": "4",
+        "area_by_city": {
+          "Dubai": "4",
+          "Abu Dhabi": "2",
+          "Sharjah": "6",
+          "Ajman": "6",
+          "Ras Al Khaimah": "7",
+          "Fujairah": "9"
+        }
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "TRN 1003############"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "AE",
+        "bban": "###################"
+      }
+    },
+    "Qatar": {
+      "postcode": {
+        "kind": "po_box",
+        "low": 1000,
+        "high": 39999
+      },
+      "phone": {
+        "landline": "+974 4### ####",
+        "mobile": "+974 ## ### ###",
+        "area_default": ""
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "CR ######"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "QA",
+        "bban": "QNBA#####################"
+      }
+    },
+    "Bahrain": {
+      "postcode": {
+        "kind": "po_box",
+        "low": 100,
+        "high": 29999
+      },
+      "phone": {
+        "landline": "+973 17## ####",
+        "mobile": "+973 3### ####",
+        "area_default": ""
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "CR #####-#"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "BH",
+        "bban": "BBKU##############"
+      }
+    },
+    "Oman": {
+      "postcode": {
+        "kind": "fixed_width",
+        "width": 3
+      },
+      "phone": {
+        "landline": "+968 24## ####",
+        "mobile": "+968 9### ####",
+        "area_default": ""
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "CR #######"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "OM",
+        "bban": "###################"
+      }
+    },
+    "_generic": {
+      "postcode": {
+        "kind": "fixed_width",
+        "width": 5
+      },
+      "phone": {
+        "landline": "+## ### ### ####",
+        "mobile": "+## ### ### ####",
+        "area_default": ""
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "REG-########"
+      },
+      "bank_account": {
+        "kind": "pattern",
+        "pattern": "ACCT ############"
+      }
+    }
+  }
+}

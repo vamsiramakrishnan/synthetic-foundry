@@ -15,6 +15,7 @@ tree.
 | Add a company-specific vocabulary | [Lore](lore.md) | [Generation model](generation-model.md) |
 | Add an artifact type | [Artifact compiler](artifact-compiler.md) | [Episode grammar](episode-grammar.md) |
 | Add a process or vertical | [Episode grammar](episode-grammar.md) | [Build order](build-order.md) and [Actor simulation](actor-simulation.md) |
+| Calibrate physics from real data, drive mess from a cause, or measure fidelity | [Extension seams](extension-seams.md) | [Architecture and invariants](architecture.md) |
 | Look up an exact CLI flag | [Generated command reference](../.claude/skills/worldloom/references/commands.md) | The relevant workflow guide above |
 
 ## System map

@@ -61,6 +61,7 @@ DOCUMENTS = (
     "docs/enterprise-corpus.md",
     "docs/sdk.md",
     "docs/skills.md",
+    "docs/extension-seams.md",
     # `docs/build-order.md` is deliberately absent. It is the roadmap, so it names
     # commands that do not exist yet — `worldloom interview` among them — and
     # checking it would either fail the build for describing the future or force
@@ -70,6 +71,7 @@ DOCUMENTS = (
 LINK_CHECKED_DOCUMENTS = (
     "README.md",
     "docs/README.md",
+    "docs/extension-seams.md",
     "docs/architecture.md",
     "docs/enterprise-corpus.md",
     "docs/sdk.md",

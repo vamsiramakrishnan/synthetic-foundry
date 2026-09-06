@@ -981,6 +981,7 @@ def messiness_ceilings(world: World) -> dict[str, int]:
 
 def apply_messiness(
     world: World, *, messiness: Messiness, recorded_as: str | Mapping[str, Any] | None = None,
+    record: bool = True,
 ) -> World:
     """Add the imperfections *messiness* asks for, and record the step.
 
@@ -999,6 +1000,11 @@ def apply_messiness(
     A world with two corrections cannot have five stale pages without inventing
     a figure to be stale about, and inventing one is the single thing this pass
     may never do.
+
+    ``record=False`` applies the decay without appending an ``Imperfections``
+    step to the recipe. For a caller that *is* a recipe step of its own —
+    ``causal.Causal`` derives its budget from a model and records that model —
+    a second step here would replay the same decay twice on rebuild.
     """
     if messiness.degree <= 0:
         return world
@@ -1069,7 +1075,7 @@ def apply_messiness(
         recipe=with_step(
             world._recipe, "Imperfections",
             profile=recorded_as if recorded_as is not None else messiness.as_dict(),
-        ),
+        ) if record else None,
     )
 
 

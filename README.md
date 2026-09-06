@@ -467,6 +467,7 @@ corpus/
 |-- events.jsonl                  append-only enterprise events
 |-- facts.jsonl                   canonical and superseded facts
 |-- detail.jsonl                  transaction-level tables, when requested
+|-- causal.jsonl                  a causal model's trace, when one ran
 |-- masterdata.json               vendors, customers, SKUs, when requested
 |-- artifact-intents.jsonl        type, author, audience, facts, lineage
 |-- artifact-ir.jsonl             resolved tables and narrative sections

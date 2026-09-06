@@ -267,7 +267,10 @@ def test_cli_refuses_a_replay_that_would_otherwise_have_succeeded(tmp_path) -> N
         "--replay", str(big), "--out", str(small),
     ])
     assert result.exit_code == 2
-    assert "recorded a different world" in result.output
+    # Whitespace-normalised: Rich wraps the error to the console width, and in
+    # a narrow non-TTY (CI, a remote harness) the phrase breaks across a line.
+    # The claim being tested is what the message *says*, not where it wraps.
+    assert "recorded a different world" in " ".join(result.output.split())
     assert "employees" in result.output
 
 
