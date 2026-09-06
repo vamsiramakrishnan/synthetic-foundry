@@ -1,0 +1,129 @@
+name: structural uplift SDK CLI integration
+on:
+  push:
+    branches: [codex/structural-uplift]
+    paths:
+      - .github/workflows/structural-uplift-sdk-cli.yml
+permissions:
+  contents: write
+concurrency:
+  group: structural-uplift-sdk-cli
+  cancel-in-progress: false
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/structural-uplift
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Move SDK and CLI onto library-owned seams
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              assert text.count(old) == 1, (path, text.count(old), old)
+              file.write_text(text.replace(old, new, 1))
+
+          sdk = 'src/worldloom/sdk.py'
+          replace_once(
+              sdk,
+              '    "outcome_selected", "probe_of", "retail", "sweep",\n]',
+              '    "outcome_selected", "pipeline", "probe_of", "retail", "sweep",\n]',
+          )
+          anchor = '''# Kept as conveniences for existing callers and docs; `company()` is the
+          # canonical, industry-neutral path and the only one a new engine appears in
+          # automatically.
+          def retail(*, seed: int = 8128) -> Blueprint:
+          '''
+          replacement = '''def pipeline(
+              start: str = "2026-03",
+              *,
+              periods: int = 1,
+              incident: bool | None = None,
+              compile_artifacts: bool = True,
+              validate: bool = True,
+          ) -> Any:
+              """Return the typed build pipeline used by SDK and CLI consumers.
+
+              The returned value is an immutable :class:`worldloom.pipeline.Pipeline`.
+              It mints nothing until ``run(blueprint)`` is called, so a harness can
+              inspect, extend, or compare its stage contracts before doing work.
+              """
+              from .pipeline import standard_pipeline
+
+              return standard_pipeline(
+                  start,
+                  periods=periods,
+                  incident=incident,
+                  compile_artifacts=compile_artifacts,
+                  validate=validate,
+              )
+
+
+          # Kept as conveniences for existing callers and docs; `company()` is the
+          # canonical, industry-neutral path and the only one a new engine appears in
+          # automatically.
+          def retail(*, seed: int = 8128) -> Blueprint:
+          '''
+          replace_once(sdk, anchor, replacement)
+
+          cli = 'src/worldloom/cli.py'
+          replace_once(
+              cli,
+              '''from .synthesis_cli import app as synthesis_app
+
+          app.add_typer(synthesis_app, name="synth")
+          ''',
+              '''from .seams_cli import seams_command
+          from .synthesis_cli import app as synthesis_app
+
+          app.command("seams")(seams_command)
+          app.add_typer(synthesis_app, name="synth")
+          ''',
+          )
+          PY
+      - name: Install validation dependencies
+        run: |
+          python -m pip install uv
+          uv pip install --system -e '.[dev,polars,xlsx,docx,pdf,pptx]' ruff==0.15.8 mypy==2.3.1
+      - name: Validate SDK and CLI parity
+        run: |
+          ruff check
+          mypy
+          pytest -q tests/test_pipeline.py tests/test_seams.py
+          python - <<'PY'
+          import json
+          from typer.testing import CliRunner
+          from worldloom import sdk
+          from worldloom.cli import app
+
+          assert "pipeline" in sdk.__all__
+          graph = sdk.pipeline("2026-03", incident=False)
+          assert [stage.name for stage in graph.stages] == ["world", "episodes", "plan", "validate"]
+          run = graph.run(sdk.retail(seed=73))
+          assert run.value.validate().ok
+
+          result = CliRunner().invoke(app, ["seams", "--json"])
+          assert result.exit_code == 0, result.output
+          manifest = json.loads(result.stdout)
+          assert {item["name"] for item in manifest["seams"]} >= {"pipeline", "connectors"}
+          PY
+      - name: Commit verified integrations separately
+        run: |
+          git config user.name 'worldloom-source-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/sdk.py
+          git commit -m 'Expose typed build orchestration through the SDK'
+          git add src/worldloom/cli.py
+          git commit -m 'Render code-generated seam contracts from the CLI'
+          git rm .github/workflows/structural-uplift-sdk-cli.yml
+          git commit -m 'Remove completed structural integration workflow'
+          git push origin HEAD:codex/structural-uplift
