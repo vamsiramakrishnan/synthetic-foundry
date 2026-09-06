@@ -21,6 +21,40 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
+      - name: Align relative-time query operands with the shared predicate contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              assert text.count(old) == 1, (path, text.count(old), old)
+              file.write_text(text.replace(old, new, 1))
+
+          path = 'src/worldloom/connector_query.py'
+          replace_once(path, 'import re\n', 'import re\nfrom datetime import datetime\n')
+          replace_once(
+              path,
+              'from .predicates import FieldPredicate, Predicate, PredicateOp, Scalar\n',
+              'from .predicates import FieldPredicate, Predicate, PredicateOp, RelativeTime, Scalar\n',
+          )
+          replace_once(
+              path,
+              'def _quote(value: Scalar) -> str:\n    if value is None:\n',
+              'def _quote(value: Scalar | RelativeTime) -> str:\n    if isinstance(value, RelativeTime):\n        raise ValueError("relative-time operands must be resolved against the connector clock")\n    if value is None:\n',
+          )
+          replace_once(
+              path,
+              'def _atom(value: Scalar) -> str:\n',
+              'def _atom(value: Scalar | RelativeTime) -> str:\n',
+          )
+          replace_once(
+              path,
+              '    for item in predicate.where:\n        field = _native_field(definition, item.field)\n',
+              '    for item in predicate.where:\n        if isinstance(item.value, RelativeTime):\n            resolved = item.value.resolve(datetime.fromisoformat(definition.clock)).isoformat()\n            item = item.model_copy(update={"value": resolved})\n        field = _native_field(definition, item.field)\n',
+          )
+          PY
       - name: Move SDK and CLI onto library-owned seams
         run: |
           python - <<'PY'
@@ -94,16 +128,18 @@ jobs:
         run: |
           python -m pip install uv
           uv pip install --system -e '.[dev,polars,xlsx,docx,pdf,pptx]' ruff==0.15.8 mypy==2.3.1
-      - name: Validate SDK and CLI parity
+      - name: Validate SDK, CLI, and predicate parity
         run: |
           ruff check
           mypy
-          pytest -q tests/test_pipeline.py tests/test_seams.py
+          pytest -q tests/test_pipeline.py tests/test_seams.py tests/test_connector_query.py
           python - <<'PY'
           import json
           from typer.testing import CliRunner
           from worldloom import sdk
           from worldloom.cli import app
+          from worldloom.connectors import compile_native, load_connector_definition
+          from worldloom.predicates import FieldPredicate, Predicate, RelativeTime
 
           assert "pipeline" in sdk.__all__
           graph = sdk.pipeline("2026-03", incident=False)
@@ -115,11 +151,22 @@ jobs:
           assert result.exit_code == 0, result.output
           manifest = json.loads(result.stdout)
           assert {item["name"] for item in manifest["seams"]} >= {"pipeline", "connectors"}
+
+          jira = load_connector_definition("jira")
+          native = compile_native(
+              jira,
+              Predicate(entity="bug", where=(
+                  FieldPredicate(field="age_days", value=RelativeTime(days=-30)),
+              )),
+          )
+          assert "2026-08-06" in native
           PY
       - name: Commit verified integrations separately
         run: |
           git config user.name 'worldloom-source-bot'
           git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/connector_query.py
+          git commit -m 'Resolve relative-time predicates against connector clocks'
           git add src/worldloom/sdk.py
           git commit -m 'Expose typed build orchestration through the SDK'
           git add src/worldloom/cli.py
