@@ -255,8 +255,8 @@ uniqueness the ambiguity twins later violate on purpose.
   asserts the digest.
 
 **Size** L, expected as two PRs (modifiers and demands, then catalogue and
-metrics). **Risk:** the classifier is the load the catalogue has to bear; if
-two shapes collide the refusal must name both.
+metrics). **Risk:** the classifier carries the catalogue. If two shapes
+collide on one DAG, the refusal must name both rather than pick one.
 
 ### 2. The eval row contract
 
