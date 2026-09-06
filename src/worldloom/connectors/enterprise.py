@@ -127,11 +127,12 @@ class EnterpriseConnectorRuntime:
                             "source_artifact_ids",
                         }
                     },
-                    fact_ids=tuple(record.get("fact_ids", ())),
-                    event_ids=tuple(record.get("event_ids", ())),
-                    source_artifact_ids=tuple(
-                        record.get("source_artifact_ids", ())
-                    ),
+                    fact_ids=[str(value) for value in record.get("fact_ids", ())],
+                    event_ids=[str(value) for value in record.get("event_ids", ())],
+                    source_artifact_ids=[
+                        str(value)
+                        for value in record.get("source_artifact_ids", ())
+                    ],
                 )
         return tuple(record for _, record in sorted(materialized.items()))
 
