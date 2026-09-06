@@ -64,8 +64,18 @@ def test_view_separates_what_was_known_from_what_is_known_now() -> None:
 
 
 def test_view_isolates_observer_channels() -> None:
-    finance = _fact("F-FIN", 98, observer="finance", authority=Authority.REPORTED)
-    ops = _fact("F-OPS", 104, observer="ops", authority=Authority.REPORTED)
+    finance = _fact(
+        "F-FIN",
+        98,
+        observer="finance",
+        authority=Authority.WORKING_DOCUMENT,
+    )
+    ops = _fact(
+        "F-OPS",
+        104,
+        observer="ops",
+        authority=Authority.WORKING_DOCUMENT,
+    )
     ledger = FactLedger((finance, ops))
 
     finance_view = ledger.view("finance", valid_at=T0, tx_at=T0)
