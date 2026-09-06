@@ -39,6 +39,20 @@ have stopped them from writing.
 
 ## Where each kind of change goes
 
+### An external generator, estimator or importer
+
+Goes behind one of the four protocols in `src/worldloom/providers.py` —
+`PriorEstimator`, `SurfaceValueProvider`, `DetailSynthesizer`,
+`DomainImporter` — never as an import inside a generator. The rule is the one
+`narrative.providers` set: the backend *proposes*, Worldloom accepts, and the
+accepted output plus a content-addressed `Receipt` is what the corpus carries,
+so a rebuild never calls the backend again. A statistical row synthesizer
+returns a `Candidate` and `providers.accept` reconciles every declared total by
+largest remainder before a row exists; a calibration returns spans and a
+privacy receipt, never rows; a surface provider fills leaf values keyed by
+`StableKey` under its own version. `docs/extension-seams.md` is the contract
+and `calibrate.py`, `surface.py` and `causal.py` are the worked examples.
+
 ### New render format
 
 Goes in `src/worldloom/render/`, registered in `render/__init__.py` via

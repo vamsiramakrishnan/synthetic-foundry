@@ -87,6 +87,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--actors` | Let employees produce the incident's records by calling tools on what they observed. `scripted` runs the built-in deterministic actor (no network, no key); `agent` leaves every decision for you to make through `worldloom act`. |
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--business-units-end` | Exact active business-unit count in the final period. |
+| `--causal` | Run a causal model over the built world: a JSON DAG of named quantities, linear effects, dated interventions and the imperfection kinds they drive (`worldloom causal check` lints one; `worldloom causal trace` shows what it would do). Where --messiness asks for a number of stale pages, this derives the number from a cause — an ERP migration raising the error rate — and records the whole trace on the corpus so the validator can recompute every value. Cannot be combined with --messiness when the model drives imperfections: two passes would spend the same corrections twice. |
 | `--comparatives` | Prior months of actuals to generate, for a trend. 11 gives a rolling year. |
 | `--conversations` | Record the episode's knowledge layer beside its facts and documents: who was told what, by whom, and therefore who knew each fact when. Adds no facts and no documents, and adds information-asymmetry evaluation cases nothing else in the corpus can pose. Refused with `--actors`, which derives its own. |
 | `--distractors` | Add this many provenance-true noise artifacts once the episode(s) finish: superseded drafts, personal working copies, and routine notices — real authors, real dates, real facts, answering nothing an evaluation case needs. 0 (the default) touches nothing. |
@@ -112,6 +113,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--periods` | Run this many consecutive episodes — closes for the retail vertical, or a single-episode vertical's own cadence (a domain's period_step_months). More than one gives recurrence, superseded documents, and the evaluation questions a single episode cannot pose. |
 | `--physics` | Build under overridden world physics: a JSON file of parameter ranges, as `worldloom probe resolve` writes and `worldloom pack params` lists. This is what makes a pack able to say the company is a jeweller rather than a grocer with the labels changed. Only the ranges that differ from the engine's are recorded, so a file restating the defaults builds a byte-identical corpus. |
 | `--policies` | Give the company its standing documents: core or full. These are the papers a company *has* rather than produces — a delegation of authority, an expense policy, a leave policy, an information security policy — as opposed to what a close or an incident emits. Without it an assistant asked what the approval threshold is has nothing to find, because the company has no rules. Money provisions scale off the company's own revenue, so two archetypes do not share a limit. Omit it and every existing corpus is byte-identical. |
+| `--priors` | Build under physics calibrated from data by `worldloom calibrate`: a prior snapshot whose spans replace the engine's ranges and whose receipt records how they were made and what privacy budget it cost. Only ranges cross the boundary — no row of the source is in the snapshot, so none can be in the corpus. Applied before --physics, which then overrides it range by range. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--reviews` | Review this many people per period. Each is a signed performance review countersigned by the manager's own manager, plus the running one-to-one note that fed it — at a lower authority, and saying something slightly different. |
 | `--section-omission` | Per-mille chance that any one *optional* section is left out of any one document, so a type emits a subset of its outline rather than all of it every time. This is swarm testing applied to documents: sections compete for a reader's attention exactly as test features compete for room, and a corpus whose every close pack carries the same five headings teaches a retriever the headings. Sections are required unless a type says otherwise, so no required fact can ever be lost to it; an un-annotated corpus has nothing optional and is unaffected at any value. Pass 0 for the historical all-sections shape. |
@@ -124,6 +126,52 @@ Generate a world deterministically from a seed, then validate it.
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
 | `--variant-bias` | Rotate which authored outline variant each document gets. Two tenants built from one engine with different biases disagree about every document's shape, which is most of what stops a mosaic sharing one shape vocabulary. Only rotates among variants a type already ships; pass 0 for the historical hash-selected variants. |
 | `--vary-incidents` | Rotate the incident's storyline across periods — a stale FX table one month, a duplicated goods receipt the next — instead of the same failure retold monthly. Surface only: causality, fact ids and machine values are identical either way, and each period's storyline is recorded on its recipe step so --replay reproduces it. Off (the default) rebuilds every existing corpus byte for byte. |
+
+### `worldloom calibrate`
+
+Learn physics ranges from data the corpus may never contain, under a privacy budget.
+
+| Option | Purpose |
+| --- | --- |
+| `--delta` | Recorded on the receipt; the built-in Laplace mechanism spends none. |
+| `--epsilon` | Total privacy budget, split evenly across the calibrated columns. |
+| `--from` | The sensitive table: CSV, JSONL or a JSON array. Read once, never copied. |
+| `--noise-seed` | Seed the noise. FOR TESTS: a seeded release is a deterministic summary, not a private one, and the snapshot says so. |
+| `--out`, `-o` | Where to write the prior snapshot. Stdout when omitted. |
+| `--schema` | Which columns inform which physics parameters, with clip bounds, bins and quantiles. `--template` writes one. |
+| `--template` | Print a calibration schema to start from, and stop. |
+
+### `worldloom causal`
+
+Author a causal model: lint it, and trace what it would do before building under it.
+
+### `worldloom causal check`
+
+Lint a causal model: DAG, declared parents, weights, physics names, drives.
+
+```
+worldloom causal check <MODEL>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the findings as JSON. |
+| `--template` | Print a model to start from, and stop. |
+
+### `worldloom causal trace`
+
+Evaluate a model over a run of periods, without a world, and show what it does.
+
+```
+worldloom causal trace <MODEL>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the trace as JSON. |
+| `--period`, `-p` | The first period, YYYY-MM. |
+| `--periods` | How many monthly periods to trace. |
+| `--seed`, `-s` | The seed exogenous nodes draw under. |
 
 ### `worldloom compose`
 
@@ -319,6 +367,24 @@ Evolve build configurations: propose, build, measure, select, vary.
 | `--population`, `-n` | Configurations proposed and built per generation. |
 | `--purpose` | What the fleet is being admitted for: challenge (it will be used to challenge a retrieval or assistant system) or counterfactual (controlled comparison against a shared frame). 'naturalistic' is refused, naming the reference data it would need. |
 | `--seed`, `-s` | Run seed. The same seed reruns the same evolution byte for byte. |
+
+### `worldloom fidelity`
+
+Compare a synthetic table with a real one, dimension by dimension — never as one score.
+
+```
+worldloom fidelity <REFERENCE> <SYNTHETIC>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--categorical` | Treat this column as categorical even though every value parses as a number — an id, a code. Repeatable. |
+| `--ignore` | Leave this column out entirely. Repeatable. |
+| `--json` | Emit the whole vector as JSON — stable keys, safe to diff. |
+| `--numeric` | Treat this column as numeric even though the reference carries a value that does not parse. Repeatable. |
+| `--seed` | Seed for the subsample the two quadratic blocks take past 2,000 rows. |
+| `--slices` | Report the per-column block again per value of this column, most frequent first. Repeatable. |
+| `--table` | When either side is a corpus directory, the detail table to read from it. |
 
 ### `worldloom fleet`
 

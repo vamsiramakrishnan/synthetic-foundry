@@ -62,6 +62,12 @@ Determinism spine:
 - **Recipe** (`recipe.py`) records every build-affecting input (archetype,
   `register_step` steps, locale, presentation) so `build --replay` is
   byte-identical; `corpus.tree_divergence` is the arbiter of "identical".
+- **Receipts** (`providers.py`): anything from outside the boundary — a
+  calibrated range, a proposed row set, a surface value, an imported event —
+  enters as a *proposal* and leaves a content-addressed `Receipt` of digests,
+  never data. `worldloom calibrate`, `build --priors`, `build --causal`,
+  `worldloom causal check` / `worldloom causal trace` and `worldloom fidelity`
+  are the four seams' CLI surface (`docs/extension-seams.md`).
 - `cli.py` (~310KB, 30+ commands, 10 sub-apps) is a thin wrapper: lazy imports
   inside command bodies, and `@app.callback()` runs `worldloom._install()`
   before every command so domain registration is all-or-nothing.
@@ -170,6 +176,8 @@ format.
 | `src/worldloom/__init__.py` | Version (hatch reads it — bump here only) + `_install()` registration |
 | `src/worldloom/ids.py`, `rng.py`, `corpus.py` | Deterministic ids, RNG streams, byte-identical IO |
 | `src/worldloom/validate.py` | Coherence gate; `register_domain_checks` |
+| `src/worldloom/providers.py` | The four extension seams (`PriorEstimator`, `SurfaceValueProvider`, `DetailSynthesizer`, `DomainImporter`) and the content-addressed `Receipt` every external execution leaves |
+| `src/worldloom/calibrate.py`, `causal.py`, `surface.py`, `fidelity.py` | DP-calibrated physics (`build --priors`); causal models driving archive decay (`build --causal`, `causal.jsonl`); vendored checksum-valid identifiers; the fidelity vector — see `docs/extension-seams.md` |
 | `src/worldloom/narrative/prompts.py` | Versioned prompt registry |
 | `.claude/skills/worldloom/references/commands.md` | GENERATED CLI reference — regenerate with `worldloom docs`, never hand-edit |
 | `examples/retail-close/` | Golden corpus; its empty generation ledger is asserted by a test |

@@ -69,6 +69,11 @@ probe_app = typer.Typer(
     help="Derive a world's physics by asking, one question at a time, under propagation.",
 )
 app.add_typer(probe_app, name="probe")
+causal_app = typer.Typer(
+    no_args_is_help=True,
+    help="Author a causal model: lint it, and trace what it would do before building under it.",
+)
+app.add_typer(causal_app, name="causal")
 present_app = typer.Typer(
     no_args_is_help=True,
     help="Decide who a corpus's documents are for, and check a profile you wrote.",
@@ -384,6 +389,9 @@ _REFUSALS: dict[str, str] = {
     "bad_physics": "a physics override names an unknown parameter or an impossible span",
     "bad_shard": "the shard arguments do not describe a partition of the mosaic",
     "cannot_combine": "two flags were given that cannot both decide the same build",
+    "causal_and_messiness": "--causal drives imperfections and --messiness names them; two passes would spend the same corrections twice",
+    "causal_model_lint": "the causal model has lint findings; data.findings names each",
+    "causal_model_unreadable": "the causal model file cannot be read as a CausalModel",
     "conflict": "a resolution conflict whose rule has no individually registered code",
     "corpus_unloadable": "the corpus (or something it depends on) cannot be read",
     "destination_exists": "the output destination exists and --overwrite was not given",
@@ -401,6 +409,7 @@ _REFUSALS: dict[str, str] = {
     "existence_path": "a mutation path decides existence, which a rebuild cannot measure a delta over",
     "evolve_failed": "the evolution run could not complete",
     "facet_syntax": "--facet takes name=value",
+    "fidelity_unreadable": "one side of the fidelity comparison cannot be read as rows",
     "fleet_error": "the fleet directory cannot be qualified or curated",
     "history_too_short": "the corpus's history is too short for this decomposition",
     "implausible_productivity": "revenue and employees describe an implausible revenue per head",
@@ -889,6 +898,17 @@ def build(
             "byte-identical corpus."
         ),
     ),
+    priors: Path = typer.Option(
+        None, "--priors",
+        help=(
+            "Build under physics calibrated from data by `worldloom calibrate`: a "
+            "prior snapshot whose spans replace the engine's ranges and whose "
+            "receipt records how they were made and what privacy budget it cost. "
+            "Only ranges cross the boundary — no row of the source is in the "
+            "snapshot, so none can be in the corpus. Applied before --physics, "
+            "which then overrides it range by range."
+        ),
+    ),
     trend: float = typer.Option(
         0.0, "--trend",
         help=(
@@ -1045,6 +1065,20 @@ def build(
             "default and writes nothing at all."
         ),
     ),
+    causal: Path = typer.Option(
+        None, "--causal",
+        help=(
+            "Run a causal model over the built world: a JSON DAG of named "
+            "quantities, linear effects, dated interventions and the imperfection "
+            "kinds they drive (`worldloom causal check` lints one; `worldloom "
+            "causal trace` shows what it would do). Where --messiness asks for a "
+            "number of stale pages, this derives the number from a cause — an ERP "
+            "migration raising the error rate — and records the whole trace on "
+            "the corpus so the validator can recompute every value. Cannot be "
+            "combined with --messiness when the model drives imperfections: two "
+            "passes would spend the same corrections twice."
+        ),
+    ),
     access: str = typer.Option(
         "standard", "--access",
         help=(
@@ -1121,6 +1155,32 @@ def build(
             messiness_module.named(messiness)
         except KeyError as exc:
             _refuse("unknown_messiness", f"[red]error:[/red] {escape(str(exc))}")
+    causal_model = None
+    if causal is not None:
+        from . import causal as causal_module
+
+        try:
+            causal_model = causal_module.from_document(
+                json.loads(causal.read_text(encoding="utf-8"))
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            _refuse("causal_model_unreadable", f"[red]error:[/red] {causal}: {escape(str(exc))}")
+        findings = causal_module.lint(causal_model)
+        if findings:
+            _refuse(
+                "causal_model_lint",
+                f"[red]error:[/red] {causal} has lint findings:\n"
+                + "\n".join(f"  - {escape(finding)}" for finding in findings),
+                findings=findings,
+            )
+        if causal_model.drives and messiness is not None:
+            _refuse(
+                "causal_and_messiness",
+                "[red]error:[/red] --causal drives imperfections and --messiness asks"
+                " for them by name; two passes would each spend the world's"
+                " corrections, and the stale pages of one would be the duplicates"
+                " of the other. Let the model decide, or drop its `drives`.",
+            )
     if locale is not None:
         from . import locales as locales_module
 
@@ -1154,6 +1214,7 @@ def build(
                 ("--employees", employees is not None),
                 ("--facet", bool(facet)),
                 ("--physics", physics is not None),
+                ("--priors", priors is not None),
                 ("--locale", locale is not None),
                 ("--estate", estate is not None),
                 ("--policies", policies is not None),
@@ -1491,6 +1552,35 @@ def build(
 
     physics_value = _DEFAULT_PHYSICS
     overrides: dict[str, Any] = dict(facet_overrides)
+    if priors is not None:
+        from .calibrate import PriorSnapshot
+
+        try:
+            snapshot = PriorSnapshot.read(priors)
+            # Under the facets' and under --physics: a calibration is a
+            # measurement of somebody's data, a facet is an implication of a
+            # word, and a file of ranges is a statement — and a statement made
+            # on purpose outranks a measurement made in general.
+            overrides.update(snapshot.overrides())
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            err.print(f"[red]error:[/red] {priors}: {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
+        receipt = snapshot.receipt
+        console.print(
+            f"[dim]priors:[/dim] {len(snapshot.spans)} range(s) from {receipt.backend}"
+            f" v{receipt.backend_version}, receipt {receipt.key}"
+        )
+        if not snapshot.private:
+            console.print(
+                "[yellow]note:[/yellow] this snapshot's noise was seeded — it is a"
+                " deterministic summary of its source, not a private release"
+            )
+        if snapshot.noisy:
+            console.print(
+                f"[yellow]note:[/yellow] {', '.join(snapshot.noisy)}: more noise than"
+                " signal at the budget and row count it was made from; the range is"
+                " valid but wide"
+            )
     if physics is not None:
         from .parameters import overrides_from
 
@@ -2353,6 +2443,29 @@ def build(
                     f" world supports at most {ceiling}: it {reasons[kind]}"
                 )
             console.print()
+
+    if causal_model is not None:
+        from . import causal as causal_module
+
+        # Under the same physics the episodes ran under — the model's exogenous
+        # nodes draw from it — and rebound the same way, so a default build's
+        # recipe still carries no physics key.
+        world = world.run(_under_physics(
+            causal_module.Causal(model=causal_model.model_dump(mode="json"))
+        ))
+        trace = list(world.causal)[-1]
+        console.print(
+            f"[dim]causal:[/dim] {causal_model.name} over {len(trace.periods)} period(s),"
+            f" {len(causal_model.interventions)} intervention(s);"
+            + (
+                " budgets " + ", ".join(
+                    f"{kind} {trace.delivered.get(kind, 0)}/{count}"
+                    for kind, count in sorted(trace.budgets.items())
+                ) + " delivered"
+                if trace.budgets else " no imperfections driven"
+            )
+            + "\n"
+        )
 
     # After every pass that plans or copies a document — episodes, workforce
     # rounds, distractors, messiness — and before narrate/render, because the
@@ -5800,6 +5913,230 @@ def stats(
     if other_report is not None:
         console.print("")
         console.print(stats_module.diff(report, other_report, a_label=corpus, b_label=against))
+
+
+@app.command()
+def fidelity(
+    reference: Path = typer.Argument(..., help="The real table: CSV, JSONL, JSON array, or a corpus directory."),
+    synthetic: Path = typer.Argument(..., help="The synthetic table, in any of the same forms."),
+    table: str = typer.Option(
+        "", "--table",
+        help="When either side is a corpus directory, the detail table to read from it.",
+    ),
+    categorical: list[str] = typer.Option(
+        None, "--categorical",
+        help="Treat this column as categorical even though every value parses as a number — an id, a code. Repeatable.",
+    ),
+    numeric: list[str] = typer.Option(
+        None, "--numeric",
+        help="Treat this column as numeric even though the reference carries a value that does not parse. Repeatable.",
+    ),
+    ignore: list[str] = typer.Option(None, "--ignore", help="Leave this column out entirely. Repeatable."),
+    slices: list[str] = typer.Option(
+        None, "--slices",
+        help="Report the per-column block again per value of this column, most frequent first. Repeatable.",
+    ),
+    seed: int = typer.Option(0, "--seed", help="Seed for the subsample the two quadratic blocks take past 2,000 rows."),
+    as_json: bool = typer.Option(False, "--json", help="Emit the whole vector as JSON — stable keys, safe to diff."),
+) -> None:
+    """Compare a synthetic table with a real one, dimension by dimension — never as one score.
+
+    Per column: KS and Wasserstein for numbers, Jensen–Shannon and total
+    variation for categories, cardinality, unseen categories, missingness. Per
+    pair: correlation error and contingency distance. Multivariate: a
+    nearest-neighbour two-sample statistic. Privacy: exact matches and distance
+    to the closest real record against the real set's own baseline. Read the
+    dimension your use depends on; a single number would reward whichever one
+    is cheapest to move.
+    """
+    from . import fidelity as fidelity_module
+    from .corpus import CorpusError
+
+    try:
+        real_rows = fidelity_module.load_rows(reference, table=table)
+        synthetic_rows = fidelity_module.load_rows(synthetic, table=table)
+        kinds: dict[str, Any] = {name: "categorical" for name in (categorical or ())}
+        kinds.update({name: "numeric" for name in (numeric or ())})
+        kinds.update({name: "ignore" for name in (ignore or ())})
+        report = fidelity_module.compute(
+            real_rows, synthetic_rows, kinds=kinds, slices=tuple(slices or ()), seed=seed,
+        )
+    except (OSError, ValueError, CorpusError, json.JSONDecodeError) as exc:
+        _refuse("fidelity_unreadable", f"[red]error:[/red] {escape(str(exc))}")
+    if as_json:
+        typer.echo(json.dumps(
+            {"reference": str(reference), "synthetic": str(synthetic), **report.as_dict()},
+            indent=2,
+        ))
+        return
+    console.print(escape(str(report)))
+
+
+@app.command()
+def calibrate(
+    source: Path = typer.Option(
+        None, "--from", help="The sensitive table: CSV, JSONL or a JSON array. Read once, never copied.",
+    ),
+    schema: Path = typer.Option(
+        None, "--schema",
+        help="Which columns inform which physics parameters, with clip bounds, bins and quantiles. `--template` writes one.",
+    ),
+    epsilon: float = typer.Option(1.0, "--epsilon", help="Total privacy budget, split evenly across the calibrated columns."),
+    delta: float = typer.Option(0.0, "--delta", help="Recorded on the receipt; the built-in Laplace mechanism spends none."),
+    noise_seed: int = typer.Option(
+        None, "--noise-seed",
+        help="Seed the noise. FOR TESTS: a seeded release is a deterministic summary, not a private one, and the snapshot says so.",
+    ),
+    out: Path = typer.Option(None, "--out", "-o", help="Where to write the prior snapshot. Stdout when omitted."),
+    template: bool = typer.Option(False, "--template", help="Print a calibration schema to start from, and stop."),
+) -> None:
+    """Learn physics ranges from data the corpus may never contain, under a privacy budget.
+
+    Each calibrated column becomes a `Span` for one physics parameter — a low and
+    a high read off a differentially private histogram — and the snapshot carries
+    a receipt: mechanism, ε, sensitivity, clipping, bins, contribution bound, and
+    digests of the source and the result. `worldloom build --priors` reads it.
+    Nothing but ranges crosses: not a row, not a mean.
+    """
+    from . import calibrate as calibrate_module
+    from .providers import digest_bytes
+
+    if template:
+        typer.echo(json.dumps(calibrate_module.TEMPLATE, indent=2))
+        return
+    if source is None or schema is None:
+        err.print("[red]error:[/red] --from and --schema are both required (or --template)")
+        raise typer.Exit(code=2)
+    from . import fidelity as fidelity_module
+
+    try:
+        rows = fidelity_module.load_rows(source)
+        payload = json.loads(schema.read_text(encoding="utf-8"))
+        resolved = calibrate_module.CalibrationSchema.model_validate(payload)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+    findings = calibrate_module.lint(resolved)
+    if findings:
+        err.print(f"[red]error:[/red] {schema} has lint findings:")
+        for finding in findings:
+            err.print(f"  - {escape(finding)}")
+        raise typer.Exit(code=2)
+    try:
+        snapshot = calibrate_module.calibrate(
+            rows, resolved, epsilon=epsilon, delta=delta,
+            estimator=calibrate_module.LaplaceHistogramEstimator(noise_seed=noise_seed),
+            source_digest=digest_bytes(source.read_bytes()),
+        )
+    except ValueError as exc:
+        err.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+    for name, span in snapshot.spans.items():
+        reading = snapshot.quality.get(name, {})
+        flag = "  [yellow]noisy[/yellow]" if name in snapshot.noisy else ""
+        console.print(
+            f"  {name:<40} [{span['low']:g}, {span['high']:g}]"
+            f"  from {reading.get('values_read', 0)} value(s){flag}"
+        )
+    if not snapshot.private:
+        console.print(
+            "[yellow]note:[/yellow] --noise-seed was given: this snapshot is a deterministic"
+            " summary of its source, not a private release, and its receipt says so"
+        )
+    if snapshot.noisy:
+        console.print(
+            "[yellow]note:[/yellow] more noise than signal for"
+            f" {', '.join(snapshot.noisy)} — raise ε, add rows, or widen the bins"
+        )
+    if out is None:
+        typer.echo(json.dumps(snapshot.model_dump(mode="json"), indent=2, sort_keys=True))
+        return
+    snapshot.write(out)
+    console.print(f"wrote {out} — receipt {snapshot.receipt.key}")
+
+
+@causal_app.command("check")
+def causal_check(
+    model: Path = typer.Argument(None, help="A causal model as JSON."),
+    template: bool = typer.Option(False, "--template", help="Print a model to start from, and stop."),
+    as_json: bool = typer.Option(False, "--json", help="Emit the findings as JSON."),
+) -> None:
+    """Lint a causal model: DAG, declared parents, weights, physics names, drives.
+
+    The same posture as `worldloom pack check`: every divergence between what
+    was authored and what the engine would do, named, with exit 1 when there
+    are any. Nothing builds under a model that has findings.
+    """
+    from . import causal as causal_module
+
+    if template:
+        typer.echo(json.dumps(causal_module.TEMPLATE, indent=2))
+        return
+    if model is None:
+        err.print("[red]error:[/red] give a model file, or --template")
+        raise typer.Exit(code=2)
+    try:
+        resolved = causal_module.from_document(json.loads(model.read_text(encoding="utf-8")))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {model}: {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+    findings = causal_module.lint(resolved)
+    if as_json:
+        typer.echo(json.dumps({"model": resolved.name, "ok": not findings, "findings": findings}, indent=2))
+    elif findings:
+        for finding in findings:
+            console.print(f"[red]✗[/red] {escape(finding)}")
+    else:
+        console.print(
+            f"[green]✓[/green] {resolved.name}: {len(resolved.nodes)} node(s),"
+            f" {len(resolved.interventions)} intervention(s), {len(resolved.drives)} drive(s)"
+        )
+    if findings:
+        raise typer.Exit(code=1)
+
+
+@causal_app.command("trace")
+def causal_trace(
+    model: Path = typer.Argument(..., help="A causal model as JSON."),
+    periods: int = typer.Option(6, "--periods", min=1, help="How many monthly periods to trace."),
+    period: str = typer.Option("2026-01", "--period", "-p", help="The first period, YYYY-MM."),
+    seed: int = typer.Option(8128, "--seed", "-s", help="The seed exogenous nodes draw under."),
+    as_json: bool = typer.Option(False, "--json", help="Emit the trace as JSON."),
+) -> None:
+    """Evaluate a model over a run of periods, without a world, and show what it does.
+
+    The authoring loop: change a weight, see the cascade. Every value printed is
+    the value a build under this model at this seed would record — the same
+    arithmetic, the same streams — so what this shows is what the corpus gets.
+    """
+    from . import causal as causal_module
+    from .rng import Rng
+
+    try:
+        resolved = causal_module.from_document(json.loads(model.read_text(encoding="utf-8")))
+        stamps = [_step_period(period, index, 1) for index in range(periods)]
+        values = causal_module.evaluate(resolved, stamps, rng=Rng(seed).derive("causal"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        err.print(f"[red]error:[/red] {model}: {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+    if as_json:
+        typer.echo(json.dumps([entry.model_dump(mode="json") for entry in values], indent=2))
+        return
+    names = causal_module.order(resolved)
+    table = Table(title=f"{resolved.name} over {periods} period(s), seed {seed}", box=None)
+    table.add_column("period")
+    for name in names:
+        table.add_column(name, justify="right")
+    table.add_column("interventions")
+    table.add_column("budgets")
+    for entry in values:
+        table.add_row(
+            entry.period,
+            *(f"{entry.values[name]:g}" for name in names),
+            ", ".join(resolved.interventions[i].reason for i in entry.interventions) or "—",
+            ", ".join(f"{k} {v}" for k, v in sorted(entry.budgets.items())) or "—",
+        )
+    console.print(table)
 
 
 def _knowledge_table(world: World) -> None:

@@ -115,12 +115,22 @@ class Vendor:
     address: str
     contact_name: str
     contact_email: str
+    postcode: str = ""
+    phone: str = ""
+    business_id: str = ""
+    bank_account: str = ""
+    """The four surface values (``surface.py``), filled only when a build asked
+    for ``identifiers``. Empty strings otherwise, and ``as_dict`` omits an
+    empty one — so a register minted before these fields existed writes the
+    same bytes it always did, and a reader of an old ``masterdata.json`` finds
+    no key it does not recognise."""
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "id": self.id, "name": self.name, "category": self.category,
             "payment_terms": self.payment_terms, "address": self.address,
             "contact_name": self.contact_name, "contact_email": self.contact_email,
+            **_surface_fields(self),
         }
 
 
@@ -133,13 +143,25 @@ class Customer:
     address: str
     contact_name: str
     contact_email: str
+    postcode: str = ""
+    phone: str = ""
+    business_id: str = ""
+    bank_account: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "id": self.id, "name": self.name, "segment": self.segment,
             "payment_terms": self.payment_terms, "address": self.address,
             "contact_name": self.contact_name, "contact_email": self.contact_email,
+            **_surface_fields(self),
         }
+
+
+def _surface_fields(row: Any) -> dict[str, str]:
+    """Only the surface values a row actually carries, in `surface.FIELDS` order."""
+    from .. import surface
+
+    return {name: getattr(row, name) for name in surface.FIELDS if getattr(row, name)}
 
 
 @dataclass(frozen=True)
@@ -235,7 +257,7 @@ def from_document(payload: Mapping[str, Any]) -> MasterData:
 #: The knob's vocabulary, closed: a request naming anything else is a typo, and
 #: a typo that silently minted nothing would report a smaller world as the one
 #: that was asked for — `Parameters.with_overrides`'s argument.
-REQUEST_KEYS = frozenset({"vendors", "customers", "skus"})
+REQUEST_KEYS = frozenset({"vendors", "customers", "skus", "identifiers"})
 
 #: The largest request the committed vocabulary can satisfy without repeating
 #: a supposedly unique business or item name.  This belongs at the request
@@ -250,19 +272,38 @@ REQUEST_LIMITS = {
 
 
 def check_request(request: Mapping[str, Any]) -> dict[str, int]:
-    """A ``master_data`` request normalised, or a ValueError naming the defect."""
+    """A ``master_data`` request normalised, or a ValueError naming the defect.
+
+    ``identifiers`` is the one key that is not a count: it names the **surface
+    rules version** (``surface.versions()``) to fill postcodes, phones,
+    registration numbers and bank accounts from, or 0 (absent) to leave the
+    register as it was. The value *is* the pin: a recipe recording
+    ``identifiers: 1`` replays under version 1's rules however many versions
+    the package has gained since, because the version is in every value's
+    stream path and a corpus whose vendors renumbered on rebuild would fail the
+    reason recipes exist (Codex review, PR #40). An unknown version is refused
+    here, before a world is built around it.
+    """
+    from .. import surface
+
     unknown = sorted(set(request) - REQUEST_KEYS)
     if unknown:
         raise ValueError(
             f"master_data does not take {unknown}; it takes"
-            f" {sorted(REQUEST_KEYS)} — counts of reference rows to mint"
+            f" {sorted(REQUEST_KEYS)} — counts of reference rows to mint,"
+            " and `identifiers` (0 or 1) to fill surface values on them"
         )
     counts: dict[str, int] = {}
     for key in sorted(request):
         value = int(request[key])
         if value < 0:
             raise ValueError(f"master_data.{key} is a count, and {value} is not one")
-        if value > REQUEST_LIMITS[key]:
+        if key == "identifiers" and value != 0 and str(value) not in surface.versions():
+            raise ValueError(
+                f"master_data.identifiers names surface rules version {value}, and this"
+                f" build carries {[int(v) for v in surface.versions()]}; 0 fills none"
+            )
+        elif key in REQUEST_LIMITS and value > REQUEST_LIMITS[key]:
             raise ValueError(
                 f"master_data.{key} asks for {value} unique rows, but the"
                 f" committed vocabulary can compose only {REQUEST_LIMITS[key]}"
@@ -302,7 +343,13 @@ def _composed_names(rng: Rng, stems: Sequence[str], trades: Sequence[str],
 
 
 def _address(rng: Rng, locale: Locale) -> str:
-    """One line of invented geography, drawn from the locale the world is in.
+    """One line of invented geography. See ``_address_in``."""
+    return _address_in(rng, locale)[0]
+
+
+def _address_in(rng: Rng, locale: Locale) -> tuple[str, str]:
+    """``(address line, city)`` — one line of invented geography, drawn from the
+    locale the world is in, and the city it was drawn in.
 
     Street from the data file, city from the locale's own pool — and no region
     label, deliberately: ``Locale.regions`` and ``Locale.cities`` are parallel
@@ -314,7 +361,7 @@ def _address(rng: Rng, locale: Locale) -> str:
     number = rng.derive("number").integer(1, 480)
     street = rng.derive("street").choice(_VOCAB["streets"])
     city, country = rng.derive("city").choice(locale.cities)
-    return f"{number} {street}, {city}, {country}"
+    return f"{number} {street}, {city}, {country}", city
 
 
 def _contacts(rng: Rng, locale: Locale) -> tuple[Contact, ...]:
@@ -354,8 +401,19 @@ def generate(
     skus: int = 0,
     locale: Locale = DEFAULT_LOCALE,
     categories: Sequence[str] = (),
+    identifiers: int = 0,
+    surface_provider: Any = None,
 ) -> MasterData:
     """Mint the requested reference tables. Same seed, same rows, every time.
+
+    ``identifiers`` names the surface rules version to fill the four surface
+    values on every vendor and customer from (0 fills none), through
+    ``surface_provider`` when one is given and the vendored provider pinned
+    to that version otherwise. Each value is keyed by ``StableKey(seed,
+    entity type, entity id, field)`` under the provider's version — *not*
+    drawn from this function's streams — so switching identifiers on moves no
+    name, address or contact, and a vendor's phone number is the same whether
+    the register has ten rows or ten thousand.
 
     ``categories`` is the world's own spend/category vocabulary when the caller
     has one; empty falls back to the data file's generic spend categories, so a
@@ -378,6 +436,10 @@ def generate(
         )
     pool = tuple(categories) or _VOCAB["spend_categories"]
     contacts = _contacts(rng.derive("contacts"), locale)
+    if identifiers and surface_provider is None:
+        from .. import surface
+
+        surface_provider = surface.Vendored(version=str(identifiers))
 
     vendor_rows: list[Vendor] = []
     if vendors:
@@ -397,14 +459,17 @@ def generate(
         contact_rng = stream.derive("contact")
         for index, name in enumerate(names, start=1):
             contact = contact_rng.choice(contacts)
+            address, city = _address_in(address_rng.derive(str(index)), locale)
+            vendor_id = f"VND-{index:05d}"
             vendor_rows.append(Vendor(
-                id=f"VND-{index:05d}",
+                id=vendor_id,
                 name=name,
                 category=category_rng.choice(pool),
                 payment_terms=terms_rng.weighted(_VOCAB["payment_terms"], _TERMS_WEIGHTS),
-                address=_address(address_rng.derive(str(index)), locale),
+                address=address,
                 contact_name=contact.name,
                 contact_email=f"{contact.email_local}@{_domain_of(name)}",
+                **_identifiers(rng, "vendor", vendor_id, locale, city, bool(identifiers), surface_provider),
             ))
 
     customer_rows: list[Customer] = []
@@ -420,14 +485,17 @@ def generate(
         contact_rng = stream.derive("contact")
         for index, name in enumerate(names, start=1):
             contact = contact_rng.choice(contacts)
+            address, city = _address_in(address_rng.derive(str(index)), locale)
+            customer_id = f"CUS-{index:05d}"
             customer_rows.append(Customer(
-                id=f"CUS-{index:05d}",
+                id=customer_id,
                 name=name,
                 segment=segment_rng.weighted(_VOCAB["customer_segments"], _SEGMENT_WEIGHTS),
                 payment_terms=terms_rng.weighted(_VOCAB["payment_terms"], _TERMS_WEIGHTS),
-                address=_address(address_rng.derive(str(index)), locale),
+                address=address,
                 contact_name=contact.name,
                 contact_email=f"{contact.email_local}@{_domain_of(name)}",
+                **_identifiers(rng, "customer", customer_id, locale, city, bool(identifiers), surface_provider),
             ))
 
     sku_rows: list[Sku] = []
@@ -467,6 +535,19 @@ def generate(
     )
 
 
+def _identifiers(rng: Rng, entity_type: str, entity_id: str, locale: Locale, city: str,
+                 wanted: bool, provider: Any) -> dict[str, str]:
+    """The surface values for one row, or nothing when the build did not ask."""
+    if not wanted:
+        return {}
+    from .. import surface
+
+    return surface.identifiers(
+        seed=rng.seed, entity_type=entity_type, entity_id=entity_id,
+        locale=locale, city=city, provider=provider,
+    )
+
+
 def applied(world: Any, request: Mapping[str, Any] | None, *,
             locale: Locale = DEFAULT_LOCALE) -> Any:
     """*world* carrying the requested tables, or untouched when none were asked.
@@ -487,7 +568,8 @@ def applied(world: Any, request: Mapping[str, Any] | None, *,
     from dataclasses import replace as _replace
 
     counts = check_request(request)
-    if not any(counts.values()):
+    if not any(value for key, value in counts.items() if key != "identifiers"):
+        # `identifiers: 1` with nothing to put them on is a no-op, not a table.
         return world
     table = generate(
         Rng(world.seed).derive("masterdata"),
@@ -496,6 +578,7 @@ def applied(world: Any, request: Mapping[str, Any] | None, *,
         skus=counts.get("skus", 0),
         locale=locale,
         categories=tuple(category.name for category in world._categories),
+        identifiers=counts.get("identifiers", 0),
     )
     return _replace(world, _masterdata=table)
 
