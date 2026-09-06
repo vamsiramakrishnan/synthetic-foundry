@@ -18,6 +18,7 @@ from typing import Any
 
 from .connector_data import ConnectorRecord
 from .connector_definition import ConnectorDefinition, ConnectorToolDefinition
+from .connector_keys import freeze_key
 from .connector_payload import shape_payload
 from .connector_query import parse_native
 from .ids import content_key
@@ -315,7 +316,13 @@ class ConnectorEmulator:
                 raise ConnectorError(504, "Gateway timeout", "timeout")
             if "rate_limit_429" in active_faults:
                 raise ConnectorError(429, "Too many requests", "rate_limit")
-            operation = getattr(self, f"_op_{tool.op}")
+            handler_op = {
+                "send": "create",
+                "post": "create",
+                "upload": "create",
+                "download": "get",
+            }.get(tool.op, tool.op)
+            operation = getattr(self, f"_op_{handler_op}")
             result = operation(tool, span, **args)
             span.bytes = _json_bytes(result)
             return result
@@ -466,7 +473,7 @@ class ConnectorEmulator:
             if values.get(required) in (None, "", [], {}):
                 raise self._error("validation", field=required)
         if tool.idempotency is not None:
-            key = tuple(values.get(part) for part in tool.idempotency.key)
+            key = tuple(freeze_key(values.get(part)) for part in tool.idempotency.key)
             replay = self._recent_creates.get((selected, *key))
             if replay is not None:
                 span.writes.append(replay)
@@ -498,7 +505,7 @@ class ConnectorEmulator:
             if value not in (None, ""):
                 self.by_ident[str(value)] = fid
         if tool.idempotency is not None:
-            key = tuple(values.get(part) for part in tool.idempotency.key)
+            key = tuple(freeze_key(values.get(part)) for part in tool.idempotency.key)
             self._recent_creates[(selected, *key)] = fid
         span.writes.append(fid)
         span.items = 1
@@ -603,6 +610,87 @@ class ConnectorEmulator:
         )
         record["modified_at"] = self.definition.clock
         self.records[fid] = record
+        span.writes.append(fid)
+        span.items = 1
+        return shape_payload(self.definition, record)
+
+    def _op_reply(
+        self,
+        tool: ConnectorToolDefinition,
+        span: _PendingSpan,
+        *,
+        id: Any = None,
+        body: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        parent_fid = self.resolve(id)
+        self._check_acl(parent_fid, "comment")
+        parent = self.records[parent_fid]
+        entity = str(parent.get("entity"))
+        if entity not in tool.entities:
+            raise self._error("not_found", id=id)
+        self._created += 1
+        fid = f"new:{self.server[:2]}:{entity}:{self._created}"
+        record = {
+            "fid": fid,
+            "server": self.server,
+            "entity": entity,
+            "name": body or "Reply",
+            "title": body or "Reply",
+            "text": body or "",
+            "body": body or "",
+            "reply_to": parent_fid,
+            "thread_id": parent.get("thread_id") or parent.get("conversation") or parent_fid,
+            "parent": parent_fid,
+            "created_by": self.actor,
+            "created_at": self.definition.clock,
+            "modified_at": self.definition.clock,
+        }
+        self.records[fid] = record
+        self.by_entity[entity].append(fid)
+        span.reads.append(parent_fid)
+        span.writes.append(fid)
+        span.items = 1
+        return shape_payload(self.definition, record)
+
+    def _op_forward(
+        self,
+        tool: ConnectorToolDefinition,
+        span: _PendingSpan,
+        *,
+        id: Any = None,
+        to: Sequence[str] | None = None,
+        body: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        source_fid = self.resolve(id)
+        self._check_acl(source_fid, "get")
+        source = self.records[source_fid]
+        entity = str(source.get("entity"))
+        if entity not in tool.entities:
+            raise self._error("not_found", id=id)
+        self._created += 1
+        fid = f"new:{self.server[:2]}:{entity}:{self._created}"
+        subject = str(source.get("subject") or source.get("name") or source.get("title") or "Forward")
+        record = copy.deepcopy(source)
+        record.update(
+            fid=fid,
+            ident=None,
+            external_id=None,
+            name=f"Fwd: {subject}",
+            title=f"Fwd: {subject}",
+            subject=f"Fwd: {subject}",
+            body=body or source.get("body") or source.get("text") or "",
+            text=body or source.get("text") or source.get("body") or "",
+            to=list(to or ()),
+            forwarded_from=source_fid,
+            created_by=self.actor,
+            created_at=self.definition.clock,
+            modified_at=self.definition.clock,
+        )
+        self.records[fid] = record
+        self.by_entity[entity].append(fid)
+        span.reads.append(source_fid)
         span.writes.append(fid)
         span.items = 1
         return shape_payload(self.definition, record)
