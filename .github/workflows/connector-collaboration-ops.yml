@@ -1,3 +1,4 @@
+# one-shot integration gate; deletes itself after a verified commit
 name: integrate collaboration connector operations
 on:
   push:
