@@ -10,7 +10,7 @@ Use it to test retrieval, document extraction, temporal questions, and agent
 workflows before you have a suitable enterprise dataset. A seed and recipe
 control the world; accepted generation ledgers make authored material replayable.
 
-Repository `synthetic-foundry` · Python package and command `worldloom` ·
+Repository, Python package and command: `worldloom` ·
 Python 3.11+ · pre-release, install from source · Apache-2.0
 
 [Quickstart](#quickstart) · [Design a corpus](docs/enterprise-corpus.md) ·
@@ -25,8 +25,8 @@ Create one local corpus with deterministic sample prose. No model service or
 credentials are required:
 
 ```bash
-git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
-cd synthetic-foundry
+git clone https://github.com/vamsiramakrishnan/worldloom.git
+cd worldloom
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[all]'
@@ -146,10 +146,63 @@ qualification and coverage determine whether that volume helps the evaluation.
 
 ## Shape the world around an evaluation
 
-Use [evaluation-driven generation](docs/eval-first.md) when the
-starting point is a failure mode you want to measure. A generated scenario,
-a passing coherence check, and a passing agent evaluation are separate artifacts.
-Keep the witnesses and execution results with the corpus you use in a benchmark.
+Use [evaluation-driven generation](docs/eval-first.md) when the starting
+point is a failure mode you want to measure. The evaluation is written first;
+the corpus is constructed to satisfy it.
+
+```text
+EvalSpec (task DAG + world requirements)
+  │
+  ▼
+demands ─────────► tactics, one per demand
+  │                   │
+  ▼                   ▼
+base world ──► constructed candidate ──► independent validation ──► bound eval + oracle
+                                                                        │
+                                                                        ▼
+                                                           proof through the emulated connectors
+```
+
+A design names the steps an agent must take (connector, entity, operation,
+and the steps each depends on) and the conditions the world must contain.
+Each condition compiles to a demand, and each demand has a construction:
+
+| Demand | What is constructed |
+|---|---|
+| records a connector search must find | the records, plus one near miss per constrained field that fails that field alone |
+| a write step | a pre-existing destination record with a version, an etag and manually authored content |
+| more artifacts of a type | sibling documents of a type the world already plans |
+| a permission | access policies matching the selector |
+| an event | events of the named kind |
+| a revision chain | versions of the same document |
+| a file in a format | that format, rendered |
+
+Every construction is recorded in the recipe, so a constructed corpus rebuilds
+byte for byte. The validator that accepts a candidate knows nothing about the
+constructions. A demand nothing can construct comes back as a finding naming
+the seam that owns the missing state: facts belong to episodes, not to evals.
+
+```bash
+worldloom evals construct design.json --out ./campaign -f markdown
+```
+
+The campaign directory holds each accepted candidate's corpus, its bound
+evaluation with the oracle, and a manifest of what every attempt applied and
+refused. From Python, `EvalCampaign(spec).construct(base_builder)` does the
+same, and `emulator_executor()` proves each bound evaluation by running its
+steps through the emulated connectors: reads hit the connector's own read
+tool, writes land on the constructed destination, and a proof that fails is a
+defect found before any model runs.
+
+Connectors are emulated from data. Twelve definitions (Jira, Confluence,
+ServiceNow, SharePoint, OneDrive, Drive, Outlook, Teams, Slack, Salesforce,
+Rovo, Teamwork Graph) drive one emulator with search, paging, projection,
+workflows, ACLs, idempotency, faults and a frozen clock. A connector is not a
+file format: a SharePoint library holds the docx, the xlsx and the pdf of the
+same pack as separate items, each carrying the rendered file's hash. A
+generated scenario, a passing coherence check, and a passing agent evaluation
+are separate artifacts; keep the witnesses and execution results with the
+corpus you use in a benchmark.
 
 ## Add calibrated or intentionally imperfect data
 

@@ -230,10 +230,10 @@ Every scenario follows this pattern:
 2. Pass into generators as `existing_X`
 3. Generator decides whether to reuse or mint anew
 4. Before extending world, filter out any reused fact by ID:
-   ```python
+```python
    known_fact_ids = set(world.facts.ids())
    new_facts = tuple(f for f in episode.facts if f.id not in known_fact_ids)
-   ```
+```
 5. Extend with new facts only (so the world is append-only and byte-identical on replay)
 
 ### Declared Carry-Forward: Insurance Multi-Period Case

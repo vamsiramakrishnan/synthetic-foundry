@@ -1,12 +1,11 @@
 # Operational synthetic data
 
-Documents describe business activity. They should not be the only place that
-activity exists. `worldloom.synthesis` generates the records below the documents:
-related entities, quantities, state transitions, observations and exception
-histories. It is an opt-in SDK and CLI. Existing World recipes are unchanged.
+Generate related operational records and transitions alongside the existing
+world and episode. Use this layer when an evaluation needs row-level histories
+or counterfactual changes, rather than only narrative documents.
 
-The shipped programs cover store-product inventory and loan servicing. They are
-inspectable simulation assumptions, not models fitted to a real customer.
+Inspect keys, relationships, transition checks, and exported evidence. A local
+connector-shaped record does not imply that a live connector was exercised.
 
 ```text
 operator-owned program and evaluator

@@ -15,8 +15,8 @@ lists nine: `confluence`, `docx`, `html`, `jira`, `markdown`, `pdf`, `pptx`,
 
 ## The IR is the contract
 
-Every document renderer reads one thing: the artifact's resolved `ArtifactIR`.
-No renderer touches the world, the fact ledger, or another renderer's output.
+Document renderers read the artifact's resolved `ArtifactIR`. Business-system
+record bundles follow the separate world/fact projection path described below.
 Two formats of one artifact agree because they are two projections of one
 structure.
 
@@ -101,13 +101,28 @@ a byte-identical copy of real corpus content, labelled in `permissions.jsonl`
 with what it duplicates. See
 [Messiness and noise](/worldloom/guides/messiness/) for why the label matters.
 
-## Validate after every render
+## Validate and inspect after rendering
 
 ```bash
 worldloom validate ./corpus
 ```
 
 Rendering adds its own checks: manifest paths that exist, charts that do not
-double-count, rendered figures that trace to facts. A misdrawn chart is as
-much a defect as a bad number, and this is the only step positioned to catch
-it.
+double-count, rendered figures that trace to facts. Automated checks cover declared relationships and values. Open the actual
+files as well: clipped labels, awkward pagination, unusable slide layouts, and
+reader comprehension require a separate rendering review.
+
+
+Inspect at least one file of each requested format:
+
+| Format | Reader check |
+|---|---|
+| XLSX | Recalculate formulas; inspect units, ranges, chart labels and totals |
+| DOCX/PDF | Check pagination, headings, tables, citations and reading order |
+| PPTX | Open in a slide renderer; check overflow, chart editability and labels |
+| Markdown/HTML | Check links, headings and fallback messages |
+| Business-system bundles | Inspect record IDs, relationships, timelines and source provenance |
+
+Choose a corpus with the artifact families your application actually consumes.
+Successful export of one finance workbook does not establish coverage of every
+spreadsheet or document family.
