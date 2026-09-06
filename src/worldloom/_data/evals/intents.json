@@ -1,0 +1,873 @@
+{
+ "intents": [
+  {
+   "activity_types": [
+    "approve",
+    "capture",
+    "decide",
+    "escalate",
+    "execute",
+    "notify",
+    "reconcile",
+    "report"
+   ],
+   "answer_shape": "refusal",
+   "assertions": [
+    "no_fabrication",
+    "states_what_is_missing"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [],
+   "failure_mode": "answers anyway from plausible inference",
+   "grading": "expected_abstention",
+   "id": "abstain",
+   "verb": "abstain"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "notify"
+   ],
+   "answer_shape": "message",
+   "assertions": [
+    "approved_before_announced",
+    "states_the_change"
+   ],
+   "deliverable": "announcement",
+   "effect": "write",
+   "evidence_kinds": [
+    "approval",
+    "fact"
+   ],
+   "failure_mode": "announces before the approval it depends on exists",
+   "grading": "citation_required",
+   "id": "announce",
+   "verb": "announce"
+  },
+  {
+   "activity_types": [
+    "report"
+   ],
+   "answer_shape": "narrative",
+   "assertions": [
+    "cites_every_claim",
+    "no_unsupported_figure",
+    "states_the_period"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "artifact",
+    "fact",
+    "policy"
+   ],
+   "failure_mode": "answers from memory of the business rather than the filed record",
+   "grading": "citation_required",
+   "id": "answer_regulator",
+   "verb": "answer a regulator"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "report"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "evidence_attached",
+    "within_authority"
+   ],
+   "deliverable": "attestation",
+   "effect": "write",
+   "evidence_kinds": [
+    "approval",
+    "control"
+   ],
+   "failure_mode": "attests beyond the asker's authority limit",
+   "grading": "authority_resolution",
+   "id": "attest",
+   "verb": "attest"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "reconcile",
+    "report"
+   ],
+   "answer_shape": "list",
+   "assertions": [
+    "cites_every_item",
+    "evidence_per_finding"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "approval",
+    "control",
+    "record_set"
+   ],
+   "failure_mode": "asserts compliance without pointing at the evidence",
+   "grading": "citation_required",
+   "id": "audit",
+   "verb": "audit"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "escalate",
+    "report"
+   ],
+   "answer_shape": "narrative",
+   "assertions": [
+    "cites_every_claim",
+    "no_unsupported_figure"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "fact",
+    "record_set"
+   ],
+   "failure_mode": "pads the brief with plausible context the ledger does not carry",
+   "grading": "cross_artifact",
+   "id": "brief",
+   "verb": "brief someone"
+  },
+  {
+   "activity_types": [
+    "capture",
+    "escalate",
+    "execute"
+   ],
+   "answer_shape": "message",
+   "assertions": [
+    "names_the_owner",
+    "names_what_is_outstanding"
+   ],
+   "deliverable": "message",
+   "effect": "write",
+   "evidence_kinds": [
+    "owner",
+    "record_set"
+   ],
+   "failure_mode": "chases the queue rather than the person who owns the item",
+   "grading": "direct_lookup",
+   "id": "chase",
+   "verb": "chase"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "execute",
+    "reconcile"
+   ],
+   "answer_shape": "decision",
+   "assertions": [
+    "names_the_control",
+    "states_pass_or_fail"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "control",
+    "threshold"
+   ],
+   "failure_mode": "judges the case on its merits instead of against the stated control",
+   "grading": "authority_resolution",
+   "id": "check_control",
+   "verb": "check a control"
+  },
+  {
+   "activity_types": [
+    "execute",
+    "reconcile"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "all_items_resolved",
+    "records_the_outcome"
+   ],
+   "deliverable": "closure",
+   "effect": "write",
+   "evidence_kinds": [
+    "control",
+    "record_set"
+   ],
+   "failure_mode": "closes with open items still outstanding",
+   "grading": "temporal_state",
+   "id": "close_out",
+   "verb": "close out"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "report"
+   ],
+   "answer_shape": "comparison",
+   "assertions": [
+    "compares_like_for_like",
+    "states_basis"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "fact",
+    "record_set"
+   ],
+   "failure_mode": "compares figures on different bases without saying so",
+   "grading": "numerical_comparison",
+   "id": "compare_options",
+   "verb": "compare options"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "decide"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "records_the_reason",
+    "within_authority"
+   ],
+   "deliverable": "decision_record",
+   "effect": "write",
+   "evidence_kinds": [
+    "approval",
+    "control"
+   ],
+   "failure_mode": "decides without recording why, so the decision cannot be audited",
+   "grading": "authority_resolution",
+   "id": "decide",
+   "verb": "decide"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "decide"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "names_the_delegate",
+    "within_authority"
+   ],
+   "deliverable": "assignment",
+   "effect": "write",
+   "evidence_kinds": [
+    "owner",
+    "policy"
+   ],
+   "failure_mode": "delegates work the delegate has no authority to do",
+   "grading": "authority_resolution",
+   "id": "delegate",
+   "verb": "delegate"
+  },
+  {
+   "activity_types": [
+    "capture",
+    "execute",
+    "report"
+   ],
+   "answer_shape": "document",
+   "assertions": [
+    "cites_every_claim",
+    "no_unsupported_figure"
+   ],
+   "deliverable": "document",
+   "effect": "write",
+   "evidence_kinds": [
+    "artifact",
+    "fact"
+   ],
+   "failure_mode": "drafts fluent prose carrying figures no fact supports",
+   "grading": "citation_required",
+   "id": "draft",
+   "verb": "draft"
+  },
+  {
+   "activity_types": [
+    "escalate"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "escalates_to_the_right_level",
+    "states_the_trigger"
+   ],
+   "deliverable": "escalation",
+   "effect": "write",
+   "evidence_kinds": [
+    "owner",
+    "record_set",
+    "sla_class"
+   ],
+   "failure_mode": "escalates past the first level that could have resolved it",
+   "grading": "authority_resolution",
+   "id": "escalate",
+   "verb": "escalate"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "report"
+   ],
+   "answer_shape": "value",
+   "assertions": [
+    "bounds_the_estimate",
+    "states_the_basis"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "fact",
+    "prior_state"
+   ],
+   "failure_mode": "gives a point number with no basis and no range",
+   "grading": "numerical_comparison",
+   "id": "estimate",
+   "verb": "estimate"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "reconcile",
+    "report"
+   ],
+   "answer_shape": "list",
+   "assertions": [
+    "evidence_per_control",
+    "names_the_channel"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "approval",
+    "artifact",
+    "control"
+   ],
+   "failure_mode": "claims the control operated without producing where it is recorded",
+   "grading": "citation_required",
+   "id": "evidence_control",
+   "verb": "evidence a control"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "reconcile",
+    "report"
+   ],
+   "answer_shape": "narrative",
+   "assertions": [
+    "cites_both_sides",
+    "names_the_driver"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "fact",
+    "prior_state"
+   ],
+   "failure_mode": "restates the variance instead of explaining what moved",
+   "grading": "causal_multi_hop",
+   "id": "explain_variance",
+   "verb": "explain a variance"
+  },
+  {
+   "activity_types": [
+    "capture",
+    "execute",
+    "reconcile"
+   ],
+   "answer_shape": "list",
+   "assertions": [
+    "applies_the_control",
+    "cites_every_item"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "control",
+    "record_set"
+   ],
+   "failure_mode": "returns everything rather than the breaching subset",
+   "grading": "direct_lookup",
+   "id": "find_exception",
+   "verb": "find the exception"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "capture",
+    "decide",
+    "escalate",
+    "execute",
+    "notify",
+    "reconcile",
+    "report"
+   ],
+   "answer_shape": "message",
+   "assertions": [
+    "references_the_original",
+    "states_what_changed"
+   ],
+   "deliverable": "message",
+   "effect": "write",
+   "evidence_kinds": [
+    "prior_state",
+    "record_set"
+   ],
+   "failure_mode": "follows up without saying what has changed since",
+   "grading": "temporal_state",
+   "id": "follow_up",
+   "verb": "follow up"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "report"
+   ],
+   "answer_shape": "value",
+   "assertions": [
+    "states_the_basis",
+    "states_the_horizon"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "fact",
+    "prior_state"
+   ],
+   "failure_mode": "extrapolates past a horizon the evidence does not support",
+   "grading": "temporal_state",
+   "id": "forecast",
+   "verb": "forecast"
+  },
+  {
+   "activity_types": [
+    "capture",
+    "execute"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "names_the_receiver",
+    "transfers_the_context"
+   ],
+   "deliverable": "handoff",
+   "effect": "write",
+   "evidence_kinds": [
+    "owner",
+    "record_set"
+   ],
+   "failure_mode": "reassigns without carrying the context the receiver needs",
+   "grading": "cross_artifact",
+   "id": "hand_off",
+   "verb": "hand off"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "decide"
+   ],
+   "answer_shape": "narrative",
+   "assertions": [
+    "cites_every_claim",
+    "names_the_authority"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "approval",
+    "fact",
+    "policy"
+   ],
+   "failure_mode": "justifies with reasons the delegation of authority does not grant",
+   "grading": "authority_resolution",
+   "id": "justify_decision",
+   "verb": "justify a decision"
+  },
+  {
+   "activity_types": [
+    "notify"
+   ],
+   "answer_shape": "message",
+   "assertions": [
+    "reaches_the_named_audience",
+    "states_the_change"
+   ],
+   "deliverable": "notification",
+   "effect": "write",
+   "evidence_kinds": [
+    "fact",
+    "record_set"
+   ],
+   "failure_mode": "notifies everyone rather than the audience the process names",
+   "grading": "direct_lookup",
+   "id": "notify",
+   "verb": "notify"
+  },
+  {
+   "activity_types": [
+    "capture",
+    "execute"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "every_required_step",
+    "revokes_access"
+   ],
+   "deliverable": "offboarding_record",
+   "effect": "write",
+   "evidence_kinds": [
+    "policy",
+    "record_set"
+   ],
+   "failure_mode": "closes the record while access remains open",
+   "grading": "cross_artifact",
+   "id": "offboard",
+   "verb": "offboard"
+  },
+  {
+   "activity_types": [
+    "capture",
+    "execute"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "every_required_step",
+    "names_the_owner"
+   ],
+   "deliverable": "onboarding_record",
+   "effect": "write",
+   "evidence_kinds": [
+    "policy",
+    "record_set"
+   ],
+   "failure_mode": "completes the visible steps and skips the control ones",
+   "grading": "cross_artifact",
+   "id": "onboard",
+   "verb": "onboard"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "execute"
+   ],
+   "answer_shape": "document",
+   "assertions": [
+    "names_the_owner",
+    "ordered_by_dependency"
+   ],
+   "deliverable": "plan",
+   "effect": "write",
+   "evidence_kinds": [
+    "prior_state",
+    "record_set"
+   ],
+   "failure_mode": "lists tasks with no order and no owner",
+   "grading": "causal_multi_hop",
+   "id": "plan",
+   "verb": "plan"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "report"
+   ],
+   "answer_shape": "narrative",
+   "assertions": [
+    "cites_every_claim",
+    "covers_the_agenda"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "artifact",
+    "fact",
+    "record_set"
+   ],
+   "failure_mode": "prepares the material rather than the decisions the meeting must take",
+   "grading": "cross_artifact",
+   "id": "prepare_for_meeting",
+   "verb": "prepare for a meeting"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "report"
+   ],
+   "answer_shape": "document",
+   "assertions": [
+    "consistent_across_sections",
+    "every_section_sourced"
+   ],
+   "deliverable": "pack",
+   "effect": "write",
+   "evidence_kinds": [
+    "artifact",
+    "fact",
+    "record_set"
+   ],
+   "failure_mode": "assembles sections that disagree with each other",
+   "grading": "cross_artifact",
+   "id": "prepare_pack",
+   "verb": "prepare a pack"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "execute"
+   ],
+   "answer_shape": "ranked_list",
+   "assertions": [
+    "ranks_completely",
+    "states_the_criterion"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "record_set",
+    "threshold"
+   ],
+   "failure_mode": "ranks without stating the criterion, so the order cannot be checked",
+   "grading": "numerical_comparison",
+   "id": "prioritise",
+   "verb": "prioritise"
+  },
+  {
+   "activity_types": [
+    "decide"
+   ],
+   "answer_shape": "decision",
+   "assertions": [
+    "states_the_basis",
+    "states_the_option"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "fact",
+    "record_set"
+   ],
+   "failure_mode": "recommends without naming what was rejected",
+   "grading": "cross_artifact",
+   "id": "recommend",
+   "verb": "recommend"
+  },
+  {
+   "activity_types": [
+    "reconcile"
+   ],
+   "answer_shape": "list",
+   "assertions": [
+    "anti_join_complete",
+    "names_both_systems"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "artifact",
+    "record_set"
+   ],
+   "failure_mode": "reports only one side of the break",
+   "grading": "cross_artifact",
+   "id": "reconcile",
+   "verb": "reconcile"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "decide"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "names_the_failed_control",
+    "records_the_reason"
+   ],
+   "deliverable": "rejection",
+   "effect": "write",
+   "evidence_kinds": [
+    "control",
+    "policy"
+   ],
+   "failure_mode": "rejects without naming which control failed",
+   "grading": "authority_resolution",
+   "id": "reject_with_reason",
+   "verb": "reject with reason"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "capture",
+    "decide",
+    "escalate",
+    "execute",
+    "notify",
+    "reconcile",
+    "report"
+   ],
+   "answer_shape": "narrative",
+   "assertions": [
+    "answers_the_question_asked",
+    "cites_every_claim"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "fact",
+    "record_set"
+   ],
+   "failure_mode": "answers a related question that was not the one asked",
+   "grading": "direct_lookup",
+   "id": "respond_to_query",
+   "verb": "respond to a query"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "execute"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "names_the_successor",
+    "supersession_recorded"
+   ],
+   "deliverable": "retirement",
+   "effect": "write",
+   "evidence_kinds": [
+    "policy",
+    "prior_state"
+   ],
+   "failure_mode": "retires a record without pointing at what replaces it",
+   "grading": "temporal_state",
+   "id": "retire",
+   "verb": "retire"
+  },
+  {
+   "activity_types": [
+    "approve",
+    "decide"
+   ],
+   "answer_shape": "decision",
+   "assertions": [
+    "names_the_policy",
+    "states_pass_or_fail"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "artifact",
+    "policy"
+   ],
+   "failure_mode": "reviews for quality rather than against the policy named",
+   "grading": "authority_resolution",
+   "id": "review_against_policy",
+   "verb": "review against a policy"
+  },
+  {
+   "activity_types": [
+    "execute",
+    "report"
+   ],
+   "answer_shape": "document",
+   "assertions": [
+    "preserves_unchanged_sections",
+    "records_what_changed"
+   ],
+   "deliverable": "document",
+   "effect": "write",
+   "evidence_kinds": [
+    "artifact",
+    "prior_state"
+   ],
+   "failure_mode": "rewrites the whole document when asked to change one section",
+   "grading": "temporal_state",
+   "id": "revise",
+   "verb": "revise"
+  },
+  {
+   "activity_types": [
+    "execute",
+    "notify"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "names_the_owner",
+    "respects_the_window"
+   ],
+   "deliverable": "schedule",
+   "effect": "write",
+   "evidence_kinds": [
+    "record_set",
+    "sla_class"
+   ],
+   "failure_mode": "schedules inside a freeze window",
+   "grading": "temporal_state",
+   "id": "schedule",
+   "verb": "schedule"
+  },
+  {
+   "activity_types": [
+    "approve"
+   ],
+   "answer_shape": "record_change",
+   "assertions": [
+    "control_satisfied_first",
+    "within_authority"
+   ],
+   "deliverable": "approval",
+   "effect": "write",
+   "evidence_kinds": [
+    "approval",
+    "control"
+   ],
+   "failure_mode": "signs off before the control it depends on has passed",
+   "grading": "authority_resolution",
+   "id": "sign_off",
+   "verb": "sign off"
+  },
+  {
+   "activity_types": [
+    "decide",
+    "notify",
+    "report"
+   ],
+   "answer_shape": "narrative",
+   "assertions": [
+    "audience_appropriate",
+    "cites_every_claim"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "artifact",
+    "fact"
+   ],
+   "failure_mode": "summarises the document instead of what the audience needs from it",
+   "grading": "citation_required",
+   "id": "summarise",
+   "verb": "summarise for an audience"
+  },
+  {
+   "activity_types": [
+    "capture",
+    "escalate",
+    "execute"
+   ],
+   "answer_shape": "ranked_list",
+   "assertions": [
+    "cites_every_item",
+    "respects_sla_order"
+   ],
+   "deliverable": null,
+   "effect": "read",
+   "evidence_kinds": [
+    "record_set",
+    "sla_class"
+   ],
+   "failure_mode": "orders by arrival rather than by breach risk",
+   "grading": "direct_lookup",
+   "id": "triage_queue",
+   "verb": "triage a queue"
+  }
+ ],
+ "note": "The work shape of a request. EvaluationType stays the grading shape.",
+ "schema": "worldloom.eval-intents/v1"
+}

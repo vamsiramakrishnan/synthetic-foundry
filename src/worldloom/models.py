@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import (
     BaseModel,
@@ -1132,6 +1132,19 @@ class EvaluationCase(Model):
 
     The answer is never invented: it is derived from canonical facts, which is
     what makes the eval set trustworthy.
+
+    The fields below `reasoning` carry the *request*, and they are optional
+    because for most of this engine's life there was not one. A question with
+    no asker has no reason to exist beyond "this fact is checkable", which is
+    what makes a generated set read as a quiz rather than as work: real
+    requests come from someone, at a moment, through a channel, under a
+    constraint, and usually name what they want back. Carrying that tuple on
+    the case is what lets slicing, difficulty, phrasing and plausibility all
+    read one account of the situation instead of four.
+
+    Ground truth is untouched by any of it: the answer still comes from the
+    fact ledger, and `expected_fact_ids` still decides whether the case is
+    honest.
     """
 
     id: str
@@ -1146,6 +1159,41 @@ class EvaluationCase(Model):
     difficulty: Literal["easy", "medium", "hard"] = "medium"
     reasoning: str | None = None
 
+    # The request tuple. `None` throughout is a case with no request, which is
+    # every case every existing corpus holds; see `_request_wire` for why that
+    # costs those corpora no bytes.
+    asker: str | None = None
+    """The role key that would send this. A `lob.RoleSpec.key`."""
+    asker_person_id: str | None = None
+    """The seated person, when the world has one. Ids, never names."""
+    occasion: str | None = None
+    """Why now: a process binding id, or an episode phase key."""
+    intent: str | None = None
+    """The work verb, an `evals.intents` id. `evaluation_type` still grades."""
+    channel: str | None = None
+    """Where the request arrives. A connector key, or a channel class."""
+    constraint: str | None = None
+    """What bounds it: a deadline, an authority limit, a control, a freeze."""
+    deliverable: str | None = None
+    """What the asker expects back, for a write intent. Prose, not an id."""
+
+    #: The request fields, in one place, because three call sites need to know
+    #: which keys are the tuple and a second hand-written list would drift.
+    REQUEST_FIELDS: ClassVar[tuple[str, ...]] = (
+        "asker",
+        "asker_person_id",
+        "occasion",
+        "intent",
+        "channel",
+        "constraint",
+        "deliverable",
+    )
+
+    @property
+    def has_request(self) -> bool:
+        """Whether this case carries a request tuple at all."""
+        return any(getattr(self, name) is not None for name in self.REQUEST_FIELDS)
+
     @model_validator(mode="after")
     def _abstention_has_no_answer(self) -> EvaluationCase:
         if self.expects_abstention:
@@ -1154,6 +1202,35 @@ class EvaluationCase(Model):
         elif not self.expected_fact_ids:
             raise ValueError(f"{self.id}: non-abstention case must cite at least one fact")
         return self
+
+    @model_validator(mode="after")
+    def _request_is_not_blank(self) -> EvaluationCase:
+        # A blank string is worse than a missing one: it serializes, so it
+        # moves bytes and reads downstream as "there is an asker" while
+        # carrying nobody. Absent is the only honest spelling of absent.
+        for name in self.REQUEST_FIELDS:
+            value = getattr(self, name)
+            if value is not None and not value.strip():
+                raise ValueError(f"{self.id}: {name} must not be blank")
+        # A deliverable with no intent cannot be graded against anything: the
+        # intent is what declares whether this request produces an artifact.
+        if self.deliverable is not None and self.intent is None:
+            raise ValueError(f"{self.id}: a deliverable needs the intent that produces it")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _request_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Same contract as `CanonicalFact._legacy_wire`, for the same reason:
+        # an additive capability must not rewrite every corpus already
+        # published. A case with no request writes exactly the bytes it always
+        # did, so `build --replay` over an existing recipe stays identical and
+        # this change needs no schema bump; a case that carries a request
+        # gains those keys and nothing else.
+        data: dict[str, Any] = handler(self)
+        for key in self.REQUEST_FIELDS:
+            if getattr(self, key) is None:
+                data.pop(key, None)
+        return data
 
 
 class GenerationLedgerEntry(Model):
