@@ -16,7 +16,7 @@ from typing import Any, Literal, TypeAlias
 
 from pydantic import Field, model_validator
 
-from .epistemics import ledger_from_facts
+from .fact_ledger import FactLedger
 from .models import CanonicalFact, Model
 
 Scalar: TypeAlias = str | int | float | bool | None
@@ -130,7 +130,7 @@ class QueryContext:
             output.pop(fact.kind, None)
         if "period" in record:
             relevant = tuple(fact for fact in relevant if fact.period == record["period"])
-        view = ledger_from_facts(relevant).view(as_of.observer, valid_at=valid_at, tx_at=tx_at)
+        view = FactLedger(relevant).view(as_of.observer, valid_at=valid_at, tx_at=tx_at)
         seen: set[str] = set()
         for fact in view:
             if fact.kind in seen:
