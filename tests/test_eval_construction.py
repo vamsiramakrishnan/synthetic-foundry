@@ -91,3 +91,29 @@ def test_revision_tactic_is_idempotent_once_requirement_is_met() -> None:
     twice = apply_revision_family(once, proposal)
 
     assert twice == once
+
+
+def test_the_family_rides_the_recipe_and_survives_replay() -> None:
+    """Same discipline as `AccessProfile`: recorded once, rebuilt identically.
+
+    The replayed step re-runs the tactic; the idempotence guard (a chain already
+    at the minimum returns the world untouched) is what stops a replay from
+    minting a second family, so intents and recipe must both come back equal.
+    """
+    from worldloom.recipe import rebuild
+
+    proposal = TacticProposal(
+        id="tactic:revision-family",
+        kind=TacticKind.REVISION_FAMILY,
+        covers=("revision-chain",),
+        cost=4,
+        parameters={"artifact_type": "finance_workbook", "minimum": 3},
+    )
+    revised = apply_revision_family(_world(), proposal)
+    assert revised.recipe["steps"][-1]["scenario"] == "EvalRevisionFamily"
+
+    again = rebuild(revised.recipe)
+    assert again.recipe == revised.recipe
+    assert [i.model_dump() for i in again.artifact_intents] == [
+        i.model_dump() for i in revised.artifact_intents
+    ]

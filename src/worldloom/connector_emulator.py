@@ -24,6 +24,11 @@ from .connector_query import parse_native
 from .ids import content_key
 from .predicates import FieldPredicate, Predicate, PredicateOp, evaluate
 
+#: The keys a product-shaped payload may carry its identity under. Mirrors the
+#: identity set ``connector_payload.shape_payload`` preserves under projection,
+#: minus the non-scalar ones (``attributes``, ``type``) that are not handles.
+_SHAPED_IDENTITY_KEYS = ("id", "Id", "sys_id", "key", "number", "ts", "ari")
+
 
 class ConnectorError(RuntimeError):
     def __init__(self, code: int, message: str, kind: str) -> None:
@@ -168,9 +173,7 @@ class ConnectorEmulator:
         for fid, record in self.records.items():
             entity = str(record.get("entity") or "record")
             self.by_entity[entity].append(fid)
-            for key in ("ident", "external_id", "name", "title"):
-                if record.get(key) not in (None, ""):
-                    self.by_ident[str(record[key])] = fid
+            self._index_references(fid, record)
         self.acl = {key: dict(value) for key, value in (acl or {}).items()}
         self.faults = {key: tuple(value) for key, value in (faults or {}).items()}
         self.actor = actor
@@ -214,6 +217,39 @@ class ConnectorEmulator:
         except KeyError:
             message = template
         return ConnectorError(code, message, kind)
+
+    def _index_references(self, fid: str, record: Mapping[str, Any]) -> None:
+        """Every name a caller may legitimately hand back for this record.
+
+        The canonical keys first; then the connector's *native* id, which is
+        the one the emulator itself emits. ``shape_payload`` mints a
+        product-shaped id per record (Jira's numeric issue id, a Confluence
+        page id, a ServiceNow ``sys_id``) and every search page and read reply
+        carries it — so an agent that does what a real agent does, feeding an
+        item's ``id`` from one page into the next tool, was refused with
+        ``not_found`` by the very emulator that had just returned that id.
+        ``tests/test_connector_eval_runtime.py`` caught it on a two-item
+        Jira ``for_each``: the runtime prefers ``item["id"]`` over ``key``,
+        exactly as a trace would, and ``add_comment`` 404'd on both.
+
+        Ident-style keys stay ahead of the native id in ``resolve`` only by
+        insertion order; the two never collide, because a native id is a
+        content address of the fid and an ident is a product key.
+        """
+        for key in ("ident", "external_id", "name", "title"):
+            if record.get(key) not in (None, ""):
+                self.by_ident[str(record[key])] = fid
+        # Every identity a shaped payload can carry, not only ``id``: ServiceNow
+        # answers with ``sys_id`` and ``number``, Salesforce with ``Id``, Slack
+        # with ``ts``, Jira with ``key`` beside ``id``. Indexing ``id`` alone
+        # left ServiceNow exactly where it was, ``search_records`` handing out
+        # a ``sys_id`` that ``get_record`` refused; a review caught it on the
+        # first fix.
+        shaped = shape_payload(self.definition, record)
+        for key in _SHAPED_IDENTITY_KEYS:
+            native = shaped.get(key)
+            if isinstance(native, (str, int)) and not isinstance(native, bool) and native != "":
+                self.by_ident.setdefault(str(native), fid)
 
     def resolve(self, reference: Any) -> str:
         raw = str(reference)
@@ -520,9 +556,7 @@ class ConnectorEmulator:
             record[workflow.field] = workflow.states[0]
         self.records[fid] = record
         self.by_entity[selected].append(fid)
-        for value in (record.get("ident"), name):
-            if value not in (None, ""):
-                self.by_ident[str(value)] = fid
+        self._index_references(fid, record)
         if tool.idempotency is not None:
             key = tuple(freeze_key(values.get(part)) for part in tool.idempotency.key)
             self._recent_creates[(selected, *key)] = fid
@@ -667,6 +701,7 @@ class ConnectorEmulator:
         }
         self.records[fid] = record
         self.by_entity[entity].append(fid)
+        self._index_references(fid, record)
         span.reads.append(parent_fid)
         span.writes.append(fid)
         span.items = 1
@@ -709,6 +744,7 @@ class ConnectorEmulator:
         )
         self.records[fid] = record
         self.by_entity[entity].append(fid)
+        self._index_references(fid, record)
         span.reads.append(source_fid)
         span.writes.append(fid)
         span.items = 1

@@ -1,6 +1,7 @@
 ---
 name: worldloom-synthesis
 description: Generate operational relational data, author causal specifications, run paired interventions, search behavior regimes, or compose coding harnesses for Worldloom synthetic data.
+tags: [worldloom, synthesis, relational, causal, interventions]
 ---
 
 # Operational synthesis

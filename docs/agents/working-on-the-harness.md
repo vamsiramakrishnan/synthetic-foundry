@@ -39,6 +39,12 @@ corpus and no sign that anything was missed. `tests/test_harness_docs.py` parses
 every command in every agent-facing document and requires it to exist, and
 requires every command to be documented somewhere.
 
+`worldloom seams` lists the library seams a harness composes against —
+`connectors`, `evals`, `pipeline` — with the canonical import for each;
+`--json` emits the full contract. Import through those names rather than the
+modules behind them: the seam is what stays put when a subsystem is
+reorganised, and it is what the SDK, the CLI, and the skills all share.
+
 Read `docs/build-order.md` before adding a subsystem. It sequences the work and
 states an exit gate for each step, and the ordering is deliberate — several steps
 exist specifically to stop a later one from being built on guesses.

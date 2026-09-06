@@ -15,7 +15,7 @@ on:
       - tests/test_ecology_sdk.py
       - tools/compile_process_bindings.py
   push:
-    branches: [main, codex/worldloom-artifact-realism]
+    branches: [main]
     paths:
       - .github/workflows/process-bindings-check.yml
       - src/worldloom/process_bindings/**

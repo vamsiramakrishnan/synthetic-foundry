@@ -7,6 +7,30 @@ reproducibility even when no API moved.
 
 ## Unreleased
 
+### Fixed — main was red
+
+- `EvalRevisionFamily` and `EvalDemands` are registered recipe verbs. Both
+  were recorded on every world the eval-first tactics touched and registered
+  nowhere, so recording them was itself the failure and no such corpus could
+  have replayed; the one-shot workflow meant to patch the verb into
+  `recipe.py` never ran. Both register from their own modules through
+  `register_step`, import unconditionally from `_install()`, and replay
+  (`tests/test_eval_construction.py`, `tests/test_eval_interventions.py`).
+- The connector emulator resolves the native ids it emits. A search page's
+  `id` handed to the next tool — what a real trace does — was refused as
+  `not_found` by the emulator that had just returned it.
+- `worldloom seams` is documented and the generated reference is current.
+
+### Removed — one-shot branch workflows
+
+- Twenty-two workflows scoped to merged-and-deleted `codex/*` branches (the
+  `artifact-realism-*` apply/fix jobs, the eval-contract repair gates, the
+  source snapshot and the vocabulary harvests), the never-applied
+  `finalize_process_catalogue.py` migration and the b85 catalogue chunks it
+  would have switched to. The tools the harvests drove stay in `tools/`.
+  `process-catalogue-check` is a read-only check on main; `process-bindings-check`
+  no longer names the deleted branch.
+
 ### Generation — reusable narration programs
 
 - Add opt-in family-level prose authoring and deterministic clause expansion. Existing per-instance narration remains unchanged.

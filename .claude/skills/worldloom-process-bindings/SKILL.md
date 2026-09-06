@@ -1,6 +1,7 @@
 ---
 name: worldloom-process-bindings
 description: Compile the supplied industry catalogue into company activity bindings, inspect coverage and drive process authoring without treating authored hints as measurements.
+tags: [worldloom, process, catalogue, bindings, coverage]
 ---
 
 # Process catalogue

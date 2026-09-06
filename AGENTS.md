@@ -73,12 +73,14 @@ Determinism spine:
 | `src/worldloom/` | The package; `cli.py`, `world.py`, `models.py`, `validate.py`, `documents.py`, `episodes.py` are load-bearing |
 | `src/worldloom/generators/` | Vertical generators (retail, banking, insurance, procurement, org, estate, …) |
 | `src/worldloom/{narrative,render,evaluate,compiler,actors}/` | Pipeline stages above |
-| `tests/` | ~160 pytest files; scripted agent stand-ins (`scripted_composer.py`, `scripted_actor.py`, `scripted_agent.py`) |
+| `src/worldloom/{connectors,evals,pipeline}/` | The three library seams `worldloom seams` names: product-shaped connector emulation and trace grading; eval-first design → demands → candidates → proof; typed orchestration shared by SDK, CLI and skills |
+| `src/worldloom/{synthesis,process_bindings,process_planning}/` | Operational relational synthesis (causal microdata, paired interventions); the supplied 12-industry process catalogue compiled into company bindings and process plans |
+| `tests/` | ~225 pytest files; scripted agent stand-ins (`scripted_composer.py`, `scripted_actor.py`, `scripted_agent.py`) |
 | `tools/` | Dev-only scripts (`sweep.py` determinism sweep, `measure_retrievers.py`, `outcome_selection.py`); stdlib-only, never imported from `src/` |
 | `docs/`, `docs/agents/` | Operator guides; 16 agent topic files |
 | `examples/` | `retail-close/` golden corpus (CI-validated, hand-authored — never regenerate or "fix" it), `grocery-close/` reference narration, `packs/`, `episodes/`, `artifact-types/` |
 | `evals/` | Checkout-only eval harnesses (enterprise_minimum, executive_narration, alphaevolve) |
-| `.claude/skills/`, `.claude/commands/` | 11 skills + 6 slash commands driving the loop |
+| `.claude/skills/`, `.claude/commands/` | 16 skills + 6 slash commands driving the loop; every skill is indexed in `docs/skills.md` |
 | `site/` | Astro/Starlight docs site (npm, GitHub Pages) |
 | `.github/` | CI workflows; `scripts/dispersed_replay.py` is the byte-identity gate |
 
