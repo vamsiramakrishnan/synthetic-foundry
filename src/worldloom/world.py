@@ -24,6 +24,7 @@ from . import corpus
 # actors package, which does reach back into `world`, is imported inside the
 # methods that use it.
 from .actors.models import ActorLedgerEntry, ActorMessage, ActorTask, Observation
+from .causal import CausalTrace
 from .collections import (
     ArtifactCollection,
     Collection,
@@ -90,6 +91,8 @@ class World:
     _intentional_errors: tuple[IntentionalError, ...] = ()
     _evaluations: tuple[EvaluationCase, ...] = ()
     _detail_tables: tuple[DetailTable, ...] = ()
+    # Causal-model traces (`causal.py`), empty on every world no model ran on.
+    _causal: tuple[CausalTrace, ...] = ()
     _ledger: tuple[GenerationLedgerEntry, ...] = ()
     # Reference tables (generators/masterdata.py), or None for the world that
     # never opted in — which is every corpus built before the knob existed, so
@@ -189,6 +192,7 @@ class World:
             _intentional_errors=tuple(corpus.load_models(root / corpus.ERRORS_FILE, IntentionalError)),
             _evaluations=tuple(corpus.load_models(root / corpus.EVALS_FILE, EvaluationCase)),
             _detail_tables=tuple(corpus.load_models(root / corpus.DETAIL_FILE, DetailTable)),
+            _causal=tuple(corpus.load_models(root / corpus.CAUSAL_FILE, CausalTrace)),
             _ledger=tuple(corpus.load_models(root / corpus.LEDGER_FILE, GenerationLedgerEntry)),
             _masterdata=_masterdata_from(root),
             _observations=tuple(corpus.load_models(root / corpus.OBSERVATIONS_FILE, Observation)),
@@ -336,6 +340,13 @@ class World:
         episode declared no detail recipe.
         """
         return self._collection("detail_tables", lambda: Collection(self._detail_tables, label="DetailTableCollection"))
+
+    @property
+    def causal(self) -> Collection[CausalTrace]:
+        """Causal-model traces: node values per period, the interventions in
+        force, and the imperfection budgets they sized. The ``causal`` check
+        group recomputes every derived value. Empty unless a model ran."""
+        return self._collection("causal", lambda: Collection(self._causal, label="CausalTraceCollection"))
 
     @property
     def ledger(self) -> Collection[GenerationLedgerEntry]:
@@ -632,6 +643,7 @@ class World:
         evaluations: tuple[EvaluationCase, ...] = (),
         intentional_errors: tuple[IntentionalError, ...] = (),
         detail_tables: tuple[DetailTable, ...] = (),
+        causal: tuple[CausalTrace, ...] = (),
         ledger: tuple[GenerationLedgerEntry, ...] = (),
         observations: tuple[Observation, ...] = (),
         messages: tuple[ActorMessage, ...] = (),
@@ -711,6 +723,7 @@ class World:
             _intentional_errors=self._intentional_errors + intentional_errors,
             _evaluations=self._evaluations + evaluations,
             _detail_tables=self._detail_tables + detail_tables,
+            _causal=self._causal + causal,
             _ledger=self._ledger + ledger,
             _masterdata=self._masterdata,
             _observations=self._observations + observations,
@@ -1122,6 +1135,8 @@ class World:
         # without one keeps its exact byte layout, and CI diffs directories.
         if self._detail_tables:
             corpus.write_jsonl(target / corpus.DETAIL_FILE, list(self._detail_tables))
+        if self._causal:
+            corpus.write_jsonl(target / corpus.CAUSAL_FILE, list(self._causal))
         if self._ledger:
             corpus.write_jsonl(target / corpus.LEDGER_FILE, list(self._ledger))
         # Written only when a build opted in, so an un-opted corpus grows no

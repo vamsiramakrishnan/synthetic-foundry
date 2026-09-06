@@ -175,6 +175,12 @@ def _install() -> None:
     # building a world, and a corpus validated in a fresh process (`worldloom
     # validate <corpus>`) would otherwise have its grids checked by nobody while
     # reporting a clean run — the failure mode `register_domain_checks` names.
+    # And for the `Causal` recipe verb and the `causal` check group. `world`
+    # imports the module for its trace type, so in practice it is always loaded
+    # by the time a world exists — but "in practice" is the dependency on import
+    # order every comment in this function is a record of, so it is named here
+    # too, where a reader looking for what a fresh process registers will find it.
+    from . import causal as _causal  # noqa: F401
     from . import cohorts as _cohorts  # noqa: F401
 
     # And once more for the episode grammar: importing this registers the

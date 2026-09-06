@@ -154,6 +154,12 @@ It can produce exception histories and connector-style source data for downstrea
 
 See [`docs/operational-synthesis.md`](docs/operational-synthesis.md).
 
+## Calibration, causal mess and fidelity
+
+Three proposal seams sit outside the deterministic boundary, each leaving a content-addressed receipt: `worldloom calibrate` learns physics ranges from a sensitive table under differential privacy (only ranges cross, never rows) for `build --priors`; `build --causal` drives the archive's stale and disagreeing documents from a declared cause (a DAG whose every derived value the validator recomputes) and records the trace as `causal.jsonl`; `worldloom fidelity` compares a synthetic table with a real one as a vector, never a score. Vendor registers gain checksum-valid, locale-correct identifiers with `"master_data": {"identifiers": 1}`.
+
+See [`docs/extension-seams.md`](docs/extension-seams.md).
+
 ## Agent-authored prose
 
 Worldloom does not import an LLM SDK. A coding agent or other external writer can request narration work over JSON and submit the result for validation.
