@@ -41,6 +41,27 @@ __worldloom_seam__ = {
     ],
 }
 
+
+def seam_contract() -> dict[str, object]:
+    """Describe the installed connector estate directly from its definitions."""
+
+    definitions = builtin_connector_definitions()
+    return {
+        "definition_schema": CONNECTOR_DEFINITION_SCHEMA,
+        "connectors": [
+            {
+                "name": name,
+                "maturity": definition.maturity,
+                "entities": sorted(definition.entities),
+                "tools": sorted(definition.tools),
+                "operations": sorted({tool.op for tool in definition.tools.values()}),
+                "query_language": definition.query_language,
+            }
+            for name, definition in definitions.items()
+        ],
+    }
+
+
 __all__ = [
     "CONNECTOR_DEFINITION_SCHEMA",
     "REFERENCE_CONNECTORS",
@@ -65,5 +86,6 @@ __all__ = [
     "parse_connector_definition",
     "parse_native",
     "run_eval_row",
+    "seam_contract",
     "shape_assertions",
 ]
