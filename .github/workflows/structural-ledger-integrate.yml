@@ -1,4 +1,4 @@
-# one-shot gate; deletes itself after canonical ledger integration
+# one-shot gate; final semantic rerun before canonical ledger integration
 name: structural canonical fact view integration
 on:
   push:
