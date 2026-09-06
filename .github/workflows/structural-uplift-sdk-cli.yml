@@ -1,3 +1,4 @@
+# one-shot gate; deletes itself after the verified integration commits
 name: structural uplift SDK CLI integration
 on:
   push:
