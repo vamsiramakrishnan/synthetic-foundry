@@ -83,4 +83,4 @@ def test_standard_pipeline_is_the_existing_sdk_path_not_a_second_builder() -> No
         "plan",
         "validate",
     ]
-    assert run.value.world.model_dump(mode="json") == direct.world.model_dump(mode="json")
+    assert run.value.world == direct.world
