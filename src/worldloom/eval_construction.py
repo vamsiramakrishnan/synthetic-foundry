@@ -32,11 +32,18 @@ def _longest_revision_chain(intents: tuple[ArtifactIntent, ...]) -> tuple[Artifa
     return longest
 
 
-def apply_revision_family(world: World, proposal: TacticProposal) -> World:
+def apply_revision_family(
+    world: World,
+    proposal: TacticProposal,
+    *,
+    record_recipe: bool = True,
+) -> World:
     """Extend one grounded artifact family; store the full operation in recipe.
 
     These are versions grounded in the same evidence, not claimed business
     restatements. Numerical/content changes require fact interventions first.
+    Replay calls this with ``record_recipe=False`` because the operation is
+    already present in the recipe being replayed.
     """
     from .recipe import with_step
 
@@ -78,7 +85,15 @@ def apply_revision_family(world: World, proposal: TacticProposal) -> World:
         intents.append(revision)
         identifiers.add(identifier)
         previous = revision
-    recipe = with_step(world.recipe, "EvalRevisionFamily", proposal=proposal.model_dump(mode="json"))
+    recipe = (
+        with_step(
+            world.recipe,
+            "EvalRevisionFamily",
+            proposal=proposal.model_dump(mode="json"),
+        )
+        if record_recipe
+        else dict(world.recipe)
+    )
     applied = set(recipe.get("eval_tactics", []))
     applied.add(proposal.id)
     recipe["eval_tactics"] = sorted(applied)
