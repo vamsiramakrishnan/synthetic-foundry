@@ -2,7 +2,7 @@
 
 The eval exists before candidate data. Builders receive deterministic plans and
 Worldloom independently accepts/rejects their worlds before binding gradeable
-instances.  This module owns campaign orchestration; individual compile,
+instances. This module owns campaign orchestration; individual compile,
 validation, tactic, execution and export stages remain small implementation
 modules during the compatibility release.
 """
@@ -16,14 +16,7 @@ from typing import TYPE_CHECKING, Any
 from ..corpus import write_json
 from ..eval_candidates import CandidateBuilder, GeneratedCandidate, generate_candidates
 from ..eval_demands import DemandSet, compile_demands
-from ..eval_design import (
-    CandidatePlan,
-    EvalSpec,
-    EvalStepSpec,
-    RequirementKind,
-    WorldRequirement,
-    plan_candidates,
-)
+from ..eval_design import CandidatePlan, EvalSpec, plan_candidates
 from ..eval_instances import EvalInstance, bind_eval_instance
 from ..eval_tactics import TacticPlan, plan_tactics
 
