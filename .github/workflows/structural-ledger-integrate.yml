@@ -34,6 +34,13 @@ jobs:
               assert count == 1, f"{path}: expected one match, found {count}: {old!r}"
               file.write_text(text.replace(old, new, 1))
 
+          epistemics = 'src/worldloom/epistemics.py'
+          replace_once(
+              epistemics,
+              '        self._observations = tuple(observations)',
+              '        self._observations: tuple[FactRow, ...] = tuple(observations)',
+          )
+
           collections = 'src/worldloom/collections.py'
           replace_once(
               collections,
@@ -84,9 +91,7 @@ jobs:
           git config user.name 'worldloom-source-bot'
           git config user.email 'actions@users.noreply.github.com'
           git add src/worldloom/epistemics.py
-          if ! git diff --cached --quiet; then
-            git commit -m 'Format the deprecated observation compatibility adapter'
-          fi
+          git commit -m 'Keep observation ledger as a typed compatibility adapter'
           git add src/worldloom/world.py
           git commit -m 'Expose explicit bitemporal fact views on World'
           git add src/worldloom/collections.py src/worldloom/predicates.py
