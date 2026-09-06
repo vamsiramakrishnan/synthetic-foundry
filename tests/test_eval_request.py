@@ -18,7 +18,7 @@ import pytest
 
 import worldloom
 from worldloom import lob as lob_module
-from worldloom.evals import intents as intents_module
+from worldloom.evals import intents as intents_module  # the submodule, not the function
 from worldloom.evals.plausibility import _checks, findings
 from worldloom.models import EvaluationCase, EvaluationType
 from worldloom.process_bindings import compile_company, default_company, situations
@@ -214,11 +214,47 @@ def test_asks_about_is_stable() -> None:
 
 
 class _World:
-    """The two attributes the check group reads, and nothing else."""
+    """A stand-in exposing the public collection the check group reads.
 
-    def __init__(self, cases: tuple[EvaluationCase, ...], lobs: object = None) -> None:
-        self._evaluations = cases
-        self._lobs = lobs
+    `evaluations`, not `_evaluations`: an earlier draft read the private
+    attribute, and a stand-in that invents whatever the code happens to reach
+    for is how a check that never runs on a real corpus still passes its test.
+    """
+
+    def __init__(self, cases: tuple[EvaluationCase, ...]) -> None:
+        self.evaluations = cases
+
+
+@pytest.fixture
+def no_installed_lob():
+    """An empty LOB registry, restored afterwards.
+
+    The registry is process-global, so another test file that installs a pack
+    would otherwise decide this one's result. Asserted state has to be arranged,
+    not assumed.
+    """
+    registry = lob_module.installed()
+    lob_module._INSTALLED.clear()
+    try:
+        yield
+    finally:
+        lob_module._INSTALLED.update(registry)
+
+
+@pytest.fixture
+def installed_finance_lob():
+    """Install the finance LOB the way a pack does, then put the registry back.
+
+    Standing is checked against `lob.installed()`, the process registry, so a
+    test that wants standing checked has to install something.
+    """
+    registry = lob_module.installed()
+    lob_module.install(list(lob_module.publish().values()))
+    try:
+        yield lob_module.installed()
+    finally:
+        lob_module._INSTALLED.clear()
+        lob_module._INSTALLED.update(registry)
 
 
 def test_the_group_is_registered_by_install() -> None:
@@ -252,10 +288,9 @@ def test_a_write_intent_owes_a_deliverable() -> None:
     assert [v.code for v in violations] == ["write_without_deliverable"]
 
 
-def test_realism_is_a_finding_and_never_a_violation() -> None:
+def test_realism_is_a_finding_and_never_a_violation(installed_finance_lob) -> None:
     """A stretchy asker is worth reporting and must not fail a build."""
-    case = _case(asker="harbourmaster", intent="triage_queue")
-    world = _World((case,), lobs=lob_module.publish())
+    world = _World((_case(asker="harbourmaster", intent="triage_queue"),))
 
     violations, _ = _checks(world)
     assert violations == []
@@ -265,7 +300,46 @@ def test_realism_is_a_finding_and_never_a_violation() -> None:
     ]
 
 
-def test_a_request_with_no_asker_is_reported() -> None:
+def test_a_declared_asker_with_standing_draws_no_finding(installed_finance_lob) -> None:
+    world = _World((_case(asker="controller", intent="triage_queue"),))
+    assert findings(world) == []
+
+
+def test_unchecked_standing_is_said_out_loud(no_installed_lob) -> None:
+    """Silence would read as approval when in fact nothing was looked at.
+
+    This is the defect the group shipped with in draft: it read an attribute
+    no World has, so standing never ran anywhere while the report stayed clean.
+    """
+    world = _World((_case(asker="controller", intent="triage_queue"),))
+    assert findings(world) == [
+        "standing was not checked for 1 asker(s): this process holds no"
+        " installed LOB to check against"
+    ]
+
+
+def test_the_group_reads_no_attribute_a_real_world_lacks() -> None:
+    """The regression that motivated the fix, pinned against a real corpus."""
+    from worldloom.evals import plausibility
+    from worldloom.world import World
+
+    world = World.load("examples/retail-close")
+    assert not hasattr(world, "_lobs"), "if this ever gains one, revisit _lobs()"
+    # The public collection is what the group reads, and it exists.
+    assert plausibility._requests(world) == []
+
+
+def test_a_deliverable_that_disagrees_with_its_verb_is_a_violation() -> None:
+    case = _case(
+        intent="sign_off",
+        evaluation_type=EvaluationType.AUTHORITY_RESOLUTION,
+        deliverable="a slide deck",
+    )
+    violations, _ = _checks(_World((case,)))
+    assert [v.code for v in violations] == ["deliverable_disagrees"]
+
+
+def test_a_request_with_no_asker_is_reported(no_installed_lob) -> None:
     world = _World((_case(occasion="PCA-1", intent="triage_queue"),))
     assert findings(world) == ["'EVAL-1' carries a request with no asker"]
 
@@ -325,3 +399,89 @@ def test_the_factoring_multiplies() -> None:
     counted = sum(1 for _ in situations(compiled))
 
     assert counted > 10_000
+
+
+# ---------------------------------------------------------------------------
+# Difficulty as features
+# ---------------------------------------------------------------------------
+
+
+def test_a_question_is_not_a_maximally_vague_request() -> None:
+    """Scoring a legacy case as seven unstated slots would make every case in
+    every existing corpus look like the hardest thing in the set."""
+    from worldloom.evals import difficulty
+
+    assert difficulty.features_for(_case()).unstated_slots == 0
+    assert difficulty.features_for(_case(asker="controller")).unstated_slots == 6
+
+
+def test_features_are_never_reported_as_fitted() -> None:
+    """An unfitted number claiming to be measured is worse than the label it
+    replaced."""
+    from worldloom.evals import difficulty
+
+    assert difficulty.features_for(_case()).fitted is False
+
+
+def test_difficulty_moves_when_the_situation_moves() -> None:
+    from worldloom.evals import difficulty
+
+    easy = difficulty.features_for(_case(asker="a", intent="respond_to_query"))
+    harder = difficulty.features_for(
+        _case(
+            asker="a",
+            intent="prepare_pack",
+            evaluation_type=EvaluationType.CROSS_ARTIFACT,
+            deliverable="the board pack",
+            temporal_cutoff=None,
+            required_artifact_ids=["A1", "A2", "A3"],
+            distractor_artifact_ids=["D1", "D2", "D3", "D4"],
+        )
+    )
+    assert harder.bucket() != easy.bucket() or harder.slice_key() != easy.slice_key()
+    assert harder.writes and not easy.writes
+
+
+def test_the_slice_key_buckets_so_a_slice_has_members() -> None:
+    """A slice with one member calibrates nothing."""
+    from worldloom.evals import difficulty
+
+    many = difficulty.features_for(_case(required_artifact_ids=[f"A{n}" for n in range(20)]))
+    fewer = difficulty.features_for(_case(required_artifact_ids=[f"A{n}" for n in range(9)]))
+    assert many.slice_key() == fewer.slice_key()
+
+
+# ---------------------------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------------------------
+
+
+def test_coverage_reports_against_a_denominator_it_names() -> None:
+    from worldloom.evals import coverage
+
+    report = coverage.report([_case(), _case(id="E2", asker="controller", intent="chase",
+                                             deliverable="a chaser")])
+    assert report.cases == 2
+    assert report.requests == 1, "a question is not a request"
+    assert report.intents_available == len(intents_module.intents())
+    assert report.intents_used == 1
+
+
+def test_coverage_names_what_the_set_does_not_say() -> None:
+    """The useful half: a number nobody acts on did not need computing."""
+    from worldloom.evals import coverage
+
+    gaps = coverage.report([_case()]).gaps()
+    assert any("questions only" in g for g in gaps)
+
+    reads_only = coverage.report([_case(asker="a", intent="triage_queue")]).gaps()
+    assert any("only reads" in g for g in reads_only)
+
+
+def test_available_defers_to_the_binding_coverage_the_generator_saw() -> None:
+    from worldloom.evals import coverage
+
+    compiled = compile_company(default_company("retail"))
+    counts = coverage.available(compiled)
+    assert counts["intents_declared"] == len(intents_module.intents())
+    assert counts["situations"] > counts["occasions"]

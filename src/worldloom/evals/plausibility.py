@@ -37,39 +37,46 @@ from typing import Any
 from .intents import intents
 
 
-def _lobs(world: Any) -> dict[str, Any]:
-    """Every LOB the world carries, keyed by name, or an empty mapping.
+def _lobs() -> dict[str, Any]:
+    """Every LOB this process holds.
 
-    Tolerant on purpose: LOBs ride the pack, so a world built without one is
-    ordinary rather than broken and this module simply has less to say about
-    it. `getattr` rather than an attribute access for the same reason the
-    causal group uses one, since not every world has been through that seam.
+    Read from `lob.installed()`, which is where they actually live: a LOB
+    rides the pack and lands in that registry through `packs.archetype_of`.
+    A `World` has no LOB attribute at all, and an earlier draft of this module
+    read `world._lobs` -- which meant the standing rules below silently never
+    ran on any real corpus while reporting a clean check. A check that cannot
+    fail is worse than no check, because it also removes the reason to write
+    a real one.
+
+    Empty is the ordinary case, not a broken one: a corpus built without a LOB
+    pack declares no roles, so there is no standing to check. `findings` says
+    that out loud rather than returning an empty list that reads as approval.
     """
-    installed = getattr(world, "_lobs", None)
-    if installed is None:
-        return {}
-    if isinstance(installed, dict):
-        return dict(installed)
-    return {
-        getattr(item, "name", str(index)): item for index, item in enumerate(installed)
-    }
+    from .. import lob as lob_module
+
+    return dict(lob_module.installed())
 
 
 def _requests(world: Any) -> list[Any]:
-    return [
-        case
-        for case in getattr(world, "_evaluations", ())
-        if getattr(case, "has_request", False)
-    ]
+    """Cases carrying a request, through the public collection.
+
+    `world.evaluations`, not `world._evaluations`: a rename of the private
+    attribute would otherwise leave this group reporting a clean run over a
+    corpus it never looked at.
+    """
+    cases: Any = getattr(world, "evaluations", None)
+    if cases is None:
+        cases = getattr(world, "_evaluations", None)
+    return [case for case in (cases or ()) if getattr(case, "has_request", False)]
 
 
-def _standing(world: Any, role_key: str) -> tuple[bool, tuple[str, ...]]:
-    """Whether any LOB declares *role_key*, and the fact kinds it may ask about."""
+def _standing(role_key: str) -> tuple[bool, tuple[str, ...]]:
+    """Whether any installed LOB declares *role_key*, and the kinds it may ask about."""
     from .. import lob as lob_module
 
     granted: list[str] = []
     known = False
-    for installed in _lobs(world).values():
+    for installed in _lobs().values():
         if any(role.key == role_key for role in getattr(installed, "roles", ())):
             known = True
         for ask in lob_module.asks_about(installed, role_key):
@@ -130,6 +137,23 @@ def _checks(world: Any) -> tuple[list, int]:
                 case.id,
                 f"intent {intent.id!r} only reads but the case names a deliverable",
             )
+        # The intent table already declares what a write produces, so a case
+        # naming something else is two accounts of one thing that can disagree
+        # with nothing to catch it. The case's wording may differ (it is prose
+        # a person would use); what it may not do is name a different kind of
+        # artifact from the one the verb is defined to produce.
+        checks += 1
+        if (
+            intent.deliverable is not None
+            and case.deliverable is not None
+            and intent.deliverable.replace("_", " ") not in case.deliverable.casefold()
+        ):
+            fail(
+                "deliverable_disagrees",
+                case.id,
+                f"intent {intent.id!r} produces {intent.deliverable!r} but the case"
+                f" names {case.deliverable!r}",
+            )
     return violations, checks
 
 
@@ -144,7 +168,8 @@ def findings(world: Any) -> list[str]:
     cases = _requests(world)
     if not cases:
         return out
-    lobs = _lobs(world)
+    lobs = _lobs()
+    askers = sorted({case.asker for case in cases if case.asker is not None})
 
     for case in sorted(cases, key=lambda c: c.id):
         if case.asker is None:
@@ -155,7 +180,7 @@ def findings(world: Any) -> list[str]:
             continue
         if not lobs:
             continue
-        known, granted = _standing(world, case.asker)
+        known, granted = _standing(case.asker)
         if not known:
             out.append(f"{case.id!r} is asked by {case.asker!r}, a role no installed LOB declares")
         elif not granted:
@@ -163,14 +188,33 @@ def findings(world: Any) -> list[str]:
                 f"{case.id!r} is asked by {case.asker!r}, which holds no"
                 " responsibility and so has no declared reason to ask"
             )
+
+    if askers and not lobs:
+        # Said once, at the end, rather than per case: without a LOB there is
+        # nothing to check standing against, and returning silence would read
+        # as "every asker checked out" when in fact none was looked at.
+        out.append(
+            f"standing was not checked for {len(askers)} asker(s): this process"
+            " holds no installed LOB to check against"
+        )
     return out
 
 
 def install() -> None:
-    """Register the check group. Idempotent, and called from ``_install``."""
+    """Register the check group. Idempotent, and called at import.
+
+    Called from the module foot below, the way every other group registers
+    (`banking`, `insurance`, `procurement`, `retail`, `cohorts`, `causal`,
+    `detail`). Kept as a named function as well so `__init__._install` can
+    state the dependency explicitly, since nothing on the way to building or
+    loading a world imports this module.
+    """
     from .. import validate as _validate
 
     _validate.register_domain_checks("eval_plausibility", _checks)
+
+
+install()
 
 
 __all__ = ["findings", "install"]

@@ -24,6 +24,20 @@ from ..eval_interventions import (
 from ..eval_tactics import TacticPlan
 from ..eval_witnesses import ConstructionRefused
 from .campaign import CampaignRun, EvalCampaign
+from .coverage import CoverageReport
+from .coverage import report as coverage_report
+from .difficulty import RequestFeatures
+from .difficulty import features_for as request_features
+
+# `intent_table`, not `intents`: this package has a submodule named
+# `intents`, and binding a function to that name here shadows it, so
+# `from worldloom.evals import intents` would hand back the function and
+# `intents.applicable` would fail with an attribute error on a cache wrapper.
+# The same hazard is why `coverage` and `difficulty` are exported under
+# `coverage_report` and `request_features` rather than their own names.
+from .intents import Intent, applicable, intent
+from .intents import intents as intent_table
+from .plausibility import findings as plausibility_findings
 
 __worldloom_seam__ = {
     "name": "evals",
@@ -69,11 +83,14 @@ def seam_contract() -> dict[str, object]:
             "reference-execution-isolated-per-instance",
         ],
         "public_types": [
+            "CoverageReport",
             "EvalSpec",
             "CandidatePlan",
             "EvalCampaign",
             "EvalInstance",
             "DemandSet",
+            "Intent",
+            "RequestFeatures",
             "TacticPlan",
         ],
     }
@@ -82,6 +99,7 @@ def seam_contract() -> dict[str, object]:
 __all__ = [
     "CampaignRun",
     "CandidateBuilder",
+    "CoverageReport",
     "CandidatePlan",
     "ConstructionFinding",
     "ConstructionRefused",
@@ -92,10 +110,18 @@ __all__ = [
     "EvalSpec",
     "EvalStepSpec",
     "GeneratedCandidate",
+    "Intent",
+    "RequestFeatures",
     "RequirementKind",
     "TacticPlan",
     "WorldRequirement",
+    "applicable",
     "construct_candidate",
+    "coverage_report",
     "emulator_executor",
+    "intent",
+    "intent_table",
+    "plausibility_findings",
+    "request_features",
     "seam_contract",
 ]

@@ -13,11 +13,13 @@ compiles thousands of bindings and `evals.intents` declares forty verbs, so
 the number of distinct occasions stops being the number of question keys
 somebody typed and starts being a product of two authored tables.
 
-An asker is deliberately *not* chosen here. Roles live on a LOB and bindings
-do not know about LOBs, so seating one is `seat` below, a separate step that
-takes the world's own `lob.asks_about` standing rule. Keeping them apart is
-what stops this module from inventing a role that the responsibility edges
-never granted.
+An asker is deliberately *not* chosen here, and this module does not offer a
+way to choose one. Roles live on a LOB, bindings know nothing about LOBs, and
+the only edge between them is `RoleSpec.function`, which is unvalidated free
+text. Seating an asker is therefore a decision for whoever holds both a
+compiled catalogue and an installed LOB, under `lob.asks_about`'s standing
+rule; guessing one here would invent a role the responsibility edges never
+granted, which is the failure this whole path exists to avoid.
 
 Nothing here draws, samples, or reads a clock. `situations` is a generator
 over sorted, declared data, so the same compiled catalogue yields the same
