@@ -1,0 +1,85 @@
+# one-shot gate; deletes itself after the legacy enterprise runtime converges
+name: structural enterprise runtime convergence
+on:
+  push:
+    branches: [codex/structural-uplift]
+    paths:
+      - .github/workflows/structural-enterprise-runtime.yml
+permissions:
+  contents: write
+concurrency:
+  group: structural-enterprise-runtime
+  cancel-in-progress: false
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/structural-uplift
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Add eval-state faults to the canonical emulator
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/worldloom/connector_emulator.py')
+          text = path.read_text()
+          old = '''            if "rate_limit_429" in active_faults:
+              raise ConnectorError(429, "Too many requests", "rate_limit")
+          handler_op = {
+          '''
+          new = '''            if "rate_limit_429" in active_faults:
+              raise ConnectorError(429, "Too many requests", "rate_limit")
+          if "permission_denied" in active_faults:
+              raise self._error("denied")
+          write_ops = {
+              "create",
+              "update",
+              "transition",
+              "comment",
+              "delete",
+              "transform",
+              "send",
+              "post",
+              "reply",
+              "forward",
+              "upload",
+          }
+          if tool.op in write_ops and "version_conflict" in active_faults:
+              raise ConnectorError(409, "Version conflict", "version_conflict")
+          if tool.op in write_ops and "partial_write" in active_faults:
+              raise ConnectorError(207, "Partial write", "partial_write")
+          handler_op = {
+          '''
+          count = text.count(old)
+          assert count == 1, f'expected one emulator fault anchor, found {count}'
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Install validation dependencies
+        run: |
+          python -m pip install uv
+          uv pip install --system -e '.[dev,polars,xlsx,docx,pdf,pptx]' ruff==0.15.8 mypy==2.3.1
+      - name: Validate one connector runtime
+        run: |
+          ruff check
+          mypy
+          pytest -q \
+            tests/test_connector_definition.py \
+            tests/test_connector_emulator.py \
+            tests/test_enterprise_runner.py \
+            tests/test_enterprise_simulator.py \
+            tests/test_seams.py
+      - name: Commit the canonical eval faults
+        run: |
+          git config user.name 'worldloom-source-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/connector_emulator.py
+          git commit -m 'Execute enterprise failure fixtures as canonical emulator faults'
+          git rm .github/workflows/structural-enterprise-runtime.yml
+          git commit -m 'Remove completed enterprise runtime convergence workflow'
+          git push origin HEAD:codex/structural-uplift
