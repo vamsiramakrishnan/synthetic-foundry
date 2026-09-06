@@ -1,0 +1,66 @@
+name: integrate embedded deck media
+on:
+  push:
+    branches: [codex/connector-definition-thin-waist]
+    paths:
+      - .github/workflows/artifact-media-integrate.yml
+permissions:
+  contents: write
+concurrency:
+  group: artifact-media-integrate
+  cancel-in-progress: false
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/connector-definition-thin-waist
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Wire image-byte targets into PPTX materialization
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/worldloom/artifact_shape_materialize.py')
+          text = path.read_text()
+          anchor = 'from .artifact_shape import ArtifactShapePlan\n'
+          assert text.count(anchor) == 1
+          text = text.replace(anchor, 'from .artifact_media import as_stream, media_chunks\n' + anchor, 1)
+          field_anchor = '    file_size_bytes: int\n    slides: int = 0\n'
+          assert text.count(field_anchor) == 1
+          text = text.replace(field_anchor, '    file_size_bytes: int\n    image_bytes: int = 0\n    slides: int = 0\n', 1)
+          helper_anchor = '\n\ndef _materialize_pptx(\n'
+          assert text.count(helper_anchor) == 1
+          helper = '''\n\ndef _package_media_bytes(path: Path) -> int:\n    with zipfile.ZipFile(path) as package:\n        return sum(\n            info.file_size\n            for info in package.infolist()\n            if info.filename.startswith("ppt/media/")\n        )\n'''
+          text = text.replace(helper_anchor, helper + helper_anchor, 1)
+          save_anchor = '    out.parent.mkdir(parents=True, exist_ok=True)\n    presentation.save(str(out))\n    _pad_ooxml(out, plan.target_file_size_bytes, seed=f"pptx:{plan.artifact_id}")\n    return ArtifactShapeMaterialization(\n'
+          assert text.count(save_anchor) == 1
+          media = '''    if plan.target_image_bytes:\n        chunks = media_chunks(f"pptx:{plan.artifact_id}:media", plan.target_image_bytes)\n        for index, payload in enumerate(chunks):\n            media_slide = presentation.slides[index % slides]\n            media_slide.shapes.add_picture(\n                as_stream(payload),\n                Inches(13.0),\n                Inches(7.15),\n                width=Inches(0.12),\n                height=Inches(0.12),\n            )\n\n    out.parent.mkdir(parents=True, exist_ok=True)\n    presentation.save(str(out))\n    _pad_ooxml(out, plan.target_file_size_bytes, seed=f"pptx:{plan.artifact_id}")\n    image_bytes = _package_media_bytes(out)\n    if image_bytes < plan.target_image_bytes:\n        raise ValueError(\n            f"embedded media target not met: {image_bytes} < {plan.target_image_bytes}"\n        )\n    return ArtifactShapeMaterialization(\n'''
+          text = text.replace(save_anchor, media, 1)
+          result_anchor = '        file_size_bytes=out.stat().st_size,\n        slides=slides,\n'
+          assert text.count(result_anchor) == 1
+          text = text.replace(result_anchor, '        file_size_bytes=out.stat().st_size,\n        image_bytes=image_bytes,\n        slides=slides,\n', 1)
+          path.write_text(text)
+          PY
+      - name: Install validation dependencies
+        run: |
+          python -m pip install uv
+          uv pip install --system -e '.[dev,pptx,docx,xlsx]' ruff==0.15.8 mypy==2.3.1
+      - name: Validate media and native artifact shapes
+        run: |
+          ruff check src/worldloom/artifact_media.py src/worldloom/artifact_shape_materialize.py tests/test_artifact_media.py tests/test_artifact_shape_materialize.py
+          mypy src/worldloom/artifact_media.py src/worldloom/artifact_shape_materialize.py
+          pytest -q tests/test_artifact_media.py tests/test_artifact_shape_materialize.py tests/test_eval_shape.py
+      - name: Commit verified media materialization
+        run: |
+          git config user.name 'worldloom-source-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/artifact_shape_materialize.py
+          git commit -m 'Materialize eval image-byte targets as embedded deck media'
+          git rm .github/workflows/artifact-media-integrate.yml
+          git commit -m 'Remove completed embedded media integration workflow'
+          git push origin HEAD:codex/connector-definition-thin-waist
