@@ -56,12 +56,34 @@ worldloom actors <CORPUS>
 
 List the company shapes `build --archetype` accepts.
 
+### `worldloom benchmark`
+
+Run an executable agent against the corpus's own benchmark, scored on IDs alone.
+
+### `worldloom benchmark run`
+
+Score an executable agent against the corpus's own evaluation set.
+
+```
+worldloom benchmark run <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exec` | The agent as an executable: reads one case's JSON on stdin, prints its answer JSON on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--json` | Emit the scorecard as JSON, labelled with the exec command. |
+| `--limit` | Score only the first N cases; 0 means all of them. |
+| `--shell` | Run the command through the shell — the opt-in for pipelines. |
+| `--timeout` | Seconds the child may run per case before it is killed and refused. |
+| `-k` | How many passages each case offers the agent. |
+
 ### `worldloom build`
 
 Generate a world deterministically from a seed, then validate it.
 
 | Option | Purpose |
 | --- | --- |
+| `--access` | How much of the corpus is gated: `open`, `standard` or `strict`. `standard` is the engines' own mapping, records nothing, and every existing corpus is byte-identical. `open` puts every document under the all-staff policy; `strict` moves the artifact classes each engine's STRICT_ACCESS table names under its function-restricted policies — deterministically by artifact type, never by draw. A build the level cannot act on is refused with the reason rather than shipped unchanged. Rides the recipe as an `AccessProfile` step, so a gated corpus replays byte-for-byte. |
 | `--actors` | Let employees produce the incident's records by calling tools on what they observed. `scripted` runs the built-in deterministic actor (no network, no key); `agent` leaves every decision for you to make through `worldloom act`. |
 | `--archetype`, `-a` | Company shape to build. See `worldloom archetypes` for the list. |
 | `--business-units-end` | Exact active business-unit count in the final period. |
@@ -84,7 +106,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--narrate` | Generate prose with the built-in deterministic provider (no network, no key). |
 | `--out`, `-o` | Directory to write the corpus into. |
 | `--outline-floor` | The fewest sections a document may end up with. Omission restores sections in the order their author wrote them until this is met. |
-| `--outline-synthesis` | Per-mille chance that any one document's outline is *synthesised* — a shape drawn from what this company's own document types have in common, rather than the one its type was authored with. Recombination, never inflation: a synthesised outline must carry at least what the authored one carries, in no more sections, arguing the document the way its type argues it, and falls back to the authored outline when no draw does. Measured at 1000 on a six-period retail build: 89% of documents synthesised, 40 distinct shapes becoming 62. 0 — the default — is byte-identical to before. |
+| `--outline-synthesis` | Per-mille chance that any one document's outline is *synthesised* — a shape drawn from what this company's own document types have in common, rather than the one its type was authored with. Recombination, never inflation: a synthesised outline must carry at least what the authored one carries, in no more sections, arguing the document the way its type argues it, and falls back to the authored outline when no draw does. Measured at 1000 on a six-period retail build: 89% of documents synthesised, 40 distinct shapes becoming 62. Pass 0 for the authored-shape-only corpus. |
 | `--overwrite` | Replace the destination if it exists. |
 | `--pack` | Build from an industry pack: a JSON file carrying the company shape, lore, and name. See `worldloom pack template` to start one and `worldloom pack check` to lint it. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
@@ -94,7 +116,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--priors` | Build under physics calibrated from data by `worldloom calibrate`: a prior snapshot whose spans replace the engine's ranges and whose receipt records how they were made and what privacy budget it cost. Only ranges cross the boundary — no row of the source is in the snapshot, so none can be in the corpus. Applied before --physics, which then overrides it range by range. |
 | `--replay` | Replay narration from an existing corpus's generation ledger instead of generating. |
 | `--reviews` | Review this many people per period. Each is a signed performance review countersigned by the manager's own manager, plus the running one-to-one note that fed it — at a lower authority, and saying something slightly different. |
-| `--section-omission` | Per-mille chance that any one *optional* section is left out of any one document, so a type emits a subset of its outline rather than all of it every time. This is swarm testing applied to documents: sections compete for a reader's attention exactly as test features compete for room, and a corpus whose every close pack carries the same five headings teaches a retriever the headings. Sections are required unless a type says otherwise, so 0 — the default — and an un-annotated corpus are both byte-identical to before. |
+| `--section-omission` | Per-mille chance that any one *optional* section is left out of any one document, so a type emits a subset of its outline rather than all of it every time. This is swarm testing applied to documents: sections compete for a reader's attention exactly as test features compete for room, and a corpus whose every close pack carries the same five headings teaches a retriever the headings. Sections are required unless a type says otherwise, so no required fact can ever be lost to it; an un-annotated corpus has nothing optional and is unaffected at any value. Pass 0 for the historical all-sections shape. |
 | `--seed`, `-s` | World seed. The same seed rebuilds the same world. |
 | `--services-end` | Exact active service count in the final period. |
 | `--sites-end` | Exact active site count in the final period. |
@@ -102,7 +124,7 @@ Generate a world deterministically from a seed, then validate it.
 | `--systems-end` | Exact active system count in the final period. |
 | `--timeline` | Sample a history rather than repeating a month: `quiet`, `steady` or `turbulent`. `--periods 6` runs six closes signed by the same twenty-three people, drawn from the same distribution — six identical months with the dates changed. A density schedules incidents and org changes across those periods instead, so a controller who departs in period 2 means periods 3-6 are signed by their successor and "which month went wrong" becomes answerable from the corpus. Needs --periods to have room to work in. Costs: the schedule states incidents in *both* directions once it schedules any, so it and --incident cannot both decide; and hires are not sampled, because a new post's title is a business decision and a sampler inventing one would write the least plausible sentence in the corpus. |
 | `--trend` | Monthly compound growth behind the comparative history, as a fraction (0.004 is about 5%/year). Without it a year of comparatives oscillates around a flat level, so a seasonally-adjusted series is flat by construction and no question about direction has an answer in the data. Needs --comparatives. 0.0 reproduces every existing corpus byte for byte. |
-| `--variant-bias` | Rotate which authored outline variant each document gets. Two tenants built from one engine with different biases disagree about every document's shape, which is most of what stops a mosaic sharing one shape vocabulary. |
+| `--variant-bias` | Rotate which authored outline variant each document gets. Two tenants built from one engine with different biases disagree about every document's shape, which is most of what stops a mosaic sharing one shape vocabulary. Only rotates among variants a type already ships; pass 0 for the historical hash-selected variants. |
 | `--vary-incidents` | Rotate the incident's storyline across periods — a stale FX table one month, a duplicated goods receipt the next — instead of the same failure retold monthly. Surface only: causality, fact ids and machine values are identical either way, and each period's storyline is recorded on its recipe step so --replay reproduces it. Off (the default) rebuilds every existing corpus byte for byte. |
 
 ### `worldloom calibrate`
@@ -218,6 +240,89 @@ Regenerate the agent-facing command reference from this CLI.
 | --- | --- |
 | `--check` | Exit non-zero if the checked-in reference is stale. |
 
+### `worldloom doctor`
+
+Say whether this installation can do what the docs promise.
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the check list as JSON. |
+
+### `worldloom enterprise-evals`
+
+Plan, generate, and validate multi-connector enterprise agent evaluations.
+
+### `worldloom enterprise-evals build`
+
+Plan, materialize, validate, export, and optionally render a connector corpus.
+
+```
+worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exhaustive` |  |
+| `--limit` |  |
+| `--profile` |  |
+| `--render-limit` |  |
+| `--shard-count` |  |
+| `--shard-index` |  |
+| `--strength` |  |
+
+### `worldloom enterprise-evals plan`
+
+Write grounded query plans as JSONL.
+
+```
+worldloom enterprise-evals plan <WORLD_PATH> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exhaustive` |  |
+| `--limit` |  |
+| `--profile` |  |
+| `--shard-count` |  |
+| `--shard-index` |  |
+| `--strength` |  |
+
+### `worldloom enterprise-evals score`
+
+Score an MCP trace against one planned query's semantic DAG.
+
+```
+worldloom enterprise-evals score <QUERY_PATH> <TRACE_PATH>
+```
+
+### `worldloom enterprise-evals simulate`
+
+Execute exported query DAGs against the in-memory MCP simulator.
+
+```
+worldloom enterprise-evals simulate <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--limit` |  |
+
+### `worldloom enterprise-evals space`
+
+Count semantically valid query candidates without generating fixtures.
+
+| Option | Purpose |
+| --- | --- |
+| `--max-candidates` |  |
+
+### `worldloom enterprise-evals validate`
+
+Validate a materialized enterprise evaluation corpus.
+
+```
+worldloom enterprise-evals validate <PATH>
+```
+
 ### `worldloom evals`
 
 Work with a corpus's evaluation set.
@@ -250,6 +355,19 @@ worldloom evaluate <CORPUS>
 | `--verbose`, `-v` | Show every question. |
 | `-k` | How many passages a retriever may return. |
 
+### `worldloom evolve`
+
+Evolve build configurations: propose, build, measure, select, vary.
+
+| Option | Purpose |
+| --- | --- |
+| `--generations`, `-g` | How many generations to run, the dispersed generation 0 included. |
+| `--json` | Emit the run manifest as JSON instead of a summary. |
+| `--out`, `-o` | Directory the generations are built into: gen0/, gen1/, ... each with its own manifest beside fleet's. |
+| `--population`, `-n` | Configurations proposed and built per generation. |
+| `--purpose` | What the fleet is being admitted for: challenge (it will be used to challenge a retrieval or assistant system) or counterfactual (controlled comparison against a shared frame). 'naturalistic' is refused, naming the reference data it would need. |
+| `--seed`, `-s` | Run seed. The same seed reruns the same evolution byte for byte. |
+
 ### `worldloom fidelity`
 
 Compare a synthetic table with a real one, dimension by dimension — never as one score.
@@ -266,6 +384,37 @@ worldloom fidelity <REFERENCE> <SYNTHETIC>
 | `--seed` | Seed for the subsample the two quadratic blocks take past 2,000 rows. |
 | `--slices` | Report the per-column block again per value of this column, most frequent first. Repeatable. |
 | `--table` | When either side is a corpus directory, the detail table to read from it. |
+
+### `worldloom fleet`
+
+Admission control for a fleet of worlds: qualify it for a purpose, curate its champions.
+
+### `worldloom fleet curate`
+
+Keep one champion per niche; name every reject and every empty niche.
+
+```
+worldloom fleet curate <FLEET_DIR>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the manifest as JSON instead of a table. |
+| `--purpose` | What the fleet is being admitted for: challenge (it will be used to challenge a retrieval or assistant system) or counterfactual (controlled comparison against a shared frame). 'naturalistic' is refused, naming the reference data it would need. |
+
+### `worldloom fleet qualify`
+
+Measure a fleet and rule on whether it is qualified for its purpose.
+
+```
+worldloom fleet qualify <FLEET_DIR>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the full qualification record as JSON. |
+| `--out`, `-o` | Also write the record here — byte-stable, so it can be checked in and diffed. |
+| `--purpose` | What the fleet is being admitted for: challenge (it will be used to challenge a retrieval or assistant system) or counterfactual (controlled comparison against a shared frame). 'naturalistic' is refused, naming the reference data it would need. |
 
 ### `worldloom formats`
 
@@ -295,6 +444,19 @@ Serve Worldloom's readings and gates as MCP tools, over stdio.
 | --- | --- |
 | `--tools` | List the tools and exit, without starting a server. |
 
+### `worldloom migrate`
+
+Copy a corpus to --out, upgraded to the current schema version.
+
+```
+worldloom migrate <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Directory to write the migrated corpus into. |
+| `--overwrite` | Replace the destination if it exists. |
+
 ### `worldloom mosaic`
 
 Build several companies at once, as unlike each other as the rules allow.
@@ -307,7 +469,11 @@ Build several companies at once, as unlike each other as the rules allow.
 | `--format`, `-f` | Render every world to these formats. Repeatable. Separate from --narrate on purpose: prose is what makes a corpus measurable and files are what make it readable, and only the first is a correctness question. Omit to leave the corpora as IR. |
 | `--incident` | Force the operational incident. Omit to let each world's seed and lore decide. |
 | `--json` | Emit the plan as data. |
-| `--narrate` | Write the prose every section is waiting for, with the built-in deterministic provider — no network, no key, no spend. On by default, unlike `build --narrate`: an un-narrated world compiles fifteen artifacts of which three carry a retrievable passage, so a third of its evaluation cases cite evidence that is in no passage at all and every score read off them is about the ranker when the sentence belongs to the corpus. `--no-narrate` writes the plan-only corpora this command used to write, for a caller who wants the shapes and will narrate them another way. |
+| `--narrate` | Write the prose every section is waiting for — with the built-in deterministic provider by default (no network, no key, no spend), or through an agent command via --narrate-exec. On by default, unlike `build --narrate`: an un-narrated world compiles fifteen artifacts of which three carry a retrievable passage, so a third of its evaluation cases cite evidence that is in no passage at all and every score read off them is about the ranker when the sentence belongs to the corpus. `--no-narrate` writes the plan-only corpora this command used to write, for a caller who wants the shapes and will narrate them another way. |
+| `--narrate-exec` | Narrate every world through AGENT COMMAND instead of the deterministic provider: the command runs once per section with the request document on stdin and must print one responses document on stdout — the same child contract `narrate loop --exec` speaks, so one adapter drives either surface (e.g. `python3 tools/exec_agent.py`, or a wrapper around your writer of choice). Rejections come back to the child as feedback and are retried; ledger entries, checkpoint resume and --narration-concurrency all work exactly as they do for the deterministic provider. Implies narration; refused together with --no-narrate. |
+| `--narrate-model-id` | Model identifier recorded in the ledger and replay keys when --narrate-exec is in use. Name the real writer, so a corpus can say what wrote it. |
+| `--narrate-shell` | Run --narrate-exec through the shell, for pipelines. |
+| `--narrate-timeout` | Seconds one agent command may run before it is killed. |
 | `--narration-concurrency` | Concurrent narration sections per world; assembly remains deterministic. |
 | `--out`, `-o` | Directory to write the worlds into. |
 | `--period`, `-p` | Reporting period, YYYY-MM. |
@@ -317,6 +483,20 @@ Build several companies at once, as unlike each other as the rules allow.
 | `--seed`, `-s` | Base seed. World N uses seed+N-1. |
 | `--shard-count` | Deterministic number of batch shards. |
 | `--shard-index` | Zero-based shard owned by this worker. |
+
+### `worldloom mutate`
+
+Apply interventions to a recipe and write the mutated recipe — no build.
+
+```
+worldloom mutate <CORPUS_OR_RECIPE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | File to write the mutated recipe to. |
+| `--overwrite` | Replace the destination if it exists. |
+| `--set` | PATH=VALUE: one recorded recipe value to replace; repeat for several. Same slash-separated grammar as `twin`, because physics names are dotted — e.g. physics/retail.margin.erosion/high=0.06, steps/0/trend_pct=0.008. VALUE is parsed as JSON, falling back to a bare string. |
 
 ### `worldloom narrate`
 
@@ -335,6 +515,22 @@ worldloom narrate accept <CORPUS>
 | `--from`, `-i` | Response JSON from the agent. |
 | `--json` | Emit verdicts as JSON — an agent fixing rejections should read data, not parse a table. |
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
+
+### `worldloom narrate loop`
+
+Drive an executable model until every section's prose is accepted.
+
+```
+worldloom narrate loop <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--exec` | The model as an executable: reads one requests JSON document on stdin, prints one responses JSON document on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--max-rounds` | Rounds to run before giving up with every outstanding violation listed. |
+| `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
+| `--shell` | Run the command through the shell — the opt-in for pipelines. |
+| `--timeout` | Seconds the child may run per round before it is killed and refused. |
 
 ### `worldloom narrate requests`
 
@@ -633,6 +829,29 @@ worldloom render <CORPUS>
 | `--out`, `-o` | Write here instead of back into the corpus. |
 | `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
 
+### `worldloom seams`
+
+Show the library seams a harness can compose.
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the complete machine-readable seam contract. |
+
+### `worldloom search`
+
+Rank the corpus's own passages against a query, BM25, deterministic.
+
+```
+worldloom search <CORPUS> <QUERY>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--as-of` | ISO date or datetime; only passages from artifacts created at or before this moment are searched. This is the temporal-cutoff rule the narration contract already imposes on facts, applied to retrieval: an author amending a document in March may only lean on what existed in March. |
+| `--include-hidden` | Search hidden sections (lineage appendices) too. Off by default for `evaluate`'s reason: machinery is not something a reader would have found. |
+| `--json` | Emit ranked passages as JSON, full text included. |
+| `-k`, `--limit` | How many passages to return. |
+
 ### `worldloom series`
 
 Decompose a period-keyed fact series into trend, season, and what is left.
@@ -684,6 +903,104 @@ worldloom status <CORPUS>
 | --- | --- |
 | `--json` | Emit machine-readable state instead of the table. |
 
+### `worldloom synth`
+
+Generate relational operational records from executable causal specifications.
+
+### `worldloom synth build`
+
+Generate a checksummed JSONL export. Resume verifies, rather than trusts, existing output.
+
+```
+worldloom synth build <SPECIFICATION> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--resume` |  |
+| `--seed` |  |
+| `--shard-count` |  |
+| `--shard-index` |  |
+
+### `worldloom synth check`
+
+Check graph, expressions, constraints and resource budgets before generation.
+
+```
+worldloom synth check <SPECIFICATION>
+```
+
+### `worldloom synth compare`
+
+Emit exact paired cell deltas as JSONL; reject mismatched populations.
+
+```
+worldloom synth compare <DIRECTORY> <COUNTERFACTUAL>
+```
+
+### `worldloom synth example`
+
+Write an editable retail or banking specification; refuse to overwrite.
+
+```
+worldloom synth example <VERTICAL> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--entities` |  |
+| `--ticks` |  |
+
+### `worldloom synth intervene`
+
+Build a paired world using a JSON array of explicit do-interventions.
+
+```
+worldloom synth intervene <DIRECTORY> <INTERVENTIONS> <OUTPUT>
+```
+
+### `worldloom synth merge`
+
+Verify a complete shard set and merge in canonical order.
+
+```
+worldloom synth merge <OUTPUT> <SHARDS>
+```
+
+### `worldloom synth search`
+
+Evolve bounded parameters, retain behavior niches, then audit held-out seeds.
+
+```
+worldloom synth search <SPECIFICATION> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--evaluator` |  |
+| `--proposals` |  |
+
+### `worldloom synth team`
+
+Run configured designer/critic executables, or replay their ledger without calls.
+
+```
+worldloom synth team <SPECIFICATION> <EVALUATOR> <AGENTS> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--checkpoint` |  |
+| `--replay-ledger` |  |
+
+### `worldloom synth verify`
+
+Replay the recipe and verify every record, identifier and byte commitment.
+
+```
+worldloom synth verify <DIRECTORY>
+```
+
 ### `worldloom topology`
 
 Read the corpus's graphs: what depends on what, and what nothing routes around.
@@ -697,6 +1014,21 @@ worldloom topology <CORPUS>
 | `--json` | Emit the reading as JSON — stable keys and ordering, safe to diff in CI. |
 | `--limit`, `-n` | How many services to list, most load-bearing first. |
 
+### `worldloom twin`
+
+Rebuild this corpus with one recorded value replaced, and measure the delta.
+
+```
+worldloom twin <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the delta manifest as JSON — stable keys and ordering. |
+| `--out`, `-o` | Directory to write the counterfactual corpus into. Omit to measure the delta without keeping the twin. |
+| `--overwrite` | Replace the destination if it exists. |
+| `--set` | PATH=VALUE: one recorded recipe value to replace, slash-separated because physics names are dotted — e.g. physics/retail.margin.erosion/high=0.06, steps/0/trend_pct=0.008. VALUE is parsed as JSON, falling back to a bare string. |
+
 ### `worldloom validate`
 
 Check a corpus for coherence violations.
@@ -708,6 +1040,18 @@ worldloom validate <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit the report as JSON — violations as data, not prose to parse. |
+
+### `worldloom verify`
+
+Rebuild this corpus from its own record and prove the bytes match.
+
+```
+worldloom verify <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the verdict as JSON — files compared, checks run. |
 
 ### `worldloom version`
 

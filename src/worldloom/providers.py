@@ -359,7 +359,7 @@ def _allocate(total: float, weights: Sequence[float], decimals: int) -> list[flo
     the column sums to the total exactly at that precision by construction.
     """
     scale = 10 ** decimals
-    units = int(round(total * scale))
+    units = round(total * scale)
     weight_sum = sum(weights) or 1.0
     exact = [units * w / weight_sum for w in weights]
     floors = [int(x) for x in exact]

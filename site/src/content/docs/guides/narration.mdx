@@ -1,0 +1,153 @@
+---
+title: Narration
+description: The request and accept handshake, its JSON shapes, and its rules.
+---
+
+import Mermaid from '../../../components/Mermaid.astro';
+
+Worldloom does not call a language model. It hands your agent a bounded
+request for each document section, then checks what came back against the
+facts. Anything that contradicts the ledger is rejected with the reason, and
+you try again.
+
+<Mermaid
+  code={`flowchart TD
+  B["worldloom build"] --> R["worldloom narrate requests"]
+  R --> W["you write responses.json"]
+  W --> A{"worldloom narrate accept"}
+  A -- "all accepted: committed to the ledger" --> N["worldloom render"]
+  A -- "any violation: returned as data, nothing committed" --> W
+  N --> V["worldloom validate"]
+  linkStyle 4 stroke:#e85d1f,stroke-width:2px`}
+/>
+
+## The request
+
+```bash
+worldloom narrate requests ./corpus -o requests.json
+```
+
+`requests.json` carries the seed, the prompt version, the company, the rules,
+and one request per section. This is a real request from a seed-8128 build:
+
+```json
+{
+  "id": "ART-0001/Commitment",
+  "artifact_id": "ART-0001",
+  "artifact_type": "close_calendar",
+  "section": "Commitment",
+  "written_by": "Group Reporting Manager",
+  "purpose": "State the committed date for the period. This is a standing published document; write it as policy, not as news.",
+  "voice": "precise, procedural, cautious",
+  "persona": "Financial controller",
+  "audience": "all_staff",
+  "background": [
+    "Month-end close is expected to complete within four business days of period end. Overruns are escalated to the Group CFO the same day."
+  ],
+  "target_words": 70,
+  "knows_as_of": "2026-04-01T07:00:00+00:00",
+  "must_not_claim": [],
+  "facts": [
+    {
+      "id": "FACT-0001",
+      "subject": "Ardent Holdings",
+      "period": "2026-03",
+      "statement": "Ardent Holdings · close.due_date = 2026-04-06",
+      "kind": "close.due_date",
+      "authority": "system_of_record",
+      "valid_from": "2026-04-01T06:00:00+00:00",
+      "superseded": false,
+      "required": true
+    }
+  ]
+}
+```
+
+The request is the boundary. If a fact is not in it, you may not use it.
+
+## The response
+
+Write one entry per request, `id` matching exactly:
+
+```json
+{
+  "responses": [
+    {
+      "id": "ART-0001/Commitment",
+      "text": "The close for this period is committed to complete by {{fact:FACT-0001}}. Any overrun is escalated to the Group CFO on the day it emerges.",
+      "claims": [
+        {
+          "text": "The close is committed to a published due date.",
+          "supporting_fact_ids": ["FACT-0001"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Submitting
+
+```bash
+worldloom narrate accept ./corpus --from responses.json --model-id your-model
+```
+
+Acceptance is transactional over the whole submission. One valid response
+beside thirty-four missing ones commits nothing:
+
+```text
+✗ 34 of 35 response(s) rejected. Nothing was committed.
+```
+
+Rejections name the rule. This is the real verdict for a response that typed
+the date out instead of referencing it:
+
+```text
+ART-0001/Commitment
+  bare_number prose contains the literal '6'; reference the fact instead
+  bare_number prose contains the literal '2026'; reference the fact instead
+```
+
+Fix the named violation and resubmit. Rejection is not a failure of the
+harness. It is the harness working. Pass `--json` to read verdicts as data.
+
+## The rules
+
+**Never write a number.** Every figure, percentage, and date goes in as
+`{{fact:ID}}`. The renderer substitutes the ledger value at render time, so no
+document holds a copy that can drift. The check is lexical: any digit outside
+a reference is rejected as `bare_number`. Spell ordinals and counts out in
+words, or leave them out.
+
+**Every claim cites its facts.** A claim with no support is invalid, not
+weak. There is nothing to check it against.
+
+**Respect `knows_as_of`.** This is when the document was written. A triage
+page written at 09:26 cannot cite a root cause confirmed at 13:27.
+
+**A `superseded` fact is a past belief.** Refer to it as history, never as
+the current position. This is how an RCA discusses the hypothesis that turned
+out to be wrong.
+
+**Invent no entities.** No company, person, system, or metric outside your
+facts.
+
+**Write in the given voice, at roughly the given length.** This part is
+yours. A controller writes differently from a service desk analyst.
+
+## Aim for a document, not a list
+
+The dullest correct answer is one sentence per fact. Lead with the position.
+Group what belongs together. Say what it means. A section headed "By business
+unit" was given unit figures precisely so it does not restate the group
+position.
+
+## Planning shapes first, optionally
+
+```bash
+worldloom plan requests ./corpus -o plans.json
+worldloom plan accept ./corpus --from plans.json --model-id your-model
+```
+
+The same handshake, one level up: you choose each document's outline before
+writing any of it. Without it, structure comes from a fixed outline per type.

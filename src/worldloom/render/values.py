@@ -29,7 +29,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World

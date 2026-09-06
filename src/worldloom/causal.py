@@ -64,13 +64,15 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from . import messiness as messiness_module
-from .parameters import DEFAULT as DEFAULT_PHYSICS, Parameters
+from .models import Model as ThinWaistModel
+from .parameters import DEFAULT as DEFAULT_PHYSICS
+from .parameters import Parameters
 from .rng import Rng
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -79,10 +81,9 @@ if TYPE_CHECKING:  # pragma: no cover
 _PERIOD = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
-class Model(BaseModel):
-    """Frozen and closed, like the episode grammar's."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
+class Model(ThinWaistModel):
+    """The thin waist's model — frozen and closed — so a trace is a corpus
+    record like any other and ``World.causal`` is a ``Collection`` of them."""
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +361,7 @@ def evaluate(
                 value = float(spec.level)  # type: ignore[arg-type]
             values[name] = round(_clamp(value, spec.low, spec.high), spec.places)
         budgets = {
-            drive.imperfection: int(round(values[drive.node] * drive.scale))
+            drive.imperfection: round(values[drive.node] * drive.scale)
             for drive in model.drives
         }
         out.append(PeriodValues(
@@ -385,7 +386,7 @@ def recompute(spec: NodeSpec, values: Mapping[str, float]) -> float:
 
 def _period_start(period: str) -> datetime:
     year, month = (int(part) for part in period.split("-"))
-    return datetime(year, month, 1, 9, 0, tzinfo=timezone.utc)
+    return datetime(year, month, 1, 9, 0, tzinfo=UTC)
 
 
 def periods_of(world: World) -> list[str]:
@@ -560,7 +561,7 @@ def _checks(world: Any) -> tuple[list, int]:
                              f" {values.values[spec.name]:g}")
             for drive in model.drives:
                 checks += 1
-                expected_budget = int(round(values.values.get(drive.node, 0.0) * drive.scale))
+                expected_budget = round(values.values.get(drive.node, 0.0) * drive.scale)
                 if values.budgets.get(drive.imperfection) != expected_budget:
                     fail("budget_drift", f"{trace.id}/{values.period}/{drive.imperfection}",
                          f"{drive.node} × {drive.scale:g} budgets {expected_budget}, recorded"
@@ -595,8 +596,8 @@ def _checks(world: Any) -> tuple[list, int]:
 # Registration — the same seams every vertical uses
 # ---------------------------------------------------------------------------
 
-from . import recipe as _recipe  # noqa: E402
-from . import validate as _validate  # noqa: E402
+from . import recipe as _recipe
+from . import validate as _validate
 
 _recipe.register_step("Causal", ("model",), Causal)
 _validate.register_domain_checks("causal", _checks)

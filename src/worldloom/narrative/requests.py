@@ -100,7 +100,8 @@ class NarrativeRequest(Model):
     that declares its industry's vocabulary sees it reach the writer. Advisory:
     guidance for the author, not a rejection rule, because vocabulary is a
     register question and the validators police facts, not style."""
-    target_words: int = 120
+    target_words: int = 190
+    """Matches the compiler's "medium" brief — see `narrative.compiler._request`."""
     fact_digest: str = ""
     """Content address of the facts supplied, so the ledger key moves when they do."""
 

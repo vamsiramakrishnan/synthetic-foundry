@@ -228,7 +228,7 @@ def test_cli_refuses_to_replay_one_worlds_prose_into_another(tmp_path) -> None:
     result = runner.invoke(app, ["build", "--seed", "8128", "--replay", str(bank),
                                  "--out", str(wrong)])
     assert result.exit_code == 2
-    assert "recorded a different world" in result.output
+    assert "recorded a different world" in " ".join(result.output.split()), result.output
     # The divergence is named, so the caller learns which flag they dropped
     # rather than being told to go and compare two recipes themselves.
     assert "archetype" in result.output
@@ -267,10 +267,7 @@ def test_cli_refuses_a_replay_that_would_otherwise_have_succeeded(tmp_path) -> N
         "--replay", str(big), "--out", str(small),
     ])
     assert result.exit_code == 2
-    # Whitespace-normalised: Rich wraps the error to the console width, and in
-    # a narrow non-TTY (CI, a remote harness) the phrase breaks across a line.
-    # The claim being tested is what the message *says*, not where it wraps.
-    assert "recorded a different world" in " ".join(result.output.split())
+    assert "recorded a different world" in " ".join(result.output.split()), result.output
     assert "employees" in result.output
 
 

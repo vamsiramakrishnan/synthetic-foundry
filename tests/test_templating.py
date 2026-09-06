@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from worldloom import templating, World
+from worldloom import World, templating
 
 
 class TestVariableParsing:
@@ -160,7 +160,7 @@ class TestVariableValidation:
 
     def test_doctypes_lint_accepts_valid_variables(self) -> None:
         """Doctypes with valid variables pass lint."""
-        from worldloom.doctypes import lint, DocumentType, SectionSpec, Lag
+        from worldloom.doctypes import DocumentType, Lag, SectionSpec, lint
 
         types = [
             DocumentType(
@@ -185,7 +185,7 @@ class TestVariableValidation:
 
     def test_doctypes_lint_rejects_malformed_variables(self) -> None:
         """Doctypes with malformed variables are rejected."""
-        from worldloom.doctypes import lint, DocumentType, SectionSpec, Lag
+        from worldloom.doctypes import DocumentType, Lag, SectionSpec, lint
 
         types = [
             DocumentType(
@@ -210,7 +210,7 @@ class TestVariableValidation:
 
     def test_doctypes_lint_rejects_unknown_variables(self) -> None:
         """Doctypes with unknown variables are rejected."""
-        from worldloom.doctypes import lint, DocumentType, SectionSpec, Lag
+        from worldloom.doctypes import DocumentType, Lag, SectionSpec, lint
 
         types = [
             DocumentType(
@@ -282,7 +282,7 @@ class TestErrorHandling:
         """An invalid attribute path returns None from resolution."""
         world = World.load("retail-close")
         text = "{{var:nonexistent}}"
-        result, unresolved = templating.substitute(text, world)
+        _result, unresolved = templating.substitute(text, world)
         assert unresolved == ["nonexistent"]
 
     def test_numeric_values_are_refused(self) -> None:
@@ -292,6 +292,6 @@ class TestErrorHandling:
         world = World.load("retail-close")
         # employees_total is numeric
         text = "{{var:company.employees_total}}"
-        result, unresolved = templating.substitute(text, world)
+        _result, unresolved = templating.substitute(text, world)
         # Should be marked as unresolved because it's numeric
         assert unresolved == ["company.employees_total"]

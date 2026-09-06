@@ -1,0 +1,77 @@
+---
+title: Determinism
+description: Same seed, same world. What replay proves and what breaks it.
+---
+
+A world regenerates byte-for-byte from its seed plus its generation ledger.
+That claim is executable:
+
+```bash
+worldloom build --seed 8128 --incident --narrate -f markdown --out ./one
+worldloom build --seed 8128 --incident --replay ./one -f markdown --out ./two
+diff -r ./one ./two
+```
+
+The second build makes no generative call. Every narrated section is served
+from the first corpus's content-addressed generation ledger. The `diff` exits
+0. CI enforces this on every push.
+
+## The recipe
+
+`world.json` carries a recipe: the seed, the archetype, and one step per
+episode. The recipe records **consequences**, never the inputs that implied
+them. A facet like `listing=listed` resolves to parameter ranges and roles,
+and the recipe stores those. If the facet registry later changes what
+`listed` means, the corpus still rebuilds into itself.
+
+The same rule holds for company specifications and probes. Only a pack is
+embedded verbatim, because the pack is identity, not derivation.
+
+## The generation ledger
+
+Every accepted piece of prose, every accepted plan, and every actor decision
+lands in `generation-ledger.jsonl`, keyed by content address. Replay reads the
+ledger instead of asking a writer. The ledger is also the save file: an actor
+episode resumes by replaying its recorded decisions and stopping at the first
+one nobody has taken.
+
+## What breaks determinism
+
+Four things, each caught by CI's byte-identity check:
+
+- **A clock.** Office libraries stamp wall-clock timestamps into their zip
+  entries. `render/ooxml.py::normalise()` rewrites them to values derived from
+  the world. Every Office-family renderer must call it.
+- **`random` or a UUID.** Ledger keys are content addresses. Python's `hash()`
+  is randomised per process and is not one either; use
+  `worldloom.ids.content_key`.
+- **An edited prompt without a version bump.** Prompt text is versioned data.
+  Editing it in place silently changes what a seed means. Bump the version in
+  `src/worldloom/narrative/prompts.py`.
+- **A measurement fed back into a build.** A generator that branched on an
+  effective-diversity score would make the corpus's bytes depend on which BLAS
+  the machine linked. Readings stay downstream of generation.
+
+## Determinism beyond one seed
+
+CI proves byte-identity at one seed on every push. That is one point in a
+twelve-axis configuration space. `tools/sweep.py` covers the rest: it plans
+configurations with a covering array, then builds each one twice.
+
+```bash
+python3 tools/sweep.py --describe
+python3 tools/sweep.py -n 12
+python3 tools/sweep.py -n 12 --mode resident
+```
+
+`process` mode builds in two fresh processes. It catches a build that depends
+on an environment variable or a hash seed. `resident` mode builds twice in one
+interpreter. It catches a first build that poisons a module-level registry.
+Neither subsumes the other, so the nightly job runs both, on a rotating seed.
+
+## Even the retriever replays
+
+The dense retriever's vectors are pinned to a model revision and cached as
+quantised `int8` integers. Scoring is an integer dot product, which is exact
+and order-independent. A corpus that commits its vector cache scores
+bit-identically on a machine with no model installed.

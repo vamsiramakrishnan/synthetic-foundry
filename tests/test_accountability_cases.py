@@ -7,8 +7,6 @@ turns an amount into a percentage the band can be compared against).
 
 from __future__ import annotations
 
-import pytest
-
 from worldloom import packs
 from worldloom.generators.org_builder import ACCOUNTABILITY_KIND
 from worldloom.retail import RetailWorld

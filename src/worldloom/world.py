@@ -11,11 +11,11 @@ against, so their shape matters more than their current implementation.
 from __future__ import annotations
 
 import shutil
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from . import corpus
 
@@ -24,6 +24,7 @@ from . import corpus
 # actors package, which does reach back into `world`, is imported inside the
 # methods that use it.
 from .actors.models import ActorLedgerEntry, ActorMessage, ActorTask, Observation
+from .causal import CausalTrace
 from .collections import (
     ArtifactCollection,
     Collection,
@@ -32,8 +33,8 @@ from .collections import (
     EventCollection,
     FactCollection,
 )
-from .causal import CausalTrace
 from .detail import DetailTable
+from .fact_ledger import FactLedger
 from .ids import Minter
 from .models import (
     AccessPolicy,
@@ -51,6 +52,7 @@ from .models import (
     GenerationLedgerEntry,
     IntentionalError,
     LoreCommitment,
+    Model,
     Persona,
     Service,
     Site,
@@ -148,6 +150,15 @@ class World:
     @classmethod
     def load(cls, name_or_path: str | Path) -> World:
         """Load a corpus by bundled name (``"retail-close"``) or path."""
+        # The package's domain registrations are lazy (W6: see
+        # `worldloom._install`), and `from worldloom.world import World` skips
+        # the package `__getattr__` that would have triggered them. A loaded
+        # corpus must compile and validate identically to the process that
+        # generated it, so the read path forces the full surface — artifact
+        # types, recipe verbs, check groups — before any table is consulted.
+        from . import _install
+
+        _install()
         root = corpus.resolve_corpus(str(name_or_path))
         header = corpus.read_json(root / corpus.WORLD_FILE)
 
@@ -158,7 +169,7 @@ class World:
                 f" ({corpus.SCHEMA_VERSION}); upgrade worldloom"
             )
 
-        def models(key: str, model: type) -> tuple:
+        def models(key: str, model: type[Model]) -> tuple:
             return tuple(model.model_validate(row) for row in header.get(key, []))
 
         return cls(
@@ -417,6 +428,33 @@ class World:
     def incidents(self) -> EventCollection:
         """Events that opened an incident."""
         return self.events.where(kind="incident_opened")
+
+    def fact_ledger(self) -> FactLedger:
+        """The complete append-only canonical fact history.
+
+        Generators, validators, replay, and provenance use this raw ledger.
+        User-facing truth/belief reads should call :meth:`fact_view` instead.
+        """
+        return FactLedger(self._facts)
+
+    def fact_view(
+        self,
+        observer: str,
+        *,
+        valid_at: datetime | str,
+        tx_at: datetime | str,
+    ) -> FactCollection:
+        """Resolve what *observer* could know about one business-time cut.
+
+        Both axes are mandatory. There is no implicit wall clock and no silent
+        fallback to the latest value, so replay is independent of run time.
+        """
+        resolved = self.fact_ledger().view(
+            observer,
+            valid_at=_moment(valid_at),
+            tx_at=_moment(tx_at),
+        )
+        return FactCollection(resolved.to_tuple(), label="FactView")
 
     def as_of(self, moment: datetime | str) -> FactCollection:
         """The facts that held at *moment* — the temporal cut-off primitive.
@@ -802,6 +840,10 @@ class World:
             raise ValueError("nothing to render — run a scenario first to plan artifacts")
 
         staged = self if self._artifact_irs else self.compile()
+        if staged.recipe.get("artifact_realism") == "ecology/v1":
+            from .artifact_ecology import enrich_world
+
+            staged = enrich_world(staged)
         irs = staged._artifact_irs
 
         rendered: list[render_module.Rendered] = []
@@ -882,9 +924,24 @@ class World:
                 previous = revises.get(previous)
             return version
 
+        # One pass over the plan, not one per IR: the linear `next(...)` scan
+        # this replaces made the manifest quadratic in corpus size. Ids are
+        # unique in the plan (`revises` above already banks on it), so the
+        # mapping loses nothing the scan had.
+        intents_by_id = {i.id: i for i in self._artifact_intents}
+
         entries: list[ArtifactManifestEntry] = []
         for ir in irs:
-            intent = next(i for i in self._artifact_intents if i.id == ir.intent_id)
+            intent = intents_by_id.get(ir.intent_id)
+            if intent is None:
+                # The scan raised a bare StopIteration here; keep the crash —
+                # an IR citing an intent the plan does not carry is corpus
+                # corruption, not a case to paper over — but name it.
+                raise ValueError(
+                    f"artifact IR {ir.id} cites intent {ir.intent_id!r},"
+                    " which is not in this world's plan — the compiled IRs and"
+                    " the artifact intents disagree about what was planned"
+                )
             item = first_file.get(intent.id)
             authority, lifecycle = documents.standing(intent.artifact_type)
             if intent.id in replaced:
@@ -1100,9 +1157,9 @@ class World:
 
         # Rendered bodies, when this world was rendered in memory.
         for item in self._rendered:
-            destination = target / item.path
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(item.payload)
+            rendered_path = target / item.path
+            rendered_path.parent.mkdir(parents=True, exist_ok=True)
+            rendered_path.write_bytes(item.payload)
 
         # Or copied through, when it was loaded from a corpus on disk — unless
         # the in-place staging above already restored them.
@@ -1186,7 +1243,6 @@ def extend_lore(
     if not claims:
         return base, recipe
     from . import facets as facets_module
-
     from .recipe import LORE_CLAIMS_KEY
 
     implied = facets_module.commit(claims, minter, alongside=base)
@@ -1229,7 +1285,7 @@ def _moment(moment: datetime | str) -> datetime:
     ``joined`` was ``None`` and the comparison was skipped.
     """
     when = datetime.fromisoformat(moment) if isinstance(moment, str) else moment
-    return when if when.tzinfo is not None else when.replace(tzinfo=timezone.utc)
+    return when if when.tzinfo is not None else when.replace(tzinfo=UTC)
 
 
 def _merged(existing: tuple, incoming: tuple) -> tuple:

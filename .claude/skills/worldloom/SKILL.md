@@ -1,6 +1,7 @@
 ---
 name: worldloom
 description: Generate a coherent synthetic enterprise corpus with Worldloom — build a world from a seed, write prose under fact constraints, render XLSX/DOCX/PPTX/PDF/Markdown and business-system bundles, score retrieval baselines, and validate that every artifact agrees. Use when asked to create synthetic enterprise data, a RAG or agent evaluation corpus, a fictional company's documents, or to add a scenario, renderer, or industry to this repository.
+tags: [worldloom, synthetic-corpus, determinism, narration, rendering, evaluation]
 ---
 
 # Worldloom
@@ -117,6 +118,14 @@ surfacing, in order:
 - **Never edit a prompt without bumping its version** in
   `src/worldloom/narrative/prompts.py`. The version is part of the ledger key, so
   editing in place silently changes what a seed means.
+
+## When the ask is a loop, not a command
+
+Every command above is one fixed arrangement of the machinery. The moment the
+ask is a comprehension — fields of worlds, sweeps, filters on what came out, a
+corpus searching itself mid-loop, recipe mutations, counterfactual twins, a
+fleet qualified from memory — write Python against `worldloom.sdk` instead:
+`/worldloom-sdk`.
 
 `pytest -q` and `worldloom validate retail-close` must both pass before you
 commit anything.

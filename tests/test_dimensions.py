@@ -13,13 +13,12 @@ import io
 
 import openpyxl
 import pytest
+from test_render import evaluate
 
 from worldloom import MonthEndClose, RetailWorld
 from worldloom.archetypes import AUSTRALIAN_GROCERY, available, get, inspired_by
 from worldloom.generators.finance import allocate, previous_periods
 from worldloom.world import World
-
-from test_render import evaluate
 
 PERIOD = "2026-03"
 COMPARATIVES = 3

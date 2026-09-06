@@ -24,12 +24,12 @@ process-global registry for everything that runs afterwards.
 
 from __future__ import annotations
 
+import itertools
 from collections import Counter
 
 import pytest
 
 import worldloom  # noqa: F401  — imports every vertical, which is what installs them
-
 from worldloom import doctypes, documents, policies
 from worldloom.vendi import vendi_of
 
@@ -50,7 +50,7 @@ def bigram_jaccard(a: tuple[str, ...], b: tuple[str, ...]) -> float:
     """
     def grams(sequence: tuple[str, ...]) -> frozenset[tuple[str, str]]:
         padded = ("\x02", *sequence, "\x03")
-        return frozenset(zip(padded, padded[1:], strict=False))
+        return frozenset(itertools.pairwise(padded))
 
     left, right = grams(a), grams(b)
     union = left | right

@@ -1,5 +1,6 @@
 ---
 description: Turn a loose corpus ask into a decided, authored, built, measured, and delivered Worldloom corpus
+tags: [worldloom, design, measurement]
 ---
 
 Design a corpus for the ask in $ARGUMENTS. Unlike the individual steps, you are

@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from worldloom import providers
 from worldloom.providers import (
@@ -71,9 +72,9 @@ def test_digest_is_canonical_over_key_order() -> None:
 
 
 def test_receipts_are_closed_and_frozen() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Receipt(**{**_receipt().model_dump(), "rows": []})  # type: ignore[arg-type]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         _receipt().backend = "other"  # type: ignore[misc]
 
 

@@ -40,9 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -141,9 +141,73 @@ jobs:
       # before they can decide whether a difference is a renderer leaking a
       # clock or an engine leaking state.
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sweep-${{ steps.seed.outputs.seed }}
           path: |
             sweep-report.json
             sweep-report.txt
+
+  # The same sweep on macOS, reduced. Every byte-identity claim this
+  # repository has ever proven — the per-push replays, the nightly sweep
+  # above, the package job — has run on ubuntu, while the package classifies
+  # itself "OS Independent" and the README's determinism claim carries no OS
+  # qualifier. This leg is the first witness for that claim on another
+  # kernel, filesystem and libc. It was added without a local macOS run to
+  # verify it (no macOS machine in this development environment — stated
+  # rather than implied), so: nightly only, never PR-blocking, and a red run
+  # here is a genuine finding about the OS-independence claim, not noise to
+  # be rerun until green.
+  #
+  # Three configurations, not eight: macOS runner minutes bill at 10x linux,
+  # and the point of this leg is the OS axis, which every configuration
+  # crosses — breadth over the configuration space is the ubuntu job's job.
+  sweep-macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]"
+
+      # Same seed derivation as the ubuntu job, so a cross-OS difference in
+      # *what was built* can never masquerade as a cross-OS difference in
+      # bytes: any failing configuration replays exactly, on either OS, with
+      # the printed seed.
+      - name: The sweep, on the other kernel
+        run: |
+          set -o pipefail
+          SEED="${{ inputs.seed }}"
+          if [ -z "$SEED" ]; then SEED="${{ github.run_number }}"; fi
+          status=0
+          python3 tools/sweep.py \
+            --seed "$SEED" \
+            -n 3 \
+            --mode process,resident \
+            --formats markdown,xlsx \
+            --json sweep-macos-report.json \
+            | tee sweep-macos-report.txt || status=$?
+          {
+            echo "### Determinism sweep (macOS)"
+            echo ""
+            echo '```'
+            cat sweep-macos-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sweep-macos-${{ github.run_number }}
+          path: |
+            sweep-macos-report.json
+            sweep-macos-report.txt

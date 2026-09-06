@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from worldloom import archetypes, packs
-from worldloom.generators import org_builder
 from worldloom.generators.org_builder import ACCOUNTABILITY_KIND, DEFAULT_TOLERANCE_PCT
 from worldloom.ids import Minter
 from worldloom.models import ConstraintKind, LoreCommitment, LoreConstraint, LoreKind

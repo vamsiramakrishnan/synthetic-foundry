@@ -314,7 +314,7 @@ class Vendored:
         raise ValueError(f"{country}: unknown postcode rule {kind!r}")
 
     def phone(self, key: StableKey, locale: Locale, *, city: str) -> str:
-        country, rule = self._rules_for(locale, city)
+        _country, rule = self._rules_for(locale, city)
         rng = key.stream(self.version)
         spec = rule["phone"]
         mobile = key.field.endswith("mobile")

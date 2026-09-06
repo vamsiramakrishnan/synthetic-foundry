@@ -31,12 +31,12 @@ chart.
 from __future__ import annotations
 
 from collections.abc import Sequence
-
 from dataclasses import dataclass
 from typing import Any
 
 from ..ids import Minter
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import (
     AccessPolicy,
     BusinessUnit,
@@ -84,6 +84,28 @@ class ProcurementOrganisation:
     roles: dict[str, str]
     milestones: tuple[EnterpriseEvent, ...]
     founding_facts: tuple[CanonicalFact, ...]
+
+
+#: ``--access strict``'s moves for this engine — see the retail table
+#: (``generators/organisation.py``) for the shared contract: deterministic by
+#: artifact type, target audiences resolving against this module's own policy
+#: labels, author and approver kept inside (checked at apply time).
+#:
+#: Procurement plans no all-staff document either, so strict extends the
+#: segregation the vendor-master policy already argues — Operations may sign
+#: for a delivery and may not see a supplier's commercial position:
+#:  * ``supplier_invoice`` — the supplier's claim as posted, carrying billed
+#:    rates; "vendor_master" drops Operations while keeping the author
+#:    (accounts payable, Finance) and the match's other two legs.
+#:  * ``match_exception_report`` — escalated under "Commercial review", whose
+#:    allow list is five functions wide; "procurement_and_finance" keeps the
+#:    author (Finance), the approver (Procurement) and Operations, whose
+#:    receipt the exception is about, and drops the Executive function bar
+#:    the CEO.
+STRICT_ACCESS: dict[str, str] = {
+    "supplier_invoice": "vendor_master",
+    "match_exception_report": "procurement_and_finance",
+}
 
 
 #: The published role keys the procure-to-pay episode needs, plus the roles

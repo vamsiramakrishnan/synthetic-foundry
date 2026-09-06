@@ -194,6 +194,12 @@ def cases(
         and (eligible is None or fact_id in eligible)
         and len(held) >= 2
         and held[-1].learned_at > held[0].learned_at
+        # Every evaluation cut-off must sit inside the expected fact's own
+        # validity window.  A superseded policy can still be learned later as
+        # history, but asking who knew it then while grading against it as the
+        # current answer violates the corpus-wide temporal contract.
+        and facts[fact_id].holds_at(held[0].learned_at)
+        and facts[fact_id].holds_at(held[-1].learned_at)
     ]
     # Widest spread first, then most observers, then the id — so the selection
     # is a property of the world rather than of dictionary order, and a rebuild

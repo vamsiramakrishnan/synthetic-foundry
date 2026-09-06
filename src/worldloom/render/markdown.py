@@ -29,11 +29,22 @@ from typing import TYPE_CHECKING
 
 from ..compiler.compose import section_components
 from ..compiler.plan import SizeClass
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
-from ..models import ArtifactIR, CanonicalFact, Chart, FlowDiagram, MagnitudeBand, Quotation, Table
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
+from ..models import (
+    ArtifactIR,
+    CanonicalFact,
+    Chart,
+    FlowDiagram,
+    MagnitudeBand,
+    Quotation,
+    Table,
+)
 from ..narrative import references
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION
+from ..presentation import Presentation
+from ..presentation import of as presentation_of
 from . import Rendered, slug_for
-from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -173,8 +184,12 @@ def _caption(chart: Chart, table: Table | None) -> str:
     the chart is announced and its data left where it already is — the reader sees
     the same numbers the workbook plots, one screen up.
     """
+    # `:=` so the column is looked up once and stays narrowed: the old
+    # `table.column(key).label if table and table.column(key)` reached `.label`
+    # on a `Column | None` the checker could not see narrowed, which is what
+    # kept this module on the mypy debt ledger.
     labels = [
-        (table.column(key).label if table and table.column(key) else key)
+        (column.label if table and (column := table.column(key)) else key)
         for key in chart.series
     ]
     lines = [f"**Figure — {chart.title}** *({chart.kind.value} chart of {', '.join(labels)})*"]
@@ -397,6 +412,10 @@ def orphans(world: World, artifact_ids: set[str]) -> list[Rendered]:
 
 def render_all(world: World) -> list[Rendered]:
     """Render every artifact that has no more specific format."""
+    # Hoisted, as docx/pdf/pptx already do: rebuilt inside the loop, the fact
+    # dict made this renderer quadratic in corpus size for no reading it
+    # changed — `render` only ever looks facts up by id.
+    facts = {fact.id: fact for fact in world.facts}
     locale = corpus_locale(world)
     profile = presentation_of(world)
     by_intent: dict[str, list] = {}
@@ -413,7 +432,7 @@ def render_all(world: World) -> list[Rendered]:
                 artifact_id=ir.id,
                 path=f"artifacts/{ir.id.lower()}-{slug_for(intent.artifact_type)}.md",
                 media_type="text/markdown",
-                payload=render(ir, {fact.id: fact for fact in world.facts}, locale=locale,
+                payload=render(ir, facts, locale=locale,
                                detail=by_intent.get(ir.intent_id, ()),
                                presentation=profile.for_doctype(intent.artifact_type),
                                artifact_type=intent.artifact_type,

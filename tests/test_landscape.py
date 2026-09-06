@@ -27,7 +27,14 @@ import dataclasses
 
 import pytest
 
-from worldloom import BankingWorld, InsuranceWorld, RetailWorld, World, graphs, landscape
+from worldloom import (
+    BankingWorld,
+    InsuranceWorld,
+    RetailWorld,
+    World,
+    graphs,
+    landscape,
+)
 from worldloom.banking_scenarios import QuarterlyCapitalReturn
 from worldloom.generators import estate as estate_module
 from worldloom.insurance_scenarios import QuarterlyReserving

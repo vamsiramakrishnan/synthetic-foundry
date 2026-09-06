@@ -1,0 +1,138 @@
+"""Compile the process catalogue for a company: value streams x activities x business units x countries,
+with owners by rule, systems of record by landscape, channels by prior, regional variants by tag, and eval
+demand templates per activity. Emits the compiled catalogue and a coverage matrix.
+
+  python compile_processes.py --spec company.json --out compiled/
+  python compile_processes.py --all --out compiled-all/        # one default company per industry -> coverage matrix
+"""
+import argparse, json, os, itertools
+from collections import Counter, defaultdict
+
+COLS = ["id", "name", "apqc", "function", "sor_class", "type", "control", "exception", "tags"]
+
+DEFAULT_LANDSCAPE = {"ERP-SD": "SAP S/4HANA", "ERP-MM": "SAP S/4HANA", "ERP-FI": "SAP S/4HANA", "CRM": "Salesforce", "CPQ": "Salesforce CPQ",
+                     "ITSM": "ServiceNow", "HRIS": "Workday", "Payroll": "ADP", "P2P-suite": "Coupa", "WMS": "Manhattan Active WM", "TMS": "SAP TM",
+                     "PLM": "PTC Windchill", "MES": "Siemens Opcenter", "EPM": "Anaplan", "Consolidation": "OneStream", "e-invoicing": "PEPPOL access point",
+                     "Treasury": "Kyriba", "DMS": "SharePoint", "Wiki": "Confluence", "Email": "Exchange Online", "Chat": "Microsoft Teams", "BI": "Power BI",
+                     "CoreBanking": "Temenos T24", "PolicyAdmin": "Guidewire PolicyCenter", "Claims": "Guidewire ClaimCenter", "TelcoBilling": "Amdocs",
+                     "EMR": "Epic", "ADMS": "GE ADMS", "Minutes": "Confluence", "portal": "PEPPOL access point"}
+
+DEFAULT_ORGS = {
+    "banking": {"operating_model": "federated", "countries": ["SG", "IN", "HK"], "bus": [{"name": "Consumer Banking", "archetype": "customer_segment"}, {"name": "Institutional Banking", "archetype": "customer_segment"}, {"name": "Wealth", "archetype": "product_line"}, {"name": "Group Finance", "archetype": "group_function"}, {"name": "Global Business Services", "archetype": "shared_service_centre"}]},
+    "insurance": {"operating_model": "centralised", "countries": ["AU", "NZ", "SG"], "bus": [{"name": "Personal Lines", "archetype": "product_line"}, {"name": "Commercial Lines", "archetype": "product_line"}, {"name": "Claims", "archetype": "shared_service_centre"}, {"name": "Group Finance", "archetype": "group_function"}]},
+    "retail": {"operating_model": "centralised", "countries": ["AU", "NZ"], "bus": [{"name": "Supermarkets", "archetype": "product_line"}, {"name": "Online", "archetype": "channel"}, {"name": "Supply Chain", "archetype": "shared_service_centre"}, {"name": "Group Finance", "archetype": "group_function"}]},
+    "consumer_products": {"operating_model": "federated", "countries": ["ID", "TH", "VN", "MY"], "bus": [{"name": "Beverages", "archetype": "product_line"}, {"name": "Snacks", "archetype": "product_line"}, {"name": "APAC Shared Services", "archetype": "shared_service_centre"}]},
+    "telecom": {"operating_model": "federated", "countries": ["IN"], "bus": [{"name": "Consumer Mobile", "archetype": "customer_segment"}, {"name": "Enterprise", "archetype": "customer_segment"}, {"name": "Network", "archetype": "shared_service_centre"}, {"name": "Group Finance", "archetype": "group_function"}]},
+    "utilities": {"operating_model": "centralised", "countries": ["AU"], "bus": [{"name": "Distribution", "archetype": "product_line"}, {"name": "Retail Energy", "archetype": "customer_segment"}, {"name": "Corporate", "archetype": "group_function"}]},
+    "life_sciences": {"operating_model": "federated", "countries": ["SG", "JP", "AU"], "bus": [{"name": "Pharma", "archetype": "product_line"}, {"name": "Devices", "archetype": "product_line"}, {"name": "Global Business Services", "archetype": "shared_service_centre"}]},
+    "logistics": {"operating_model": "decentralised", "countries": ["SG", "HK", "MY", "ID"], "bus": [{"name": "Freight Forwarding", "archetype": "product_line"}, {"name": "Contract Logistics", "archetype": "product_line"}, {"name": "Singapore", "archetype": "legal_entity"}]},
+    "healthcare": {"operating_model": "centralised", "countries": ["SG"], "bus": [{"name": "Acute Hospitals", "archetype": "product_line"}, {"name": "Primary Care", "archetype": "product_line"}, {"name": "Corporate Services", "archetype": "shared_service_centre"}]},
+    "manufacturing": {"operating_model": "decentralised", "countries": ["TW", "CN", "MY"], "bus": [{"name": "Plant Taoyuan", "archetype": "legal_entity"}, {"name": "Plant Penang", "archetype": "legal_entity"}, {"name": "Group", "archetype": "group_function"}]},
+    "public_sector": {"operating_model": "centralised", "countries": ["SG"], "bus": [{"name": "Ministry", "archetype": "group_function"}, {"name": "Statutory Board A", "archetype": "legal_entity"}, {"name": "Whole-of-Government Platforms", "archetype": "shared_service_centre"}]},
+    "technology_saas": {"operating_model": "decentralised", "countries": ["SG", "AU", "IN", "JP"], "bus": [{"name": "Product & Engineering", "archetype": "group_function"}, {"name": "Customer Success", "archetype": "customer_segment"}, {"name": "APAC Sales", "archetype": "geography"}]},
+}
+
+
+def load(path):
+    return json.load(open(path))
+
+
+def activities_for(cat, industry):
+    ov = cat["industry_overlays"][industry]
+    streams = {}
+    for sid, s in cat["value_streams"].items():
+        streams[sid] = {"name": s["name"], "kind": "universal", "core": sid in ov["core_streams"], "activities": s["activities"], "calibrate": s.get("calibrate", [])}
+    for sid, s in ov["specific"].items():
+        streams[sid] = {"name": s["name"], "kind": "industry_specific", "core": True, "activities": s["activities"], "calibrate": s.get("calibrate", [])}
+    return streams
+
+
+def owner_kind(cat, model, function):
+    rules = cat["operating_models"][model]
+    for kind, fams in rules.items():
+        if function in fams:
+            return kind
+    return "group_function"
+
+
+def bind_owner(kind, bus):
+    if kind == "BU":
+        return [b for b in bus if b["archetype"] in ("product_line", "geography", "customer_segment", "channel", "legal_entity")] or bus
+    if kind == "shared_service":
+        return [b for b in bus if b["archetype"] == "shared_service_centre"] or [b for b in bus if b["archetype"] == "group_function"] or bus[:1]
+    return [b for b in bus if b["archetype"] == "group_function"] or bus[:1]
+
+
+def compile_company(cat, spec):
+    industry = spec["industry"]
+    landscape = {**DEFAULT_LANDSCAPE, **spec.get("landscape", {})}
+    streams = activities_for(cat, industry)
+    rows, cov = [], Counter()
+    for sid, s in streams.items():
+        for act in s["activities"]:
+            a = dict(zip(COLS, act))
+            kind = owner_kind(cat, spec["operating_model"], a["function"])
+            owners = bind_owner(kind, spec["bus"])
+            prod = landscape.get(a["sor_class"], "unbound")
+            objects = list(cat["sor_classes"].get(a["sor_class"], {}).get("products", {}).get(prod, {}).keys())
+            prior = cat["channel_priors"][a["type"]]
+            for bu in owners:
+                for country in spec["countries"]:
+                    variant = {}
+                    rv = cat["regional_variants"].get(country, {})
+                    for tag in a["tags"]:
+                        for k in cat["variant_tags"].get(tag, []):
+                            if k in rv:
+                                variant[k] = rv[k]
+                    rows.append({"activity_id": a["id"], "stream": sid, "stream_name": s["name"], "activity": a["name"], "apqc": a["apqc"],
+                                 "function": a["function"], "owner_kind": kind, "owner_bu": bu["name"], "bu_archetype": bu["archetype"], "country": country,
+                                 "sor_class": a["sor_class"], "sor_product": prod, "sor_objects": objects, "type": a["type"],
+                                 "channels": [c for c, p in prior.items() if p >= 0.5], "channels_optional": [c for c, p in prior.items() if 0 < p < 0.5],
+                                 "control": a["control"], "exception": a["exception"], "variant": variant,
+                                 "eval_templates": [t["id"] for t in cat["eval_templates"]]})
+            status = "corpus_calibrated" if s["calibrate"] else ("overlay" if s["kind"] == "industry_specific" else "backbone")
+            cov[(industry, sid, status)] += 1
+    return rows, cov
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--catalogue", default="catalogue.json"); ap.add_argument("--spec"); ap.add_argument("--all", action="store_true"); ap.add_argument("--out", default="compiled")
+    a = ap.parse_args()
+    cat = load(a.catalogue)
+    os.makedirs(a.out, exist_ok=True)
+    specs = []
+    if a.spec:
+        specs.append(load(a.spec))
+    if a.all:
+        for ind, org in DEFAULT_ORGS.items():
+            specs.append({"name": f"default-{ind}", "industry": ind, **org})
+    total_cov = Counter(); summary = []
+    for spec in specs:
+        rows, cov = compile_company(cat, spec)
+        total_cov.update(cov)
+        name = spec.get("name", spec["industry"])
+        with open(os.path.join(a.out, f"{name}.jsonl"), "w") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        n_act = len({r["activity_id"] for r in rows})
+        summary.append({"company": name, "industry": spec["industry"], "operating_model": spec["operating_model"], "bus": len(spec["bus"]), "countries": len(spec["countries"]),
+                        "distinct_activities": n_act, "activity_instances": len(rows), "streams": len({r["stream"] for r in rows}),
+                        "eval_demands": len(rows) * len(cat["eval_templates"]), "unbound_systems": sorted({r["sor_class"] for r in rows if r["sor_product"] == "unbound"})})
+    matrix = defaultdict(dict)
+    for (ind, sid, status), n in total_cov.items():
+        matrix[ind][sid] = {"status": status, "activities": n}
+    json.dump({"summary": summary, "coverage": matrix}, open(os.path.join(a.out, "coverage.json"), "w"), indent=1)
+    with open(os.path.join(a.out, "coverage.csv"), "w") as f:
+        f.write("industry,stream,status,activities\n")
+        for ind in sorted(matrix):
+            for sid, v in sorted(matrix[ind].items()):
+                f.write(f"{ind},{sid},{v['status']},{v['activities']}\n")
+    for s in summary:
+        print(json.dumps(s))
+    inds = len(matrix); streams = sum(len(v) for v in matrix.values()); statuses = Counter(v["status"] for m in matrix.values() for v in m.values())
+    print(f"coverage: {inds} industries, {streams} industry-stream cells, {dict(statuses)}")
+
+
+if __name__ == "__main__":
+    main()

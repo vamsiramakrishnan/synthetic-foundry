@@ -40,18 +40,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..compiler.compose import compose, plan_from_ir
 from ..compiler.style import StyleGenome, genome
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import ArtifactIR, CanonicalFact, Chart, ChartKind, Row, Table
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
 from ..narrative import references
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION
+from ..presentation import Presentation as PresentationProfile
+from ..presentation import of as presentation_of
 from ..rng import Rng
-from . import Rendered, RenderError, ooxml, slug_for
-from ..presentation import (
-    DEFAULT as DEFAULT_PRESENTATION,
-    Presentation as PresentationProfile,
-    of as presentation_of,
-)
+from ..storyboard import build as build_storyboard
+from . import Rendered, RenderError, fonts, ooxml, slug_for
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -250,6 +249,20 @@ _SIZE_CLASS = "small"
 _DENSITY_PROFILE = "balanced"
 
 
+def _density_profile(ir: ArtifactIR) -> str:
+    """Translate ecology's visual density into the semantic compiler axis.
+
+    Legacy IR has no ecology metadata and remains balanced byte-for-byte. The
+    mapping changes component selection, not facts: compact decks can reach
+    metric/table components whose density bands correctly exclude sparse prose.
+    """
+    return {
+        "airy": "sparse",
+        "balanced": "balanced",
+        "compact": "dense",
+    }.get(ir.metadata.get("artifact_density", ""), _DENSITY_PROFILE)
+
+
 def _plan(ir: ArtifactIR,
           profile: PresentationProfile = DEFAULT_PRESENTATION) -> PresentationPlan:
     """``ArtifactIR`` -> ``PresentationPlan``, by way of the compiler.
@@ -261,29 +274,24 @@ def _plan(ir: ArtifactIR,
     cover, appendix divider, closing — that the compiler has no opinion about
     because they carry no beat of the argument.
     """
-    plan = plan_from_ir(
+    board = build_storyboard(
         ir,
         artifact_type="executive_summary",
+        fmt="pptx",
         size_class=_SIZE_CLASS,
-        density_profile=_DENSITY_PROFILE,
+        density_profile=_density_profile(ir),
     )
-    composition = compose(plan, fmt="pptx")
-    if not composition.ok:
+    if not board.ok:
         raise RenderError(
             f"{ir.id}: component sequence is not a grammatical executive_summary: "
-            + "; ".join(str(v) for v in composition.violations)
+            + "; ".join(str(v) for v in board.composition.violations)
         )
-
-    # `plan.beats` and `ir.sections` are built 1:1, in order, by `plan_from_ir`
-    # — one beat per section, nothing filtered before `compose` runs — so
-    # zipping them is the correct way back to the section a beat came from,
-    # without re-deriving the beat-key slug `compose` computes internally.
-    section_by_beat = {beat.key: section for beat, section in zip(plan.beats, ir.sections)}
 
     slides: list[SlidePlan] = [SlidePlan(kind="cover", component_id="cover", heading=ir.title)]
     appendix_opened = False
-    for component_id, beat_key in zip(composition.components, composition.beats):
-        section = section_by_beat[beat_key]
+    for beat in board.beats:
+        section = ir.sections[beat.section_index]
+        component_id = beat.component_id
         if section.hidden and profile.appendix != "append":
             # Dropped before the divider is considered, so a deck whose only
             # hidden sections are omitted does not open an appendix and then
@@ -302,7 +310,7 @@ def _plan(ir: ArtifactIR,
             SlidePlan(
                 kind="content",
                 component_id=component_id,
-                heading=section.heading,
+                heading=beat.heading,
                 body=section.body,
                 table=section.table,
                 hidden=section.hidden,
@@ -403,7 +411,7 @@ def _genome_for(ir: ArtifactIR) -> StyleGenome:
         from ..rng import Rng
         g = genome(Rng(world.seed).derive("style"))
     """
-    raw = ir.metadata.get("worldloom_seed")
+    raw = ir.metadata.get("style_seed") or ir.metadata.get("worldloom_seed")
     seed = int(raw) if raw and raw != "None" else 0
     return genome(Rng(seed).derive("style"))
 
@@ -495,12 +503,13 @@ def _write(
     frame,  # type: ignore[no-untyped-def]
     paragraphs: list[str],
     *,
-    size: int,
+    size: float,
     colour: str,
     bold: bool = False,
     italic: bool = False,
     align=None,  # type: ignore[no-untyped-def]
     space_after_pt: float | None = None,
+    face: str | None = None,
 ) -> None:
     """Fill a text frame with one paragraph per string, uniformly styled.
 
@@ -534,6 +543,12 @@ def _write(
         run.font.bold = bold
         run.font.italic = italic
         run.font.color.rgb = _rgb(colour)
+        # The genome's typeface, resolved by the caller to this run's role
+        # (display for titles and bands, body for everything else). `None` —
+        # the house family in the theme-bearing formats — sets no name, which
+        # is the theme default a house deck always had.
+        if face:
+            run.font.name = face
 
 
 def _new_slide(prs, heading: str, *, footer_text: str, g: StyleGenome = _HOUSE_GENOME):  # type: ignore[no-untyped-def]
@@ -548,6 +563,7 @@ def _new_slide(prs, heading: str, *, footer_text: str, g: StyleGenome = _HOUSE_G
     _write(
         header.text_frame, [heading], size=_clamped_pt(g.type_scale[_TS_HEADING]),
         colour=g.colour_roles["header_text"], bold=True, align=heading_align,
+        face=fonts.named(g.typeface).display,
     )
 
     footer = _textbox(slide, FOOTER)
@@ -577,6 +593,7 @@ def _draw_cover(prs, plan: PresentationPlan, g: StyleGenome = _HOUSE_GENOME) -> 
     _write(
         title.text_frame, [plan.title], size=_clamped_pt(g.type_scale[_TS_TITLE]),
         colour=g.colour_roles["body_text"], bold=True, align=PP_ALIGN.CENTER,
+        face=fonts.named(g.typeface).display,
     )
 
     if plan.subtitle:
@@ -624,6 +641,7 @@ def _draw_divider(prs, heading: str, g: StyleGenome = _HOUSE_GENOME) -> None:  #
     _write(
         band.text_frame, [heading], size=_clamped_pt(g.type_scale[_TS_TITLE]),
         colour=g.colour_roles["header_text"], bold=True, align=PP_ALIGN.CENTER,
+        face=fonts.named(g.typeface).display,
     )
 
     note_box = Box(_CONTENT_X, band_box.bottom + _GUTTER, _CONTENT_W, _in(0.5))
@@ -690,6 +708,7 @@ def _draw_prose_content(prs, slide_plan, facts, footer_text: str,
         text.text_frame, paragraphs, size=_clamped_pt(g.type_scale[style["band"]]),
         colour=g.colour_roles["body_text"], bold=style.get("bold", False),
         space_after_pt=_space_pt(g, _SP_PARAGRAPH),
+        face=fonts.named(g.typeface).body,
     )
 
 
@@ -749,7 +768,6 @@ def _apply_cell_borders(cell, policy: str, weight_pt: float) -> None:  # type: i
     never modeled.
     """
     from lxml import etree
-
     from pptx.oxml.ns import qn
 
     edges = {"all": ("lnL", "lnR", "lnT", "lnB"), "horizontal": ("lnT", "lnB"), "none": ()}[policy]

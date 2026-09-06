@@ -201,13 +201,19 @@ def check(
                              f" ({', '.join(sorted(f.id for f in present))}) — a"
                              " valuation states one figure per cohort, and two make"
                              " the sum a choice rather than a reading")
-                for cohort in sorted(observed, key=lambda p: (p is None, p or "")):
-                    if cohort in grid:
+                # A name of its own rather than reusing `cohort`: the grid
+                # loop above binds `cohort` to `str`, and `observed`'s keys
+                # are `str | None` (a cell may carry no cohort at all), so
+                # reusing the name widened a variable mid-function — the one
+                # error keeping this module on the mypy debt ledger.
+                for observed_cohort in sorted(observed, key=lambda p: (p is None, p or "")):
+                    if observed_cohort in grid:
                         continue
                     checks += 1
-                    stated = f"cohort {cohort}" if cohort else "no cohort at all"
+                    stated = (f"cohort {observed_cohort}" if observed_cohort
+                              else "no cohort at all")
                     fail("cohort_off_grid", where,
-                         f"{', '.join(sorted(f.id for f in observed[cohort]))} carries"
+                         f"{', '.join(sorted(f.id for f in observed[observed_cohort]))} carries"
                          f" {stated}, which is not one of the cohorts this valuation"
                          f" observes ({', '.join(grid)})")
 

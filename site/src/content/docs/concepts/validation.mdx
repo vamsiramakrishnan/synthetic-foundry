@@ -1,0 +1,78 @@
+---
+title: Validation
+description: What worldloom validate checks, and what it refuses to warn about.
+---
+
+```bash
+worldloom validate ./corpus
+```
+
+The validator checks that the whole corpus agrees with itself. It prints the
+number of checks it ran: 1,283 on the bundled `retail-close` example, 8,877 on
+a rendered seed-8128 build, tens of thousands on a large world. Every failure
+is a defect, not a warning.
+
+## What it treats as a defect
+
+- A total that does not equal the sum of its parts.
+- A variance that is not actual less budget.
+- A percentage that does not match the amounts it describes.
+- A document citing a fact that did not yet exist when it was written.
+- A reference to an entity, event, or fact that does not exist.
+- A reporting line that cycles, or a service that owns itself.
+- An author who cannot see the document they wrote.
+- An approver who does not exist, wrote the document themselves, or is not
+  permitted by the document's own access policy.
+- Lore that constrains nothing.
+- A fact a document was asked to carry and does not carry.
+- A table cell that names a fact and states nothing.
+- Fewer compiled documents than the plan asked for.
+
+The last three are one rule seen from three sides. The worst defect this
+project has had passed everything above them: a workbook looked its figures up
+at the wrong month, rendered with every cell empty, and validated clean. A
+reconciliation check compares a cell against a fact, and two absent numbers
+agree. The validator now compares each intent's `required_fact_ids` against
+its own compiled `ArtifactIR`, per document. That check found four more
+defects of the same shape on its first run.
+
+## Violations versus advisories
+
+Some findings are true and are not coherence violations. The validator prints
+them as readings, not counted against the verdict. The build above ends with:
+
+```text
+✓ coherent — 8861 checks passed
+
+organisation — 3 reading(s), not counted against coherence
+  person_reaches_nothing CO-0001: 9 of 23 person(s) are named as the subject
+  of no fact that any compiled document carries on its readable surface ...
+```
+
+That is `validate.reachability`. An entity is *reached* when a fact names it
+and a compiled document carries that fact on its readable surface. A declared
+entity that nothing reaches is real thinness, but it is not incoherence, so it
+does not fail the gate. It ships as a ratchet instead: an entity kind the
+reading names is a knob that will not turn.
+
+Coherence and thinness are different properties. A 58-fact bank once passed
+validation cleanly while mentioning none of its 133 branches in any document.
+Reachability is the reading that catches that; see
+[Verticals](/synthetic-foundry/reference/verticals/) for what closing it did to corpus volume.
+
+## After rendering
+
+Run `validate` after every render, not only after narration. Rendering adds
+its own checks:
+
+- Every file the manifest names exists on disk.
+- A chart cannot double-count: plotting a `SUM` cell beside its own operands
+  draws the same money twice.
+- Every number in a rendered document traces to a resolved `{{fact:...}}`
+  reference.
+
+## Do not negotiate with it
+
+If you are tempted to make a check pass by editing the fixture or relaxing the
+check: don't. A validator that can be talked out of failing is decoration. Fix
+the thing it caught.

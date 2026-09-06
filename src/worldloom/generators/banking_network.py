@@ -299,19 +299,19 @@ def generate(
     ltd_target = physics.number("banking.network.loan_to_deposit_pct",
                                 rng.derive("loan_to_deposit"))
     group_deposits = int(round(group_lending / (ltd_target / 100), -1))
-    group_income = int(round(
+    group_income = round(
         annual_income / 4
         * physics.number("banking.network.income_quarter_pct", rng.derive("income"))
-    ))
+    )
     group_settled = int(round(
         group_lending
         * physics.number("banking.network.settlement_rate", rng.derive("settlement")),
         -1,
     ))
-    group_shared_cost = int(round(
+    group_shared_cost = round(
         group_income
         * physics.number("banking.network.shared_services_pct", rng.derive("shared_services"))
-    ))
+    )
 
     # -- income: every division, then every trading branch -------------------
     income_weights = [max(unit_share_of.get(unit.id, 0.0), 1e-9) for unit in income_units]
@@ -359,10 +359,10 @@ def generate(
     estate_weight = sum(
         site_staff_weight[s.id] for unit in staffed_units for s in staffed_of[unit.id]
     )
-    group_fte = int(round(
+    group_fte = round(
         estate_weight
         * physics.number("banking.network.fte_per_site_weight", rng.derive("fte"))
-    ))
+    )
     # The network cannot be larger than the bank. Binds only for a pack whose
     # stated headcount is small against its estate; the shipped ADI draws about
     # a quarter of its people into the network, which is what a bank with a

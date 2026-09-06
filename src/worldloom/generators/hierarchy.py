@@ -36,7 +36,8 @@ from dataclasses import dataclass
 
 from .. import axes
 from ..ids import Minter
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import Category, Site
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng

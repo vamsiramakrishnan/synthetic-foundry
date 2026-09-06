@@ -1,0 +1,100 @@
+---
+title: Fleets
+description: Plan many corpora, build them, qualify them, and curate the champions.
+---
+
+import Mermaid from '../../../components/Mermaid.astro';
+
+Varying a seed does not give you several enterprises. A seed decides names and
+figures, not headcount, span, reporting depth, or trading calendar. Five seeds
+produce one company wearing five names. A fleet needs planned variation, and
+then it needs admission control.
+
+<Mermaid
+  code={`flowchart LR
+  S["worldloom spaces --cover
+plan the configurations"] --> M["worldloom mosaic
+build the worlds"]
+  M --> Q{"worldloom fleet qualify
+floors per purpose"}
+  Q -- "qualified" --> C["worldloom fleet curate
+one champion per niche"]
+  Q -- "not qualified: exit 1, findings named" --> M
+  C --> K["fleet-manifest.json
+champions · rejects · empty niches"]
+  linkStyle 3 stroke:#e85d1f,stroke-width:2px`}
+/>
+
+## Plan the space
+
+```bash
+worldloom spaces
+worldloom spaces --cover -t 2 > plan.jsonl
+worldloom spaces --holes plan.jsonl
+```
+
+The build-configuration space has 12 axes and 3,732,480 exhaustive
+configurations. A covering array at strength 2 reaches every pair of axis
+values in 39 rows, because the row count grows with the two widest axes, not
+with the space. `--cover` builds nothing; it emits configurations you run.
+
+`--holes` scores a fleet you already built. It names the axes the fleet never
+varied at all before listing missed combinations, because one unvaried axis is
+a hundred holes with a single cause. Pointed at this repository's own
+determinism gate, it reported 24% pair coverage and one structural gap: the
+gate had never once built a bank running more than one period.
+
+## Build the worlds
+
+```bash
+worldloom mosaic --describe
+worldloom mosaic -n 5 --incident --out ./mosaic
+worldloom mosaic -e banking -n 5 --out ./banks
+```
+
+`mosaic` covers candidates with a low-discrepancy sequence, discards
+infeasible combinations, and keeps the configurations furthest apart. Each
+engine varies its own physics: a retailer's margin erosion, a bank's capital
+headroom, an insurer's tail length. World N uses seed+N−1, so the third world
+rebuilds without building the first two. Each world lands in
+`./mosaic/world-NN/` with its own recipe.
+
+## Qualify
+
+```bash
+worldloom fleet qualify ./mosaic --purpose challenge
+```
+
+`qualify` measures the fleet and rules on it. Every member must validate,
+must rebuild from its own recipe and ledger into the same fact ledger and
+artifact plan, and must hold the floors its purpose requires. A `challenge`
+fleet must mint questions and must not contain the same world twice. A
+`counterfactual` fleet must share one archetype, so a difference in outcome
+attributes to the varied input rather than to being a different company.
+
+The record also reports pairwise coverage, unvaried axes, restated questions,
+and effective diversity — the last labelled non-gating, because a gate on a
+BLAS-dependent number would break replay. Exit code 1 means not qualified,
+with the findings named.
+
+## The refused purpose
+
+There is no `naturalistic` purpose. Qualifying a fleet as resembling real
+enterprise populations needs reference data this repository does not have. The
+purpose is refused naming the data it would take. Offering it anyway would
+turn an honest absence of a realism claim into a fake one.
+
+## Curate
+
+```bash
+worldloom fleet curate ./mosaic --purpose challenge
+```
+
+`curate` keeps one champion per niche of a small behaviour grid, built from
+deterministic integer features of the measured corpora. It lists every reject
+with the champion that displaced it and why, and writes
+`fleet-manifest.json`, byte-for-byte stable. The manifest's empty niches are
+the next generation's worklist: plan against them and build again.
+
+A curator is downstream of generation. Nothing it emits feeds back into a
+build.

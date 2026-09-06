@@ -14,21 +14,71 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Lint and types, blocking. This repository's stated position is that a
+  # gate that is skipped is not a gate — so neither of these is advisory:
+  # `ruff check` must exit 0 (config and per-rule rationale in
+  # pyproject.toml), and `mypy` must exit 0 against the honest scope
+  # pyproject.toml declares (104 of 163 modules held clean today, the rest on
+  # a named debt list that is only allowed to shrink).
+  #
+  # Both tools are pinned exactly, unlike the library floors in pyproject: a
+  # new ruff release enables new rules and a new mypy release finds new
+  # errors, and either would turn an unrelated PR red. Bumping these pins is
+  # a deliberate PR that fixes whatever the newer tool finds.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # 3.11 — the package's declared floor, and deliberately so. The gate's
+      # own config types at `python_version = "3.11"`, and running it on a
+      # newer interpreter resolves a newer dependency set: 3.12 pulled numpy
+      # 2.5, whose stubs use PEP 695 `type` statements a 3.11-targeted check
+      # cannot parse, and numpy 2.5 ships no 3.11 wheels — so the failure was
+      # unreproducible from any 3.11 dev environment and burned two CI rounds
+      # before this line. Gating at the floor makes interpreter, typing target
+      # and resolved dependencies one consistent story, and every failure
+      # reproducible locally.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # The project itself is installed because mypy follows imports into the
+      # installed environment — pydantic's types are half the signal.
+      - name: Install
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]" \
+            ruff==0.15.8 mypy==2.3.1
+
+      - name: Lint gates
+        run: ruff check
+
+      - name: Type gate
+        run: mypy
+
   dispersed-replay:
     # One interpreter, one small rotating sample.  This is deliberately not in
     # the three-version pytest matrix: byte identity is the property under test,
     # not compatibility with each supported Python minor.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
 
+      # uv rather than pip for the repo installs (verified to resolve this
+      # project locally before the switch); the `package` job below keeps
+      # pip/pipx deliberately, because it proves the wheel under the
+      # installer users actually run.
       - name: Install
-        run: pip install -e .
+        run: |
+          pip install uv
+          uv pip install --system -e .
 
       - name: Dispersed byte-identity replay
         run: >-
@@ -44,18 +94,32 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install
-        run: pip install -e ".[dev,polars,xlsx,docx,pdf,pptx]"
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]"
 
       - name: Tests
+        if: matrix.python-version != '3.12'
         run: pytest -q
+
+      # One leg measures coverage and prints it in the job log. Report-only
+      # is deliberate and is not a skipped gate: a coverage *threshold* is a
+      # proxy gate that invites test theatre — tests written to move a number
+      # rather than to catch anything. Visibility is the product here; the
+      # suite's pass/fail is the gate.
+      - name: Tests (with coverage read-out)
+        if: matrix.python-version == '3.12'
+        run: |
+          uv pip install --system pytest-cov
+          pytest -q --cov=worldloom --cov-report=term
 
       # The agent-facing documents must describe the harness that exists. These
       # are what an agent reads before it knows anything, so a stale flag there
@@ -97,10 +161,13 @@ jobs:
       # collective label: the file's prose has been written by more than one
       # Claude model over time (the close artifacts first, the fan-out layer's
       # commentary and thread later), each accepted through this same gate.
+      # This authored reference predates the CLI's varying-outline defaults.
+      # Pin its recipe; a different shape correctly rejects its section IDs.
       - name: The reference narration is still accepted
         run: |
           worldloom build --seed 8128 --incident --archetype australian_grocery \
-            --comparatives 11 --out "${{ runner.temp }}/reference"
+            --comparatives 11 --section-omission 0 --outline-synthesis 0 --variant-bias 0 \
+            --out "${{ runner.temp }}/reference"
           worldloom narrate accept "${{ runner.temp }}/reference" \
             --from examples/grocery-close/narration.json --model-id claude-agents
           worldloom render "${{ runner.temp }}/reference" -f docx -f xlsx -f markdown
@@ -370,6 +437,60 @@ jobs:
           diff -r "${{ runner.temp }}/narrated" "${{ runner.temp }}/replayed"
           worldloom validate "${{ runner.temp }}/replayed"
 
+  # The Windows leg, phase 2 of 2. Every byte-identity claim this repository
+  # enforces ran on POSIX kernels only (ubuntu on every push, macOS nightly in
+  # determinism-sweep.yml) until phase 1 ran this job as inventory, not gate.
+  # The inventory (14 failures / 8 errors) fell into two classes, both fixed:
+  # console encoding — piped stdout falls back to cp1252 and the CLI's ✓/✗
+  # glyphs raise UnicodeEncodeError (PYTHONUTF8 below) — and CRLF drift, from
+  # autocrlf rewriting fixtures at checkout (.gitattributes) and from
+  # unpinned text-mode writes (newline="\n" pins in corpus.py and every
+  # manifest writer; O_BINARY on the narration checkpoint's raw descriptor).
+  # The leg also caught two portability bugs the fixes above did not predict:
+  # the exec seam's POSIX tokenizer eating Windows paths, and verify
+  # reporting divergences in host-separator form. Gating since the first
+  # green run. Never make this leg green by skipping a test.
+  windows:
+    runs-on: windows-latest
+    env:
+      # GitHub step output is a pipe, not a console, so sys.stdout falls back
+      # to the locale codec (cp1252) and any ✓ the CLI prints raises
+      # UnicodeEncodeError. The glyphs are pinned output — the fix is the
+      # stream, not the strings. This mirrors what a real Windows user needs
+      # when *redirecting* output on Python < 3.15 (PEP 686 makes UTF-8 the
+      # default there); interactive consoles are already UTF-8 via PEP 528,
+      # so redirection is the only gap.
+      PYTHONUTF8: "1"
+    # The default shell on windows-latest is pwsh; bash (Git Bash, which the
+    # runner ships) keeps these steps byte-identical to the linux test job's,
+    # so a failure here is the OS, never a shell-translation artifact.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      # One version only (3.12, the coverage leg's version on linux): the
+      # 3.11–3.13 matrix is the linux job's job; the axis under test here is
+      # the OS.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,polars,xlsx,docx,pdf,pptx]"
+
+      - name: Tests
+        run: pytest -q
+
+      # The coherence gate on the pinned example: proves the shipped corpus
+      # loads and validates when read on a CRLF-native filesystem.
+      - name: Golden episode validates
+        run: worldloom validate retail-close
+
   # The artifact users install, not the checkout developers test. Everything the
   # test job proves is proven against the repo; this job proves the *wheel* —
   # that the bundled examples ship, that a bare install (no extras) works and
@@ -379,9 +500,9 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -420,7 +541,7 @@ jobs:
             --replay /tmp/one $FORMATS --out /tmp/two
           diff -r /tmp/one /tmp/two
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/

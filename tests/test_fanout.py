@@ -92,7 +92,7 @@ def test_thread_messages_learn_in_order(retail: World) -> None:
     """The epistemic staircase: the first report cannot cite the confirmed
     cause, the last message can. This is the property that makes the thread a
     record of knowledge arriving rather than a summary wearing timestamps."""
-    intent, ir = _ir(retail, "email_thread")
+    _intent, ir = _ir(retail, "email_thread")
     cause = next(
         f.id for f in retail.facts.where(kind="ops.cause")
         if f.authority is Authority.CONFIRMED
@@ -109,7 +109,7 @@ def test_banking_thread_carries_the_live_disagreement(banking: World) -> None:
     """Message one states the treatment; message two challenges it; message
     three approves anyway. The thread is the contested window as it was
     lived, before any of the formal documents existed."""
-    intent, ir = _ir(banking, "email_thread")
+    _intent, ir = _ir(banking, "email_thread")
     challenge = next(
         f.id for f in banking.facts.where(kind="review.challenge")
     )

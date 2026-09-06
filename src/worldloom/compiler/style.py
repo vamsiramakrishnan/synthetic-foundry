@@ -48,6 +48,7 @@ TableDensity = Literal["airy", "normal", "tight"]
 TitleAlignment = Literal["left", "centre"]
 GridlinePolicy = Literal["all", "horizontal", "none"]
 NumberNegatives = Literal["parenthesised", "minus"]
+TypefaceFamily = Literal["house_sans", "editorial_serif", "engineering_mono", "director_serif"]
 
 #: Named archetypes bias *how* a genome is sampled — which table density and
 #: how much whitespace bias are likely — without ever picking a value outside
@@ -94,7 +95,7 @@ class StyleGenome:
     colour_roles: dict[str, str]
     gridline_policy: GridlinePolicy
     number_negatives: NumberNegatives
-
+    typeface: TypefaceFamily
 
 # ---------------------------------------------------------------------------
 # 1. Colour math — WCAG relative luminance and contrast ratio
@@ -286,6 +287,26 @@ _PAPER_CANDIDATES: tuple[str, ...] = ("FFFFFF", "FBF9F6", "F5F7F8", "FFF8EE", "F
 
 _TABLE_DENSITIES: tuple[TableDensity, ...] = ("airy", "normal", "tight")
 
+#: Curated typeface families — the fourth axis a corporate identity carries,
+#: after colour, size, and spacing. Curated for exactly the reason
+#: `_FILL_PALETTES` is: typeface *coherence* (a display face that belongs with
+#: a body face) is a designer's judgement call, not something independent
+#: per-document draws would produce; and the families are whole identities
+#: rather than independent display/body picks for the same reason a palette
+#: is a triple rather than three colours. Entry 0 is not decorative: it is the
+#: shipped look — PDF's base-14 Helvetica, the OOXML renderers' theme
+#: defaults, and HTML's unspecified user-agent stack — so the current
+#: rendered look is a literal point in this space, same contract as
+#: `_FILL_PALETTES[0]`. Resolution to concrete faces is `render/fonts.py`'s
+#: one table; this module names families and never a format's font, so the
+#: compiler layer stays renderer-agnostic.
+_TYPEFACE_FAMILIES: tuple[TypefaceFamily, ...] = (
+    "house_sans",        # entry 0: the shipped look, every format
+    "editorial_serif",   # serif throughout — heritage, insurance, legal
+    "engineering_mono",  # monospaced — logistics, engineering, operations
+    "director_serif",    # serif display over sans body — the annual-report hybrid
+)
+
 #: archetype -> (airy, normal, tight) sampling weights. `None` (no archetype)
 #: is uniform; a named archetype nudges the distribution without ever
 #: removing an option outright, because a plan-layer archetype is a bias on
@@ -348,6 +369,7 @@ def genome(rng: Rng, *, archetype: str | None = None) -> StyleGenome:
         title_alignment: TitleAlignment = "left"
         gridline_policy: GridlinePolicy = "all"
         number_negatives: NumberNegatives = "parenthesised"
+        typeface: TypefaceFamily = "house_sans"
     else:
         header_fill, subtotal_fill, negative_seed = rng.derive("palette").choice(_FILL_PALETTES)
         ink = rng.derive("ink").choice(_INK_CANDIDATES)
@@ -358,6 +380,7 @@ def genome(rng: Rng, *, archetype: str | None = None) -> StyleGenome:
         title_alignment = rng.derive("title_alignment").choice(("left", "centre"))
         gridline_policy = rng.derive("gridline_policy").choice(("all", "horizontal", "none"))
         number_negatives = rng.derive("number_negatives").choice(("parenthesised", "minus"))
+        typeface = rng.derive("typeface").choice(_TYPEFACE_FAMILIES)
 
     low, high = _WHITESPACE_RANGES.get(archetype, _WHITESPACE_RANGES[None])
     whitespace_bias = round(rng.derive("whitespace_bias").number(low, high), 2)
@@ -390,6 +413,7 @@ def genome(rng: Rng, *, archetype: str | None = None) -> StyleGenome:
         tuple(sorted(colour_roles.items())),
         gridline_policy,
         number_negatives,
+        typeface,
     )[:16].upper()
 
     return StyleGenome(
@@ -403,6 +427,7 @@ def genome(rng: Rng, *, archetype: str | None = None) -> StyleGenome:
         colour_roles=colour_roles,
         gridline_policy=gridline_policy,
         number_negatives=number_negatives,
+        typeface=typeface,
     )
 
 

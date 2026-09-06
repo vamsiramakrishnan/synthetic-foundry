@@ -1,0 +1,7 @@
+{
+  "name": "HrOnboarding",
+  "purpose": "Every joiner is recorded, surveyed, and signed off.",
+  "engine": "retail",
+  "lob": "hr",
+  "period": "month"
+}

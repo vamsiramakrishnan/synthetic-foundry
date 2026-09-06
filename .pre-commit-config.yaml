@@ -1,0 +1,31 @@
+# Pre-commit hooks — the same gates CI runs, caught before the push.
+# Install once with: pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Pinned to the same version ci.yml installs, so a commit that passes
+    # here cannot fail the lint job there (and vice versa).
+    rev: v0.15.8
+    hooks:
+      - id: ruff-check
+      # `ruff-format` is deliberately absent. Measured before deciding:
+      # `ruff format --check` would reformat 294 of 309 files — this
+      # repository is ~97k lines dense with long-form why-comments whose
+      # paragraphing and dense table layouts are deliberate, and a formatter
+      # pass would bury every meaningful diff for months of history under a
+      # reflow while erasing formatting choices that carry intent. Lint
+      # catches the defect class that matters (unused, undefined, footguns);
+      # uniform quote style is not worth that trade here.
+
+  - repo: local
+    hooks:
+      # The agent-facing docs must describe the CLI that exists — the same
+      # check ci.yml runs, because a stale flag in AGENTS.md doesn't error,
+      # it silently produces thinner corpora (see tests/test_harness_docs.py).
+      - id: worldloom-docs-check
+        name: worldloom docs --check
+        entry: worldloom docs --check
+        language: system
+        pass_filenames: false
+        # The check reads the CLI and every agent-facing document, so run it
+        # when either side could have moved.
+        files: ^(src/worldloom/|AGENTS\.md|CLAUDE\.md|README\.md|docs/|\.claude/)

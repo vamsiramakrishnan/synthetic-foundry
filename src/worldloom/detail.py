@@ -66,12 +66,13 @@ import json
 import math
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from . import factkinds
 from . import validate as validate_module
+from .models import Model as ThinWaistModel
 
 if TYPE_CHECKING:  # pragma: no cover
     from .models import CanonicalFact
@@ -85,10 +86,13 @@ MAX_ROWS = 100_000
 CellValue = str | int | float | None
 
 
-class Model(BaseModel):
+# Derived from the thin waist's base rather than repeating it: this module
+# used to declare its own `Model(BaseModel)` with the identical config, which
+# made `DetailTable` a *different* Model from the one `Collection` is bounded
+# by — mypy caught `world.detail_tables` failing the type-var bound while the
+# duplication looked harmless. One base, one contract.
+class Model(ThinWaistModel):
     """Base for every detail model — frozen and closed, like the episode grammar's."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
 
 # ---------------------------------------------------------------------------
@@ -427,7 +431,7 @@ def allocate_scaled(total: float, weights: list[float], *, decimals: int) -> lis
     if total < 0:
         raise ValueError(f"cannot allocate a negative total ({total})")
     scale = 10 ** decimals
-    units = int(round(total * scale))
+    units = round(total * scale)
     parts = allocate(units, weights)
     if decimals == 0:
         return [float(part) for part in parts]
@@ -728,9 +732,9 @@ def _checks(world) -> tuple[list, int]:
                     continue
                 scale = 10 ** column.decimals
                 summed = sum(
-                    int(round(float(row[column.name]) * scale)) for row in table.rows
+                    round(float(row[column.name]) * scale) for row in table.rows
                 )
-                declared = int(round(fact.value.amount * scale))
+                declared = round(fact.value.amount * scale)
                 if summed != declared:
                     fail("rows_do_not_sum", f"{table.id}/{column.name}",
                          f"rows sum to {summed / scale:,.{column.decimals}f} against"

@@ -37,13 +37,24 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..rng import Rng
 
 COMPANY_FIRST = (
     "Southern Cross", "Meridian", "Kestrel", "Ardent", "Northwind",
     "Greyfell", "Aurelia", "Tessellate", "Halcyon", "Farrowgate",
     "Vantara", "Brightwater", "Ironvale", "Solmark", "Quillon",
+    # Fifteen first words meant every pack-less world shared its branding
+    # vocabulary with every other; at three tenants the mosaic read as one
+    # company with three logos. Widened in place — same draw, deeper pool, so
+    # only new worlds re-roll.
+    "Aldercrest", "Bellwether", "Cormorant", "Dunmarrow", "Everline",
+    "Fairholme", "Goldcrest", "Harrowgate", "Ilvaren", "Junipera",
+    "Kelmscott", "Lumindale", "Marchmont", "Norcliff", "Osterhagen",
+    "Palewood", "Quarrymill", "Ravensworth", "Silverstrand", "Thornbury",
+    "Umberleigh", "Veridian", "Westhaven", "Yarrowfield", "Zephyrine",
+    "Oakmouth", "Brindlewood", "Caldermere", "Halloway", "Stonemarch",
 )
 
 #: Aliases onto the default locale — see the module docstring. Verbatim what
@@ -54,11 +65,26 @@ CITIES = DEFAULT_LOCALE.cities
 GIVEN = DEFAULT_LOCALE.given
 FAMILY = DEFAULT_LOCALE.family
 
-ERP = ("Helios", "Atlas Core", "Keystone", "Lumen", "Cornerstone", "Pinnacle")
-MDM = ("Merchandising Hub", "Range Hub", "Product Central", "Catalogue Hub")
-PLATFORM = ("Atlas Data Platform", "Lakeview", "Nimbus Analytics", "Beacon Platform")
-COMMERCE = ("Commerce Platform", "Storefront", "Digital Commerce", "Shopfront")
-POS = ("Store POS", "Checkout POS", "Register", "Front-of-Store POS")
+ERP = (
+    "Helios", "Atlas Core", "Keystone", "Lumen", "Cornerstone", "Pinnacle",
+    "Meridian One", "Northstar ERP", "Cobalt Suite", "Ledgerline",
+)
+MDM = (
+    "Merchandising Hub", "Range Hub", "Product Central", "Catalogue Hub",
+    "Item Master", "Assortment Cloud", "Golden Record",
+)
+PLATFORM = (
+    "Atlas Data Platform", "Lakeview", "Nimbus Analytics", "Beacon Platform",
+    "Signal House", "Insight Fabric", "Clearing House Data",
+)
+COMMERCE = (
+    "Commerce Platform", "Storefront", "Digital Commerce", "Shopfront",
+    "Omni Channel Hub", "Clickstream",
+)
+POS = (
+    "Store POS", "Checkout POS", "Register", "Front-of-Store POS",
+    "Till Point", "Lane Terminal",
+)
 
 
 def company_name(rng: Rng, *, locale: Locale = DEFAULT_LOCALE) -> str:

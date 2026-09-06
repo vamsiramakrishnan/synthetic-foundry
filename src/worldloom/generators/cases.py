@@ -65,9 +65,21 @@ class CaseBuilder:
     minted it, which is why nothing here drops those.
     """
 
-    def __init__(self, minter: Minter, prior: Iterable[EvaluationCase] = ()) -> None:
+    def __init__(
+        self,
+        minter: Minter,
+        prior: Iterable[EvaluationCase] = (),
+        *,
+        default_difficulty: str = "medium",
+    ) -> None:
         self.minter = minter
         self.cases: list[EvaluationCase] = []
+        # A builder-level default rather than a per-call one, because it is a
+        # claim about a whole taxonomy: banking, insurance and procurement mint
+        # families that are hard by design, and each used to wrap `case` in a
+        # seven-line closure whose only job was flipping this default. "medium"
+        # keeps retail — the one taxonomy that never wrapped — exactly as it was.
+        self.default_difficulty = default_difficulty
         self._seen: set[tuple[str, str]] = {
             (case.question, case.expected_answer) for case in prior
         }
@@ -80,7 +92,7 @@ class CaseBuilder:
         facts: list[str],
         *,
         cutoff: datetime | None = None,
-        difficulty: str = "medium",
+        difficulty: str | None = None,
         reasoning: str = "",
         sources: list[str | None] | None = None,
         distractors: list[str | None] | None = None,
@@ -99,7 +111,11 @@ class CaseBuilder:
                 required_artifact_ids=[a for a in (sources or []) if a],
                 distractor_artifact_ids=[a for a in (distractors or []) if a],
                 temporal_cutoff=cutoff,
-                difficulty=difficulty,  # type: ignore[arg-type]
+                # None means "the builder's default", not a fourth difficulty:
+                # a call site that says nothing inherits the taxonomy's claim.
+                difficulty=(  # type: ignore[arg-type]
+                    self.default_difficulty if difficulty is None else difficulty
+                ),
                 reasoning=reasoning,
             )
         )

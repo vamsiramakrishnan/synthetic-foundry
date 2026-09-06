@@ -111,30 +111,12 @@ def artifact_intents(
         if key.startswith("fact_book_") and key != "fact_book_corrected"
     ]
     intents: list[ArtifactIntent] = []
-
-    def intent(artifact_type: str, domain: str, audience: str, author: str,
-               facts: list[str], events: list[str], size: str, rationale: str,
-               *, derived_from: list[str] | None = None, revises: str | None = None,
-               restates: str | None = None) -> ArtifactIntent:
-        made = ArtifactIntent(
-            id=minter.next("ART"),
-            artifact_type=artifact_type,
-            domain=domain,
-            audience=audience,
-            author_id=author,
-            approver_id=documents.approver_of(
-                roles, artifact_type, author, _APPROVED_BY
-            ),
-            triggered_by=events,
-            required_fact_ids=facts,
-            size_profile=size,  # type: ignore[arg-type]
-            rationale=rationale,
-            derived_from=derived_from or [],
-            revises=revises,
-            restates=restates,
-        )
-        intents.append(made)
-        return made
+    # The shared minter, with banking's own approval table: four planners used
+    # to hand-copy this closure and drift on its keywords (see
+    # ``documents.intent_minter``); what stays banking's is _APPROVED_BY.
+    intent = documents.intent_minter(
+        minter, intents, roles=roles, approved_by=_APPROVED_BY
+    )
 
     # 1 — the filed return. Deliberately silent on the open challenge; the
     # omission is registered below, which is what makes it a test case.
@@ -849,7 +831,9 @@ def divisional_performance_ir(world, intent: ArtifactIntent, minter: Minter) -> 
 # same dual treatment retail's memos get. Import here is safe on a bare
 # install: renderer modules import their optional dependency lazily, at render
 # time, precisely so registration costs nothing.
-from .render import docx as _docx, markdown as _markdown, xlsx as _xlsx
+from .render import docx as _docx
+from .render import markdown as _markdown
+from .render import xlsx as _xlsx
 
 _xlsx.register("capital_return", "divisional_performance_pack")
 _markdown.own_elsewhere("capital_return", "divisional_performance_pack")

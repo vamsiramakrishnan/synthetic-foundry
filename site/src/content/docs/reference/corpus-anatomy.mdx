@@ -1,0 +1,83 @@
+---
+title: Corpus anatomy
+description: Every file in a built corpus, and what each one holds.
+---
+
+import Mermaid from '../../../components/Mermaid.astro';
+
+A corpus directory is plain files: JSON and JSONL ledgers plus rendered
+artifacts. You need Worldloom to build and validate it, not to read it.
+
+<Mermaid
+  code={`flowchart TD
+  subgraph state ["Canonical state"]
+    W["world.json"]
+    L["lore.jsonl"]
+    E["events.jsonl"]
+    F["facts.jsonl"]
+  end
+  subgraph plan ["Artifact plan"]
+    AI["artifact-intents.jsonl"]
+    IR["artifact-ir.jsonl"]
+  end
+  subgraph out ["Output"]
+    AM["artifact-manifest.jsonl"]
+    AR["artifacts/"]
+  end
+  subgraph meas ["Measurement and replay"]
+    EV["evals.jsonl"]
+    GL["generation-ledger.jsonl"]
+  end
+  L --> E --> F
+  F --> AI --> IR --> AM --> AR
+  F --> EV
+  IR --> GL
+  classDef accent stroke:#e85d1f,stroke-width:2px;
+  class F accent`}
+/>
+
+## The files
+
+| File | What it holds |
+| --- | --- |
+| `world.json` | The company, its entities, the recipe, and the schema version. The recipe is how the corpus [rebuilds itself](/synthetic-foundry/concepts/determinism/). |
+| `lore.jsonl` | Historical priors and constraints. Lore is an input: it dates business units and shapes generation. |
+| `events.jsonl` | The append-only enterprise timeline. Events mint facts and make documents necessary. |
+| `facts.jsonl` | Canonical and superseded facts. The ledger every document is checked against. One row per fact, with subject, kind, value, authority, and validity window. |
+| `detail.jsonl` | Transaction-level tables, when requested. |
+| `masterdata.json` | Vendors, customers, and SKUs, when requested. |
+| `artifact-intents.jsonl` | One row per planned document: type, author, audience, required facts, lineage. |
+| `artifact-ir.jsonl` | The resolved intermediate representation: tables, sections, claims. Every renderer reads this and nothing else. |
+| `artifact-manifest.jsonl` | Rendered files and their provenance. An empty path means compiled but not rendered in this format set. |
+| `evals.jsonl` | Evaluation cases: questions, expected fact IDs, distractors, temporal cutoffs, abstention labels. |
+| `intentional-errors.jsonl` | The labelled, mechanically explainable mess `--messiness` added. See [Messiness](/synthetic-foundry/guides/messiness/). |
+| `generation-ledger.jsonl` | Every accepted generative decision, content-addressed. The replay key and the save file. |
+| `actor-*.jsonl` | Observations, messages, tasks, and tool calls, when the corpus was built with `--actors` or `--conversations`. |
+| `artifacts/` | The rendered files: XLSX, DOCX, PDF, PPTX, Markdown, and the Jira, Confluence, and ServiceNow bundles. |
+
+## Reading it by hand
+
+Count the ledgers with ordinary tools. A seed-8128 retail build with an
+incident:
+
+```bash
+wc -l corpus/facts.jsonl corpus/evals.jsonl corpus/events.jsonl
+#  615 corpus/facts.jsonl
+#   51 corpus/evals.jsonl
+#   17 corpus/events.jsonl
+```
+
+Or let the tool list it:
+
+```bash
+worldloom inspect ./corpus --facts
+worldloom inspect ./corpus --events
+worldloom inspect ./corpus --artifacts
+```
+
+## What is deliberately not here
+
+No API keys, no service state, no model weights. The flat `artifacts/` folder
+carries none of the corpus's knowledge about folders, owners, or permissions;
+`worldloom workspace` [projects that tree](/synthetic-foundry/guides/rendering/) from the
+manifest, the roster, and the access policies without touching the corpus.

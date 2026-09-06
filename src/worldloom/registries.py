@@ -111,6 +111,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
+
 #: A declared table, and why it is in here rather than being a registration
 #: registry like the other 25.
 @dataclass(frozen=True)
@@ -213,6 +214,26 @@ _WRITERS = ("columns", "doctypes", "episodes", "lob", "validate")
 
 
 def _ensure_declared() -> None:
+    # The package install runs first, and before the writer imports below, for
+    # two reasons the lazy `worldloom._install` (W6) created at this seam:
+    #
+    # 1. Declaration *order* is import order, and `declared()` promises the
+    #    same tuple in every process. Under the eager init that held for free;
+    #    lazily, a process that imported only this module would declare the
+    #    `_WRITERS` in tuple order while the suite process declared them in
+    #    install order — measured as `columns._INSTALLED` first in one and
+    #    `validate._DOMAIN_CHECKS` first in the other
+    #    (`test_the_declarations_are_the_same_in_every_process`). One fixed
+    #    install prefix makes the order a property of the checkout again.
+    #
+    # 2. `scoped()` snapshots through `containers()`, which lands here. If the
+    #    process's *first* install fired inside a scoped block instead, the
+    #    restore would roll the registrations back — and, modules being cached
+    #    in `sys.modules`, nothing would ever re-run them. Installing before
+    #    any snapshot means whatever triggers inside a block is a no-op.
+    from . import _install
+
+    _install()
     from importlib import import_module
 
     for module in _WRITERS:
@@ -257,6 +278,9 @@ def scoped() -> Iterator[None]:
     installs for the life of the process deliberately, because the world it
     built is compiled later and has to still find its sheet.
     """
+    # `containers()` reaches `_ensure_declared`, which runs the full package
+    # install before this snapshot is taken — see reason 2 there for why a
+    # first install *inside* the block would be a silent, permanent rollback.
     saved = [(container, _copy(container)) for container in containers()]
     try:
         yield
@@ -268,15 +292,25 @@ def scoped() -> Iterator[None]:
         # default.
         for container, original in reversed(saved):
             container.clear()
-            container.update(original)  # type: ignore[arg-type]
+            # A branch after all, where an unconditional `update` used to sit
+            # under an ignore: concrete `set` answers `update`, but the
+            # `MutableSet` ABC this union is typed against does not — the
+            # ignore was masking a real [union-attr], not a stylistic one.
+            # Dispatching on the same test `_copy` uses keeps both directions
+            # of the snapshot honest about which shape they are holding, and
+            # `|=` is `MutableSet`'s own spelling of "put these back".
+            if isinstance(container, MutableMapping):
+                container.update(original)
+            else:
+                container |= original
 
 
 def _copy(container: MutableMapping[Any, Any] | MutableSet[Any]) -> Any:
     """A shallow copy that works for both shapes a registry takes here.
 
-    ``dict`` for seven of them and ``set`` for ``render.docx.HANDLES``, and both
-    answer ``clear()``/``update()`` the same way — so the restore above needs no
-    branch and a ninth container of either shape needs no change.
+    ``dict`` for seven of them and ``set`` for ``render.docx.HANDLES``. The
+    restore above dispatches on the same ``MutableMapping`` test, so a ninth
+    container of either shape needs no change to either direction.
     """
     return dict(container) if isinstance(container, MutableMapping) else set(container)
 

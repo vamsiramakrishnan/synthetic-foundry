@@ -1,3 +1,10 @@
+---
+title: Evaluating Hardness
+description: Score the corpus against baseline retrievers and read the scorecard the right way round
+read-when: The corpus is rendered and the question is whether it is actually hard to retrieve from
+tags: [evaluation, retrieval, baselines, scorecard, abstention]
+---
+
 # Evaluating
 
 You are here because the corpus is built, narrated and rendered, and the

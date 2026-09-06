@@ -19,7 +19,15 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 
 class Model(BaseModel):
@@ -150,6 +158,21 @@ class ErrorType(StrEnum):
     OUTDATED_OWNER = "outdated_owner"
     MISSING_FIELD = "missing_field"
     TIMEZONE_DISCREPANCY = "timezone_discrepancy"
+    HARDCODED_VALUE = "hardcoded_value"
+    """A workbook cell carries a typed-in number where the formula belongs.
+
+    The first *mechanical* kind: every kind above it is editorial — a stale
+    page, a wrong first hypothesis — while this one is a spreadsheet failure
+    mode, a paste-over that severed a cell from its derivation. For this kind
+    and ``SHORT_RANGE``, ``IntentionalError.observed_value`` is the bare
+    reading of the wrong figure rather than a prose account, because two
+    subsystems parse it back: ``compiler.mechanical`` types it into the cell,
+    and ``validate.intentional`` compares the compiled cell against it."""
+    SHORT_RANGE = "short_range"
+    """A SUM whose range stops one row early, so the total misses a member.
+
+    Mechanical, like ``HARDCODED_VALUE``, and carrying the same bare-reading
+    ``observed_value`` contract for the same two parsers."""
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +503,47 @@ class CanonicalFact(Model):
     event_id: str | None = None
     supersedes: str | None = None
     lore_ids: list[str] = Field(default_factory=list)
+
+    # None preserves the legacy ledger contract. Explicit observers are isolated;
+    # '*' is the oracle's latent channel, NOT a grant to every employee.
+    observer: str | None = None
+    source: str | None = None
+    tx_from: datetime | None = None
+    tx_to: datetime | None = None
+    derived_from: tuple[str, ...] = ()
+
+    @property
+    def recorded_at(self) -> datetime:
+        """Legacy facts were recorded when valid; new facts can arrive late."""
+        return self.tx_from if self.tx_from is not None else self.valid_from
+
+    def known_at(self, moment: datetime) -> bool:
+        return self.recorded_at <= moment and (self.tx_to is None or moment < self.tx_to)
+
+    def visible_to(self, observer: str) -> bool:
+        return observer == "*" or self.observer == observer or (
+            self.observer is None and self.source != "latent"
+        )
+
+    @model_validator(mode="after")
+    def _transaction_ordered(self) -> CanonicalFact:
+        if self.tx_to is not None and self.tx_to <= self.recorded_at:
+            raise ValueError(f"{self.id}: tx_to must follow tx_from")
+        if self.observer is not None and not self.observer.strip():
+            raise ValueError(f"{self.id}: observer must not be blank")
+        if self.id in self.derived_from or self.supersedes == self.id:
+            raise ValueError(f"{self.id}: a fact cannot derive from or supersede itself")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _legacy_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # An additive query capability must not rewrite every historic corpus.
+        # New metadata is serialized when set; old rows retain their exact shape.
+        data: dict[str, Any] = handler(self)
+        for key in ("observer", "source", "tx_from", "tx_to", "derived_from"):
+            if getattr(self, key) in (None, ()):
+                data.pop(key, None)
+        return data
 
     @model_validator(mode="after")
     def _needs_a_value(self) -> CanonicalFact:

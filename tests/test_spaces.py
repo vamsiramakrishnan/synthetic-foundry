@@ -266,6 +266,10 @@ def fleet_rows() -> list[spaces.Row]:
             "surface": config.surface,
             "history": "incident" if config.engine == "retail" else "unforced",
             "policies": "none",
+            # `standard` is `--access`'s own default and an identity that
+            # records nothing, so a sweep with no knob for it builds exactly
+            # this value — the same reading as `pristine` above.
+            "access": "standard",
             "storyline": "fixed",
             "genome": "authored",
             "eval_density": "standard",
@@ -289,16 +293,16 @@ def test_shipped_fleet_leaves_most_of_the_space_uncovered() -> None:
     assert covered == pytest.approx(1 - len(missing) / space.size_at(2))
 
 
-def test_shipped_fleet_never_turns_five_of_the_twelve_knobs() -> None:
+def test_shipped_fleet_never_turns_six_of_the_thirteen_knobs() -> None:
     """The blunt reading, and the one to take first.
 
-    These five are not axes the sweep sampled badly — they are axes it has no
+    These six are not axes the sweep sampled badly — they are axes it has no
     enumeration for at all, so several hundred of its holes are consequences of
-    five causes. That distinction is invisible in a coverage percentage and is
+    six causes. That distinction is invisible in a coverage percentage and is
     the whole reason `unvaried` exists.
     """
     assert spaces.unvaried(spaces.build_space(), fleet_rows()) == (
-        "policies", "storyline", "genome", "eval_density", "knowledge",
+        "policies", "access", "storyline", "genome", "eval_density", "knowledge",
     )
 
 

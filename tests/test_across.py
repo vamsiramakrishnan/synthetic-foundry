@@ -129,10 +129,50 @@ def test_the_answers_are_where_the_variety_is(worlds) -> None:
 
 
 def test_survey_states_the_unflattering_verdict(worlds) -> None:
+    """The verdict, pinned at exactly how unflattering it is.
+
+    `transfers["bm25"].identical` read True — three seeds, one company, one
+    verdict sheet — until the variance memo's divisional table gained
+    `gp_actual`, the operand its margin ratio had always been missing
+    (`columns._CUTS`). One more real column in one passage moved a marginal
+    top-5 ranking on one seed and the gross-profit reconciliation comparison
+    became the single case the worlds disagreed on, which this file pinned at
+    that exact width rather than at a threshold a real variety regression could
+    hide under.
+
+    Narration briefs then lengthened (`narrative/compiler`, 70/130/200 words →
+    110/190/300): the deterministic provider's evidence budget scales off the
+    brief, every document cites more optional facts, and the margin that had
+    split the seeds resolved — adversely and unanimously. EVAL-0017 now fails
+    on all three worlds, the verdict sheet is one sheet again, and the reading
+    is back to its original branch. The unflattering half has not moved an
+    inch: the questions are byte-identical across worlds either way, which is
+    why this test pins the questions above and only reports the difficulty
+    spread here.
+    """
     reading = across.survey(worlds)
-    assert reading.transfers["bm25"].identical
+    transfer = reading.transfers["bm25"]
+    verdicts = {
+        name: {o.case_id: o.passed for o in card.outcomes}
+        for name, card in transfer.cards.items()
+    }
+    names = sorted(verdicts)
+    assert all(set(verdicts[n]) == set(verdicts[names[0]]) for n in names[1:])
+    split = {
+        case_id
+        for case_id in verdicts[names[0]]
+        if len({verdicts[n][case_id] for n in names}) > 1
+    }
+    assert split == set(), split
+    assert transfer.identical
+    # Back on the first branch: one company's verdict sheet, retold. The
+    # questions half of the claim is what matters and is asserted above by
+    # exact ids; the difficulty half reports the even margin.
     assert "the variety is in the facts, not in the questions" in reading.verdict
-    assert reading.difficulty.concentration == pytest.approx(reading.difficulty.even_share)
+    # 26 of 78 failures on every world — the once-marginal case failing
+    # everywhere, read through the concentration lens as a perfect third.
+    assert reading.difficulty.failures[names[2]] == reading.difficulty.failures[names[0]]
+    assert reading.difficulty.concentration == pytest.approx(26 / 78, abs=1e-4)
     assert "cross-world duplicate group" in str(reading)
 
 

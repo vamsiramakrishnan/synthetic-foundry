@@ -16,8 +16,8 @@ import zipfile
 import openpyxl
 import pytest
 
-from worldloom import MonthEndClose, RetailWorld, World
-from worldloom.render import RenderError, available, markdown, xlsx
+from worldloom import MonthEndClose, RetailWorld, World, recipe
+from worldloom.render import RenderError, available, bundles, markdown
 
 PERIOD = "2026-03"
 
@@ -260,7 +260,6 @@ def test_number_formats_are_set(workbook) -> None:  # type: ignore[no-untyped-de
 
 def test_a_percentage_is_stored_as_a_fraction(rendered: World, workbook) -> None:  # type: ignore[no-untyped-def]
     """Excel's percent format multiplies by 100, so 24.94% must be stored as 0.2494."""
-    sheet = workbook["Business Unit P&L"]
     computed = evaluate(workbook, "Business Unit P&L", "H4")
     assert 0.0 < computed < 1.0, f"margin stored as {computed}, which would display as a percent of a percent"
 
@@ -414,6 +413,31 @@ def test_confluence_labels_a_stale_page_as_stale(rendered: World) -> None:
     assert {c["page"] for c in comments} <= {p["id"] for p in pages}
 
 
+def test_confluence_pages_honour_the_corpus_presentation(rendered: World) -> None:
+    """A bundle page must not revert a reader corpus to the audit document.
+
+    Confluence wraps Markdown in a system-native record, but the body is still
+    the document a person opens.  Calling ``markdown.render`` with its isolated
+    defaults leaked the supporting-facts appendix and generation brief into
+    that body after every standalone format had correctly omitted them.
+    """
+    reader = rendered.extend(
+        recipe=recipe.with_presentation(rendered.recipe, "reader")
+    )
+    pages_item = next(
+        item for item in bundles.render_confluence(reader)
+        if item.path == "confluence/pages.jsonl"
+    )
+    bodies = "\n".join(
+        json.loads(line)["body"] for line in pages_item.text.splitlines() if line
+    )
+
+    assert "Supporting facts" not in bodies
+    assert "not part of the readable surface" not in bodies
+    assert "Author voice:" not in bodies
+    assert "Persona:" not in bodies
+
+
 def test_bundles_are_plain_text_a_consumer_can_read_without_us(rendered: World) -> None:
     for item in rendered._rendered:
         if not item.path.startswith(("jira/", "confluence/", "servicenow/")):
@@ -463,6 +487,56 @@ def test_an_unknown_audience_does_not_publish_to_all_staff(rendered: World) -> N
 def test_a_rendered_world_validates(rendered: World) -> None:
     report = rendered.validate()
     assert report.ok, "\n".join(str(v) for v in report.violations)
+
+
+def test_every_renderer_derives_the_same_genome_for_one_artifact(rendered: World) -> None:
+    """The genome is the company's identity, not the format's. Each renderer
+    derives it from the IR's world seed independently — a renderer that read
+    its own stream, or its own label, would produce a memo and an HTML twin
+    that disagree about their own company, the render-layer equivalent of a
+    layer re-deciding a fact."""
+    from worldloom.render import docx, html, pdf, pptx, xlsx
+
+    ir = next(ir for ir in rendered.artifact_irs if ir.metadata.get("worldloom_seed"))
+    derived = {
+        module._genome_for(ir).key
+        for module in (docx, html, pdf, pptx, xlsx)
+    }
+    assert len(derived) == 1, "the five renderers disagree about one artifact's genome"
+
+
+def test_the_workbook_wears_the_genome_header_fill(rendered: World, workbook) -> None:
+    """The genome reaches the one place a workbook shows identity: the header
+    row. Asserted through openpyxl on the rendered file, not on the styles the
+    renderer built — a renderer could style an object and never persist it."""
+    from worldloom.render import xlsx
+
+    ir = next(
+        ir for ir in rendered.artifact_irs
+        if rendered.artifact_intents.by_id(ir.intent_id).artifact_type == "finance_workbook"
+    )
+    header_fill = xlsx._genome_for(ir).colour_roles["header_fill"]
+    sheet = workbook["Summary"]
+    fills = {
+        cell.fill.fgColor.rgb for row in sheet.iter_rows(max_row=4) for cell in row
+    }
+    assert f"FF{header_fill}" in fills or header_fill in {
+        fill[-6:] for fill in fills if isinstance(fill, str)
+    }, fills
+
+
+def test_the_html_stylesheet_reads_the_genome(rendered: World) -> None:
+    """HTML's shipped stylesheet was grey-on-grey by absence rather than
+    decision. It now reads the same genome the workbook and the memo read, so
+    one world's documents share header fills, emphasis fills, and body ink
+    across every format that draws them."""
+    from worldloom.render import html
+
+    ir = next(ir for ir in rendered.artifact_irs if ir.metadata.get("worldloom_seed"))
+    page = html.render(ir).decode("utf-8")
+    roles = html._genome_for(ir).colour_roles
+    assert f"#{roles['header_fill']}" in page
+    assert f"#{roles['body_text']}" in page
 
 
 def test_exported_files_exist_and_the_reloaded_corpus_validates(rendered: World, tmp_path) -> None:

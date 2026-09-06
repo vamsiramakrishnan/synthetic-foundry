@@ -1,0 +1,129 @@
+---
+title: Authoring a company
+description: Archetypes, facets, locales, specifications, packs, and physics.
+---
+
+Several surfaces answer "what kind of company is this?". This page orders them
+from the cheapest to the most expressive. Each one is a strict no-op when
+omitted, and each rides the recipe, so an authored corpus rebuilds itself.
+
+## Archetypes: the stock shapes
+
+```bash
+worldloom archetypes
+worldloom build --seed 8128 --archetype midsize_adi --out ./bank
+```
+
+Six ship: `australian_grocery`, `customer_owned_bank`, `midsize_adi`,
+`midsize_general_insurer`, `midsize_infrastructure_services`, and
+`omnichannel_retailer` (the default). An archetype fixes the company shape:
+business units, categories, sites, headcount. Which episode runs on it is the
+[vertical's](/synthetic-foundry/reference/verticals/) decision.
+
+## Facets: one attribute at a time
+
+```bash
+worldloom pack facets
+worldloom build --facet listing=listed --facet maturity=legacy --seed 8128 --out ./corpus
+```
+
+A facet says what the company *is*, as consequences into vocabularies that
+already exist. `listing=listed` mints an audit committee chair and a head of
+investor relations, raises status-report density, and puts the audit committee
+in the filing approval chain. Two behaviours to know before you use one:
+
+- Naming any facet settles every facet at its registry default. So
+  `--facet listing=listed` alone also asserts `trading_pattern=steady`, a flat
+  year. Name `trading_pattern=christmas_peak` to keep the December peak.
+- Contradictory claims are refused naming both, with the arithmetic. A mutual
+  runs 16–26% margin and a premium brand 48–62%; no company is both.
+
+The recipe records the consequences, never the facet names. What a facet
+implies and nothing implements is printed as `unmet:` rather than dropped.
+
+## Locales: where the corpus is
+
+```bash
+worldloom pack locales australia
+worldloom build --locale germany --seed 8128 --out ./corpus
+```
+
+Four ship: `australia`, `germany`, `gulf`, `united_kingdom`. A locale reaches
+the figure grammar corpus-wide — Germany prints `1.234,50` and `-1.234` — and
+the build: region labels in site names, name pools, headquarters, currency,
+fiscal year, and the working week. The Gulf week runs Sunday to Thursday, and
+every close date steps on the corpus's own calendar.
+
+## Specifications: the company in one document
+
+```bash
+worldloom pack spec --template
+worldloom build --spec company.json --seed 8128 --out ./corpus
+```
+
+A specification is the sentence "a listed mid-size German insurer, thin
+margins, fragmented market" as one JSON document: industry, geo, facets,
+organisation, leadership, identity. It is a composer, not an engine. Every
+field resolves into a seam the flags already reach. What it adds is that the
+pieces resolve together:
+
+- It refuses a self-contradictory description, with the arithmetic. Revenue
+  that cannot fit the headcount is refused naming both numbers and the
+  registered shapes that bound them.
+- It reports what it cannot honour rather than dropping it, on the same
+  `unmet:` channel facets use.
+- It is never recorded. It resolves to consequences and the recipe records
+  those.
+
+`--spec` refuses the flags it subsumes (`--archetype`, `--pack`,
+`--employees`, `--facet`, `--physics`, `--locale`, `--estate`) rather than
+merging with them. `--seed`, `--periods`, and `--incident` still apply: the
+specification says what the company is, those say what happens to it.
+
+## Packs: identity
+
+```bash
+worldloom pack template retail
+worldloom pack check pack.json
+worldloom build --pack pack.json --seed 8128 --out ./corpus
+```
+
+A pack is identity: the company's name, its units and their books, its lore,
+its voices. A specification describes a class of businesses; a pack names one.
+The pack embeds in the recipe verbatim, because the pack is how the world was
+made. A pack's own name pools, regions, and headquarters win over a locale's.
+
+## Physics: the ranges behind the figures
+
+```bash
+worldloom pack params retail
+worldloom build --physics physics.json --seed 8128 --out ./corpus
+```
+
+A pack supplies values; the engine owns the ranges figures are drawn from.
+`--physics` overrides those ranges from a JSON file. Writing one by hand is
+the wrong instrument — the ranges are not independent — so derive it instead:
+
+```bash
+worldloom probe open -p "A field-services business, 900 people, four regions."
+worldloom probe next probe.json
+worldloom probe accept probe.json --from answer.json
+worldloom probe resolve probe.json -o physics.json
+```
+
+The probe descends organisation → reporting → roles → objectives → measures,
+one question at a time. You may narrow a bound and never widen it. Every
+relation is invertible, so the graph is narrowed to arc consistency after each
+answer; an answer that empties a range is refused naming the chain that broke.
+`probe next` exits 3 when nothing is left to ask.
+
+## Making the company bigger
+
+`organisation.divisions` is the field that makes a corpus bigger, not
+headcount. Raising headcount from 23 to 429 left facts, artifacts, and
+evaluation cases unchanged, because 429 people still managed three divisions.
+Widening the same retailer from three divisions to eight took facts from 604
+to 990 on the same seed. Volume follows structure, because the close fans out
+per division. `--policies core`, `--hiring`, and `--reviews` add the standing
+documents and the line-management paperwork a company has rather than
+produces.

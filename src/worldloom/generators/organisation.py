@@ -18,12 +18,12 @@ topology, and ``persona_trait`` adjusts how specific people write.
 from __future__ import annotations
 
 from collections.abc import Sequence
-
 from dataclasses import dataclass
 from typing import Any
 
 from ..ids import Minter
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import (
     AccessPolicy,
     BusinessUnit,
@@ -44,8 +44,8 @@ from ..rng import Rng
 from ..roles import UnitRole, parse_unit_role, unit_role_key
 from . import hierarchy, names
 from .org_builder import (
-    apply_traits,
     accountability_facts,
+    apply_traits,
     form_units,
     founding_milestones,
     mint_people,
@@ -53,6 +53,37 @@ from .org_builder import (
     stated_headcount,
     wire_managers,
 )
+
+#: Which artifact classes ``--access strict`` moves under this engine's
+#: function-restricted policies, and to which audience. Deterministic by
+#: artifact type — never by draw — so two same-seed strict builds gate the same
+#: documents. Declared beside the policy tuple below because each entry is a
+#: claim about *this* vertical: the target audience must resolve through
+#: ``World._policy_for`` against the labels this module mints, and must keep
+#: admitting the type's author and approver (``scenarios.AccessProfile`` checks
+#: both at apply time and refuses naming the document otherwise).
+#:
+#: The three retail moves, argued:
+#:  * ``close_calendar`` — the timetable is all-staff by default because the
+#:    close touches everyone; a strict company treats it as a finance working
+#:    document. Author is the reporting manager (Finance), so "finance"
+#:    ("Finance and audit only") keeps its author inside.
+#:  * ``confluence_page`` — the incident status page, written by the service
+#:    desk (ServiceOperations); "technology" keeps it inside the function that
+#:    runs the estate.
+#:  * ``peak_trading_review`` — written by the merchandising lead and signed by
+#:    the CEO; "commercial_and_finance" resolves to "Commercial and finance" by
+#:    exact label, which admits Merchandising and names the CEO.
+#:
+#: ``company_timeline`` and the personnel notices stay all-staff on purpose:
+#: the onboarding intranet page and an internal announcement are all-staff
+#: *by nature*, and gating them would make the strict level less true, not
+#: more strict.
+STRICT_ACCESS: dict[str, str] = {
+    "close_calendar": "finance",
+    "confluence_page": "technology",
+    "peak_trading_review": "commercial_and_finance",
+}
 
 
 @dataclass(frozen=True)

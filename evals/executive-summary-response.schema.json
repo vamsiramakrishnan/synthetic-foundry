@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["responses"],
+  "properties": {
+    "responses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text", "claims"],
+        "properties": {
+          "id": {"type": "string"},
+          "text": {"type": "string"},
+          "claims": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["text", "supporting_fact_ids"],
+              "properties": {
+                "text": {"type": "string"},
+                "supporting_fact_ids": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {"type": "string"}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

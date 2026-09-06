@@ -28,7 +28,8 @@ import pytest
 from worldloom import MonthEndClose, RetailWorld, World
 from worldloom.models import Cell, Chart, ChartKind, Column, Row, Table
 from worldloom.narrative import DeterministicProvider, references
-from worldloom.render import RenderError, docx as docx_renderer, markdown, ooxml
+from worldloom.render import RenderError, ooxml
+from worldloom.render import docx as docx_renderer
 from worldloom.render import pptx as pptx_renderer
 from worldloom.render.values import format_value
 

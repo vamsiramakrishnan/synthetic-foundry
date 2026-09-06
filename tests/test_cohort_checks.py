@@ -18,7 +18,7 @@ the facts directly is what lets the defect exist at all.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -82,7 +82,7 @@ def _at(valuation: str, *, hours: int) -> datetime:
     """A moment inside *valuation*'s run — a week after the quarter ends."""
     year, month = (int(part) for part in valuation.split("-"))
     year, month = (year + 1, 1) if month == 12 else (year, month + 1)
-    return datetime(year, month, 7, tzinfo=timezone.utc) + timedelta(hours=hours)
+    return datetime(year, month, 7, tzinfo=UTC) + timedelta(hours=hours)
 
 
 def _fact(fact_id, kind, period, amount, at, *, supersedes=None):

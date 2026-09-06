@@ -15,15 +15,15 @@ with its first user tends to be shaped by that user's accidents.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from worldloom import World
 from worldloom.models import ArtifactIntent, ArtifactManifestEntry, Authority, Lifecycle
 
-WHEN = datetime(2026, 4, 10, 9, 0, tzinfo=timezone.utc)
-LATER = datetime(2026, 4, 20, 9, 0, tzinfo=timezone.utc)
+WHEN = datetime(2026, 4, 10, 9, 0, tzinfo=UTC)
+LATER = datetime(2026, 4, 20, 9, 0, tzinfo=UTC)
 
 
 def entry(artifact_id: str, *, artifact_type: str = "regulatory_return",
@@ -134,7 +134,7 @@ def test_two_corrections_restate_in_a_chain_not_a_fork(base: World) -> None:
         base,
         entry("ART-9001"),
         entry("ART-9002", created_at=LATER, restates="ART-9001"),
-        entry("ART-9003", created_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        entry("ART-9003", created_at=datetime(2026, 5, 1, tzinfo=UTC),
               restates="ART-9002"),
     )
     assert "restated_twice" not in chained

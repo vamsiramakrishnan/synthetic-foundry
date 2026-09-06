@@ -15,12 +15,14 @@ changes and a total does not, the sheet shows it.
 
 from __future__ import annotations
 
+import itertools
 from datetime import datetime
 from io import BytesIO
 from typing import TYPE_CHECKING
 
+from ..compiler.style import StyleGenome, genome
 from ..models import ArtifactIR, FormulaKind, Table
-from . import Rendered, RenderError, ooxml, slug_for
+from . import Rendered, RenderError, fonts, ooxml, slug_for
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..world import World
@@ -62,6 +64,23 @@ def _column_letter(index: int) -> str:
     return get_column_letter(index)
 
 
+def _genome_for(ir: ArtifactIR) -> StyleGenome:
+    """This workbook's world-derived style genome — see `render/docx.py::
+    _genome_for` for the reasoning. The workbook is analytical rather than
+    editorial, so the genome reaches it through the two places a reader sees
+    identity at all: the header row's fill and text colour, and the shaded
+    subtotal/total rows. Number formats, formulas, and column widths stay
+    exactly what they were — those are the workbook's own contract, and a
+    genome that moved a number would be worse than one that coloured it.
+    """
+    from ..rng import Rng
+
+    raw = ir.metadata.get("style_seed") or ir.metadata.get("worldloom_seed")
+    seed = int(raw) if raw and raw != "None" else 0
+    return genome(Rng(seed).derive("style"))
+
+
+
 class _Layout:
     """Where every row and column of every table landed on the sheet.
 
@@ -71,7 +90,7 @@ class _Layout:
     one-minute one.
     """
 
-    __slots__ = ("rows", "columns", "first_data_row", "sheet")
+    __slots__ = ("columns", "first_data_row", "rows", "sheet")
 
     def __init__(self, tables, sheet_of: dict[str, str], rows_of: dict[str, int]) -> None:
         self.rows = {
@@ -153,7 +172,7 @@ def _formula(
         contiguous = (
             len(resolved) > 1
             and len({(t, c) for t, c, _, _ in resolved}) == 1
-            and all(b[2] == a[2] + 1 for a, b in zip(resolved, resolved[1:]))
+            and all(b[2] == a[2] + 1 for a, b in itertools.pairwise(resolved))
         )
         if contiguous:
             target_table = resolved[0][0]
@@ -200,8 +219,8 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
     """
     openpyxl = _require_openpyxl()
     from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.workbook.defined_name import DefinedName
     from openpyxl.utils import quote_sheetname
+    from openpyxl.workbook.defined_name import DefinedName
 
     workbook = openpyxl.Workbook()
     workbook.remove(workbook.active)
@@ -211,8 +230,15 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
     rows_of = {s.table.key: _HEADER_ROW + 1 for s in sections}
     layout = _Layout([s.table for s in sections], sheet_of, rows_of)
 
-    bold = Font(bold=True)
-    header_fill = PatternFill("solid", fgColor="EEEEEE")
+    g = _genome_for(ir)
+    roles = g.colour_roles
+    face = fonts.named(g.typeface).body
+    # `name=face` only when the family declares one: `None` leaves openpyxl's
+    # own default in force, which is the face a house workbook always had.
+    header_font = Font(bold=True, color=roles["header_text"], name=face)
+    header_fill = PatternFill("solid", fgColor=roles["header_fill"])
+    emphasis_font = Font(bold=True, color=roles["subtotal_text"], name=face)
+    emphasis_fill = PatternFill("solid", fgColor=roles["subtotal_fill"])
 
     for section in sections:
         table = section.table
@@ -223,11 +249,12 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
         if ir.subtitle:
             sheet.cell(row=2, column=1, value=ir.subtitle).font = Font(italic=True, color="666666")
 
-        sheet.cell(row=_HEADER_ROW, column=1, value=table.title).font = bold
-        sheet.cell(row=_HEADER_ROW, column=1).fill = header_fill
+        head = sheet.cell(row=_HEADER_ROW, column=1, value=table.title)
+        head.font = header_font
+        head.fill = header_fill
         for index, column in enumerate(table.columns, start=2):
             header = sheet.cell(row=_HEADER_ROW, column=index, value=column.label)
-            header.font = bold
+            header.font = header_font
             header.fill = header_fill
             header.alignment = Alignment(horizontal="right")
 
@@ -235,7 +262,8 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
             excel_row = rows_of[table.key] + row_offset
             label = sheet.cell(row=excel_row, column=1, value=row.label)
             if row.emphasis:
-                label.font = bold
+                label.font = emphasis_font
+                label.fill = emphasis_fill
 
             for column_index, column in enumerate(table.columns, start=2):
                 cell = row.cells.get(column.key)
@@ -261,7 +289,8 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
                             target.value = cell.value / 100
                     target.number_format = column.number_format
                 if row.emphasis:
-                    target.font = bold
+                    target.font = emphasis_font
+                    target.fill = emphasis_fill
 
         widths = [max(12, len(table.title))] + [max(12, len(c.label) + 2) for c in table.columns]
         for index, width in enumerate(widths, start=1):
@@ -274,10 +303,15 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
             )
 
         sheet.freeze_panes = sheet.cell(row=rows_of[table.key], column=2)
+        if ir.metadata.get("realism_profile") == "ecology/v1" and table.rows:
+            last_column = _column_letter(len(table.columns) + 1)
+            last_row = rows_of[table.key] + len(table.rows) - 1
+            sheet.auto_filter.ref = f"A{_HEADER_ROW}:{last_column}{last_row}"
 
     for table in detail:
-        _detail_sheet(workbook, ir, table, bold=bold, header_fill=header_fill,
-                      Alignment=Alignment, Font=Font)
+        _detail_sheet(workbook, ir, table, header_font=header_font,
+                      header_fill=header_fill, emphasis_font=emphasis_font,
+                      emphasis_fill=emphasis_fill, Alignment=Alignment, Font=Font)
 
     # Named ranges, so a consumer can address the numbers that matter without
     # depending on where they happen to sit.
@@ -302,6 +336,25 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
 
     _add_charts(workbook, ir, layout, sheet_of)
 
+    if ir.metadata.get("realism_profile") == "ecology/v1":
+        control = workbook.create_sheet(title="Document Control")
+        control.sheet_state = "hidden"
+        control_rows = (
+            ("Realism profile", ir.metadata.get("realism_profile")),
+            ("Artifact family", ir.metadata.get("artifact_family")),
+            ("Lifecycle", ir.metadata.get("lifecycle")),
+            ("Revision", ir.metadata.get("revision")),
+            ("Department style", ir.metadata.get("department_style")),
+            ("Artifact density", ir.metadata.get("artifact_density")),
+            ("Style seed", ir.metadata.get("style_seed")),
+            ("Source contract", "Artifact IR and cited facts; no independent business values"),
+        )
+        for row, (label, value) in enumerate(control_rows, start=1):
+            control.cell(row=row, column=1, value=label)
+            control.cell(row=row, column=2, value=value)
+        control.column_dimensions["A"].width = 22
+        control.column_dimensions["B"].width = 64
+
     workbook.properties.title = ir.title
     workbook.properties.subject = ir.subtitle or ""
     workbook.properties.creator = "Worldloom"
@@ -324,7 +377,8 @@ def render(ir: ArtifactIR, detail=()) -> bytes:  # type: ignore[no-untyped-def]
     return ooxml.normalise(buffer.getvalue(), created=stamp)
 
 
-def _detail_sheet(workbook, ir, table, *, bold, header_fill, Alignment, Font):  # type: ignore[no-untyped-def]
+def _detail_sheet(workbook, ir, table, *, header_font, header_fill,
+                  emphasis_font, emphasis_fill, Alignment, Font):  # type: ignore[no-untyped-def]
     """One detail table as a sheet of literal rows plus a computed total.
 
     Values are literals — a thousand generated lines are the data, not a
@@ -341,7 +395,7 @@ def _detail_sheet(workbook, ir, table, *, bold, header_fill, Alignment, Font):  
 
     for index, column in enumerate(table.columns, start=1):
         header = sheet.cell(row=_HEADER_ROW, column=index, value=column.label)
-        header.font = bold
+        header.font = header_font
         header.fill = header_fill
         if column.number_format:
             header.alignment = Alignment(horizontal="right")
@@ -354,14 +408,17 @@ def _detail_sheet(workbook, ir, table, *, bold, header_fill, Alignment, Font):  
                 cell.number_format = column.number_format
 
     total_row = first + len(table.rows)
-    sheet.cell(row=total_row, column=1, value="Total").font = bold
+    label = sheet.cell(row=total_row, column=1, value="Total")
+    label.font = emphasis_font
+    label.fill = emphasis_fill
     for index, column in enumerate(table.columns, start=1):
         if not column.fact_id:
             continue
         letter = _column_letter(index)
         cell = sheet.cell(row=total_row, column=index)
         cell.value = f"=SUM({letter}{first}:{letter}{total_row - 1})"
-        cell.font = bold
+        cell.font = emphasis_font
+        cell.fill = emphasis_fill
         if column.number_format:
             cell.number_format = column.number_format
 
@@ -374,6 +431,10 @@ def _detail_sheet(workbook, ir, table, *, bold, header_fill, Alignment, Font):  
     for index, width in enumerate(widths, start=1):
         sheet.column_dimensions[_column_letter(index)].width = width
     sheet.freeze_panes = sheet.cell(row=first, column=1)
+    if ir.metadata.get("realism_profile") == "ecology/v1" and table.rows and table.columns:
+        sheet.auto_filter.ref = (
+            f"A{_HEADER_ROW}:{_column_letter(len(table.columns))}{total_row - 1}"
+        )
 
 
 def render_all(world: World) -> list[Rendered]:

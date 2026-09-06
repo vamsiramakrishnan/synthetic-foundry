@@ -1,5 +1,6 @@
 ---
 description: Render a Worldloom corpus to files and validate that every document agrees
+tags: [worldloom, rendering, validation]
 ---
 
 Render and validate the corpus at $ARGUMENTS (default `./corpus`).

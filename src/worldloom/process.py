@@ -38,9 +38,10 @@ resumed by replaying its accepted answers through ``open``/``accept``.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, ValidationError
 
@@ -55,9 +56,14 @@ from .episodes import (
     RoleSlotSpec,
 )
 
+if TYPE_CHECKING:
+    from .process_planning.models import Compilation
+
+
 __all__ = [
     "ProcessSeed", "Session", "Brief", "Answer", "load_seed", "open",
     "next_stage", "accept", "resolve", "lint_seed", "lint_steps", "lint_slots",
+    "open_from_catalogue",
 ]
 
 
@@ -117,6 +123,8 @@ class Session:
     kinds: tuple[FactKindSpec, ...] | None = None
     steps: tuple[EventSpec, ...] | None = None
     slots: tuple[RoleSlotSpec, ...] | None = None
+    # Canonical JSON keeps source context immutable across accept/replace.
+    catalogue_context: str | None = None
 
 
 # The next question in process authoring is the protocol's own `Brief` —
@@ -168,6 +176,36 @@ def open(
     )
 
 
+def open_from_catalogue(
+    compilation: Compilation,
+    stream: str,
+    *,
+    engine: str,
+    lob: str,
+    period: Literal["month", "quarter", "year"] = "month",
+) -> Session:
+    """Carry compiled industry factors through the existing authoring cascade.
+
+    The caller must name an installed engine and LOB. Twelve planning overlays
+    do not magically create twelve validated simulation engines. No controls,
+    causal transitions or measurement claims are inferred from source prose.
+    """
+    from . import _install
+    from .process_planning import authoring_context
+
+    _install()
+    context = authoring_context(compilation, stream)
+    seed = ProcessSeed(
+        name="".join(part[:1].upper() + part[1:] for part in stream.split("_")),
+        purpose=f"Author {stream} for {compilation.company.name} from the supplied process factors.",
+        engine=engine, lob=lob, period=period,
+    )
+    findings = lint_seed(seed)
+    if findings:
+        cascade.refuse("seed", findings)
+    return replace(open(seed), catalogue_context=json.dumps(context, sort_keys=True, ensure_ascii=False))
+
+
 def _context(session: Session) -> dict[str, Any]:
     """The company, in every brief — so an answer is written for *this* world."""
     from . import lob as lob_module
@@ -179,6 +217,8 @@ def _context(session: Session) -> dict[str, Any]:
         "purpose": session.purpose,
         "period": session.period,
     }
+    if session.catalogue_context is not None:
+        context["process_catalogue"] = json.loads(session.catalogue_context)
     owning = lob_module.installed().get(session.lob) or lob_module.publish().get(session.lob)
     if owning is not None:
         context["lob_roles"] = {role.key: role.title for role in owning.roles}
@@ -306,7 +346,8 @@ def load_seed(source: str | Path | dict[str, Any]) -> ProcessSeed:
 
 def lint_seed(seed: ProcessSeed | dict[str, Any]) -> list[str]:
     """Findings for a process seed before opening."""
-    from . import domains, lob as lob_module
+    from . import domains
+    from . import lob as lob_module
 
     if isinstance(seed, dict):
         try:

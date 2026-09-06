@@ -1,0 +1,47 @@
+# A check, not a bot. This used to run on a codex/* branch, rewrite
+# `process_catalogue.py` through a one-shot packaging migration and push the
+# result back to that branch. The branch is merged and deleted, and the
+# migration was never applied — the runtime reads `catalogue.json`, and the
+# b85 chunks the migration would have switched it to sat unreferenced beside
+# it — so what is left is the part worth keeping: the catalogue's own
+# invariants and the supplied 12-industry oracle, verified on every change to
+# either, with read-only credentials.
+name: process catalogue check
+on:
+  pull_request:
+    paths:
+      - .github/workflows/process-catalogue-check.yml
+      - src/worldloom/process_catalogue.py
+      - src/worldloom/_data/process-catalogue/**
+      - tests/test_process_catalogue.py
+      - tools/compile_processes.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/process-catalogue-check.yml
+      - src/worldloom/process_catalogue.py
+      - src/worldloom/_data/process-catalogue/**
+      - tests/test_process_catalogue.py
+      - tools/compile_processes.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  catalogue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install focused test dependencies
+        run: python -m pip install -e '.[dev]' ruff==0.15.8
+      - name: Lint process catalogue integration
+        run: ruff check src/worldloom/process_catalogue.py tests/test_process_catalogue.py tools/compile_processes.py
+      - name: Test process catalogue invariants
+        run: pytest -q tests/test_process_catalogue.py
+      - name: Verify supplied 12-industry oracle
+        run: python tools/compile_processes.py --verify

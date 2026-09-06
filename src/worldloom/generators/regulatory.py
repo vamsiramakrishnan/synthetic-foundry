@@ -37,10 +37,9 @@ The episode's shape, and why each part is there:
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-
-from collections.abc import Mapping
 
 from ..ids import Minter
 from ..models import Authority, CanonicalFact, EnterpriseEvent, Quantity
@@ -235,14 +234,14 @@ def generate(
     filing_lore = lore_by_target.get("finance/file_over_challenge", [])
     charter_lore = lore_by_target.get("regulatory_filing_signoff", [])
 
-    def event(kind: str, at: datetime, summary: str, *, actors: list[str] = [],
-              services: list[str] = [], systems: list[str] = [],
-              units: list[str] = [], caused_by: list[str] = [],
-              lore: list[str] = []) -> EnterpriseEvent:
+    def event(kind: str, at: datetime, summary: str, *, actors: Sequence[str] = (),
+              services: Sequence[str] = (), systems: Sequence[str] = (),
+              units: Sequence[str] = (), caused_by: Sequence[str] = (),
+              lore: Sequence[str] = ()) -> EnterpriseEvent:
         made = EnterpriseEvent(id=minter.next("EV"), kind=kind, occurred_at=at,
-                               summary=summary, actors=actors, services=services,
-                               systems=systems, business_units=units,
-                               caused_by=caused_by, lore_ids=lore)
+                               summary=summary, actors=list(actors), services=list(services),
+                               systems=list(systems), business_units=list(units),
+                               caused_by=list(caused_by), lore_ids=list(lore))
         events.append(made)
         keys[f"event_{kind}"] = made.id
         return made

@@ -39,14 +39,20 @@ split by site and, independently, across the two cost centres it is coded to.
 Two decompositions that each reconcile to the same parent are a cross-check;
 two independently drawn ones are two contradictions.
 
-**What is deliberately not here, and would be the next increment.** A
+**The movement, which an earlier revision of this docstring deferred.** A
 commitment is a stock, so the reading a contractor's cost report actually opens
 with is its *movement*: closing commitment is opening commitment plus what was
-placed less what was received. Stating that would need a fourth measure
-(commitment placed in the period) and a cross-period resolution of the opening
-balance — the ``prior_shortfall_value`` shape ``procurement_scenarios`` already
-uses. It is worth having and it is a bigger change than making the estate reach
-anything at all, so it is named rather than half-built.
+placed less what was received. That is now stated, through the one grammar
+``generators/stockflow.py`` owns rather than as arithmetic of this module's
+own: the opening balance resolves from the previous close's record (the
+``prior_shortfall_value`` shape ``procurement_scenarios`` already uses), what
+was received against orders *is* the period's third-party spend — commitment
+converts to spend at the gate, and a separate "received against orders" figure
+would be that same number stated twice — and the placed figure is derived so
+the identity holds to the unit. Deriving placed rather than the closing keeps
+the order book mean-reverting: the closing position is still this period's own
+draw, so twelve months are twelve differently-sized books rather than a random
+walk off the ``commitment_cover`` band.
 """
 
 from __future__ import annotations
@@ -60,6 +66,8 @@ from ..models import Authority, CanonicalFact, Category, Quantity, Site
 from ..parameters import DEFAULT, Parameters, Span
 from ..rng import Rng
 from .finance import allocate
+from .stockflow import StockFlowSpec
+from .stockflow import close as movement_close
 
 #: What a site's format makes it, in this vertical's own words.
 DELIVERS = "delivers"
@@ -174,6 +182,30 @@ SPEND = "p2p.third_party_spend"
 COMMITMENT = "p2p.open_commitment"
 MATERIALS = "p2p.materials_on_hand"
 
+# The commitment movement's two new parts. The other two parts are reused, not
+# duplicated: the movement's closing balance IS `p2p.open_commitment` (its
+# registered meaning — "placed and not yet received at close" — is the closing
+# stock, and a second kind stating the same figure would be the copy-that-can-
+# drift AGENTS.md forbids at the fact level), and what was received against
+# orders IS `p2p.third_party_spend` (receipted in the period at contracted
+# rates — the event that converts commitment into spend). `p2p.ordered_value`
+# was considered for the placed leg and refused: it is one two-line subcontract
+# package, and sizing the group's placed total from it is exactly the "whole
+# cost base a function of one order" coupling `procurement_scenarios` refuses.
+OPENING = "p2p.commitment.opening"
+PLACED = "p2p.commitment.placed"
+
+#: The movement, as data, in the one grammar `generators/stockflow.py` owns.
+#: The generator derives with `stockflow.close` and the check group verifies
+#: with `stockflow.verify` against this same spec, so the two cannot state two
+#: versions of the identity.
+MOVEMENT = StockFlowSpec(
+    opening=OPENING,
+    inflows=(PLACED,),
+    outflows=(SPEND,),
+    closing=COMMITMENT,
+)
+
 
 @dataclass(frozen=True)
 class EstatePosition:
@@ -187,6 +219,14 @@ class EstatePosition:
     spend_total: int
     commitment_total: int
     materials_total: int
+
+    opening_total: int
+    """The order book brought forward — last close's ``commitment_total``, or a
+    drawn balance for the first period on record."""
+
+    placed_total: int
+    """Orders placed in the period: derived so the movement closes exactly,
+    ``commitment_total == opening_total + placed_total − spend_total``."""
 
 
 class _Ledger:
@@ -239,6 +279,7 @@ def generate(
     receipting_system_id: str,
     general_ledger_id: str,
     lore_by_target: dict[str, list[str]] | None = None,
+    opening_commitment: int | None = None,
     physics: Parameters = DEFAULT,
 ) -> EstatePosition:
     """The month's position across the divisions, the categories and the estate.
@@ -254,6 +295,11 @@ def generate(
     total and the rows under it cannot disagree. ``allocate`` is
     largest-remainder, so the integer parts add to the integer whole exactly and
     there is no residual line to explain.
+
+    ``opening_commitment`` is the group's closing commitment at the previous
+    close, resolved by the scenario from the world's own record — the
+    ``prior_shortfall_value`` pattern — and ``None`` means this is the first
+    period on record, so the opening balance is drawn rather than inherited.
     """
     physics = _physics(physics)
     lore_by_target = lore_by_target or {}
@@ -269,6 +315,32 @@ def generate(
     spend_total = int(round(monthly * bought_in, -2))
     cover = physics.number("procurement.estate.commitment_cover", rng.derive("cover"))
     commitment_total = int(round(spend_total * cover, -2))
+
+    # -- the commitment movement ---------------------------------------------
+    # Opening is last close's book where a record exists; the first period on
+    # record draws one from the same `commitment_cover` physics under its own
+    # stream — where the book *stood* and where it *runs* are the same quantity
+    # asked at two dates, and a second span would have been one knob wearing
+    # two names in `worldloom pack params`.
+    if opening_commitment is None:
+        opening_total = int(round(spend_total * physics.number(
+            "procurement.estate.commitment_cover", rng.derive("opening")), -2))
+    else:
+        opening_total = opening_commitment
+    # Placed is derived and the closing keeps its own draw, not the other way
+    # round, so the book mean-reverts to the cover band instead of random-
+    # walking off it over `--periods 12`. The one corner: a heavy opening book
+    # meeting a light target would need *negative* placing — an order-
+    # cancellation workflow this vertical does not model (the same posture as
+    # check (b)'s refusal of over-receipt) — so the group places nothing and
+    # the book runs down to `opening − received` instead of to the draw.
+    placed_total = commitment_total - opening_total + spend_total
+    if placed_total < 0:
+        placed_total = 0
+    # Every figure is a multiple of 100 by the roundings above, so this holds
+    # to the unit and the validator's exact `==` (never a tolerance) can too.
+    commitment_total = movement_close(opening_total, (placed_total,), (spend_total,))
+
     holding = physics.number("procurement.estate.materials_pct", rng.derive("materials"))
     materials_total = int(round(spend_total * holding, -2))
     indirect = physics.number("procurement.estate.indirect_share", rng.derive("indirect"))
@@ -303,6 +375,14 @@ def generate(
     # -- group ---------------------------------------------------------------
     ledger.money(SPEND, company_id, spend_total,
                  source=receipting_system_id, lore=rollout)
+    # The movement pair, group-subject only: the carry-forward is a claim about
+    # the company's book, and stating it per site would assert eighty-one
+    # opening balances no system of record holds. The received leg is the SPEND
+    # fact above — one figure, cited twice, never stated twice.
+    ledger.money(OPENING, company_id, opening_total,
+                 source=procure_system_id, lore=contract)
+    ledger.money(PLACED, company_id, placed_total,
+                 source=procure_system_id, lore=contract)
     ledger.money(COMMITMENT, company_id, commitment_total,
                  source=procure_system_id, lore=contract)
     if holders:
@@ -392,11 +472,13 @@ def generate(
         spend_total=spend_total,
         commitment_total=commitment_total,
         materials_total=materials_total,
+        opening_total=opening_total,
+        placed_total=placed_total,
     )
 
 
 __all__ = [
     "COMMITMENT", "COMMITMENT_ROLES", "COMMITS", "DELIVERS", "EstatePosition",
-    "HOLDS", "MATERIALS", "MATERIALS_ROLES", "SPANS", "SPEND", "SPEND_ROLES",
-    "generate", "role_of",
+    "HOLDS", "MATERIALS", "MATERIALS_ROLES", "MOVEMENT", "OPENING", "PLACED",
+    "SPANS", "SPEND", "SPEND_ROLES", "generate", "role_of",
 ]

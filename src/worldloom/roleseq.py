@@ -33,10 +33,10 @@ anything about order, which is the failure mode at the coarse end:
 
     projection      symbols  windows  admitted  novel   shuffles admitted
     heading             104       73        44      1        0 / 1,737
-    kinds                72       63       114     76        0 / 1,724
-    scope+kinds          73       64        85     47        0 / 1,727
-    kind                 54       59       265    229        0 / 1,724
-    scope+kind  ←        56       60       196    159        0 / 1,727
+    kinds                78       68       143    100        0 / 1,724
+    scope+kinds          79       69       114     71        0 / 1,727
+    kind                 60       64       294    253        0 / 1,724
+    scope+kind  ←        62       65       225    183        0 / 1,727
     domain               15       27     1,089  1,060       48 / 914    5.3%
     scope+domain         18       30       836    806       48 / 926    5.2%
     scope                 3        8       282    268       44 / 158   27.8%
@@ -44,17 +44,19 @@ anything about order, which is the failure mode at the coarse end:
 The forty-third outline is insurance's ``underwriting_result_commentary``, which
 arrived when that vertical's estate was made load-bearing. It is worth naming
 here because of what it did *not* move: one more document added two symbols and
-one admitted sequence at ``scope+kind`` and left ``novel`` at 159 exactly, which
-is the table's own claim about itself — novelty comes from recombining roles the
-fleet already has, so a document whose sections project onto existing roles adds
-reach without adding shapes.
+one admitted sequence at ``scope+kind`` and left ``novel`` exactly where it
+stood, which is the table's own claim about itself — novelty comes from
+recombining roles the fleet already has, so a document whose sections project
+onto existing roles adds reach without adding shapes.
 
 The ``heading`` row is the control, and it reads 104/73/44/1 rather than the
 84/63/34/1 ``adjacency``'s docstring publishes because this wave gave ten policies
 their own headings — eighteen more strings, nine more admitted sequences, and
 **still one novel one**, which is the finding restated: heading text does not
-recombine however much of it there is. Everything below that row is untouched by
-the rename, because a policy's kinds and scope did not move.
+recombine however much of it there is. The rename moved nothing below that row,
+because a policy's kinds and scope did not move with it; the kind-bearing rows
+have since moved exactly once, for the per-policy taxonomy fix recorded below,
+which is a change to the kinds themselves and not to what anything is called.
 
 ``scope+kind`` — scope, then the first kind with its trailing dot stripped, e.g.
 ``unit:financial.revenue`` — is the pick, and the two boundaries either side of it
@@ -68,17 +70,17 @@ purpose, which is the exact failure ``adjacency`` was built to avoid. Everything
 at ``kind`` granularity or finer admits **zero** shuffles.
 
 *The fine boundary is between ``kind`` and ``scope+kind``, and dropping scope
-costs more than the extra 70 sequences are worth.* ``cfo_variance_memo`` opens
+costs more than the extra 70 novel sequences are worth.* ``cfo_variance_memo`` opens
 ``Position`` (group) then ``By business unit`` (unit) over identical kinds. Without
 scope those are one symbol, so the model learns a **self-loop** on
-``financial.revenue`` and most of the jump from 195 to 264 is that loop firing
+``financial.revenue`` and most of the jump from 225 to 294 is that loop firing
 repeatedly — sequences that say "state the group position, then state it again".
 Scope is one bit and it is the bit that distinguishes the two sections in this
 repository's most-read memo.
 
-``kinds`` (the full tuple) is the "too fine" end the exercise predicted: 72
-symbols against 104 headings is barely a collapse at all, and it buys 76 novel
-sequences against 159.
+``kinds`` (the full tuple) is the "too fine" end the exercise predicted: 78
+symbols against 104 headings is barely a collapse at all, and it buys 100 novel
+sequences against 183.
 
 **Cross-vertical splices are refused by tagging the symbol**, not by partitioning
 the examples into four models and not by handing the other verticals' symbols to
@@ -89,25 +91,36 @@ under every tag, and a policy section can therefore splice into a retail close
 *and* into a bank's committee pack while the close and the pack stay apart. And
 it makes the guard structural rather than optional: a caller who forgets to pass
 ``forbid`` gets a cross-vertical splice, whereas a caller who forgets a tag gets a
-``KeyError`` from the catalogue. Measured at ``scope+kind``: **414 sequences are
+``KeyError`` from the catalogue. Measured at ``scope+kind``: **443 sequences are
 admitted by the pooled model, 218 of them are refused** because no single company
-issues all their sections, leaving the 196 above. Per vertical those 196 shapes
-account for 335 (vertical, shape) pairs — retail 146, banking 89, insurance 51,
-procurement 49 — of which 267 are novel.
+issues all their sections, leaving the 225 above. Per vertical those 225 shapes
+account for 451 (vertical, shape) pairs — retail 175, banking 118, insurance 80,
+procurement 78 — of which 363 are novel.
 
-**What the projection still cannot see, stated because it shows in the output.**
-Every section of every HR policy carries the prefix ``policy.hr.``, so leave and
-remote work are one role at every projection here — the full kind tuple included
-— and 36 of the 159 novel shapes therefore splice two policies of one function
-into a document a company would issue as two. The fix is a finer kind
-(``policy.hr.leave.`` against ``policy.hr.remote_work.``), which lives in
-``policies.py`` and ``factkinds.py``; ``tests/test_roleseq.py`` fences the
-limitation so that closing it is noticed rather than silently improving a number.
-The other 123 novel shapes do not touch a policy section.
+**A defect this projection used to have, and what closing it measured.** Every
+section of every HR policy once carried the area-wide prefix ``policy.hr.``, so
+leave and remote work were one role at every projection here — the full kind
+tuple included — and 36 of the then-159 novel shapes touched a policy symbol
+that conflated an area's policies: 30 self-loop runs whose realisations drew
+headings from two policies at once (``any:policy.hr`` ×3 realised as a
+leave/remote-work chimera, and likewise corporate, finance and technology), and
+6 hybrids splicing the onboarding checklist's access section into the
+technology policies it merely cites. ``policies.kind_of`` now puts the policy's
+own name in the kind (``policy.hr.leave.`` against ``policy.hr.remote_work.``),
+and the numbers moved in a direction worth stating plainly: ``novel`` *rose*,
+159 → 183, because ten per-policy symbols mint more self-loop runs (60, from
+30) than one-per-area did — but every one of those runs is now unrealisable,
+since a per-policy symbol owns exactly two headings and ``realise`` never uses
+one twice, and the 6 hybrids are gone outright. So the realisable novel space
+lost every policy chimera and gained nothing spurious; the enumerator's count
+went up while the documents it can actually produce got strictly more honest.
+The 123 novel shapes that touch no policy section are unchanged, as is the
+``heading`` control row — a kind is not a heading. ``tests/test_roleseq.py``
+fenced the defect until the prefix closed it, and now pins the separation.
 
 **Why lengths are bounded and realisation is not.** The policy family contributes
-five genuine self-loops (``any:policy.finance`` follows itself: purpose, then
-responsibilities, both over the same kind), so the admitted *symbol* set is
+ten genuine self-loops (``any:policy.finance.expense`` follows itself: purpose,
+then responsibilities, both over the same kind), so the admitted *symbol* set is
 infinite and any count of it is a count at some length. ``admitted`` therefore
 takes ``max_length`` and says so. Realisation needs no such bound, because
 ``realise`` may not use one heading twice: a symbol appearing k times needs k
@@ -443,7 +456,7 @@ def admitted(model: Adjacency, *, max_length: int) -> tuple[tuple[Symbol, ...], 
     """Every sequence of at most *max_length* symbols that *model* admits, sorted.
 
     Exhaustive, by forward closure over prefixes rather than by generate-and-test
-    — the space over 56 symbols at length 8 is 10^13 and the admitted set is 414.
+    — the space over 62 symbols at length 8 is 10^14 and the admitted set is 443.
 
     *max_length* is required, with no default, because on a role model there is no
     honest one: the policy family's self-loop makes the admitted set infinite, and
@@ -504,7 +517,7 @@ def refused(
     The cross-vertical guard, measured rather than asserted. Takes untagged
     sequences — the shapes a *pooled* model would admit — and reports the ones
     that survive only by borrowing sections from two companies at once. 218 of
-    414 at the shipped projection.
+    443 at the shipped projection.
     """
     ordered = sorted(tags)
     out: list[tuple[Symbol, ...]] = []

@@ -15,7 +15,6 @@ import pytest
 
 from worldloom.render import docx
 
-
 #: Every type `facets`/`planning` can put in a plan beyond the close's own.
 FILINGS = (
     "service_impact_assessment",

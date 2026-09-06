@@ -26,7 +26,7 @@ import pytest
 from worldloom import MonthEndClose, RetailWorld, World
 from worldloom.actors import ScriptedActorProvider
 from worldloom.asymmetry import cases as asymmetry_cases
-from worldloom.conversation import derive
+from worldloom.conversation import ConversationRefresh, derive
 from worldloom.documents import written_at
 from worldloom.ids import Minter
 
@@ -99,14 +99,14 @@ def test_the_same_fact_reaches_different_people_at_different_times(spoken: World
 def test_every_channel_the_model_declares_is_actually_used(spoken: World) -> None:
     """A channel nothing ever takes is a branch nobody has exercised.
 
-    ``artifact`` is deliberately absent from the expectation: during a build
-    nothing has been rendered, so ``observations_for`` finds no readable document
-    and that channel cannot fire. It is named here so its absence stays a
-    recorded finding rather than becoming an unnoticed hole.
+    ``artifact`` here is the narrow originating-record channel: the first
+    artifact carrying an eventless fact. It does not imply that rendered files
+    were read during the build.
     """
     used = {record.source_type for record in spoken.observations}
-    assert {"participant", "trigger", "system_of_record", "message", "duty"} <= used
-    assert "artifact" not in used
+    assert {
+        "participant", "trigger", "system_of_record", "message", "artifact", "duty"
+    } <= used
 
 
 def test_a_message_channel_observation_names_the_message(spoken: World) -> None:
@@ -185,6 +185,79 @@ def test_the_corpus_validates(spoken: World) -> None:
     assert report.ok, [f"{v.code} {v.subject}: {v.detail}" for v in report.violations]
 
 
+def test_policy_authors_hold_the_rules_at_publication() -> None:
+    """A standing policy has no triggering event; authorship is its origin."""
+    world = RetailWorld(seed=8128, policies="full").build().run(
+        MonthEndClose(period=PERIOD, conversations=True)
+    )
+    held = _held(world)
+    facts = {fact.id: fact for fact in world.facts}
+    policy_intents = [
+        intent for intent in world.artifact_intents
+        if intent.artifact_type.endswith("policy")
+        or intent.artifact_type in {"delegation_of_authority", "code_of_conduct"}
+    ]
+    assert policy_intents
+    covered = {record.observer_id for record in world.observations}
+    checked = 0
+    for intent in policy_intents:
+        if intent.author_id not in covered:
+            continue
+        deadline = written_at(intent, facts)
+        for fact_id in intent.required_fact_ids:
+            assert held[(intent.author_id, fact_id)] <= deadline  # type: ignore[operator]
+            checked += 1
+    assert checked
+    assert world.validate().ok
+
+
+def test_a_refresh_covers_records_appended_after_the_close() -> None:
+    """Exercise the CLI timeline order: conversations, then workforce records."""
+    from worldloom.workforce import HiringRound, PerformanceCycle
+
+    world = RetailWorld(seed=8128, policies="full").build().run(
+        MonthEndClose(period=PERIOD, conversations=True)
+    )
+    world = world.run(HiringRound(period=PERIOD, count=1))
+    world = world.run(PerformanceCycle(period=PERIOD, pairs=1))
+    before = len(world.observations)
+    world = world.run(ConversationRefresh())
+
+    workforce_types = {
+        "job_requisition", "offer_letter", "onboarding_checklist",
+        "performance_review", "one_to_one_note",
+    }
+    facts = {fact.id: fact for fact in world.facts}
+    held = _held(world)
+    covered = {record.observer_id for record in world.observations}
+    checked = 0
+    for intent in world.artifact_intents:
+        if intent.artifact_type not in workforce_types or intent.author_id not in covered:
+            continue
+        deadline = written_at(intent, facts)
+        for fact_id in intent.required_fact_ids:
+            assert held[(intent.author_id, fact_id)] <= deadline  # type: ignore[operator]
+            checked += 1
+    assert checked
+    assert len(world.observations) > before
+    assert world.validate().ok
+
+
+def test_a_refresh_replays_exactly() -> None:
+    from worldloom.recipe import rebuild
+    from worldloom.workforce import HiringRound
+
+    world = RetailWorld(seed=8128).build().run(
+        MonthEndClose(period=PERIOD, conversations=True)
+    )
+    world = world.run(HiringRound(period=PERIOD, count=1))
+    world = world.run(ConversationRefresh())
+
+    replayed = rebuild(world.recipe)
+    assert list(replayed.observations) == list(world.observations)
+    assert list(replayed.messages) == list(world.messages)
+
+
 # -- the question it buys --------------------------------------------------
 
 
@@ -237,6 +310,18 @@ def test_every_asymmetry_case_cites_a_fact_some_document_carries(
     assert asymmetry
     for case in asymmetry:
         assert set(case.expected_fact_ids) <= carried
+
+
+def test_every_asymmetry_cutoff_is_inside_the_expected_facts_validity(
+    spoken: World, asymmetry: tuple
+) -> None:
+    facts = {fact.id: fact for fact in spoken.facts}
+    for case in asymmetry:
+        assert case.temporal_cutoff is not None
+        assert all(
+            facts[fact_id].holds_at(case.temporal_cutoff)
+            for fact_id in case.expected_fact_ids
+        )
 
 
 def test_the_derived_cases_reached_the_corpus(spoken: World, asymmetry: tuple) -> None:
@@ -342,7 +427,6 @@ def test_the_validator_catches_a_doctored_ledger(spoken: World, code: str, tampe
     A validator nobody has seen fail is a validator nobody has tested.
     """
     from dataclasses import replace
-
     from datetime import timedelta
 
     observations = list(spoken.observations)

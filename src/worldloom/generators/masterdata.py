@@ -48,11 +48,12 @@ from __future__ import annotations
 import json
 import unicodedata
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..rng import Rng
 
 #: The component pools, read once at import — `locales._vocabulary_pack`'s
@@ -258,6 +259,17 @@ def from_document(payload: Mapping[str, Any]) -> MasterData:
 #: that was asked for — `Parameters.with_overrides`'s argument.
 REQUEST_KEYS = frozenset({"vendors", "customers", "skus", "identifiers"})
 
+#: The largest request the committed vocabulary can satisfy without repeating
+#: a supposedly unique business or item name.  This belongs at the request
+#: boundary, not only in ``generate``: company specifications and SDK
+#: blueprints promise to reject an impossible shape before an expensive world
+#: build begins.
+REQUEST_LIMITS = {
+    "vendors": len(_VOCAB["company_stems"]) * len(_VOCAB["trades"]),
+    "customers": len(_VOCAB["company_stems"]) * len(_VOCAB["trades"]),
+    "skus": len(_VOCAB["sku_qualifiers"]) * len(_VOCAB["sku_nouns"]),
+}
+
 
 def check_request(request: Mapping[str, Any]) -> dict[str, int]:
     """A ``master_data`` request normalised, or a ValueError naming the defect.
@@ -284,7 +296,17 @@ def check_request(request: Mapping[str, Any]) -> dict[str, int]:
             raise ValueError(f"master_data.{key} is a count, and {value} is not one")
         if key == "identifiers" and value not in (0, 1):
             raise ValueError(f"master_data.identifiers is a switch, 0 or 1; got {value}")
+        elif key in REQUEST_LIMITS and value > REQUEST_LIMITS[key]:
+            raise ValueError(
+                f"master_data.{key} asks for {value} unique rows, but the"
+                f" committed vocabulary can compose only {REQUEST_LIMITS[key]}"
+            )
         counts[key] = value
+    if counts.get("skus", 0) and not counts.get("vendors", 0):
+        raise ValueError(
+            "master_data.skus are children of vendors; asking for skus with"
+            " vendors=0 would mint rows whose parent table does not exist"
+        )
     return counts
 
 
@@ -551,5 +573,6 @@ def applied(world: Any, request: Mapping[str, Any] | None, *,
 
 __all__ = [
     "CONTACT_POOL_SIZE", "Contact", "Customer", "MasterData", "REQUEST_KEYS",
-    "Sku", "Vendor", "applied", "check_request", "from_document", "generate",
+    "REQUEST_LIMITS", "Sku", "Vendor", "applied", "check_request",
+    "from_document", "generate",
 ]

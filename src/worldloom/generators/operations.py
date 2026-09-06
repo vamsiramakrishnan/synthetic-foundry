@@ -13,14 +13,21 @@ than overwritten.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Protocol
 
 from .. import locales
 from ..ids import Minter
-from ..models import Authority, CanonicalFact, EnterpriseEvent, FiscalPeriod, Quantity, fiscal_period
+from ..models import (
+    Authority,
+    CanonicalFact,
+    EnterpriseEvent,
+    FiscalPeriod,
+    Quantity,
+    fiscal_period,
+)
 from ..parameters import DEFAULT, Parameters
 from ..rng import Rng
 from . import episode_text
@@ -495,7 +502,15 @@ class Calendar(Protocol):
     spelled (ISO, see the locales module on why that stays closed).
     """
 
-    fiscal_year_start_month: int
+    # A read-only property rather than a bare attribute, because a bare
+    # attribute in a Protocol demands a *settable* member — and ``Locale`` is a
+    # frozen dataclass, so structural typing refused the very type this
+    # Protocol exists to admit. Nothing writes a calendar's start month (the
+    # close reads it once, at `fiscal_period` time), so read-only is the honest
+    # contract, and it is what let mypy clear this module and every scenario
+    # module that passes a ``Locale`` in.
+    @property
+    def fiscal_year_start_month(self) -> int: ...
 
     def is_business_day(self, day: date) -> bool: ...
 
@@ -566,7 +581,7 @@ def period_end(period: str) -> date:
 
 
 def _at(day: date, hour: int, minute: int) -> datetime:
-    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=timezone.utc)
+    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=UTC)
 
 
 def _text(minter: Minter, kind: str, subject: str, text: str, *, at: datetime,
@@ -742,7 +757,15 @@ def _incident_chain(
 
     detected = _at(day, 8, physics.integer("ops.incident.detected_minute", rng))
     raised = detected + timedelta(minutes=physics.integer("ops.incident.raise_minutes", rng))
-    hypothesised = detected + timedelta(minutes=physics.integer("ops.incident.hypothesis_minutes", rng))
+    # Physics axes are independently authorable.  A fast organisation may put
+    # the hypothesis span below the ticket-raising span, but the recorded
+    # hypothesis causally depends on that ticket and therefore cannot predate
+    # it.  Preserve the stated detection-to-hypothesis tempo whenever it is
+    # feasible and meet the chronology boundary when it is not.
+    hypothesised = max(
+        raised,
+        detected + timedelta(minutes=physics.integer("ops.incident.hypothesis_minutes", rng)),
+    )
     ruled_out = hypothesised + timedelta(minutes=physics.integer("ops.incident.rule_out_minutes", rng))
     confirmed = ruled_out + timedelta(minutes=physics.integer("ops.incident.confirm_minutes", rng))
     worked_around = confirmed + timedelta(minutes=physics.integer("ops.incident.workaround_minutes", rng))
@@ -763,12 +786,13 @@ def _incident_chain(
     # format belongs to the ticketing system, not to the world's physics.
     incident_ref = f"INC{rng.integer(10_000, 99_999):07d}"
 
-    def event(kind: str, at: datetime, summary: str, *, actors: list[str], services: list[str] = [],
-              systems: list[str] = [], units: list[str] = [], caused_by: list[str] = [],
-              lore: list[str] = []) -> EnterpriseEvent:
+    def event(kind: str, at: datetime, summary: str, *, actors: list[str], services: Sequence[str] = (),
+              systems: Sequence[str] = (), units: Sequence[str] = (), caused_by: Sequence[str] = (),
+              lore: Sequence[str] = ()) -> EnterpriseEvent:
         made = EnterpriseEvent(id=minter.next("EV"), kind=kind, occurred_at=at, summary=summary,
-                               actors=actors, services=services, systems=systems,
-                               business_units=units, caused_by=caused_by, lore_ids=lore)
+                               actors=actors, services=list(services), systems=list(systems),
+                               business_units=list(units), caused_by=list(caused_by),
+                               lore_ids=list(lore))
         events.append(made)
         return made
 

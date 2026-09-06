@@ -63,17 +63,17 @@ from __future__ import annotations
 
 import json
 import math
-import random
 import secrets
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .ids import content_key
-from .parameters import DEFAULT as DEFAULT_PHYSICS, Parameters, Span
+from .parameters import DEFAULT as DEFAULT_PHYSICS
+from .parameters import Parameters, Span
 from .providers import PrivacyReceipt, Receipt, digest
+from .rng import Rng
 
 SCHEMA_VERSION = 1
 
@@ -218,7 +218,29 @@ class PriorSnapshot(Model):
 # ---------------------------------------------------------------------------
 
 
-def _laplace(scale: float, draw: random.Random | secrets.SystemRandom) -> float:
+class _Uniform(Protocol):
+    """A source of uniforms on [0, 1) — system entropy, or a seeded stream."""
+
+    def random(self) -> float: ...
+
+
+class _SeededUniform:
+    """Uniforms from a named ``Rng`` stream. Test-only: see ``noise_seed``.
+
+    Through ``worldloom.rng`` rather than the stdlib generator, because the
+    determinism gate (``tests/test_determinism_hygiene.py``) allows ``random``
+    in exactly one module — and it is right to: a second seeded wrapper is a
+    second place a seed can mean something, which is one too many.
+    """
+
+    def __init__(self, seed: int, column: str) -> None:
+        self._rng = Rng(seed, f"calibrate/{column}")
+
+    def random(self) -> float:
+        return self._rng.number(0.0, 1.0)
+
+
+def _laplace(scale: float, draw: _Uniform) -> float:
     """Inverse-CDF Laplace: u ∈ (−½, ½) → −b · sgn(u) · ln(1 − 2|u|)."""
     u = draw.random() - 0.5
     while u == 0.0:  # pragma: no cover — probability 2^-53
@@ -259,10 +281,10 @@ class LaplaceHistogramEstimator:
     def __init__(self, *, noise_seed: int | None = None) -> None:
         self.noise_seed = noise_seed
 
-    def _draw(self, column: str) -> random.Random | secrets.SystemRandom:
+    def _draw(self, column: str) -> _Uniform:
         if self.noise_seed is None:
             return secrets.SystemRandom()
-        return random.Random(int(content_key("calibrate", self.noise_seed, column), 16))
+        return _SeededUniform(self.noise_seed, column)
 
     def estimate(
         self,
@@ -282,7 +304,9 @@ class LaplaceHistogramEstimator:
         bounded = _bounded(rows, schema.unit, schema.contribution_bound)
         per_query = epsilon / len(schema.columns)
         sensitivity = float(schema.contribution_bound)
-        noise_source = "seeded" if self.noise_seed is not None else "system-entropy"
+        noise_source: Literal["system-entropy", "seeded"] = (
+            "seeded" if self.noise_seed is not None else "system-entropy"
+        )
         spans: dict[str, dict[str, Any]] = {}
         quality: dict[str, dict[str, float | int]] = {}
         clipping: dict[str, tuple[float, float]] = {}

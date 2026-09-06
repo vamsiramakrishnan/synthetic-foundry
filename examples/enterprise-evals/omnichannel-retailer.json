@@ -1,0 +1,65 @@
+{
+  "name": "omnichannel-retailer",
+  "industry": "retail",
+  "company_description": "A full-scale omnichannel retailer with stores, ecommerce, merchandising, inventory, suppliers, fulfilment and customer operations.",
+  "workflows": [
+    "merchandising_performance",
+    "inventory_availability",
+    "supplier_trade_funding",
+    "store_fulfilment_operations",
+    "digital_commerce_steering",
+    "customer_service_recovery",
+    "executive_digest"
+  ],
+  "connectors": ["jira", "confluence", "sharepoint", "drive", "servicenow", "salesforce", "email"],
+  "additional_processes": [
+    {"name": "retail_merchandising", "event_kinds": ["trade_agreement", "promotion", "range_review", "forecast"], "connector_entities": {"jira": "issue", "salesforce": "account"}},
+    {"name": "retail_operations", "event_kinds": ["store_incident", "fulfilment_exception", "stockout", "change"], "connector_entities": {"servicenow": "incident", "jira": "issue"}},
+    {"name": "digital_commerce", "event_kinds": ["release", "conversion", "replatform", "customer_case"], "connector_entities": {"jira": "issue", "salesforce": "case"}}
+  ],
+  "additional_workflows": [
+    {
+      "name": "merchandising_performance", "purpose": "category, range, promotion and margin performance review", "process": "retail_merchandising",
+      "sources": [{"connector": "sharepoint", "entities": ["file"]}, {"connector": "drive", "entities": ["file"]}, {"connector": "salesforce", "entities": ["account", "opportunity"]}, {"connector": "email", "entities": ["thread"]}],
+      "destinations": [{"connector": "sharepoint", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["xlsx", "pptx", "pdf"]}, {"connector": "drive", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["xlsx", "pptx"]}],
+      "content_actions": ["extract", "compare", "reconcile", "generate", "render"], "audiences": ["category_manager", "merchandising_director", "commercial_finance"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Reconcile SKU, category, supplier and promotion identifiers, preserve source links and exceptions, then {verification_instruction}.{failure_instruction}"
+    },
+    {
+      "name": "inventory_availability", "purpose": "inventory availability, replenishment and stockout action pack", "process": "retail_operations",
+      "sources": [{"connector": "sharepoint", "entities": ["file"]}, {"connector": "servicenow", "entities": ["incident"]}, {"connector": "jira", "entities": ["issue"]}, {"connector": "email", "entities": ["thread"]}],
+      "destinations": [{"connector": "drive", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["xlsx", "pptx", "pdf"]}, {"connector": "jira", "entities": ["issue"], "operations": ["create", "update", "patch", "upsert"]}],
+      "content_actions": ["summarize", "extract", "reconcile", "generate"], "audiences": ["replenishment_lead", "supply_chain_director", "store_operations"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Match SKU-location records, separate store and fulfilment-centre exceptions, retain owners and due dates, then {verification_instruction}.{failure_instruction}"
+    },
+    {
+      "name": "supplier_trade_funding", "purpose": "supplier agreement, rebate and trade-funding assurance pack", "process": "retail_merchandising",
+      "sources": [{"connector": "confluence", "entities": ["page"]}, {"connector": "sharepoint", "entities": ["file"]}, {"connector": "salesforce", "entities": ["account", "opportunity"]}, {"connector": "email", "entities": ["thread"]}],
+      "destinations": [{"connector": "sharepoint", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["docx", "xlsx", "pdf"]}, {"connector": "email", "entities": ["message"], "operations": ["draft", "reply"], "formats": ["html"]}],
+      "content_actions": ["extract", "compare", "reconcile", "generate"], "audiences": ["buyer", "commercial_manager", "legal_counsel"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Reconcile supplier, agreement and funding-period identifiers; distinguish signed terms from working drafts, then {verification_instruction}.{failure_instruction}"
+    },
+    {
+      "name": "store_fulfilment_operations", "purpose": "store and fulfilment operational exceptions review", "process": "retail_operations",
+      "sources": [{"connector": "servicenow", "entities": ["incident", "change_request"]}, {"connector": "jira", "entities": ["issue"]}, {"connector": "email", "entities": ["thread"]}, {"connector": "drive", "entities": ["file"]}],
+      "destinations": [{"connector": "confluence", "entities": ["page"], "operations": ["create", "update", "patch", "upsert"], "formats": ["html", "markdown"]}, {"connector": "sharepoint", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["xlsx", "pptx", "pdf"]}],
+      "content_actions": ["summarize", "classify", "reconcile", "generate"], "audiences": ["regional_manager", "fulfilment_lead", "operations_director"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Group exceptions by store, fulfilment centre and service; preserve severity, ownership and source tickets, then {verification_instruction}.{failure_instruction}"
+    },
+    {
+      "name": "digital_commerce_steering", "purpose": "digital commerce conversion, release and replatform steering pack", "process": "digital_commerce",
+      "sources": [{"connector": "jira", "entities": ["issue"]}, {"connector": "confluence", "entities": ["page"]}, {"connector": "servicenow", "entities": ["incident", "change_request"]}, {"connector": "salesforce", "entities": ["case"]}],
+      "destinations": [{"connector": "drive", "entities": ["file"], "operations": ["create", "update", "patch", "upsert"], "formats": ["pptx", "xlsx", "pdf"]}, {"connector": "confluence", "entities": ["page"], "operations": ["create", "update", "patch", "upsert"], "formats": ["html", "markdown"]}],
+      "content_actions": ["summarize", "compare", "reconcile", "generate", "render"], "audiences": ["digital_director", "product_lead", "technology_steerco"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Link releases to incidents, customer cases and conversion evidence, preserve unresolved decisions, then {verification_instruction}.{failure_instruction}"
+    },
+    {
+      "name": "customer_service_recovery", "purpose": "customer complaint, service recovery and loyalty risk review", "process": "digital_commerce",
+      "sources": [{"connector": "salesforce", "entities": ["account", "contact", "case"]}, {"connector": "email", "entities": ["thread"]}, {"connector": "servicenow", "entities": ["incident"]}],
+      "destinations": [{"connector": "salesforce", "entities": ["case", "account"], "operations": ["update", "patch", "upsert"]}, {"connector": "email", "entities": ["message"], "operations": ["draft", "reply"], "formats": ["html"]}, {"connector": "drive", "entities": ["file"], "operations": ["create", "update"], "formats": ["xlsx", "pdf"]}],
+      "content_actions": ["summarize", "extract", "classify", "generate"], "audiences": ["customer_care_lead", "loyalty_manager", "operations_manager"],
+      "prompt_template": "Prepare the {period} {purpose} for {company}'s {audience}. Use {sources}. {action_instruction} {output_label} in {destination}. Join customers and cases only by stable identifiers, remove unnecessary personal data, retain consent and escalation state, then {verification_instruction}.{failure_instruction}"
+    }
+  ],
+  "coverage": {"name": "retail-pairwise", "strengths": 2, "connector_counts": [1, 2, 4, 6], "failures": ["none", "ambiguous_join", "missing_stable_id", "permission_denied", "partial_write", "stale_source", "version_conflict"], "max_candidates": 10000000}
+}

@@ -129,11 +129,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field as _field
+from dataclasses import dataclass
+from dataclasses import field as _field
 from pathlib import Path
 from typing import Any
 
-from . import archetypes, domains, facets as facets_module, locales, profiles, roles
+from . import archetypes, domains, locales, profiles, roles
+from . import facets as facets_module
 from .parameters import DEFAULTS, Span, overrides_from
 
 __all__ = [
@@ -462,8 +464,25 @@ def from_document(payload: Mapping[str, Any] | str | Path) -> CompanySpec:
         identity=identity,
         pack=str(payload.get("pack", "")),
         about=str(payload.get("about", "")),
-        rivals=tuple(str(rival) for rival in payload.get("rivals", ())),
+        rivals=_rivals(payload.get("rivals", ())),
     )
+
+
+def _rivals(payload: Any) -> tuple[str, ...]:
+    """The rivals list, refusing the one wrong shape Python would accept.
+
+    A bare string is iterable, so ``"Coles"`` used to sail through the tuple
+    comprehension as five one-character rivals — each then reported ``unmet``
+    against the landscape, which reads as five separate mysteries instead of
+    one wrong shape. Found by a skill-doc smoke run, not by a user, which is
+    the lucky order.
+    """
+    if isinstance(payload, str):
+        raise ValueError(
+            f"rivals is a list of names, not a single string; write"
+            f' ["{payload}"] rather than "{payload}"'
+        )
+    return tuple(str(rival) for rival in payload)
 
 
 def _spans(payload: Mapping[str, Any]) -> dict[str, Span]:
@@ -750,7 +769,7 @@ def resolve(spec: CompanySpec) -> Resolution:
 
         try:
             pack = packs.load(spec.pack)
-        except Exception as exc:            # noqa: BLE001 - reported, not swallowed
+        except Exception as exc:
             found.append(Conflict("pack", "does_not_validate", str(exc)))
         else:
             restated = [
@@ -940,7 +959,7 @@ def resolve(spec: CompanySpec) -> Resolution:
                     # this description — the pool-sizing input; see `pack_of`.
                     people=_people_needed(role_table, domain, shape),
                 )
-            except Exception as exc:        # noqa: BLE001 - reported, not swallowed
+            except Exception as exc:
                 found.append(Conflict("identity", "does_not_compose", str(exc)))
     elif spec.identity is not None and not spec.identity.company_name and pack is None:
         found.append(Conflict(

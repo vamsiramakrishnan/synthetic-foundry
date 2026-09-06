@@ -29,10 +29,10 @@ vertical is capped at a single period and cannot reach any scale. This
 scenario runs over a history by construction, and the reason it can is that
 every fact it carries between months is resolved from the *world's own
 record* rather than from a counter threaded through the recipe — the standing
-rate card, the delegation of authority, the counterparty, and the undelivered
-balance left at the previous close. That is the ``prior_incident_periods``
-pattern ``operations.generate`` already uses, applied to four things instead
-of one.
+rate card, the delegation of authority, the counterparty, the undelivered
+balance left at the previous close, and the order book that close struck. That
+is the ``prior_incident_periods`` pattern ``operations.generate`` already
+uses, applied to five things instead of one.
 """
 
 from __future__ import annotations
@@ -136,6 +136,13 @@ class PurchaseToPayCycle:
             "p2p.open_shortfall_value", company_id, period=prior_period)
         prior_shortfall_quantity = world.authoritative(
             "p2p.open_shortfall_quantity", company_id, period=prior_period)
+        # The order book last close struck, for the commitment movement's
+        # opening balance — the fifth thing a later month inherits, resolved
+        # the same way and period-scoped for the same reason as the shortfall:
+        # every close's commitment fact stays open forever, and an unscoped
+        # lookup would carry forward whichever one sorted last.
+        prior_commitment = world.authoritative(
+            procurement_estate.COMMITMENT, company_id, period=prior_period)
 
         # Drawn from a stream keyed on the *world*, not on the period, and that
         # is the whole reason it is drawn here rather than inside the figure
@@ -237,6 +244,11 @@ class PurchaseToPayCycle:
             receipting_system_id=roles["sys_receipting"],
             general_ledger_id=roles["sys_general_ledger"],
             lore_by_target=index,
+            opening_commitment=(
+                int(prior_commitment.value.amount)
+                if prior_commitment is not None and prior_commitment.value is not None
+                else None
+            ),
             physics=self.physics,
         )
 
@@ -288,7 +300,7 @@ class PurchaseToPayCycle:
 # `recipe.register_step` — the seam insurance paid for and this vertical is
 # the first to get for free. `recipe.py` never learns this name, and
 # `tests/test_procurement.py` pins that it has not.
-from . import recipe as _recipe  # noqa: E402
+from . import recipe as _recipe
 
 _recipe.register_step("PurchaseToPayCycle", ("period",), PurchaseToPayCycle)
 

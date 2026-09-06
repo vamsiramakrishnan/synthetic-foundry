@@ -1,3 +1,10 @@
+---
+title: Structural Diversity
+description: Judge whether a batch is structurally varied or one document photocopied, and move that number
+read-when: Plans are compiled and the question is batch sameness — shapes, entropy, quotas, near-duplicates
+tags: [diversity, fingerprints, entropy, quotas, near-duplicates]
+---
+
 # Diversity
 
 You are here because the corpus is built and compiled — plans exist, sections

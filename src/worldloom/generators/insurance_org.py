@@ -20,12 +20,12 @@ rather than two authorities that are structurally allowed to differ.
 from __future__ import annotations
 
 from collections.abc import Sequence
-
 from dataclasses import dataclass
 from typing import Any
 
 from ..ids import Minter
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import (
     AccessPolicy,
     BusinessUnit,
@@ -45,8 +45,8 @@ from ..rng import Rng
 from ..roles import UnitRole, parse_unit_role
 from . import hierarchy, names
 from .org_builder import (
-    apply_traits,
     accountability_facts,
+    apply_traits,
     form_units,
     founding_milestones,
     mint_people,
@@ -73,6 +73,26 @@ class InsurerOrganisation:
     roles: dict[str, str]
     milestones: tuple[EnterpriseEvent, ...]
     founding_facts: tuple[CanonicalFact, ...]
+
+
+#: ``--access strict``'s moves for this engine — see the retail table
+#: (``generators/organisation.py``) for the shared contract: deterministic by
+#: artifact type, target audiences resolving against this module's own policy
+#: labels, author and approver kept inside (checked at apply time).
+#:
+#: The insurer's two all-staff documents are its two divisional performance
+#: readings, and both stay legible to the people who answer for them:
+#:  * ``underwriting_performance_pack`` — prepared by the financial controller
+#:    (Finance), approved by the CFO (Finance); "finance_and_actuarial" keeps
+#:    both and Audit, and drops Claims and the divisional MDs.
+#:  * ``underwriting_result_commentary`` — argued by a divisional MD
+#:    (Executive) and countersigned by the CEO; "reserving_committee" is the
+#:    narrowest policy here that admits the Executive function, so it is the
+#:    tightest gate that does not lock the author out of their own argument.
+STRICT_ACCESS: dict[str, str] = {
+    "underwriting_performance_pack": "finance_and_actuarial",
+    "underwriting_result_commentary": "reserving_committee",
+}
 
 
 #: The published role keys the reserving episode needs, plus the roles that

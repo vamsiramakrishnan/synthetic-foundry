@@ -28,12 +28,12 @@ policies, and the charter norm instead.
 from __future__ import annotations
 
 from collections.abc import Sequence
-
 from dataclasses import dataclass
 from typing import Any
 
 from ..ids import Minter
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import (
     AccessPolicy,
     BusinessUnit,
@@ -53,8 +53,8 @@ from ..rng import Rng
 from ..roles import UnitRole, parse_unit_role
 from . import hierarchy, names
 from .org_builder import (
-    apply_traits,
     accountability_facts,
+    apply_traits,
     form_units,
     founding_milestones,
     mint_people,
@@ -81,6 +81,25 @@ class BankOrganisation:
     roles: dict[str, str]
     milestones: tuple[EnterpriseEvent, ...]
     founding_facts: tuple[CanonicalFact, ...]
+
+
+#: ``--access strict``'s moves for this engine — see the retail table
+#: (``generators/organisation.py``) for the shared contract: deterministic by
+#: artifact type, target audiences resolving against this module's own policy
+#: labels, author and approver kept inside (checked at apply time).
+#:
+#: Banking plans no all-staff document, so strict tightens the widest gate it
+#: has instead: ``capital_return`` sits under "Prudential regulator", whose
+#: allow list is the whole Executive function beside the preparing lines. A
+#: strict bank limits the filing to the teams that prepare, challenge and
+#: audit it — "finance_and_risk" resolves to "Finance and risk" by exact
+#: label, which keeps the author (regulatory reporting manager, Finance), the
+#: approver (CFO, Finance) and the third line (Audit, whose read access
+#: ``banking._checks`` asserts on every filing) while dropping the divisional
+#: MDs, who are Executive and on nobody's named-exception list.
+STRICT_ACCESS: dict[str, str] = {
+    "capital_return": "finance_and_risk",
+}
 
 
 #: The people a capital-return episode needs, in reporting order. The first

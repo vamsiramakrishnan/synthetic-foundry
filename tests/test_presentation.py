@@ -23,7 +23,12 @@ import io
 import pytest
 
 from worldloom import presentation, recipe
-from worldloom.presentation import Presentation, PresentationSeed, scale_money, suffix_for
+from worldloom.presentation import (
+    Presentation,
+    PresentationSeed,
+    scale_money,
+    suffix_for,
+)
 
 # ---------------------------------------------------------------------------
 # 1. The control: presentation may not move a number
@@ -304,15 +309,25 @@ def test_a_measured_pdf_table_never_breaks_a_token_in_half(memo) -> None:
     pytest.importorskip("reportlab")
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
+    from worldloom.compiler.style import genome
     from worldloom.locales import DEFAULT as DEFAULT_LOCALE
     from worldloom.render import pdf
+    from worldloom.rng import Rng
 
     ir, _ = memo
     section = next(s for s in ir.sections if s.hidden and s.table)
-    widths, size_pt = pdf._measured_layout(section.table, pdf._FRAME_WIDTH_PT, DEFAULT_LOCALE)
+    # The measurement contract, threaded explicitly since `_styles` became
+    # genome-driven: measure in the face and size the cells will actually be
+    # set in. `"house"` keeps this test about token-breaking, not palette.
+    house = genome(Rng(0).derive("style"), archetype="house")
+    cell_pt = pdf._styles(house)["cell"].fontSize
+    widths, size_pt = pdf._measured_layout(
+        section.table, pdf._FRAME_WIDTH_PT, DEFAULT_LOCALE,
+        font=pdf._styles(house)["cell_header"].fontName, size=cell_pt,
+    )
 
     assert abs(sum(widths) - pdf._FRAME_WIDTH_PT) < 0.5, "the table must fill its frame"
-    assert size_pt <= pdf._CELL_PT and size_pt >= pdf._CELL_MIN_PT
+    assert size_pt <= cell_pt and size_pt >= pdf._CELL_MIN_PT
 
     columns = [[section.table.title] + [row.label for row in section.table.rows]]
     for spec in section.table.columns:
@@ -320,9 +335,10 @@ def test_a_measured_pdf_table_never_breaks_a_token_in_half(memo) -> None:
             str((row.cells.get(spec.key).value if row.cells.get(spec.key) else "") or "")
             for row in section.table.rows
         ])
+    header_face = pdf._styles(house)["cell_header"].fontName
     for width, texts in zip(widths, columns):
         widest = max(
-            (stringWidth(token, pdf._CELL_FONT, size_pt)
+            (stringWidth(token, header_face, size_pt)
              for text in texts if text for token in str(text).split()),
             default=0.0,
         )

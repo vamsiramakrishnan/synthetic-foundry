@@ -37,7 +37,8 @@ its graph.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field as _field, replace
+from dataclasses import dataclass, replace
+from dataclasses import field as _field
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +47,7 @@ from pydantic import Field
 from . import cascade
 from .cascade import Brief, CascadeModel
 from .models import ConstraintKind, LoreConstraint
-from .roles import Role, to_rows
+from .roles import Role
 
 __all__ = [
     "LobSeed", "Lob", "RoleSpec", "Responsibility", "SlotBinding",

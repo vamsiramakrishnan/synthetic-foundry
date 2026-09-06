@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import replace
+from datetime import UTC
 
 import pytest
 
@@ -37,6 +38,8 @@ from worldloom.generators.procurement_estate import (
     COMMITMENT_ROLES,
     MATERIALS,
     MATERIALS_ROLES,
+    OPENING,
+    PLACED,
     SPEND,
     SPEND_ROLES,
     role_of,
@@ -342,6 +345,179 @@ def test_a_yard_billed_for_a_month_of_subcontract_spend_trips_the_check(
     )
     tampered = retyped(compiled, fact.id, kind=SPEND)
     assert "site_states_a_measure_its_format_cannot_own" in codes(tampered)
+
+
+# ---------------------------------------------------------------------------
+# The commitment movement
+# ---------------------------------------------------------------------------
+#
+# The increment `procurement_estate`'s docstring deferred, held to the same two
+# halves as the estate itself: the movement *closes exactly* (the stock-flow
+# grammar, with `==` and never a tolerance — the validator's own tolerance
+# would absorb a slide back to round-and-hope, so these assertions must not
+# borrow it), and it *reaches the rendered page* as a sheet a reader opens.
+
+
+def test_the_movement_closes_exactly_in_every_month(history: World) -> None:
+    """closing == opening + placed − received, to the unit, every period."""
+    company = history.company.id
+    for period in ("2026-03", "2026-04", "2026-05"):
+        opening = figures(history, OPENING, period)[company]
+        placed = figures(history, PLACED, period)[company]
+        received = figures(history, SPEND, period)[company]
+        closing = figures(history, COMMITMENT, period)[company]
+        assert closing == opening + placed - received, period
+
+
+def test_the_opening_balance_is_last_months_closing(history: World) -> None:
+    """The carry that makes three months one account rather than three
+    photographs — the whole reason the movement exists."""
+    company = history.company.id
+    for earlier, later in (("2026-03", "2026-04"), ("2026-04", "2026-05")):
+        assert figures(history, OPENING, later)[company] \
+            == figures(history, COMMITMENT, earlier)[company], (earlier, later)
+
+
+def test_the_first_month_on_record_still_states_an_opening(world: World) -> None:
+    """A single-period world is not exempt from the grammar: the opening is
+    drawn (there is no earlier close to inherit from), the movement still
+    closes, and only the carry clause is vacuously clean — correctly, because
+    continuity is a claim about two observations and this world holds one.
+    `test_stockflow.py` proves that vacuity is not a hole: the identity is
+    still checked, and breaking it in a one-period world still fires."""
+    company = world.company.id
+    opening = figures(world, OPENING)[company]
+    placed = figures(world, PLACED)[company]
+    assert opening > 0
+    assert placed >= 0
+    assert figures(world, COMMITMENT)[company] \
+        == opening + placed - figures(world, SPEND)[company]
+    assert "stock_tears_between_periods" not in codes(world)
+
+
+def test_the_movement_reaches_the_rendered_workbook(compiled: World) -> None:
+    """The estate's own bar, applied to the movement: not planned, rendered.
+    Every movement line must be a labelled row with a figure on it in the
+    workbook openpyxl parses back off the bytes."""
+    openpyxl = pytest.importorskip("openpyxl")
+
+    rendered = compiled.render("xlsx")
+    item = next(r for r in rendered._rendered if "spend-and-commitment" in r.path)
+    book = openpyxl.load_workbook(io.BytesIO(item.payload))
+
+    labelled = {
+        str(row[0]): [cell for cell in row[1:] if cell is not None]
+        for sheet in book.worksheets
+        for row in sheet.iter_rows(values_only=True)
+        if row and row[0] is not None
+    }
+    for label in (
+        "Open commitment brought forward",
+        "Orders placed in the period",
+        "Receipts against orders in the period",
+        "Open commitment carried forward",
+    ):
+        assert labelled.get(label), f"movement row {label!r} has no figure in the workbook"
+
+
+def test_a_movement_that_does_not_close_trips_the_check(compiled: World) -> None:
+    """The stock-flow clause, firing through `worldloom validate` itself —
+    tampered at the *opening*, deliberately: the opening sits in no roll-up,
+    so nothing but the movement identity can be what catches it. (Tampering
+    the closing fires `estate_does_not_reconcile` too, which would prove the
+    old checks rather than the new one.)"""
+    company = compiled.company.id
+    fact = next(
+        f for f in compiled.facts
+        if f.kind == OPENING and f.subject == company and f.period == PERIOD
+    )
+    tampered = retyped(compiled, fact.id,
+                       value=fact.value.model_copy(update={"amount": fact.value.amount + 100}))
+    assert "movement_does_not_close" in codes(tampered)
+
+
+def test_a_book_that_tears_between_months_trips_the_check(history: World) -> None:
+    """April opening at a balance March never closed at — the discontinuity
+    the carry exists to refuse. The tamper moves opening and placed together
+    so April's own movement still closes; only the tear can fire."""
+    company = history.company.id
+    opening = next(
+        f for f in history.facts
+        if f.kind == OPENING and f.subject == company and f.period == "2026-04"
+    )
+    placed = next(
+        f for f in history.facts
+        if f.kind == PLACED and f.subject == company and f.period == "2026-04"
+    )
+    tampered = retyped(history, opening.id,
+                       value=opening.value.model_copy(update={"amount": opening.value.amount + 100}))
+    tampered = retyped(tampered, placed.id,
+                       value=placed.value.model_copy(update={"amount": placed.value.amount - 100}))
+    found = codes(tampered)
+    assert "stock_tears_between_periods" in found
+    assert "movement_does_not_close" not in found
+
+
+def test_a_book_too_heavy_for_the_target_runs_down_rather_than_cancelling(
+    world: World,
+) -> None:
+    """The movement's one corner, held as a claim: when the opening book is
+    heavier than the drawn target could reach without *negative* placing — an
+    order-cancellation workflow this vertical does not model, the same posture
+    as the over-receipt refusal — the group places nothing and the book runs
+    down to opening less receipts, still closing exactly. Exercised by seed
+    8128 at twelve periods (one month places zero) and pinned here directly so
+    it does not depend on which seed happens to reach the branch."""
+    from datetime import datetime
+
+    from worldloom.generators import procurement_estate
+    from worldloom.generators.stockflow import close
+    from worldloom.ids import Minter
+    from worldloom.rng import Rng
+
+    roles = dict(world._roles)
+    archetype = world._archetype
+    heavy = 10**9  # far above anything the cover band can draw
+    position = procurement_estate.generate(
+        Rng(1).derive("estate"), Minter(),
+        period="2030-01",
+        company_id=world.company.id,
+        unit_ids={unit.key: roles[f"unit_{unit.key}"] for unit in archetype.units},
+        unit_shares={unit.key: unit.share for unit in archetype.units},
+        categories=list(world.categories),
+        sites=list(world.sites),
+        commercial_cost_centre_id=roles["cc_commercial"],
+        finance_cost_centre_id=roles["cc_finance"],
+        annual_revenue=world._annual_revenue,
+        money_unit="AUD_thousands",
+        at=datetime(2030, 2, 4, tzinfo=UTC),
+        event_id="EV-0001",
+        procure_system_id=roles["sys_procure"],
+        receipting_system_id=roles["sys_receipting"],
+        general_ledger_id=roles["sys_general_ledger"],
+        opening_commitment=heavy,
+    )
+    assert position.placed_total == 0
+    assert position.commitment_total == heavy - position.spend_total
+    assert position.commitment_total == close(
+        position.opening_total, [position.placed_total], [position.spend_total]
+    )
+    assert position.commitment_total > 0
+
+
+def test_a_dropped_opening_is_a_violation_not_a_silence(compiled: World) -> None:
+    """The decoration hazard: a verifier whose population is 'whoever states
+    an opening' goes vacuously clean when the opening facts vanish. The check
+    group pins the company, so the gap is loud."""
+    company = compiled.company.id
+    fact = next(
+        f for f in compiled.facts
+        if f.kind == OPENING and f.subject == company and f.period == PERIOD
+    )
+    tampered = replace(compiled, _facts=tuple(
+        f for f in compiled._facts if f.id != fact.id
+    ))
+    assert "movement_has_no_opening" in codes(tampered)
 
 
 # ---------------------------------------------------------------------------

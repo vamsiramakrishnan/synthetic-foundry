@@ -661,7 +661,10 @@ class QuotaViolation:
         return f"[{self.code}] {self.detail}"
 
 
-def check(fingerprints: Sequence[Fingerprint], quotas: Quotas = Quotas()) -> list[QuotaViolation]:
+_DEFAULT_QUOTAS = Quotas()
+
+
+def check(fingerprints: Sequence[Fingerprint], quotas: Quotas = _DEFAULT_QUOTAS) -> list[QuotaViolation]:
     """Every way *fingerprints* fails *quotas*. Never raises — mirrors
     `grammar.check`: a caller wants every violation at once, not the first
     one a `raise` happened to reach.

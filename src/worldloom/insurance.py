@@ -73,19 +73,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import archetypes as archetype_registry
-from . import validate as validate_module
-from .archetypes import MIDSIZE_GENERAL_INSURER, Archetype
-from .ids import Minter
-from .models import (
-    ConstraintKind,
-    LoreCommitment,
-    LoreConstraint,
-    LoreKind,
-)
-from .parameters import DEFAULT, Parameters
-from .rng import Rng
-from .validate import RECONCILIATION_TOLERANCE, Violation
-from .world import World, extend_lore
 
 # Imported for its side effect: registering insurance's artifact types with
 # the document compiler. Kept at module scope so that importing
@@ -102,8 +89,21 @@ from . import insurance_documents  # noqa: F401  (registration)
 # imported would make `Parameters.with_overrides` refuse a name in one process
 # and accept it in another, which is a determinism bug wearing a plugin's
 # clothes.
-from . import parameters as _parameters_module  # noqa: E402
-from .generators.insurance_book import SPANS as _INSURANCE_BOOK_SPANS  # noqa: E402
+from . import parameters as _parameters_module
+from . import validate as validate_module
+from .archetypes import MIDSIZE_GENERAL_INSURER, Archetype
+from .generators.insurance_book import SPANS as _INSURANCE_BOOK_SPANS
+from .ids import Minter
+from .models import (
+    ConstraintKind,
+    LoreCommitment,
+    LoreConstraint,
+    LoreKind,
+)
+from .parameters import DEFAULT, Parameters
+from .rng import Rng
+from .validate import RECONCILIATION_TOLERANCE, Violation
+from .world import World, extend_lore
 
 _parameters_module.register(_INSURANCE_BOOK_SPANS)
 
@@ -811,12 +811,13 @@ validate_module.register_domain_checks("insurance", _checks)
 
 # The domain registry entry: how the CLI and the recipe rebuilder find this
 # vertical from an archetype key, without either naming insurance in core.
-from .domains import Domain, register_domain  # noqa: E402
-from .insurance_scenarios import QuarterlyReserving  # noqa: E402
-
-from .generators.insurance_evaluation import EVAL_TEXT as _INSURANCE_EVAL_TEXT  # noqa: E402
-from .generators.insurance_org import _ROLES as _INSURANCE_ROLES  # noqa: E402
-from .generators.reserving import TEXT as _INSURANCE_TEXT  # noqa: E402
+from .domains import Domain, register_domain
+from .generators.insurance_evaluation import (
+    EVAL_TEXT as _INSURANCE_EVAL_TEXT,
+)
+from .generators.insurance_org import _ROLES as _INSURANCE_ROLES
+from .generators.reserving import TEXT as _INSURANCE_TEXT
+from .insurance_scenarios import QuarterlyReserving
 
 register_domain(Domain(
     name="insurance",
@@ -859,7 +860,8 @@ register_domain(Domain(
 # Insurance's own fact kinds, in the process-global registry — the `close.*`
 # kinds the reserving episode reuses are declared once, by retail. The
 # invariants restate what `_checks` above enforces.
-from .factkinds import FactKind, register as _register_kinds  # noqa: E402
+from .factkinds import FactKind
+from .factkinds import register as _register_kinds
 
 _register_kinds([
     FactKind(kind="reserves.philosophy", domain="insurance", generated_by="generators/reserving.py",

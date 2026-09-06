@@ -24,7 +24,8 @@ from collections.abc import Mapping
 from ..ids import Minter
 from ..models import ArtifactIntent, EvaluationCase, EvaluationType
 from . import episode_text
-from .cases import CaseBuilder, answerable, fmt as _fmt, reachable_fact_ids
+from .cases import CaseBuilder, answerable, reachable_fact_ids
+from .cases import fmt as _fmt
 from .regulatory import ReturnEpisode
 
 #: This taxonomy's surface text, keyed exactly as `evaluation.EVAL_TEXT` is —
@@ -164,18 +165,10 @@ def evaluation_cases(
         (i.id for i in intents if i.artifact_type == "board_risk_committee_summary"), None
     )
 
-    # The shared builder defaults difficulty to "medium"; this vertical's
-    # families are hard by design, so the wrapper flips the default rather
-    # than repeating "hard" at every call.
-    builder = CaseBuilder(minter)
-
-    def case(question: str, kind: EvaluationType, answer: str, facts: list[str], *,
-             cutoff=None, difficulty: str = "hard", reasoning: str = "",  # type: ignore[no-untyped-def]
-             sources: list[str | None] | None = None,
-             distractors: list[str | None] | None = None) -> None:
-        builder.case(question, kind, answer, facts, cutoff=cutoff,
-                     difficulty=difficulty, reasoning=reasoning,
-                     sources=sources, distractors=distractors)
+    # This vertical's families are hard by design, so the builder's default
+    # flips to "hard" rather than repeating it at every call.
+    builder = CaseBuilder(minter, default_difficulty="hard")
+    case = builder.case
 
     ratio_filed = by_id[k["fact_ratio_filed"]]
     ratio_corrected = by_id[k["fact_ratio_corrected"]]

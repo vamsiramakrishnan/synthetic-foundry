@@ -208,8 +208,8 @@ def wasserstein_1(a: np.ndarray, b: np.ndarray) -> float:
     if not len(a) or not len(b):
         return float("nan")
     grid = np.sort(np.concatenate([a, b]))
-    fa = np.searchsorted(np.sort(a), grid, side="right") / len(a)
-    fb = np.searchsorted(np.sort(b), grid, side="right") / len(b)
+    fa = np.asarray(np.searchsorted(np.sort(a), grid, side="right") / len(a), dtype=float)
+    fb = np.asarray(np.searchsorted(np.sort(b), grid, side="right") / len(b), dtype=float)
     gaps = np.diff(grid)
     return float(np.sum(np.abs(fa[:-1] - fb[:-1]) * gaps))
 
@@ -246,7 +246,9 @@ def jensen_shannon(p: Mapping[str, float], q: Mapping[str, float]) -> float:
 def total_variation(p: Mapping[str, float], q: Mapping[str, float]) -> float:
     if not p or not q:
         return float("nan")
-    keys = set(p) | set(q)
+    # Sorted, as every set iteration in this package is: summation order is a
+    # float-rounding order, and a set's is hash order.
+    keys = sorted(set(p) | set(q))
     return sum(abs(p.get(key, 0.0) - q.get(key, 0.0)) for key in keys) / 2
 
 
@@ -271,7 +273,7 @@ def univariate(
         if kind == "numeric":
             a, b = _numeric(real, column), _numeric(synthetic, column)
             entry.update({
-                "n_real": int(len(a)), "n_synthetic": int(len(b)),
+                "n_real": len(a), "n_synthetic": len(b),
                 "ks": _round(ks_statistic(a, b)),
                 "wasserstein": _round(wasserstein_1(a, b)),
                 "mean_real": _round(float(np.mean(a))) if len(a) else None,
@@ -405,7 +407,7 @@ def _squared_distances(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     Accumulated per column rather than through the expanded ``(n, m, d)``
     broadcast, which is a memory shape not a compute shape; and not through
     ``x @ y.T``, which is the matrix product the dependency note keeps out."""
-    out = np.zeros((len(x), len(y)), dtype=float)
+    out: np.ndarray = np.zeros((len(x), len(y)), dtype=float)
     for column in range(x.shape[1]):
         diff = x[:, column][:, None] - y[:, column][None, :]
         out += diff * diff
@@ -426,7 +428,7 @@ def multivariate(
     a = _subsample(_numeric_matrix(real, numeric), rng.derive("real"))
     b = _subsample(_numeric_matrix(synthetic, numeric), rng.derive("synthetic"))
     if len(a) < 2 or len(b) < 2:
-        return {"columns": len(numeric), "n_real": int(len(a)), "n_synthetic": int(len(b))}
+        return {"columns": len(numeric), "n_real": len(a), "n_synthetic": len(b)}
     a, b = _standardise(a, b)
     pooled = np.concatenate([a, b])
     labels = np.concatenate([np.zeros(len(a)), np.ones(len(b))])

@@ -49,7 +49,7 @@ def _replays(built: World, tmp_path: Path, label: str) -> None:
     again.compile().export(second, overwrite=True)
     files = sorted(p.name for p in first.iterdir())
     assert files == sorted(p.name for p in second.iterdir())
-    match, mismatch, errors = filecmp.cmpfiles(first, second, files, shallow=False)
+    _match, mismatch, errors = filecmp.cmpfiles(first, second, files, shallow=False)
     assert not mismatch and not errors, f"{label}: {mismatch} differ, {errors} unreadable"
 
 
@@ -279,7 +279,7 @@ def test_pack_facets_prints_the_registry_and_its_json_is_data() -> None:
     assert result.exit_code == 0
     registry = json.loads(result.output)
     assert "listing" in registry
-    assert [o["value"] for o in registry["listing"]["options"]][0] == "listed"
+    assert next(o["value"] for o in registry["listing"]["options"]) == "listed"
     assert "listing:mutual" in registry["listing"]["options"][0]["excludes"]
 
 

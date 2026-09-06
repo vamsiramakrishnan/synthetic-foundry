@@ -98,7 +98,7 @@ def test_two_companies_do_not_share_an_expense_limit() -> None:
         ).build()
         fact = next(
             f for f in world.facts
-            if f.kind == "policy.finance.approval_threshold" and f.valid_to is None
+            if f.kind == "policy.finance.expense.approval_threshold" and f.valid_to is None
         )
         assert fact.value is not None
         return fact.value.amount
@@ -118,7 +118,7 @@ def test_a_money_provision_is_stated_in_currency_not_in_ledger_units(governed) -
     """
     receipt = next(
         f for f in governed.facts
-        if f.kind == "policy.finance.receipt_threshold" and f.valid_to is None
+        if f.kind == "policy.finance.expense.receipt_threshold" and f.valid_to is None
     )
     assert receipt.value is not None
     assert receipt.value.unit == governed.company.currency, "bare currency, no scale"

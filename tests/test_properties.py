@@ -55,15 +55,15 @@ import pytest
 # CLAUDE.md's `pytest -q` assumes.
 pytest.importorskip("hypothesis")
 
-from hypothesis import HealthCheck, assume, given, settings  # noqa: E402
-from hypothesis import strategies as st  # noqa: E402
+from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import strategies as st
 
-from worldloom import (  # noqa: E402
+from worldloom import (
     benchmark,
     detail,
     dispersion,
-    domains,
     doctypes,
+    domains,
     episodes,
     factkinds,
     lob,
@@ -73,8 +73,13 @@ from worldloom import (  # noqa: E402
     roles,
     similarity,
 )
-from worldloom.episodes import EpisodeSpec, EventSpec, FactKindSpec, Invariant  # noqa: E402
-from worldloom.generators.finance import allocate  # noqa: E402
+from worldloom.episodes import (
+    EpisodeSpec,
+    EventSpec,
+    FactKindSpec,
+    Invariant,
+)
+from worldloom.generators.finance import allocate
 
 #: The house profile. `deadline` is per example and is the only thing standing
 #: between a slow-convergence bug and a suite that appears to hang — it is what
@@ -1197,7 +1202,7 @@ def test_a_template_slot_no_family_fills_is_always_refused(family, slot):
     assume(slot not in allowed)
     findings = benchmark.lint(benchmark.EvalSpec(
         families=[benchmark.QuestionFamily(
-            family=family, question="A question about {%s}." % slot,
+            family=family, question=f"A question about {{{slot}}}.",
         )],
     ))
     _findings_are_actionable(findings)
@@ -1216,7 +1221,7 @@ def test_every_slot_a_family_advertises_is_accepted_in_both_templates(family):
     one of them is a rule half-written.
     """
     allowed = sorted(benchmark.COMMON_SLOTS | benchmark.FAMILY_SLOTS[family])
-    template = " ".join("{%s}" % slot for slot in allowed)
+    template = " ".join(f"{{{slot}}}" for slot in allowed)
     findings = benchmark.lint(benchmark.EvalSpec(
         families=[benchmark.QuestionFamily(
             family=family, question=template, answer=template,
@@ -1253,7 +1258,7 @@ def test_a_kinds_phrase_drops_its_domain_and_keeps_everything_after(kind, domain
     """
     spoken = benchmark.phrase(kind)
     assert spoken and "_" not in spoken and "." not in spoken
-    head, _, tail = kind.partition(".")
+    _head, _, tail = kind.partition(".")
     if not tail:
         return
     assert spoken == tail.replace(".", " ").replace("_", " ")

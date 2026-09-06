@@ -124,7 +124,7 @@ def test_an_explicit_setting_beats_one_a_facet_merely_implies() -> None:
 def test_contradictory_facets_fail_where_they_are_written() -> None:
     """A comprehension crossing six facets should fail on the combination that
     cannot hold, not fifty worlds later."""
-    with pytest.raises(ValueError, match="no_overlap|excludes"):
+    with pytest.raises(ValueError, match=r"no_overlap|excludes"):
         sdk.retail().facets(listing="mutual", margin_profile="premium")
 
 

@@ -10,12 +10,13 @@ report card.
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
 from worldloom.compiler.components import component
 from worldloom.compiler.style import (
     CONTRAST_FLOOR,
-    StyleGenome,
     contrast_ratio,
     genome,
     genomes,
@@ -114,7 +115,9 @@ def test_the_contrast_floor_holds_across_every_curated_fill_palette_too() -> Non
     directly, including the archetypes that bias away from a uniform pick,
     so a palette entry added later that happens to be rare under `Rng.choice`
     cannot go unchecked."""
-    from worldloom.compiler.style import _FILL_PALETTES  # the module's own data, not re-derived
+    from worldloom.compiler.style import (
+        _FILL_PALETTES,  # the module's own data, not re-derived
+    )
 
     for index in range(len(_FILL_PALETTES)):
         # Force each palette by sampling until `Rng.choice` lands on it —
@@ -139,13 +142,13 @@ def test_the_contrast_floor_holds_across_every_curated_fill_palette_too() -> Non
 def test_type_scale_is_strictly_decreasing_in_every_sampled_genome() -> None:
     for candidate in genomes(_SAMPLE_SIZE, seed=42):
         sizes = candidate.type_scale
-        assert all(a > b for a, b in zip(sizes, sizes[1:])), (candidate.key, sizes)
+        assert all(a > b for a, b in itertools.pairwise(sizes)), (candidate.key, sizes)
 
 
 def test_spacing_scale_is_non_increasing_in_every_sampled_genome() -> None:
     for candidate in genomes(_SAMPLE_SIZE, seed=42):
         spacing = candidate.spacing_scale
-        assert all(a >= b for a, b in zip(spacing, spacing[1:])), (candidate.key, spacing)
+        assert all(a >= b for a, b in itertools.pairwise(spacing)), (candidate.key, spacing)
 
 
 # ---------------------------------------------------------------------------
@@ -308,3 +311,61 @@ def test_layout_for_never_returns_a_layout_the_component_did_not_declare() -> No
             for columns in (1, 2, 4, 8):
                 result = layout_for(spec, rows=rows, columns=columns, density=0.5, rng=Rng(rows + columns))
                 assert result in spec.layouts, (candidate_id, rows, columns, result)
+
+
+# ---------------------------------------------------------------------------
+# 7. The typeface axis and its render-side resolution
+# ---------------------------------------------------------------------------
+
+
+def test_house_pins_the_typeface_the_shipped_renderers_used() -> None:
+    """The family half of the palette pin above. The look that shipped was
+    Helvetica in PDF, the theme defaults in Word and PowerPoint, and the
+    user-agent stack in HTML — which is `house_sans` resolved per format, so
+    `"house"` must select exactly that entry and not a family that would
+    restyle every existing corpus."""
+    house = genome(Rng(8128).derive("style"), archetype="house")
+    assert house.typeface == "house_sans"
+
+
+def test_every_family_the_sampler_draws_resolves_in_the_render_table() -> None:
+    """`compiler.style` names families; `render.fonts` resolves them. A family
+    one half knows and the other does not is drift between the two halves of
+    one contract, and the refusal in `fonts.named` is where it would surface —
+    so every sampled genome is resolved here, not just one."""
+    from worldloom.render import fonts
+
+    for candidate in genomes(_SAMPLE_SIZE, seed=7):
+        fonts.named(candidate.typeface)
+
+
+def test_the_house_family_names_no_face_a_theme_already_decides() -> None:
+    """House is inert in the theme-bearing formats: `None` means "set no font
+    name", which is exactly what the OOXML renderers did before typefaces
+    existed and what HTML's user-agent stylesheet does. Resolving house to a
+    literal name there would freeze one platform's default into the file and
+    break the byte-identity of an un-restyled corpus. PDF is the exception
+    that proves the rule — reportlab has no theme, so house names the base-14
+    Helvetica the renderer always drew with."""
+    from worldloom.render import fonts
+
+    house = fonts.named("house_sans")
+    assert house.display is None and house.body is None
+    assert house.html_display is None and house.html_body is None
+    assert house.pdf_display == "Helvetica" and house.pdf_body == "Helvetica"
+
+
+def test_an_unknown_family_is_refused_rather_than_defaulted_to_house() -> None:
+    """A silent fallback would make a recorded genome key lie about what the
+    corpus looks like — same posture as every registry that accepts a name."""
+    from worldloom.render import fonts
+
+    with pytest.raises(KeyError, match="unknown typeface family"):
+        fonts.named("bespoke")
+
+
+def test_the_typeface_axis_varies_across_seeds() -> None:
+    """A fourth axis that every seed drew identically would add a field and no
+    diversity. Across a sample, more than one family must appear."""
+    seen = {candidate.typeface for candidate in genomes(_SAMPLE_SIZE, seed=8128)}
+    assert len(seen) > 1, seen

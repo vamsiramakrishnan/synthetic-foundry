@@ -28,14 +28,19 @@ from __future__ import annotations
 
 import io
 import re
-import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import docx as python_docx
 import pptx as python_pptx
 import pytest
 
-from worldloom.compiler.style import CONTRAST_FLOOR, StyleGenome, contrast_ratio, genome, genomes
+from worldloom.compiler.style import (
+    CONTRAST_FLOOR,
+    StyleGenome,
+    contrast_ratio,
+    genome,
+    genomes,
+)
 from worldloom.models import ArtifactIR, ArtifactSection, Cell, Column, Row, Table
 from worldloom.render import docx as docx_renderer
 from worldloom.render import pptx as pptx_renderer
@@ -83,7 +88,7 @@ def _table(negative: bool) -> Table:
 
 
 def _ir(seed: int, *, negative: bool = True) -> ArtifactIR:
-    created = datetime(2026, 4, 1, tzinfo=timezone.utc).isoformat()
+    created = datetime(2026, 4, 1, tzinfo=UTC).isoformat()
     return ArtifactIR(
         id="ART-STYLE",
         intent_id="ART-STYLE",

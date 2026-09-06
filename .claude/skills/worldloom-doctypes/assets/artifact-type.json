@@ -1,0 +1,24 @@
+{
+  "key": "franchisee_trading_statement",
+  "authority": "approved_report",
+  "lifecycle": "published",
+  "lag": {"days": 0, "hours": 20, "minutes": 0},
+  "word": true,
+  "sections": [
+    {
+      "heading": "Network position",
+      "kinds": ["financial.revenue.", "financial.gross_profit."],
+      "scope": "group",
+      "purpose": "State the network's month against plan, for a reader who is a small-business owner rather than a manager. They are not staff and they are not investors: they run one store, they pay a fee computed off these figures, and they are entitled to see the arithmetic behind it. Plain register, no growth story, and no framing that would read as a sales pitch to somebody whose lease depends on it."
+    }
+  ],
+  "filing": {
+    "author_role": "controller",
+    "fallback_role": "cfo",
+    "domain": "finance",
+    "audience": "all_staff",
+    "size": "medium",
+    "facts": ["headline", "close_status"],
+    "rationale": "A franchisor computes every franchisee's fee off the group's own reported month, so it owes the network a statement of that month rather than an assurance about it."
+  }
+}

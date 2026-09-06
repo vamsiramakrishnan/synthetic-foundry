@@ -27,6 +27,7 @@ from worldloom.evaluate import phrasing
 from worldloom.generators.evaluation import EVAL_TEXT
 from worldloom.scenarios import MonthEndClose
 
+
 def _world(vocab: str = ""):
     domain = domains.by_name("retail")
     shape = archetypes.get(domain.default_archetype)
@@ -143,7 +144,7 @@ def test_an_answer_key_is_refused_because_grading_reads_it() -> None:
 
 
 def test_registers_refuse_a_broken_pool_rather_than_dealing_it() -> None:
-    with pytest.raises(ValueError, match="q.direct.group_revenue"):
+    with pytest.raises(ValueError, match=r"q\.direct\.group_revenue"):
         phrasing.registers(
             EVAL_TEXT,
             {"q.direct.group_revenue": ("What gross margin did the group run at in {period}?",)},

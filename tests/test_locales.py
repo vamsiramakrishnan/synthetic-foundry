@@ -56,9 +56,16 @@ REGIONS: tuple[str, ...] = ("NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT")
 #: plus the length pin the order and the contents against any reordering or
 #: truncation, and forty more strings would make this file a second copy of the
 #: module rather than a check on it.
+#:
+#: `CITIES` *is* repeated whole — it was six entries, and stayed short enough
+#: to read as a unit even after the 2026 widening added the second tier; the
+#: prefix pins the historical order against reordering.
 CITIES: tuple[tuple[str, str], ...] = (
     ("Sydney", "Australia"), ("Melbourne", "Australia"), ("Auckland", "New Zealand"),
     ("Brisbane", "Australia"), ("Perth", "Australia"), ("Adelaide", "Australia"),
+    ("Canberra", "Australia"), ("Hobart", "Australia"), ("Darwin", "Australia"),
+    ("Gold Coast", "Australia"), ("Wellington", "New Zealand"),
+    ("Christchurch", "New Zealand"),
 )
 COMPANY_SECOND: tuple[str, ...] = (
     "Retail Group", "Group", "Holdings", "Retail", "Commerce Group",

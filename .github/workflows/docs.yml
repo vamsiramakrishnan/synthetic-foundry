@@ -1,0 +1,64 @@
+# Deploys the documentation site to GitHub Pages on every push to main that
+# touches it. Split into build and deploy jobs because deploy-pages requires
+# the `github-pages` environment, and keeping the npm toolchain out of the
+# deploy job means a deployment failure can be retried without rebuilding.
+name: docs
+
+on:
+  push:
+    branches: [main]
+    # The site pins its own toolchain, so nothing outside these paths can
+    # change the built output — anything else re-deploying would be noise.
+    paths:
+      - "site/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and a queued deploy for a superseded commit is
+# useless — but an *in-progress* one must finish, because cancelling a Pages
+# deployment midway can leave the environment stuck pending.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      # `enablement: true` lets the first run switch the repository's Pages
+      # source to GitHub Actions instead of failing with "Pages not enabled".
+      # If the token lacks permission for that, flip it once by hand:
+      # Settings → Pages → Source → GitHub Actions.
+      - uses: actions/configure-pages@v6
+        with:
+          enablement: true
+      - run: npm ci
+        working-directory: site
+      # The build fails on broken internal links (starlight-links-validator),
+      # so a bad cross-reference blocks deployment rather than shipping a 404.
+      - run: npm run build
+        working-directory: site
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Iterator
+from collections.abc import Set as AbstractSet
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -173,11 +174,11 @@ class CoherenceError(Exception):
 #: Each group is a callable ``world -> (violations, checks_run)`` and must
 #: return quickly with no violations on a world its domain never touched —
 #: the same early-return contract ``_Validator.actors`` follows.
-_DOMAIN_CHECKS: dict[str, Callable[["World"], tuple[list[Violation], int]]] = {}
+_DOMAIN_CHECKS: dict[str, Callable[[World], tuple[list[Violation], int]]] = {}
 
 
 def register_domain_checks(
-    name: str, checks: Callable[["World"], tuple[list[Violation], int]]
+    name: str, checks: Callable[[World], tuple[list[Violation], int]]
 ) -> None:
     """Register a domain-owned check group under *name*.
 
@@ -492,7 +493,7 @@ class _Validator:
         self.advisories.extend(self.violations[at:])
         del self.violations[at:]
 
-    def check_ref(self, subject: str, field_name: str, value: str | None, *, expect: str | set[str] | None = None) -> None:
+    def check_ref(self, subject: str, field_name: str, value: str | None, *, expect: str | AbstractSet[str] | None = None) -> None:
         """Check that *value* resolves, and optionally that its prefix is expected."""
         self.checks += 1
         if value is None:
@@ -514,7 +515,7 @@ class _Validator:
                     f"{field_name}={value} is a {actual}, expected one of {sorted(expected)}",
                 )
 
-    def check_refs(self, subject: str, field_name: str, values: list[str], *, expect: str | set[str] | None = None) -> None:
+    def check_refs(self, subject: str, field_name: str, values: list[str], *, expect: str | AbstractSet[str] | None = None) -> None:
         for value in values:
             self.check_ref(subject, field_name, value, expect=expect)
 
@@ -1630,6 +1631,50 @@ class _Validator:
                     f" {fact.id} states {canonical!r}",
                 )
 
+        self._mechanical()
+
+    def _mechanical(self) -> None:
+        """A mechanical label must be true of the compiled sheet, cell for cell.
+
+        The canonical check above holds a label to the *ledger*; the mechanical
+        kinds (`hardcoded_value`, `short_range`) additionally claim something
+        about a *page* — that a named workbook cell carries a specific wrong
+        reading in a specific wrong way — and a page-shaped claim has to be
+        checked against the IR or the corpus is vouching for a disagreement it
+        cannot show. `compiler.mechanical.unsubstantiated` is the single
+        implementation of "which cell, wrong how", shared with the compiler
+        that writes the corruption, so this check and the corruption cannot
+        drift into two accounts of one cell.
+
+        This is also why no ordinary formula check needs loosening: the
+        corrupted cell keeps its `fact_id` and a stated value (so
+        `carried_evidence` and `empty_cell_cites_a_fact` pass on their own
+        terms), and everything specific to the corruption is recognised here,
+        via the ledgered record, rather than exempted anywhere else.
+
+        Skipped, per error, only when there is nothing compiled to read —
+        `compiled_evidence` owns the "plan-only corpus" argument — and skipped
+        per artifact when the parity check there has already said the IR is
+        missing, once, rather than once per label.
+        """
+        if not self.world._artifact_irs:
+            return
+        from .compiler import mechanical as _mechanical
+
+        by_intent = {ir.intent_id: ir for ir in self.world.artifact_irs}
+        for error in self.world.intentional_errors:
+            if error.error_type not in _mechanical.MECHANICAL_KINDS:
+                continue
+            ir = by_intent.get(error.artifact_id)
+            if ir is None:
+                continue
+            self.checks += 1
+            problem = _mechanical.unsubstantiated(
+                ir, error, self._facts.get(error.canonical_fact_id or "")
+            )
+            if problem:
+                self.fail("intentional", "mechanical_unsubstantiated", error.id, problem)
+
 
     # -- actors ------------------------------------------------------------
 
@@ -2102,7 +2147,7 @@ class _Validator:
                 continue
             carried = set(ir.fact_ids())
             missing = [f for f in intent.required_fact_ids if f not in carried]
-            for fact_id in intent.required_fact_ids:
+            for _fact_id in intent.required_fact_ids:
                 self.checks += 1
             if missing:
                 self.fail(
@@ -2692,5 +2737,15 @@ def validate(world: World) -> ValidationReport:
     exactly the rules it was built under rather than by whatever this process
     happened to import.
     """
+    # The package's domain registrations are lazy (W6: `worldloom._install`),
+    # and a caller who imported this module directly — `from worldloom.validate
+    # import validate` — never triggered them. Installing here, *before*
+    # `_under_the_corpus_rules` snapshots the registries, keeps the check
+    # count independent of the caller's import path; a validate run against a
+    # half-registered `_DOMAIN_CHECKS` would report "coherent" from a check
+    # set missing whole verticals.
+    from . import _install
+
+    _install()
     with _under_the_corpus_rules(world):
         return _Validator(world).run()

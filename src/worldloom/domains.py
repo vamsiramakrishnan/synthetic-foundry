@@ -37,7 +37,7 @@ class Domain:
 
     name: str
     archetype_keys: frozenset[str]
-    world: type
+    world: type[Any]
     """The world builder — ``RetailWorld``, ``BankingWorld`` — accepting
     ``(seed, archetype, employees, annual_revenue)`` keyword arguments."""
     single_episode: Callable[[str], Any] | None = None
@@ -135,6 +135,24 @@ def register_domain(domain: Domain) -> None:
     _DOMAINS[domain.name] = domain
 
 
+def _full() -> dict[str, Domain]:
+    """`_DOMAINS`, guaranteed post-registration.
+
+    The verticals register themselves by being imported, and package import
+    became lazy (W6: `worldloom._install`) — so a process that imported this
+    module directly (`from worldloom import domains`, as `tools/sweep.py`
+    does) would otherwise read whichever engines happened to be loaded.
+    Measured: sweep's engine axis came back empty in a fresh process while the
+    full suite saw four engines — the import-order dependency every accessor
+    below exists to rule out. The read seam forces the install so the registry
+    has one answer per checkout, not one per import path.
+    """
+    from . import _install
+
+    _install()
+    return _DOMAINS
+
+
 def for_archetype(key: str) -> Domain | None:
     """The domain that owns *key*, or ``None`` for an unclaimed archetype.
 
@@ -150,7 +168,7 @@ def for_archetype(key: str) -> Domain | None:
     from .vocabulary import QUALIFIER
 
     base = key.partition(QUALIFIER)[0]
-    for domain in _DOMAINS.values():
+    for domain in _full().values():
         if base in domain.archetype_keys:
             return domain
     return None
@@ -158,9 +176,9 @@ def for_archetype(key: str) -> Domain | None:
 
 def by_name(name: str) -> Domain | None:
     """The domain registered as *name* — how a pack's ``base`` resolves."""
-    return _DOMAINS.get(name)
+    return _full().get(name)
 
 
 def names() -> list[str]:
     """Every registered domain name."""
-    return sorted(_DOMAINS)
+    return sorted(_full())

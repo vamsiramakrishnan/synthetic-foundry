@@ -201,7 +201,7 @@ def test_the_permission_table_lands_beside_the_tree(rendered, tmp_path) -> None:
         assert row["owner"] and "@" in row["owner"]
     # A row for a file that is not there is a lie a connector would trip on.
     on_disk = {
-        str(p.relative_to(root)) for p in root.rglob("*")
+        p.relative_to(root).as_posix() for p in root.rglob("*")
         if p.is_file() and p.name != "permissions.jsonl"
     }
     assert {row["path"] for row in rows} == on_disk
@@ -225,12 +225,12 @@ def test_two_people_of_one_name_get_two_addresses() -> None:
 
 def test_the_corpus_is_untouched(rendered, tmp_path) -> None:  # type: ignore[no-untyped-def]
     before = sorted(
-        (str(p.relative_to(rendered.root)), p.stat().st_size)
+        (p.relative_to(rendered.root).as_posix(), p.stat().st_size)
         for p in rendered.root.rglob("*") if p.is_file()
     )
     workspace.write(rendered, tmp_path / "drive2")
     after = sorted(
-        (str(p.relative_to(rendered.root)), p.stat().st_size)
+        (p.relative_to(rendered.root).as_posix(), p.stat().st_size)
         for p in rendered.root.rglob("*") if p.is_file()
     )
     assert before == after
@@ -286,7 +286,7 @@ def test_every_junk_file_says_what_kind_it_is(rendered, tmp_path) -> None:  # ty
     kinds = {r["noise"] for r in rows if r.get("noise")}
     assert kinds and kinds <= set(workspace._NOISE_KINDS)
     on_disk = {
-        str(p.relative_to(root)) for p in root.rglob("*")
+        p.relative_to(root).as_posix() for p in root.rglob("*")
         if p.is_file() and p.name != "permissions.jsonl"
     }
     assert {r["path"] for r in rows} == on_disk, "a file the table does not account for"

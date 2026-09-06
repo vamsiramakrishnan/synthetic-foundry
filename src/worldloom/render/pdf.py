@@ -34,18 +34,30 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from xml.sax.saxutils import escape as _escape
 
 from ..compiler.compose import compose, plan_from_ir
 from ..compiler.grammar import GrammarViolation
 from ..compiler.plan import SizeClass
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
-from ..models import ArtifactIR, ArtifactSection, CanonicalFact, FlowDiagram, MagnitudeBand, Quotation, Table
+from ..compiler.style import StyleGenome, genome
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
+from ..models import (
+    ArtifactIR,
+    ArtifactSection,
+    CanonicalFact,
+    FlowDiagram,
+    MagnitudeBand,
+    Quotation,
+    Table,
+)
 from ..narrative import references
-from . import Rendered, RenderError, ooxml, slug_for
+from ..presentation import DEFAULT as DEFAULT_PRESENTATION
+from ..presentation import Presentation
+from ..presentation import of as presentation_of
+from . import Rendered, RenderError, fonts, ooxml, slug_for
 from .docx import HANDLES
-from ..presentation import DEFAULT as DEFAULT_PRESENTATION, Presentation, of as presentation_of
 from .values import corpus_locale, format_value
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -60,13 +72,59 @@ _AWAITING = (
 
 _HIDDEN_NOTE = "Not part of the readable surface."
 
-#: A sober palette, matching DOCX exactly — one artifact rendered in two formats
-#: that disagreed about colour would read as two artifacts.
-_HEADER_FILL = "2F4858"
-_SUBTOTAL_FILL = "EDF2F4"
-_NEGATIVE = "9B2226"
+#: Footnote-grey for running heads, notices, and table/figure notes — kept
+#: local for the same reason `render/docx.py` keeps its own `_MUTED`:
+#: `StyleGenome.colour_roles` declares no "muted" role (only fills and the
+#: text that sits on them), and none of these sit on a genome fill, so there
+#: is no contrast pair for `style.py`'s floor to police. The subtitle grey
+#: below is the same decision at one step removed.
 _MUTED = "6B747B"
-_INK = "1A1A1A"
+_SUBTITLE_GREY = "4A555C"
+
+#: The style genome this renderer draws with — the same genome `render/docx.py`
+#: and `render/pptx.py` derive, so one artifact rendered in two formats cannot
+#: disagree about its own look. Every fill, text colour, size, and face below
+#: comes from it; a renderer that picked its own would be the render-layer
+#: equivalent of a layer re-deciding a fact.
+
+#: `type_scale` band indices — see `compiler/style.py::_TYPE_BANDS` for the pt
+#: ranges each one samples from. Named (matching `docx.py`'s own block) rather
+#: than left as bare `g.type_scale[1]` throughout, so a reader does not have to
+#: cross-reference `style.py` to know which band a given style draws from.
+_TS_TITLE, _TS_HEADING, _TS_SUBHEADING, _TS_BODY, _TS_CAPTION = range(5)
+
+#: `spacing_scale` band indices — see `compiler/style.py::_SPACING_BANDS`.
+_SP_HEADING, _SP_SUBHEADING, _SP_PARAGRAPH, _SP_CELL = range(4)
+
+#: `table_density` scales the tightest spacing band further still — the same
+#: second multiplier `render/docx.py::_DENSITY_FACTOR` documents, mirrored
+#: rather than imported so this renderer stays independently inspectable.
+_DENSITY_FACTOR: dict[str, float] = {"airy": 1.4, "normal": 1.0, "tight": 0.65}
+
+
+def _genome_for(ir: ArtifactIR) -> StyleGenome:
+    """This artifact's world-derived style genome — see `render/docx.py::
+    _genome_for` for the full reasoning; both renderers derive it identically
+    so the memo, the deck, and this PDF for one world always agree on how it
+    looks.
+    """
+    from ..rng import Rng
+
+    raw = ir.metadata.get("worldloom_seed")
+    seed = int(raw) if raw and raw != "None" else 0
+    return genome(Rng(seed).derive("style"))
+
+
+def _space_pt(g: StyleGenome, band: int) -> float:
+    """One `spacing_scale` band in points, anchored to this genome's own body
+    type size — see `render/docx.py::_space_pt`, same reasoning applies."""
+    return g.spacing_scale[band] * g.type_scale[_TS_BODY]
+
+
+def _cell_padding_pt(g: StyleGenome) -> float:
+    """Table cell padding: the tightest spacing band, scaled again by
+    `table_density` — see `render/docx.py::_cell_padding_pt`."""
+    return _space_pt(g, _SP_CELL) * _DENSITY_FACTOR[g.table_density]
 
 #: `Cell.band` shaded, one fill per `MagnitudeBand` — a five-step sequential
 #: scale from cool (low) through neutral (average) to warm (high), so a
@@ -236,104 +294,125 @@ def _normalise(payload: bytes) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def _styles() -> dict:  # type: ignore[no-untyped-def]
+def _styles(g: StyleGenome) -> dict:  # type: ignore[no-untyped-def]
     """Every named style this renderer draws with, built once per render call.
 
     Deferred behind `_require_reportlab` rather than built at import time —
     same reason every other reportlab name in this module is imported inside a
     function: an optional dependency for one format must not break import of
     the package as a whole (see `render/__init__.py`).
+
+    Sizes, colours, and faces come from *g*: the same genome `render/docx.py`
+    reads, so one artifact rendered in two formats cannot disagree about its
+    own look. The muted and subtitle greys stay local (`_MUTED`,
+    `_SUBTITLE_GREY`) because the genome declares no muted role for them to
+    fill.
     """
     from reportlab.lib.colors import HexColor
-    from reportlab.lib.enums import TA_LEFT, TA_RIGHT
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
     from reportlab.lib.styles import ParagraphStyle
 
-    muted = HexColor(f"#{_MUTED}")
-    negative = HexColor(f"#{_NEGATIVE}")
-    accent = HexColor(f"#{_HEADER_FILL}")
-    ink = HexColor(f"#{_INK}")
-    white = HexColor("#FFFFFF")
+    faces = fonts.named(g.typeface)
+    display, body = faces.pdf_display, faces.pdf_body
+    roles = g.colour_roles
+    ts = g.type_scale
 
-    def cell(name: str, *, bold: bool = False, right: bool = False, colour=ink):  # type: ignore[no-untyped-def]
+    muted = HexColor(f"#{_MUTED}")
+    negative = HexColor(f"#{roles['negative_text']}")
+    accent = HexColor(f"#{roles['accent']}")
+    ink = HexColor(f"#{roles['body_text']}")
+    header_text = HexColor(f"#{roles['header_text']}")
+
+    title_align = TA_CENTER if g.title_alignment == "centre" else TA_LEFT
+
+    def cell(name, *, bold=False, right=False, colour=ink, face=body):  # type: ignore[no-untyped-def]
         return ParagraphStyle(
             name,
-            fontName="Helvetica-Bold" if bold else "Helvetica",
-            fontSize=9,
-            leading=11,
+            fontName=f"{face}-Bold" if bold else face,
+            fontSize=ts[_TS_CAPTION],
+            leading=ts[_TS_CAPTION] * 1.25,
             alignment=TA_RIGHT if right else TA_LEFT,
             textColor=colour,
         )
 
     return {
         "title": ParagraphStyle(
-            "wl-title", fontName="Helvetica-Bold", fontSize=22, leading=26,
-            spaceAfter=6, textColor=ink,
+            "wl-title", fontName=f"{display}-Bold", fontSize=ts[_TS_TITLE],
+            leading=ts[_TS_TITLE] * 1.2, spaceAfter=6, textColor=ink,
+            alignment=title_align,
         ),
         "subtitle": ParagraphStyle(
-            "wl-subtitle", fontName="Helvetica-Oblique", fontSize=11, leading=14,
-            spaceAfter=4, textColor=HexColor("#4A555C"),
+            "wl-subtitle", fontName=f"{body}-Oblique", fontSize=ts[_TS_SUBHEADING],
+            leading=ts[_TS_SUBHEADING] * 1.3, spaceAfter=4,
+            textColor=HexColor(f"#{_SUBTITLE_GREY}"),
         ),
         "byline": ParagraphStyle(
-            "wl-byline", fontName="Helvetica-Bold", fontSize=10, leading=13,
-            spaceAfter=10, textColor=ink,
+            "wl-byline", fontName=f"{body}-Bold", fontSize=ts[_TS_BODY],
+            leading=ts[_TS_BODY] * 1.3, spaceAfter=10, textColor=ink,
         ),
         "notice": ParagraphStyle(
-            "wl-notice", fontName="Helvetica-Oblique", fontSize=8, leading=10,
-            spaceAfter=16, textColor=muted,
+            "wl-notice", fontName=f"{body}-Oblique", fontSize=ts[_TS_CAPTION],
+            leading=ts[_TS_CAPTION] * 1.25, spaceAfter=16, textColor=muted,
         ),
         "heading": ParagraphStyle(
-            "wl-heading", fontName="Helvetica-Bold", fontSize=13, leading=16,
-            spaceBefore=14, spaceAfter=6, textColor=accent,
+            "wl-heading", fontName=f"{display}-Bold", fontSize=ts[_TS_HEADING],
+            leading=ts[_TS_HEADING] * 1.25,
+            spaceBefore=_space_pt(g, _SP_HEADING), spaceAfter=_space_pt(g, _SP_CELL),
+            textColor=accent, alignment=title_align,
         ),
         "purpose": ParagraphStyle(
-            "wl-purpose", fontName="Helvetica-Oblique", fontSize=9, leading=12,
-            spaceAfter=6, textColor=muted,
+            "wl-purpose", fontName=f"{body}-Oblique", fontSize=ts[_TS_CAPTION],
+            leading=ts[_TS_CAPTION] * 1.3, spaceAfter=6, textColor=muted,
         ),
         "body": ParagraphStyle(
-            "wl-body", fontName="Helvetica", fontSize=10, leading=14,
-            spaceAfter=8, textColor=ink,
+            "wl-body", fontName=body, fontSize=ts[_TS_BODY],
+            leading=ts[_TS_BODY] * 1.4, spaceAfter=_space_pt(g, _SP_PARAGRAPH),
+            textColor=ink,
         ),
         "awaiting": ParagraphStyle(
-            "wl-awaiting", fontName="Helvetica-Oblique", fontSize=9.5, leading=13,
-            spaceAfter=8, textColor=muted,
+            "wl-awaiting", fontName=f"{body}-Oblique", fontSize=ts[_TS_BODY],
+            leading=ts[_TS_BODY] * 1.35, spaceAfter=8, textColor=muted,
         ),
         "hidden": ParagraphStyle(
-            "wl-hidden", fontName="Helvetica-Oblique", fontSize=9, leading=12,
-            spaceAfter=6, textColor=muted,
+            "wl-hidden", fontName=f"{body}-Oblique", fontSize=ts[_TS_CAPTION],
+            leading=ts[_TS_CAPTION] * 1.3, spaceAfter=6, textColor=muted,
         ),
         "note": ParagraphStyle(
-            "wl-note", fontName="Helvetica-Oblique", fontSize=8, leading=11,
-            spaceAfter=10, textColor=muted,
+            "wl-note", fontName=f"{body}-Oblique", fontSize=ts[_TS_CAPTION],
+            leading=ts[_TS_CAPTION] * 1.35, spaceAfter=10, textColor=muted,
         ),
         "figure_title": ParagraphStyle(
-            "wl-figure-title", fontName="Helvetica-Bold", fontSize=9, leading=11,
-            spaceAfter=4, textColor=ink,
+            "wl-figure-title", fontName=f"{display}-Bold", fontSize=ts[_TS_CAPTION],
+            leading=ts[_TS_CAPTION] * 1.25, spaceAfter=4, textColor=ink,
         ),
         "figure_note": ParagraphStyle(
-            "wl-figure-note", fontName="Helvetica-Oblique", fontSize=8, leading=10,
-            spaceBefore=4, textColor=muted,
+            "wl-figure-note", fontName=f"{body}-Oblique", fontSize=ts[_TS_CAPTION],
+            leading=ts[_TS_CAPTION] * 1.25, spaceBefore=4, textColor=muted,
         ),
         "cell": cell("wl-cell"),
         "cell_bold": cell("wl-cell-bold", bold=True),
-        "cell_header": cell("wl-cell-header", bold=True, colour=white),
+        "cell_header": cell("wl-cell-header", bold=True, colour=header_text, face=display),
         "cell_right": cell("wl-cell-right", right=True),
         "cell_right_bold": cell("wl-cell-right-bold", bold=True, right=True),
-        "cell_right_header": cell("wl-cell-right-header", bold=True, right=True, colour=white),
+        "cell_right_header": cell(
+            "wl-cell-right-header", bold=True, right=True, colour=header_text, face=display
+        ),
         "cell_right_negative": cell("wl-cell-right-negative", right=True, colour=negative),
         "cell_right_negative_bold": cell(
             "wl-cell-right-negative-bold", bold=True, right=True, colour=negative
         ),
         "quote": ParagraphStyle(
-            "wl-quote", fontName="Helvetica-Oblique", fontSize=11, leading=15,
-            leftIndent=18, spaceBefore=4, spaceAfter=2, textColor=accent,
+            "wl-quote", fontName=f"{body}-Oblique", fontSize=ts[_TS_SUBHEADING],
+            leading=ts[_TS_SUBHEADING] * 1.35, leftIndent=18, spaceBefore=4,
+            spaceAfter=2, textColor=accent,
         ),
         "quote_attribution": ParagraphStyle(
-            "wl-quote-attribution", fontName="Helvetica", fontSize=8.5, leading=11,
-            leftIndent=18, spaceAfter=8, textColor=muted,
+            "wl-quote-attribution", fontName=body, fontSize=ts[_TS_CAPTION],
+            leading=ts[_TS_CAPTION] * 1.25, leftIndent=18, spaceAfter=8, textColor=muted,
         ),
         "flow_step": ParagraphStyle(
-            "wl-flow-step", fontName="Helvetica", fontSize=10, leading=14,
-            leftIndent=10, spaceAfter=4, textColor=ink,
+            "wl-flow-step", fontName=body, fontSize=ts[_TS_BODY],
+            leading=ts[_TS_BODY] * 1.4, leftIndent=10, spaceAfter=4, textColor=ink,
         ),
     }
 
@@ -346,7 +425,7 @@ def _styles() -> dict:  # type: ignore[no-untyped-def]
 def _table_flowable(table: Table, frame_width: float, styles: dict,
                     locale: Locale = DEFAULT_LOCALE,
                     presentation: Presentation = DEFAULT_PRESENTATION,
-                    *, show_bands: bool = False):  # type: ignore[no-untyped-def]
+                    *, g: StyleGenome, show_bands: bool = False):  # type: ignore[no-untyped-def]
     """One IR table as a paginating platypus table.
 
     ``repeatRows=1`` is what gives this renderer real pagination for free: when
@@ -372,33 +451,59 @@ def _table_flowable(table: Table, frame_width: float, styles: dict,
     them.
     """
     from reportlab.lib import colors
-    from reportlab.platypus import Paragraph
+    from reportlab.platypus import Paragraph, TableStyle
     from reportlab.platypus import Table as PlatypusTable
-    from reportlab.platypus import TableStyle
 
-    cell_pt = _CELL_PT
+    base_cell_pt = styles["cell"].fontSize
+    cell_pt = base_cell_pt
     if presentation.table_fit == "measured":
-        col_widths, cell_pt = _measured_layout(table, frame_width, locale)
-        if cell_pt < _CELL_PT:
+        col_widths, cell_pt = _measured_layout(
+            table, frame_width, locale,
+            # The header face, not the body face: headers draw in the display
+            # family's bold, which under a mixed-family genome is not the
+            # same face as the body bold — and measuring the narrower of the
+            # two would break the header, the row a reader looks at first.
+            font=styles["cell_header"].fontName, size=base_cell_pt,
+        )
+        if cell_pt < base_cell_pt:
             styles = _scaled_cells(styles, cell_pt)
     else:
         label_width = frame_width * 0.34
         per_column = (frame_width - label_width) / max(1, len(table.columns))
         col_widths = [label_width] + [per_column] * len(table.columns)
 
-    header_row = [Paragraph(_escape(table.title), styles["cell_header"])]
-    header_row += [Paragraph(_escape(column.label), styles["cell_right_header"]) for column in table.columns]
-    data = [header_row]
-
-    commands = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(f"#{_HEADER_FILL}")),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#C7CDD1")),
+    roles = g.colour_roles
+    # A neutral grey rather than a genome colour role — the same decision
+    # `render/docx.py::_apply_table_borders` documents: `style.py` declares no
+    # "gridline colour" role, and a rule this faint reads as structure, not
+    # as a fourth ink the contrast floor would need to account for.
+    rule_grey = colors.HexColor("#C7CDD1")
+    pad = _cell_padding_pt(g)
+    # Tuples of two widths live here by design: fills/valign/padding are
+    # 4-tuples, the conditional rules 5-tuples carrying a weight. Annotated
+    # rather than left to inference, which would fix the element type at the
+    # initial literal's width and refuse the rules below.
+    commands: list[tuple[Any, ...]] = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(f"#{roles['header_fill']}")),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (-1, -1), 4),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), pad),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), pad),
     ]
+    if g.gridline_policy == "all":
+        commands.append(("GRID", (0, 0), (-1, -1), g.rule_weight, rule_grey))
+    elif g.gridline_policy == "horizontal":
+        # Top edge, bottom edge, and every rule between rows — the same edge
+        # set `docx._apply_table_borders` maps "horizontal" to, expressed as
+        # the two reportlab commands that cover it exactly.
+        commands.append(("LINEABOVE", (0, 0), (-1, 0), g.rule_weight, rule_grey))
+        commands.append(("LINEBELOW", (0, 0), (-1, -1), g.rule_weight, rule_grey))
+    # "none": no rules at all, which needs no command to say so.
+
+    header_row = [Paragraph(_escape(table.title), styles["cell_header"])]
+    header_row += [Paragraph(_escape(column.label), styles["cell_right_header"]) for column in table.columns]
+    data = [header_row]
 
     for row_index, row in enumerate(table.rows, start=1):
         cells = [Paragraph(_escape(row.label), styles["cell_bold" if row.emphasis else "cell"])]
@@ -431,7 +536,7 @@ def _table_flowable(table: Table, frame_width: float, styles: dict,
             # is not itself "high" or "low" in the sense a band means, so the
             # subtotal fill is the more truthful one to show where both claim
             # the same cell.
-            commands.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor(f"#{_SUBTOTAL_FILL}")))
+            commands.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor(f"#{roles['subtotal_fill']}")))
 
     grid = PlatypusTable(data, colWidths=col_widths, repeatRows=1)
     grid.setStyle(TableStyle(commands))
@@ -439,19 +544,19 @@ def _table_flowable(table: Table, frame_width: float, styles: dict,
 
 
 
-#: Font and size the measurement assumes. **Bold** and not the regular face,
-#: deliberately: `_styles()` builds every cell style from one factory at 9pt and
-#: flips to `Helvetica-Bold` for headers and emphasis rows, so bold is the
-#: widest any cell can be and measuring against it is the only choice that
-#: cannot under-measure. Measuring the regular face would fit the body rows and
-#: break the header, which is the row a reader looks at first.
-#:
-#: The size is 9 because `_styles()` says 9. It was written as 8.5 on the first
-#: pass — a guess, not a reading — and the symptom was instructive: the
-#: computed widths were arithmetically perfect and the timestamps still broke,
-#: because every column had been measured 6% narrow. A layout that measures
-#: against a font it is not set in is not measured at all.
-_CELL_FONT, _CELL_PT = "Helvetica-Bold", 9.0
+#: The measurement in `_measured_layout` assumes the *bold* face at the cell
+#: style's own size, both passed in by `_table_flowable` from the styles dict
+#: rather than kept here as a second copy. **Bold** deliberately: `_styles`
+#: builds every cell style from one factory and flips to a bold face for
+#: headers and emphasis rows, so bold is the widest any cell can be and
+#: measuring against it is the only choice that cannot under-measure — the
+#: regular face would fit the body rows and break the header, which is the
+#: row a reader looks at first. The size is a parameter for the same reason:
+#: this module once hard-coded 9 and wrote 8.5 on its first pass instead — a
+#: guess, not a reading — and the computed widths were arithmetically perfect
+#: while the timestamps still broke, because every column had been measured
+#: 6% narrow. A layout that measures against a font or a size it is not set
+#: in is not measured at all.
 
 #: The smallest a measured table may be set at. Below this the fix is worse
 #: than the defect: a broken token in a 9pt table is legible and obviously
@@ -493,7 +598,7 @@ _COLUMN_CAP = 0.42
 
 
 def _measured_layout(table: Table, frame_width: float,
-                     locale: Locale) -> tuple[list[float], float]:
+                     locale: Locale, *, font: str, size: float) -> tuple[list[float], float]:
     """Column widths sized to what each column actually holds.
 
     The fixed 34%-then-even split this replaces produced, on the five-column
@@ -532,7 +637,7 @@ def _measured_layout(table: Table, frame_width: float,
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
     def measure(text: str) -> float:
-        return stringWidth(text, _CELL_FONT, _CELL_PT)
+        return stringWidth(text, font, size)
 
     def column(texts: list[str]) -> tuple[float, float]:
         present = [text for text in texts if text]
@@ -562,12 +667,12 @@ def _measured_layout(table: Table, frame_width: float,
         # the caller has already decided it belongs here, so fall back to the
         # even split rather than dividing by zero.
         return ([frame_width / max(1, len(table.columns) + 1)] * (len(table.columns) + 1),
-                _CELL_PT)
+                size)
 
     if sum(naturals) <= frame_width:
         # Everything fits with room over. Grow proportionally to fill the frame:
         # a table that stopped short of its own margin reads as a layout bug.
-        return [natural * frame_width / sum(naturals) for natural in naturals], _CELL_PT
+        return [natural * frame_width / sum(naturals) for natural in naturals], size
 
     slack = frame_width - sum(floors)
     if slack <= 0:
@@ -576,7 +681,7 @@ def _measured_layout(table: Table, frame_width: float,
         # tail — this ends up in the PDF, and a corpus gated on byte identity
         # should not carry 8.203419...pt.
         shrink = frame_width / sum(floors)
-        scaled_pt = int(_CELL_PT * shrink * 10) / 10
+        scaled_pt = int(size * shrink * 10) / 10
         if scaled_pt >= _CELL_MIN_PT:
             return [floor * shrink for floor in floors], scaled_pt
         return [floor * frame_width / sum(floors) for floor in floors], _CELL_MIN_PT
@@ -584,13 +689,13 @@ def _measured_layout(table: Table, frame_width: float,
     wanted = [natural - floor for natural, floor in zip(naturals, floors)]
     total_wanted = sum(wanted)
     if total_wanted <= 0:
-        return [floor + slack / len(floors) for floor in floors], _CELL_PT
+        return [floor + slack / len(floors) for floor in floors], size
     return [
         floor + slack * want / total_wanted for floor, want in zip(floors, wanted)
-    ], _CELL_PT
+    ], size
 
 
-def _figure_flowables(chart, table: Table, frame_width: float, styles: dict, locale: Locale = DEFAULT_LOCALE) -> list:  # type: ignore[no-untyped-def]
+def _figure_flowables(chart, table: Table, frame_width: float, styles: dict, locale: Locale = DEFAULT_LOCALE, *, g: StyleGenome) -> list:  # type: ignore[no-untyped-def]
     """A declared chart, drawn as proportional bars from the same cells the
     table above shows — never a second computation of the data.
 
@@ -604,9 +709,8 @@ def _figure_flowables(chart, table: Table, frame_width: float, styles: dict, loc
     and does not depend on what a font happens to map a codepoint to.
     """
     from reportlab.lib import colors
-    from reportlab.platypus import Flowable, Paragraph
+    from reportlab.platypus import Flowable, Paragraph, TableStyle
     from reportlab.platypus import Table as PlatypusTable
-    from reportlab.platypus import TableStyle
 
     class _Bar(Flowable):
         """A single proportional bar, vector-drawn to a fixed height."""
@@ -653,7 +757,7 @@ def _figure_flowables(chart, table: Table, frame_width: float, styles: dict, loc
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
     ]
     for name, value in values:
-        colour = colors.HexColor(f"#{_NEGATIVE if value < 0 else _HEADER_FILL}")
+        colour = colors.HexColor(f"#{g.colour_roles['negative_text'] if value < 0 else g.colour_roles['accent']}")
         fraction = min(1.0, abs(value) / widest)
         formatted = format_value(value, column.number_format if column else None, locale=locale)
         data.append([
@@ -757,6 +861,7 @@ def _section_flowables(
     presentation: Presentation = DEFAULT_PRESENTATION,
     *,
     component_id: str | None = None,
+    g: StyleGenome,
 ) -> list:
     """One IR section as a run of flowables: heading, then body, a declared
     flow or quotation, or a table — the fallback chain in that priority order.
@@ -808,7 +913,7 @@ def _section_flowables(
     elif section.table is not None:
         flow.append(_table_flowable(
             section.table, frame_width, styles, locale, presentation,
-            show_bands=component_id in _BANDED_TABLE_COMPONENTS,
+            show_bands=component_id in _BANDED_TABLE_COMPONENTS, g=g,
         ))
         if section.table.note:
             flow.append(Paragraph(_escape(section.table.note), styles["note"]))
@@ -822,7 +927,7 @@ def _section_flowables(
     # that defect first shipped, in the Markdown renderer.
     for chart in section.charts:
         if section.table is not None:
-            flow.extend(_figure_flowables(chart, section.table, frame_width, styles, locale))
+            flow.extend(_figure_flowables(chart, section.table, frame_width, styles, locale, g=g))
 
     flow.append(Spacer(1, 4))
     return flow
@@ -833,7 +938,7 @@ def _section_flowables(
 # ---------------------------------------------------------------------------
 
 
-def _header_drawer(text: str):  # type: ignore[no-untyped-def]
+def _header_drawer(text: str, face: str = "Helvetica"):  # type: ignore[no-untyped-def]
     """An ``onPage`` callback that writes the running header — the company and
     the document title, right-aligned in the top margin, same content as
     `render/docx.py::_running_heads`. Needs no total page count, unlike the
@@ -844,7 +949,7 @@ def _header_drawer(text: str):  # type: ignore[no-untyped-def]
         from reportlab.lib.colors import HexColor
 
         canvas.saveState()
-        canvas.setFont("Helvetica", 8)
+        canvas.setFont(face, 8)
         canvas.setFillColor(HexColor(f"#{_MUTED}"))
         canvas.drawRightString(_PAGE_WIDTH_PT - _MARGIN_PT, _PAGE_HEIGHT_PT - _MARGIN_PT + 8, text)
         canvas.restoreState()
@@ -852,7 +957,7 @@ def _header_drawer(text: str):  # type: ignore[no-untyped-def]
     return draw
 
 
-def _numbered_canvas_class(footer_note: str):  # type: ignore[no-untyped-def]
+def _numbered_canvas_class(footer_note: str, face: str = "Helvetica"):  # type: ignore[no-untyped-def]
     """Build a `Canvas` subclass that captions every page ``Page X of Y``.
 
     The footer needs the total page count, and `Canvas.save()` writes pages as
@@ -892,7 +997,7 @@ def _numbered_canvas_class(footer_note: str):  # type: ignore[no-untyped-def]
 
         def _draw_footer(self, total: int) -> None:
             self.saveState()
-            self.setFont("Helvetica", 8)
+            self.setFont(face, 8)
             self.setFillColor(colors.HexColor(f"#{_MUTED}"))
             self.drawCentredString(
                 _PAGE_WIDTH_PT / 2,
@@ -936,7 +1041,9 @@ def render(
     from reportlab.platypus.doctemplate import LayoutError
 
     plan = _plan(ir, artifact_type, size_class)
-    styles = _styles()
+    g = _genome_for(ir)
+    faces = fonts.named(g.typeface)
+    styles = _styles(g)
     frame_width = plan.page_width_pt - 2 * plan.margin_pt
 
     story: list = [Paragraph(_escape(ir.title), styles["title"])]
@@ -960,7 +1067,8 @@ def render(
             continue
         story.extend(_section_flowables(section, facts, styles, frame_width, locale,
                                         presentation,
-                                        component_id=plan.components.get(section.heading)))
+                                        component_id=plan.components.get(section.heading),
+                                        g=g))
 
     if ir.metadata.get("voice") and presentation.provenance == "footer":
         story.append(Paragraph(
@@ -969,6 +1077,17 @@ def render(
         ))
 
     buffer = BytesIO()
+    keywords = ["synthetic", "worldloom", f"seed={ir.metadata.get('worldloom_seed', '')}"]
+    if ir.metadata.get("realism_profile"):
+        keywords.append("worldloom-realism=ecology/v1")
+        for key, label in (
+            ("lifecycle", "lifecycle"),
+            ("revision", "revision"),
+            ("artifact_family", "family"),
+        ):
+            value = ir.metadata.get(key)
+            if value is not None:
+                keywords.append(f"{label}={value}")
     doc = BaseDocTemplate(
         buffer,
         pagesize=(plan.page_width_pt, plan.page_height_pt),
@@ -980,7 +1099,7 @@ def render(
         author=ir.metadata.get("author") or "Worldloom",
         subject=ir.subtitle or "",
         creator="Worldloom",
-        keywords=["synthetic", "worldloom", f"seed={ir.metadata.get('worldloom_seed', '')}"],
+        keywords=keywords,
         # `invariant` is reportlab's own documented determinism switch — it
         # substitutes a fixed instant for `time.time()` everywhere the library
         # would otherwise reach for the clock, including the digest that seeds
@@ -997,10 +1116,10 @@ def render(
     frame = Frame(plan.margin_pt, plan.margin_pt, frame_width, plan.page_height_pt - 2 * plan.margin_pt, id="body")
     header_text = " · ".join(part for part in (ir.metadata.get("company"), ir.title) if part)
     footer_note = ir.metadata.get("note", "Synthetic corpus generated by Worldloom.")
-    doc.addPageTemplates([PageTemplate(id="main", frames=[frame], onPage=_header_drawer(header_text))])
+    doc.addPageTemplates([PageTemplate(id="main", frames=[frame], onPage=_header_drawer(header_text, face=faces.pdf_body))])
 
     try:
-        doc.build(story, canvasmaker=_numbered_canvas_class(footer_note))
+        doc.build(story, canvasmaker=_numbered_canvas_class(footer_note, face=faces.pdf_body))
     except LayoutError as exc:
         # A single row taller than an empty page cannot be split further —
         # `Table.split()` has nothing left to try, and platypus raises rather

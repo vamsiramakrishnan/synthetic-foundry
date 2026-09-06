@@ -26,7 +26,6 @@ import pytest
 from worldloom import archetypes, company, domains, facets, packs, recipe, roles, sdk
 from worldloom.parameters import DEFAULTS
 
-
 # ---------------------------------------------------------------------------
 # The document itself
 # ---------------------------------------------------------------------------
@@ -397,6 +396,14 @@ def test_a_named_rival_is_reported_rather_than_accepted_silently() -> None:
     resolved = company.resolve(company.from_document({"rivals": ["Northgate Retail"]}))
     assert resolved.ok
     assert any("Northgate Retail" in want for want in resolved.unmet)
+
+
+def test_a_bare_string_rival_is_refused_naming_the_fix() -> None:
+    """A string is iterable, so "Coles" once parsed as five one-character
+    rivals — five separate `unmet` mysteries instead of one wrong shape.
+    Found by a skill-doc smoke run against the real tool."""
+    with pytest.raises(ValueError, match=r'\["Coles"\]'):
+        company.from_document({"rivals": "Coles"})
 
 
 def test_a_facets_own_unmet_consequences_survive() -> None:

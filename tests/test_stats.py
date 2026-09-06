@@ -11,7 +11,7 @@ exact figures that would make this file as fragile as the thing it is testing.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -20,10 +20,10 @@ from typer.testing import CliRunner
 from worldloom import World
 from worldloom.cli import app
 from worldloom.models import (
-    Authority,
     ArtifactIR,
     ArtifactManifestEntry,
     ArtifactSection,
+    Authority,
     CanonicalFact,
     Company,
     EvaluationCase,
@@ -34,7 +34,7 @@ from worldloom.stats import Distribution, compute, diff
 
 runner = CliRunner()
 
-WHEN = datetime(2026, 4, 1, tzinfo=timezone.utc)
+WHEN = datetime(2026, 4, 1, tzinfo=UTC)
 
 
 def _company() -> Company:
@@ -304,7 +304,10 @@ def test_against_diffs_two_corpora(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     assert "metric" in result.output
     assert "retail-close" in result.output
-    assert str(out) in result.output
+    # Whitespace stripped from both sides: Rich hard-wraps a long path at
+    # console width (Windows temp paths always overflow it), so the substring
+    # only survives comparison with the wrap points removed.
+    assert "".join(str(out).split()) in "".join(result.output.split())
 
 
 def test_a_corpus_with_nothing_to_measure_is_a_clean_error(tmp_path: Path) -> None:

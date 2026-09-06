@@ -23,7 +23,13 @@ import pytest
 
 import worldloom  # noqa: F401 — importing the package populates the registries
 from worldloom import episodes, lob, process
-from worldloom.episodes import EpisodeSpec, EventSpec, FactKindSpec, Invariant, RoleSlotSpec
+from worldloom.episodes import (
+    EpisodeSpec,
+    EventSpec,
+    FactKindSpec,
+    Invariant,
+    RoleSlotSpec,
+)
 
 
 def _survey_spec(slots: list[RoleSlotSpec] | None = None) -> EpisodeSpec:
@@ -228,7 +234,7 @@ def test_the_cascade_round_trips_to_a_spec_that_installs_and_runs() -> None:
 
 def test_a_step_minting_an_invented_kind_is_refused() -> None:
     session = process.open(SEED)
-    with pytest.raises(ValueError, match="wellness.morale"):
+    with pytest.raises(ValueError, match=r"wellness\.morale"):
         process.accept(session, process.Answer(
             stage="steps",
             steps=[EventSpec(kind="hr.survey", when="start",

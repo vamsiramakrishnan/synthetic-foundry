@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ..locales import DEFAULT as DEFAULT_LOCALE, Locale
+from ..locales import DEFAULT as DEFAULT_LOCALE
+from ..locales import Locale
 from ..models import AUTHORITY_RANK, Authority, Table
 from ..narrative import references
 from ..render.values import corpus_locale, format_value

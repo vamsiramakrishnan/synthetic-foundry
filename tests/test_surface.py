@@ -22,7 +22,6 @@ from worldloom.providers import StableKey, SurfaceValueProvider
 from worldloom.retail import RetailWorld
 from worldloom.rng import Rng
 
-
 # ---------------------------------------------------------------------------
 # Checksums, against published examples
 # ---------------------------------------------------------------------------

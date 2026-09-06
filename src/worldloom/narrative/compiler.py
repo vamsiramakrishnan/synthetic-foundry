@@ -38,15 +38,16 @@ pass decides that, once, in order.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from ..ids import content_key, format_id, highest_numeric_suffix
 from ..models import ArtifactIR, ArtifactSection, GenerationLedgerEntry
 from . import claims as claim_checks
 from . import prompts, providers
-from .requests import GeneratedClaim, GeneratedNarrative, NarrativeRequest
+from .requests import GeneratedNarrative, NarrativeRequest
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact
@@ -183,6 +184,14 @@ def _request_for(
     # later RCA discuss the hypothesis that triage got wrong.
     cutoff = manifest.created_at if manifest else None
 
+    # Keep legacy request bytes stable. Explicit observer/transaction metadata
+    # narrows new requests before a writer sees them; historic evidence remains
+    # citable, but a backdated correction cannot arrive before its record time.
+    allowed = [fact_id for fact_id in allowed
+               if facts[fact_id].visible_to(author.id)
+               and (facts[fact_id].tx_from is None or cutoff is None
+                    or facts[fact_id].recorded_at <= cutoff)]
+
     required = [
         fact_id
         for fact_id in intent.required_fact_ids
@@ -195,7 +204,11 @@ def _request_for(
     # movement the writer worked out in their head. Without this the harness
     # would be right to reject "the third consecutive month" — there would be
     # nothing supporting it.
-    comparators = _comparators(allowed, facts, cutoff)
+    comparators = {
+        key: value for key, value in _comparators(allowed, facts, cutoff).items()
+        if facts[value].visible_to(author.id)
+        and (cutoff is None or facts[value].recorded_at <= cutoff)
+    }
     allowed = allowed + [c for c in comparators.values() if c not in allowed]
 
     return NarrativeRequest(
@@ -230,7 +243,15 @@ def _request_for(
             for constraint in commitment.constrains
             if constraint.kind.value == "terminology"
         },
-        target_words={"small": 70, "medium": 130, "long": 200}.get(intent.size_profile, 120),
+        # Briefs, not physics: what the writer is asked for, not what the world
+        # contains. Raised from 70/130/200 after rendered corpora read as
+        # telegrams — three sentences could not carry a variance memo's
+        # argument, and the optional-fact budget below scales off this number,
+        # so shorter briefs also meant thinner evidence per section. Measured
+        # both ways when it moved: with pools widened but briefs held at the
+        # old numbers, retrieval hardness reads exactly as before (26 of 51),
+        # so the pin's move is attributable here and nowhere else.
+        target_words={"small": 110, "medium": 190, "long": 300}.get(intent.size_profile, 190),
         fact_digest=providers.digest([facts[f] for f in allowed]),
     )
 
@@ -320,7 +341,7 @@ def _plan(
 
 def _ledger_entry(
     *,
-    id: str,  # noqa: A002 - matches the field name it fills
+    id: str,
     slot: _Slot,
     world_seed: int,
     provider_id: str,

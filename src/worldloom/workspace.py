@@ -569,9 +569,12 @@ def write(world: Any, destination: str | Path, *, overwrite: bool = False,
                else {"noise": entry.noise, "copy_of": entry.copy_of}),
         })
 
+    # newline pinned: this JSONL bypasses corpus.write_jsonl (it writes plain
+    # dicts, not models), so it needs the same CRLF guard or a Windows-laid
+    # workspace would differ byte-for-byte from a POSIX one.
     (target / "permissions.jsonl").write_text(
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
-        encoding="utf-8",
+        encoding="utf-8", newline="\n",
     )
     if not written:
         raise ValueError(

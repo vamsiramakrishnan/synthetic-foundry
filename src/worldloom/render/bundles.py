@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from ..models import Authority
 from . import Rendered
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -69,7 +68,12 @@ def render_servicenow(world: World) -> list[Rendered]:
     confirmed = next((f for f in facts if f.kind == "ops.cause" and not f.is_superseded), None)
     classification = next((f for f in facts if f.kind == "ops.root_cause_classification"), None)
     service = confirmed.subject if confirmed else (opened.subject if opened else None)
-    service_name = world.services.get(service).name if service and world.services.get(service) else ""
+    # Looked up once and narrowed, not `.get(...).name if .get(...)`: the
+    # double lookup left `.name` reached on a `Service | None` the checker
+    # could not see narrowed, which is what kept this module on the mypy
+    # debt ledger.
+    service_entry = world.services.get(service) if service else None
+    service_name = service_entry.name if service_entry else ""
 
     work_notes = [
         {
@@ -149,7 +153,6 @@ def render_jira(world: World) -> list[Rendered]:
         return []
 
     intent = intents[0]
-    facts = {f.id: f for f in world.facts}
     scope = next((f for f in world.facts if f.kind == "ops.remediation_addresses"), None)
     classification = next((f for f in world.facts if f.kind == "ops.root_cause_classification"), None)
     owner_fact = next((f for f in world.facts if f.kind == "ops.mapping_table_owner"), None)
@@ -247,7 +250,9 @@ def render_confluence(world: World) -> list[Rendered]:
     format adds — a reader arriving at a stale status page should be able to see
     what it hangs off.
     """
+    from ..presentation import of as presentation_of
     from . import markdown
+    from .values import corpus_locale
 
     page_types = {"confluence_page", "knowledge_article", "close_calendar", "working_note"}
     intents = [i for i in world.artifact_intents if i.artifact_type in page_types]
@@ -265,6 +270,8 @@ def render_confluence(world: World) -> list[Rendered]:
     pages: list[dict[str, Any]] = []
     comments: list[dict[str, Any]] = []
     facts = {f.id: f for f in world.facts}
+    locale = corpus_locale(world)
+    profile = presentation_of(world)
 
     for intent in intents:
         ir = next((r for r in world.artifact_irs if r.intent_id == intent.id), None)
@@ -283,7 +290,19 @@ def render_confluence(world: World) -> list[Rendered]:
                 "author": intent.author_id,
                 "created": manifest.created_at.isoformat() if manifest else None,
                 "version": 1,
-                "body": markdown.render(ir, facts).decode("utf-8"),
+                # A Confluence page is still a document a person reads.  The
+                # bundle used to call the isolated Markdown renderer without
+                # the corpus decisions, which silently restored the audit
+                # appendix and authoring brief even when `render --profile
+                # reader` had removed them from every standalone format.
+                "body": markdown.render(
+                    ir,
+                    facts,
+                    locale=locale,
+                    presentation=profile.for_doctype(intent.artifact_type),
+                    artifact_type=intent.artifact_type,
+                    size_class=intent.size_profile,
+                ).decode("utf-8"),
                 "labels": [intent.domain, intent.artifact_type],
                 "worldloom_fact_ids": list(intent.required_fact_ids),
                 # A page whose facts have since been superseded is stale. Labelled

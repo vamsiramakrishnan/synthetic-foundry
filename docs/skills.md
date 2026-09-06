@@ -158,6 +158,46 @@ a pack or process cannot express what happens.
 
 Source: [`.claude/skills/worldloom-vertical/SKILL.md`](../.claude/skills/worldloom-vertical/SKILL.md)
 
+### `worldloom-agent-evals`
+
+Author, plan, generate, validate and score multi-connector MCP workflow
+evaluation corpora: connector fixtures, multi-tool DAGs, coverage plans and
+agent-trajectory scoring, all grounded in one `World`.
+
+Source: [`.claude/skills/worldloom-agent-evals/SKILL.md`](../.claude/skills/worldloom-agent-evals/SKILL.md)
+
+### `worldloom-artifact-realism`
+
+Improve how a world materialises into documents, decks, workbooks, tickets,
+pages and email through bounded proposals the deterministic host accepts or
+refuses. A proposal chooses structure and emphasis; it never creates a fact.
+
+Source: [`.claude/skills/worldloom-artifact-realism/SKILL.md`](../.claude/skills/worldloom-artifact-realism/SKILL.md)
+
+### `worldloom-process-bindings`
+
+Compile the supplied 12-industry catalogue into company activity bindings,
+inspect coverage and evidence boundaries, and drive process authoring from
+them without treating authored hints as measurements.
+
+Source: [`.claude/skills/worldloom-process-bindings/SKILL.md`](../.claude/skills/worldloom-process-bindings/SKILL.md)
+
+### `worldloom-process-catalogue`
+
+Compile authored industry factors into company-bound process plans, then
+author executable episodes through the existing process cascade — the plan is
+context for the cascade, never an execution trace.
+
+Source: [`.claude/skills/worldloom-process-catalogue/SKILL.md`](../.claude/skills/worldloom-process-catalogue/SKILL.md)
+
+### `worldloom-synthesis`
+
+Generate operational relational data, author causal specifications, run paired
+interventions and search behaviour regimes. Detail in
+[operational synthesis](operational-synthesis.md).
+
+Source: [`.claude/skills/worldloom-synthesis/SKILL.md`](../.claude/skills/worldloom-synthesis/SKILL.md)
+
 ## One cascade, reused everywhere
 
 The authorable layers share one mechanism from `worldloom.cascade`:
@@ -337,3 +377,11 @@ The harness-doc test parses documented invocations and rejects unknown commands
 or flags. New operator pages are included in that gate, and their local links are
 verified. A skill that advertises an obsolete option is a product bug because it
 causes an agent to build the wrong corpus while believing the request succeeded.
+
+## Operational data and behavioral search
+
+The `worldloom-synthesis` skill covers causal record programs, conservation
+checks, paired interventions, deterministic sharding, behavioral archives and
+designer/critic executable teams. See [operational synthesis](operational-synthesis.md).
+Ordinary generation and replay do not call a model. External commands execute
+only when explicitly configured; critics cannot override mechanical acceptance.

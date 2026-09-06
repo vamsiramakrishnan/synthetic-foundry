@@ -92,8 +92,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
-from . import factkinds
-from . import registries
+from . import factkinds, registries
 from .models import FormulaKind
 
 #: The formulas a *column* may declare. Closed for ``ConstraintKind``'s reason:
@@ -518,7 +517,18 @@ PNL = Sheet(
 _CUTS: Mapping[str, tuple[tuple[str, ...], Mapping[str, str]]] = {
     "stores": (("revenue_budget", "revenue_actual", "revenue_variance"), {}),
     "divisions": (
-        ("revenue_budget", "revenue_actual", "revenue_variance", "gm_pct_actual"),
+        # `gp_actual` is here because `gm_pct_actual` derives from it
+        # (RATIO_PCT over gp_actual / revenue_actual). The cut shipped without
+        # it, `lint`'s missing-operand rule reported it truthfully for as long
+        # as both existed, and the finding was pinned in `tests/test_columns.py`
+        # rather than fixed: `render.xlsx._formula` found no address for the
+        # numerator and the margin cell rendered as a pasted literal — a number
+        # Word prints and Excel cannot recompute, the exact cross-format defect
+        # class this module's lint exists to catch. Carrying the operand is the
+        # fix that keeps the ratio a ratio; dropping the derivation instead
+        # would have kept the paste and merely stopped reporting it.
+        ("revenue_budget", "revenue_actual", "revenue_variance", "gp_actual",
+         "gm_pct_actual"),
         # The memo's table is already titled by division, so "Revenue variance"
         # on every heading is noise a reader of a memo does not need.
         {"revenue_variance": "Variance"},
@@ -538,17 +548,17 @@ def cut(pnl: Sheet, name: str) -> Sheet:
 #: columns, narrowed rather than restated.
 STORES = cut(PNL, "stores")
 
-#: The variance memo's divisional table: revenue in full, plus the margin rate,
-#: under the memo's own heading for the variance column.
+#: The variance memo's divisional table: revenue in full, gross profit, and the
+#: margin rate it derives from, under the memo's own heading for the variance
+#: column.
 #:
-#: It carries ``gm_pct_actual`` without ``gp_actual``, so ``lint`` reports one
-#: finding against it — truthfully. The ratio's numerator column is not on the
-#: table, ``render.xlsx._formula`` therefore emits no formula, and the cell has
-#: rendered as a pasted literal since the table was written. It is latent rather
-#: than wrong today (the memo is a Word document and this table is never the
-#: subject of an XLSX render), and both fixes — adding the column, or dropping
-#: the derivation for this sheet — change what a reader sees. So it is reported
-#: here and left standing, which is what a lint is for.
+#: It lints clean now, and it did not always: the cut shipped carrying
+#: ``gm_pct_actual`` without ``gp_actual``, and ``lint``'s missing-operand rule
+#: reported it against this very constant from the day the rule existed — the
+#: ratio's numerator resolved to no address, so the margin cell rendered as a
+#: pasted literal in any XLSX of the table. ``_CUTS`` carries the account of the
+#: defect and of why the fix is the operand column rather than dropping the
+#: derivation.
 DIVISIONAL = cut(PNL, "divisions")
 
 

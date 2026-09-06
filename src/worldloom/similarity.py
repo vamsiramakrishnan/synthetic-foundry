@@ -55,7 +55,7 @@ import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -219,8 +219,8 @@ def _coefficients(rows: int) -> tuple[np.ndarray, np.ndarray]:
     different processes compare against each other, and a seeded RNG makes it a
     function of the text *and* of which stream the caller happened to pass.
     """
-    a = np.empty(rows, dtype=np.int64)
-    b = np.empty(rows, dtype=np.int64)
+    a: Any = np.empty(rows, dtype=np.int64)
+    b: Any = np.empty(rows, dtype=np.int64)
     for row in range(rows):
         # `a` must be non-zero for the family to be universal; the modulus is
         # prime, so any non-zero residue works.

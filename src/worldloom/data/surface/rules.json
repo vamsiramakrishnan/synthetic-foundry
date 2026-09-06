@@ -68,7 +68,7 @@
         "pattern": "BSB ###-### Acc ########"
       }
     },
-    "New Zealand": {
+    "Austria": {
       "postcode": {
         "kind": "range_by_city",
         "width": 4,
@@ -77,36 +77,63 @@
           9999
         ],
         "cities": {
-          "Auckland": [
+          "Wien": [
             1010,
-            1072
+            1230
           ],
-          "Wellington": [
-            6011,
-            6037
+          "Graz": [
+            8010,
+            8055
           ],
-          "Christchurch": [
-            8011,
-            8083
+          "Linz": [
+            4020,
+            4048
+          ],
+          "Salzburg": [
+            5020,
+            5083
           ]
         }
       },
       "phone": {
-        "landline": "0@ ### ####",
-        "mobile": "02# ### ####",
-        "area_default": "9",
+        "landline": "+43 @ ### ####",
+        "mobile": "+43 6## ######",
+        "area_default": "1",
         "area_by_city": {
-          "Auckland": "9",
-          "Wellington": "4",
-          "Christchurch": "3"
+          "Wien": "1",
+          "Graz": "316",
+          "Linz": "732",
+          "Salzburg": "662"
         }
       },
       "business_identifier": {
-        "kind": "nzbn"
+        "kind": "at_uid"
       },
       "bank_account": {
+        "kind": "iban",
+        "country": "AT",
+        "bban": "################"
+      }
+    },
+    "Bahrain": {
+      "postcode": {
+        "kind": "po_box",
+        "low": 100,
+        "high": 29999
+      },
+      "phone": {
+        "landline": "+973 17## ####",
+        "mobile": "+973 3### ####",
+        "area_default": ""
+      },
+      "business_identifier": {
         "kind": "pattern",
-        "pattern": "##-####-#######-##"
+        "pattern": "CR #####-#"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "BH",
+        "bban": "BBKU##############"
       }
     },
     "Germany": {
@@ -196,7 +223,27 @@
         "bban": "##################"
       }
     },
-    "Austria": {
+    "Kuwait": {
+      "postcode": {
+        "kind": "fixed_width",
+        "width": 5
+      },
+      "phone": {
+        "landline": "+965 2### ####",
+        "mobile": "+965 9### ####",
+        "area_default": ""
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "CR ######"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "KW",
+        "bban": "NBOK0######################"
+      }
+    },
+    "New Zealand": {
       "postcode": {
         "kind": "range_by_city",
         "width": 4,
@@ -205,42 +252,134 @@
           9999
         ],
         "cities": {
-          "Wien": [
+          "Auckland": [
             1010,
-            1230
+            1072
           ],
-          "Graz": [
-            8010,
-            8055
+          "Wellington": [
+            6011,
+            6037
           ],
-          "Linz": [
-            4020,
-            4048
-          ],
-          "Salzburg": [
-            5020,
-            5083
+          "Christchurch": [
+            8011,
+            8083
           ]
         }
       },
       "phone": {
-        "landline": "+43 @ ### ####",
-        "mobile": "+43 6## ######",
-        "area_default": "1",
+        "landline": "0@ ### ####",
+        "mobile": "02# ### ####",
+        "area_default": "9",
         "area_by_city": {
-          "Wien": "1",
-          "Graz": "316",
-          "Linz": "732",
-          "Salzburg": "662"
+          "Auckland": "9",
+          "Wellington": "4",
+          "Christchurch": "3"
         }
       },
       "business_identifier": {
-        "kind": "at_uid"
+        "kind": "nzbn"
+      },
+      "bank_account": {
+        "kind": "pattern",
+        "pattern": "##-####-#######-##"
+      }
+    },
+    "Oman": {
+      "postcode": {
+        "kind": "fixed_width",
+        "width": 3
+      },
+      "phone": {
+        "landline": "+968 24## ####",
+        "mobile": "+968 9### ####",
+        "area_default": ""
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "CR #######"
       },
       "bank_account": {
         "kind": "iban",
-        "country": "AT",
-        "bban": "################"
+        "country": "OM",
+        "bban": "###################"
+      }
+    },
+    "Qatar": {
+      "postcode": {
+        "kind": "po_box",
+        "low": 1000,
+        "high": 39999
+      },
+      "phone": {
+        "landline": "+974 4### ####",
+        "mobile": "+974 ## ### ###",
+        "area_default": ""
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "CR ######"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "QA",
+        "bban": "QNBA#####################"
+      }
+    },
+    "Saudi Arabia": {
+      "postcode": {
+        "kind": "fixed_width",
+        "width": 5
+      },
+      "phone": {
+        "landline": "+966 @ ### ####",
+        "mobile": "+966 5# ### ####",
+        "area_default": "11",
+        "area_by_city": {
+          "Riyadh": "11",
+          "Jeddah": "12",
+          "Dammam": "13",
+          "Makkah": "12",
+          "Madinah": "14"
+        }
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "CR 10########"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "SA",
+        "bban": "80####################"
+      }
+    },
+    "United Arab Emirates": {
+      "postcode": {
+        "kind": "po_box",
+        "low": 1000,
+        "high": 99999
+      },
+      "phone": {
+        "landline": "+971 @ ### ####",
+        "mobile": "+971 5# ### ####",
+        "area_default": "4",
+        "area_by_city": {
+          "Dubai": "4",
+          "Abu Dhabi": "2",
+          "Sharjah": "6",
+          "Ajman": "6",
+          "Ras Al Khaimah": "7",
+          "Fujairah": "9",
+          "Al Ain": "3"
+        }
+      },
+      "business_identifier": {
+        "kind": "pattern",
+        "pattern": "TRN 1003############"
+      },
+      "bank_account": {
+        "kind": "iban",
+        "country": "AE",
+        "bban": "###################"
       }
     },
     "United Kingdom": {
@@ -341,97 +480,6 @@
         "kind": "iban",
         "country": "GB",
         "bban": "WLBK##############"
-      }
-    },
-    "United Arab Emirates": {
-      "postcode": {
-        "kind": "po_box",
-        "low": 1000,
-        "high": 99999
-      },
-      "phone": {
-        "landline": "+971 @ ### ####",
-        "mobile": "+971 5# ### ####",
-        "area_default": "4",
-        "area_by_city": {
-          "Dubai": "4",
-          "Abu Dhabi": "2",
-          "Sharjah": "6",
-          "Ajman": "6",
-          "Ras Al Khaimah": "7",
-          "Fujairah": "9"
-        }
-      },
-      "business_identifier": {
-        "kind": "pattern",
-        "pattern": "TRN 1003############"
-      },
-      "bank_account": {
-        "kind": "iban",
-        "country": "AE",
-        "bban": "###################"
-      }
-    },
-    "Qatar": {
-      "postcode": {
-        "kind": "po_box",
-        "low": 1000,
-        "high": 39999
-      },
-      "phone": {
-        "landline": "+974 4### ####",
-        "mobile": "+974 ## ### ###",
-        "area_default": ""
-      },
-      "business_identifier": {
-        "kind": "pattern",
-        "pattern": "CR ######"
-      },
-      "bank_account": {
-        "kind": "iban",
-        "country": "QA",
-        "bban": "QNBA#####################"
-      }
-    },
-    "Bahrain": {
-      "postcode": {
-        "kind": "po_box",
-        "low": 100,
-        "high": 29999
-      },
-      "phone": {
-        "landline": "+973 17## ####",
-        "mobile": "+973 3### ####",
-        "area_default": ""
-      },
-      "business_identifier": {
-        "kind": "pattern",
-        "pattern": "CR #####-#"
-      },
-      "bank_account": {
-        "kind": "iban",
-        "country": "BH",
-        "bban": "BBKU##############"
-      }
-    },
-    "Oman": {
-      "postcode": {
-        "kind": "fixed_width",
-        "width": 3
-      },
-      "phone": {
-        "landline": "+968 24## ####",
-        "mobile": "+968 9### ####",
-        "area_default": ""
-      },
-      "business_identifier": {
-        "kind": "pattern",
-        "pattern": "CR #######"
-      },
-      "bank_account": {
-        "kind": "iban",
-        "country": "OM",
-        "bban": "###################"
       }
     },
     "_generic": {

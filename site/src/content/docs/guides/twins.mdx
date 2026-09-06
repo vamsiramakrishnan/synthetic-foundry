@@ -1,0 +1,93 @@
+---
+title: Counterfactual twins
+description: Rebuild a corpus with one recorded value replaced, and measure the delta.
+---
+
+import Mermaid from '../../../components/Mermaid.astro';
+
+Two seeds differ everywhere at once, so comparing them attributes nothing. A
+counterfactual twin rebuilds the same recipe with exactly one recorded value
+replaced. Every row that differs between the two worlds differs because of
+that value.
+
+<Mermaid
+  code={`flowchart TD
+  C["corpus recipe + generation ledger"] --> P["patched recipe
+one --set PATH=VALUE"]
+  P --> O["rebuild original"]
+  P --> T["rebuild twin"]
+  O --> D["DeltaManifest
+changed and unchanged counts
+per stream"]
+  T --> D
+  P -- "intervention changes what exists" --> X["refused with the cause
+exit code 3"]
+  classDef accent stroke:#e85d1f,stroke-width:2px;
+  class D accent`}
+/>
+
+## A worked example
+
+Build a corpus whose recipe records a growth trend, then move the trend:
+
+```bash
+worldloom build --seed 8128 --incident --comparatives 11 --trend 0.004 \
+    --narrate --out ./corpus
+worldloom twin ./corpus --set steps/0/trend_pct=0.008
+```
+
+Real output from that run:
+
+```text
+steps/0/trend_pct: 0.004 -> 0.008
+┏━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━┓
+┃ stream      ┃ changed ┃ unchanged ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━┩
+│ facts       │     276 │       735 │
+│ events      │       0 │        17 │
+│ artifacts   │       1 │        15 │
+│ evaluations │       0 │        51 │
+│ entities    │       0 │       227 │
+└─────────────┴─────────┴───────────┘
+```
+
+Read it as attribution. Doubling the trend moved 276 of 1,011 facts and
+exactly one artifact — the workbook that carries the comparative history.
+No event, no evaluation case, and no entity moved. The delta is measured at
+the corpus's own JSONL representation, not predicted.
+
+Add `--out ./counterfactual` to keep the twin. Add `--json` for the manifest
+as data. Paths are slash-separated because physics names are themselves
+dotted: `--set physics/retail.margin.erosion/high=0.06` on a corpus whose
+recipe records that physics range.
+
+## The refusal branch
+
+An intervention that changes how many things exist reshuffles sequentially
+minted IDs. A diff across reshuffled IDs would label unrelated changes as
+caused, so the twin refuses it and names the cause. Real output:
+
+```bash
+worldloom twin ./corpus --set steps/0/incident=false
+```
+
+```text
+steps/0/incident: True -> False
+refused: this intervention changes what exists, not what is true about it
+(facts 1011 -> 995; events 17 -> 7; artifacts 48 -> 21; evaluations 51 -> 35).
+Ids are minted sequentially, so locality cannot hold: a twin that silently
+realigned the reshuffled ids would label unrelated changes as caused.
+```
+
+The command exits with code 3 on refusal.
+
+## A zero-change manifest is a finding
+
+A widened integer range can be absorbed by rejection sampling. The twin then
+reports honestly that the parameter reached nothing. That is an answer, not a
+failure: you now know the knob does not turn this world.
+
+## From Python
+
+`worldloom.twins` returns both worlds and the manifest, for sweeps the CLI's
+one-flag shape does not fit.

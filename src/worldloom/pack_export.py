@@ -147,9 +147,12 @@ class Derived:
         written: dict[str, Path] = {}
 
         pack_path = target / "pack.json"
+        # newline pinned on all three sidecars: an exported bundle is diffed
+        # and re-imported across machines, and Windows text mode would give
+        # it CRLF bytes a POSIX export never has.
         pack_path.write_text(
             json.dumps(packs.to_recipe(self.pack), indent=2, allow_nan=False) + "\n",
-            encoding="utf-8",
+            encoding="utf-8", newline="\n",
         )
         written["pack"] = pack_path
 
@@ -157,7 +160,7 @@ class Derived:
             physics_path = target / "physics.json"
             physics_path.write_text(
                 json.dumps(self.physics_document(), indent=2, allow_nan=False) + "\n",
-                encoding="utf-8",
+                encoding="utf-8", newline="\n",
             )
             written["physics"] = physics_path
 
@@ -165,7 +168,8 @@ class Derived:
         if shape:
             shape_path = target / "shape.json"
             shape_path.write_text(
-                json.dumps(shape, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+                json.dumps(shape, indent=2, allow_nan=False) + "\n",
+                encoding="utf-8", newline="\n",
             )
             written["shape"] = shape_path
 

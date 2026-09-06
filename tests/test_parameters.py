@@ -20,7 +20,6 @@ from worldloom.retail import BASE_INCIDENT_LIKELIHOOD, RetailWorld
 from worldloom.rng import Rng
 from worldloom.scenarios import MonthEndClose
 
-
 # ---------------------------------------------------------------------------
 # The registry itself
 # ---------------------------------------------------------------------------
@@ -190,6 +189,31 @@ def test_the_incident_tempo_is_reachable() -> None:
     assert confirmed(_close(faster)) != confirmed(_close(DEFAULT))
 
 
+def test_a_fast_hypothesis_never_predates_the_incident_it_depends_on() -> None:
+    """Independent mosaic axes once let a fast hypothesis beat ticket raising.
+
+    Seed 8138 reaches that draw in its fourth close: 12 minutes from detection
+    to a hypothesis and 18 minutes to an opened incident.  The dependency must
+    remain chronological without narrowing the caller's authored physics span.
+    """
+    physics = DEFAULT.with_overrides({
+        "ops.incident.hypothesis_minutes": Span(2, 28),
+    })
+    world = RetailWorld(seed=8138, physics=physics).build()
+    for period in ("2026-03", "2026-04", "2026-05", "2026-06"):
+        world = world.run(MonthEndClose(
+            period=period, include_operational_incident=True, physics=physics,
+        ))
+
+    events = {event.id: event for event in world.events}
+    assert all(
+        events[cause].occurred_at <= event.occurred_at
+        for event in world.events
+        for cause in event.caused_by
+    )
+    assert world.validate().ok
+
+
 # ---------------------------------------------------------------------------
 # Carriage: the recipe, and replay
 # ---------------------------------------------------------------------------
@@ -261,7 +285,7 @@ def test_an_integer_span_survives_the_round_trip_it_is_recorded_by() -> None:
 
 
 def test_a_malformed_override_names_the_parameter() -> None:
-    with pytest.raises(ValueError, match="retail.margin.erosion"):
+    with pytest.raises(ValueError, match=r"retail\.margin\.erosion"):
         overrides_from({"retail.margin.erosion": {"low": 0.1}})
 
 
@@ -281,7 +305,7 @@ def test_a_reserving_multiple_may_be_tuned_and_not_tuned_away(name: str) -> None
     from worldloom.generators import triangles
 
     periods = ("2025-03", "2025-06", "2025-09", "2025-12")
-    with pytest.raises(ValueError, match="strictly above 1.0"):
+    with pytest.raises(ValueError, match=r"strictly above 1\.0"):
         triangles.generate(
             Rng(8128), accident_periods=periods, risk_margin_policy_pct=6.0,
             physics=DEFAULT.with_overrides({name: Span(0.9, 1.4)}),

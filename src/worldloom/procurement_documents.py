@@ -46,7 +46,10 @@ happened inside:
   yards and both cost centres carry a figure somebody could argue with, and it
   is a workbook rather than a memo for the reason the retail month-end model is:
   a hundred and forty rows of allocation is a sheet, and prose about it would be
-  a paraphrase of a table.
+  a paraphrase of a table. Its movement sheet is what stitches a history
+  together: this month's opening commitment is last month's closing one, so two
+  workbooks from consecutive closes are two pages of one account rather than
+  two photographs.
 """
 
 from __future__ import annotations
@@ -59,6 +62,8 @@ from .generators.procurement_cycle import ProcurementEpisode
 from .generators.procurement_estate import (
     COMMITMENT,
     MATERIALS,
+    OPENING,
+    PLACED,
     SPEND,
     EstatePosition,
 )
@@ -133,27 +138,12 @@ def artifact_intents(
     k = episode.keys
     lines = [line.category_id for line in episode.position.lines]
     intents: list[ArtifactIntent] = []
-
-    def intent(artifact_type: str, domain: str, audience: str, author: str,
-               facts: list[str], events: list[str], size: str, rationale: str,
-               *, derived_from: list[str] | None = None) -> ArtifactIntent:
-        made = ArtifactIntent(
-            id=minter.next("ART"),
-            artifact_type=artifact_type,
-            domain=domain,
-            audience=audience,
-            author_id=author,
-            approver_id=documents.approver_of(
-                roles, artifact_type, author, _APPROVED_BY
-            ),
-            triggered_by=events,
-            required_fact_ids=facts,
-            size_profile=size,  # type: ignore[arg-type]
-            rationale=rationale,
-            derived_from=derived_from or [],
-        )
-        intents.append(made)
-        return made
+    # The shared minter, with procurement's own approval table: four planners
+    # used to hand-copy this closure and drift on its keywords (see
+    # ``documents.intent_minter``); what stays procurement's is _APPROVED_BY.
+    intent = documents.intent_minter(
+        minter, intents, roles=roles, approved_by=_APPROVED_BY
+    )
 
     # 1 — the purchase order: what was committed, and at what rate.
     order_facts: list[str] = []
@@ -733,6 +723,40 @@ def spend_and_commitment_ir(world, intent: ArtifactIntent, minter: Minter) -> Ar
         ),
     )
 
+    # -- the commitment movement -------------------------------------------
+    # The reading a contractor's cost report opens with, and the sheet that
+    # makes a history causally continuous on the page: this month's opening
+    # line is last month's closing line, and a reader with two workbooks open
+    # can see the balance carry. No formula cell — the identity mixes signs
+    # across *rows*, which neither SUM (rows, one sign) nor DIFFERENCE
+    # (columns) declares — so the closing is a plain cited figure and the
+    # arithmetic is held by the procurement check group's stockflow clause
+    # rather than asserted twice in two grammars.
+    opening_by = _by_kind(facts, OPENING)
+    placed_by = _by_kind(facts, PLACED)
+    movement = Table(
+        key="movement", title="Commitment movement",
+        columns=[Column(key="amount", label=f"Amount ({money})",
+                        number_format=MONEY_FORMAT)],
+        rows=[
+            Row(key="opening", label="Open commitment brought forward",
+                cells={"amount": _figure(opening_by, company.id)}),
+            Row(key="placed", label="Orders placed in the period",
+                cells={"amount": _figure(placed_by, company.id)}),
+            Row(key="received", label="Receipts against orders in the period",
+                cells={"amount": _figure(spend, company.id)}),
+            Row(key="closing", label="Open commitment carried forward", emphasis=True,
+                cells={"amount": _figure(commitment, company.id)}),
+        ],
+        note=(
+            "Closing is opening plus placed less received, to the unit. Receipts "
+            "against orders are the period's third-party spend — the same figure the "
+            "position above reports, because a receipt is the event that turns "
+            "commitment into spend — and the opening balance is the closing balance "
+            "of the previous close's workbook."
+        ),
+    )
+
     # -- by division -------------------------------------------------------
     division_rows = [
         Row(key=unit.id, label=unit.name, cells={
@@ -876,6 +900,7 @@ def spend_and_commitment_ir(world, intent: ArtifactIntent, minter: Minter) -> Ar
     # repository's `carried_evidence` family exists to refuse.
     sections = [
         ArtifactSection(heading="Procurement position", table=position),
+        ArtifactSection(heading="Commitment movement", table=movement),
         ArtifactSection(heading="By division", table=division),
     ]
     if category_subtotals:
@@ -899,7 +924,9 @@ def spend_and_commitment_ir(world, intent: ArtifactIntent, minter: Minter) -> Ar
 # Registration
 # ---------------------------------------------------------------------------
 
-from .render import docx as _docx, markdown as _markdown, xlsx as _xlsx  # noqa: E402
+from .render import docx as _docx
+from .render import markdown as _markdown
+from .render import xlsx as _xlsx
 
 _xlsx.register("purchase_order", "goods_receipt_note", "supplier_invoice",
                "spend_and_commitment_workbook")

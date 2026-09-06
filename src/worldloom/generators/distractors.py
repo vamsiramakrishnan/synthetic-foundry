@@ -53,11 +53,13 @@ corpus's promise was never that a synthetic enterprise is tidier than a real one
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from .. import documents
+from ..compiler import mechanical
 from ..ids import Minter, id_prefix, is_id
 from ..models import (
     ArtifactIntent,
@@ -941,6 +943,121 @@ def _orphaned(
     return found
 
 
+def _workbook_sources(world: World) -> list[ArtifactIntent]:
+    """The planned workbooks a mechanical error could corrupt a copy of, in id order.
+
+    Id order for `_citations`' reason: the one total order that never moves,
+    since which workbook gains the copy decides every id minted after it.
+    """
+    return [
+        intent
+        for intent in sorted(world._artifact_intents, key=lambda i: i.id)
+        if intent.artifact_type in mechanical.CORRUPTIBLE
+    ]
+
+
+def _mechanical_defects(
+    world: World, source: ArtifactIntent, facts: dict[str, CanonicalFact],
+) -> list[tuple[ErrorType, CanonicalFact, float, str]]:
+    """The mechanical errors *source*'s workbook can support, fully decided.
+
+    ``(error_type, canonical fact, observed amount, note)`` per defect, in a
+    fixed order — the paste-over first, then the short range — because the pass
+    spends a budget down this list and a reordering would relabel every corpus
+    that asked for one of the two.
+
+    Deliberately **pure**: no minter, no rng. `messiness_ceilings` calls this
+    to *measure*, and `_orphanable`'s docstring records what happened the last
+    time measuring advanced the id sequence — a replay stopped matching its own
+    build. Every choice below is forced instead of drawn: the paste-over is the
+    first adjacent pair of unit rows whose variances differ (a paste-down comes
+    from the row above by definition, not from a sampled donor), and the short
+    range always drops the last row (that is what "stops one row early" means).
+
+    The unit selection replicates `documents.finance_workbook`'s own — same
+    period rule, same "any measured column resolves" predicate, same fallback —
+    because the observed reading recorded here must equal what the compiled
+    sheet's truncated range states. The coupling is deliberate and defended:
+    `compiler.mechanical._corrupted` recomputes the truncated sum from the
+    compiled table and raises on disagreement, so the two drifting apart is a
+    loud build failure rather than a mislabelled corpus.
+    """
+    from .. import columns as columns_module
+
+    kinds = columns_module.for_world(world).kinds()
+    current: dict[tuple[str, str, str | None], CanonicalFact] = {}
+    cited = [facts[fact_id] for fact_id in source.required_fact_ids if fact_id in facts]
+    for fact in cited:
+        if not fact.is_superseded:
+            current.setdefault((fact.kind, fact.subject, fact.period), fact)
+    periods = sorted({fact.period for fact in cited if fact.period})
+    period = (periods[-1] if periods else "") or world.period or ""
+
+    def measured(unit_id: str) -> bool:
+        return any(current.get((kind, unit_id, period)) is not None for kind in kinds.values())
+
+    units = [unit for unit in world.business_units if measured(unit.id)]
+    if not units:
+        units = list(world.business_units)
+
+    found: list[tuple[ErrorType, CanonicalFact, float, str]] = []
+
+    # (i) the paste-over: a unit's variance cell carrying the row above's number.
+    variance_kind = kinds["revenue_variance"]
+    rows = [(unit, current.get((variance_kind, unit.id, period))) for unit in units]
+    for (_donor_unit, donor), (target_unit, target) in itertools.pairwise(rows):
+        if donor is None or target is None or donor.value is None or target.value is None:
+            continue
+        if abs(donor.value.amount - target.value.amount) <= 0.01:
+            # Equal readings would label a disagreement the sheet does not
+            # have, which is exactly what `validate.intentional` refuses.
+            continue
+        found.append((
+            ErrorType.HARDCODED_VALUE,
+            target,
+            donor.value.amount,
+            (
+                "Deliberate paste-over, and no figure was invented to make it:"
+                f" the number typed into {target_unit.name}'s revenue-variance"
+                f" cell is {donor.id}'s own reading — the row above, copied"
+                " down and never re-derived. Establishable from the corpus"
+                f" alone: the cell cites {target.id}, every sibling row still"
+                f" derives, and {donor.id} measures exactly what the cell"
+                " states."
+            ),
+        ))
+        break
+
+    # (ii) the short range: the group total's SUM stopping one row early.
+    actual_kind = kinds["revenue_actual"]
+    group = current.get((actual_kind, world.company.id, period))
+    if group is not None and group.value is not None and len(units) >= 2:
+        dropped = units[-1]
+        stated = 0.0
+        for unit in units[:-1]:
+            fact = current.get((actual_kind, unit.id, period))
+            if fact is not None and fact.value is not None:
+                stated += fact.value.amount
+        if abs(stated - group.value.amount) > 0.01:
+            dropped_fact = current.get((actual_kind, dropped.id, period))
+            found.append((
+                ErrorType.SHORT_RANGE,
+                group,
+                stated,
+                (
+                    "Deliberate short range: the group revenue total sums the"
+                    f" unit rows and stops one row early, missing {dropped.name}."
+                    f" Establishable from the corpus alone: the cell cites"
+                    f" {group.id}, the truncated range totals what the rows it"
+                    " still covers state, and the dropped row's own figure"
+                    + (f" ({dropped_fact.id})" if dropped_fact is not None else "")
+                    + " accounts for the difference."
+                ),
+            ))
+
+    return found
+
+
 def messiness_ceilings(world: World) -> dict[str, int]:
     """The most each kind of imperfection *world* could support, by kind.
 
@@ -971,11 +1088,20 @@ def messiness_ceilings(world: World) -> dict[str, int]:
         (old, new) for old, new in corrections
         if citations.get(old.id) and citations.get(new.id)
     ]
-    orphanable = len(_orphanable(world, _facts_by_id(world)))
+    facts = _facts_by_id(world)
+    orphanable = len(_orphanable(world, facts))
     return {
         "staleness": len([1 for old, _ in corrections if citations.get(old.id)]),
         "disagreement": len(cited),
         "orphaning": orphanable,
+        # One paste-over and one short range per corruptible workbook is the
+        # structural most: `_mechanical_defects` decides both without minting
+        # or drawing, which is what makes it callable from a measurement at
+        # all — the `_orphanable` lesson, applied from day one this time.
+        "mechanical": sum(
+            len(_mechanical_defects(world, source, facts))
+            for source in _workbook_sources(world)
+        ),
     }
 
 
@@ -1068,6 +1194,70 @@ def apply_messiness(
 
     # (c) orphaning — documents the roster already stranded, now recorded.
     errors.extend(_orphaned(world, facts, minter)[: messiness["orphaning"]])
+
+    # (d) mechanical — the sheet's own failure modes, on a working copy of the
+    # month-end model. Spent last, always: the three editorial kinds above must
+    # mint the same ids and draw the same seeded values they always have, since
+    # every stored profile carries this budget at zero and those corpora keep
+    # their exact bytes. The plan is fully decided here; making each error true
+    # of a rendered cell is `compiler.mechanical`'s half of the thread.
+    remaining = messiness["mechanical"]
+    for source in _workbook_sources(world):
+        if remaining <= 0:
+            break
+        planned = _mechanical_defects(world, source, facts)[:remaining]
+        if not planned:
+            continue
+        # The copy postdates the model it copies by construction — its
+        # register's lag is longer — but a borrowed voice is not automatically
+        # a valid one, the same rule `_stale_republication` enforces at the
+        # point the date is chosen.
+        at = documents.written_at(
+            _probe(source, mechanical.WORKBOOK_COPY, list(source.required_fact_ids)),
+            facts,
+        )
+        if not _employed_at(world, source.author_id, at):
+            continue
+        copy = ArtifactIntent(
+            id=minter.next("ART"),
+            artifact_type=mechanical.WORKBOOK_COPY,
+            domain=source.domain,
+            audience=source.audience,
+            author_id=source.author_id,
+            # The full fact set, not a subset: the copy is the whole model
+            # saved again, and `compiler.mechanical` rebuilds every sheet from
+            # these — a subset would be a thinner document wearing the model's
+            # name, and `carried_evidence` would rightly refuse it.
+            required_fact_ids=list(source.required_fact_ids),
+            size_profile=source.size_profile,
+            derived_from=[source.id],
+            rationale=(
+                f"A hand-kept working copy of {source.id} with mechanical"
+                " spreadsheet errors in it — a cell typed over its formula, a"
+                " SUM range that stops one row early. The model itself stays"
+                " right; the discoverable disagreement between the two is the"
+                " trap, and every wrong cell is labelled in"
+                " intentional-errors.jsonl."
+            ),
+        )
+        new_intents.append(copy)
+        for error_type, canonical, observed, note in planned:
+            errors.append(
+                IntentionalError(
+                    id=minter.next("ERR"),
+                    artifact_id=copy.id,
+                    error_type=error_type,
+                    # Bare readings rather than the decay kinds' prose:
+                    # `compiler.mechanical` types observed_value into the cell
+                    # and `validate.intentional` compares the compiled cell
+                    # back against it, and neither may parse a sentence.
+                    observed_value=mechanical.reading(observed),
+                    canonical_value=_reading(canonical),
+                    canonical_fact_id=canonical.id,
+                    note=note,
+                )
+            )
+            remaining -= 1
 
     return world.extend(
         artifact_intents=tuple(new_intents),

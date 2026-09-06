@@ -416,7 +416,7 @@ def test_a_breach_multiple_at_one_is_refused() -> None:
     spans = dict(procurement_match.SPANS)
     spans["procurement.tolerance.breach_multiple"] = Span(
         1.0, 1.4, "number", None, "tuned away")
-    with pytest.raises(ValueError, match="strictly above 1.0"):
+    with pytest.raises(ValueError, match=r"strictly above 1\.0"):
         procurement_match.generate(
             __import__("worldloom.rng", fromlist=["Rng"]).Rng(SEED),
             contested_category_id="CAT-0001", clean_category_id="CAT-0002",

@@ -227,21 +227,27 @@ def _pick(rng: Rng, people: Sequence[Any], count: int) -> list[Any]:
     return [people[index] for index in sorted(indices)]
 
 
-def _managers(world: Any, at: datetime) -> list[Any]:
-    """Everybody who has at least one direct report, in roster order.
+def _managers(roster: list[Any]) -> list[Any]:
+    """Everybody in *roster* who has at least one direct report, in roster order.
 
     A hiring manager has reports by definition and a reviewer has one to
     review, so this is the pool both rounds draw from — and it is the pool this
     module exists to reach. It is 55 people on a 420-person synthesised
     organisation, against the dozen the role table names.
+
+    Takes the listed roster rather than ``(world, at)`` — and ``_reports``
+    likewise — because ``world.org_at`` filters and re-collects the whole
+    roster on every call, and the review cycle used to ask it again for every
+    manager it paired: O(managers × people) for a roster that cannot change
+    mid-round, since the round itself is what would change it. The caller
+    lists it once and both helpers read the same snapshot.
     """
-    roster = list(world.org_at(at))
     leads = {person.manager_id for person in roster if person.manager_id}
     return [person for person in roster if person.id in leads]
 
 
-def _reports(world: Any, at: datetime, manager_id: str) -> list[Any]:
-    return [p for p in world.org_at(at) if p.manager_id == manager_id]
+def _reports(roster: list[Any], manager_id: str) -> list[Any]:
+    return [p for p in roster if p.manager_id == manager_id]
 
 
 #: The label of the access policy these documents are governed by, and — by
@@ -343,7 +349,7 @@ class HiringRound:
         base_cost = _median_cost(world)
         pack_pools = (world._recipe.get("pack") or {}).get("name_pools") or {}
 
-        managers = _managers(world, at)
+        managers = _managers(list(world.org_at(at)))
         if not managers:
             raise ValueError(
                 "this world has nobody with a direct report, so no vacancy has a"
@@ -473,8 +479,17 @@ class HiringRound:
                 # start date alone, which is honest.
                 required_fact_ids=[offer_facts[1].id] + [
                     fact.id for fact in world.facts
-                    if fact.kind in ("policy.technology.mfa",
-                                     "policy.technology.access_review_months")
+                    # Four-part kinds since `policies.kind_of` put the policy's
+                    # own name in the prefix (leave and remote work were one
+                    # role without it). An exact-match list is the one consumer
+                    # a prefix change breaks *silently* — the checklist would
+                    # have shipped citing the start date alone, exactly the
+                    # policies-off shape, with nothing failing — so these two
+                    # literals moved with the taxonomy.
+                    if fact.kind in (
+                        "policy.technology.information_security.mfa",
+                        "policy.technology.information_security.access_review_months",
+                    )
                     and fact.valid_to is None
                 ],
                 size_profile="small",
@@ -530,7 +545,8 @@ class PerformanceCycle:
         at = _period_boundary(self.period)
         rng = Rng(world.seed).derive(f"scenario/PerformanceCycle/{self.period}")
 
-        managers = _managers(world, at)
+        roster = list(world.org_at(at))
+        managers = _managers(roster)
         if not managers:
             raise ValueError(
                 "this world has nobody with a direct report, so nobody has a"
@@ -544,7 +560,7 @@ class PerformanceCycle:
         named: set[str] = set()
 
         for index, manager in enumerate(_pick(rng.derive("managers"), managers, self.pairs)):
-            reports = _reports(world, at, manager.id)
+            reports = _reports(roster, manager.id)
             if not reports:
                 continue
             draw = rng.derive(f"pair/{index}")
@@ -817,7 +833,8 @@ def _register() -> None:
         },
     )
 
-    from .factkinds import FactKind, register as register_kinds
+    from .factkinds import FactKind
+    from .factkinds import register as register_kinds
 
     register_kinds([
         FactKind(kind="people.requisition.grade", domain="core",

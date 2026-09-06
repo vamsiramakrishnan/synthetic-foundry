@@ -16,17 +16,18 @@ from __future__ import annotations
 
 import argparse
 import os
-from dataclasses import dataclass
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Sequence, TypeVar
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TypeVar
 
 from worldloom import domains, facets, landscape, locales
+from worldloom.corpus import tree_divergence
 from worldloom.dispersion import farthest_first, halton, manhattan
-
 
 PERIODS = (1, 2, 3)
 POOL_SIZE = 1_024
@@ -214,17 +215,18 @@ def _run(command: Sequence[str]) -> None:
 
 
 def _assert_byte_identical(expected: Path, actual: Path) -> None:
-    expected_files = {
-        path.relative_to(expected) for path in expected.rglob("*") if path.is_file()
-    }
-    actual_files = {path.relative_to(actual) for path in actual.rglob("*") if path.is_file()}
-    if expected_files != actual_files:
-        missing = sorted(str(path) for path in expected_files - actual_files)
-        extra = sorted(str(path) for path in actual_files - expected_files)
+    # The comparison itself lives in `worldloom.corpus.tree_divergence` now,
+    # shared with `worldloom verify` so the sweep and the command cannot drift
+    # apart about what byte-identical means; only the AssertionError dressing —
+    # the exact messages this script has always raised — stays here.
+    divergence = tree_divergence(expected, actual)
+    if divergence is None:
+        return
+    if divergence.differing is None:
+        missing = list(divergence.missing)
+        extra = list(divergence.extra)
         raise AssertionError(f"replay file set differs; missing={missing}, extra={extra}")
-    for relative in sorted(expected_files):
-        if (expected / relative).read_bytes() != (actual / relative).read_bytes():
-            raise AssertionError(f"replay differs byte-for-byte at {relative}")
+    raise AssertionError(f"replay differs byte-for-byte at {divergence.differing}")
 
 
 def replay(configuration: Configuration, seed: int, root: Path) -> None:

@@ -1,0 +1,35 @@
+{
+  "question": "store_count",
+  "claim": "The network's size follows from format and geography; per-store headcount is not free of it once total headcount is fixed.",
+  "low": 180,
+  "high": 240,
+  "source": "sector aggregate or published benchmark, never a named company's own figures",
+  "binds": null,
+  "answers_for": null,
+  "raises": [
+    {
+      "key": "store_headcount",
+      "asks": "How many people does one store run?",
+      "because": "Total headcount is stores times staffing, so neither is free once the other is answered.",
+      "unit": "people",
+      "relation": "scales",
+      "factor_low": 0.4,
+      "factor_high": 0.6,
+      "domain_low": null,
+      "domain_high": null,
+      "binds": null,
+      "answers_for": null,
+      "layer": "organisation"
+    }
+  ],
+  "links": [
+    {
+      "subject": "store_count",
+      "object": "store_headcount",
+      "relation": "at_most",
+      "factor_low": 1.0,
+      "factor_high": 1.0,
+      "because": "Why these two questions cannot be set independently."
+    }
+  ]
+}
