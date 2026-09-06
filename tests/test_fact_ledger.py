@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from worldloom import sdk
 from worldloom.fact_ledger import AmbiguousFactView, FactLedger
 from worldloom.models import Authority, CanonicalFact, Quantity
 
@@ -91,3 +93,24 @@ def test_raw_ledger_retains_every_history_row() -> None:
     )
 
     assert FactLedger((first, second)).to_tuple() == (first, second)
+
+
+def test_world_keeps_raw_history_and_exposes_explicit_resolved_views() -> None:
+    first = _fact("F-1", 100, tx_from=T0)
+    second = _fact(
+        "F-2",
+        120,
+        tx_from=T0 + timedelta(days=5),
+        supersedes="F-1",
+    )
+    base = sdk.retail(seed=31).build().world
+    world = replace(base, _facts=(first, second))
+
+    assert world.facts.ids() == ["F-1", "F-2"]
+    assert world.fact_ledger().to_tuple() == (first, second)
+    assert world.fact_view(
+        "*", valid_at=T0 + timedelta(days=2), tx_at=T0 + timedelta(days=2)
+    ).ids() == ["F-1"]
+    assert world.fact_view(
+        "*", valid_at=T0 + timedelta(days=2), tx_at=T0 + timedelta(days=10)
+    ).ids() == ["F-2"]
