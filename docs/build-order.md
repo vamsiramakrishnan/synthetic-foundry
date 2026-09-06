@@ -1,6 +1,8 @@
 # Build order
 
-Worldloom is not built subsystem by subsystem. It is built as one complete, falsifiable enterprise episode, made useful for evaluation, and then handcrafted parts are replaced with reusable generators.
+Choose the company specification, required episode, output surfaces, and
+evaluation purpose before building. Use the stages below to make dependencies
+explicit and inspect each result before producing the next artifact.
 
 ```
 Truth model

@@ -1,78 +1,58 @@
 ---
 title: Validation
-description: What worldloom validate checks, and what it refuses to warn about.
+description: Check corpus coherence, interpret advisories, and decide what still needs evaluation.
 ---
+
+Run validation after generation, accepted narration, and rendering:
 
 ```bash
 worldloom validate ./corpus
 ```
 
-The validator checks that the whole corpus agrees with itself. It prints the
-number of checks it ran: 1,283 on the bundled `retail-close` example, 8,877 on
-a rendered seed-8128 build, tens of thousands on a large world. Every failure
-is a defect, not a warning.
+The verdict concerns the configured coherence rules. A passing verdict does
+not establish enterprise breadth, document realism, rendering quality, or
+successful retrieval. Keep those results separate.
 
-## What it treats as a defect
+## What the checks compare
 
-- A total that does not equal the sum of its parts.
-- A variance that is not actual less budget.
-- A percentage that does not match the amounts it describes.
-- A document citing a fact that did not yet exist when it was written.
-- A reference to an entity, event, or fact that does not exist.
-- A reporting line that cycles, or a service that owns itself.
-- An author who cannot see the document they wrote.
-- An approver who does not exist, wrote the document themselves, or is not
-  permitted by the document's own access policy.
-- Lore that constrains nothing.
-- A fact a document was asked to carry and does not carry.
-- A table cell that names a fact and states nothing.
-- Fewer compiled documents than the plan asked for.
+| Check family | Compared values |
+|---|---|
+| Arithmetic | Totals, components, variances, rates and their canonical facts |
+| Chronology | Artifact knowledge cutoffs, fact validity and entity lifetimes |
+| Identity and access | Authors, approvers, reporting relationships and permissions |
+| Artifact coverage | Each intent's required facts and its own compiled artifact |
+| Rendered output | Manifest files, declared figures and chart inputs |
 
-The last three are one rule seen from three sides. The worst defect this
-project has had passed everything above them: a workbook looked its figures up
-at the wrong month, rendered with every cell empty, and validated clean. A
-reconciliation check compares a cell against a fact, and two absent numbers
-agree. The validator now compares each intent's `required_fact_ids` against
-its own compiled `ArtifactIR`, per document. That check found four more
-defects of the same shape on its first run.
+Artifact coverage is checked per document. A fact in one workbook cannot
+satisfy another document's requirement. This catches empty or missing output
+that a corpus-wide union of facts could conceal.
 
-## Violations versus advisories
+## Read the result
 
-Some findings are true and are not coherence violations. The validator prints
-them as readings, not counted against the verdict. The build above ends with:
+Coherence violations fail the verdict. Advisories describe other measured
+properties and do not count as violations. For example, reachability can show
+that named people or systems never appear in readable evidence even when all
+existing references are valid.
 
-```text
-✓ coherent: 8861 checks passed
+Check counts depend on the recipe, revision, artifact set, and render stage.
+Use the count from the actual run; a larger count is not a quality score.
+The [quickstart](/worldloom/getting-started/quickstart/) records one fixture's
+observed counts with its source revision.
 
-organisation: 3 reading(s), not counted against coherence
-  person_reaches_nothing CO-0001: 9 of 23 person(s) are named as the subject
-  of no fact that any compiled document carries on its readable surface ...
-```
+## Decide the next check
 
-That is `validate.reachability`. An entity is *reached* when a fact names it
-and a compiled document carries that fact on its readable surface. A declared
-entity that nothing reaches is real thinness, but it is not incoherence, so it
-does not fail the gate. It ships as a ratchet instead: an entity kind the
-reading names is a knob that will not turn.
+| Question | Next step |
+|---|---|
+| Does the corpus cover the intended business functions? | Enterprise admission audit in the repository guides |
+| Can a reader use the rendered files? | Open the files and inspect layout, labels, formulas and citations |
+| Can a retriever answer the generated cases? | [Evaluation](/worldloom/concepts/evaluation/) |
+| Do accepted inputs replay? | [Determinism](/worldloom/concepts/determinism/) |
+| Does the agent complete a multi-step task? | Execute and grade the agent workflow against its expected effects |
 
-Coherence and thinness are different properties. A 58-fact bank once passed
-validation cleanly while mentioning none of its 133 branches in any document.
-Reachability is the reading that catches that; see
-[Verticals](/worldloom/reference/verticals/) for what closing it did to corpus volume.
+## Resolve a failure
 
-## After rendering
-
-Run `validate` after every render, not only after narration. Rendering adds
-its own checks:
-
-- Every file the manifest names exists on disk.
-- A chart cannot double-count: plotting a `SUM` cell beside its own operands
-  draws the same money twice.
-- Every number in a rendered document traces to a resolved `{{fact:...}}`
-  reference.
-
-## Do not negotiate with it
-
-If you are tempted to make a check pass by editing the fixture or relaxing the
-check: don't. A validator that can be talked out of failing is decoration. Fix
-the thing it caught.
+Use the reported rule and artifact or fact identity to find the inconsistent
+input or transformation. Correct that cause and rerun validation. Do not
+change a fixture or relax an invariant solely to make the current result pass.
+An intentional rule change needs a behavioral test and an explicit compatibility
+decision.

@@ -3,8 +3,9 @@ title: Determinism
 description: Same seed, same world. What replay proves and what breaks it.
 ---
 
-A world regenerates byte-for-byte from its seed plus its generation ledger.
-That claim is executable:
+Replay depends on the recorded recipe, seed, accepted generation ledger,
+output formats, and a compatible code revision. Compare both builds in the
+same environment first:
 
 ```bash
 worldloom build --seed 8128 --incident --narrate -f markdown --out ./one
@@ -12,9 +13,9 @@ worldloom build --seed 8128 --incident --replay ./one -f markdown --out ./two
 diff -r ./one ./two
 ```
 
-The second build makes no generative call. Every narrated section is served
-from the first corpus's content-addressed generation ledger. The `diff` exits
-0. CI enforces this on every push.
+The second build reads accepted narration from the first corpus's ledger.
+Expected result: `diff` exits 0 for this example. A difference needs investigation;
+the seed alone does not establish replay after a code, recipe, or format change.
 
 ## The recipe
 
@@ -37,7 +38,7 @@ one nobody has taken.
 
 ## What breaks determinism
 
-Four things, each caught by CI's byte-identity check:
+Common sources of drift to test:
 
 - **A clock.** Office libraries stamp wall-clock timestamps into their zip
   entries. `render/ooxml.py::normalise()` rewrites them to values derived from
@@ -54,9 +55,10 @@ Four things, each caught by CI's byte-identity check:
 
 ## Determinism beyond one seed
 
-CI proves byte-identity at one seed on every push. That is one point in a
-twelve-axis configuration space. `tools/sweep.py` covers the rest: it plans
-configurations with a covering array, then builds each one twice.
+A passing replay covers its tested configuration. `tools/sweep.py` expands
+coverage by planning configurations with a covering array and building each
+one twice. It samples interactions; it does not enumerate every possible
+world or prove determinism over the entire configuration space.
 
 ```bash
 python3 tools/sweep.py --describe
