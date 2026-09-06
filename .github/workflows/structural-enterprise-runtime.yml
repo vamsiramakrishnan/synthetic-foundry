@@ -1,4 +1,4 @@
-# one-shot gate; deletes itself after the legacy enterprise runtime converges
+# one-shot gate; final rerun after adapter typing fix
 name: structural enterprise runtime convergence
 on:
   push:
