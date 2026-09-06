@@ -68,23 +68,23 @@ def shape_assertions(shape: EvalShape) -> tuple[dict[str, Any], ...]:
     """Compile efficiency assertions from the same shape that builds the eval."""
 
     assertions: list[dict[str, Any]] = []
-    for requirement in shape.records:
-        if requirement.projection_required:
+    for record_requirement in shape.records:
+        if record_requirement.projection_required:
             assertions.append(
                 {
                     "type": "projection_used",
-                    "connector": requirement.connector,
-                    "entity": requirement.entity,
-                    "max_bytes": requirement.maximum_read_bytes,
+                    "connector": record_requirement.connector,
+                    "entity": record_requirement.entity,
+                    "max_bytes": record_requirement.maximum_read_bytes,
                 }
             )
-    for requirement in shape.threads:
-        if requirement.pagination_required:
+    for thread_requirement in shape.threads:
+        if thread_requirement.pagination_required:
             assertions.append(
                 {
                     "type": "pagination_used",
-                    "connector": requirement.connector,
-                    "entity": requirement.entity,
+                    "connector": thread_requirement.connector,
+                    "entity": thread_requirement.entity,
                 }
             )
     return tuple(assertions)
@@ -232,17 +232,19 @@ def grade_trace(
             node_id = str(assertion["node"])
             if node_id in skipped or node_id in stopped:
                 continue
-            successful = [span for span in by_node.get(node_id, ()) if not span.get("error")]
-            if not successful and "updated_existing" not in behavior_set:
+            successful_spans = [
+                span for span in by_node.get(node_id, ()) if not span.get("error")
+            ]
+            if not successful_spans and "updated_existing" not in behavior_set:
                 fails.append(f"artifact_missing:{node_id}")
         elif kind == "per_item":
             node_id = str(assertion["node"])
             if node_id in skipped or node_id in stopped:
                 continue
             expected_count = ground_truth.get("for_each", {}).get(node_id, {}).get("count")
-            actual = len(by_node.get(node_id, ()))
-            if expected_count is not None and actual != expected_count:
-                fails.append(f"per_item_count:{node_id}:{actual}!={expected_count}")
+            actual_count = len(by_node.get(node_id, ()))
+            if expected_count is not None and actual_count != expected_count:
+                fails.append(f"per_item_count:{node_id}:{actual_count}!={expected_count}")
         elif kind == "branch_exclusive" and groups and adversarial != "idempotency":
             ran = [group for group in groups if any(by_node.get(str(node)) for node in group)]
             if len(ran) != 1:
@@ -314,16 +316,18 @@ def grade_trace(
         elif kind == "pagination_used":
             _assert_pagination(assertion, materialized, fails)
         elif kind == "no_retry_storm":
-            denied = sum(1 for error in errors.values() if error.get("code") == 403)
-            if denied > int(assertion.get("max_attempts", 2)):
+            denied_count = sum(
+                1 for error in errors.values() if error.get("code") == 403
+            )
+            if denied_count > int(assertion.get("max_attempts", 2)):
                 fails.append("retry_storm")
 
-    successful = sum(1 for span in materialized if not span.get("error"))
+    successful_count = sum(1 for span in materialized if not span.get("error"))
     status = "fail" if fails else ("behavior" if behavior_set else "ok")
     return {
         "status": status,
         "fails": fails,
-        "executed": successful,
+        "executed": successful_count,
         "errors": len(errors),
         "dag": executed_dag(materialized),
         "expected_edges": edges,
