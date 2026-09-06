@@ -91,8 +91,10 @@ enterprise_evals_app = typer.Typer(
 app.add_typer(enterprise_evals_app, name="enterprise-evals")
 
 # Keep operational generation in its own command module, not this monolith.
+from .seams_cli import seams_command
 from .synthesis_cli import app as synthesis_app
 
+app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
 
 
