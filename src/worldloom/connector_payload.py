@@ -80,8 +80,8 @@ def _manifest_value(
     if field.field_type == "boolean":
         return bool(int(token[:2], 16) % 2)
     if field.field_type in {"date", "datetime"}:
-        base = datetime.fromisoformat(definition.clock)
-        value = base - timedelta(days=int(token[:8], 16) % 730)
+        clock_base = datetime.fromisoformat(definition.clock)
+        value = clock_base - timedelta(days=int(token[:8], 16) % 730)
         return value.date().isoformat() if field.field_type == "date" else value.isoformat()
     if field.field_type in {"user", "multi_user"}:
         user = {"id": f"user-{token[:12]}", "displayName": f"Synthetic User {token[:6]}"}
@@ -92,11 +92,11 @@ def _manifest_value(
         return f"https://example.invalid/{token[:20]}"
     if field.field_type == "json":
         return {"key": token[:12], "source": "synthetic-shape"}
-    base = f"{field.name} {token[:12]}"
+    rendered = f"{field.name} {token[:12]}"
     if field.field_type == "rich_text":
-        repetitions = max(1, field.average_bytes // max(1, len(base) + 1))
-        return " ".join(base for _ in range(repetitions))[: field.average_bytes]
-    return base
+        repetitions = max(1, field.average_bytes // max(1, len(rendered) + 1))
+        return " ".join(rendered for _ in range(repetitions))[: field.average_bytes]
+    return rendered
 
 
 def _wide_fields(definition: ConnectorDefinition, record: Mapping[str, Any]) -> dict[str, Any]:
