@@ -10,11 +10,13 @@ pip install "worldloom[all]"
 worldloom --help
 ```
 
-For development, install from a checkout instead:
+For the current source and repository examples, install from the checkout.
+The product and command are named Worldloom; the repository is currently
+`synthetic-foundry`:
 
 ```bash
-git clone https://github.com/vamsiramakrishnan/worldloom.git
-cd worldloom
+git clone https://github.com/vamsiramakrishnan/synthetic-foundry.git
+cd synthetic-foundry
 pip install -e ".[dev]"
 worldloom --help
 ```
@@ -56,11 +58,11 @@ model installed at all.
 command: `validate`, `topology`, `series`, `diversity`. The extra adds the
 protocol, not the capability.
 
-## No model SDK
+## External writers
 
-There is no extra for a language model. Worldloom never calls one. Your agent
-writes prose through the [narration handshake](/worldloom/guides/narration/), as shell
-commands and JSON files.
+The library does not import a language-model SDK. An external writer can use
+a model service and submit its result through the [narration handshake](/worldloom/guides/narration/), using shell commands and JSON files. Model usage by that external writer is
+separate from the library's deterministic generation path.
 
 ## Check the install
 
