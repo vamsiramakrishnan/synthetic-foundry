@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import zipfile
 from datetime import UTC, datetime
 
 from worldloom.artifact_shape import plan_artifact_shape
@@ -65,6 +66,34 @@ def test_pptx_shape_has_exact_slide_notes_and_real_file_weight(tmp_path) -> None
         for shape in slide.shapes
         if getattr(shape, "has_chart", False)
     ) >= 5
+
+
+def test_pptx_shape_materializes_image_bytes_as_referenced_media(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    requirement = ArtifactShapeRequirement(
+        artifact_type="pptx",
+        slides=8,
+        image_bytes=1_200_000,
+        file_size_bytes=1_500_000,
+    )
+    plan = plan_artifact_shape(requirement, artifact_id="deck:media-heavy")
+    path = tmp_path / "media-heavy.pptx"
+
+    result = materialize_artifact_shape(plan, path, title="Media Heavy")
+
+    with zipfile.ZipFile(path) as package:
+        media = [info for info in package.infolist() if info.filename.startswith("ppt/media/")]
+        media_bytes = sum(info.file_size for info in media)
+        slide_relationships = "\n".join(
+            package.read(info).decode("utf-8", errors="ignore")
+            for info in package.infolist()
+            if info.filename.startswith("ppt/slides/_rels/")
+        )
+    assert media
+    assert media_bytes >= 1_200_000
+    assert result.image_bytes == media_bytes
+    assert "../media/" in slide_relationships
+    assert result.file_size_bytes >= 1_500_000
+    assert result.ballast_is_evidence is False
 
 
 def test_docx_shape_uses_explicit_page_breaks_and_exact_paragraph_locator(tmp_path) -> None:  # type: ignore[no-untyped-def]
