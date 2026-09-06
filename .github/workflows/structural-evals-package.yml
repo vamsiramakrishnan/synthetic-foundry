@@ -1,0 +1,55 @@
+# one-shot gate; deletes itself after the eval package conversion is verified
+name: structural evals package gate
+on:
+  push:
+    branches: [codex/structural-uplift]
+    paths:
+      - .github/workflows/structural-evals-package.yml
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/structural-uplift
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install uv
+          uv pip install --system -e '.[dev,polars,xlsx,docx,pdf,pptx]' ruff==0.15.8 mypy==2.3.1
+      - name: Validate eval-first package seam
+        run: |
+          ruff check
+          mypy
+          pytest -q \
+            tests/test_eval_design.py \
+            tests/test_eval_candidates.py \
+            tests/test_eval_instances.py \
+            tests/test_eval_search.py \
+            tests/test_eval_campaign.py \
+            tests/test_eval_demands.py \
+            tests/test_eval_tactics.py \
+            tests/test_eval_reference.py \
+            tests/test_eval_construction.py \
+            tests/test_seams.py
+          python - <<'PY'
+          import worldloom.evals as evals
+          from worldloom.seams import seam_manifest
+
+          assert evals.__file__.endswith('/evals/__init__.py')
+          assert evals.EvalCampaign
+          names = {item['name'] for item in seam_manifest()['seams']}
+          assert {'pipeline', 'connectors', 'evals'} <= names
+          PY
+      - name: Remove completed eval package gate
+        run: |
+          git config user.name 'worldloom-source-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git rm .github/workflows/structural-evals-package.yml
+          git commit -m 'Remove completed eval package gate'
+          git push origin HEAD:codex/structural-uplift
