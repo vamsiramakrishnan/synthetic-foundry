@@ -1,6 +1,7 @@
 ---
 name: worldloom-agent-evals
 description: Author, plan, generate, validate, and score realistic multi-connector enterprise MCP workflow evaluation corpora with WorldLoom.
+tags: [worldloom, evals, mcp, connectors, workflows, scoring]
 ---
 
 # WorldLoom enterprise agent evaluations

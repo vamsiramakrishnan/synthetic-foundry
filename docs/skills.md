@@ -158,6 +158,46 @@ a pack or process cannot express what happens.
 
 Source: [`.claude/skills/worldloom-vertical/SKILL.md`](../.claude/skills/worldloom-vertical/SKILL.md)
 
+### `worldloom-agent-evals`
+
+Author, plan, generate, validate and score multi-connector MCP workflow
+evaluation corpora: connector fixtures, multi-tool DAGs, coverage plans and
+agent-trajectory scoring, all grounded in one `World`.
+
+Source: [`.claude/skills/worldloom-agent-evals/SKILL.md`](../.claude/skills/worldloom-agent-evals/SKILL.md)
+
+### `worldloom-artifact-realism`
+
+Improve how a world materialises into documents, decks, workbooks, tickets,
+pages and email through bounded proposals the deterministic host accepts or
+refuses. A proposal chooses structure and emphasis; it never creates a fact.
+
+Source: [`.claude/skills/worldloom-artifact-realism/SKILL.md`](../.claude/skills/worldloom-artifact-realism/SKILL.md)
+
+### `worldloom-process-bindings`
+
+Compile the supplied 12-industry catalogue into company activity bindings,
+inspect coverage and evidence boundaries, and drive process authoring from
+them without treating authored hints as measurements.
+
+Source: [`.claude/skills/worldloom-process-bindings/SKILL.md`](../.claude/skills/worldloom-process-bindings/SKILL.md)
+
+### `worldloom-process-catalogue`
+
+Compile authored industry factors into company-bound process plans, then
+author executable episodes through the existing process cascade — the plan is
+context for the cascade, never an execution trace.
+
+Source: [`.claude/skills/worldloom-process-catalogue/SKILL.md`](../.claude/skills/worldloom-process-catalogue/SKILL.md)
+
+### `worldloom-synthesis`
+
+Generate operational relational data, author causal specifications, run paired
+interventions and search behaviour regimes. Detail in
+[operational synthesis](operational-synthesis.md).
+
+Source: [`.claude/skills/worldloom-synthesis/SKILL.md`](../.claude/skills/worldloom-synthesis/SKILL.md)
+
 ## One cascade, reused everywhere
 
 The authorable layers share one mechanism from `worldloom.cascade`:

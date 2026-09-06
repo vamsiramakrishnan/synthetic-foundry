@@ -50,7 +50,15 @@ def test_compiled_demands_materialize_as_deterministic_events() -> None:
     assert all(event.kind.startswith("demand.") for event in first)
     payload = json.loads(first[0].summary)
     assert "selector" in payload
-    assert first[0].caused_by
+    # Provenance rides the payload, not the causal graph: the module contract
+    # is that `caused_by` names only real world events, and an eval demand is an
+    # obligation on the world, not something the world did. The requirement and
+    # step ids it came from are the `required_by` list instead. This test used
+    # to assert the opposite and was merged alongside the contract that
+    # reversed it.
+    assert first[0].caused_by == []
+    assert payload["required_by"] == payload["source_requirement_ids"] + payload["source_step_ids"]
+    assert payload["required_by"]
 
 
 def test_intervention_appends_provenance_without_satisfying_requirement() -> None:
@@ -63,3 +71,23 @@ def test_intervention_appends_provenance_without_satisfying_requirement() -> Non
     assert len(intervened.events) == len(world.events) + len(demands.demands)
     assert tuple(intervened.events)[: len(world.events)] == tuple(world.events)
     assert all(event.kind.startswith("demand.") for event in intervened.events[len(world.events) :])
+
+
+def test_demands_ride_the_recipe_and_survive_replay() -> None:
+    """The step is a recipe verb: a corpus a campaign intervened on rebuilds.
+
+    Replay re-records through `intervene`, whose exactly-once guard makes the
+    replayed step a no-op on the events — so the rebuilt world carries the same
+    demand events once, and the same recipe line, not two of either.
+    """
+    from worldloom.recipe import rebuild
+
+    world = RetailWorld(seed=8128).build().run(MonthEndClose(period="2026-03"))
+    demands = compile_demands(_spec())
+    at = datetime(2026, 9, 1, 9, tzinfo=UTC)
+    intervened = intervene(world, demands, occurred_at=at)
+
+    assert intervened.recipe["steps"][-1]["scenario"] == "EvalDemands"
+    again = rebuild(intervened.recipe)
+    assert again.recipe == intervened.recipe
+    assert tuple(again.events) == tuple(intervened.events)

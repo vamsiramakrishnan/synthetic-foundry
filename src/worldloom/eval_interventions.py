@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .eval_demands import DemandSet, WorldDemand, compile_demands
 from .eval_design import CandidatePlan, EvalSpec, RequirementKind, design_digest
@@ -137,4 +137,42 @@ def construct_candidate(spec: EvalSpec, plan: CandidatePlan, base: World, *,
                               findings=tuple(findings), applied_tactic_ids=tuple(applied))
 
 
-__all__ = ["ConstructionFinding", "ConstructionResult", "construct_candidate", "demand_event", "demand_events", "intervene"]
+@dataclass(frozen=True)
+class EvalDemands:
+    """The recipe verb behind ``intervene``.
+
+    Same seam and same defect as ``eval_construction.EvalRevisionFamily``:
+    ``intervene`` recorded a step no registry knew, so recording it was itself
+    the failure (``unknown scenario 'EvalDemands'`` in
+    ``tests/test_eval_interventions.py``). Stored arguments are exactly the
+    JSON ``intervene`` wrote — the demand set's own dump and an ISO timestamp —
+    so the class is its own builder, as ``messiness.Imperfections`` is.
+
+    Replay re-records through ``intervene`` itself, whose exactly-once guard
+    (an identical demand event already present is not appended again) is what
+    makes a replayed step a no-op on the events while still restoring the
+    recipe line.
+    """
+
+    demands: dict[str, Any]
+    occurred_at: str
+    physics: Any = None
+    """Never read; carried for ``recipe._under``, see ``EvalRevisionFamily``."""
+
+    def run(self, world: World) -> World:
+        return intervene(
+            world,
+            DemandSet.model_validate(self.demands),
+            occurred_at=datetime.fromisoformat(self.occurred_at),
+        )
+
+
+from . import recipe as _recipe
+
+_recipe.register_step("EvalDemands", ("demands", "occurred_at"), EvalDemands)
+
+
+__all__ = [
+    "ConstructionFinding", "ConstructionResult", "EvalDemands", "construct_candidate",
+    "demand_event", "demand_events", "intervene",
+]

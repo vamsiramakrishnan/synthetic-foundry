@@ -1,6 +1,7 @@
 ---
 name: worldloom-process-catalogue
 description: Compile authored industry factors into company-bound process plans, then author executable episodes through Worldloom's existing process cascade.
+tags: [worldloom, process, catalogue, planning, episodes]
 ---
 
 # Company process plans

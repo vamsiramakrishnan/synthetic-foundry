@@ -79,6 +79,25 @@ DOCUMENTS = (
     # skill does.
     "docs/operational-synthesis.md",
     ".claude/skills/worldloom-synthesis/SKILL.md",
+    # The eval-first, artifact-realism and process-catalogue waves, gated the
+    # day they were folded into the harness contract rather than the day they
+    # landed: the two harness-docs failures that were red on main for a week
+    # were exactly a command nobody had documented and a reference nobody had
+    # regenerated, in surfaces this list did not yet name.
+    ".claude/skills/worldloom-agent-evals/SKILL.md",
+    ".claude/skills/worldloom-agent-evals/references/authoring.md",
+    ".claude/skills/worldloom-agent-evals/references/execution.md",
+    ".claude/skills/worldloom-artifact-realism/SKILL.md",
+    ".claude/skills/worldloom-process-bindings/SKILL.md",
+    ".claude/skills/worldloom-process-catalogue/SKILL.md",
+    "docs/agent-workflow-evals.md",
+    "docs/enterprise-agent-evals.md",
+    "docs/artifact-ecology.md",
+    "docs/eval-first.md",
+    "docs/eval-first-world-compilation.md",
+    "docs/narration-programs.md",
+    "docs/process-bindings.md",
+    "docs/process-catalogue.md",
     "docs/architecture.md",
     "docs/enterprise-corpus.md",
     "docs/sdk.md",

@@ -5,7 +5,8 @@ lets the existing artifact compiler materialize the resulting intent family.
 """
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from typing import Any
 
 from .eval_tactics import TacticKind, TacticProposal
 from .ids import content_key
@@ -101,4 +102,41 @@ def apply_revision_family(
                    _artifacts=(), _rendered=(), _recipe=recipe)
 
 
-__all__ = ["apply_revision_family"]
+@dataclass(frozen=True)
+class EvalRevisionFamily:
+    """The recipe verb behind ``apply_revision_family``.
+
+    Registered from this module, never as a literal in ``recipe.py`` — the same
+    seam ``messiness.Imperfections`` and ``scenarios.AccessProfile`` use, for
+    the reason ``recipe._STEP_REGISTRY`` documents. What this closes: the
+    tactic recorded ``EvalRevisionFamily`` on every world it touched, but the
+    verb was never registered anywhere, so ``with_step`` refused the record at
+    the moment of writing it (``unknown scenario 'EvalRevisionFamily'``, three
+    tests in ``tests/test_eval_construction.py``) and a corpus that *had* been
+    written could not have replayed. A one-shot repair workflow was meant to add
+    the verb to ``recipe.py`` by string patch and never ran.
+
+    Replay re-records: ``run`` calls the same function with the same recording
+    default the original call used, so the rebuilt recipe carries the step in
+    the same position — ``AccessProfile.run`` re-records itself the same way.
+    The idempotence guard inside ``apply_revision_family`` (a chain already at
+    the minimum returns the world untouched) is what keeps a replayed step from
+    minting a second family on top of the first.
+    """
+
+    proposal: dict[str, Any]
+    physics: Any = None
+    """Never read. Declared because ``recipe._under`` rebinds recorded physics
+    onto every registered step's spec and raises on one that cannot carry
+    them — ``messiness.Imperfections.physics``' reason verbatim."""
+
+    def run(self, world: World) -> World:
+        return apply_revision_family(world, TacticProposal.model_validate(self.proposal))
+
+
+from . import recipe as _recipe
+
+_recipe.register_step("EvalRevisionFamily", ("proposal",), EvalRevisionFamily)
+
+
+__all__ = ["EvalRevisionFamily", "apply_revision_family"]

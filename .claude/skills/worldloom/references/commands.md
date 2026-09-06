@@ -764,6 +764,14 @@ worldloom render <CORPUS>
 | `--out`, `-o` | Write here instead of back into the corpus. |
 | `--profile` | Who the documents are for. `audit` (the default, and what every corpus rendered before this flag existed got) prints the supporting-fact appendix and the author's voice in the document. `reader` records both and prints neither, and spells figures the way a memo does. `filing` puts the citations in a sibling file. `worldloom present describe` prints every profile and knob; `worldloom present lint` checks one you wrote. |
 
+### `worldloom seams`
+
+Show the library seams a harness can compose.
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the complete machine-readable seam contract. |
+
 ### `worldloom search`
 
 Rank the corpus's own passages against a query, BM25, deterministic.

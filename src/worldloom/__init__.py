@@ -183,6 +183,16 @@ def _install() -> None:
     # fails loudly in `AuthoredEpisode.run`, not with `unknown scenario` here.
     from . import episodes as _episodes  # noqa: F401
 
+    # And for the two eval-first recipe verbs, `EvalRevisionFamily` and
+    # `EvalDemands`. Nothing on the way to building or loading a world imports
+    # these modules — they are reached from the eval campaign — so a corpus a
+    # campaign built would `rebuild` in a fresh process as `unknown scenario`,
+    # the exact failure `messiness` below names. They registered nowhere at all
+    # until this wave; a one-shot repair workflow that was meant to hard-code
+    # the verb into `recipe.py` never ran.
+    from . import eval_construction as _eval_construction  # noqa: F401
+    from . import eval_interventions as _eval_interventions  # noqa: F401
+
     # Same contract again, one level up: importing this is what registers the
     # `Imperfections` recipe verb, and a corpus built with a messiness profile
     # cannot rebuild itself in a process where that verb is unknown. `recipe.rebuild`

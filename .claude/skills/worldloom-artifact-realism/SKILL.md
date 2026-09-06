@@ -1,3 +1,9 @@
+---
+name: worldloom-artifact-realism
+description: Improve how a generated world materialises into documents, decks, workbooks, tickets, pages and email through bounded proposals the deterministic host accepts or refuses — organisation DNA, surface plans, lifecycle chronology, product-faithful connector fixtures. Use when rendered artifacts look generic, when a deck or workbook needs to read like its real product, or when asked to make a corpus's documents more realistic without touching a fact.
+tags: [worldloom, artifacts, realism, ecology, rendering, connectors]
+---
+
 # Worldloom artifact realism
 
 Use this skill when improving how a generated enterprise world materialises into documents, decks, workbooks, tickets, knowledge pages, or email.
