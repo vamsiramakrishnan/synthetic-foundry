@@ -16,6 +16,8 @@ from pydantic import model_validator
 
 from .fact_ledger import (
     AmbiguousFactView,
+)
+from .fact_ledger import (
     FactLedger as CanonicalFactLedger,
 )
 from .models import AUTHORITY_RANK, Authority, CanonicalFact, Model, Quantity
@@ -104,7 +106,7 @@ class FactLedger(Generic[FactRow]):
     """
 
     def __init__(self, observations: Iterable[FactRow]) -> None:
-        self._observations = tuple(observations)
+        self._observations: tuple[FactRow, ...] = tuple(observations)
         ids = [item.id for item in self._observations]
         if len(ids) != len(set(ids)):
             raise ValueError("duplicate fact/observation IDs in ledger")
