@@ -226,3 +226,92 @@ def test_a_constructed_campaign_exports_its_findings_beside_the_corpora(tmp_path
     corpus = root / "candidates" / manifest["candidates"][0]["path"].split("/")[-1] / "corpus"
     recipe = json.loads((corpus / "world.json").read_text())["recipe"]
     assert "EvalWitnesses" in {step["scenario"] for step in recipe["steps"]}
+
+
+def _spec_with(steps, requirements, ident="EVALSPEC-REVIEW"):  # type: ignore[no-untyped-def]
+    return EvalSpec(id=ident, capability="review", persona="analyst", request_template="Do the task.",
+                    steps=steps, requirements=requirements, candidate_count=1)
+
+
+def _prove(spec):  # type: ignore[no-untyped-def]
+    run = EvalCampaign(spec).construct(lambda plan: _base(plan.seed), occurred_at=AT)
+    assert run.constructions[0].findings == (), run.constructions[0].findings
+    assert run.instances, run.constructions[0].candidate.validation
+    proof = execute_reference(run.instances[0], run.accepted[0].world, emulator_executor())
+    return run, proof
+
+
+def test_a_get_step_runs_the_connector_read_tool_not_a_search() -> None:
+    """Review finding: `get` steps were proven through the search tool."""
+    incidents = WorldRequirement(id="incidents", kind=RequirementKind.CONNECTOR,
+                                 selector={"connector": "servicenow", "entity": "incident", "priority": "1 - Critical"})
+    _, proof = _prove(_spec_with(
+        (EvalStepSpec(id="find", capability="search", connector="servicenow", entity="incident", operation="search"),
+         EvalStepSpec(id="fetch", capability="read", connector="servicenow", entity="incident", operation="get",
+                      depends_on=("find",))),
+        (incidents,), ident="EVALSPEC-GET"))
+    assert proof.status == ProofStatus.PROVEN_EXECUTABLE, proof.failure
+    fetch = next(step for step in proof.steps if step.step_id == "fetch")
+    assert fetch.operation == "get"
+    assert fetch.input_ids and fetch.input_ids[0].startswith("CONN-SERVICENOW-")
+
+
+def test_a_write_is_visible_to_a_later_step_of_the_same_instance() -> None:
+    """Review finding: every step rebuilt the emulator, discarding earlier writes."""
+    _, proof = _prove(_spec_with(
+        (EvalStepSpec(id="raise", capability="create", connector="jira", entity="bug", operation="create", effect="write"),
+         EvalStepSpec(id="check", capability="search", connector="jira", entity="bug", operation="search",
+                      depends_on=("raise",), effect="verify")),
+        (WorldRequirement(id="workbook", kind=RequirementKind.ARTIFACT, selector={"artifact_type": "finance_workbook"}),),
+        ident="EVALSPEC-WRITE-THEN-READ"))
+    assert proof.status == ProofStatus.PROVEN_EXECUTABLE, proof.failure
+    by_step = {step.step_id: step for step in proof.steps}
+    assert by_step["raise"].effect_ids
+    assert set(by_step["raise"].effect_ids) <= set(by_step["check"].output_ids)
+
+
+def test_a_step_entity_reaches_its_witness() -> None:
+    """Review finding: a Teams channel_message search constructed a `team`."""
+    run = EvalCampaign(_spec_with(
+        (EvalStepSpec(id="ask", capability="search", connector="teams", entity="channel_message", operation="search"),),
+        (WorldRequirement(id="workbook", kind=RequirementKind.ARTIFACT, selector={"artifact_type": "finance_workbook"}),),
+        ident="EVALSPEC-STEP-ENTITY")).construct(lambda plan: _base(plan.seed), occurred_at=AT)
+    payloads = [witness_payload(e) for e in run.accepted[0].world.events]
+    teams = [p for p in payloads if p and p["connector"] == "teams"]
+    assert teams and all(p["entity"] == "channel_message" for p in teams)
+
+
+def test_witness_predicates_are_scoped_to_the_step_entity() -> None:
+    """Review finding: every read ran every witness predicate on the connector."""
+    _, proof = _prove(_spec_with(
+        (EvalStepSpec(id="find", capability="search", connector="servicenow", entity="incident", operation="search"),),
+        (WorldRequirement(id="incidents", kind=RequirementKind.CONNECTOR,
+                          selector={"connector": "servicenow", "entity": "incident", "priority": "1 - Critical"}),
+         WorldRequirement(id="articles", kind=RequirementKind.CONNECTOR,
+                          selector={"connector": "servicenow", "entity": "kb_article", "workflow_state": "published"})),
+        ident="EVALSPEC-TWO-ENTITIES"))
+    assert proof.status == ProofStatus.PROVEN_EXECUTABLE, proof.failure
+
+
+def test_overwrite_replaces_a_campaign_and_refuses_anything_else(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Review finding: --overwrite left last run's candidates beside the new manifest."""
+    import json
+
+    import pytest
+
+    campaign = EvalCampaign(_spec_with(
+        (EvalStepSpec(id="find", capability="search"),),
+        (WorldRequirement(id="workbook", kind=RequirementKind.ARTIFACT, selector={"artifact_type": "finance_workbook"}),),
+        ident="EVALSPEC-OVERWRITE").model_copy(update={"candidate_count": 2}))
+    root = campaign.export(lambda plan: _base(plan.seed), tmp_path / "c", count=2, occurred_at=AT, construct=True)
+    assert len(list((root / "candidates").iterdir())) == 2
+    campaign.export(lambda plan: _base(plan.seed), root, count=1, occurred_at=AT, construct=True, overwrite=True)
+    assert len(list((root / "candidates").iterdir())) == 1
+    assert json.loads((root / "manifest.json").read_text())["candidate_count"] == 1
+
+    other = tmp_path / "not-a-campaign"
+    other.mkdir()
+    (other / "keep.txt").write_text("mine")
+    with pytest.raises(FileExistsError):
+        campaign.export(lambda plan: _base(plan.seed), other, count=1, occurred_at=AT, construct=True, overwrite=True)
+    assert (other / "keep.txt").exists()

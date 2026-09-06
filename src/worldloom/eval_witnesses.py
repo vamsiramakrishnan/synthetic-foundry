@@ -41,6 +41,7 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from .connector_definition import (
@@ -240,13 +241,22 @@ def _render_for(world: World, proposal: TacticProposal, definition: ConnectorDef
             f"{definition.connector} does not hold {entity!r} files; it holds"
             f" {', '.join(file_formats(definition.connector))}"
         )
-    already = any(item.path.endswith(f".{entity}") for item in world._rendered)
-    if already:
+    # `World.render` replaces the rendered set, so a second format demanded
+    # on the same candidate would have discarded the first. Render the union
+    # of what is there and what is asked for; the bytes are deterministic, so
+    # re-rendering a format is the same file again.
+    suffixes = {".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx", ".pdf": "pdf",
+                ".md": "markdown", ".html": "html"}
+    existing = {
+        suffixes[suffix] for suffix in {Path(item.path).suffix for item in world._rendered}
+        if suffix in suffixes
+    }
+    if entity in existing:
         return world
     from .render import RenderError
 
     try:
-        return world.render(entity)
+        return world.render(*sorted(existing | {entity}))
     except RenderError as error:
         raise ConstructionRefused(str(error)) from error
 

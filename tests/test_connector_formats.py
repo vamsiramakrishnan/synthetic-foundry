@@ -134,3 +134,31 @@ def test_a_field_a_file_cannot_answer_for_is_refused_with_the_list() -> None:
     result = construct_candidate(spec, plan, _world(plan.seed), occurred_at=datetime(2026, 9, 1, tzinfo=UTC))
     assert [f.code for f in result.findings] == ["construction_refused"]
     assert "priority" in result.findings[0].detail and "artifact_type" in result.findings[0].detail
+
+
+def test_two_formats_demanded_on_one_candidate_both_survive() -> None:
+    """Review finding: rendering the second format discarded the first."""
+    rendered = _world().render("docx", "xlsx")
+
+    def type_with(suffix: str) -> str:
+        ids = {i.artifact_id for i in rendered._rendered if i.path.endswith(suffix)}
+        return next(i.artifact_type for i in rendered.artifact_intents if i.id in ids)
+
+    doc_type, sheet_type = type_with(".docx"), type_with(".xlsx")
+    spec = EvalSpec(
+        id="EVALSPEC-TWO-FORMATS", capability="find", persona="analyst", request_template="Find both files.",
+        steps=(EvalStepSpec(id="find", capability="search", connector="sharepoint"),),
+        requirements=(
+            WorldRequirement(id="doc", kind=RequirementKind.CONNECTOR,
+                             selector={"connector": "sharepoint", "entity": "docx", "artifact_type": doc_type}),
+            WorldRequirement(id="sheet", kind=RequirementKind.CONNECTOR,
+                             selector={"connector": "sharepoint", "entity": "xlsx", "artifact_type": sheet_type}),
+        ),
+        candidate_count=1,
+    )
+    plan = plan_candidates(spec)[0]
+    result = construct_candidate(spec, plan, _world(plan.seed), occurred_at=datetime(2026, 9, 1, tzinfo=UTC))
+    assert result.findings == ()
+    assert result.candidate.validation.accepted
+    suffixes = {item.path[-5:] for item in result.candidate.world._rendered}
+    assert ".docx" in suffixes and ".xlsx" in suffixes

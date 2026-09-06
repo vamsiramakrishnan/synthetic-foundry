@@ -9,6 +9,8 @@ modules during the compatibility release.
 
 from __future__ import annotations
 
+import json
+import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -221,10 +223,26 @@ class EvalCampaign:
         """
 
         root = Path(out)
-        if root.exists() and any(root.iterdir()) and not overwrite:
-            raise FileExistsError(
-                f"evaluation campaign destination is not empty: {root}"
-            )
+        if root.exists() and any(root.iterdir()):
+            if not overwrite:
+                raise FileExistsError(
+                    f"evaluation campaign destination is not empty: {root}"
+                )
+            # Replace means replace: a rerun with fewer candidates must not
+            # leave last run's directories beside this run's manifest for a
+            # consumer enumerating `candidates/` to find. Only a directory
+            # that is a campaign is cleared; anything else is refused rather
+            # than deleted on the strength of a flag.
+            manifest = root / "manifest.json"
+            try:
+                schema = json.loads(manifest.read_text(encoding="utf-8")).get("schema")
+            except (OSError, ValueError):
+                schema = None
+            if schema != "worldloom.eval-campaign/v1":
+                raise FileExistsError(
+                    f"{root} is not an evaluation campaign directory; refusing to overwrite it"
+                )
+            shutil.rmtree(root)
         root.mkdir(parents=True, exist_ok=True)
 
         run = (
