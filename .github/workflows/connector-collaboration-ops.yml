@@ -28,10 +28,16 @@ jobs:
           from pathlib import Path
           path = Path('src/worldloom/connector_emulator.py')
           text = path.read_text()
+          import_anchor = 'from .connector_definition import ConnectorDefinition, ConnectorToolDefinition\n'
+          assert text.count(import_anchor) == 1
+          text = text.replace(import_anchor, import_anchor + 'from .connector_keys import freeze_key\n', 1)
           old = '            operation = getattr(self, f"_op_{tool.op}")\n            result = operation(tool, span, **args)'
           new = '''            handler_op = {\n                "send": "create",\n                "post": "create",\n                "upload": "create",\n                "download": "get",\n            }.get(tool.op, tool.op)\n            operation = getattr(self, f"_op_{handler_op}")\n            result = operation(tool, span, **args)'''
           assert text.count(old) == 1
           text = text.replace(old, new, 1)
+          key_line = '            key = tuple(values.get(part) for part in tool.idempotency.key)'
+          assert text.count(key_line) == 2
+          text = text.replace(key_line, '            key = tuple(freeze_key(values.get(part)) for part in tool.idempotency.key)')
           marker = '    def _op_transform(\n'
           assert text.count(marker) == 1
           semantic = '''    def _op_reply(\n        self,\n        tool: ConnectorToolDefinition,\n        span: _PendingSpan,\n        *,\n        id: Any = None,\n        body: str | None = None,\n        **_: Any,\n    ) -> dict[str, Any]:\n        parent_fid = self.resolve(id)\n        self._check_acl(parent_fid, "comment")\n        parent = self.records[parent_fid]\n        entity = str(parent.get("entity"))\n        if entity not in tool.entities:\n            raise self._error("not_found", id=id)\n        self._created += 1\n        fid = f"new:{self.server[:2]}:{entity}:{self._created}"\n        record = {\n            "fid": fid,\n            "server": self.server,\n            "entity": entity,\n            "name": body or "Reply",\n            "title": body or "Reply",\n            "text": body or "",\n            "body": body or "",\n            "reply_to": parent_fid,\n            "thread_id": parent.get("thread_id") or parent.get("conversation") or parent_fid,\n            "parent": parent_fid,\n            "created_by": self.actor,\n            "created_at": self.definition.clock,\n            "modified_at": self.definition.clock,\n        }\n        self.records[fid] = record\n        self.by_entity[entity].append(fid)\n        span.reads.append(parent_fid)\n        span.writes.append(fid)\n        span.items = 1\n        return shape_payload(self.definition, record)\n\n    def _op_forward(\n        self,\n        tool: ConnectorToolDefinition,\n        span: _PendingSpan,\n        *,\n        id: Any = None,\n        to: Sequence[str] | None = None,\n        body: str | None = None,\n        **_: Any,\n    ) -> dict[str, Any]:\n        source_fid = self.resolve(id)\n        self._check_acl(source_fid, "get")\n        source = self.records[source_fid]\n        entity = str(source.get("entity"))\n        if entity not in tool.entities:\n            raise self._error("not_found", id=id)\n        self._created += 1\n        fid = f"new:{self.server[:2]}:{entity}:{self._created}"\n        subject = str(source.get("subject") or source.get("name") or source.get("title") or "Forward")\n        record = copy.deepcopy(source)\n        record.update(\n            fid=fid,\n            ident=None,\n            external_id=None,\n            name=f"Fwd: {subject}",\n            title=f"Fwd: {subject}",\n            subject=f"Fwd: {subject}",\n            body=body or source.get("body") or source.get("text") or "",\n            text=body or source.get("text") or source.get("body") or "",\n            to=list(to or ()),\n            forwarded_from=source_fid,\n            created_by=self.actor,\n            created_at=self.definition.clock,\n            modified_at=self.definition.clock,\n        )\n        self.records[fid] = record\n        self.by_entity[entity].append(fid)\n        span.reads.append(source_fid)\n        span.writes.append(fid)\n        span.items = 1\n        return shape_payload(self.definition, record)\n\n'''
@@ -44,8 +50,8 @@ jobs:
           uv pip install --system -e '.[dev,polars,xlsx,docx,pdf,pptx]' ruff==0.15.8 mypy==2.3.1
       - name: Validate semantic collaboration operations
         run: |
-          ruff check src/worldloom/connector_emulator.py tests/test_connector_collaboration_ops.py
-          mypy src/worldloom/connector_emulator.py
+          ruff check src/worldloom/connector_keys.py src/worldloom/connector_emulator.py tests/test_connector_collaboration_ops.py
+          mypy src/worldloom/connector_keys.py src/worldloom/connector_emulator.py
           pytest -q tests/test_connector_collaboration_ops.py tests/test_connector_emulator.py tests/test_connector_definition.py
       - name: Commit verified emulator semantics
         run: |
