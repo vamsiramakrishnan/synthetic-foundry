@@ -52,6 +52,23 @@ ConnectorFieldType = Literal[
     "url",
     "json",
 ]
+ConnectorOperation = Literal[
+    "search",
+    "get",
+    "create",
+    "update",
+    "comment",
+    "transition",
+    "transform",
+    "delete",
+    "send",
+    "reply",
+    "forward",
+    "post",
+    "upload",
+    "download",
+    "invoke",
+]
 
 
 class ConnectorIdDefinition(Model):
@@ -136,16 +153,7 @@ class ConnectorIdempotency(Model):
 
 
 class ConnectorToolDefinition(Model):
-    op: Literal[
-        "search",
-        "get",
-        "create",
-        "update",
-        "comment",
-        "transition",
-        "transform",
-        "delete",
-    ]
+    op: ConnectorOperation
     entities: tuple[str, ...]
     params: dict[str, str]
     page_size: int = Field(ge=1)
@@ -303,9 +311,6 @@ class ConnectorDefinition(Model):
     def fields_for(self, entity: str) -> tuple[ConnectorFieldDefinition, ...]:
         members = self.entity_members(entity)
         if len(members) != 1:
-            # Alias field manifests are intentionally not unioned. A 300-field
-            # bug is a meaningful shape; a 300-field synthetic union of every
-            # issue type is not.
             return ()
         return self.field_manifests.get(members[0], ())
 
@@ -391,6 +396,7 @@ __all__ = [
     "ConnectorIdDefinition",
     "ConnectorIdempotency",
     "ConnectorMaturity",
+    "ConnectorOperation",
     "ConnectorToolDefinition",
     "ConnectorValidationRule",
     "ConnectorWorkflow",
