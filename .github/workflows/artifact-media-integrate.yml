@@ -1,3 +1,4 @@
+# one-shot gate; valid media must be referenced by slide relationships
 name: integrate embedded deck media
 on:
   push:
