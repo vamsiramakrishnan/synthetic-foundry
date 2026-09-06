@@ -37,85 +37,36 @@ jobs:
           collections = 'src/worldloom/collections.py'
           replace_once(
               collections,
-              '''        from .epistemics import ledger_from_facts
-
-          return FactCollection(ledger_from_facts(self).view(
-              observer, valid_at=valid_at, tx_at=tx_at,
-          ))''',
-              '''        from .fact_ledger import FactLedger
-
-          return FactCollection(
-              FactLedger(self).view(
-                  observer, valid_at=valid_at, tx_at=tx_at,
-              ).to_tuple(),
-              label="FactView",
-          )''',
+              'from .epistemics import ledger_from_facts',
+              'from .fact_ledger import FactLedger',
+          )
+          replace_once(
+              collections,
+              'ledger_from_facts(self).view(',
+              'FactLedger(self).view(',
           )
 
           predicates = 'src/worldloom/predicates.py'
           replace_once(
               predicates,
-              'from .epistemics import ledger_from_facts\n',
-              'from .fact_ledger import FactLedger\n',
+              'from .epistemics import ledger_from_facts',
+              'from .fact_ledger import FactLedger',
           )
           replace_once(
               predicates,
-              '        view = ledger_from_facts(relevant).view(as_of.observer, valid_at=valid_at, tx_at=tx_at)\n',
-              '        view = FactLedger(relevant).view(as_of.observer, valid_at=valid_at, tx_at=tx_at)\n',
+              'ledger_from_facts(relevant).view(',
+              'FactLedger(relevant).view(',
           )
 
           world = 'src/worldloom/world.py'
           replace_once(
               world,
-              'from .detail import DetailTable\nfrom .ids import Minter\n',
-              'from .detail import DetailTable\nfrom .fact_ledger import FactLedger\nfrom .ids import Minter\n',
+              'from .detail import DetailTable\nfrom .ids import Minter',
+              'from .detail import DetailTable\nfrom .fact_ledger import FactLedger\nfrom .ids import Minter',
           )
-          anchor = '''    def as_of(self, moment: datetime | str) -> FactCollection:
-              """The facts that held at *moment* — the temporal cut-off primitive.
-
-              This is what makes a temporal question meaningful: the world of
-              09:30 genuinely differs from the world of 14:00.
-              """
-              return self.facts.at(_moment(moment))
-          '''
-          replacement = '''    def fact_ledger(self) -> FactLedger:
-              """The complete append-only canonical fact history.
-
-              Generators, validators, replay, and provenance use this raw ledger.
-              User-facing truth/belief reads should call :meth:`fact_view` instead.
-              """
-              return FactLedger(self._facts)
-
-              def fact_view(
-                  self,
-                  observer: str,
-                  *,
-                  valid_at: datetime | str,
-                  tx_at: datetime | str,
-              ) -> FactCollection:
-                  """Resolve what *observer* could know about one business-time cut.
-
-                  Both axes are mandatory. There is no implicit wall clock and no
-                  silent fallback to the latest value, so replaying the same query
-                  against the same world always resolves the same facts.
-                  """
-                  resolved = self.fact_ledger().view(
-                      observer,
-                      valid_at=_moment(valid_at),
-                      tx_at=_moment(tx_at),
-                  )
-                  return FactCollection(resolved.to_tuple(), label="FactView")
-
-              def as_of(self, moment: datetime | str) -> FactCollection:
-                  """Compatibility valid-time slice of the raw ledger.
-
-                  This predates observer and transaction-time facts. New read-facing
-                  code should use :meth:`fact_view`; structural code may still need
-                  every raw row that held at a business-time instant.
-                  """
-                  return self.facts.at(_moment(moment))
-          '''
-          replace_once(world, anchor, replacement)
+          marker = '    def as_of(self, moment: datetime | str) -> FactCollection:\n'
+          methods = '''    def fact_ledger(self) -> FactLedger:\n        """The complete append-only canonical fact history.\n\n        Generators, validators, replay, and provenance use this raw ledger.\n        User-facing truth/belief reads should call :meth:`fact_view` instead.\n        """\n        return FactLedger(self._facts)\n\n    def fact_view(\n        self,\n        observer: str,\n        *,\n        valid_at: datetime | str,\n        tx_at: datetime | str,\n    ) -> FactCollection:\n        """Resolve what *observer* could know about one business-time cut.\n\n        Both axes are mandatory. There is no implicit wall clock and no silent\n        fallback to the latest value, so replay is independent of run time.\n        """\n        resolved = self.fact_ledger().view(\n            observer,\n            valid_at=_moment(valid_at),\n            tx_at=_moment(tx_at),\n        )\n        return FactCollection(resolved.to_tuple(), label="FactView")\n\n'''
+          replace_once(world, marker, methods + marker)
           PY
       - name: Install validation dependencies
         run: |
