@@ -271,11 +271,14 @@ class ConnectorEmulator:
             for member in members:
                 pool_ids.extend(self.by_entity.get(member, ()))
         seen: set[str] = set()
-        return [
-            self.records[fid]
-            for fid in pool_ids
-            if not (fid in seen or seen.add(fid)) and self._visible(fid)
-        ]
+        visible: list[dict[str, Any]] = []
+        for fid in pool_ids:
+            if fid in seen:
+                continue
+            seen.add(fid)
+            if self._visible(fid):
+                visible.append(self.records[fid])
+        return visible
 
     def _record_for_predicate(self, record: Mapping[str, Any]) -> dict[str, Any]:
         return {
