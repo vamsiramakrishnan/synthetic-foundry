@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .artifact_media import as_stream, media_chunks
 from .artifact_shape import ArtifactShapePlan
 from .evidence_locator import DocxLocator, EvidenceRef, PptxLocator, XlsxLocator
 from .models import CanonicalFact, Model
@@ -24,6 +25,7 @@ class ArtifactShapeMaterialization(Model):
     artifact_type: str
     path: str
     file_size_bytes: int
+    image_bytes: int = 0
     slides: int = 0
     pages: int = 0
     paragraphs: int = 0
@@ -99,6 +101,15 @@ def _pad_ooxml(path: Path, target_size: int, *, seed: str) -> None:
                 chunk = block[: min(len(block), remaining)]
                 stream.write(chunk)
                 remaining -= len(chunk)
+
+
+def _package_media_bytes(path: Path) -> int:
+    with zipfile.ZipFile(path) as package:
+        return sum(
+            info.file_size
+            for info in package.infolist()
+            if info.filename.startswith("ppt/media/")
+        )
 
 
 def _materialize_pptx(
@@ -182,14 +193,32 @@ def _materialize_pptx(
                 chart_data,
             )
 
+    if plan.target_image_bytes:
+        chunks = media_chunks(f"pptx:{plan.artifact_id}:media", plan.target_image_bytes)
+        for index, payload in enumerate(chunks):
+            media_slide = presentation.slides[index % slides]
+            media_slide.shapes.add_picture(
+                as_stream(payload),
+                Inches(13.0),
+                Inches(7.15),
+                width=Inches(0.12),
+                height=Inches(0.12),
+            )
+
     out.parent.mkdir(parents=True, exist_ok=True)
     presentation.save(str(out))
     _pad_ooxml(out, plan.target_file_size_bytes, seed=f"pptx:{plan.artifact_id}")
+    image_bytes = _package_media_bytes(out)
+    if image_bytes < plan.target_image_bytes:
+        raise ValueError(
+            f"embedded media target not met: {image_bytes} < {plan.target_image_bytes}"
+        )
     return ArtifactShapeMaterialization(
         artifact_id=plan.artifact_id,
         artifact_type=plan.artifact_type,
         path=str(out),
         file_size_bytes=out.stat().st_size,
+        image_bytes=image_bytes,
         slides=slides,
         evidence=evidence,
         ballast_is_evidence=False,
