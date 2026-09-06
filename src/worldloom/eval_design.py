@@ -164,8 +164,6 @@ class EvalStepSpec(Model):
     def _connector_tuple(self) -> EvalStepSpec:
         if self.entity is not None and self.connector is None:
             raise ValueError(f"{self.id}: entity needs connector")
-        if self.operation is not None and self.connector is None:
-            raise ValueError(f"{self.id}: operation needs connector")
         return self
 
 
