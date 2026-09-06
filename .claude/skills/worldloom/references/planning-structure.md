@@ -14,8 +14,8 @@ above prose: before you write anything, you decide what shape the document takes
 
 Without it, structure comes from a hard-coded outline, so every CFO memo in every
 period has the same four sections in the same order. A twelve-period corpus of 120
-artifacts carried **11 distinct section shapes**. Structure is a judgment — what to
-lead with, what this reader needs, what belongs in an appendix — and judgment is
+artifacts carried **11 distinct section shapes**. Structure is a judgment (what to
+lead with, what this reader needs, what belongs in an appendix), and judgment is
 the part you are here for.
 
 Making the outline *random* would not fix it. A shuffled memo is not a memo. So you
@@ -101,8 +101,8 @@ deterministic layer accepts or rejects.
 
 ## Rejection codes
 
-The whole set is reviewed at once and **nothing commits unless everything passes**
-— a partial commit would leave a corpus half-planned with no record of which half.
+The whole set is reviewed at once and **nothing commits unless everything passes**.
+A partial commit would leave a corpus half-planned with no record of which half.
 
 | Code | Meaning |
 | --- | --- |
@@ -116,7 +116,7 @@ The whole set is reviewed at once and **nothing commits unless everything passes
 | `all_optional` | every beat droppable, so the document could compose to nothing |
 
 `purpose` is not decoration. It reaches the narrative request later and is what
-decides whether the prose argues or lists — a writer told "here are four metrics"
+decides whether the prose argues or lists. A writer told "here are four metrics"
 produces four correct sentences and nothing better.
 
 ## Writing headings worth having

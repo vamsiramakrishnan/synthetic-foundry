@@ -1,12 +1,12 @@
 ---
 name: worldloom-process
-description: Author a business process for a Worldloom company through a refusable cascade — seed it with a name, purpose, engine and owning LOB, propose its steps and the fact kinds they mint, declare its ordered role slots, and resolve it into an episode spec that installs, runs, and replays. Use when a company needs a recurring process (a close, a P2P cycle, an onboarding drive) that no shipped scenario models, or when asked who participates in a process and in what order.
+description: Author a business process for a Worldloom company through a refusable cascade: seed it with a name, purpose, engine and owning LOB, propose its steps and the fact kinds they mint, declare its ordered role slots, and resolve it into an episode spec that installs, runs, and replays. Use when a company needs a recurring process (a close, a P2P cycle, an onboarding drive) that no shipped scenario models, or when asked who participates in a process and in what order.
 tags: [worldloom, process, episodes, cascade, cohorts]
 ---
 
 # Authoring a process
 
-A **process** is the recurring type, declared once — the month-end close, P2P,
+A **process** is the recurring type, declared once: the month-end close, P2P,
 a recruitment drive. One bounded run of it over a period is an **episode**
 (`episodes.EpisodeSpec` is the spec; `AuthoredEpisode` is the run). The cascade
 is the same staged handshake as `/worldloom-lob`: seed → briefs → refusable
@@ -41,7 +41,7 @@ world = world.run(episodes.AuthoredEpisode(episode=spec.name, period="2026-01"))
 A refused `accept` raises `ValueError` with findings; fix that finding and
 answer again. The steps stage enforces one rule: a minted kind must be
 **registry-known or declared with invariants**. A registry-known kind
-(`factkinds.names()`) may leave `invariants` empty — `accept` fills them from
+(`factkinds.names()`) may leave `invariants` empty. `accept` fills them from
 the registry, so the spec cannot drift from what the validators enforce. An
 unknown kind must declare its own invariants or the answer is refused. Slots
 are the process's own vocabulary (`preparer`, `approver`), never company role
@@ -52,11 +52,11 @@ path, JSON text, or dict.
 
 ## Read next
 
-- `references/cascade.md` — both stages in field detail (spec enums included),
+- `references/cascade.md`: both stages in field detail (spec enums included),
   resolve, determinism. Load before answering the first brief.
-- `references/cohorts.md` — when the numbers are a grid (loss triangle,
+- `references/cohorts.md`: when the numbers are a grid (loss triangle,
   vintage book): origin axes, `allocation_of` / `prior_in_cohort`,
   `rolls-up-to`, and the refusals. Load only for cohort-gridded kinds.
-- `references/participation.md` — the company's half: slot bindings on the
+- `references/participation.md`: the company's half: slot bindings on the
   LOB, and participation derived rather than stored. Load when seating roles
   or asking who is in a process.

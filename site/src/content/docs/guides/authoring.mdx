@@ -18,7 +18,7 @@ Six ship: `australian_grocery`, `customer_owned_bank`, `midsize_adi`,
 `midsize_general_insurer`, `midsize_infrastructure_services`, and
 `omnichannel_retailer` (the default). An archetype fixes the company shape:
 business units, categories, sites, headcount. Which episode runs on it is the
-[vertical's](/synthetic-foundry/reference/verticals/) decision.
+[vertical's](/worldloom/reference/verticals/) decision.
 
 ## Facets: one attribute at a time
 
@@ -49,9 +49,9 @@ worldloom build --locale germany --seed 8128 --out ./corpus
 ```
 
 Four ship: `australia`, `germany`, `gulf`, `united_kingdom`. A locale reaches
-the figure grammar corpus-wide — Germany prints `1.234,50` and `-1.234` — and
-the build: region labels in site names, name pools, headquarters, currency,
-fiscal year, and the working week. The Gulf week runs Sunday to Thursday, and
+the figure grammar corpus-wide (Germany prints `1.234,50` and `-1.234`) and the
+build: region labels in site names, name pools, headquarters, currency, fiscal
+year, and the working week. The Gulf week runs Sunday to Thursday, and
 every close date steps on the corpus's own calendar.
 
 ## Specifications: the company in one document
@@ -102,7 +102,7 @@ worldloom build --physics physics.json --seed 8128 --out ./corpus
 
 A pack supplies values; the engine owns the ranges figures are drawn from.
 `--physics` overrides those ranges from a JSON file. Writing one by hand is
-the wrong instrument — the ranges are not independent — so derive it instead:
+the wrong instrument: the ranges are not independent, so derive it instead.
 
 ```bash
 worldloom probe open -p "A field-services business, 900 people, four regions."

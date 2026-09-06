@@ -120,7 +120,7 @@ when the goal is to construct the benchmark deliberately.
 - [Python SDK](sdk.md) documents immutable blueprints, combinators, measurements,
   scenarios, queries, rendering, and the CLI/SDK boundary.
 - [Agent skills](skills.md) explains the stage commands and specialist skills
-  shipped in `.claude/`, including how another terminal-capable harness uses the
+  shipped for coding agents, including how any terminal-capable harness uses the
   same protocols.
 
 ## Architecture references

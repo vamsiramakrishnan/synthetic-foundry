@@ -25,15 +25,15 @@ worldloom narrate accept <CORPUS> --from responses.json --model-id claude-opus-5
 ```
 
 **Expect rejection on the first pass, and iterate.** Every violation comes back with
-the rule and the offending text. Fix exactly what is named and resubmit. Nothing is
+the rule and the offending text. Fix what is named and resubmit. Nothing is
 committed until all responses pass.
 
-The rule broken most often is `bare_number` — a figure, percentage, or date typed
+The rule broken most often is `bare_number`: a figure, percentage, or date typed
 out instead of referenced as `{{fact:ID}}`. Never respond to a rejection by editing
 the corpus or relaxing a check.
 
 Write documents rather than lists: lead with the position, group what belongs
-together, say what it means. Sections were given different facts deliberately.
+together, say what it means. Sections were given different facts for a reason.
 
 For the full rule set, the rejection reasons in detail, and what good prose looks
 like for this harness, read `references/writing-prose.md`.

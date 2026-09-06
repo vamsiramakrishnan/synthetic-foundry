@@ -1,11 +1,11 @@
 ---
 title: Registration Seams
-description: Register a vertical through the four seams, and report — never widen — the closed tables.
+description: Register a vertical through the four seams, and report, never widen, the closed tables.
 read-when: Before writing any vertical code.
 tags: [worldloom, vertical, registries, thin-waist, cli]
 ---
 
-# The registration seams — what is open, and what is deliberately not
+# The registration seams: what is open, and what is deliberately not
 
 A domain module reaches core through four registries and nothing else; the
 closed tables at the bottom are the gaps to report, not widen.
@@ -47,13 +47,13 @@ worldloom evaluate ./corpus                # your benchmark families
 
 `--periods N` runs your episode N times, stepping by the `period_step_months`
 you registered. Fill in `consulted_targets`, `system_slots`, `role_keys`,
-`episode_text` and `evaluation_text` on the `Domain` — they are not decoration,
+`episode_text` and `evaluation_text` on the `Domain`: they are not decoration,
 they are what a pack author sees and what `pack check` lints against.
 
 ## The seams that are not there
 
 Four core tables have no registration seam. Each is a closed literal, so a
-fourth vertical cannot add to it without editing core — which
+fourth vertical cannot add to it without editing core, which
 `tests/test_thin_waist.py` forbids, correctly. Report the gap rather than
 widening the table:
 
@@ -62,11 +62,11 @@ widening the table:
 | `parameters.DEFAULTS` | your physics ranges are invisible to `worldloom pack params` and `Parameters.with_overrides` refuses them by name, so **a pack cannot tune your engine's physics**. Keep your spans in your own module and layer them under whatever a caller supplies. |
 | `landscape.LANDSCAPES` | `--estate` cannot grow a landscape in your vocabulary. Refuse the flag with its reason rather than serving a retailer's `click-collect-api`. |
 | `mosaic.ENGINES` | `worldloom mosaic -e <yours>` is refused; the per-engine variation axes are a literal map. |
-| `locales.industry_suffixes` | your companies are named from the *retail* suffix pool in every shipped jurisdiction, silently — `suffixes_for` falls back rather than raising. |
+| `locales.industry_suffixes` | your companies are named from the *retail* suffix pool in every shipped jurisdiction, silently: `suffixes_for` falls back rather than raising. |
 
 And one seam that is not a registry at all: **a domain module registers by
 being imported**, and the only thing that imports it unconditionally is
 `src/worldloom/__init__.py`. That import is a hand edit and there is no way
-around it. Lazy registration is not an option — a check group that runs only
+around it. Lazy registration is not an option: a check group that runs only
 in processes that happened to import the right module is a check that passes
 on machines where it never ran.

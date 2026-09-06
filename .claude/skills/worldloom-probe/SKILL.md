@@ -1,13 +1,13 @@
 ---
 name: worldloom-probe
-description: Derive a world's physics by Socratic drill-down instead of typing ranges — descend org → reporting → roles → objectives → measures, state the constraints between layers, and let arc consistency refuse what cannot hold. Use when a corpus needs to be a specific kind of organisation rather than the engine's default one, when a pack cannot express what a business actually is, or when asked what shapes a set of answers has committed to.
+description: Derive a world's physics by Socratic drill-down instead of typing ranges, descending org → reporting → roles → objectives → measures, stating the constraints between layers, and letting arc consistency refuse what cannot hold. Use when a corpus needs to be a specific kind of organisation rather than the engine's default one, when a pack cannot express what a business actually is, or when asked what shapes a set of answers has committed to.
 tags: [worldloom, probe, physics, arc-consistency, cascade]
 ---
 
 # Probing a world
 
 The engine draws every figure from a range written into a generator. Those
-ranges have names (`worldloom pack params`), so a pack can override them — but
+ranges have names (`worldloom pack params`), so a pack can override them, but
 a list of thirty-seven ranges to fill in is the wrong instrument. They are not
 independent: setting a margin without moving markdown cadence and inventory
 turns builds the same business with one figure edited. So derive them, by
@@ -31,20 +31,20 @@ from "something went wrong" without parsing prose.
 Layers descend `organisation → reporting → roles → objectives → measures`. A
 level is settled before the one under it opens, and `layer_for_sub_questions`
 in each brief names the layer to raise into. An answer is one JSON document per
-question — `assets/answer.json` is the shape.
+question: `assets/answer.json` is the shape.
 
 Nothing commits on a refused answer; the refusal names the chain that broke.
 Fix that specific thing and resubmit. **A rejection is the harness working.**
 
 ## Read next
 
-- `references/answering.md` — what each layer asks, the narrowing rule,
+- `references/answering.md`: what each layer asks, the narrowing rule,
   sub-question relations, cross-layer links, and grounding a range in a source.
   Load before answering the first question.
-- `references/objectives.md` — the accountability channel: `answers_for`, the
+- `references/objectives.md`: the accountability channel: `answers_for`, the
   tolerance band, and its three refusals. Load when the objectives layer opens.
-- `references/endgame.md` — the refusal taxonomy, `probe_worlds` before
+- `references/endgame.md`: the refusal taxonomy, `probe_worlds` before
   resolving, and why an unbound leaf is the finding. Load on a refusal you do
   not recognise, or when the graph settles.
-- A settled session fans out to buildable blueprints from Python —
-  `sdk.probe_of(session, n)` — see `/worldloom-sdk`.
+- A settled session fans out to buildable blueprints from Python:
+  `sdk.probe_of(session, n)`. See `/worldloom-sdk`.

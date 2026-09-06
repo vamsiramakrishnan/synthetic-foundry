@@ -1,6 +1,6 @@
 ---
 name: worldloom
-description: Generate a coherent synthetic enterprise corpus with Worldloom — build a world from a seed, write prose under fact constraints, render XLSX/DOCX/PPTX/PDF/Markdown and business-system bundles, score retrieval baselines, and validate that every artifact agrees. Use when asked to create synthetic enterprise data, a RAG or agent evaluation corpus, a fictional company's documents, or to add a scenario, renderer, or industry to this repository.
+description: Generate a coherent synthetic enterprise corpus with Worldloom, building a world from a seed, writing prose under fact constraints, rendering XLSX/DOCX/PPTX/PDF/Markdown and business-system bundles, scoring retrieval baselines, and validating that every artifact agrees. Use when asked to create synthetic enterprise data, a RAG or agent evaluation corpus, a fictional company's documents, or to add a scenario, renderer, or industry to this repository.
 tags: [worldloom, synthetic-corpus, determinism, narration, rendering, evaluation]
 ---
 
@@ -24,7 +24,7 @@ pip install -e ".[all]"
 
 worldloom build --seed 8128 --incident --out ./corpus   # 1. a world
 worldloom act requests ./corpus -o decision.json        # 1a. optional: be the employees
-worldloom act accept ./corpus --from action.json        #     (see below — needs --actors agent)
+worldloom act accept ./corpus --from action.json        #     (see below; needs --actors agent)
 worldloom plan requests ./corpus -o plans.json          # 1b. what shape each doc takes
 worldloom plan accept ./corpus --from plans.json        #     validated against the grammar
 worldloom narrate requests ./corpus -o requests.json    # 2. what prose it needs
@@ -51,7 +51,7 @@ also takes `--json`, so a rejection arrives as data rather than a table to parse
 
 Step 1a is a different loop and a different job. Built with
 `worldloom build --seed 8128 --incident --actors agent --out ./corpus`, the
-incident's records are not planned from the fact ledger — they are produced by
+incident's records are not planned from the fact ledger. They are produced by
 employees calling tools on what each of them had actually observed. You are those
 employees, one decision at a time, until `act requests` says the episode is
 complete. Skip it and the deterministic planner writes those documents instead;
@@ -72,7 +72,7 @@ Do not read these up front. Each is loaded for one stage of the journey.
 | 3. Write | `references/writing-prose.md` | The rules, the rejection cycle, and what good prose looks like here |
 | 5. Render | `references/rendering.md` | What each format is for and what it carries |
 | 7. Evaluate | `references/evaluating.md` | Reading the scorecard, and what a *rising* score means |
-| Any stage | `references/diversity.md` | Whether the batch is structurally varied, or one document photocopied — and `--effective`, which prices a shape used ten times differently from one used once |
+| Any stage | `references/diversity.md` | Whether the batch is structurally varied, or one document photocopied. Also `--effective`, which prices a shape used ten times differently from one used once |
 | Many corpora | `references/fleets.md` | Planning a fleet so every pairwise combination is reached, and asking a fleet you already built what it never covered |
 | Changing the repo | `references/extending.md` | Adding a format, scenario, industry, or coherence rule |
 | Any stage | `references/commands.md` | Every command and flag. Generated from the CLI |
@@ -85,7 +85,7 @@ their commands are checked against the CLI by the same test.
 ## The three rules everything follows from
 
 1. **You reference numbers, never restate them.** Every figure, percentage and
-   date is `{{fact:FACT-0028}}`. Checked lexically — any digit outside a reference
+   date is `{{fact:FACT-0028}}`. Checked lexically: any digit outside a reference
    is rejected.
 2. **Every generative call is recorded**, so a world replays byte-for-byte with no
    model reachable.
@@ -94,16 +94,16 @@ their commands are checked against the CLI by the same test.
 
 ## Report to the user, at each stage
 
-Do not run the whole loop silently and present a directory. What is worth
-surfacing, in order:
+Do not run the whole loop silently and present a directory. Surface these, in
+order:
 
-- After **build**: the summary table — company, headcount, facts, artifacts,
+- After **build**: the summary table: company, headcount, facts, artifacts,
   evaluation cases. If you ran several periods, say so; recurrence is the point.
 - After **act**: `worldloom actors ./corpus --observations`. Two people woken by
-  the same failure with different numbers of visible facts is the whole claim,
-  and it is invisible in the summary table.
+  the same failure with different numbers of visible facts is the claim the actor
+  loop makes, and the summary table does not show it.
 - After **accept**: how many passes it took and what was rejected. A first-pass
-  rejection is informative, not embarrassing — it shows the guardrail is real.
+  rejection is informative, not embarrassing. It shows the guardrail is real.
 - After **validate**: the check count. A large world runs tens of thousands.
 - After **evaluate**: the per-type scores. A baseline that scores well on direct
   lookup and badly on temporal state and abstention is the corpus *working*.
@@ -113,7 +113,7 @@ surfacing, in order:
 - **Never respond to a rejection by editing the corpus, relaxing a check, or
   dropping the offending fact.** The violation is correct; the prose is wrong.
 - **Never introduce a clock, `random`, or a UUID.** Ledger keys are content
-  addresses. `hash()` is randomised per process and is not one either — use
+  addresses. `hash()` is randomised per process and is not one either; use
   `worldloom.ids.content_key`.
 - **Never edit a prompt without bumping its version** in
   `src/worldloom/narrative/prompts.py`. The version is part of the ledger key, so
@@ -122,9 +122,9 @@ surfacing, in order:
 ## When the ask is a loop, not a command
 
 Every command above is one fixed arrangement of the machinery. The moment the
-ask is a comprehension — fields of worlds, sweeps, filters on what came out, a
+ask is a comprehension (fields of worlds, sweeps, filters on what came out, a
 corpus searching itself mid-loop, recipe mutations, counterfactual twins, a
-fleet qualified from memory — write Python against `worldloom.sdk` instead:
+fleet qualified from memory), write Python against `worldloom.sdk` instead:
 `/worldloom-sdk`.
 
 `pytest -q` and `worldloom validate retail-close` must both pass before you

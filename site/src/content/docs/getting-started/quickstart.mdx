@@ -5,7 +5,7 @@ description: Generate a local corpus, open its rendered files, validate its clai
 
 This guide produces a local corpus with deterministic sample prose. It requires
 no model service or cloud credentials. Complete
-[installation](/synthetic-foundry/getting-started/installation/) with the `all`
+[installation](/worldloom/getting-started/installation/) with the `all`
 extra so all five document renderers below are available.
 
 ## 1. Build one episode
@@ -34,7 +34,7 @@ worldloom inspect ./corpus --artifacts
 
 `facts.jsonl` holds canonical facts. `artifact-intents.jsonl` states what the
 artifacts should contain. `artifact-manifest.jsonl` links rendered outputs to
-their provenance. [Corpus anatomy](/synthetic-foundry/reference/corpus-anatomy/).
+their provenance. [Corpus anatomy](/worldloom/reference/corpus-anatomy/).
 
 ## 3. Check consistency and retrieval separately
 
@@ -82,7 +82,7 @@ worldloom narrate requests ./authored-corpus -o requests.json
 ```
 
 An external writer reads `requests.json` and produces `responses.json` under
-the [narration contract](/synthetic-foundry/guides/narration/). The library does
+the [narration contract](/worldloom/guides/narration/). The library does
 not call a model on your behalf. Then accept, render, and validate:
 
 ```bash
@@ -98,5 +98,5 @@ violation and resubmit; preserve the accepted ledger for replay.
 
 The default close is a bounded episode. A full enterprise evaluation needs
 explicit choices about processes, periods, systems, people, artifact families,
-and distractors. Use [enterprise corpus generation](https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/enterprise-corpus.md)
+and distractors. Use [enterprise corpus generation](https://github.com/vamsiramakrishnan/worldloom/blob/main/docs/enterprise-corpus.md)
 to plan those axes before increasing volume.

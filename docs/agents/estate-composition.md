@@ -9,11 +9,11 @@ tags: [estate, compose, topology, services, landscape]
 
 A stock world runs four services on five systems, because nine is what the
 episode names. `--estate small|medium|large` grows a real landscape around them
-on the retail engine — layered, with placed chokepoints, and with the episode's
+on the retail engine: layered, with placed chokepoints, and with the episode's
 own services untouched so its causality is unchanged.
 
-For a vertical whose vocabulary the engine does not have — banking's estate is
-not called `click-collect-api`, and the insurer ships with no services at all —
+For a vertical whose vocabulary the engine does not have (banking's estate is
+not called `click-collect-api`, and the insurer ships with no services at all)
 you author it, and the graph is the grammar:
 
 ```bash
@@ -25,11 +25,11 @@ worldloom topology ./corpus                           # read what you built
 
 The request carries the company, its units, every existing service with what it
 depends on, who may own something, the closed constraint vocabulary lore may
-use, and the rules — so you can answer without reading the source. Propose
+use, and the rules, so you can answer without reading the source. Propose
 services and systems under keys of your own; the harness mints the ids.
 
-The refusals are the point, and each is stated in the request before you write
-anything: a dependency cycle through any number of hops, a dependency that
+The refusals are what the handshake is for, and each is stated in the request
+before you write anything: a dependency cycle through any number of hops, a dependency that
 resolves to nothing, an owner who does not work here, a criticality tier the
 graph contradicts, lore that constrains nothing, and an estate in which nothing
 is a single point of failure. All violations come back at once, and nothing is

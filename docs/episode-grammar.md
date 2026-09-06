@@ -1,6 +1,6 @@
 # Episode Grammar: The Autopsy
 
-This document dissects the four existing episodes (MonthEndClose, QuarterlyCapitalReturn, QuarterlyReserving, PurchaseToPayCycle) and three org-change scenarios (Hire, Departure, Reorganisation) to expose the shared spine — the declarative structure from which fact minting, events, artifacts, and evaluation cases can be derived.
+This document dissects the four existing episodes (MonthEndClose, QuarterlyCapitalReturn, QuarterlyReserving, PurchaseToPayCycle) and three org-change scenarios (Hire, Departure, Reorganisation) to expose the shared spine: the declarative structure from which fact minting, events, artifacts, and evaluation cases can be derived.
 
 ## The Episode Spine: Phases → Facts → Events → Artifacts → Evals
 
@@ -73,8 +73,8 @@ Every fact minted declares:
 - **Kind**: a stable string key (`ops.incident_opened`, `capital.rwa`, `reserves.booked_total`, `p2p.open_shortfall_value`)
 - **Authority**: `INITIAL_HYPOTHESIS`, `UNOFFICIAL_NOTE`, `WORKING_DOCUMENT`, `APPROVED_REPORT`, `CONFIRMED`, `SYSTEM_OF_RECORD`
 - **Validity window**: `valid_from`, `valid_to` (the moment it stopped being current)
-- **Supersession**: `supersedes: str | None` — which prior fact it replaces (if any)
-- **Lore linkage**: `lore_ids: list[str]` — which commitments shaped this fact
+- **Supersession**: `supersedes: str | None`, the prior fact it replaces (if any)
+- **Lore linkage**: `lore_ids: list[str]`, the commitments that shaped this fact
 
 The **supersession pattern** is the key: a wrong hypothesis is not deleted; it stays with `valid_to` set and its successor records `supersedes=hypothesis_id`. This is what lets a document discuss "what we believed at the time, which turned out to be wrong."
 
@@ -83,8 +83,8 @@ The **supersession pattern** is the key: a wrong hypothesis is not deleted; it s
 Events are recorded as `EnterpriseEvent(kind, occurred_at, summary, lore_ids)` and carry:
 
 - **Kind**: `"ops.incident_opened"`, `"capital.return_lodged"`, `"reserves.triangle_refreshed"`, `"p2p.order_placed"`
-- **Occurred_at**: the moment it happened (derived from period + calendar + business days)
-- **Summary**: one sentence (from `episode_text` overrideable by pack)
+- **Occurred_at**: the moment it happened (derived from period, calendar, and business days)
+- **Summary**: one sentence (from `episode_text`, overrideable by pack)
 - **Lore linkage**: which commitments triggered or explained this
 - **Fact keys**: `episode.keys` dictionary maps named handles (e.g., `"fact_incident_ref"`, `"fact_rwa"`) to fact IDs for planner and evaluation to cite
 
@@ -101,7 +101,7 @@ An `ArtifactIntent` is the decision that a document should exist, with:
 - **Structured part** (if any): tables compiled from facts via `outline()` (generic fact-kind prefix matching) or custom `_COMPILERS` (workbook, thread, Jira issue)
 - **Unstructured part** (if any): section names for `narrate requests` (prose)
 
-Artifacts are produced by `generators.planning.artifact_intents(episode)` (retail), or domain-specific equivalents (`banking_documents.artifact_intents`, `insurance_documents`, `procurement_documents`). They are deterministic and standalone — the same episode produces the same intents in every run.
+Artifacts are produced by `generators.planning.artifact_intents(episode)` (retail), or domain-specific equivalents (`banking_documents.artifact_intents`, `insurance_documents`, `procurement_documents`). They are deterministic and standalone: the same episode produces the same intents in every run.
 
 ### Evaluation Cases: Questions the Corpus Answers
 
@@ -116,7 +116,7 @@ The four **engines** produce theirs from domain-specific generators
 (`generators.evaluation.evaluation_cases`, `banking_evaluation`,
 `insurance_evaluation`, `procurement_evaluation`). An **authored process** does
 not, and cannot: those modules read a vertical's own Python vocabulary and the
-grammar has no way to reach them. That was the measurement below — 11 cases per
+grammar has no way to reach them. That is the measurement below: 11 cases per
 period from the engine, 0 from the port, twice.
 
 It is closed by `src/worldloom/benchmark.py`, and the mechanism is that **a
@@ -126,17 +126,17 @@ question shape is a shape in the graph** rather than a template in a vertical:
 | --- | --- |
 | `direct_lookup` | a fact one artifact carries and nothing contests |
 | `authority_resolution` | two or more artifacts citing different-authority facts about one subject |
-| `temporal_state` | a fact whose window closed — the instant is `valid_to`; or one period-keyed fact asked of a period that is no longer current |
+| `temporal_state` | a fact whose window closed, at the instant `valid_to` names; or one period-keyed fact asked of a period that is no longer current |
 | `causal_multi_hop` | a path in the event graph (`EnterpriseEvent.caused_by`) |
 | `cross_artifact` | a declared `derive`, or a `sums-to`, whose terms landed in several documents |
 | `numerical_comparison` | the same identity, when its terms landed in one |
 | `citation_required` | a statement exactly one document makes |
-| `expected_abstention` | **nothing** — see below |
+| `expected_abstention` | **nothing**, see below |
 
 None of those reads a vertical's vocabulary, so the same code derives a
 benchmark for a bank, a builder's purchase cycle, and an industry nobody has
-authored yet. The authored half — question phrasing, difficulty targets, which
-families a process wants emphasised, and the abstentions — is `EvalSpec` on
+authored yet. The authored half (question phrasing, difficulty targets, which
+families a process wants emphasised, and the abstentions) is `EvalSpec` on
 `EpisodeSpec.evaluation`, declared and linted exactly as `detail_tables` is:
 **a family naming a fact kind the registry lacks is refused**, and so is a
 `str.format` slot the derivation never fills.
@@ -206,7 +206,7 @@ Read pattern:
 existing_tolerance = world.authoritative("p2p.approval_tolerance_pct", company_id)
 ```
 
-Note: `period=None` (default) — an unscoped lookup because standing facts carry no period.
+Note: `period=None` (default) is an unscoped lookup, because standing facts carry no period.
 
 ### 2. Period-Scoped Carry-Forward
 
@@ -220,7 +220,7 @@ prior_period = previous_periods(self.period, 1)[0]
 prior_shortfall_value = world.authoritative("p2p.open_shortfall_value", company_id, period=prior_period)
 ```
 
-Note: explicit `period=prior_period` scope — the lookup reaches only the previous month's record.
+Note: explicit `period=prior_period` scope. The lookup reaches only the previous month's record.
 
 ### 3. Execution Pattern: Reuse vs. Mint
 
@@ -238,7 +238,7 @@ Every scenario follows this pattern:
 
 ### Declared Carry-Forward: Insurance Multi-Period Case
 
-**The hand-written insurance scenario is capped at one period** — `QuarterlyReserving.run()` refuses a second run:
+**The hand-written insurance scenario is capped at one period.** `QuarterlyReserving.run()` refuses a second run:
 
 ```python
 if any(f.kind == "reserves.held_vs_central_gap" for f in world.facts):
@@ -263,18 +263,18 @@ procurement's open shortfall is:
 4. Next quarter's run sees the same gap in the world and uses it
 
 **And it is not enough, which is why the guard was written rather than the
-carry-forward.** Every kind in that table is a *standing* fact — one number the
+carry-forward.** Every kind in that table is a *standing* fact: one number the
 company holds, reused. The thing a second valuation actually has to say is the
-triangle: `reserves.ultimate` is not one figure carried forward, it is four
+triangle. `reserves.ultimate` is not one figure carried forward, it is four
 figures, one per accident quarter, each of which has to be compared against
 *what that same accident quarter held one valuation ago*. `prior(K)` cannot ask
-that question — it walks the period axis, and an accident quarter's period does
+that question: it walks the period axis, and an accident quarter's period does
 not move. So the reserving episode stayed Python, and the guard is what an
 episode says when the grammar it would have been authored in has one axis and
 the business has two.
 
 The axis is the next section. With it, the carry-forward above is what it
-always looked like — three standing facts and a `reuse` rule — and the triangle
+always looked like: three standing facts and a `reuse` rule, and the triangle
 is a declared grid rather than `triangles.py`.
 
 **The grammar declares the slots; the scenario implementation (generator code) remains deterministic.**
@@ -284,15 +284,14 @@ is a declared grid rather than `triangles.py`.
 A loss triangle is not a series. Neither is a loan book by vintage, a warranty
 provision by manufacture quarter, or retention by hiring cohort. Each is a
 **grid**: origin cohort down one side, observation date across the other, and a
-cell whose meaning needs both coordinates — *what we thought the 2025-Q1
+cell whose meaning needs both coordinates: *what we thought the 2025-Q1
 accident quarter would ultimately cost us, as at the March 2026 valuation*.
 
 The grammar had one axis. `period` was the observation, `prior(K)` stepped it
 back one, and every carry-forward in the project is that one step. A triangle
-needs the other one, and the absence is the whole reason `triangles.py` and
-`reserving.py` are Python: not because the arithmetic is hard — it is one
-allocation and one lookback — but because there was nowhere to declare what a
-row *is*.
+needs the other one. The arithmetic itself is simple, one allocation and one
+lookback; `triangles.py` and `reserving.py` stayed Python because there was
+nowhere to declare what a row *is*.
 
 `CohortSpec` is that axis, `FactKindSpec.cohort` puts a kind on it, and two
 derivations move along it.
@@ -303,8 +302,8 @@ derivations move along it.
 where it always was: `valid_from`, plus the supersession chain that closes each
 cell when the next valuation reopens it.
 
-This is the most consequential decision on the page and it is worth four
-reasons, because the obvious alternative — a `cohort` field on `CanonicalFact` —
+This is the most consequential decision on the page, and it needs four
+reasons, because the obvious alternative, a `cohort` field on `CanonicalFact`,
 is what most readers will reach for first.
 
 **1. It is not a new decision.** `generators/reserving.py` has always done it.
@@ -325,14 +324,14 @@ FACT-0049  period 2025-12  86.0  valid 2026-04-24 → open   supersedes FACT-002
 One kind, one subject (`CAT-0004`, the long-tail line), and the entire grid is
 already there: **four `period` values are the cohorts, two `valid_from` values
 are the observations, and the supersession edges are the cells' own histories,
-cohort by cohort.** The axis being added does not invent this layout — it names
+cohort by cohort.** The axis being added does not invent this layout, it names
 it, so a spec can produce it instead of a generator. An authored grid keyed any
 other way would disagree with these rows about which quarter is which, and the
 byte-diff a port is measured by would have nothing to line up against.
 
 **2. A new optional field breaks byte-identity in every corpus at once.**
 `CanonicalFact` serialises to one JSON line per fact. Add `cohort: str | None`
-and every fact line of every corpus ever built gains `"cohort": null` — a
+and every fact line of every corpus ever built gains `"cohort": null`: a
 retailer's revenue, a bank's RWA, a policy threshold, all of them. CI rebuilds a
 corpus from its ledger and diffs it byte-for-byte; the whole estate fails, and it
 fails for a field almost no fact will ever set. The gate exists to catch exactly
@@ -343,7 +342,7 @@ it.
 `world.authoritative("reserves.ultimate", line_id, period="2025-06")` is a
 row-and-column lookup with no new API, no new index and no new argument. So is
 every temporal check, every `outline()` scope filter, and the benchmark's
-`temporal_state` reading — which is why a cohort grid produces "what did we think
+`temporal_state` reading. That is why a cohort grid produces "what did we think
 2025-Q1 would cost, as at the *previous* valuation?" for free, from a supersession
 pair it did not know was a triangle.
 
@@ -355,18 +354,18 @@ with nothing added:
 
 | Read | How | What it answers |
 |---|---|---|
-| a **column** — one valuation, every cohort | facts sharing this run's `valid_from` | "what does the triangle say today?" |
-| a **row** — one cohort, every valuation | facts sharing a `period`, walked by `supersedes` | "how has 2025-Q1 developed?" |
+| a **column**, one valuation, every cohort | facts sharing this run's `valid_from` | "what does the triangle say today?" |
+| a **row**, one cohort, every valuation | facts sharing a `period`, walked by `supersedes` | "how has 2025-Q1 developed?" |
 
 **What it costs, stated plainly.** For a cohort kind, `period` no longer means
-"the period this fact reports" — it means "the cohort this fact is about", and a
+"the period this fact reports": it means "the cohort this fact is about", and a
 reader has to know the kind's `cohort` declaration to interpret it. That is a
 real ambiguity and the lint is where it is paid for: a cohort kind may not be
 `period-scoped` and may not be a series, because both would put a *second*
 meaning into the same field, and nothing could then say which one a given fact
 meant.
 
-### `CohortSpec` — the declared axis
+### `CohortSpec`: the declared axis
 
 Declared on `EpisodeSpec.cohorts`, referenced by name:
 
@@ -374,7 +373,7 @@ Declared on `EpisodeSpec.cohorts`, referenced by name:
 |---|---|
 | `name` | the axis's name (`accident_quarter`), referenced by `FactKindSpec.cohort` |
 | `count` | how many cohorts each observation carries into view (≥ 1) |
-| `spacing_months` | months between consecutive cohorts — 3 for accident quarters |
+| `spacing_months` | months between consecutive cohorts, 3 for accident quarters |
 | `lag_months` | months between the newest cohort and the observing period |
 
 `lag_months` is the field that is easy to skip and shouldn't be. A quarter that
@@ -399,24 +398,24 @@ The axis is declared on the *episode*, never on the archetype. A many-unit pack
 must not silently multiply the grid: four cohorts is a claim about how far back
 this business's reserving looks, not about how many divisions it has.
 
-### `FactKindSpec.cohort` — a kind on the axis
+### `FactKindSpec.cohort`: a kind on the axis
 
 Naming a declared axis makes a kind a row of the grid. When set:
 
 - the kind mints **`count` facts per episode run**, one per cohort;
 - each fact's `period` is its **cohort's** period, not the observing period;
-- `period_scope` must be `period-keyed` — lint-refused otherwise, because a grid
+- `period_scope` must be `period-keyed`, lint-refused otherwise, because a grid
   with optional cells is a grid with holes, and you cannot tell a cohort that
   reported nothing from one nobody asked about. Every roll-up over it becomes
   unanswerable, which is the one question a grid exists to answer;
-- `series_days` must be 0 — a business-day series and a cohort grid are two
+- `series_days` must be 0. A business-day series and a cohort grid are two
   different second axes, and both claim the fact's `period`. Refused rather than
   nested until something real needs a daily series per cohort, because guessing
   which one a row meant would be a silent decision about what the corpus says.
 
-Empty `cohort` — every kind that existed before the axis — mints exactly once,
-exactly as it did. An episode that declares no `cohorts` is unchanged to the
-byte.
+Every kind that existed before the axis leaves `cohort` empty, and still mints
+exactly once, exactly as it did. An episode that declares no `cohorts` is
+unchanged to the byte.
 
 A cohort kind does not have to be derived. However its value is reached, it is a
 grid:
@@ -425,22 +424,22 @@ grid:
 |---|---|
 | `derive: allocation_of(K)` | K split across the cells by largest remainder |
 | `derive: prior_in_cohort(K)` | what K held for each cell one observation ago |
-| `derive:` one of the seven arithmetic derivations over gridded operands | the same arithmetic cell by cell — see "Shapes" below |
+| `derive:` one of the seven arithmetic derivations over gridded operands | the same arithmetic cell by cell, see "Shapes" below |
 | `parameter` | one draw per cell, on the cell's own stream |
-| `amount` or `text` | the same stated value in every cell — a floor or a policy does not vary by vintage just because it is gridded |
+| `amount` or `text` | the same stated value in every cell, since a floor or a policy does not vary by vintage just because it is gridded |
 
 **The declaration decides whether a grid is a chain or a diagonal**, and this is
 the one place an invariant instructs the runner rather than only the checker:
 
 - `supersedes-prior`, **or neither** (the default, and what every grid authored
   before this did): each cell supersedes its own predecessor rather than the grid
-  superseding wholesale, which is what keeps a *row* readable — a valuation
+  superseding wholesale, which is what keeps a *row* readable: a valuation
   revises each cohort separately, and one grid-level supersession would leave
   "what did we think this cohort was worth last quarter" unanswerable for every
   cohort but one.
 - `never-superseded`: an **append-only observation grid**. No predecessor is
   linked and no window is closed, because a later reading sits *beside* the
-  earlier one rather than correcting it — a paid or incurred triangle diagonal,
+  earlier one rather than correcting it: a paid or incurred triangle diagonal,
   where both figures are things the claims system actually held. Until the runner
   read this declaration, such a grid could be declared, would chain anyway, would
   lint clean, and would then fail its own rule (`triangle_touched`).
@@ -452,24 +451,24 @@ the one place an invariant instructs the runner rather than only the checker:
 Both are cohort-kinds-only; the lint refuses either on a kind with no `cohort`,
 because both are claims about a cell's place in a grid.
 
-**`allocation_of(K)`** — this kind's cells are K's amount split across the
+**`allocation_of(K)`**: this kind's cells are K's amount split across the
 cohorts by **largest remainder** (`generators.finance.allocate`), so the grid
 reconciles to its parent *by construction* rather than by luck. Weights are equal
 unless the kind declares a `parameter`, in which case one draw per cohort on a
-stream named `kind/{kind}/{cohort_period}` supplies them — so a cohort's share is
+stream named `kind/{kind}/{cohort_period}` supplies them, so a cohort's share is
 its own draw, reproducible from the seed and the cohort alone.
 
-This is `triangles.py`'s own discipline, lifted verbatim: *"book (cohort) figures
-are allocated from a book-level total by largest remainder, never drawn and
-summed, so a roll-up reconciles to its cohorts exactly."* Drawing four figures
+This is `triangles.py`'s own discipline, stated the same way: book (cohort)
+figures are allocated from a book-level total by largest remainder, never drawn
+and summed, so a roll-up reconciles to its cohorts exactly. Drawing four figures
 and summing them gives a total that is nobody's stated total; allocating one
 stated total gives four figures that add up.
 
-**`prior_in_cohort(K)`** — what K held **for this same cohort** at the previous
+**`prior_in_cohort(K)`**: what K held **for this same cohort** at the previous
 observation. Resolved the way `prior(K)` is: look up a fact of kind K whose
 `period` is *this cohort's* period and whose `valid_from` precedes this run,
-taking the latest such. Zero when there is none — the same rule and the same
-reason as `prior(K)`: "nothing had emerged yet" is a claim, not an absence.
+taking the latest such. Zero when there is none, for the same reason as
+`prior(K)`: "nothing had emerged yet" is a claim, not an absence.
 
 It is the diagonal step, and it is the one thing `prior(K)` structurally cannot
 express. `prior(K)` walks the period axis; here the period *is* the cohort and
@@ -482,19 +481,19 @@ does not move, so the step is along `valid_from` instead.
 ```
 
 Declared on the cohort-keyed kind: **its cells sum to the parent kind's amount
-for the same observation, exactly** — exactly rather than within a tolerance,
+for the same observation, exactly**, and exactly rather than within a tolerance,
 because largest remainder allocates integers and the crumb has nowhere to go.
 Declared on the kind, recomputed by the validator, as `sums-to` is.
 
 It is a separate invariant from `sums-to` rather than a reuse of it, and the
 direction of the operands is the tell. `sums-to` is declared on the *parent* and
 names its *children*: it sums across **subjects** that share a common parent
-subject — revenue by division to group revenue. `rolls-up-to` is declared on the
+subject, revenue by division to group revenue. `rolls-up-to` is declared on the
 *child* and names its *parent*: it sums across **periods** on one subject, which
 is a set `sums-to` has no way to describe. One kind, one subject, four periods,
 one valuation is not a shape the subject hierarchy contains.
 
-Declaring it on the cohort kind is deliberate: the invariant lives where the
+The invariant is declared on the cohort kind because that is where the
 grid lives, so a reader of the kind sees what its cells owe, and there is exactly
 one parent to name while there are `count` cells to name back.
 
@@ -527,7 +526,7 @@ At `period = "2026-03"` the axis resolves to `2025-03, 2025-06, 2025-09,
       "authority": "confirmed",
       "source_role": "sys_actuarial",
       "invariants": [
-        {"kind": "holds-at", "detail": "The actuary's central estimate for the long-tail book at this valuation. The span is a single cohort's size, scaled by the cohort count, because a book total is what four accident quarters come to — the same call-site arithmetic `scale` was added for."}
+        {"kind": "holds-at", "detail": "The actuary's central estimate for the long-tail book at this valuation. The span is a single cohort's size, scaled by the cohort count, because a book total is what four accident quarters come to: the same call-site arithmetic `scale` was added for."}
       ]
     },
     {
@@ -554,7 +553,7 @@ At `period = "2026-03"` the axis resolves to `2025-03, 2025-06, 2025-09,
       "authority": "confirmed",
       "source_role": "sys_actuarial",
       "invariants": [
-        {"kind": "holds-at", "detail": "What this same accident quarter was carried at one valuation ago — the diagonal step. Zero at a cohort's first appearance, because nothing had emerged yet."}
+        {"kind": "holds-at", "detail": "What this same accident quarter was carried at one valuation ago: the diagonal step. Zero at a cohort's first appearance, because nothing had emerged yet."}
       ]
     }
   ]
@@ -565,14 +564,14 @@ Declaration order is mint order, and it has to be: `allocation_of` needs its
 parent's value before it can split it, and `prior_in_cohort` needs to know which
 kind it is looking back at.
 
-**Lint it and it refuses, once, correctly.** Copy the spec above verbatim and
+**Lint it and it refuses, once, correctly.** Copy the spec above exactly and
 `episodes.lint` returns exactly one finding:
 
 ```
 episodes[0] (QuarterlyReserving).fact_kinds[1] (reserves.ultimate): declares
 invariant(s) ['rolls-up-to'] that the fact-kind registry does not hold for this
 kind (registered by 'insurance' as ['holds-at']). Either the registry
-declaration is incomplete — fix it where the kind is registered — or the spec
+declaration is incomplete, fix it where the kind is registered, or the spec
 claims a rule the kind's generator does not keep.
 ```
 
@@ -581,7 +580,7 @@ Which is the right answer to the right question. `reserves.ultimate` is a
 and today that is `holds-at` alone, because when it was registered the roll-up
 was arithmetic inside `triangles.py` rather than a rule anything checked. The
 spec is claiming more than the registry does, and the lint will not let the two
-drift — the same guard that stops a process spec from quietly promising rules
+drift: it is the same guard that stops a process spec from quietly promising rules
 the validator never runs. The reserving port's first line is therefore a
 registry line, not a spec line: `reserves.ultimate` gains
 `rolls-up-to(reserves.central_estimate_total)` where it is registered, and the
@@ -590,18 +589,18 @@ clean, including `reserves.ultimate_at_prior_valuation`, which is unregistered
 and so carries its own invariants and answers to nobody else.
 
 **What the two valuations produce.** March mints four cells with an empty prior
-column. June's axis resolves to `2025-06, 2025-09, 2025-12, 2026-03` — the grid
+column. June's axis resolves to `2025-06, 2025-09, 2025-12, 2026-03`: the grid
 has slid one quarter:
 
 | Cohort | 2026-03 valuation | 2026-06 valuation | `prior_in_cohort` at 2026-06 |
 |---|---|---|---|
-| 2025-03 | in view | dropped out | — |
+| 2025-03 | in view | dropped out | n/a |
 | 2025-06 | in view | in view | March's cell for 2025-06 |
 | 2025-09 | in view | in view | March's cell for 2025-09 |
 | 2025-12 | in view | in view | March's cell for 2025-12 |
-| 2026-03 | — | newly in view | zero: first appearance |
+| 2026-03 | n/a | newly in view | zero: first appearance |
 
-Three cells carry, one arrives, one leaves — which is a triangle, arrived at
+Three cells carry, one arrives, one leaves. That is a triangle, arrived at
 from a four-field axis declaration rather than from a generator. June's cells
 for the three overlapping cohorts supersede March's, so the row reads as a development
 history and `world.authoritative(..., period="2025-09")` still returns the
@@ -610,7 +609,7 @@ current view, with no accessor that knows a triangle exists.
 **The fourth kind is the movement, and it is a grid.**
 `minus(reserves.ultimate, reserves.ultimate_at_prior_valuation)` is per-cohort
 adverse development: two grids on one axis, subtracted cell by cell. This
-paragraph used to say the opposite — *do not write that* — because the seven
+paragraph used to say the opposite (*do not write that*), because the seven
 arithmetic derivations were scalar and a grid handed to one was silently its
 roll-up, so the declaration compiled into four cells each carrying the *book's*
 movement: validating clean, describing nothing. The lint then refused it
@@ -628,16 +627,16 @@ valuations are a supersession pair on one subject and period, which is a
 `temporal_state` question ("what were we carrying for 2025-Q3 at the March
 valuation?") and a `numerical_comparison` with no kind minted at all. And a
 document that only has to *print* a movement column can print the two figures it
-is the difference of. Mint the movement when something depends on it as a figure
-— an artifact intent needs a fact id, or another kind derives from it; read it
+is the difference of. Mint the movement when something depends on it as a figure,
+say an artifact intent needs a fact id, or another kind derives from it; read it
 off the graph when the corpus only has to be able to answer about it. That is
 the same choice `reserves.ultimate_at_prior_valuation` documents one paragraph
 down, and the shipped insurer pack now makes it in both directions.
 
 ### Shapes: what a derivation does with a grid
 
-The seven arithmetic derivations — `pct_of`, `at_rate`, `percent_of`,
-`multiple_of`, `plus`, `minus`, `units_of` (`episodes.SHAPED_DERIVATIONS`) —
+The seven arithmetic derivations (`pct_of`, `at_rate`, `percent_of`,
+`multiple_of`, `plus`, `minus`, `units_of`, all in `episodes.SHAPED_DERIVATIONS`)
 infer their shape from their operands. One arithmetic, declared once, applied
 at whatever shape it is handed:
 
@@ -645,37 +644,37 @@ at whatever shape it is handed:
 |---|---|---|
 | all scalars | a scalar | exactly what it always was, byte for byte |
 | all grids on **one** axis | a grid | the same computation, cell by cell |
-| a mix | a grid | the scalar **broadcasts** across the cells — one board rate, four answers |
+| a mix | a grid | the scalar **broadcasts** across the cells: one board rate, four answers |
 | grids on **two** axes | refused | an accident quarter and an underwriting year are not a couple |
 
 Two rules come with it. A kind whose derivation comes out gridded must
 **declare** `cohort`: completeness, roll-up and cohort sanity all key off it, and
 an undeclared grid's cells are held to nothing while looking exactly like a
 passing corpus. And a drawn factor (`pct_of`, `multiple_of`) is drawn **once per
-kind**, outside the map — a rate applied to a triangle is one rate and four
+kind**, outside the map: a rate applied to a triangle is one rate and four
 answers, not four unrelated draws wearing one kind's name.
 
 The other derivations are *not* lifted, and the boundary is what each reads.
 `ratio_pct`, `initial`, `supersession_delta` and `bps_delta` read a supersession
-**pair** — a two-tuple a grid would be silently mistaken for — and `prior` reads
+**pair**, a two-tuple a grid would be silently mistaken for, and `prior` reads
 one carried value from the period before; each still asks for a `rolls-up-to`
 parent and a derivation from that. `allocation_of` and `prior_in_cohort` are the
 two that *make* a grid and were never scalar.
 
 No verb was added for any of this. `minus` and a `minus_grid` beside it would be
-one subtraction written twice, drifting apart at the first rounding change — a
+one subtraction written twice, drifting apart at the first rounding change: a
 shape is not a computation.
 
 **Which leaves the question `reserves.ultimate_at_prior_valuation` answers.** The
-prior value is already in the world — it is the superseded cell — so minting it
+prior value is already in the world, it is the superseded cell, so minting it
 again as its own kind is a choice, not a necessity, and the choice is about
 documents. A valuation report that prints an "at prior valuation" column needs a
 fact id per cell for its `required_fact_ids`; walking `supersedes` is not
 something an artifact intent can do. `reserving.py` solves the same problem the
-other way, naming the superseded ids into `keys` explicitly *"rather than left
-reachable only by walking `supersedes`"*. Mint the comparative when a document
-prints it as a column; leave it to the chain when the corpus only has to be able
-to answer about it.
+other way, naming the superseded ids into `keys` explicitly rather than leaving
+them reachable only by walking `supersedes`. Mint the comparative when a
+document prints it as a column; leave it to the chain when the corpus only has
+to be able to answer about it.
 
 **Construction direction differs from the engine's, and the divergence is named
 rather than hidden.** `triangles.py` draws each cohort's ultimate and sums them
@@ -683,9 +682,9 @@ to the central estimate, then allocates the book-level **movement** across
 cohorts weighted by remaining IBNR. The spec above inverts it: it draws the book
 total and allocates the **ultimate**. Both reconcile exactly and neither is more
 correct, but they are different arithmetic on different streams, so the figures
-will not match the engine's — the same structural divergence the banking and P2P
-ports both measured, for the same reason (stream identity is generator-private,
-never data).
+will not match the engine's. It is the same structural divergence the banking and P2P
+ports both measured, for the same reason: stream identity is generator-private,
+never data.
 
 ### What the axis does not do
 
@@ -705,14 +704,14 @@ never data).
   this is a sliding one.
 - **Not yet a measured port.** `QuarterlyReserving` remains hand-written. The
   worked example above is the shape the axis makes authorable, not a byte-diff
-  against the engine — when the port lands it gets a proof section beside the
+  against the engine. When the port lands it gets a proof section beside the
   other two, with the divergences enumerated the same way.
 
 ## What Cannot Be Data
 
 ### 1. **Prose and Voice**
 
-Narrative requests name a writer, voice, audience, and target words. The prose itself is not authored in the grammar — it comes from the model at `narrate requests` time. The grammar declares:
+Narrative requests name a writer, voice, audience, and target words. The prose itself is not authored in the grammar: it comes from the model at `narrate requests` time. The grammar declares:
 
 - Which sections a document has (fact-kind prefixes + scope filters)
 - What facts are available to cite
@@ -722,11 +721,11 @@ The writer decides how to argue it.
 
 ### 2. **Incident Causality** (in MonthEndClose)
 
-Which specific detail causes the valuation failure (stale hierarchy mapping vs. ERP bug vs. data corruption) is fixed in the operational generator's constants and lore. It is deterministic but not authored as data — it is baked into `generators/operations.py`'s `TEXT` dictionary and lore hooks. The grammar can declare that an incident *can* happen and *when* it happens; the grammar cannot (yet) declare *what* the incident is. That lives in episode_text overrides (pack-specific narrative) and the generator code.
+Which specific detail causes the valuation failure (stale hierarchy mapping vs. ERP bug vs. data corruption) is fixed in the operational generator's constants and lore. It is deterministic but not authored as data: it is baked into `generators/operations.py`'s `TEXT` dictionary and lore hooks. The grammar can declare that an incident *can* happen and *when* it happens; the grammar cannot (yet) declare *what* the incident is. That lives in episode_text overrides (pack-specific narrative) and the generator code.
 
 ### 3. **Graph Structures** (in Hire/Departure/Reorganisation)
 
-These scenarios read the world's org chart and modify it, but the org chart itself (who reports to whom) is not part of the scenario grammar — it is generated by `generators/organisation.py` at build time. A Reorganisation scenario can declare "change the reporting line for person X to manager Y", but the universe of possible reorg shapes is generated, not authored.
+These scenarios read the world's org chart and modify it, but the org chart itself (who reports to whom) is not part of the scenario grammar: it is generated by `generators/organisation.py` at build time. A Reorganisation scenario can declare "change the reporting line for person X to manager Y", but the universe of possible reorg shapes is generated, not authored.
 
 ### 4. **Evaluation Case Questions**
 
@@ -734,8 +733,8 @@ The four engines template their questions in generator code
 (`generators/evaluation.py` and its three siblings), and a pack may re-voice
 them (`evaluation_text`). For an **authored process** this is no longer true of
 the case *kind*: `benchmark.py` derives which family a question belongs to from
-the graph — a closed validity window is a `temporal_state`, a differently-ranked
-rival document is an `authority_resolution` — so the taxonomy is a reading
+the graph: a closed validity window is a `temporal_state`, a differently-ranked
+rival document is an `authority_resolution`. So the taxonomy is a reading
 rather than a code decision.
 
 What stays authored, and why each is not derivable:
@@ -745,7 +744,7 @@ What stays authored, and why each is not derivable:
   group contractually obliged to pay?".
 - **Abstentions.** A fact graph contains no witness to a fact's *absence*, so
   an abstention has nothing to be derived from. It is declared whole, and the
-  lint refuses a template slot in one — there is no case to interpolate from.
+  lint refuses a template slot in one: there is no case to interpolate from.
 - **Emphasis.** Which families a process is *for* is the author's claim about
   the business: procurement exists for authority resolution and a close exists
   for reconciliation, and a flat cap would give both the same benchmark shape.
@@ -790,7 +789,7 @@ The grammar declares these; the validator *derives* checks from them. A kind wit
    - templates like "who signed {{role}} memo?" with roles filled in
 7. **World extension**: `world.extend(facts=new_facts, events=..., artifact_intents=..., evaluations=..., period="2026-04", recipe=...)`
 
-The second and every subsequent run uses the same RNG seed, so facts and events are identical. The difference is that year-over-year or multi-month corpora have *comparatives* — prior-month figures — which changes what the financial generator produces (variance calculations, trend analysis).
+The second and every subsequent run uses the same RNG seed, so facts and events are identical. The difference is that year-over-year or multi-month corpora have *comparatives* (prior-month figures), which changes what the financial generator produces (variance calculations, trend analysis).
 
 ## Concrete Flow: QuarterlyCapitalReturn (Banking)
 
@@ -833,9 +832,9 @@ The port exists and is measured: the spec is
 `examples/episodes/quarterly-capital-return.json`, the runner is
 `episodes.run` (executed through `episodes.AuthoredEpisode`, an ordinary
 recipe step), and `tests/test_episode_runner.py` pins that it lints clean
-against the fact-kind registry, validates clean under the full validator —
-banking's own check group polices `capital.*` whoever minted it, plus the
-checks derived from the spec's invariants — and replays byte-identically from
+against the fact-kind registry, validates clean under the full validator
+(banking's own check group polices `capital.*` whoever minted it, plus the
+checks derived from the spec's invariants), and replays byte-identically from
 its own recipe.
 
 **The byte-diff verdict, measured** (seed 8128, period 2026-03, both corpora
@@ -853,48 +852,48 @@ byte-identical, every other file differs):
 * **Facts: 58 vs 55, first id divergence at FACT-0006.** The three missing
   facts are the working paper's WORKING_DOCUMENT pre-figures for
   `capital.cet1_ratio`/`capital.rwa_total` and the second line's `unverified`
-  half of the collateral treatment — the three-way contest (working paper,
+  half of the collateral treatment. The three-way contest (working paper,
   review, confirmed resolution, at three authorities, with selective
   supersession) exceeds the supersession-pair primitive and stays generator
   logic.
 * **Every drawn value differs, structurally on purpose**: filed RWA 15,500 vs
   20,000; ratio 13.4 vs 13.1; understatement 600 vs 782 (the generator also
-  rounds to the nearest ten — call-site arithmetic, not a curve); every LCR
+  rounds to the nearest ten, which is call-site arithmetic, not a curve); every LCR
   observation. The reason is stream identity: `capital.generate` draws on
   `…/capital/rwa`, the runner on `…/kind/capital.rwa_total`. Making stream
   labels data would let a spec silently re-key every figure a seed ever
   meant, so they stay generator-private and the values honestly diverge. The
-  *relationships* hold identically on both sides — books sum to totals,
+  *relationships* hold identically on both sides: books sum to totals,
   ratios equal their divisions, the corrected figures supersede the filed
-  ones — which is what the invariants declare and the validator checks.
+  ones. That is what the invariants declare and the validator checks.
 * **The standing minimum matches exactly** (10.25, no period, reused by
   carry-forward declaration), as do the close facts, the liquidity cadence
   (same six business days, exact window handover), and 28 of 31 text facts.
 * **Artifacts: 11 intents vs 4, intentional errors 2 vs 0.** The artifact
-  relationship graph — the restatement's `restates` edge, the working paper's
-  `revises`, the board summary's labelled omission, the communications — is
+  relationship graph (the restatement's `restates` edge, the working paper's
+  `revises`, the board summary's labelled omission, the communications) is
   planner logic (`banking_documents.py`), not yet grammar.
 * **Evaluations: 16 vs 0 when this was written; 16 vs 14 now, and the port
   authors nothing.** `quarterly-capital-return.json` has no `evaluation` key
-  at all, and one quarter of it carries 14 cases across six families —
+  at all, and one quarter of it carries 14 cases across six families:
   3 authority, 3 temporal, 2 causal, 2 cross-artifact, 2 numerical-or-citation,
   2 lookups. That is the "for free" claim measured without assistance: the
   cases come from the supersession pairs, the `sums-to` on `capital.rwa_total`,
   the `reconciles-against` ratio and the restatement's own causal chain, all of
   which the spec already declared for the validator's benefit. What the engine
-  still has and the port does not is the *contested pair generated together* —
+  still has and the port does not is the *contested pair generated together*:
   the restated ratio and the between-filings cut-off, deliberately minted as a
-  pair so no lexical bias satisfies both — which is a judgement about how two
+  pair so no lexical bias satisfies both. That is a judgement about how two
   cases relate, not a shape in the graph.
 
-So: the grammar expresses the causal spine — phases, events, fact kinds with
-invariants, carry-forward, the supersession structure — and the runner
+So: the grammar expresses the causal spine (phases, events, fact kinds with
+invariants, carry-forward, the supersession structure) and the runner
 executes it into a corpus that satisfies every invariant the hand-built one
 does. It does not and cannot reproduce the hand-built corpus's bytes, and the
 reasons are enumerable: generator-private stream labels, drawn tempo and
 identifiers, the three-way contest, working-paper pre-figures, and the
 artifact/evaluation planners. Each is either mechanism (correctly not data)
-or a named next seam — not a vague gap.
+or a named next seam, not a vague gap.
 
 ## The Grammar Proof II: PurchaseToPayCycle
 
@@ -906,8 +905,8 @@ any engine's world. The spec is `examples/episodes/procure-to-pay.json`
 `examples/episodes/procure-to-pay-lob.json`; `tests/test_p2p_port.py` pins
 every claim below.
 
-**What the port needed, and what it deliberately did not.** The known gap —
-a three-way authority contest exceeding the supersession pair — resolves
+**What the port needed, and what it deliberately did not.** The known gap,
+a three-way authority contest exceeding the supersession pair, resolves
 *without* a `contested_triple` primitive, because P2P's contest is not a
 supersession at all: the purchase order (APPROVED_REPORT), the goods receipt
 (SYSTEM_OF_RECORD) and the invoice (SYSTEM_OF_RECORD) are three *kinds*, all
@@ -917,7 +916,7 @@ a primitive that encoded the disagreement as one fact's history would assert a
 succession that never happens. `generators/primitives.py` is unchanged. What
 the runner did need, and got (`episodes.py`):
 
-* **`EventSpec.anchor`** — `prior_period_end` counts an event's business day
+* **`EventSpec.anchor`**: `prior_period_end` counts an event's business day
   from the previous period's end, which is how the order (bd 3) and the
   receipt (bd 15) land *inside* the month. Defaulted so every earlier spec
   replays byte-identically.
@@ -928,12 +927,12 @@ the runner did need, and got (`episodes.py`):
   refuses. Pairs are unchanged byte-for-byte.
 * **`prior(K)` and the sum/derive carry-forward, actually resolved**: the
   runner now scopes the lookup to the genuinely prior period (the old code
-  passed the current one — unexercised until this port) and hands the value
+  passed the current one, unexercised until this port) and hands the value
   to a `prior(K)` derivation, zero in a first period because "nothing was
   outstanding" is a claim, not an absence. A `prior` derive with no declared
   carry-forward slot is lint-refused rather than silently zero.
 * **Seven arithmetic derivations** (`at_rate`, `percent_of`, `multiple_of`,
-  `plus`, `minus`, `units_of`, `prior`) — each a pure function the validator
+  `plus`, `minus`, `units_of`, `prior`): each a pure function the validator
   can recompute, rounded exactly as `procurement_match._money` publishes
   figures, so the identities the engine's check group recomputes hold by
   construction.
@@ -945,19 +944,19 @@ other file differs, and every difference is attributable:
 
 * **Events are the port's win outright**: 14 of 14 events with the same
   kinds, same order, same `EV` ids, same timestamps, same summaries, and same
-  actors — the `anchor` field is what made the in-month timestamps exact.
-  What differs on every event: `systems` (the port declares none — a portable
+  actors. The `anchor` field is what made the in-month timestamps exact.
+  What differs on every event: `systems` (the port declares none: a portable
   process cannot presume a host engine's system catalogue, the LOB-owned-
   systems seam being unbuilt) and `lore_ids` (the grammar has no lore linkage
   on events or facts; the engine tags the receipt, the escalation and the
   settlement with the commitments that explain them). One event differs in
   `caused_by`: the engine's close records two causes (close started, and the
   settlement), `EventSpec.caused_by` holds one, and the port declares the
-  settlement — the cause the accrual depends on.
+  settlement, the cause the accrual depends on.
 * **Facts: 52 vs 32 in one period, 134 vs 78 over three; first id divergence
   at FACT-0003.** Every missing fact is the *line* structure: the engine's
-  order has two lines — a contested and a clean one, per spend category, plus
-  group totals — and the runner mints one subject per kind, so the port
+  order has two lines (a contested and a clean one, per spend category, plus
+  group totals) and the runner mints one subject per kind, so the port
   carries the cycle at company scope and drops per-category
   quantities/values/variances (2–3 facts per kind), `p2p.invoiced_quantity`
   and `p2p.invoiced_unit_price` (the billed unit rate is the back-out
@@ -966,7 +965,7 @@ other file differs, and every difference is attributable:
   The clean line is not an accounting detail: it is the anti-shortcut control
   that stops the corpus being solvable by distrusting invoices, and it stays
   engine-only.
-* **Every drawn figure differs, structurally on purpose** — stream identity,
+* **Every drawn figure differs, structurally on purpose**: stream identity,
   exactly as the first proof: the engine draws under
   `scenario/PurchaseToPayCycle/<period>/match/...`, the port under
   `scenario/ProcureToPay/<period>/kind/...`. Ordered value 3,539.20 vs
@@ -974,11 +973,11 @@ other file differs, and every difference is attributable:
   identically on both sides: the variance halves sum, the credit note covers
   the variance, the settlement is the contracted rate, the accrual is the
   receipt plus the released balance, and each month releases exactly what
-  the month before left outstanding — 45 procurement-group checks over three
+  the month before left outstanding. That is 45 procurement-group checks over three
   periods, zero violations, on facts the engine never minted.
 * **Construction direction is a named divergence, not a hidden one**: both
   size the breach top-down (tolerance × drawn multiple, split by a drawn
-  fraction — the same three spans), but the engine then backs *integer*
+  fraction, the same three spans), but the engine then backs *integer*
   units and a unit-price uplift out with outward rounding and republishes the
   variances from the integers, so its published integers are the truth and
   its variances are their products. The port derives its quantities from its
@@ -991,40 +990,40 @@ other file differs, and every difference is attributable:
   month zero in both. Two divergences: the supplier's name is drawn from a
   world-keyed stream by the engine and committed as fiction by the spec, and
   the engine mints the vendor-change *event* only in the first month where
-  the grammar cannot conditionalise an event — 30 vs 32 events over three
+  the grammar cannot conditionalise an event: 30 vs 32 events over three
   periods, the two extras being repeated `vendor_change_requested`.
 
-**The artifact story.** 6 vs 6 intents in one period — same types, same
-order, same `ART` ids, same authors, same audiences, same sizes: the port
+**The artifact story.** 6 vs 6 intents in one period: same types, same
+order, same `ART` ids, same authors, same audiences, same sizes. The port
 plans `purchase_order`, `goods_receipt_note`, `supplier_invoice`,
 `match_exception_report`, `payment_approval_memo`, `vendor_master_change`,
 all six doctypes the engine registers. What the planner layer still cannot
-say: **required facts** are thinner (11 vs 6 on the order — the per-line
+say: **required facts** are thinner (11 vs 6 on the order: the per-line
 facts, plus the engine's habit of handing a document cross-referenced facts);
 **`derived_from` edges** (the exception report derives from all three source
-documents, the memo from the report — the relationship graph, the same gap
+documents, the memo from the report: the relationship graph, the same gap
 the first proof named); **per-intent domain labels** (the engine files the
 receipt under `operations` and the invoice under `finance`; a spec has one
 domain); **conditional planning** (vendor_master_change once per corpus vs
-once per period — 16 vs 18 intents over three); and **intentional errors: 1 vs
-0 per period** — the payment memo's labelled political understatement.
+once per period: 16 vs 18 intents over three); and **intentional errors: 1 vs
+0 per period**, the payment memo's labelled political understatement.
 
 **Evaluation cases: 11 vs 0 per period and 35 vs 0 over three when this was
 written; 11 vs 17 and 35 vs 49 now.** The port's benchmark is derived from its
 own fact graph (`benchmark.py`) and re-voiced by the `evaluation` block the
 spec now carries. One period yields 4 authority-resolution, 3 cross-artifact,
 3 direct-lookup, 2 temporal-state, 2 citation-required, 1 causal-multi-hop,
-1 numerical-comparison and 1 expected-abstention — 11 of the 17 graded hard,
+1 numerical-comparison and 1 expected-abstention: 11 of the 17 graded hard,
 3 easy. Three periods yield 49, and the growth is genuine rather than
 photocopied: the extra cases are the across-period temporal questions ("what
 did the March order commit?", asked in April, where nothing lexical separates
 the two months) that a one-period corpus cannot pose, and a question already
 asked is refused rather than restated.
 
-The vertical's signature questions survive the port. The rank *inversion* —
-the contracted rate sits on the purchase order at `APPROVED_REPORT` while the
+The vertical's signature questions survive the port. The rank *inversion*
+(the contracted rate sits on the purchase order at `APPROVED_REPORT` while the
 invoice sits at `SYSTEM_OF_RECORD`, so ranking by authority picks the wrong
-document — is **derived**, not declared: the derivation ranks contested facts
+document) is **derived**, not declared: the derivation ranks contested facts
 by whether their highest-ranked rival outranks them, and spreads the family's
 cap across distinct source documents so the three questions land on three
 documents rather than three times on one. What the spec's `evaluation` block
@@ -1034,77 +1033,77 @@ never conjure a case the graph does not hold), and the abstention.
 
 Three residues, honestly. **The accrual cannot be asked about**: nothing in the
 port's artifact list requires `financial.accrual.grni`, `p2p.open_shortfall_*`
-or the `close.*` facts, so the reachability gate — the same one every taxonomy
-here ends at — refuses every question about the fact this port exists to land
+or the `close.*` facts, so the reachability gate, the same one every taxonomy
+here ends at, refuses every question about the fact this port exists to land
 in a close. That is a gap in what *plans documents*, not in what asks about
 them, and it is the same `required_facts` thinness the artifact story above
 already names. **The clean line stays engine-only**, so the anti-shortcut
 control that stops the corpus being solvable by distrusting invoices is not in
 the derived set; it needs the two-line order, which needs multi-subject
-minting. And **a deliberately generated pair** — two cases minted together
-because a retriever passing one must fail the other — is a claim about how two
+minting. And **a deliberately generated pair** (two cases minted together
+because a retriever passing one must fail the other) is a claim about how two
 cases relate, which no reading of a single graph produces.
 
-**Cross-engine attachment, proven** — the point of the migration. The
+**Cross-engine attachment, proven.** This is the point of the migration. The
 procurement LOB's five roles enter a **retail** world through the roles seam
 (`RetailWorld(role_table=retail spine + lob roles)`), the authored process
 runs inside it, and `financial.accrual.grni` lands at company scope, in
-`AUD_thousands`, in the shared `financial.*` vocabulary retail's close reads
-— 1,902.51 for seed 8128, **the same figure the procurement world gets**,
+`AUD_thousands`, in the shared `financial.*` vocabulary retail's close reads:
+1,902.51 for seed 8128, **the same figure the procurement world gets**,
 because the stream is named for the spec and the period, never for the host
 engine: the process carries its figures with it. The procurement check group
-polices the p2p facts inside the retail world (15 checks, zero violations —
+polices the p2p facts inside the retail world (15 checks, zero violations;
 it polices `p2p.*` whoever minted it, the exact argument banking's group
 made for the first proof), the whole world validates, and retail's own
-`MonthEndClose` runs on top — the following month, or even the same one —
+`MonthEndClose` runs on top (the following month, or even the same one)
 and still validates. Two honest residues: the port still mints `close.*`
 facts of its own (the engine-conflation it was extracted from; when a
 finance LOB owns the close, the process should shed its close phase and the
 accrual should feed that close instead), and the LOB's
 `financial_controller` seats a second controller beside retail's own
 `controller`, because the runner resolves actor keys directly against
-`world._roles` rather than through the slot bindings — binding-aware actor
+`world._roles` rather than through the slot bindings. Binding-aware actor
 resolution is the seam that would let one spec run at companies whose role
 keys differ.
 
 **Slot bindings, attached and measured.** The process declares its seats in
-its own vocabulary — `preparer` (raise the order), `matcher` (run the
-match), `approver` (clear the exception, never whoever raised the order) —
+its own vocabulary: `preparer` (raise the order), `matcher` (run the
+match), `approver` (clear the exception, never whoever raised the order);
 and the LOB binds `category_manager`, `accounts_payable_lead` and
 `financial_controller` into them; `lob.lint_bindings` is clean and
 `lob.participation` derives the room: the preparer sits in the process
 through the binding alone (no responsibility edge names an ordering kind),
 the CPO sits in it through the `p2p` responsibility family alone (21 kinds,
-no seat), and the matcher and approver arrive by both routes — the two
+no seat), and the matcher and approver arrive by both routes, the two
 halves of the settled design each doing exactly its own job.
 
 **Retirement: not yet, and here is the evidence.** The port covers the
 causal spine (14/14 events with exact timestamps), the fact vocabulary at
 company scope (26 of the engine's 28 kinds), all six doctypes' intents, the
 three-authority contest, the status chain, and the only period-keyed
-carry-forward in the project — running in two engines. The engine alone
+carry-forward in the project, running in two engines. The engine alone
 still does: the two-line order and every per-category fact; 6 of its 13
 check families on real subjects ((a) per-document value reconciliation, (b)
 over-receipt, (c)/(d) the per-line match legs and identity, (e) group
-roll-ups, (h) the artifact-gated approval and segregation-of-duties checks —
+roll-ups, (h) the artifact-gated approval and segregation-of-duties checks:
 the port exercises (f), (g), (i), (j), (k), (l), (m), 15 of the engine's 47
 checks per period); the clean-line control and the two evaluation shapes that
 need it (the anti-shortcut lookup, and the deliberately-generated pair whose
 members no single retrieval bias satisfies together); the labelled intentional
 error; the `derived_from` graph; lore linkage; system
-stamps; and — not episode logic at all — the world itself: the archetype,
+stamps; and, not episode logic at all, the world itself: the archetype,
 the three-reporting-lines organisation, the physics registration, the check
 group, and the fact-kind registrations all live in `procurement.py` and
 `procurement_org.py` and are what the port *runs inside*. Before
 `PurchaseToPayCycle`/`procurement_cycle`/`procurement_match` could be
-deleted: (1) intentional errors as grammar — evaluation cases now are, derived
+deleted: (1) intentional errors as grammar: evaluation cases now are, derived
 rather than templated, and the port outproduces the engine 17 to 11 per period
 while authoring only their phrasing, (2) the
 artifact relationship graph and conditional planning, (3) multi-subject
-(line-level) minting or an order-line axis — the "a purchase order is not an
+(line-level) minting or an order-line axis, the "a purchase order is not an
 entity" misfit, resolved rather than inherited, (4) lore linkage on authored
 events and facts, (5) LOB-owned systems entering a host world, and (6) a
-carry-forward stage in the process cascade — today `process.py` cannot
+carry-forward stage in the process cascade: today `process.py` cannot
 author the two `prior()` slots, and the lint refuses them with the reason
 (measured in `test_the_cascade_refuses_what_its_missing_stage_cannot_hold`).
 The engine does not retire; it shrinks in *scope*: its episode is now also a
@@ -1122,31 +1121,31 @@ assumed.
 5. **Carry-forward declarations** (standing vs. period-keyed, reuse vs. derive)
 6. **Phase structure** (detection → investigation → control → resolution, or subset)
 7. **Cohort axes** (`CohortSpec`: an origin key beside the period, so a triangle
-   is a declared grid rather than a generator — carried in the fact's own
+   is a declared grid rather than a generator, carried in the fact's own
    `period`, never in a new `CanonicalFact` field)
 
 ### Cannot Declare (Lives in Code or Pack Overrides)
 
-- **Prose and voice** (narration at time of writing — `narrate requests` time)
-- **Incident specifics** (what type of failure, which component — `episode_text` override or generator code)
-- **Causality chain** (the *order* failures unfold, dependencies between phases — `generators/regulatory.py` logic)
-- **Org chart shape** (who reports to whom — `generators/organisation.py`)
-- **Evaluation question phrasing, difficulty targets, family emphasis and abstentions** (`EpisodeSpec.evaluation`, an `EvalSpec` — declared data, but authored judgement; the *cases themselves* are derived from the graph by `benchmark.py`)
+- **Prose and voice** (narration at time of writing, `narrate requests` time)
+- **Incident specifics** (what type of failure, which component, `episode_text` override or generator code)
+- **Causality chain** (the *order* failures unfold, dependencies between phases, `generators/regulatory.py` logic)
+- **Org chart shape** (who reports to whom, `generators/organisation.py`)
+- **Evaluation question phrasing, difficulty targets, family emphasis and abstentions** (`EpisodeSpec.evaluation`, an `EvalSpec`, declared data, but authored judgement; the *cases themselves* are derived from the graph by `benchmark.py`)
 - **Access policies and approvers** (lore constraints and roles; grammar names them, role table decides specifics)
 
-The boundary is: **grammar declares facts, invariants, and structure; the graph is read for what follows from them; code decides specifics and flow**. Evaluation moved across that boundary in exactly this way — a question shape turned out to be a shape in the graph, and only its English stayed authored.
+The boundary is: **grammar declares facts, invariants, and structure; the graph is read for what follows from them; code decides specifics and flow**. Evaluation moved across that boundary in exactly this way: a question shape turned out to be a shape in the graph, and only its English stayed authored.
 
 ## What the Grammar Enables
 
 Once fact kinds are declared with their invariants:
 
-1. **Checks are derived**: `validate.register_domain_checks` receives a spec and produces a check callable — no hand-written per-kind checks
+1. **Checks are derived**: `validate.register_domain_checks` receives a spec and produces a check callable, so no per-kind check is hand-written
 2. **Lint is automatic**: a kind with no invariant is refused; an artifact citing a nonexistent kind is refused; a carry-forward citing an undeclared kind is refused
 3. **Carry-forward is automatic**: reading from the world by kind and filtering reused facts is templated, not coded per-scenario
 4. **Replayability is guaranteed**: a grammar is pure data, travels in the pack/recipe, and can be loaded deterministically
-5. **The benchmark is derived**: seven question families are read off the fact graph, the event graph and the artifact plan — no hand-written per-vertical taxonomy, and an episode that authors nothing about evaluation still ships one (`benchmark.py`)
-6. **Vertical addition is lightweight**: a new industry adds an episode spec, registers domain checks, and is done — no core edits, and it gets a benchmark rather than a document pile
-7. **A grid is authorable**: a cohort axis plus `allocation_of`/`prior_in_cohort` expresses a triangle, a vintage book or a hiring cohort as data — the shape that previously required a generator, and the reason insurance was capped at one valuation
+5. **The benchmark is derived**: seven question families are read off the fact graph, the event graph and the artifact plan, with no hand-written per-vertical taxonomy, and an episode that authors nothing about evaluation still ships one (`benchmark.py`)
+6. **Vertical addition is lightweight**: a new industry adds an episode spec, registers domain checks, and is done, with no core edits, and it gets a benchmark rather than a document pile
+7. **A grid is authorable**: a cohort axis plus `allocation_of`/`prior_in_cohort` expresses a triangle, a vintage book or a hiring cohort as data: the shape that previously required a generator, and the reason insurance was capped at one valuation
 
 ## The Two Carry-Forward Cases
 
@@ -1185,7 +1184,7 @@ like anything else:
 
 The grammar declares the slots; `reserving.generate` sees them on the world and decides whether to reuse or refresh.
 
-The other half is the triangle, and it is not a carry-forward at all — it is the
+The other half is the triangle, and it is not a carry-forward at all: it is the
 **cohort axis**. Four accident quarters is not one figure carrying into the next
 period; it is four rows, each compared against what that same row held one
 valuation earlier, which is `prior_in_cohort(K)` and nothing `prior(K)` can
@@ -1199,7 +1198,7 @@ the standing gap reuses by carry-forward, the grid slides one quarter
 cells derive from their own prior values and supersede them, the newest cohort
 arrives with a zero prior, and `rolls-up-to` holds the four cells to the
 valuation's central estimate. The phase guard becomes what it always described:
-a state machine over declared facts — phase 1 opens the gap, phase 2 closes it —
+a state machine over declared facts (phase 1 opens the gap, phase 2 closes it)
 rather than a refusal standing in for a missing primitive.
 
 ## The Honest Gap: What Needs Core Support
@@ -1211,7 +1210,7 @@ The grammar as specified covers facts, events, artifacts, and carry-forward. Wha
    from the fact graph, the event graph and the artifact plan, and
    `EpisodeSpec.evaluation` declares the part that cannot be derived. Measured:
    the P2P port went from 0 cases to 17 per period (49 over three), and the
-   banking port — which authors *nothing* about evaluation — from 0 to 14 per
+   banking port, which authors *nothing* about evaluation, from 0 to 14 per
    quarter. What remains is enumerated under the P2P proof above: a question
    about a fact no planned artifact carries (the reachability gate refusing
    correctly, which names a planner gap rather than a benchmark one), the
@@ -1228,22 +1227,22 @@ These are tractable in phase 3, after the first three episodes are ported. The s
 
 **The autopsy** found a shared spine across all four episodes: phases minting facts with invariants, events linking to facts, artifacts linking to events, and carry-forward slots standing between periods. The spine is regular enough to be authored as data.
 
-**The grammar** (`src/worldloom/episodes.py`) declares fact kinds, invariants, events, artifacts, carry-forward, and — for the businesses whose numbers are a grid rather than a series — a cohort axis. It follows the doctypes.py pattern: load from JSON, lint against the engine's vocabulary, install into the process, derive checks.
+**The grammar** (`src/worldloom/episodes.py`) declares fact kinds, invariants, events, artifacts, carry-forward, and, for the businesses whose numbers are a grid rather than a series, a cohort axis. It follows the doctypes.py pattern: load from JSON, lint against the engine's vocabulary, install into the process, derive checks.
 
-**The proof** is QuarterlyCapitalReturn (banking's smallest episode), which the grammar can express byte-for-byte — with the caveat that specific failure modes and approval chains live in episode_text overrides or generator code, not data. That boundary is intentional: prose and causality are harder than invariants and structure.
+**The proof** is QuarterlyCapitalReturn (banking's smallest episode), which the grammar can express byte-for-byte, with the caveat that specific failure modes and approval chains live in episode_text overrides or generator code, not data. That boundary is intentional: prose and causality are harder than invariants and structure.
 
-**Ports done**: QuarterlyCapitalReturn (banking) and PurchaseToPayCycle (procurement, as the LOB-owned `ProcureToPay` process — the first to run cross-engine, with the project's only period-keyed carry-forward). **Ports remain**: MonthEndClose (retail) and QuarterlyReserving (insurance) — the second of which was blocked on a missing primitive rather than on effort, and is not any more: the cohort axis is what a triangle needs, and the phase-1 cap is a hand-written scenario's guard rather than a limit of the grammar.
+**Ports done**: QuarterlyCapitalReturn (banking) and PurchaseToPayCycle (procurement, as the LOB-owned `ProcureToPay` process, the first to run cross-engine, with the project's only period-keyed carry-forward). **Ports remain**: MonthEndClose (retail) and QuarterlyReserving (insurance), the second of which was blocked on a missing primitive rather than on effort, and is not any more: the cohort axis is what a triangle needs, and the phase-1 cap is a hand-written scenario's guard rather than a limit of the grammar.
 
 **The benchmark gap is closed**, and not by a fifth taxonomy: `benchmark.py`
 derives the case families from the graph the world already carries, so an
 authored vertical gets a benchmark whether or not anyone authored one.
-Measured — 0 → 17 cases per period on the P2P port, 0 → 14 per quarter on the
+Measured: 0 → 17 cases per period on the P2P port, 0 → 14 per quarter on the
 banking port with no `evaluation` block at all, and the four default engine
 builds byte-identical. The remaining milestones are the reserving port itself
-(the declarations now exist — the cohort axis for the triangle, the standing
-carry-forward for the gap — and what remains is running them and measuring the
+(the declarations now exist: the cohort axis for the triangle, the standing
+carry-forward for the gap; what remains is running them and measuring the
 byte-diff), the artifact relationship graph and conditional planning, and
-multi-subject minting — which is now also what stands between the derived
+multi-subject minting, which is now also what stands between the derived
 benchmark and the two shapes the procurement engine still holds alone, and what
 keeps an authored triangle at company scope where the engine's sits on the
 affected line.

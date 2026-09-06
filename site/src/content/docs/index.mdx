@@ -10,10 +10,10 @@ hero:
     recipe, and the accepted authored content.
   actions:
     - text: Build and inspect a corpus
-      link: /synthetic-foundry/getting-started/quickstart/
+      link: /worldloom/getting-started/quickstart/
       variant: primary
     - text: Design a larger dataset
-      link: https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/enterprise-corpus.md
+      link: https://github.com/vamsiramakrishnan/worldloom/blob/main/docs/enterprise-corpus.md
       variant: secondary
     - text: GitHub
       link: https://github.com/vamsiramakrishnan/synthetic-foundry
@@ -26,7 +26,7 @@ and command are `worldloom`. It is pre-release and installs from source.
 
 ## First result: files you can open, answers you can check
 
-After [installation](/synthetic-foundry/getting-started/installation/):
+After [installation](/worldloom/getting-started/installation/):
 
 ```bash
 worldloom build --seed 8128 --incident --narrate --out ./corpus
@@ -47,8 +47,8 @@ not a complete retailer's operating history.
 | `generation-ledger.jsonl` | Accepted authored content used for replay |
 | `world.json` | Company state and recorded recipe |
 
-[Run the quickstart](/synthetic-foundry/getting-started/quickstart/) or inspect
-[the corpus format](/synthetic-foundry/reference/corpus-anatomy/).
+[Run the quickstart](/worldloom/getting-started/quickstart/) or inspect
+[the corpus format](/worldloom/reference/corpus-anatomy/).
 
 ## Build for the failure you want to measure
 
@@ -62,7 +62,7 @@ not a complete retailer's operating history.
 
 Choose business processes, time depth, entity scale, and artifact density
 separately. Increasing headcount alone does not create a broader company
-history. [Design an enterprise corpus](https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/enterprise-corpus.md).
+history. [Design an enterprise corpus](https://github.com/vamsiramakrishnan/worldloom/blob/main/docs/enterprise-corpus.md).
 
 ## Facts constrain the writer and the renderer
 
@@ -76,19 +76,19 @@ Intentional defects can be recorded rather than silently treated as truth.
 
 A coherent corpus can still be easy to retrieve from, repetitive, or stylistically
 weak. Measure those properties separately. The deterministic narrator is a
-first-run and replay aid. [Use your agent as the writer](/synthetic-foundry/guides/narration/)
+first-run and replay aid. [Use your agent as the writer](/worldloom/guides/narration/)
 when prose quality matters.
 
 ## Continue by task
 
 | Next task | Guide |
 |---|---|
-| Design evaluation demands before generating evidence | [Eval-first generation](https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/eval-first.md) |
-| Generate from a Python application | [Python SDK](https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/sdk.md) |
-| Add DOCX, XLSX, PDF, PPTX, or system bundles | [Rendering](/synthetic-foundry/guides/rendering/) |
-| Author grounded prose | [Narration](/synthetic-foundry/guides/narration/) |
-| Generate and qualify varied companies | [Fleets](/synthetic-foundry/guides/fleets/) |
-| Preserve a benchmark for replay | [Determinism](/synthetic-foundry/concepts/determinism/) |
+| Design evaluation demands before generating evidence | [Eval-first generation](https://github.com/vamsiramakrishnan/worldloom/blob/main/docs/eval-first.md) |
+| Generate from a Python application | [Python SDK](https://github.com/vamsiramakrishnan/worldloom/blob/main/docs/sdk.md) |
+| Add DOCX, XLSX, PDF, PPTX, or system bundles | [Rendering](/worldloom/guides/rendering/) |
+| Author grounded prose | [Narration](/worldloom/guides/narration/) |
+| Generate and qualify varied companies | [Fleets](/worldloom/guides/fleets/) |
+| Preserve a benchmark for replay | [Determinism](/worldloom/concepts/determinism/) |
 
 Rendering business-system bundles does not write to live tenants. Replay
 requires the recorded recipe, accepted ledger, and compatible code revision.

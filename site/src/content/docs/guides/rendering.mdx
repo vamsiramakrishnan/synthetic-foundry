@@ -11,7 +11,7 @@ worldloom render ./corpus -f xlsx -f docx -f markdown -f jira -f confluence -f s
 `worldloom formats` lists what your installation registered. A full install
 lists nine: `confluence`, `docx`, `html`, `jira`, `markdown`, `pdf`, `pptx`,
 `servicenow`, `xlsx`. The Office formats need their
-[extras](/synthetic-foundry/getting-started/installation/); the rest need nothing.
+[extras](/worldloom/getting-started/installation/); the rest need nothing.
 
 ## The IR is the contract
 
@@ -28,24 +28,24 @@ value it plots is a cell in the table beside it.
 
 ## What each format carries
 
-**`xlsx`** — the finance workbook. Totals are live formulas, so the sheet
+**`xlsx`**: the finance workbook. Totals are live formulas, so the sheet
 recomputes itself when opened. Charts draw from a hidden data sheet of
 cross-sheet references. Named ranges mark the headline figures.
 
-**`docx`** — narrative artifacts as Word documents. A4 page setup, a running
+**`docx`**: narrative artifacts as Word documents. A4 page setup, a running
 header, live `PAGE` and `TOC` fields rather than typed text. Negative figures
 are parenthesised and coloured, with the parenthesis as the signal that
 survives black-and-white printing.
 
-**`pdf`, `pptx`, `html`** — the same IR as fixed pages, slides, and web
+**`pdf`, `pptx`, `html`**: the same IR as fixed pages, slides, and web
 pages. PPTX charts are native chart parts with the embedded workbook OOXML
 requires.
 
-**`markdown`** — the fallback that keeps every artifact readable whatever is
+**`markdown`**: the fallback that keeps every artifact readable whatever is
 installed, and the cheapest to diff. An artifact still awaiting narration
 renders here and says so.
 
-**`jira`, `confluence`, `servicenow`** — portable bundles: a JSON header plus
+**`jira`, `confluence`, `servicenow`**: portable bundles: a JSON header plus
 JSONL, not an API call. These are record sets, so they render from the world's
 facts and events directly. The ServiceNow incident carries the full triage
 timeline, including the hypothesis later ruled out. Jira raises two
@@ -99,7 +99,7 @@ worldloom workspace ./corpus -o ./drive --noise neglected
 `--noise` makes the drive untidy the way real drives are. Every extra file is
 a byte-identical copy of real corpus content, labelled in `permissions.jsonl`
 with what it duplicates. See
-[Messiness and noise](/synthetic-foundry/guides/messiness/) for why the label matters.
+[Messiness and noise](/worldloom/guides/messiness/) for why the label matters.
 
 ## Validate after every render
 

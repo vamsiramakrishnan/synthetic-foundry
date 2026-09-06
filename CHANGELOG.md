@@ -2,40 +2,44 @@
 
 Worldloom versions its releases and its worlds together: every generated corpus
 stamps the version that made it into `world.json`. Changes that alter what a
-seed generates are listed under **Generation** — they are breaking for
+seed generates are listed under **Generation**; they are breaking for
 reproducibility even when no API moved.
 
-## Unreleased
+## 0.1.0
+
+The first release. Everything below it is what 0.1.0 ships; the notes run
+newest first, and the section headed *The foundation* is the release as it was
+first written up, before the waves above it landed.
 
 ### Proposal engines behind the compiler boundary
 
-- **`providers.py`** — four extension seams on the pattern `narrative.providers`
+- **`providers.py`**, four extension seams on the pattern `narrative.providers`
   and `actors.providers` already set: `PriorEstimator`, `SurfaceValueProvider`,
   `DetailSynthesizer`, `DomainImporter`. Each is a small `Protocol` with an `id`
   and `version`; each execution leaves a **`Receipt`** whose `key` is a content
   address over backend, operation, configuration, source, candidate and accepted
-  digests — digests, never data. `accept` makes a synthesizer's proposal into
+  digests, digests, never data. `accept` makes a synthesizer's proposal into
   data by refusing rows that violate a constraint and then reconciling every
   declared total by largest remainder at the declared precision. A deterministic
   fake (`EvenSynthesizer`) proves the contract with no backend.
-- **`calibrate.py` / `worldloom calibrate` / `build --priors`** — physics
+- **`calibrate.py` / `worldloom calibrate` / `build --priors`**, physics
   ranges learned from a sensitive table under differential privacy. The built-in
   Laplace-histogram estimator clips, bounds contributions by truncation, noises
   under sequential composition and reads spans off the noised CDF. The
   `PriorSnapshot` is exactly the `--physics` overrides document plus the receipt
   and a per-column **noise-share** reading; the CLI names parameters whose
-  release was more noise than signal. Noise is system entropy by default — a
-  calibration is not reproducible, the corpus is — and a `--noise-seed`
+  release was more noise than signal. Noise is system entropy by default (a
+  calibration is not reproducible, the corpus is) and a `--noise-seed`
   snapshot says in three places that it is not a private release.
-- **`surface.py`** — postcodes, phones, registration numbers and bank accounts
+- **`surface.py`**, postcodes, phones, registration numbers and bank accounts
   from versioned rules in `data/surface/rules.json`, every value a pure function
   of `seed / rules version / entity type / entity id / field`. Checksums are the
   issuing bodies' own (ABN, USt-IdNr, Austrian UID, UK VAT, NZBN, IBAN) and are
   tested against their published examples. `master_data` takes `"identifiers": 1`
-  — the value names the rules version, every version is kept in the data file,
+ , the value names the rules version, every version is kept in the data file,
   and a corpus replays under the one it recorded; an un-opted register writes
   the same bytes it always did.
-- **`causal.py` / `build --causal` / `worldloom causal check|trace`** — a DAG
+- **`causal.py` / `build --causal` / `worldloom causal check|trace`**, a DAG
   of named quantities with linear effects, dated interventions (`do()`) and
   drives that make a node's value an imperfection kind's budget. Distinct from
   `worldloom.synthesis`, which simulates operational records and intervenes on
@@ -43,9 +47,9 @@ reproducibility even when no API moved.
   the trace on the corpus as **`causal.jsonl`**; interventions mint
   `causal.intervention` events; the `Causal` recipe verb replays byte for byte;
   the `causal` validator group recomputes every derived value from its recorded
-  parents and refuses drift, over-delivery, or a missing event. Linear only —
+  parents and refuses drift, over-delivery, or a missing event. Linear only , 
   `FactKindSpec.derive`'s closed-vocabulary argument.
-- **`fidelity.py` / `worldloom fidelity`** — a synthetic table against a real
+- **`fidelity.py` / `worldloom fidelity`**, a synthetic table against a real
   one as a vector: KS and Wasserstein, Jensen–Shannon and total variation,
   cardinality and unseen share, correlation error, contingency distance, a
   nearest-neighbour two-sample statistic beside its baseline, exact-match rate
@@ -57,7 +61,54 @@ reproducibility even when no API moved.
 - `docs/extension-seams.md` is the contract; the SDK gains
   `Blueprint.priors()` and `Built.causal()`.
 
-### Fixed — main was red
+### Fixed: main was red
+
+### Added: the eval drives generation
+
+- `construct_candidate` executes one tactic per demand the eval design
+  compiles to, instead of one: connector witnesses with one near miss per
+  constrained field (`eval_witnesses`), the write step's precondition record,
+  artifact families, access policies, events, and revision chains. Every
+  construction is a recipe verb, so a constructed candidate rebuilds from its
+  own recipe; the validator that accepts it knows nothing about the
+  constructions. A demand no tactic can honour comes back as a finding naming
+  the seam that owns it (a fact belongs to an episode).
+- Witnesses are world events projected through the same connector registry the
+  validator, the emulator and the exporters read, and a connector that has a
+  definition but no engine projection (Teams, Slack, OneDrive) is now
+  constructible and searchable.
+- `EvalCampaign.construct`, `export(construct=True)` with the constructions in
+  the manifest, and `worldloom evals construct design.json --out DIR`.
+- `emulator_executor`: a reference executor that runs each step through the
+  emulated connectors, so a campaign's proof is about the corpus and the
+  emulator together.
+
+### Added: a connector is not a file format
+
+- File connectors (SharePoint, Drive) project one record per artifact *and*
+  format once the world is rendered, under the definition's entity for that
+  format, carrying the rendered file's path, size and hash; `get_file` serves
+  the mime type and the hash. Before rendering, the one planned item per
+  artifact it always was. `file_formats(connector)` names what a connector
+  holds. A demand for a format is constructed by rendering it.
+
+### Changed: the name is worldloom, and the prose reads like a person wrote it
+
+- The package's home is `github.com/vamsiramakrishnan/worldloom`; the README,
+  the docs site base path, badges and clone commands point there. The first
+  release ships from PyPI as `worldloom`; `RELEASING.md` carries the order of
+  operations.
+- `tests/test_prose_style.py` gates every user-facing document, the generated
+  CLI reference and the docs site against the tells of model-written prose
+  (the em dash as a universal joint, a stock adjective of praise, a vendor's
+  name), and
+  the CLI's own output lines follow the same rule. About 1,400 sentences
+  across 110 files were rewritten to pass it; no command, flag, path or claim
+  changed.
+- `worldloom enterprise-evals space` reports a floor (`at_least`) instead of
+  crashing when the space exceeds the ceiling.
+
+### Fixed: main was red
 
 - `EvalRevisionFamily` and `EvalDemands` are registered recipe verbs. Both
   were recorded on every world the eval-first tactics touched and registered
@@ -67,11 +118,11 @@ reproducibility even when no API moved.
   `register_step`, import unconditionally from `_install()`, and replay
   (`tests/test_eval_construction.py`, `tests/test_eval_interventions.py`).
 - The connector emulator resolves the native ids it emits. A search page's
-  `id` handed to the next tool — what a real trace does — was refused as
+  `id` handed to the next tool, which is what a real trace does, was refused as
   `not_found` by the emulator that had just returned it.
 - `worldloom seams` is documented and the generated reference is current.
 
-### Removed — one-shot branch workflows
+### Removed: one-shot branch workflows
 
 - Twenty-two workflows scoped to merged-and-deleted `codex/*` branches (the
   `artifact-realism-*` apply/fix jobs, the eval-contract repair gates, the
@@ -81,13 +132,13 @@ reproducibility even when no API moved.
   `process-catalogue-check` is a read-only check on main; `process-bindings-check`
   no longer names the deleted branch.
 
-### Generation — reusable narration programs
+### Generation: reusable narration programs
 
 - Add opt-in family-level prose authoring and deterministic clause expansion. Existing per-instance narration remains unchanged.
 - Persist program sources and clause dependencies in the normal ledger and restore them during recipe replay. Bound-fact changes invalidate only dependent expansions.
 - Enforce measured near-duplicate budgets and optional blind-reader findings through existing claim validation. Expansion and replay make no model calls.
 
-### Generation — canonical bitemporal views
+### Generation: canonical bitemporal views
 
 - Add opt-in observer, source and transaction-time fields to canonical facts.
   Unset fields retain legacy serialized bytes. Explicit latent channels do not
@@ -96,14 +147,14 @@ reproducibility even when no API moved.
   Missing fields are distinct from null; booleans are not numeric witnesses.
   Unsupported historical construction refuses rather than inventing state.
 
-### Generation — artifact ecology v1
+### Generation: artifact ecology v1
 
 - Opt-in `artifact_realism=ecology/v1` changes native artifact metadata, style
   selection, connector lifecycle history and output bytes for a fixed seed.
   PDF outputs persist machine-readable realism, lifecycle, revision and family
   markers. Recipes record replayable metamorphic noise transforms.
 
-### Added — source-backed process catalogue
+### Added: source-backed process catalogue
 
 - `worldloom.process_bindings` compiles the supplied 12-industry catalogue into
   typed company activity bindings, lexicon records, process-authoring briefs and
@@ -120,7 +171,7 @@ reproducibility even when no API moved.
 - Generation compatibility: opt-in namespace `worldloom.process-catalogue/v1`.
   Existing World recipes, operational programs and golden corpora are unchanged.
 
-### Fixed — constructive predicate witnesses
+### Fixed: constructive predicate witnesses
 
 - `satisfy` no longer treats a missing field as a constructed witness for
   `ne` or `eq null`. Explicit existing values still use the shared evaluator;
@@ -128,21 +179,21 @@ reproducibility even when no API moved.
   domain alternative. Existing predicate tests now pass without weakening
   matching semantics or manufacturing a status value.
 
-### Fixed — artifact lifecycle source contract
+### Fixed: artifact lifecycle source contract
 
 - Artifact ecology resolves timestamps, versions and state from the compiled
   manifest. A missing or mismatched manifest is an explicit refusal, not an
   access to fields that ArtifactIntent does not define. Existing compiled
   artifact lifecycles are unchanged.
 
-### Generation - opt-in authored process planning
+### Generation: opt-in authored process planning
 
 - Integrate the supplied 12-industry factors with typed company, owner, country and system bindings, named-stream channel draws, source-attested lexicon records and pinned offline replay. Existing world builds and the source-reference catalogue API do not change.
 - Feed activity context into the existing process authoring cascade without bypassing its validation gates. APQC references remain hints; calibration names remain requests; template pairs are not executable evaluations.
 - Expose missing streams, fallback owners and unresolved system schemas. Retain source hashes, licence declarations, coverage and replay manifests.
 
 
-### Added — operational relational synthesis
+### Added: operational relational synthesis
 
 - Opt-in `worldloom.synthesis` SDK and `worldloom synth` commands. Frozen,
   typed causal programs generate related entities and lagged state with keyed
@@ -160,7 +211,7 @@ reproducibility even when no API moved.
 - Skill, operator documentation, invariant, counterfactual, replay, search,
   executable-contract and enterprise integration regression tests.
 
-### Fixed — reference narration build contract
+### Fixed: reference narration build contract
 
 - CI and the reference README explicitly select the historical outline settings
   expected by the authored grocery narration. The prose and acceptance rules are
@@ -175,21 +226,22 @@ reproducibility even when no API moved.
   customer models. They do not imply privacy guarantees or reconciliation to
   an attached World's macro financial totals.
 
-### Added — a real-model writer behind the agent seam
+### Added: a real-model writer behind the agent seam
 
-- **`tools/model_narrator.py`** turns `claude -p` or `codex exec` into the
-  stdin/stdout child contract: request document in, responses document out,
-  rejections fed back verbatim on the next round. The backend sees only a
-  self-contained prompt built from the harness's own rules and facts — no
-  Worldloom types, no corpus access. Output parsing tolerates fenced or
+- **`tools/model_narrator.py`** turns a coding harness's headless CLI
+  (`--backend claude` or `--backend codex`) into the stdin/stdout child
+  contract: request document in, responses document out, rejections fed back
+  unchanged on the next round. The backend sees only a self-contained prompt
+  built from the harness's own rules and facts, with no Worldloom types and no
+  corpus access. Output parsing tolerates fenced or
   chatter-wrapped JSON by scanning for the balanced `responses` object.
 
-### Added — an agent command can write for a whole mosaic
+### Added: an agent command can write for a whole mosaic
 
 - **`mosaic --narrate-exec COMMAND`** narrates every world through an agent
   command of your choosing instead of the deterministic provider: the command
   runs once per section with a request document on stdin and must print one
-  responses document on stdout — the same child contract `narrate loop --exec`
+  responses document on stdout. That is the same child contract `narrate loop --exec`
   speaks, so one adapter (a wrapper around any writer that reads stdin and
   writes stdout) drives both surfaces unchanged. `tools/exec_agent.py` ships as
   the reference adapter: no model, key or network, and the contract drives end
@@ -207,7 +259,7 @@ reproducibility even when no API moved.
   is not JSON dies in `run_exec`; valid JSON of the wrong shape is refused by
   the provider layer with the child's stderr tail attached.
 
-### Generation — corpora stop being clones of one document and one brand
+### Generation: corpora stop being clones of one document and one brand
 
 Five small dials, turned together, aimed at what a six-period corpus reads like
 rather than at any one mechanism: **variety** (documents of a type stop sharing
@@ -216,7 +268,7 @@ longer repeat from pools sized for a demo), and **length** (sections asked for
 telegrams now ask for prose). Measured on the reference six-period retail build
 (seed 8128): 11 → 13 distinct document shapes across 30 compiled artifacts,
 unique-shape ratio 37% → 43%, repeated shapes 93% → 87% of artifacts. The
-per-period close calendar is still an exact ×6 clone — its sections are all
+per-period close calendar is still an exact ×6 clone: its sections are all
 required and it ships one variant, so every mechanism here declines to touch
 it by construction. Types with optional sections, several variants, or room to
 recombine are where the difference lives.
@@ -225,7 +277,7 @@ recombine are where the difference lives.
   passes `--section-omission 200 --outline-synthesis 300 --variant-bias 1`
   unless told otherwise, so an unflagged build's documents vary in which
   optional sections they carry, in shape drawn from the company's own types,
-  and in which authored variant they take — instead of emitting each type's
+  and in which authored variant they take, instead of emitting each type's
   outline identically, every period. All three mechanisms are coherence-safe by
   construction (required sections always survive; synthesis must carry at least
   what the authored outline carries; variant bias only rotates variants a type
@@ -235,58 +287,58 @@ recombine are where the difference lives.
 - **Narration briefs lengthened ~55%, measured at the pin:** `target_words`
   small/medium/long 70/130/200 → 110/190/300 (`narrative/compiler.py`), with
   `NarrativeRequest.target_words`'s standalone default aligned at 190. Longer
-  briefs pull more optional facts per section — the deterministic provider's
-  evidence budget scales off this number — and that is the whole of the
+  briefs pull more optional facts per section (the deterministic provider's
+  evidence budget scales off this number), and that is the whole of the
   retrieval-hardness move recorded in `tests/test_retrievers.py` (numerical
   comparison 5/8 → 4/8): holding briefs at the old numbers while pools widened
-  reproduces the old score exactly, so documents demonstrably cite more of the
+  reproduces the old score, so documents demonstrably cite more of the
   corpus, not just more words.
 - **Company-name pool tripled** (`generators/names.COMPANY_FIRST`, 15 → 45):
   fifteen first words meant a mosaic of tenants shared one branding vocabulary.
 - **Site-name pools doubled per locale** (`locales.py`, four presets, 6 → 12
-  cities each): six names could not carry a national estate. Real place names —
-  geography, not branding — keeping each preset's existing cross-border
+  cities each): six names could not carry a national estate. Real place names,
+  geography rather than branding, keeping each preset's existing cross-border
   entries (Auckland/Wellington, Wien/Zürich).
 - **System-name pools widened** (`names.py`: ERP 6→10, MDM/PLATFORM/COMMERCE/
   POS 4–6 → 6–7): a company whose every system was named from a four-deep list
   read as procured from one vendor fair.
 
 **Breaking for reproducibility:** a fresh build from the same seed produces
-different documents than before the change — different shapes (genome), names
+different documents than before the change: different shapes (genome), names
 (pools), and narration briefs. Existing corpora replay byte-for-byte: the
 genome travels in the recipe, facts and ledgers travel in the corpus, and
 nothing here touches either. The golden `examples/retail-close` corpus is
 hand-authored and unaffected.
 
-### Generation — every format reads the style genome, and the genome gains a typeface
+### Generation: every format reads the style genome, and the genome gains a typeface
 
 - **The style genome now reaches every renderer.** `render/pdf.py` (Helvetica
   end-to-end, hardcoded palette), `render/html.py` (a generic grey stylesheet),
   and `render/xlsx.py` (grey `EEEEEE` headers) were the three formats that
   still decided their own look. They now derive the same world-seeded
-  `StyleGenome` `render/docx.py` and `render/pptx.py` already read — fills,
+  `StyleGenome` `render/docx.py` and `render/pptx.py` already read (fills,
   text colours, type sizes, spacing, density, gridline policy, rule weight,
-  title alignment — so one world's memo, deck, PDF, HTML twin, and workbook
+  title alignment), so one world's memo, deck, PDF, HTML twin, and workbook
   cannot disagree about the company's own identity. PDF additionally gains
   genome-driven table rules per `gridline_policy`/`rule_weight` and
   genome-scaled cell padding; HTML gains the negative-figure colour the other
   formats already carried as colour-is-the-second-signal.
 - **A fourth axis: `typeface`.** The genome samples one of four curated
-  families — `house_sans` (the shipped look), `editorial_serif`,
-  `engineering_mono`, `director_serif` (serif display over sans body) — drawn
+  families, `house_sans` (the shipped look), `editorial_serif`,
+  `engineering_mono` and `director_serif` (serif display over sans body), drawn
   from its own named `Rng` stream, so no existing draw reshuffles.
   `render/fonts.py` is the one resolution table: base-14 families for PDF,
   OOXML names or theme-default `None` for Word/PowerPoint/Excel, CSS stacks
-  for HTML. `house_sans` is deliberately inert in the theme-bearing formats
-  (no font name set at all) and resolves to Helvetica only in PDF, where
-  reportlab has no theme to inherit.
+  for HTML. `house_sans` is inert in the theme-bearing formats (no font name
+  set at all) and resolves to Helvetica only in PDF, where reportlab has no
+  theme to inherit.
 - **Breaking for reproducibility:** a world whose sampled genome draws a
   non-house family now renders different bytes in every format, and the
   genome-driven colours/sizes change PDF, HTML, and XLSX bytes even for house
   palettes. Existing corpora replay identically under their recorded version;
   re-rendering under the new version re-skins them.
 
-### Generation — AlphaEvolve balances evolutionary search without evolving truth
+### Generation: AlphaEvolve balances evolutionary search without evolving truth
 
 - Added a checkout-only `evals/alphaevolve` portfolio following a strict
   current-policy → restricted search → holdout/adversarial → reviewed-source
@@ -301,9 +353,9 @@ hand-authored and unaffected.
   local gate freezes 64 search, 37 holdout, and four adversarial cases and makes
   no realism, retrieval-quality, managed-winner, or billed-cost claim.
 
-### Generation — a document type may argue its case more than one way
+### Generation: a document type may argue its case more than one way
 
-- **`documents._OUTLINE_VARIANTS`** — a six-period corpus produced **32 distinct
+- **`documents._OUTLINE_VARIANTS`.** A six-period corpus produced **32 distinct
   shapes across 249 artifacts (13% unique), largest group 37**, and every
   near-duplicate group was exactly ×6: the same document once per period, the
   same headings in the same order. Six close calendars with different dates is
@@ -313,25 +365,25 @@ hand-authored and unaffected.
 - Six types carry alternatives: `unit_close_commentary` (3),
   `incident_rca`, `executive_summary`, `performance_review`, `one_to_one_note`
   and `job_requisition` (2 each). Each alternative is a different **argument**,
-  never a reshuffle — an RCA that opens with the cause is a different document
+  never a reshuffle. An RCA that opens with the cause is a different document
   from one that opens with the timeline, and a test refuses two variants whose
   sections differ only in order.
 - **Rotated by ordinal, not drawn.** N instances over M variants land evenly by
   construction; a seeded draw would only *tend* to spread and would happily give
-  six documents one shape on an unlucky seed — the exact failure being fixed.
+  six documents one shape on an unlucky seed, the exact failure being fixed.
   The first variant is the outline that shipped, so a type's first instance is
   byte-identical and only later ones move.
-- `examples/grocery-close/narration.json` — real model prose, checked in — is
+- `examples/grocery-close/narration.json` (real model prose, checked in) is
   **rewritten** for the three sections the rotation changed rather than the type
-  being left alone. A reference narration is worth keeping current, and a
-  document type nobody varies is worth less than the work of keeping it.
+  being left alone. A reference narration should stay current, and a document
+  type nobody varies is worth less than the work of keeping it.
 - Retail's default build and the grocer differ by that rotation, which is the
   intended change; banking, insurance and procurement are byte-identical, having
   no variants on their own types.
 
 ### The corpus as a drive, not a folder of numbered files
 
-- **`worldloom workspace`** — a corpus exports to one flat `artifacts/`
+- **`worldloom workspace`.** A corpus exports to one flat `artifacts/`
   directory of `art-0001-…` files with **identical filesystem permissions on
   all 293**. That is right for the harness, which reads the manifest and never
   looks at a path, and wrong for what the corpus is for: an enterprise
@@ -340,8 +392,8 @@ hand-authored and unaffected.
   of those and put none of them on disk.
 - Measured on a six-period, eight-division build: **249 files across 52 folders,
   four levels deep, 224 restricted, 44 distinct owners, 6 superseded pairs.**
-- Documents are shelved by the function that owns them — `Policies/`,
-  `Finance/Close/2026-03/`, `Technology/Incidents/`, `People/Performance/` —
+- Documents are shelved by the function that owns them (`Policies/`,
+  `Finance/Close/2026-03/`, `Technology/Incidents/`, `People/Performance/`),
   with periodic types filed under their period and standing types at the top of
   their shelf. Filing a policy under a month would say it expired with the
   month.
@@ -351,13 +403,13 @@ hand-authored and unaffected.
   and Convenience 2026-03`. They carry the period too, because the commonest
   way a real document loses its context is being lifted out of its folder.
 - A policy revised in place sits beside its replacement as
-  `Expense Policy (superseded)` — and the **live** one keeps the clean name.
+  `Expense Policy (superseded)`, and the **live** one keeps the clean name.
   Marking ran after names were claimed at first, so the retired policy took
   `Expense Policy.md` and the current one landed as `Expense Policy (2).md`:
-  exactly backwards, and exactly the mistake a reader would act on. A monthly
+  backwards, and the mistake a reader would act on. A monthly
   calendar that supersedes last month's is *not* marked, because that is the
   ordinary life of a periodic document; the edge is recorded either way.
-- **`permissions.jsonl`** is one row per file — path, title, owner, every
+- **`permissions.jsonl`** is one row per file: path, title, owner, every
   address permitted, policy label, created date, and the successor where there
   is one. Addresses are derived `first.last@company.example` with collisions
   broken the way a mail administrator breaks them. An unrestricted policy lists
@@ -373,7 +425,7 @@ hand-authored and unaffected.
   249 files become **336, of which 87 are labelled junk**, evenly across the
   four kinds.
 - Every extra file is a **byte-identical copy of real corpus content**, never
-  invented text — a drive's junk is not fabricated documents, it is the same
+  invented text. A drive's junk is not fabricated documents, it is the same
   documents saved again in the wrong place under the wrong name, and that is
   what makes it hard: a retriever cannot tell the copy from the original by
   reading it. A copy carries the permissions of what it copies, so a misfiling
@@ -383,37 +435,37 @@ hand-authored and unaffected.
   it duplicates. That is the difference between this and simply making a mess:
   a benchmark scored against a drive it cannot account for cannot tell "found
   the wrong copy" from "was wrong". Seeded off the world, so a corpus's drive is
-  the same drive every time — distractors that moved between runs would not be
+  the same drive every time; distractors that moved between runs would not be
   a benchmark.
-- Filesystem noise, deliberately distinct from `--messiness`, which is content
+- Filesystem noise, distinct from `--messiness`, which is content
   noise. A stale page is wrong; a duplicate is not wrong at all, it is merely
   there twice. A realistic archive wants both.
 
-### Generation — the month-end model was empty in every multi-period corpus
+### Generation: the month-end model was empty in every multi-period corpus
 
 - **`documents.finance_workbook` took its reporting month from the world rather
   than from its own facts.** `compile()` compiles every intent against the world
   as it stands *now*, so in a two-period corpus March's workbook was looked up
-  at April: every measure lookup missed and the month-end model — the corpus's
-  system of record, the document every other one reconciles against — rendered
+  at April: every measure lookup missed and the month-end model (the corpus's
+  system of record, the document every other one reconciles against) rendered
   with **every cell empty**. Measured: a one-period build's Business Unit P&L
   carries 28 of 28 values, a two-period build's carried **0 of 28**, and the
   Store Performance sheet vanished entirely because it is gated on the period
   having site facts. Single-period builds are byte-identical either way, which
-  is why it survived — every fixture, example and default build has one period.
-- **`validate.compiled_evidence`** — the check that would have caught it.
+  is why it survived: every fixture, example and default build has one period.
+- **`validate.compiled_evidence`**: the check that would have caught it.
   `unreachable_answer` reads `required_fact_ids`, the *plan*, and has to,
   because at step 3 nothing is compiled. The moment a corpus is compiled that
   becomes the weaker claim, and the gap between them is where this hid.
   Measured on an eight-division, six-period build: **6,185 facts planned into
   documents and 1,718 actually carried**, with 55 of 479 evaluation cases
-  citing evidence in no document — and `validate` reporting clean. After both
+  citing evidence in no document, and `validate` reporting clean. After both
   fixes: 6,071 carried and **0 unanswerable cases**.
 - **The reserve triangle showed one valuation.** Found by the new check the day
   it existed: the prior-valuation ultimate was required by the workbook, cited
   by the insurer's own first evaluation case ("as at the 2026-03 valuation"),
   and carried by no compiled document. A triangle whose estimate sheet has one
-  column is not a triangle — the subject of that whole episode is that an
+  column is not a triangle: the subject of that whole episode is that an
   ultimate *moved*. Both valuations now appear per cohort, as the book-position
   sheet already did for the totals.
 - The diversity floor drops 8 → 7, and the eighth shape was the bug: two empty
@@ -423,20 +475,20 @@ hand-authored and unaffected.
 
 ### Line management produces documents
 
-- **`worldloom.workforce`** — the organisation was modelled in full and used as
+- **`worldloom.workforce`**: the organisation was modelled in full and used as
   a source of *bylines*. A 420-person retailer named **24 of 444 people**
   anywhere in its corpus; a manager three levels down existed, had a name, a
   function and a manager of their own, and appeared in nothing. Two rounds fix
   it: `--hiring N` raises, approves, offers and fills N vacancies a period, and
   `--reviews N` reviews N people. Five artifact types, ten fact kinds.
 - The hiring manager and the reviewer are drawn from **everybody with a direct
-  report** — 73 people on a synthesised 420-person company against the dozen the
+  report**: 73 people on a synthesised 420-person company against the dozen the
   role table names. Measured on a three-period build: artifacts 113 across 28
   types with no type above 21%, and **41 distinct people named in 37 distinct
   titles**, against 24 before.
 - **A requisition reads the company's own rules.** Its three-year commitment is
   checked against the delegation of authority (`worldloom.policies`) and the
-  lowest rung that covers it signs — so "was this approved at the right level"
+  lowest rung that covers it signs, so "was this approved at the right level"
   is the first question in this repository whose answer is in *neither document
   alone*. Annual cost was the first rule and made the ladder say nothing: every
   vacancy costs under 110,000 fully loaded and the second rung starts at
@@ -444,8 +496,8 @@ hand-authored and unaffected.
   `--policies` still hires, and the requisition says "no written delegation" in
   as many words.
 - **Two performance records disagree on purpose.** The signed review is an
-  approved report countersigned by the manager's own manager — the corpus's only
-  three-person document — and the running one-to-one note is an unofficial note
+  approved report countersigned by the manager's own manager (the corpus's only
+  three-person document), and the running one-to-one note is an unofficial note
   carrying the view held before calibration. Every authority-resolution case
   here before now was about an incident; a rating is the same shape and reaches
   the whole organisation.
@@ -454,13 +506,13 @@ hand-authored and unaffected.
   person's salary and a review states their rating; "all staff", "finance and
   audit", "executive committee" and "technology" are all wrong for a readership
   of one person and their line, and falling through to the narrowest locked the
-  *author* out of what they wrote — `validate.author_cannot_see_own_artifact`,
+  *author* out of what they wrote: `validate.author_cannot_see_own_artifact`,
   the first time this ran. Widened rather than replaced on a second round,
   through the `access_policies` seam `personnel.promote` opened.
 - **`policies` is a specification field**, not only a flag. A description of
   what kind of company this is legitimately says whether it writes its rules
   down, and `--spec` refuses the flags it subsumes.
-- **`evaluation._Taxonomy.workforce`** — a `cross_artifact` case whose answer
+- **`evaluation._Taxonomy.workforce`**: a `cross_artifact` case whose answer
   needs the requisition *and* the delegation, and an `authority_resolution` case
   over the two ratings. They arrive one period behind the rounds, which is the
   same lag every cross-episode family already has: a corpus cannot ask about a
@@ -471,7 +523,7 @@ hand-authored and unaffected.
 
 ### The paperwork a company has, rather than the paperwork it produces
 
-- **`worldloom.policies`** — every document in this corpus was *episodic*: a
+- **`worldloom.policies`**: every document in this corpus was *episodic*: a
   close ran, an incident happened, a return was filed. Measured on a
   twelve-period, eight-division build: 195 artifacts, of which 96 were the same
   type with a different division's name on it, and **not one was a policy**. An
@@ -482,42 +534,42 @@ hand-authored and unaffected.
   information security, data retention, procurement.
 - **A provision is a fact, not a sentence.** "Receipts above 90 need a
   manager's approval" is minted as a `CanonicalFact` with a number in it, so
-  every question this repository can already ask of a figure — what is it, when
-  did it change, which document says so — works on a policy unchanged. Forty-
+  every question this repository can already ask of a figure (what is it, when
+  did it change, which document says so) works on a policy unchanged. Forty-
   eight `policy.*` kinds are registered in `factkinds` like any other.
 - **Scaled off revenue**, and rounded to a figure a policy would really name,
   so a 7.8bn retailer and a 2bn insurer do not share an expense limit. A
-  delegation-of-authority ladder that stops climbing — two rungs a decimal place
-  apart rounding to the same figure at a small enough company — is refused
+  delegation-of-authority ladder that stops climbing (two rungs a decimal place
+  apart rounding to the same figure at a small enough company) is refused
   rather than clamped.
 - **A revision is supersession.** The expense policy is the one revised entry
   in the shipped library: the earlier threshold's validity window closes, the
   later fact records what it superseded, *and the earlier document stays on the
   shelf* with the current one `supersedes`-ing it. Minting only the closed facts
-  was not enough and the corpus said so — `evaluation.answerable` dropped the
+  was not enough and the corpus said so: `evaluation.answerable` dropped the
   question about the old figure, correctly, and that drop is what found it.
 - Dates are **clamped forward of whoever signs**, never back, which is
   `form_units`' rule about a unit and its leader.
   `validate.author_not_yet_employed` found the violation immediately: a
   superseded policy dated five years back signed by a controller who joined
   three years ago.
-- **`documents.extends_outline`** — a third kind of compiler. One that builds
+- **`documents.extends_outline`**: a third kind of compiler. One that builds
   its IR from nothing (a workbook, a thread) must have no outline beside it or
   the outline is dead data; one that *composes* the outline, as
   `policies._provisions` does by inserting a resolved provisions table, has an
   outline that is live. Marked on the function, because the two are the same
   callable shape, and `tests/test_doctypes.py` holds the line per-compiler so a
   from-scratch compiler that grew an outline by accident still fails.
-- **`evaluation._Taxonomy.standing_documents`** — the questions an assistant is
+- **`evaluation._Taxonomy.standing_documents`**: the questions an assistant is
   actually asked. Retail's set moves 30 → 44 with `--policies full`: eleven
   direct lookups whose wording is stated on the clause itself
   (`policies.Clause.asks`), one `authority_resolution` about who signed the
-  rules, and one hard `temporal_state` — what the threshold was before the
+  rules, and one hard `temporal_state`: what the threshold was before the
   revision, where the current document is the confident wrong answer and only a
   validity window tells them apart.
 - Registered at **package import**, not lazily from inside `build()`. It was
   lazy first, and `tests/test_doctypes.py` passed alone and failed in a full
-  suite — `documents.declared_types()` returning two different answers depending
+  suite: `documents.declared_types()` returning two different answers depending
   on what had run before it, which is exactly the import-order determinism bug
   `register_artifact_types` warns about.
 - Off by default: `applied(world, None)` returns the same object, every default
@@ -531,7 +583,7 @@ hand-authored and unaffected.
   lines the engine's own table already declares. Retail's four Technology keys
   sort early and landed at depth 1 with enormous subtrees; its
   ServiceOperations keys sort late and landed at depth 2 with almost none. A
-  420-person retailer came out **159 technologists to 14 service operators** —
+  420-person retailer came out **159 technologists to 14 service operators**:
   the function mix of the whole company decided by alphabetical order. It now
   reads 140 Finance, 128 Technology, 82 Merchandising, 42 Audit, 27
   ServiceOperations, 1 Executive.
@@ -543,31 +595,31 @@ hand-authored and unaffected.
 - A per-unit key is in no shipped table, so this function now states their
   structure: the division's MD reports to the chief executive and everyone else
   in the division reports to their MD, which makes **each division a subtree**.
-  Deliberately not the dotted line the engines declare — retail's `_bp` reports
-  to the group controller — because a synthesised organisation has one line per
+  Deliberately not the dotted line the engines declare (retail's `_bp` reports
+  to the group controller) because a synthesised organisation has one line per
   person and the one that makes a division legible is the solid one.
 - A full manager pushes a report **down a level rather than refusing**. The
   chief executive takes the CFO, the CIO and one MD per division, so a span of
   three with four divisions cannot seat them all; an organisation whose top is
   wide adds a layer, it does not fail to exist. Widest span still never exceeds
   what the caller claimed.
-- Every default build and all five registered archetypes are byte-identical —
+- Every default build and all five registered archetypes are byte-identical:
   they use their engine's own table and never call this. A mosaic of three
   worlds validates clean, and a widened synthesised corpus replays
   byte-identical from its recipe.
 
 ### Somebody signed it
 
-- **`ArtifactIntent.approver_id`** — every document in this corpus was authored
+- **`ArtifactIntent.approver_id`**: every document in this corpus was authored
   and none of them was approved, which is not how a company works and, more to
   the point, is not how a company's *archive* works. "Who approved the March
   pack for Fuel and Convenience" is a question every real reader asks and no
   artifact here could answer. A signed document now carries an **Approval**
-  block — prepared by, approved by, name, role and date — in Markdown, DOCX,
+  block (prepared by, approved by, name, role and date) in Markdown, DOCX,
   PDF, PPTX and as a worksheet in XLSX.
 - Measured on an eight-division retailer: **10 distinct people** named across
   the corpus before, **19** after. The divisional close commentary is the one
-  approval that fans out with the company — widen a retailer to eight divisions
+  approval that fans out with the company: widen a retailer to eight divisions
   and eight *different* managing directors sign eight different documents.
 - Who signs what is a per-vertical table (`_APPROVED_BY` in each planner),
   because who signs a prudential return is an argument about banking. All four
@@ -580,7 +632,7 @@ hand-authored and unaffected.
   internal audit's review carries the Chief Internal Auditor's name and no
   countersignature at all. A corpus where everything is signed is as unlike a
   real archive as one where nothing is.
-- **`validate.approvals`** — a signature has to be one somebody could have
+- **`validate.approvals`**: a signature has to be one somebody could have
   given: the approver exists, is not the author, and is permitted by the
   document's own access policy. It found two real defects the day it existed.
   Eight divisional MDs were signing finance-audience documents the policy would
@@ -591,7 +643,7 @@ hand-authored and unaffected.
 - **Access follows the post.** A reorganisation moved a division's title
   without moving its access, so the corpus recorded a signature from somebody it
   also recorded as unable to open the document. `personnel.promote` now carries
-  the post's access to whoever holds it — *added* and never substituted, because
+  the post's access to whoever holds it, *added* and never substituted, because
   the archive is historical and the policy is current state, and striking a name
   off today would retroactively invalidate every signature that person ever
   gave. Measured: substituting produced five violations on a six-period history
@@ -599,7 +651,7 @@ hand-authored and unaffected.
 - A signature block is **furniture, not content**: fully resolved at plan time,
   no prose to write, identical in a document that said the opposite. So it costs
   the narration loop nothing and is exempt from the size-class component budget
-  (`compose._FURNITURE`) — counting it refused to compose a `meeting_minutes`
+  (`compose._FURNITURE`): counting it refused to compose a `meeting_minutes`
   that had not grown by a single sentence.
 - Baseline retrieval moved 23 → 22 at @5, `numerical_comparison` 6/8 → 5/8. Two
   names and a date per document is more text to rank against and no more of the
@@ -612,28 +664,28 @@ hand-authored and unaffected.
 - **And the corpus asks about it**, because a document property nobody asks
   about is decoration. Four cases per episode (`evaluation._Taxonomy.
   approvals`): who approved a group document, who approved *and* who prepared
-  one division's commentary out of eight near-identical ones, and — the one
-  that makes absence testable — who approved a document nobody signed, which
+  one division's commentary out of eight near-identical ones, and (the one
+  that makes absence testable) who approved a document nobody signed, which
   must come back as an abstention. Retail's set moves 42 → 46,
   `authority_resolution` 3 → 6, `expected_abstention` 9 → 10. The keyword
   baseline passes none of the four, which is the intended result: a baseline
   that could tell an author from an approver would mean the two were not
-  distinguishable in the first place. The byline is the trap — a document names
-  its author at the top in larger type and its approver in a table at the foot
-  — so a test pins that no expected answer is ever the author's name.
+  distinguishable in the first place. The byline is the trap: a document names
+  its author at the top in larger type and its approver in a table at the foot,
+  so a test pins that no expected answer is ever the author's name.
 
 ### A synthesised role reports to somebody who does its job
 
 - **`roles.from_shape`** dealt each role's function by position in the tree and
   each role's manager by position in the level, and the two had nothing to do
   with each other. Measured on an eight-division retailer: **319 of 407**
-  synthesised people — 78% — reported across a function boundary. It produced a
+  synthesised people (78%) reported across a function boundary. It produced a
   "Head of Audit" reporting to a Merchandising Systems Analyst and a "Head of
   Executive" reporting to a platform lead. Now 0 of 407.
 - A role the synthesiser invented takes its **manager's** function. Inheritance
   rather than "pick a same-function parent", because choosing the parent by
-  function unbalances the spans — a function with two managers at a level would
-  take a third of the tree — and `measure`/`review` check the widest span
+  function unbalances the spans (a function with two managers at a level would
+  take a third of the tree), and `measure`/`review` check the widest span
   against what the caller claimed, so a shape accepted yesterday would be
   refused today. The tree's shape is untouched reporting line for reporting
   line; only the labels move.
@@ -644,8 +696,8 @@ hand-authored and unaffected.
   coherent answer and the honest one is the rotation the caller chose. So
   `functions` stays the closed vocabulary for synthesised roles, exactly as
   documented, and coherence is what you get for asking for departments your
-  engine has — which is what `company._functions_of` passes by default.
-- Cosmetic until now; load-bearing from here. Everything below the spine is
+  engine has: which is what `company._functions_of` passes by default.
+- Cosmetic until now; everything from here depends on it being right. Everything below the spine is
   about to author documents, and a one-to-one minuted between a finance manager
   and their audit-function manager is noise wearing a document's clothes.
 - Left open at the time and closed above: `from_shape` still discarded the
@@ -655,16 +707,16 @@ hand-authored and unaffected.
 
 ### The knob a corpus's size actually follows
 
-- **`worldloom.divisions`** — widen a company past the divisions its archetype
+- **`worldloom.divisions`**: widen a company past the divisions its archetype
   declares. Found by measurement: raising `organisation.headcount` from 23 to
-  429 left facts at 8,021, artifacts at 204 and evaluation cases at 596 —
+  429 left facts at 8,021, artifacts at 204 and evaluation cases at 596:
   every one unchanged, because 429 people were still managing the same three
   divisions. The close fans out per division and per category, so the corpus
   follows the *structure* and `headcount` was never the knob. Widening the same
   retailer three → eight divisions took facts 604 → 990, artifacts 15 → 20 and
   questions 42 → 52 on one seed.
 - Widening is additive. The declared divisions keep their names, categories,
-  formats and *relative* sizes — 64/21/15 stays in that ratio at any width —
+  formats and *relative* sizes (64/21/15 stays in that ratio at any width),
   and only the shares renormalise, because a share is a fraction of group
   revenue and a fourth division has to take something from somebody. Each
   addition is sized against the smallest declared division and declines by 0.8
@@ -672,7 +724,7 @@ hand-authored and unaffected.
   share against General Merchandise's 7.9%, an adjacent business outweighing
   the core it was bolted onto.
 - Pools are per industry and each entry is a real line of business rather than
-  a relabelling — its own categories and estate, therefore its own row in every
+  a relabelling: its own categories and estate, therefore its own row in every
   unit-level table, its own close commentary and its own questions. Retail
   offers five, banking three, insurance three. `divisions.register` adds a pool
   for a fourth vertical, and is refused on redefinition for `locales.register`'s
@@ -683,8 +735,8 @@ hand-authored and unaffected.
   division owned), exhausting the pool (named with how many are available), and
   an unknown industry. Through `--spec` these arrive as an `organisation`
   conflict alongside whatever else the description got wrong.
-- The width rides the **archetype key** — `omnichannel_retailer+8div`, composing
-  with the vocabulary qualifier as `omnichannel_retailer+wholesale_club+8div` —
+- The width rides the **archetype key** (`omnichannel_retailer+8div`, composing
+  with the vocabulary qualifier as `omnichannel_retailer+wholesale_club+8div`),
   for the reason `vocabulary.spoken` qualified its own key: the key is the only
   thing a recipe records about the shape, so a width carried anywhere else
   would rebuild a three-division company from an eight-division corpus and
@@ -694,7 +746,7 @@ hand-authored and unaffected.
 
 ### A benchmark an authored process gets for free
 
-- **`worldloom.benchmark`** — evaluation cases derived from the fact graph
+- **`worldloom.benchmark`**: evaluation cases derived from the fact graph
   rather than templated per vertical. An authored process produced **0**
   evaluation cases against the 11 per period its engine episode produces
   (measured twice, docs/episode-grammar.md), because every question shape lived
@@ -706,11 +758,11 @@ hand-authored and unaffected.
   `cross_artifact`/`numerical_comparison` are a declared `derive` or `sums-to`
   read against where its terms landed, and `citation_required` is a statement
   exactly one document makes.
-- **`EpisodeSpec.evaluation`** — an `EvalSpec` for what cannot be derived:
+- **`EpisodeSpec.evaluation`**: an `EvalSpec` for what cannot be derived:
   question phrasing per family and per kind, difficulty targets, which families
   a process wants emphasised, and the abstentions (a fact graph holds no witness
   to a fact's *absence*). Declared beside `detail_tables` and linted the same
-  way — a family naming a fact kind the registry lacks is refused, as is a
+  way: a family naming a fact kind the registry lacks is refused, as is a
   `str.format` slot the derivation never fills. `about` is a priority as well as
   a scope, and cannot conjure a case the corpus could not answer.
 - **Measured.** `ProcureToPay`: 0 → **17 cases per period, 49 over three**,
@@ -721,7 +773,7 @@ hand-authored and unaffected.
 
 ### A retriever anyone would deploy, and what it says about the corpus
 
-- **`worldloom.evaluate.embedding`** — dense retrieval as a third ranking
+- **`worldloom.evaluate.embedding`**: dense retrieval as a third ranking
   family, so a hardness claim no longer rests on two heuristics that share one
   idea. `RETRIEVERS` widened from classes to factories (`RetrieverFactory`), and
   that is the whole integration surface: `score()`'s grading still cannot ask
@@ -732,7 +784,7 @@ hand-authored and unaffected.
   reports the lexical pair; `--retriever embedding` says what to install and
   exits nonzero. Never a traceback, never a silent zero.
 - **Deterministic, which for an embedding model is not free.** Pins carry a
-  model id *and a commit revision*; every vector — passages and questions — is
+  model id *and a commit revision*; every vector (passages and questions) is
   cached to a sidecar keyed by `content_key(model, revision, scheme, text)`;
   cached vectors are L2-normalised `int8` and scoring is an integer dot product,
   so the cosine is bit-identical on any machine holding the same cache. A corpus
@@ -740,19 +792,19 @@ hand-authored and unaffected.
   the generation ledger's argument applied to a retriever.
 - **`worldloom evaluate --retriever all`** and `tools/measure_retrievers.py`
   print a new per-family reading: *genuinely hard*, *lexical trap*, *semantic
-  blind spot*, *solved by everything*. `--retriever both` is unchanged — still
+  blind spot*, *solved by everything*. `--retriever both` is unchanged: still
   exactly BM25 against TF-IDF, same console text, same JSON.
 - **Measured, on the reference narration and a five-world mosaic.**
   `expected_abstention` and `temporal_state` are hard for everything (0/96 and
   0/30 lexical; 0/96 and 5/30 semantic, and those five are one question passed
-  for the wrong reason). `authority_resolution` moves 0/30 → 8/30 — still
+  for the wrong reason). `authority_resolution` moves 0/30 → 8/30, still
   failing, but part of what BM25 was failing on was vocabulary, not authority.
   **No family turned out to be a pure lexical trap**, which is the result the
   corpus wanted and the first time it has been shown rather than assumed.
 
 ### Selection on outcomes, and what it actually bought
 
-- **`worldloom.outcomes`** — the loop this repository described and never ran:
+- **`worldloom.outcomes`**: the loop this repository described and never ran:
   generate candidates, **measure the corpora**, select on the measurements.
   `mosaic` disperses in parameter space, which is a proxy it never checked;
   this points the same `dispersion.farthest_first` at a measurement vector
@@ -763,7 +815,7 @@ hand-authored and unaffected.
   `mosaic.field` and `worldloom mosaic -n 5` are byte-for-byte unchanged.
 - **The Goodhart line is in the code, not only in the prose.** `select()`
   optimises *spread*, has no model of a good corpus, and provably never touches
-  a retriever — `tests/test_outcomes.py` replaces the scorer with something that
+  a retriever: `tests/test_outcomes.py` replaces the scorer with something that
   raises and requires the default path not to notice. Selecting against one
   baseline is a separate method (`Pool.hardest`), takes the retriever's name,
   and warns at the call.
@@ -774,8 +826,8 @@ hand-authored and unaffected.
   distinct (question, answer) pairs (145 → 169), cross-world near-duplicate
   *rate* (0.0050 → 0.0042), families showing any spread (3 → 5) and failure
   concentration (0.33 → 0.24); it reliably **loses** raw cross-world duplicate
-  pair counts — it prefers denser corpora and that count is quadratic in
-  questions per world — and it consistently halves the abstention-floor
+  pair counts (it prefers denser corpora and that count is quadratic in
+  questions per world), and it consistently halves the abstention-floor
   transplants that change a verdict (16 → 9), which is less transfer stress,
   not more. On banking and insurance every row ties: those evaluation
   generators emit the same 16 and 9 question strings in every world, so no
@@ -783,7 +835,7 @@ hand-authored and unaffected.
   than about the selector. The win is real, partial, and retail-only.
 - **The objective's one free parameter changed nothing.** Selection was
   identical at question weights 0, 0.5, 1 and 2 on a thirty-candidate retail
-  pool — the metric block decided it — so the win is not an artifact of a term
+  pool (the metric block decided it), so the win is not an artifact of a term
   that mimics the metric being reported.
 - **Cost.** A pool of thirty retail candidates measures in 4–5 s (≈0.15 s each,
   no narration, no render, nothing on disk), against 0.07 s to disperse the
@@ -804,7 +856,7 @@ hand-authored and unaffected.
 - `Built.measure()` and `Built.topology()` were a second copy of
   `outcomes.shape_vector`'s walk; they now delegate to it.
 
-## 0.1.0 — first release (unreleased)
+### The foundation
 
 One coherent enterprise, taken all the way through. Two, in fact.
 
@@ -817,13 +869,13 @@ One coherent enterprise, taken all the way through. Two, in fact.
   the same corpus, byte for byte.
 - **Two industry verticals.** The retail month-end close is the default;
   `--archetype midsize_adi` builds a fictional bank and runs the quarterly
-  capital-return episode instead — challenged by the second line before
+  capital-return episode instead: challenged by the second line before
   lodgement, filed anyway under a lodgement norm, invalidated by a
   reconciliation break the daily liquidity cadence catches, and corrected by a
   *restatement* that leaves the original filing on the record. Both lodgements
   carry the same authority, so only the restatement relationship and fact
-  validity can say which figure is current — and the evaluation set asks
-  exactly that, paired with its temporal inverse so no retrieval bias answers
+  validity can say which figure is current, and the evaluation set asks
+  that, paired with its temporal inverse so no retrieval bias answers
   both. Banking adds zero fields to the core model: its validator checks,
   artifact types, and archetype arrive through registration seams any future
   vertical can use.
@@ -844,11 +896,11 @@ One coherent enterprise, taken all the way through. Two, in fact.
   episodes; an execution ledger recording every call, including the refused
   ones.
 - **Evaluation as a product surface.** `worldloom evaluate` scores an in-repo
-  baseline retriever per question family — direct, cross-artifact, numerical,
-  causal, temporal, authority, abstention — so corpus hardness is measured, not
+  baseline retriever per question family (direct, cross-artifact, numerical,
+  causal, temporal, authority, abstention) so corpus hardness is measured, not
   asserted. `worldloom diversity` fingerprints document structure so a batch
   cannot quietly become one document photocopied.
-- **Complete replay.** Every generative call — prose, plans, actor decisions —
+- **Complete replay.** Every generative call (prose, plans, actor decisions)
   is content-addressed into a generation ledger that ships with the corpus.
   `--replay` regenerates byte-identically with no provider reachable, and CI
   proves it on every push, from the installed wheel as well as the checkout.
@@ -858,8 +910,8 @@ One coherent enterprise, taken all the way through. Two, in fact.
   moved the retail close; the banking meeting that approved the return with
   the challenge on the table), email threads whose every message knows only
   what its sender knew at that moment, and per-unit close commentary from
-  each division's finance partner. Minutes are fully structured — attendees,
-  tabled material, decisions — and cost the narration loop nothing; threads
+  each division's finance partner. Minutes are fully structured (attendees,
+  tabled material, decisions) and cost the narration loop nothing; threads
   and commentary are prose under the same fact constraints as everything
   else. New evaluation families ask who was in the room and who was told
   what, when.
@@ -867,32 +919,32 @@ One coherent enterprise, taken all the way through. Two, in fact.
 - **Industry packs.** A world's shape and lore as a JSON file an agent (or a
   person) authors: units, product categories, site estate, scale, dated lore
   commitments in the engine's closed constraint vocabulary, and the fictional
-  company's name — run through either engine, with the episode physics staying
+  company's name: run through either engine, with the episode physics staying
   the engine's. `worldloom pack template` starts one, `pack targets` publishes
   which lore each engine actually consults, `pack check` lints inert
   commitments by name, and `build --pack` builds it. The pack embeds in the
   corpus recipe, so a pack-built corpus rebuilds itself with no pack file.
   Packs also own their texture: ``system_brands`` renames the engine's
-  systems for the industry, and ``voices`` re-voices any role's prose —
+  systems for the industry, and ``voices`` re-voices any role's prose:
   applied as per-role persona clones, so a voiced CFO never re-voices
   everyone sharing the CFO's register, and numeric temperament stays the
   engine's. Each engine publishes its slots and role keys through
   ``worldloom pack targets``, and the lint names unknown keys.
   Packs also re-voice the episode itself: every event sentence and prose
   fact an engine states is a keyed template (``worldloom pack texts``), and
-  ``episode_text`` overrides them — slot-checked, riding the recipe, over
+  ``episode_text`` overrides them: slot-checked, riding the recipe, over
   causality a pack cannot touch. The insurer's incident is about claims and
   peril codes; the mutual bank's challenge names its own book.
   Shipped references: a general insurer on the close engine and a mutual bank
   on the challenged-return engine, both exercised in tests. Authoring the
   first packs surfaced and fixed three archetype-coupling leaks the telco
   experiment had predicted (`unit_gm`, the merch lead's manager, and the
-  banking error's unit) — each engine now derives those from the world it was
+  banking error's unit), each engine now derives those from the world it was
   given.
   And packs re-voice the benchmark: every evaluation question and authored
   answer is a keyed template too (``EVAL_TEXT``, published beside the episode
   tables by ``pack texts``), overridden through ``evaluation_text`` under the
-  same slot contract — the insurer's evaluation set asks about classes of
+  same slot contract: the insurer's evaluation set asks about classes of
   business and gross written premium, never a merchandise category. The fact
   each case is graded against stays the engine's.
 
@@ -908,26 +960,26 @@ One coherent enterprise, taken all the way through. Two, in fact.
   replays byte-for-byte.
 
 - **A third vertical: insurance reserving, increment 1.** "The Living
-  Estimate" — a mid-size general insurer's quarterly reserving cycle, from
+  Estimate": a mid-size general insurer's quarterly reserving cycle, from
   the decided design record (`docs/design/insurance-reserving.md`): the
   development triangle as append-only observations, estimate chains whose
   superseded links were correct when made, and the estate's first permanent
-  two-authority record — the actuarial central estimate and the booked
+  two-authority record: the actuarial central estimate and the booked
   reserve legitimately disagree, reconciled only by an explicit margin fact.
   Landing it triggered the rule of three: recipe steps are now a registry
   (`recipe.register_step`) each vertical seeds from its own module, and two
   thin-waist exceptions were paid down rather than a third added.
 
 - **Repetition measured; the rewrite loop deleted before release.** Narration
-  is open-loop — every section gets one request and one attempt, and nothing
-  afterwards looks at what the corpus became — and a refinement loop
+  is open-loop (every section gets one request and one attempt, and nothing
+  afterwards looks at what the corpus became), and a refinement loop
   (`worldloom refine`, MCP rewrite tools, a skill and a Stop hook) was built to
   close it: measure what repeats, rewrite only what repeats, gate each rewrite
   on the measured similarity. It was deleted before release, on evidence. The
   loop was built and gated against `DeterministicProvider` template prose,
   where three closes from one template genuinely repeat; a five-world proof run
-  on real model prose measured its target — passages in a near-duplicate group
-  — at zero in every world (0/46, 0/50, 0/52, 0/46, 0/43). The repetition it
+  on real model prose measured its target (passages in a near-duplicate group)
+  at zero in every world (0/46, 0/50, 0/52, 0/46, 0/43). The repetition it
   fought was an artifact of the deterministic fake, and its API adapters were
   the only code violating "this repository does not call a language model".
 
@@ -935,15 +987,15 @@ One coherent enterprise, taken all the way through. Two, in fact.
   whoever narrated it: `stats.measure` runs the exact similarity join over the
   corpus's own passages beside a structural shape census, `worldloom diversity
   --near-duplicates` names the groups, and `worldloom mcp` serves the
-  read-only tools — `measure_corpus`, `corpus_topology`, `corpus_series`,
-  `validate_corpus`, and the probe tools — over stdio, with `.mcp.json` wiring
-  them into Claude Code. No MCP tool writes a corpus; every corpus write path
+  read-only tools (`measure_corpus`, `corpus_topology`, `corpus_series`,
+  `validate_corpus`, and the probe tools) over stdio, with `.mcp.json` wiring
+  them into any MCP client. No MCP tool writes a corpus; every corpus write path
   stays behind the CLI handshakes.
 
   Also fixed: `World.export` copied artifacts twice on an in-place export of a
   corpus that had been rendered, raising `FileExistsError` on a corpus that was
   perfectly intact. It had never fired because the only in-place callers ran on
-  corpora with no `artifacts/` directory yet — and fixing it revealed a second,
+  corpora with no `artifacts/` directory yet, and fixing it revealed a second,
   older defect it had been masking. CI's agent-handshake step submits
   deliberately invalid prose to prove the guardrail rejects it, and had been
   doing so against an already-narrated corpus: `review()` had nothing to review,
@@ -952,11 +1004,11 @@ One coherent enterprise, taken all the way through. Two, in fact.
   named for had not been exercised since rendering was added to it. `narrate
   accept` now refuses responses submitted into a corpus with no section awaiting
   prose, instead of printing "0 section(s) accepted" and exiting zero, and the
-  CI step runs its rejection first — while sections are genuinely pending.
+  CI step runs its rejection first, while sections are genuinely pending.
 
 - **The estate becomes a landscape.** `worldloom topology` on the largest world
   this tool builds reported **nine** services and systems and a three-hop
-  dependency chain — because nine is exactly what the month-end-close episode
+  dependency chain: because nine is exactly what the month-end-close episode
   names. Categories scale with the archetype, sites scale, facts scale; the
   estate did not, which made blast radius meaningless, gave "who gets paged" a
   single answer, and left the incident's stale mapping table reading as bad
@@ -964,26 +1016,26 @@ One coherent enterprise, taken all the way through. Two, in fact.
   `build --estate small|medium|large` grows the rest of the landscape around
   the episode's own services: layered (edge → domain → platform → data →
   system of record) so acyclicity is *unconstructible* rather than merely
-  checked, with chokepoints **placed** — each backed by a store only it may
+  checked, with chokepoints **placed**: each backed by a store only it may
   reach, because a shared service whose dependencies everything else can also
   reach directly dominates nothing. 101 nodes, a ten-hop chain, and the close
   orchestrator finally has a blast radius. The episode's four services are
   never edited, so its causality is bit-for-bit unchanged, and omitting the
   flag leaves every existing corpus byte-identical.
 
-- **`worldloom compose` — the third handshake, and the first over entities.**
+- **`worldloom compose`: the third handshake, and the first over entities.**
   `narrate` bounds what a model may *say* and checks it against the fact
   ledger; `plan` bounds how it may *shape* a document and checks it against a
-  component grammar. This bounds what the company *runs* — services, systems,
+  component grammar. This bounds what the company *runs* (services, systems,
   ownership, dependencies, declared criticality, and the lore explaining why
-  the landscape looks that way — and checks it against `worldloom.graphs`. The
+  the landscape looks that way) and checks it against `worldloom.graphs`. The
   graph library built for other reasons turned out to be exactly the validator
   that judgement needs.
 
   It exists because the generated estate cannot serve every vertical: its
   name pools are retail's, banking's landscape is not called
   `click-collect-api`, and the insurer ships with no services at all. A pool
-  per industry is the wrong answer — it puts an ever-growing list of invented
+  per industry is the wrong answer: it puts an ever-growing list of invented
   names into the engine, the contamination §7 forbids. An industry's
   vocabulary is the thing a model is genuinely better at than a table, so the
   model brings it and the harness refuses anything incoherent: a cycle through
@@ -991,7 +1043,7 @@ One coherent enterprise, taken all the way through. Two, in fact.
   work here, a tier the graph contradicts, lore that constrains nothing, and
   an estate in which nothing is a single point of failure. Every violation is
   reported at once, nothing commits unless everything passes, and the accepted
-  composition lands in the generation ledger — so a composed corpus rebuilds
+  composition lands in the generation ledger, so a composed corpus rebuilds
   from its own recipe with no provider reachable, and refuses loudly rather
   than quietly rebuilding into the *un*composed world if its ledger is
   missing.
@@ -1001,14 +1053,14 @@ One coherent enterprise, taken all the way through. Two, in fact.
   ever looked at: the service/system dependency graph, the artifact provenance
   DAG across all four relationships at once, the fact supersession forest, and
   the reporting tree. It closed three real invariant gaps corpus-wide, for
-  every vertical at the same time — a dependency cycle through more than one
+  every vertical at the same time: a dependency cycle through more than one
   hop (the old check caught a service that depended on *itself* and nothing
   longer), a **forked supersession chain** (two facts replacing one, which
   leaves "what is current" ambiguous; the fact-layer walk built a dict keyed on
   the superseded id and let the second writer win, so this could never
   surface), and a provenance loop that uses a different relationship on each
   edge. `worldloom topology` is the reading: services ranked by *blast radius*
-  and separately by *gates* — how much has no second path to what they serve,
+  and separately by *gates*: how much has no second path to what they serve,
   computed from dominator trees, because "lots of things depend on it" and
   "nothing routes around it" are different properties and a replicated platform
   has the first without the second. Every measure is an exact integer count
@@ -1018,7 +1070,7 @@ One coherent enterprise, taken all the way through. Two, in fact.
 
 - **Near-duplicate detection that survives Gate 1.** `stats` has always
   reported an exact near-duplicate rate over passages, computed by comparing
-  every pair — defensible at 120 artifacts and uncomputable at the 10,000
+  every pair, defensible at 120 artifacts and uncomputable at the 10,000
   build-order §12 targets, which is to say it would have stopped working on
   exactly the corpora whose repetition most needs auditing. `worldloom.similarity`
   keeps the *answer* and changes the algorithm: a prefix-filtered similarity
@@ -1033,7 +1085,7 @@ One coherent enterprise, taken all the way through. Two, in fact.
 
 - **Batch diversity, not just per-artifact.** `compiler.diversity.select` picks
   the *k* most-unlike alternatives for one artifact and is silent about the
-  batch — run independently for a hundred artifacts it hands every one of them
+  batch: run independently for a hundred artifacts it hands every one of them
   index 0, which is how §7a's measured defect (120 artifacts, 11 distinct
   shapes) is produced in the first place. `assign` spreads shapes *across* a
   batch, carrying what earlier periods already spent so period two does not
@@ -1042,7 +1094,7 @@ One coherent enterprise, taken all the way through. Two, in fact.
 
 - **Time series behind the figures.** `worldloom.series` decomposes a
   period-keyed fact series into trend, season and residual, and names the
-  periods the first two do not explain — read it as a corpus check, since an
+  periods the first two do not explain: read it as a corpus check, since an
   incident month that does *not* sit outside the pattern is a corpus asserting
   a disruption its own numbers do not show. Outliers are scored on median
   absolute deviation rather than a z-score, because outliers inflate the
@@ -1051,25 +1103,25 @@ One coherent enterprise, taken all the way through. Two, in fact.
   replaced by what it expected, so one spike cannot tilt the trend every other
   month is then judged against. Two defects found by its own tests and fixed
   in the algorithm rather than the assertion: a local (Hampel) filter mistakes
-  a genuine seasonal peak for a spike, and a robust scale of zero — routine
-  when more than half a sample is identical, which generated figures often are
-  — silently disabled the detector on exactly the obvious cases.
+  a genuine seasonal peak for a spike, and a robust scale of zero (routine
+  when more than half a sample is identical, which generated figures often are)
+  silently disabled the detector on exactly the obvious cases.
 
 - **`build --trend`.** Monthly compound growth behind the comparative history.
   Without it a year of comparatives oscillates around a flat level, so a
   seasonally-adjusted series is flat by construction and no question about
-  direction has an answer in the data. 0.0 multiplies by exactly 1.0 — an IEEE
-  identity — so every existing corpus is byte-identical, asserted rather than
+  direction has an answer in the data. 0.0 multiplies by exactly 1.0 (an IEEE
+  identity), so every existing corpus is byte-identical, asserted rather than
   reasoned about.
 
 - **Two retrievers, so hardness claims survive a change of heuristic.**
-  `evaluate --retriever {bm25,tfidf,both}` — the existing baseline was
+  `evaluate --retriever {bm25,tfidf,both}`: the existing baseline was
   already BM25, so the second family is TF-IDF cosine with shared
   tokenization, and the scorecard reports per-family agreement: a family
   hard under both ranking families is structurally hard. On the shipped
   corpora, every designed-hard family is. `worldloom stats` reports what a
   buyer can recompute: length distributions, vocabulary, exact
-  near-duplicate rates, fact-citation density — no invented benchmarks.
+  near-duplicate rates, fact-citation density: no invented benchmarks.
 
 - **Name pools and locale as pack data** (ladder rung 4). Person names,
   site regions, and headquarters are engine defaults a pack may replace,
@@ -1079,10 +1131,10 @@ One coherent enterprise, taken all the way through. Two, in fact.
   no longer Australian, and proves it byte-reproducibly.
 
 - **Narration at scale, without an API caller.** There is no `narrate auto`
-  and no model-SDK extra: an in-process API path (Anthropic, Gemini, and two
+  and no model-SDK extra: an in-process API path (two model providers, and two
   agent-harness adapters) was built and then deleted before release, because
   the product is driven by a coding harness through the `narrate requests` /
-  `narrate accept` handshake and the SDK — an API caller was a second writer
+  `narrate accept` handshake and the SDK: an API caller was a second writer
   path this repository's first line says it does not have. What ships from
   that work is the scale machinery in `narrative/compiler.py`, which any
   provider benefits from: `narrate(concurrency=N)` fans sections out with
@@ -1093,21 +1145,21 @@ One coherent enterprise, taken all the way through. Two, in fact.
 
 - **A benchmark that scales with the world.** `build --eval-density
   {low,standard,high}` grows the evaluation set and the fan-out layer from
-  what the world already has — more categories and sites feed lookups and
-  comparisons, more periods feed temporal and recurrence cases — reachability-
+  what the world already has (more categories and sites feed lookups and
+  comparisons, more periods feed temporal and recurrence cases), reachability-
   gated like every existing case, with the default byte-identical to before.
   A three-period high-density grocery build carries `168` cases against `44`,
   and its hard families still score near zero, which is the point.
 
 - **The haystack.** `build --distractors <n>` adds provenance-true noise:
-  superseded drafts, derived personal copies, and routine notices — real
+  superseded drafts, derived personal copies, and routine notices: real
   authors, real lineage, real dates, citing only subsets of facts real
   documents already carry. No new facts means grading stays safe by
   construction: a distractor can never become the only home of an answer or
   make an abstention question answerable. Off by default; rides the recipe.
 
-- **`/worldloom-design`.** The command for asks that arrive without a seed —
-  "a hard corpus for insurance RAG" — driving elicit → decide engine/pack →
+- **`/worldloom-design`.** The command for asks that arrive without a seed,
+  such as "a hard corpus for insurance RAG": driving elicit → decide engine/pack →
   build → measure (`evaluate --json`, `diversity`) → iterate → deliver, with
   `references/designing.md` carrying the judgment: the elicitation table,
   the archetype / `--inspired-by` / pack cost ladder, symptom-level

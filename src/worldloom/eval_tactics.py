@@ -56,6 +56,12 @@ def _selector_key(demand: WorldDemand) -> tuple[tuple[str, str], ...]:
     )
 
 
+def proposal_for(demand: WorldDemand) -> TacticProposal:
+    """The one tactic that executes *demand* on its own; the executors dispatch on it."""
+
+    return _proposal_for(demand)
+
+
 def _proposal_for(demand: WorldDemand) -> TacticProposal:
     selector = {key: value for key, value in demand.selector.items() if key != "requirement_kind"}
     common = dict(selector)
@@ -157,4 +163,6 @@ def plan_tactics(demands: DemandSet) -> TacticPlan:
     )
 
 
-__all__ = ["TacticKind", "TacticPlan", "TacticProposal", "plan_tactics", "propose_tactics"]
+__all__ = [
+    "TacticKind", "TacticPlan", "TacticProposal", "plan_tactics", "proposal_for", "propose_tactics",
+]

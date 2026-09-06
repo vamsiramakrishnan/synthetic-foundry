@@ -14,7 +14,10 @@ Repository `synthetic-foundry` · Python package and command `worldloom` ·
 Python 3.11+ · pre-release, install from source · Apache-2.0
 
 [Quickstart](#quickstart) · [Design a corpus](docs/enterprise-corpus.md) ·
-[Python SDK](docs/sdk.md) · [Documentation site](https://vamsiramakrishnan.github.io/synthetic-foundry/)
+[Python SDK](docs/sdk.md) · [Documentation site](https://vamsiramakrishnan.github.io/worldloom/)
+
+Status: 0.1.0, the first release. The source-install path below targets this
+repository checkout. The library never calls an LLM service by itself.
 
 ## Quickstart
 
@@ -140,6 +143,21 @@ worldloom fleet curate ./fleet --purpose challenge
 Start with a small qualified corpus before scaling. Fleet counts measure volume;
 qualification and coverage determine whether that volume helps the evaluation.
 [Enterprise generation](docs/enterprise-corpus.md) · [Artifact ecology](docs/artifact-ecology.md).
+
+## Shape the world around an evaluation
+
+Use [evaluation-driven generation](docs/eval-first.md) when the
+starting point is a failure mode you want to measure. A generated scenario,
+a passing coherence check, and a passing agent evaluation are separate artifacts.
+Keep the witnesses and execution results with the corpus you use in a benchmark.
+
+## Add calibrated or intentionally imperfect data
+
+The [extension seams](docs/extension-seams.md) cover calibrated priors,
+causal traces, fidelity comparisons, and locale-aware master-data identifiers.
+These are explicit inputs and receipts around the deterministic generation
+boundary. Review their contracts before using a real table or treating a
+fidelity result as evidence that a dataset suits your task.
 
 ## Reproduce and extend
 

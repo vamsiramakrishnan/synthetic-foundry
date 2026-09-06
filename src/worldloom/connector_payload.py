@@ -228,6 +228,12 @@ def _shape_sharepoint(definition: ConnectorDefinition, r: Mapping[str, Any]) -> 
     mime = _mime(entity)
     if mime:
         out["file"] = {"mimeType": mime}
+        if r.get("sha256"):
+            # A rendered body stands behind this item: Graph reports the
+            # hash the same way, and an eval grading "did the agent fetch the
+            # deck" can compare bytes rather than trust a name.
+            out["file"]["hashes"] = {"sha256Hash": r["sha256"]}
+        out["size"] = int(r.get("size_bytes", 0) or 0)
         out["content"] = _text(r)
     if entity == "folder":
         out["folder"] = {"childCount": int(r.get("child_count", 0))}
@@ -244,6 +250,8 @@ def _shape_drive(definition: ConnectorDefinition, r: Mapping[str, Any]) -> dict[
         "parents": [r.get("folder") or r.get("parent")],
         "modifiedTime": r.get("modified_at", definition.clock),
         "webViewLink": f"https://docs.google.com/d/{item_id}",
+        "size": str(r.get("size_bytes", 0) or 0),
+        "sha256Checksum": r.get("sha256"),
         "content": None if _entity(r) == "folder" else _text(r),
         **_wide_fields(definition, r),
     }
@@ -288,6 +296,8 @@ def _shape_onedrive(definition: ConnectorDefinition, r: Mapping[str, Any]) -> di
         out["folder"] = {"childCount": int(r.get("child_count", 0))}
     else:
         out["file"] = {"mimeType": _mime(entity) or r.get("mime_type") or "application/octet-stream"}
+        if r.get("sha256"):
+            out["file"]["hashes"] = {"sha256Hash": r["sha256"]}
         out["content"] = _text(r)
     out.update(_wide_fields(definition, r))
     return out

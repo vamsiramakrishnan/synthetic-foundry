@@ -8,8 +8,8 @@ tags: [actors, episodes, observations, replay, decisions]
 # Actors, optionally
 
 `worldloom build --actors` changes who decides what the incident's records say.
-It takes `scripted` — the built-in deterministic actor, no network and no key —
-or `agent`, which leaves every decision for you.
+It takes `scripted`, the built-in deterministic actor with no network and no
+key, or `agent`, which leaves every decision for you.
 
 Without it, the planner writes the incident documents from the whole fact ledger:
 it knows the root cause, the control failure, and the remediation, and it hands
@@ -49,12 +49,12 @@ Four things are true of every step, and they are what the actor layer is for:
   observation and a tool catalogue. There is no accessor on either that reaches a
   `World`.
 - **Only an accepted tool call changes anything.** Refusals are recorded with the
-  rule they broke and change nothing — `worldloom actors ./corpus --rejected`
+  rule they broke and change nothing; `worldloom actors ./corpus --rejected`
   shows them.
 - **Canonical truth is still deterministic.** The pipeline fails because the
   operational generator says so, and the cause is the stale hierarchy mapping
   because 2024 lore made it so. An actor chooses *when the organisation finds
-  out, who records it, and what gets written down* — never what happened.
+  out, who records it, and what gets written down*, never what happened.
 - **It replays.** Every decision is content-addressed into the same generation
   ledger narration uses, so `--replay` regenerates the episode byte-for-byte with
   no provider at all.
@@ -70,8 +70,8 @@ depends on whether the business partner escalated at 09:12, so the later
 invocations do not exist until the earlier decisions are made.
 
 Resuming needs no suspend format. Each call rebuilds the world from the corpus's
-recipe, replays every decision the ledger already holds — the provider is never
-asked for those — and stops at the first one nobody has taken. The ledger was
+recipe, replays every decision the ledger already holds (the provider is never
+asked for those) and stops at the first one nobody has taken. The ledger was
 already shipping; it is now also the save file. Two consequences: `--model-id` is
 pinned to the corpus on the first accepted decision, because answering turn nine
 under a different id would miss every key before it and silently restart the

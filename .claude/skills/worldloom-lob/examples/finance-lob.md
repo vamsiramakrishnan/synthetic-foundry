@@ -1,6 +1,6 @@
 ---
 title: Finance LOB Cascade
-description: Walk the LOB cascade end to end — seed, roles, responsibilities, resolve, build — on a finance LOB.
+description: Walk the LOB cascade end to end on a finance LOB, seed, roles, responsibilities, resolve, build.
 read-when: Answering your first LOB brief, or when an accept is refused and you want the shape of a passing answer.
 tags: [worldloom, lob, cascade, worked-example, refusal-loop]
 ---
@@ -17,7 +17,7 @@ from worldloom import lob
 seed = lob.LobSeed(name="finance", title="Finance",
                    purpose="Financial management, reporting, and close-out.",
                    engine="retail")
-lob.lint_seed(seed)               # [] or findings — e.g. an unregistered engine
+lob.lint_seed(seed)               # [] or findings, e.g. an unregistered engine
 session = lob.open(seed)
 
 brief = lob.next_stage(session)   # brief.stage, brief.asks, brief.context
@@ -37,7 +37,7 @@ lob_spec = lob.resolve(session,
 ```
 
 The two refusals to expect first: the role tree needs exactly one root and by
-convention it must be `ceo` — a cfo-rooted proposal is refused — and a fact
+convention it must be `ceo` (a cfo-rooted proposal is refused), and a fact
 kind the registry cannot resolve (`worldloom.factkinds.names()`) is an
 accountability edge that never fires.
 

@@ -1,6 +1,6 @@
 # Lore
 
-Lore is what the company *is* — its industry, history, culture, politics, and the scar tissue that still shapes its decisions. It is generated before any structure exists, because no org graph, service catalogue, or financial model is decidable without it.
+Lore is what the company *is*: its industry, history, culture, politics, and the scar tissue that still shapes its decisions. It is generated before any structure exists, because no org graph, service catalogue, or financial model is decidable without it.
 
 This document defines what lore is as a data structure, where depth comes from, and how the generators that produce it are themselves authored.
 
@@ -8,7 +8,7 @@ This document defines what lore is as a data structure, where depth comes from, 
 
 ## Lore is a constraint graph, not a story
 
-The failure mode is predictable. Ask a model for "company history and culture" and you get *founded in 1987 by two engineers, innovative, customer-obsessed*. Generic — and worse, **inert**. Nothing downstream can consume it.
+The failure mode is predictable. Ask a model for "company history and culture" and you get *founded in 1987 by two engineers, innovative, customer-obsessed*. That is generic, and worse, **inert**: nothing downstream can consume it.
 
 So the test for any piece of lore is:
 
@@ -29,7 +29,7 @@ LORE-0042  erp_migration_failure
   scars:   [LORE-0058, LORE-0061]
 ```
 
-Every clause has a downstream effect. The founding story is then a *rendering* of the lore — the project's own philosophy applied one level up: generate reality first, render the narrative second, recursively.
+Every clause has a downstream effect. The founding story is then a *rendering* of the lore, applying the project's own philosophy one level up: generate reality first, render the narrative second, recursively.
 
 ### Required fields
 
@@ -40,7 +40,7 @@ Every clause has a downstream effect. The founding story is then a *rendering* o
 | `assertion` | What is true, as structured data |
 | `when` | Effective dates. Lore can expire; a norm from 2014 may no longer bind |
 | `actors` | Entity references, resolved against the graph |
-| `constrains` | One or more typed downstream effects — **at least one is mandatory** |
+| `constrains` | One or more typed downstream effects (**at least one is mandatory**) |
 | `scars` | Other lore this caused or deepened |
 | `visibility` | Whether the organisation openly acknowledges it |
 
@@ -95,13 +95,13 @@ Budget the generator to roughly a dozen commitments per world, not two hundred. 
 
 ### Extract shape, not facts
 
-`inspired_by("woolworths")` yields structural invariants — store-network retail, thin margins, seasonal peaks, a unionised workforce, pricing under regulatory attention — and *those* generate lore. Nothing proprietary is copied, and the resulting world is recognisably that kind of company without being that company.
+`inspired_by("woolworths")` yields structural invariants: store-network retail, thin margins, seasonal peaks, a unionised workforce, pricing under regulatory attention. *Those* generate lore. Nothing proprietary is copied, and the resulting world is recognisably that kind of company without being that company.
 
 ---
 
 ## Lore packs
 
-A lore generator is a **lore pack**: versioned data, packaged the way a skill is — instructions and validators rather than code.
+A lore generator is a **lore pack**: versioned data, packaged the way a skill is, as instructions and validators rather than code.
 
 ```
 packs/retail/
@@ -121,9 +121,9 @@ A pack contributes questions, a constraint vocabulary subset, critics, and exemp
 
 The honest answer has an unavoidable first step.
 
-**1. Hand-author one pack completely.** Retail first. You cannot meta-generate the first one — there is nothing to generalise from and no way to judge the output. Any project that skips this ships slop and does not find out for six months.
+**1. Hand-author one pack completely.** Retail first. You cannot meta-generate the first one: there is nothing to generalise from and no way to judge the output. Any project that skips this ships slop and does not find out for six months.
 
-**2. Generalise from the exemplar.** Banking is not *"write me a banking lore pack."* It is the retail pack as a worked example, plus the differences that matter — regulatory intensity, capital constraints, a real risk function — and the model produces a candidate.
+**2. Generalise from the exemplar.** Banking is not *"write me a banking lore pack."* It is the retail pack as a worked example, plus the differences that matter (regulatory intensity, capital constraints, a real risk function), and the model produces a candidate.
 
 **3. Accept mechanically, not by vibes.** This is what makes meta-generation safe, and it is the precondition for letting a model write generators at all: you may only do it if you can automatically measure whether a generator produces valid output.
 
@@ -149,7 +149,7 @@ Consistent with [meta-generation being an authoring-time activity](generation-mo
 
 This makes the retail lore pack the critical path for everything meta. Its quality ceiling becomes the platform's, because every later pack is generalised from it.
 
-That is an argument for building it small and early rather than large and late. The [build order](build-order.md) puts a minimal lore slot at step 3 — three to five commitments for the retail close episode, enough to prove that lore constrains generation — and defers the full pack to step 8.
+That is an argument for building it small and early rather than large and late. The [build order](build-order.md) puts a minimal lore slot at step 3: three to five commitments for the retail close episode, enough to prove that lore constrains generation, and defers the full pack to step 8.
 
 The reason is dependency direction, not scope. Lore feeds the org generator, the persona model, and the artifact planner. Adding the mechanism once those exist means touching all three; designing the slot early costs almost nothing.
 

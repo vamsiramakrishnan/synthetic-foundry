@@ -224,7 +224,7 @@ def test_no_call_site_names_a_key_eval_text_does_not_have() -> None:
 def test_stock_retail_evaluation_set_is_unchanged() -> None:
     """The reason this table is allowed to exist at all: a build with no pack
     reads exactly as it did when the questions were f-strings. Pinned against
-    the same seed and period the byte-identity gate in AGENTS.md/CLAUDE.md
+    the same seed and period the byte-identity gate in AGENTS.md
     uses, so a regression here is a regression there."""
     world = RetailWorld(seed=8128).build().run(
         MonthEndClose(period="2026-03", include_operational_incident=True)

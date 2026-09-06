@@ -2,8 +2,8 @@
 
 Worldloom is agent-neutral at runtime. Its contracts are commands, JSON requests,
 JSON responses, and deterministic accept/refuse results. The repository also
-ships Claude Code commands and skills that encode the operating procedure with
-progressive disclosure.
+ships a coding harness's commands and skills that encode the operating
+procedure with progressive disclosure.
 
 ```text
 coding agent
@@ -24,7 +24,7 @@ bounded projection required for one decision and proposes a typed response.
 
 ## Discovery
 
-When Claude Code opens the repository root, it can discover:
+When a coding harness opens the repository root, it can discover:
 
 - `.claude/commands/`: stage-oriented slash commands;
 - `.claude/skills/`: specialist procedures with trigger descriptions;
@@ -37,7 +37,7 @@ No files need to be copied into generated corpora. They are the procedure for th
 agent operating the repository.
 
 For another coding harness, point it to [AGENTS.md](../AGENTS.md) and let it drive
-the same commands. No Claude-specific API participates in corpus generation.
+the same commands. No harness-specific API participates in corpus generation.
 
 ## Stage commands
 
@@ -185,7 +185,7 @@ Source: [`.claude/skills/worldloom-process-bindings/SKILL.md`](../.claude/skills
 ### `worldloom-process-catalogue`
 
 Compile authored industry factors into company-bound process plans, then
-author executable episodes through the existing process cascade — the plan is
+author executable episodes through the existing process cascade. The plan is
 context for the cascade, never an execution trace.
 
 Source: [`.claude/skills/worldloom-process-catalogue/SKILL.md`](../.claude/skills/worldloom-process-catalogue/SKILL.md)

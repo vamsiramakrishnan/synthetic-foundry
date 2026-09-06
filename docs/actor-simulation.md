@@ -122,9 +122,9 @@ A scripted fake actor can receive an observation, call one fake tool, and replay
 
 `actors/models.py` carries the five boundary objects above plus three the
 roadmap's list implied without naming. `ActorObservation` has `message_ids`, so
-there has to be an `ActorMessage` for that field to name — and it turns out to be
-the load-bearing one, because it is the only mechanism by which a fact reaches
-somebody who neither witnessed it nor owns the system that recorded it. Without
+there has to be an `ActorMessage` for that field to name, and everything else
+depends on it: it is the only mechanism by which a fact reaches somebody who
+neither witnessed it nor owns the system that recorded it. Without
 it, knowledge either spreads by magic or does not spread at all. `ActorTask` is
 the same argument for `task_ids`, and `ActorLedgerEntry` is the execution ledger.
 
@@ -133,7 +133,7 @@ result with `accepted=False` and any ids in it will not construct. The residue
 rule is a type rather than a check somebody has to remember to run.
 
 **The ledger entry must not record whether it was replayed.** It did, briefly, as
-a diagnostic — and a field that differs between a fresh generation and a replay
+a diagnostic, and a field that differs between a fresh generation and a replay
 puts a byte of run history into a file the determinism test diffs. The replay
 counts are reported by `ActorEpisode` instead, exactly as narration reports its
 own.
@@ -201,14 +201,14 @@ paged.
 purpose.** Shorten it and every actor is omniscient within its domain inside an
 hour; remove it and the world is unknowable. Four hours means an actor woken at
 the moment of the trigger sees essentially what it witnessed and what its own
-systems recorded — and by the afternoon everyone has caught up, which is also
+systems recorded, and by the afternoon everyone has caught up, which is also
 true of real organisations.
 
 **Two-sided asymmetry only appears after the actors have acted.** At the instant
 two people are woken by one event their views differ mostly because less had
 happened to one of them. It is after the finance partner has read the ledger and
 the engineer has walked the dependency graph that each holds something the other
-cannot reach — which is the form the gate is really about, and what the test
+cannot reach, which is the form the gate is really about, and what the test
 asserts.
 
 A fact reaching nobody returns no channel at all, rather than a late one. That
@@ -258,7 +258,7 @@ The finance business partner can request a journal but cannot post one. The engi
 Both gate cases are tests, and both are **rejections naming a rule** rather than
 absences. `post_journal` is in the business partner's `prohibited_actions`, not
 merely missing from `allowed_tools`, so the refusal reads as a policy rather than
-as an oversight — and the same for `approve_change` on the engineer.
+as an oversight, and the same for `approve_change` on the engineer.
 
 **A tool asks the policy, never the caller's identity.** `Tool.authorise` has one
 implementation and no tool overrides it to special-case a role. Authority written
@@ -275,7 +275,7 @@ tool at three standings, and the confirmed one needs evidence the actor gathered
 itself. A gate in `authorise` cannot see `status`, so it would have to block a
 first hunch or let a confirmation through unchecked; the requirement moved to
 `validate`, where `evidence_needed(arguments, ctx)` can be argument-dependent.
-"Gathered itself" means a read tool this actor called during the episode — being
+"Gathered itself" means a read tool this actor called during the episode: being
 told the ERP was fine is not the same as having read its logs.
 
 Decision rights are checked **separately** from the tool allow-list, because "may
@@ -347,14 +347,14 @@ Four stages, in this order: **schema → authorise → validate → execute**. N
 is appended until `execute` returns, so a refused call cannot half-mutate.
 
 Twenty-seven tools across the four families, with `request_evidence` and
-`assign_task` added — the incident commander's characteristic move is asking
+`assign_task` added: the incident commander's characteristic move is asking
 somebody to go and check, and there was no way to express it.
 
 **The reads are the interesting half.** `query_logs`, `inspect_dependencies`,
 `read_ledger`, `query_budget`, `query_forecast`, and `search_incidents` change no
 world state and are how an actor legitimately comes to know something it did not
-witness: each discloses a bounded slice — records this system produced, this
-service and one hop of its dependencies, this subject's ledger lines — filtered by
+witness: each discloses a bounded slice (records this system produced, this
+service and one hop of its dependencies, this subject's ledger lines) filtered by
 the role's readable domains. Drop the domain filter and querying a log becomes a
 way to read the group's margin out of the ERP, which is exactly the omniscience
 the observation ledger exists to prevent.
@@ -362,7 +362,7 @@ the observation ledger exists to prevent.
 **Idempotency has to be keyed on the caller.** It was not, and the bug was
 instructive: the controller read the ledger, the CFO read the same ledger an hour
 later, the second call hit the first one's cache and returned without disclosing
-anything — and what that looked like downstream was an executive summary missing
+anything, and what that looked like downstream was an executive summary missing
 the one figure the CFO had gone to look up. Reads now opt out of idempotency
 entirely, because the world moves between turns and the same query at 09:00 and
 at 16:40 is a different question. Writes key on the actor plus the arguments,
@@ -371,7 +371,7 @@ whatever wording the analyst used; one remediation per thing being fixed.
 
 **An actor cannot mint a number.** `emit_fact` produces textual facts describing
 decisions and records. Every measurement in the corpus still comes from the
-deterministic generators — an actor able to write a figure would be authoring
+deterministic generators: an actor able to write a figure would be authoring
 canonical truth.
 
 **A document may cite at most forty facts.** By the time the CFO is woken, the
@@ -388,7 +388,7 @@ vocabulary is six coarse names rather than a taxonomy; role policies are Python
 declarations rather than a role DSL; `DRAFTABLE` is a closed list rather than an
 open artifact-type registry; and there is no tool composition, retry policy, or
 tool-selection model. Each of those would encode a guess about the second
-industry in the shape of the abstraction — the same reason there is still no
+industry in the shape of the abstraction, the same reason there is still no
 scenario DSL.
 
 ---
@@ -428,7 +428,7 @@ A trigger produces the same actor queue from the same world and seed. No actor c
 
 `ROUTES` is the retail-close table, read top to bottom as the §A5 episode. An
 activation is identified by `(event, role)` and fires once, which is what makes
-the recursion bound structural rather than a counter — an actor reaches another
+the recursion bound structural rather than a counter: an actor reaches another
 actor only by committing an event, and committing an event already went through a
 tool.
 
@@ -440,7 +440,7 @@ can approve anything. The head of data platform is the seventh.
 **Time has to be monotonic across invocations, not merely within them.** The
 first version started each invocation at its scheduled time, and an actor woken
 second could be handed an observation of a moment its predecessor had not reached
-— so its view was projected before facts that were, causally, already true. The
+so its view was projected before facts that were, causally, already true. The
 runtime now floors each start at the previous invocation's finish. Without it the
 episode's causal order and its timestamps disagree, and every temporal evaluation
 built on it is quietly wrong.
@@ -511,17 +511,17 @@ the executive summary by the CFO.
 
 **The line between the world's physics and the organisation's paperwork is the
 whole design, and it is not where it first looks.** The tempting reading of §A5 is
-that actors produce the incident — that an engineer decides the cause. They must
+that actors produce the incident, that an engineer decides the cause. They must
 not: the pipeline fails because the operational generator says so, and the cause
 is the stale hierarchy mapping because a 2024 lore commitment made it so. An actor
 that could choose the root cause would be authoring canonical truth, which design
 rules 1 and 2 exist to prevent. What an actor chooses is *when the organisation
-finds out, who records it, what is done about it, and what gets written down* —
+finds out, who records it, what is done about it, and what gets written down*,
 and that is where all the judgement under incomplete information actually is.
 
-So the deterministic planner keeps the close's standing outputs — the calendar,
+So the deterministic planner keeps the close's standing outputs (the calendar,
 the workbook, the variance memo exist every period whether or not anything went
-wrong, and nobody decides to write them — and withholds the seven incident
+wrong, and nobody decides to write them) and withholds the seven incident
 documents when actors are on. Generating both would be the same document twice,
 and generating the incident block from an omniscient view of the ledger would
 undermine the exercise entirely.
@@ -530,13 +530,13 @@ undermine the exercise entirely.
 planner: this artifact type does not get the control failure. It is now the CFO
 citing ten facts and not an eleventh, from an observation that genuinely did not
 contain the classification, at a moment when nobody had told them. The difference
-matters for the evaluation built on it — "what did the summary leave out" is now a
+matters for the evaluation built on it: "what did the summary leave out" is now a
 question about two people's knowledge rather than about a template.
 
 **Evaluation has to run after the episode, not beside it.** The deterministic
 evaluation generator only emits a case whose facts some artifact carries. Run
 before the actors, it silently dropped every incident family the moment actors
-were switched on — the facts were carried, just by a document the planner had not
+were switched on: the facts were carried, just by a document the planner had not
 written. It now receives the actor documents too.
 
 ---
@@ -685,7 +685,7 @@ The actor corpus is measurably harder than the non-actor baseline on temporal, a
 
 ### What landed
 
-`actors/evaluation.py` emits the families that only exist because actors do —
+`actors/evaluation.py` emits the families that only exist because actors do:
 temporal knowledge (was the cause confirmed before the close moved), role
 authority (who decided, who approved), escalation chains, task ownership
 (which fix addresses the control rather than detection), information asymmetry
@@ -702,8 +702,8 @@ none, because it trains a system to refuse.
 Six validators run in the `actors` group: `premature_observation` (knowing
 something before it was true), `cites_unobserved_fact`, `tool_exceeds_authority`,
 `decision_without_right`, `residue_after_rejection`, `duplicate_mutation`, and
-`owner_already_departed` — the obligation-side counterpart of
-`author_already_departed`.
+`owner_already_departed` (the obligation-side counterpart of
+`author_already_departed`).
 
 **They read the shipped corpus, not the runtime.** The runtime enforces the
 observation boundary while it runs; what a reader is handed is a directory, and a
@@ -730,21 +730,21 @@ Left column without actors, right with.
 
 (The authority row was first recorded as 1/3 and 3/4. Those two extra "passes"
 were an artefact of the scorer, which graded authority resolution on the top
-passage's *rank* alone — so a retriever whose top hit was the wrong document at
+passage's *rank* alone, so a retriever whose top hit was the wrong document at
 the right authority scored as having resolved something. The banking vertical's
 rank tie exposed the hole; the scorer now also requires the top passage to carry
 an expected fact, and the table above is the re-measurement under the honest
 grading.)
 
 Direct-fact correctness holds, which was the half the gate was most at risk of
-losing — the actor corpus adds documents without making the easy questions
+losing: the actor corpus adds documents without making the easy questions
 harder to answer. Cross-artifact and causal both got harder. But **authority and
 temporal both got easier**, and the gate as written requires all four to move the
 other way. So the *retail actor* corpus does not pass it.
 
 The authority result is the useful one to understand, because it is not noise.
-The case the actor layer contributes — "who decided to move the close, and who
-approved that decision" — is answered by a single record that names both in one
+The case the actor layer contributes ("who decided to move the close, and who
+approved that decision") is answered by a single record that names both in one
 sentence, so a keyword retriever finds it immediately. That is a direct lookup
 wearing an authority label. A real authority question has to require *resolving*
 between sources that disagree about who was entitled to act, and generating one
@@ -757,7 +757,7 @@ it hard means separating them across documents whose relative order is not
 recoverable from either one alone.
 
 Recorded rather than fixed here, because the fix is a change to what an episode
-*generates*, not to how it is scored — and inventing an eval that the baseline
+*generates*, not to how it is scored, and inventing an eval that the baseline
 happens to fail would be gaming the gate rather than passing it.
 
 ### The banking episode generates what the retail one could not
@@ -778,14 +778,14 @@ its own corpus. Seed 8128, one quarter, narrated, k=5:
 
 The contested decision now exists: the second line challenges the collateral
 treatment on the record, a filing norm files over the challenge, and the filed
-return and its restatement both sit at SYSTEM_OF_RECORD — so authority rank
+return and its restatement both sit at SYSTEM_OF_RECORD, so authority rank
 ties, and only the `restates` edge or fact validity resolves the pair. The
 contested-figure question fails for the baseline with the failure the design
 wanted: its top hit is a system-of-record document that carries no part of the
 answer. The temporal inverse ("what was reported as of a date between the
 lodgements") is generated together with it always, so no lexical bias can
-satisfy both. `tests/test_banking.py` pins the gate as an inequality —
-authority and temporal must score below direct lookup — rather than as
+satisfy both. `tests/test_banking.py` pins the gate as an inequality:
+authority and temporal must score below direct lookup, rather than as
 today's absolute numbers.
 
 ---

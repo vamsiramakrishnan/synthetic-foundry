@@ -5,7 +5,7 @@ See `docs/process-catalogue.md` for the integration boundary and measured result
 
 ---
 
-# Vocabulary layer — real industry structure, real distributions, synthetic content
+# Vocabulary layer: real industry structure, real distributions, synthetic content
 
 Vocabulary is where synthetic worlds leak. A Jira project called PHX with a "payments" service reads as a demo; a "Global Transaction Services" division with a "SG-NET-L2" assignment group, an AVP who reports to an ED, and a P3-heavy incident queue reads as a bank. The names are cheap; the structure and the frequencies are what convince a model and, more importantly, what make the eval distribution match production.
 

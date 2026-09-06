@@ -1,6 +1,6 @@
 ---
 title: Fields of Worlds
-description: Arrange many worlds — cross, sweep, dispersed — then measure and filter what came out.
+description: Arrange many worlds (cross, sweep, dispersed), then measure and filter what came out.
 read-when: Arranging many worlds, or choosing between cross, sweep and dispersed.
 tags: [worldloom, sdk, sweeps, dispersion, filtering]
 ---
@@ -19,14 +19,14 @@ sdk.dispersed(candidates, 8)                                              # the 
 46,656 worlds and nobody wants those; they want the eight least alike. Taking
 the *first* eight of a product gives you eight that differ only in the last
 axis, because that is what a product's ordering does. `dispersed` is a
-farthest-point traversal over normalised coordinates — the same algorithm
-`mosaic` uses — so the eight actually cover the space.
+farthest-point traversal over normalised coordinates, the same algorithm
+`mosaic` uses, so the eight actually cover the space.
 
 Normalising matters and is done for you: headcount runs to forty and a margin
 runs from 0.2 to 0.6, so unnormalised, headcount would decide entirely what
 "unlike" means.
 
-## Measure, then filter — that is the point of a loop
+## Measure, then filter: that is the point of a loop
 
 ```python
 rich = [
@@ -38,7 +38,7 @@ rich = [
 `Built.measure()` gives people, titles, facts, artifacts, evaluations, graph
 nodes, chokepoints and longest chain. `Built.topology()` is the graph subset.
 `Built.search`, `Built.mutated` and `Built.twin` close the loop on a built
-world — see `references/corpus-loop.md`.
+world. See `references/corpus-loop.md`.
 `Built.ok` is the coherence gate. `sdk.built(blueprints)` builds lazily, so a
 loop that stops early does not mint the rest.
 
