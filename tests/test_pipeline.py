@@ -5,7 +5,13 @@ from dataclasses import replace
 import pytest
 
 from worldloom import sdk
-from worldloom.pipeline import Pipeline, Stage, StageContext, StageResult, standard_pipeline
+from worldloom.pipeline import (
+    Pipeline,
+    Stage,
+    StageContext,
+    StageResult,
+    standard_pipeline,
+)
 
 
 def test_stage_rejects_undeclared_recipe_contributions() -> None:
