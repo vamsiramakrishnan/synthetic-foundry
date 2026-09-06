@@ -1,8 +1,9 @@
-"""Bitemporal views over the canonical fact ledger.
+"""Compatibility adapter for the pre-ledger observation SDK.
 
-FactObservation remains a deprecated input adapter for early SDK callers.
-New generation writes CanonicalFact rows; ledger_from_facts never copies them
-into a second observation database. Intervals are half-open on both axes.
+The canonical implementation is :mod:`worldloom.fact_ledger`. New Worldloom
+code imports ``FactLedger`` from there and operates directly on ``CanonicalFact``.
+This module keeps the old ``FactObservation`` + generic ``FactLedger`` surface for
+one compatibility release; it is not used by generation, rendering, or evals.
 """
 
 from __future__ import annotations
@@ -13,11 +14,17 @@ from typing import Generic, TypeVar
 
 from pydantic import model_validator
 
+from .fact_ledger import (
+    AmbiguousFactView,
+)
+from .fact_ledger import (
+    FactLedger as CanonicalFactLedger,
+)
 from .models import AUTHORITY_RANK, Authority, CanonicalFact, Model, Quantity
 
 
 class FactObservation(Model):
-    """Compatibility input for the original observation SDK; not an export table."""
+    """Deprecated input adapter; observations are no longer a second database."""
 
     id: str
     fact_id: str
@@ -51,10 +58,14 @@ class FactObservation(Model):
         return self.observer_id
 
     def holds_at(self, moment: datetime) -> bool:
-        return self.valid_from <= moment and (self.valid_to is None or moment < self.valid_to)
+        return self.valid_from <= moment and (
+            self.valid_to is None or moment < self.valid_to
+        )
 
     def known_at(self, moment: datetime) -> bool:
-        return self.recorded_at <= moment and (self.tx_to is None or moment < self.tx_to)
+        return self.recorded_at <= moment and (
+            self.tx_to is None or moment < self.tx_to
+        )
 
     def visible_to(self, observer: str) -> bool:
         return observer == "*" or self.observer == observer or (
@@ -64,25 +75,35 @@ class FactObservation(Model):
     @classmethod
     def from_fact(cls, fact: CanonicalFact) -> FactObservation:
         return cls(
-            id=f"obs:{fact.id}", fact_id=fact.id, kind=fact.kind,
-            subject=fact.subject, period=fact.period, value=fact.value,
-            text_value=fact.text_value, source_system=fact.source_system,
-            observer_id=fact.observer, valid_from=fact.valid_from,
-            valid_to=fact.valid_to, recorded_at=fact.recorded_at,
-            authority=fact.authority, supersedes=fact.supersedes,
-            tx_to=fact.tx_to, source=fact.source,
+            id=f"obs:{fact.id}",
+            fact_id=fact.id,
+            kind=fact.kind,
+            subject=fact.subject,
+            period=fact.period,
+            value=fact.value,
+            text_value=fact.text_value,
+            source_system=fact.source_system,
+            observer_id=fact.observer,
+            valid_from=fact.valid_from,
+            valid_to=fact.valid_to,
+            recorded_at=fact.recorded_at,
+            authority=fact.authority,
+            supersedes=fact.supersedes,
+            tx_to=fact.tx_to,
+            source=fact.source,
         )
 
 
 FactRow = TypeVar("FactRow", CanonicalFact, FactObservation)
 
 
-class AmbiguousFactView(ValueError):
-    """Equally authoritative observations disagree; a grader must not guess."""
-
-
 class FactLedger(Generic[FactRow]):
-    """Immutable queries. view resolves state; known_at preserves record history."""
+    """Deprecated generic observation ledger retained for source compatibility.
+
+    CanonicalFact callers should use :class:`worldloom.fact_ledger.FactLedger`.
+    Keeping this class here prevents a source-breaking change for early SDK users
+    without leaving any internal Worldloom path dependent on the observation shim.
+    """
 
     def __init__(self, observations: Iterable[FactRow]) -> None:
         self._observations: tuple[FactRow, ...] = tuple(observations)
@@ -106,9 +127,13 @@ class FactLedger(Generic[FactRow]):
         return FactLedger(item for item in self if item.observer == observer_id)
 
     def from_system(self, source_system: str) -> FactLedger[FactRow]:
-        return FactLedger(item for item in self if item.source_system == source_system)
+        return FactLedger(
+            item for item in self if item.source_system == source_system
+        )
 
-    def as_known(self, *, valid_at: datetime, recorded_at: datetime) -> FactLedger[FactRow]:
+    def as_known(
+        self, *, valid_at: datetime, recorded_at: datetime
+    ) -> FactLedger[FactRow]:
         return self.valid_at(valid_at).known_at(recorded_at)
 
     @staticmethod
@@ -119,19 +144,14 @@ class FactLedger(Generic[FactRow]):
     def _rank(item: FactRow) -> tuple[int, datetime]:
         return AUTHORITY_RANK[item.authority], item.recorded_at
 
-    def view(self, observer: str, *, valid_at: datetime, tx_at: datetime) -> FactLedger[FactRow]:
-        """Resolve semantic keys without leaking other observers' facts.
-
-        '*' is an explicit oracle query across channels. None-observer legacy
-        facts remain public for compatibility; explicitly latent rows do not.
-        Append-only supersedes links retire predecessors only in the same
-        channel and for the successor's valid-time interval. Equal-rank values
-        must agree; identifier ordering is never a truth-resolution policy.
-        """
+    def view(
+        self, observer: str, *, valid_at: datetime, tx_at: datetime
+    ) -> FactLedger[FactRow]:
         if not observer.strip():
             raise ValueError("observer must not be blank")
         rows = tuple(
-            item for item in self.as_known(valid_at=valid_at, recorded_at=tx_at)
+            item
+            for item in self.as_known(valid_at=valid_at, recorded_at=tx_at)
             if item.visible_to(observer)
         )
         by_id = {item.id: item for item in rows}
@@ -146,10 +166,12 @@ class FactLedger(Generic[FactRow]):
                 and previous.recorded_at <= item.recorded_at
             ):
                 retired.add(previous.id)
+
         grouped: dict[tuple[str, str, str], list[FactRow]] = {}
         for item in rows:
             if item.id not in retired:
                 grouped.setdefault(self._semantic_key(item), []).append(item)
+
         winners: list[FactRow] = []
         for key in sorted(grouped):
             group = sorted(grouped[key], key=lambda item: item.id)
@@ -158,22 +180,41 @@ class FactLedger(Generic[FactRow]):
             winner = peers[0]
             for peer in peers[1:]:
                 if peer.value != winner.value or peer.text_value != winner.text_value:
-                    raise AmbiguousFactView(f"{key}: {winner.id} and {peer.id} disagree")
+                    raise AmbiguousFactView(
+                        f"{key}: {winner.id} and {peer.id} disagree"
+                    )
             winners.append(winner)
         return FactLedger(winners)
 
     def best(self) -> FactRow | None:
-        return max(self._observations, key=self._rank) if self._observations else None
+        return (
+            max(self._observations, key=self._rank)
+            if self._observations
+            else None
+        )
 
-    def for_subject(self, subject: str, *, kind: str | None = None) -> FactLedger[FactRow]:
-        return FactLedger(item for item in self if item.subject == subject and (kind is None or item.kind == kind))
+    def for_subject(
+        self, subject: str, *, kind: str | None = None
+    ) -> FactLedger[FactRow]:
+        return FactLedger(
+            item
+            for item in self
+            if item.subject == subject and (kind is None or item.kind == kind)
+        )
 
     def to_tuple(self) -> tuple[FactRow, ...]:
         return self._observations
 
 
-def ledger_from_facts(facts: Iterable[CanonicalFact]) -> FactLedger[CanonicalFact]:
-    return FactLedger(facts)
+def ledger_from_facts(facts: Iterable[CanonicalFact]) -> CanonicalFactLedger:
+    """Deprecated spelling for ``worldloom.fact_ledger.FactLedger(facts)``."""
+
+    return CanonicalFactLedger(facts)
 
 
-__all__ = ["AmbiguousFactView", "FactLedger", "FactObservation", "ledger_from_facts"]
+__all__ = [
+    "AmbiguousFactView",
+    "FactLedger",
+    "FactObservation",
+    "ledger_from_facts",
+]

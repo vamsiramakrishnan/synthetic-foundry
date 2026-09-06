@@ -1,0 +1,92 @@
+# one-shot gate; closes eval package migration and replay vocabulary together
+name: structural evals package gate
+on:
+  push:
+    branches: [codex/structural-uplift]
+    paths:
+      - .github/workflows/structural-evals-package.yml
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: codex/structural-uplift
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Register revision-family replay in the recipe vocabulary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/worldloom/recipe.py')
+          text = path.read_text()
+
+          step_line = '    "AddIrrelevantFacts": ("seed", "count"),\n'
+          assert text.count(step_line) == 1
+          text = text.replace(
+              step_line,
+              step_line + '    "EvalRevisionFamily": ("proposal",),\n',
+              1,
+          )
+
+          fallback = '        elif name in _STEP_REGISTRY:\n'
+          assert text.count(fallback) == 1
+          replay = (
+              '        elif name == "EvalRevisionFamily":\n'
+              '            from .eval_construction import apply_revision_family\n'
+              '            from .eval_tactics import TacticProposal\n'
+              '\n'
+              '            world = apply_revision_family(\n'
+              '                world,\n'
+              '                TacticProposal.model_validate(step["proposal"]),\n'
+              '                record_recipe=False,\n'
+              '            )\n'
+          )
+          path.write_text(text.replace(fallback, replay + fallback, 1))
+          PY
+      - run: |
+          python -m pip install uv
+          uv pip install --system -e '.[dev,polars,xlsx,docx,pdf,pptx]' ruff==0.15.8 mypy==2.3.1
+      - name: Validate eval-first package seam and replay
+        run: |
+          ruff check
+          mypy
+          pytest -q \
+            tests/test_eval_design.py \
+            tests/test_eval_candidates.py \
+            tests/test_eval_instances.py \
+            tests/test_eval_search.py \
+            tests/test_eval_campaign.py \
+            tests/test_eval_demands.py \
+            tests/test_eval_tactics.py \
+            tests/test_eval_reference.py \
+            tests/test_eval_construction.py \
+            tests/test_recipe.py \
+            tests/test_seams.py
+          python - <<'PY'
+          import worldloom.evals as evals
+          from worldloom.seams import seam_manifest
+
+          assert evals.__file__.endswith('/evals/__init__.py')
+          assert evals.EvalCampaign
+          names = {item['name'] for item in seam_manifest()['seams']}
+          assert {'pipeline', 'connectors', 'evals'} <= names
+          PY
+      - name: Commit replay vocabulary and remove temporary gates
+        run: |
+          git config user.name 'worldloom-source-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/worldloom/recipe.py
+          git commit -m 'Replay eval revision families from the canonical recipe'
+          if [ -f .github/workflows/eval-contract-repair.yml ]; then
+            git rm .github/workflows/eval-contract-repair.yml
+          fi
+          git rm .github/workflows/structural-evals-package.yml
+          git commit -m 'Remove completed eval migration gates'
+          git push origin HEAD:codex/structural-uplift

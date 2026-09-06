@@ -95,7 +95,11 @@ def construct_candidate(spec: EvalSpec, plan: CandidatePlan, base: World, *,
     independently rejected candidate. The eval and its acceptance rules never
     change to make an unsupported construction appear successful.
     """
-    from .eval_candidates import GeneratedCandidate, check_requirement, validate_candidate
+    from .eval_candidates import (
+        GeneratedCandidate,
+        check_requirement,
+        validate_candidate,
+    )
     from .eval_construction import apply_revision_family
 
     if (plan.eval_spec_id != spec.id or plan.design_digest != design_digest(spec)

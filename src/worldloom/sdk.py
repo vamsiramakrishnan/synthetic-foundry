@@ -64,7 +64,7 @@ from .roles import from_shape, to_rows
 __all__ = [
     "Blueprint", "Built", "as_fleet", "banking", "built", "companies", "cross",
     "described", "dispersed", "company", "engine", "insurance", "mosaic_of",
-    "outcome_selected", "probe_of", "retail", "sweep",
+    "outcome_selected", "pipeline", "probe_of", "retail", "sweep",
 ]
 
 
@@ -971,6 +971,31 @@ def from_resolution(resolution: Any, *, seed: int = 8128) -> Blueprint:
         employees=resolution.employees,
         annual_revenue=resolution.annual_revenue,
         role_rows=resolution.role_table or (),
+    )
+
+
+def pipeline(
+    start: str = "2026-03",
+    *,
+    periods: int = 1,
+    incident: bool | None = None,
+    compile_artifacts: bool = True,
+    validate: bool = True,
+) -> Any:
+    """Return the typed build pipeline used by SDK and CLI consumers.
+
+    The returned value is an immutable :class:`worldloom.pipeline.Pipeline`.
+    It mints nothing until ``run(blueprint)`` is called, so a harness can
+    inspect, extend, or compare its stage contracts before doing work.
+    """
+    from .pipeline import standard_pipeline
+
+    return standard_pipeline(
+        start,
+        periods=periods,
+        incident=incident,
+        compile_artifacts=compile_artifacts,
+        validate=validate,
     )
 
 

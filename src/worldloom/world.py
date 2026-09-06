@@ -33,6 +33,7 @@ from .collections import (
     FactCollection,
 )
 from .detail import DetailTable
+from .fact_ledger import FactLedger
 from .ids import Minter
 from .models import (
     AccessPolicy,
@@ -416,6 +417,33 @@ class World:
     def incidents(self) -> EventCollection:
         """Events that opened an incident."""
         return self.events.where(kind="incident_opened")
+
+    def fact_ledger(self) -> FactLedger:
+        """The complete append-only canonical fact history.
+
+        Generators, validators, replay, and provenance use this raw ledger.
+        User-facing truth/belief reads should call :meth:`fact_view` instead.
+        """
+        return FactLedger(self._facts)
+
+    def fact_view(
+        self,
+        observer: str,
+        *,
+        valid_at: datetime | str,
+        tx_at: datetime | str,
+    ) -> FactCollection:
+        """Resolve what *observer* could know about one business-time cut.
+
+        Both axes are mandatory. There is no implicit wall clock and no silent
+        fallback to the latest value, so replay is independent of run time.
+        """
+        resolved = self.fact_ledger().view(
+            observer,
+            valid_at=_moment(valid_at),
+            tx_at=_moment(tx_at),
+        )
+        return FactCollection(resolved.to_tuple(), label="FactView")
 
     def as_of(self, moment: datetime | str) -> FactCollection:
         """The facts that held at *moment* — the temporal cut-off primitive.

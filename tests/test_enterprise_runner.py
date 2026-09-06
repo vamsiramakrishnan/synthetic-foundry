@@ -63,6 +63,30 @@ def test_shards_are_disjoint_and_complete() -> None:
     assert sum(len(shard) for shard in shards) == len(queries)
 
 
+def test_runner_resolves_default_tools_from_connector_definitions() -> None:
+    config = RunnerConfig()
+
+    assert config.resolve("sharepoint", "create", "file") == "sharepoint.create_file"
+    assert config.resolve("sharepoint", "readback", "file") == "sharepoint.get_file"
+    assert config.resolve("jira", "transition", "bug") == "jira.transition_issue"
+
+
+def test_explicit_mcp_binding_overrides_definition_resolution() -> None:
+    config = RunnerConfig(
+        bindings=(
+            ToolBinding(
+                connector="sharepoint",
+                operation="readback",
+                entity="file",
+                tool_name="customer.read_file",
+            ),
+        )
+    )
+
+    assert config.resolve("sharepoint", "readback", "file") == "customer.read_file"
+    assert config.resolve("sharepoint", "create", "file") == "sharepoint.create_file"
+
+
 def test_runner_respects_dag_dependencies() -> None:
     query = _query("Q-1")
     fixture = QueryFixture(

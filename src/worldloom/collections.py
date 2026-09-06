@@ -227,9 +227,9 @@ class FactCollection(Collection):
 
     def view(self, observer: str, *, valid_at: datetime, tx_at: datetime) -> FactCollection:
         """The same bitemporal read boundary used by predicates and narration."""
-        from .epistemics import ledger_from_facts
+        from .fact_ledger import FactLedger
 
-        return FactCollection(ledger_from_facts(self).view(
+        return FactCollection(FactLedger(self).view(
             observer, valid_at=valid_at, tx_at=tx_at,
         ))
 

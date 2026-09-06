@@ -8,9 +8,10 @@ same :class:`worldloom.predicates.Predicate` instead of private filter DSLs.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from .connector_definition import ConnectorDefinition
-from .predicates import FieldPredicate, Predicate, PredicateOp, Scalar
+from .predicates import FieldPredicate, Predicate, PredicateOp, RelativeTime, Scalar
 
 _SUPPORTED_LANGUAGES = frozenset(
     {"jql", "soql", "encoded_query", "cql", "odata", "drive_q", "cypher"}
@@ -26,7 +27,9 @@ def _semantic_field(definition: ConnectorDefinition, field: str) -> str:
     return inverse.get(field.casefold(), field)
 
 
-def _quote(value: Scalar) -> str:
+def _quote(value: Scalar | RelativeTime) -> str:
+    if isinstance(value, RelativeTime):
+        raise ValueError("relative-time operands must be resolved against the connector clock")
     if value is None:
         return "null"
     if isinstance(value, bool):
@@ -118,7 +121,7 @@ def _compile_encoded(field: str, item: FieldPredicate) -> str:
     raise AssertionError(f"unsupported predicate operator {item.op}")
 
 
-def _atom(value: Scalar) -> str:
+def _atom(value: Scalar | RelativeTime) -> str:
     rendered = _quote(value)
     if rendered.startswith("'") and rendered.endswith("'"):
         return rendered[1:-1]
@@ -144,6 +147,9 @@ def compile_native(
 
     clauses = []
     for item in predicate.where:
+        if isinstance(item.value, RelativeTime):
+            resolved = item.value.resolve(datetime.fromisoformat(definition.clock)).isoformat()
+            item = item.model_copy(update={"value": resolved})
         field = _native_field(definition, item.field)
         clauses.append(
             _compile_encoded(field, item)
