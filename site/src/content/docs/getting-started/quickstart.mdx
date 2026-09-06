@@ -1,93 +1,102 @@
 ---
-title: Quickstart
-description: Build, narrate, render, validate, and evaluate one corpus.
+title: Build your first corpus
+description: Generate a local corpus, open its rendered files, validate its claims, and measure retrieval without a model service.
 ---
 
-This page runs the whole loop once. You build a world, write its prose, render
-its files, and measure the result. Every command below was run against
-Worldloom 0.1.0.
+This guide produces a local corpus with deterministic sample prose. It requires
+no model service or cloud credentials. Complete
+[installation](/synthetic-foundry/getting-started/installation/) with the `all`
+extra so all five document renderers below are available.
 
-## 1. Build a world
-
-```bash
-worldloom build --seed 8128 --incident --out ./corpus
-```
-
-The same seed builds the same world, every time. This one is a mid-size
-omnichannel retailer with a month-end close and an operational incident. The
-build mints 615 facts, 16 artifact intents, and 51 evaluation cases, then
-validates its own output.
-
-## 2. Ask what prose is needed
+## 1. Build one episode
 
 ```bash
-worldloom narrate requests ./corpus -o requests.json
+worldloom build --seed 8128 --incident --narrate --out ./corpus
 ```
 
-This writes 35 requests. Each request names an author, a voice, an audience, a
-target length, a knowledge cutoff, and the facts the section may use.
+The example is an omnichannel retailer's month-end close with an operational
+incident. `--narrate` fills prose using the built-in deterministic provider.
+It is useful for inspecting the pipeline; it does not measure production
+writing quality.
 
-## 3. Write responses
-
-Read `requests.json`. Write `responses.json`: one entry per request, prose plus
-the facts each claim rests on. This step is yours. The
-[narration guide](/synthetic-foundry/guides/narration/) covers the rules and the JSON shapes.
-
-## 4. Submit
+## 2. Render files you can open
 
 ```bash
-worldloom narrate accept ./corpus --from responses.json --model-id your-model
+worldloom render ./corpus -f xlsx -f docx -f pptx -f pdf -f markdown
 ```
 
-Acceptance is transactional. Every response is checked, every violation comes
-back as data, and nothing commits until all of it passes. Expect rejections on
-the first pass. Fix the named violation and resubmit.
-
-## 5. Render
+Open `corpus/artifacts/`. Then inspect the records behind those files:
 
 ```bash
-worldloom render ./corpus -f xlsx -f docx -f markdown
+worldloom inspect ./corpus --facts
+worldloom inspect ./corpus --artifacts
 ```
 
-Add `-f jira -f confluence -f servicenow` for the business-system bundles. See
-[Rendering](/synthetic-foundry/guides/rendering/) for what each format carries.
+`facts.jsonl` holds canonical facts. `artifact-intents.jsonl` states what the
+artifacts should contain. `artifact-manifest.jsonl` links rendered outputs to
+their provenance. [Corpus anatomy](/synthetic-foundry/reference/corpus-anatomy/).
 
-## 6. Validate
+## 3. Check consistency and retrieval separately
 
 ```bash
 worldloom validate ./corpus
+worldloom evaluate ./corpus --retriever both
 ```
 
-On this corpus the validator passes 8,877 checks. It fails on any total that
-does not sum, any citation of a fact that did not yet exist, any reference to
-an entity that does not. See [Validation](/synthetic-foundry/concepts/validation/).
+Validation checks identities, chronology, arithmetic, and declared artifact
+contracts. Evaluation compares BM25 and TF-IDF retrieval against `evals.jsonl`.
+Passing validation does not mean a retriever answers every question.
 
-## 7. Measure hardness
+A local run of this sequence on revision `28da948` produced 615 facts, 16
+artifact intents, and 51 evaluation cases, and passed 8,877 coherence checks
+after rendering. Both lexical baselines failed all expected-abstention and
+temporal-state cases. These are observations for that fixture and revision,
+not fixed counts or product-wide performance claims.
 
-```bash
-worldloom evaluate ./corpus
-```
-
-The BM25 baseline scores 26 of 51 on this corpus. It passes every direct
-lookup and fails every abstention case. That shape is the intended result:
-the corpus is hard where hardness was designed in. See
-[Evaluation](/synthetic-foundry/concepts/evaluation/).
-
-## 8. Lay it out as a drive
+## 4. Add a business-system or drive view
 
 ```bash
+worldloom render ./corpus -f jira -f confluence -f servicenow
 worldloom workspace ./corpus -o ./drive
 ```
 
-This writes the folder tree an enterprise assistant would index: documents
-shelved by owning function, filenames a person would have typed, and
-`permissions.jsonl` with one row per file.
+The drive export includes a folder layout and `permissions.jsonl`. The system
+bundles are local test data; these commands do not publish to live tenants.
 
-## If you lose your place
+## 5. Find the next incomplete stage
 
 ```bash
 worldloom status ./corpus
 ```
 
-`status` names the stage the corpus is at and prints the exact next command.
-Resume from that, not from memory.
+Use its next action when a stage is missing. If a renderer dependency is absent,
+`worldloom doctor` names the relevant installation extra.
+
+## Next: replace test prose with authored prose
+
+Create a separate corpus **without** `--narrate` so narration requests are pending:
+
+```bash
+worldloom build --seed 8128 --incident --out ./authored-corpus
+worldloom narrate requests ./authored-corpus -o requests.json
+```
+
+An external writer reads `requests.json` and produces `responses.json` under
+the [narration contract](/synthetic-foundry/guides/narration/). The library does
+not call a model on your behalf. Then accept, render, and validate:
+
+```bash
+worldloom narrate accept ./authored-corpus --from responses.json --model-id your-writer
+worldloom render ./authored-corpus -f xlsx -f docx -f markdown
+worldloom validate ./authored-corpus
+```
+
+Acceptance can reject unsupported claims or bare figures. Fix the reported
+violation and resubmit; preserve the accepted ledger for replay.
+
+## Next: broaden the company
+
+The default close is a bounded episode. A full enterprise evaluation needs
+explicit choices about processes, periods, systems, people, artifact families,
+and distractors. Use [enterprise corpus generation](https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/enterprise-corpus.md)
+to plan those axes before increasing volume.

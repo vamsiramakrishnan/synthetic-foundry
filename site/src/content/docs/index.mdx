@@ -1,64 +1,94 @@
 ---
 title: Worldloom
-description: A deterministic compiler for coherent synthetic enterprise corpora.
+description: Generate enterprise documents, business records, and evaluation cases from one shared world model.
 template: splash
 hero:
-  tagline: A deterministic compiler for coherent synthetic enterprise corpora.
+  title: A test corpus that belongs to one company.
+  tagline: >-
+    Generate the company's facts and history, render its documents and records,
+    and test against answers tied to that evidence. Control the seed, the
+    recipe, and the accepted authored content.
   actions:
-    - text: Get started
+    - text: Build and inspect a corpus
       link: /synthetic-foundry/getting-started/quickstart/
       variant: primary
+    - text: Design a larger dataset
+      link: https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/enterprise-corpus.md
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/vamsiramakrishnan/synthetic-foundry
+      variant: minimal
 ---
 
-import { CardGrid, LinkCard } from '@astrojs/starlight/components';
-import Mermaid from '../../components/Mermaid.astro';
+Worldloom is for developers testing retrieval, extraction, temporal questions,
+and agent workflows. The repository is `synthetic-foundry`; the Python package
+and command are `worldloom`. It is pre-release and installs from source.
 
-Worldloom generates the enterprise before it generates the files. It builds a
-company, its people, its systems, and its facts from a seed. It then projects
-that state into XLSX, DOCX, PDF, PPTX, Markdown, and business-system bundles.
-Every document in the corpus can be checked against the same fact ledger.
+## First result: files you can open, answers you can check
 
-<Mermaid
-  code={`flowchart LR
-  A["Authoring inputs
-spec · pack · facets
-seed · locale · lore
-physics · org shape"] --> W["Deterministic world
-company · people · estate
-events · facts · access
-recipe · eval ground truth"]
-  W --> I["Artifact intents
-author · audience
-type · facts · time"]
-  I -- "propose → validate → accept" --> IR["ArtifactIR
-tables · sections
-claims · lineage"]
-  IR --> X["XLSX"]
-  IR --> D["DOCX · PDF"]
-  IR --> P["PPTX · Markdown"]
-  IR --> B["Jira · Confluence · ServiceNow"]
-  classDef accent stroke:#e85d1f,stroke-width:2px;
-  class IR accent`}
-/>
+After [installation](/synthetic-foundry/getting-started/installation/):
 
-The renderers never decide what is true. Each one reads a single resolved
-`ArtifactIR` and spells it in a different file grammar. That is why the PDF
-and the workbook agree without coordinating.
+```bash
+worldloom build --seed 8128 --incident --narrate --out ./corpus
+worldloom render ./corpus -f xlsx -f docx -f pptx -f pdf -f markdown
+worldloom validate ./corpus
+worldloom evaluate ./corpus --retriever both
+```
 
-<CardGrid>
-  <LinkCard
-    title="Quickstart"
-    description="Build, narrate, render, and validate one corpus in eight steps."
-    href="/synthetic-foundry/getting-started/quickstart/"
-  />
-  <LinkCard
-    title="Architecture"
-    description="Facts precede prose. How the pipeline enforces that order."
-    href="/synthetic-foundry/concepts/architecture/"
-  />
-  <LinkCard
-    title="Narration"
-    description="The request and accept handshake your agent writes prose through."
-    href="/synthetic-foundry/guides/narration/"
-  />
-</CardGrid>
+This path uses deterministic sample prose and no model service. The default
+example covers a retailer's month-end close and an incident. It is one episode,
+not a complete retailer's operating history.
+
+| Open | Inspect |
+|---|---|
+| `artifacts/` | Rendered documents and workbooks |
+| `facts.jsonl` | The facts those artifacts may claim |
+| `evals.jsonl` | Questions and their evidence bindings |
+| `generation-ledger.jsonl` | Accepted authored content used for replay |
+| `world.json` | Company state and recorded recipe |
+
+[Run the quickstart](/synthetic-foundry/getting-started/quickstart/) or inspect
+[the corpus format](/synthetic-foundry/reference/corpus-anatomy/).
+
+## Build for the failure you want to measure
+
+| Evaluation | Corpus ingredients |
+|---|---|
+| Cited retrieval | Supporting evidence, distractors, and answer bindings |
+| Document and spreadsheet extraction | Reconciled values across tables and narrative claims |
+| Temporal reasoning | Events, supersession, and knowledge cutoffs |
+| Business-system workflows | Connector records, entity relationships, and trace checks |
+| Realistic document reading | Agent-authored prose accepted against factual constraints |
+
+Choose business processes, time depth, entity scale, and artifact density
+separately. Increasing headcount alone does not create a broader company
+history. [Design an enterprise corpus](https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/enterprise-corpus.md).
+
+## Facts constrain the writer and the renderer
+
+The world establishes identities, amounts, events, and chronology. Artifact
+plans select facts and audiences. Writers propose prose. Renderers materialize
+the resolved representation into file formats.
+
+Validation checks declared relationships: a total reconciles, an author exists,
+a cited fact is known at the stated time, and an evaluation answer has evidence.
+Intentional defects can be recorded rather than silently treated as truth.
+
+A coherent corpus can still be easy to retrieve from, repetitive, or stylistically
+weak. Measure those properties separately. The deterministic narrator is a
+first-run and replay aid. [Use your agent as the writer](/synthetic-foundry/guides/narration/)
+when prose quality matters.
+
+## Continue by task
+
+| Next task | Guide |
+|---|---|
+| Design evaluation demands before generating evidence | [Eval-first generation](https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/eval-first.md) |
+| Generate from a Python application | [Python SDK](https://github.com/vamsiramakrishnan/synthetic-foundry/blob/main/docs/sdk.md) |
+| Add DOCX, XLSX, PDF, PPTX, or system bundles | [Rendering](/synthetic-foundry/guides/rendering/) |
+| Author grounded prose | [Narration](/synthetic-foundry/guides/narration/) |
+| Generate and qualify varied companies | [Fleets](/synthetic-foundry/guides/fleets/) |
+| Preserve a benchmark for replay | [Determinism](/synthetic-foundry/concepts/determinism/) |
+
+Rendering business-system bundles does not write to live tenants. Replay
+requires the recorded recipe, accepted ledger, and compatible code revision.
