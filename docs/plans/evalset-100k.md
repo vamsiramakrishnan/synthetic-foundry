@@ -112,9 +112,13 @@ Three properties of the set are exact, and a generator is held to them.
 - **A skeleton is a tool signature.** The 26,405 skeleton ids partition the
   rows by shape, per-node server, tool, entity, operation, modifiers, flags
   and edges, and no skeleton carries two signatures.
-- **`parallelizable` is derived.** It is true on exactly the rows carrying a
-  `parallel_ok` assertion, and the pairs named there are always
-  edge-independent in the expected DAG.
+- **`parallelizable` tracks the assertion exactly, but is not pure
+  independence.** It is true on exactly the rows carrying a `parallel_ok`
+  assertion, and no pair named there is ever reachable from its partner. It
+  does not follow from independence alone: 29,687 rows hold an independent
+  pair and only 25,656 are parallelizable, the 4,031-row gap being conditional
+  rows whose independent nodes are branch-exclusive, plus adversarial and
+  skill rows the family or invocation mode overrides.
 
 Two defects in the source set are worth naming because a generator must not
 reproduce them: 635 queries and 624 search payloads leak an unrendered
@@ -195,30 +199,63 @@ and derive metrics and difficulty from them.
 branch-group label carrying a structured predicate) and `flags`, all
 default-off and dropped from the canonical payload so existing design digests
 do not move. A shape catalogue at `src/worldloom/_data/evals/dag_shapes.json`
-names the 42 shapes as node-and-edge templates with a classifier that reads a
-DAG back to its name and a `compose` operator that joins two templates with
-one bridging edge. `eval_metrics` gains exact `metrics_for` (node count,
-depth as longest path, width as the largest level, `for_each` and conditional
-counts, connector count), `independent_pairs` (which yields `parallelizable`
-and the `parallel_ok` pairs), and `difficulty_for` implementing the closed
-form above from a versioned weight table. `compile_demands` learns the rule
-none of the analysis proposed and the corpus doctrine requires: a read,
+names 41 base shapes as templates, with `composed_skills` derived by a
+`compose` operator rather than authored, and a classifier that reads a DAG
+back to its name. The classifier's key is not nodes and edges alone: measured
+over the set, nodes plus edges plus modifiers leave 53,973 rows (54%) on a
+signature carrying more than one name, because `chain_2`, `missing_pipe` and
+`resolve_then_act` share one, as do `map_pipe` and the three `bulk_*` shapes.
+Adding node flags cuts the collision to 6,579 rows; adding the operation and
+the server partition cuts it to 296; the residue is `backlink_chain` against
+`chain_3`, separable only by a payload key (all 647 `backlink_chain` rows
+carry `to` on the final update and none of the 2,609 `chain_3` rows do). So
+the key is nodes, edges, modifiers, flags, operation, server partition and
+that one payload discriminator, and the catalogue says so.
+
+`eval_metrics` gains exact `metrics_for` (node count, depth as longest path,
+width as the largest level, `for_each` and conditional counts, connector
+count), `independent_pairs`, and `difficulty_for` implementing the closed form
+above from a versioned weight table. Note what `independent_pairs` does and
+does not settle. It yields the `parallel_ok` *pairs* exactly: no pair named
+anywhere in the set is reachable from its partner, and on 25,520 of the 25,656
+rows the named set is the full independent set. It does **not** yield
+`parallelizable`. 29,687 rows carry an edge-independent pair but only 25,656
+are parallelizable, so pure independence over-generates by 4,031 rows, of
+which 2,499 are tier-4 `conditional` rows inside this plan's own smallest
+end-to-end run. The rule is independence minus branch-exclusive conditional
+pairs, then overridden per adversarial family and per skill invocation mode.
+Feature 1 can close the conditional part and no more; the remaining 1,532 rows
+land with features 7 and 8, which is where the family and the invocation mode
+first exist.
+
+`compile_demands` learns the rule the corpus doctrine requires: a read,
 extract, comment or transition step with an entity compiles to an evidence
-demand carrying its aspect. Today `_from_steps` emits a mutation demand only
-for writes and a search demand only for search-like capabilities, so a single
-`get_page` design compiles to zero demands and is refused, which means the
-read roots of tiers 1 to 4, most of the 1,111 slots, are forced by nothing.
-Zero-step designs become legal for the `no_plan` rows.
+demand carrying its aspect. The motivation is not that such a design is
+refused today. It is not: `EvalSpec` requires at least one `WorldRequirement`
+and `_from_requirements` emits a demand per requirement, so every
+constructible spec already compiles to at least one demand and the
+"compiled to no world demands" refusal is unreachable through the public
+constructor. The motivation is narrower and still real: `_from_steps` derives
+a demand from a *write* step and from a search-like capability only, so a read
+step contributes nothing of its own and the aspect it needs is forced by
+whatever requirement the author happened to write instead. Zero-step designs
+become legal for the `no_plan` rows. Note that `no_plan` is not the only
+fixture-less shape: 4,453 rows carry a null fixture on every node, of which
+2,779 are tier-1 rows whose subject is created rather than found and 974 are
+`idempotent_create`. Only 700 have no nodes at all, so "has a fixture" is not
+a proxy for "has a plan".
 
 **Why now.** It is the root of the dependency graph: 27 of the other 42
 candidate features depend on it, and no producer of any tier can be written
 without it. The modifiers are the difference between a label and a plan.
 
-**Rows unlocked.** `resolve_then_act` and the other optional shapes, 9,471
-rows; the map and bulk shapes, 12,487 rows; conditional and idempotent
-create, 3,650 rows; the flags all 12,001 tier 5 rows need; `metrics` and
-`difficulty` on all 100,002; `parallelizable` and `parallel_ok` on 25,656;
-`no_plan` on 700.
+**Rows unlocked.** 9,471 rows carry an optional node, 12,487 carry a
+`for_each` node and 3,650 carry a conditional one (counted by modifier, not by
+shape name: the shape names are looser than the modifiers in each case, and
+`composed_skills` contributes some of every group). The flags all 12,001 tier
+5 rows need; `metrics` and `difficulty` on all 100,002; the `parallel_ok`
+pairs on 25,656 and the `parallelizable` flag on the 2,499 conditional rows
+this feature can settle; `no_plan` on 700.
 
 **Corpus driven.** `for_each` forces search witnesses with at least two
 matching records; conditional forces both branch targets to pre-exist and a
@@ -244,13 +281,14 @@ uniqueness the ambiguity twins later violate on purpose.
 
 **Acceptance.**
 
-- Round-trip the shape catalogue: classify all 42 templates back to their own
-  names.
+- Round-trip the shape catalogue: classify all 41 base templates back to their
+  own names, and refuse a DAG no template claims rather than defaulting.
 - `difficulty_for` reproduces the difficulty of a fixture sample of rows from
   each tier with zero residual, and the test states the formula.
-- `parallelizable` equals "has a `parallel_ok` assertion" on the sample.
-- A design whose only step is a read compiles to one evidence demand instead
-  of being refused.
+- The pairs `independent_pairs` yields match the `parallel_ok` pairs on the
+  sample, and a conditional row with two branch-exclusive independent nodes is
+  reported not parallelizable.
+- A read step compiles to an evidence demand carrying its aspect.
 - Existing design digests are unchanged: a test builds a pre-feature spec and
   asserts the digest.
 
@@ -266,14 +304,28 @@ writer, so every producer emits into the same wire format.
 **What.** A frozen pydantic `EvalRow` in a new `src/worldloom/evals/rows.py`
 mirroring the 21 keys: nodes carrying `n1..nN`, server, tool, entity,
 operation, fixture, the three modifiers, flags and payload; edges as
-`[from, to]` pairs; connectors and entities sorted; operations in
-first-appearance order; fixtures as the sorted unique set of node fixtures.
-The validator admits a server, tool, entity and operation only through
-`ConnectorDefinition.tool_for` and refuses a cycle. Beside it, an addressing
-layer mints `skeleton_id` as a content key over the canonical tool signature,
-`instance_id` over the skeleton with locale, vocabulary digest and fixture
-ids, `variant` as the surface ordinal, and the row id through
-`ids.format_id` with a per-tier minter so ids are contiguous per tier.
+`[from, to]` pairs. The four derived list fields follow the set's own rules,
+which are not the obvious ones and were measured rather than assumed:
+`ops` is the per-node operation list in node order with duplicates preserved,
+not a unique set; `connectors` and `entities` are the sorted unique servers
+and entities of the **non-optional** nodes only, so a resolve step's connector
+does not appear; `fixtures` is the sorted unique non-null fixture set over all
+nodes, optional ones included. The validator admits a server, tool, entity and
+operation only through `ConnectorDefinition.tool_for` and refuses a cycle.
+
+Beside it, an addressing layer mints `skeleton_id` as a content key over the
+canonical tool signature, `variant` as the surface ordinal, and the row id
+through `ids.format_id` with a per-tier minter so ids are contiguous per tier.
+`instance_id` needs care and an open decision. Skeleton, locale and fixture
+set do not separate the set's 58,866 instances: that key yields 51,371, so
+something further discriminates, and the evidence points at the drawn
+vocabulary binding rather than at the rendered payload. Worldloom should mint
+on skeleton, locale, vocabulary digest and fixture ids plus the lexicon draw
+ordinal, and state the count that key actually yields rather than inheriting
+58,866 as a target. The lint must then match whichever key is chosen; the
+source set's own 2,987 instances binding two payloads are a defect to refuse,
+not a shape to reproduce.
+
 `write_rows` streams row by row through the pinned newline and key order that
 `corpus.write_jsonl` already sets; `read_rows` streams back.
 
@@ -282,7 +334,8 @@ second means the producers are written against a checked schema rather than
 against each other.
 
 **Rows unlocked.** All 100,002, as the format. The lineage triple on all of
-them: 26,405 skeletons, 58,866 instances, 100,002 variants.
+them: 26,405 skeletons and 100,002 variants, with the instance count decided
+by the key this feature settles rather than inherited from the source set.
 
 **Corpus driven.** Every hash input names the world and vocabulary digest,
 which closes the present defect where an enterprise query id is identical
@@ -296,6 +349,17 @@ across two different worlds (`enterprise_queries.py:336`).
 - One assertion union, type-discriminated, built through the catalogue that
   feature 9 declares; until then, through a provisional constructor the
   catalogue replaces.
+- **The minting rules live here**, and they are distinct from the grading
+  rules feature 9 declares. A catalogue that says how `per_item` is *checked*
+  does not say which rows carry one, on which node, with what payload. This
+  feature owns that: 553,111 assertions across 13 types sit on the 78,001
+  first-run rows alone, and each type's rule is a function of the DAG (every
+  row gets `dag_acyclic`; every non-optional node gets `tool_called`; every
+  edge gets an `order`; a `for_each` node gets a `per_item`). Two payload
+  shapes are measured and must be reproduced rather than invented:
+  `per_item.count` is the symbolic string `len(items(source))` on all 14,645
+  occurrences and never an integer, and `artifact_created` has an optional-key
+  variant on 79,909 of its 80,570 occurrences.
 - A lint asserts the invariants the source set holds (no skeleton with two
   signatures) and refuses the ones it breaks (an instance id binding two
   payloads).
@@ -308,6 +372,9 @@ across two different worlds (`enterprise_queries.py:336`).
   error.
 - A row whose node names an inadmissible tool, entity or operation triple is
   refused with the triple named.
+- The four derived fields are re-derived from the nodes and compared: `ops`
+  keeps duplicates in node order, `connectors` and `entities` exclude optional
+  nodes, `fixtures` includes them.
 - Re-running the writer on the same rows produces identical bytes.
 - The lineage lint refuses a fabricated instance carrying two payloads.
 
@@ -319,10 +386,15 @@ across two different worlds (`enterprise_queries.py:336`).
 and native identifiers, and make the emulator interpret both.
 
 **What.** The largest single change, and one Generation bump rather than six.
-`tool.params` is a dead `dict[str, str]` declared for every tool and read by
-nothing; it becomes a typed payload block per key (type, required, option
-alias map, shape) authored in the six JSON files and enforced by
-`validate_payload` at `ConnectorEmulator.call` entry. A `derive` map per
+Two contracts are needed, and conflating them is the trap. The first is a
+**row-payload vocabulary** keyed by (tool, operation, entity), validated by the
+new payload compiler in `connector_eval_runtime`: that is what covers the 249
+tool and key pairs the rows carry. The second is the **call-signature**
+contract, `tool.params` today a dead `dict[str, str]` declared for every tool
+and read by nothing, which becomes a typed block per key (type, required,
+option alias map, shape) authored in the six JSON files and enforced at
+`ConnectorEmulator.call` entry. A row payload and a call argument are not the
+same object, and one contract cannot police both. A `derive` map per
 entity supplies the fields `required_on_create` demands from context (a Jira
 project from the parent key prefix, a Confluence space from the programme, a
 SharePoint parent from the site folder, a ServiceNow caller and type), which
@@ -337,17 +409,28 @@ materialise as real bytes with a changed hash. `_write_fields`, today an
 exclusion set that drops `state` and passes the rest as an opaque patch,
 becomes a compiler keyed by operation and entity: a state on an update tool
 becomes a workflow-field transition, a search phrase and aspect compile to a
-predicate, an aspect on a get compiles to a section or field lookup,
-`ref_override` resolves before the fixture identifier, and `to` and `links`
-resolve node ids to the records those nodes produced. `capability_notes`,
-declared and unused, gains a schema naming what a product cannot do.
+predicate, an aspect on a get compiles to a section or field lookup, and `to` and
+`links` resolve node ids to the records those nodes produced. `ref_override`
+is scoped the way feature 7 scopes it: it overrides the fixture identifier
+only on a node carrying the `nonexistent` flag. Everywhere else it is an
+anaphoric phrasing slot, not a reference, and treating it as one would break
+the 9,204 rows where it names the antecedent of an upstream result.
+`capability_notes`, declared and unused, gains a schema naming what a product
+cannot do. Two payload keys the ranking missed get contracts here too:
+`change` (713 occurrences, a prose instruction on `update_attachment`) and
+`what` (591, the target phrase on `move_file`). Both are natural-language
+slots rather than references, and both need saying so, or the payload compiler
+will try to resolve them.
 
 **Why now.** Without it the payloads are decoration. Half the create nodes
 fail, every search returns the whole entity pool, the transition rows can
 never satisfy `state_equals`, and no file fixture can hold an aspect.
 
 **Rows unlocked.** The 50,028 refused create nodes and the 80,570
-`artifact_created` assertions that depend on them; the 40,667 search nodes;
+`artifact_created` assertions that depend on them; the 40,667 search nodes,
+of which only 31,233 carry a `search` phrase, the other 9,434 being the bare
+resolve step whose payload is empty and whose fixture is the thing to be
+found;
 the 646 transition nodes and their 1,296 `state_equals` assertions; the
 96,377 aspect-bearing reads; 46,446 `field_or_section_updated`; 3,260
 `links_present`; 3,046 `lists_created_keys`; the 455 transform nodes that
@@ -586,8 +669,11 @@ compile node flags from state rather than trusting them.
 
 **What.** New requirement, demand and tactic kinds, each with an executor
 registered through `register_step` so every adversarial fixture replays from
-the recipe: an archived target with a live successor (the first producer of
-`Lifecycle.ARCHIVED`, which exists and nothing mints), a denied target
+the recipe: an archived target with a live successor, marked on the canonical record and
+not only as a lifecycle value: `connector_payload._shape_confluence` already
+reads an `archived` field to report a Confluence status and nothing anywhere
+produces it, so that is the seam this rides, and it makes the state readable
+without tripping the access check; a denied target
 carrying an access entry, a twin set minting two records on two connectors
 under one title, and the absence kind that is declared and dead today,
 executed as a reserved-name catalogue no witness may take and every
@@ -595,10 +681,14 @@ projection is checked against. An injected-content tactic mints a body
 carrying an instruction passage beside legitimate content and records the
 passage and the write it tries to induce as an intentional error, routed
 through the content model so the bytes behind a document fixture really
-contain it. Three emulator semantics follow: name resolution keeps every
-identifier per name and raises an ambiguous error with candidates when a
-title maps to more than one visible record (today the index is overwritten
-per name, so twins are structurally impossible); a validation rule may deny
+contain it. Three semantics follow, and the first is not an emulator change at all.
+Ambiguity resolution has to be a **pool-level lookup** over the shared fixture
+manifest feature 6 builds, because one emulator is one connector and all
+twelve twin pairs span two, so a multi-candidate index inside a single server
+would never see them. The emulator still keeps every identifier per name for
+the same-server case, where today the index is overwritten and even that is
+impossible, and raises an ambiguous error carrying candidates; the
+cross-connector answer comes from the pool. A validation rule may deny
 rather than merely refuse, so a locked field raises 403; and the idempotency
 window, which has no consumer, is honoured against the definition clock. The
 runtime then compiles flags from state: a fault-injected node passes faults
@@ -691,7 +781,11 @@ seam contract, `__init__._install`.
 
 - The registry is exported through the seam contract so the names and
   signatures cannot drift from the grader.
-- The shape of each skill comes from the classifier, never re-authored.
+- The shape of a single skill row comes from the classifier, never
+  re-authored; `composed_skills` is a provenance label the compose operator
+  sets and the classifier never returns. The classifier must read flags and
+  payload-key shape here too, or `archive-sweep`, `sprint-report` and
+  `vendor-register-update` collide with the bulk shapes.
 - Composition renumbers ids and adds exactly one bridging edge, which is the
   invariant all 2,352 composed rows hold.
 - The campaign runs against the shared pool, not one world per spec.
@@ -799,9 +893,14 @@ deliverable a deliverable rather than a library.
 **Rows unlocked.** The tier, category and shape distribution of all 100,002
 rows, and their delivery as one reproducible artifact with a proof per row.
 
-**Corpus driven.** The plan is the pool's demand list: summing the read and
-write roots over planned skeletons yields the per-namespace demand and the
-adversarial slot quotas before a single fixture is minted. The manifest binds
+**Corpus driven.** The plan is the pool's demand list, and it declares two
+things rather than one. Summing the read and write roots over planned
+skeletons yields the per-namespace *node* demand; on its own that sizes the
+pool at one slot per reference and misses the set's defining economy. The plan
+therefore also declares a per-namespace **slot budget** and a reuse policy,
+because the source set reuses one slot across up to 498 skeletons and shares
+959 of its 1,111 slots across locales. The adversarial slot quotas are fixed
+here too, before a single fixture is minted. The manifest binds
 the pool digest to the row set, so a pool change is a plan mismatch rather
 than silent drift.
 
@@ -852,13 +951,21 @@ proof from "it ran" into "it was checked". A session that wants a visible
 result early should build that subset first and treat 7, 8 and 9 as the
 second wave.
 
-Two ordering hazards are worth restating. The assertion catalogue in feature
-9 must land with its branches, because a catalogue without them converts a
-silent pass into an unhandled failure across tens of thousands of rows. And
-the fixture pool in feature 6 must consume the demand set compiled in feature
-1, not a hand-authored slot template; if it does not, the corpus is a
-parallel generator that happens to agree with the eval, and the agreement
-will not survive the first change to either side.
+Three ordering hazards are worth restating. The assertion catalogue in
+feature 9 must land with its branches, because a catalogue without them
+converts a silent pass into an unhandled failure across tens of thousands of
+rows. The fixture pool in feature 6 must consume the demand set compiled in
+feature 1, not a hand-authored slot template; if it does not, the corpus is a
+parallel generator that happens to agree with the eval, and the agreement will
+not survive the first change to either side.
+
+The third is a hole in the smallest end-to-end run as stated. Feature 10's
+proof gate promises to refuse a row failing a structural assertion, but two of
+the six structural types, `dag_acyclic` and `parallel_ok`, have no grader
+branch until feature 9, which that subset excludes. So the first run's proofs
+mean "every row executed" and not "every row was checked", and the manifest
+must say which. Either accept that narrower claim explicitly, or pull feature
+9 into the subset and accept the longer path to a first result.
 
 ## What is deliberately not here
 
@@ -887,14 +994,41 @@ recording because they were close.
 
 ## Verifying the numbers
 
-Every count in this file came from the set itself or from the code. Two
-properties are worth re-deriving before trusting a feature that depends on
-them, because they are the ones that would quietly invalidate a design:
+Every count in this file came from the set itself or from the code, and every
+feature was then read back adversarially against both, one reviewer per
+feature plus a completeness pass. That second reading changed the document in
+ten places and is the reason several claims below are narrower than they first
+were. What it overturned, so a reader knows which way the corrections ran:
+
+- **`parallelizable` is not derivable from DAG independence.** The first draft
+  said it was. Independence over-generates by 4,031 rows, 2,499 of them inside
+  the smallest end-to-end run.
+- **The 42 shape names are not 42 templates.** Over nodes, edges and modifiers
+  the set holds 307, and 54% of rows sit on a signature carrying more than one
+  name, so the classifier key had to grow flags, operation, the server
+  partition and one payload discriminator.
+- **A read-only design is not refused today.** The first draft justified the
+  new demand rule with a refusal that cannot happen, because `EvalSpec`
+  already requires a requirement. The rule is still right; the reason was not.
+- **The derived list fields do not follow the obvious rules.** Operations keep
+  duplicates in node order, and connectors and entities exclude optional
+  nodes.
+- **`instance_id` has no settled key.** Skeleton, locale and fixture set yield
+  51,371, not the set's 58,866, so the discriminator is still open and the
+  target count was dropped rather than assumed.
+- **Assertion minting had no owner.** Nine declares how assertions are graded,
+  which is not the same as which rows carry which; that now sits with two.
+- **The proof gate outruns the smallest run.** Two structural assertion types
+  have no grader until nine, which that subset excludes.
+
+Two properties survived unchanged and are worth re-deriving before trusting
+any feature that depends on them:
 
 - the difficulty closed form, which reproduces all 100,002 values with no
   residual, and
-- the rule that `parallelizable` is true on exactly the rows carrying a
-  `parallel_ok` assertion.
+- the rule that a row is parallelizable exactly when it carries a
+  `parallel_ok` assertion, whose named pairs are never reachable from one
+  another.
 
 Both are stated in "The target" in enough detail to recompute in a few lines
 against a copy of the set.
