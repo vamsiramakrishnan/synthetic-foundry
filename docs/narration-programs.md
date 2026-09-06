@@ -1,8 +1,8 @@
 # Narrate programs, not instances
 
-A prose program is authored once for an artifact type, section, voice and audience.
-It expands against each section's allowed facts. Expansion makes no model calls.
-The existing narrative validator still checks every expanded instance.
+Reuse an authored narration procedure while retaining fact scope, voice,
+audience, and validation for each requested section. The program describes how
+to propose prose; acceptance still determines whether it enters the corpus.
 
 ```python
 from worldloom import RetailWorld, MonthEndClose

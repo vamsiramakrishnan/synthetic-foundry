@@ -1,6 +1,11 @@
 # Artifact compiler
 
-Worldloom already has the correct semantic boundary:
+The artifact compiler resolves an intent into the structure a renderer reads:
+sections, tables, claims, and their provenance. Use this page when adding an
+artifact family or changing how a family maps to a format.
+
+The renderer must preserve resolved facts. It should not invent business
+state to fill a layout or make an inconsistent table look plausible.
 
 ```
 World → events → facts → ArtifactIntent → ArtifactIR → renderer
