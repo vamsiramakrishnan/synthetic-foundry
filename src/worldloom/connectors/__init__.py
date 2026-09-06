@@ -1,10 +1,10 @@
 """Canonical connector surface.
 
-New code imports connector contracts from ``worldloom.connectors``.  The
-historical top-level ``connector_*`` modules remain the implementation and
+New code imports connector contracts from ``worldloom.connectors``. The
+historical top-level ``connector_*`` modules remain implementation and
 compatibility paths for this release; moving their bodies underneath this
-package is deliberately a later mechanical step, after consumers have crossed
-this seam.
+package is deliberately a later mechanical step, after consumers cross this
+seam.
 """
 
 from ..connector_definition import (
@@ -27,6 +27,7 @@ from ..connector_emulator import ConnectorEmulator, ConnectorError, ConnectorSpa
 from ..connector_eval_runtime import EvalRuntimeResult, run_eval_row
 from ..connector_query import compile_native, parse_native
 from ..connector_trace import executed_dag, grade_trace, shape_assertions
+from .enterprise import EnterpriseConnectorRuntime
 
 __worldloom_seam__ = {
     "name": "connectors",
@@ -38,6 +39,7 @@ __worldloom_seam__ = {
         "worldloom.connector_eval_runtime",
         "worldloom.connector_query",
         "worldloom.connector_trace",
+        "worldloom.enterprise_simulator",
     ],
 }
 
@@ -77,6 +79,7 @@ __all__ = [
     "ConnectorToolDefinition",
     "ConnectorValidationRule",
     "ConnectorWorkflow",
+    "EnterpriseConnectorRuntime",
     "EvalRuntimeResult",
     "builtin_connector_definitions",
     "compile_native",
