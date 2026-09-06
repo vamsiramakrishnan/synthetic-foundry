@@ -32,6 +32,13 @@ __worldloom_seam__ = {
     "compatibility_imports": [],
 }
 
+
+def seam_contract() -> dict[str, object]:
+    """Describe the live default stage graph without executing a build."""
+
+    return standard_pipeline("2000-01").seam_manifest()
+
+
 __all__ = [
     "PIPELINE_SCHEMA",
     "Pipeline",
@@ -46,6 +53,7 @@ __all__ = [
     "export_stage",
     "manifest_for",
     "plan_stage",
+    "seam_contract",
     "standard_pipeline",
     "validate_stage",
     "world_stage",
