@@ -142,9 +142,9 @@ def _materialize_pptx(
         )
 
         is_evidence = ppt_locator is not None and ppt_locator.slide == ordinal
-        if is_evidence and ppt_locator.element in {"text", "table", "hidden_slide"}:
+        if ppt_locator is not None and is_evidence and ppt_locator.element in {"text", "table", "hidden_slide"}:
             body.text_frame.text = evidence_text
-        if is_evidence and ppt_locator.element == "hidden_slide":
+        if ppt_locator is not None and is_evidence and ppt_locator.element == "hidden_slide":
             slide._element.set("show", "0")
         elif hidden_budget > 0 and ordinal > slides - hidden_budget:
             slide._element.set("show", "0")
@@ -183,7 +183,7 @@ def _materialize_pptx(
             )
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    presentation.save(out)
+    presentation.save(str(out))
     _pad_ooxml(out, plan.target_file_size_bytes, seed=f"pptx:{plan.artifact_id}")
     return ArtifactShapeMaterialization(
         artifact_id=plan.artifact_id,
@@ -236,7 +236,7 @@ def _materialize_docx(
             paragraph.runs[-1].add_break(WD_BREAK.PAGE)
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    document.save(out)
+    document.save(str(out))
     _pad_ooxml(out, plan.target_file_size_bytes, seed=f"docx:{plan.artifact_id}")
     return ArtifactShapeMaterialization(
         artifact_id=plan.artifact_id,
