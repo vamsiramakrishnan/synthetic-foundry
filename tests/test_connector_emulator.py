@@ -169,3 +169,40 @@ def test_outlook_and_teams_use_the_same_engine() -> None:
 
     assert outlook.call("list_messages")["items"][0]["subject"] == "Close review"
     assert teams.call("list_channel_messages")["items"][0]["channelIdentity"]["channelId"] == "close"
+
+
+def test_every_identity_a_shaped_payload_hands_out_resolves_back() -> None:
+    """A search item's identity, under whatever key the product uses, is a handle.
+
+    The first fix indexed the shaped ``id`` only, which resolved Jira and left
+    ServiceNow refusing its own ``sys_id``. Checked over every connector that
+    projects records, for every identity key ``shape_payload`` emits.
+    """
+    from worldloom.connector_data import builtin_projections
+    from worldloom.connector_definition import builtin_connector_definitions
+    from worldloom.connector_payload import shape_payload
+    from worldloom.retail import RetailWorld
+    from worldloom.scenarios import MonthEndClose
+
+    world = RetailWorld(seed=8128).build().run(
+        MonthEndClose(period="2026-03", include_operational_incident=True)
+    )
+    identity_keys = ("id", "Id", "sys_id", "key", "number", "ts", "ari")
+    checked: set[tuple[str, str]] = set()
+    for name, definition in sorted(builtin_connector_definitions().items()):
+        try:
+            records = builtin_projections().project(name, world)
+        except ValueError:
+            continue
+        if not records:
+            continue
+        emulator = ConnectorEmulator(definition, records)
+        for record in records:
+            shaped = shape_payload(definition, emulator.records[record.id])
+            for key in identity_keys:
+                value = shaped.get(key)
+                if isinstance(value, (str, int)) and not isinstance(value, bool):
+                    assert emulator.resolve(value) == record.id, (name, key, value)
+                    checked.add((name, key))
+    assert ("servicenow", "sys_id") in checked
+    assert ("jira", "id") in checked and ("jira", "key") in checked

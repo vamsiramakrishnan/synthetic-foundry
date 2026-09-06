@@ -24,6 +24,11 @@ from .connector_query import parse_native
 from .ids import content_key
 from .predicates import FieldPredicate, Predicate, PredicateOp, evaluate
 
+#: The keys a product-shaped payload may carry its identity under. Mirrors the
+#: identity set ``connector_payload.shape_payload`` preserves under projection,
+#: minus the non-scalar ones (``attributes``, ``type``) that are not handles.
+_SHAPED_IDENTITY_KEYS = ("id", "Id", "sys_id", "key", "number", "ts", "ari")
+
 
 class ConnectorError(RuntimeError):
     def __init__(self, code: int, message: str, kind: str) -> None:
@@ -234,9 +239,17 @@ class ConnectorEmulator:
         for key in ("ident", "external_id", "name", "title"):
             if record.get(key) not in (None, ""):
                 self.by_ident[str(record[key])] = fid
-        native = shape_payload(self.definition, record).get("id")
-        if native not in (None, ""):
-            self.by_ident.setdefault(str(native), fid)
+        # Every identity a shaped payload can carry, not only ``id``: ServiceNow
+        # answers with ``sys_id`` and ``number``, Salesforce with ``Id``, Slack
+        # with ``ts``, Jira with ``key`` beside ``id``. Indexing ``id`` alone
+        # left ServiceNow exactly where it was, ``search_records`` handing out
+        # a ``sys_id`` that ``get_record`` refused; a review caught it on the
+        # first fix.
+        shaped = shape_payload(self.definition, record)
+        for key in _SHAPED_IDENTITY_KEYS:
+            native = shaped.get(key)
+            if isinstance(native, (str, int)) and not isinstance(native, bool) and native != "":
+                self.by_ident.setdefault(str(native), fid)
 
     def resolve(self, reference: Any) -> str:
         raw = str(reference)
