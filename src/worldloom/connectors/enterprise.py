@@ -1,6 +1,6 @@
 """Compatibility execution of enterprise eval fixtures on ConnectorEmulator.
 
-The old enterprise simulator carried its own generic CRUD model.  This adapter
+The old enterprise simulator carried its own generic CRUD model. This adapter
 keeps only what is specific to those historical eval fixtures: translating their
 generic DAG arguments and compiling deliberate failure-state overlays. Product
 semantics, payloads, workflows, ACL checks, idempotency and traces belong to the
@@ -20,21 +20,6 @@ from ..enterprise_corpus import EnterpriseCorpus, QueryFixture, StateOverride
 from ..ids import content_key
 
 _READ_OPERATIONS = frozenset({"search", "get", "read", "extract", "download"})
-_WRITE_OPERATIONS = frozenset(
-    {
-        "create",
-        "update",
-        "transition",
-        "comment",
-        "delete",
-        "transform",
-        "send",
-        "post",
-        "reply",
-        "forward",
-        "upload",
-    }
-)
 _MODEL_OPERATIONS = frozenset(
     {
         "transform",
@@ -61,16 +46,32 @@ _STABLE_ID_FIELDS = (
 )
 
 
-def _override_rows(fixture: QueryFixture, connector: str) -> tuple[StateOverride, ...]:
+def _override_rows(
+    fixture: QueryFixture, connector: str
+) -> tuple[StateOverride, ...]:
     return tuple(item for item in fixture.overrides if item.connector == connector)
-
-
-def _internal_id(record: Mapping[str, Any]) -> str:
-    return str(record.get("fid") or record.get("id"))
 
 
 def _record_fact_ids(record: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(str(value) for value in record.get("fact_ids", ()))
+
+
+def _emulator_record(record: ConnectorRecord) -> dict[str, Any]:
+    """Project the corpus record into ConnectorEmulator's one canonical shape."""
+
+    return {
+        **deepcopy(record.fields),
+        "fid": record.id,
+        "server": record.connector,
+        "entity": record.entity,
+        "ident": record.external_id,
+        "external_id": record.external_id,
+        "name": record.title,
+        "title": record.title,
+        "fact_ids": list(record.fact_ids),
+        "event_ids": list(record.event_ids),
+        "source_artifact_ids": list(record.source_artifact_ids),
+    }
 
 
 class EnterpriseConnectorRuntime:
@@ -81,7 +82,10 @@ class EnterpriseConnectorRuntime:
         self._source: dict[str, tuple[ConnectorRecord, ...]] = {}
         for record in corpus.connector_data.records:
             self._source.setdefault(record.connector, ())
-            self._source[record.connector] = (*self._source[record.connector], record)
+            self._source[record.connector] = (
+                *self._source[record.connector],
+                record,
+            )
         self._queries: dict[tuple[str, str], ConnectorEmulator] = {}
         self._latest: tuple[str, str] | None = None
 
@@ -125,7 +129,9 @@ class EnterpriseConnectorRuntime:
                     },
                     fact_ids=tuple(record.get("fact_ids", ())),
                     event_ids=tuple(record.get("event_ids", ())),
-                    source_artifact_ids=tuple(record.get("source_artifact_ids", ())),
+                    source_artifact_ids=tuple(
+                        record.get("source_artifact_ids", ())
+                    ),
                 )
         return tuple(record for _, record in sorted(materialized.items()))
 
@@ -138,7 +144,6 @@ class EnterpriseConnectorRuntime:
         try:
             return definition.canonical_tool(requested)
         except KeyError:
-            legacy = requested.removeprefix("read_").removeprefix("get_")
             if requested.startswith(("read_", "get_")):
                 operation = "read"
             elif requested.startswith(("create_", "upload_")):
@@ -150,7 +155,7 @@ class EnterpriseConnectorRuntime:
             elif requested.startswith(("search_", "list_")):
                 operation = "search"
             else:
-                operation = legacy
+                operation = requested
             return definition.tool_for(entity, operation)
 
     @staticmethod
@@ -165,7 +170,11 @@ class EnterpriseConnectorRuntime:
         if len(members) == 1:
             return members[0]
         mutation = generation.get("mutation")
-        output_format = mutation.get("output_format") if isinstance(mutation, Mapping) else None
+        output_format = (
+            mutation.get("output_format")
+            if isinstance(mutation, Mapping)
+            else None
+        )
         if isinstance(output_format, str) and output_format in members:
             return output_format
         for dependency in dependencies.values():
@@ -180,7 +189,10 @@ class EnterpriseConnectorRuntime:
                 return actual
         raise ConnectorError(
             400,
-            f"legacy entity alias {entity!r} needs one concrete member from {sorted(members)}",
+            (
+                f"legacy entity alias {entity!r} needs one concrete member "
+                f"from {sorted(members)}"
+            ),
             "validation",
         )
 
@@ -197,29 +209,38 @@ class EnterpriseConnectorRuntime:
             return existing
 
         definition = load_connector_definition(connector)
-        records = [record.model_dump(mode="python") for record in self._source.get(connector, ())]
+        records = [
+            _emulator_record(record) for record in self._source.get(connector, ())
+        ]
         overrides = _override_rows(fixture, connector)
         for override in overrides:
             if override.record_id is None:
                 continue
             target = next(
-                (record for record in records if record.get("id") == override.record_id),
+                (
+                    record
+                    for record in records
+                    if record.get("fid") == override.record_id
+                ),
                 None,
             )
             if target is None:
                 continue
-            fields = target.setdefault("fields", {})
             if override.kind == "stale_source":
-                fields["version"] = max(0, int(fields.get("version", 1)) - 1)
+                target["version"] = max(0, int(target.get("version", 1)) - 1)
             elif override.kind == "missing_stable_id":
                 for field in _STABLE_ID_FIELDS:
-                    fields.pop(field, None)
+                    target.pop(field, None)
             elif override.kind == "ambiguous_join":
                 duplicate = deepcopy(target)
-                duplicate["id"] = content_key(
-                    "ambiguous-enterprise-record", fixture.query_id, override.record_id
+                duplicate_id = content_key(
+                    "ambiguous-enterprise-record",
+                    fixture.query_id,
+                    override.record_id,
                 )
-                duplicate["external_id"] = duplicate["id"]
+                duplicate["fid"] = duplicate_id
+                duplicate["ident"] = duplicate_id
+                duplicate["external_id"] = duplicate_id
                 records.append(duplicate)
 
         faults: dict[str, Sequence[str]] = {}
@@ -229,7 +250,10 @@ class EnterpriseConnectorRuntime:
                 if override.record_id is not None:
                     acl[override.record_id] = {"denied": True}
                 else:
-                    faults["*"] = (*faults.get("*", ()), "permission_denied")
+                    faults["*"] = (
+                        *faults.get("*", ()),
+                        "permission_denied",
+                    )
             elif override.kind in {"version_conflict", "partial_write"}:
                 mutation = generation.get("mutation")
                 if not isinstance(mutation, Mapping):
@@ -239,7 +263,9 @@ class EnterpriseConnectorRuntime:
                 if mutation_operation == "readback":
                     mutation_operation = "read"
                 try:
-                    tool = definition.tool_for(mutation_entity, mutation_operation)
+                    tool = definition.tool_for(
+                        mutation_entity, mutation_operation
+                    )
                 except KeyError:
                     tool = "*"
                 faults[tool] = (*faults.get(tool, ()), override.kind)
@@ -291,7 +317,11 @@ class EnterpriseConnectorRuntime:
                 for fact in _record_fact_ids(emulator.records[fid])
             }
         )
-        records = [deepcopy(emulator.records[fid]) for fid in span.reads if fid in emulator.records]
+        records = [
+            deepcopy(emulator.records[fid])
+            for fid in span.reads
+            if fid in emulator.records
+        ]
         return {
             "succeeded": span.error is None,
             "status": status,
@@ -300,6 +330,36 @@ class EnterpriseConnectorRuntime:
             "records": records,
             "payload": payload,
         }
+
+    @staticmethod
+    def _create_fields(
+        definition: ConnectorDefinition,
+        concrete: str,
+        fixture: QueryFixture,
+    ) -> dict[str, Any]:
+        fields: dict[str, Any] = {
+            "last_query_id": fixture.query_id,
+            "version": 1,
+            "body": f"Generated by {fixture.query_id}",
+            "text": f"Generated by {fixture.query_id}",
+            "subject": f"Generated by {fixture.query_id}",
+        }
+        already_provided = {
+            "entity",
+            "name",
+            "title",
+            "summary",
+            "Name",
+            "Subject",
+            "short_description",
+            "parent",
+            "parents",
+            "issuetype",
+        }
+        for required in definition.entities[concrete].required_on_create:
+            if required not in fields and required not in already_provided:
+                fields[required] = f"worldloom-{required}"
+        return fields
 
     async def invoke(
         self, tool_name: str, arguments: Mapping[str, Any]
@@ -319,9 +379,13 @@ class EnterpriseConnectorRuntime:
         definition = emulator.definition
         entity = str(arguments.get("entity") or "record")
         dependencies = arguments.get("dependencies")
-        dependency_map = dependencies if isinstance(dependencies, Mapping) else {}
+        dependency_map = (
+            dependencies if isinstance(dependencies, Mapping) else {}
+        )
         try:
-            canonical_tool = self._definition_tool(definition, requested_tool, entity)
+            canonical_tool = self._definition_tool(
+                definition, requested_tool, entity
+            )
             tool = definition.tool(canonical_tool)
             concrete = self._concrete_entity(
                 definition,
@@ -338,12 +402,7 @@ class EnterpriseConnectorRuntime:
                     canonical_tool,
                     entity=concrete,
                     name=f"Generated {concrete} for {fixture.query_id}",
-                    fields={
-                        "last_query_id": fixture.query_id,
-                        "version": 1,
-                        "body": f"Generated by {fixture.query_id}",
-                        "text": f"Generated by {fixture.query_id}",
-                    },
+                    fields=self._create_fields(definition, concrete, fixture),
                     parent="worldloom-eval",
                     **common,
                 )
@@ -357,7 +416,12 @@ class EnterpriseConnectorRuntime:
                     )
                 else:
                     if target is None:
-                        return {"succeeded": True, "status": 200, "records": [], "fact_ids": []}
+                        return {
+                            "succeeded": True,
+                            "status": 200,
+                            "records": [],
+                            "fact_ids": [],
+                        }
                     payload = emulator.call(canonical_tool, id=target, **common)
                 return self._response(emulator, payload)
             if target is None:
@@ -372,7 +436,11 @@ class EnterpriseConnectorRuntime:
             elif tool.op == "transition":
                 workflow = definition.entities[concrete].workflow
                 if workflow is None or len(workflow.states) < 2:
-                    raise ConnectorError(400, "No legal transition target", "bad_transition")
+                    raise ConnectorError(
+                        400,
+                        "No legal transition target",
+                        "bad_transition",
+                    )
                 payload = emulator.call(
                     canonical_tool,
                     id=target,
@@ -389,14 +457,16 @@ class EnterpriseConnectorRuntime:
             elif tool.op == "delete":
                 payload = emulator.call(canonical_tool, id=target, **common)
             elif tool.op in {"transform", "forward"}:
+                mutation = generation_map.get("mutation")
+                output_format = (
+                    mutation.get("output_format")
+                    if isinstance(mutation, Mapping)
+                    else None
+                )
                 payload = emulator.call(
                     canonical_tool,
                     id=target,
-                    format=(
-                        generation_map.get("mutation", {}).get("output_format")
-                        if isinstance(generation_map.get("mutation"), Mapping)
-                        else None
-                    ),
+                    format=output_format,
                     dest="worldloom-eval",
                     **common,
                 )
