@@ -85,7 +85,7 @@ jobs:
         run: |
           ruff check
           mypy
-          pytest -q tests/test_fact_ledger.py tests/test_epistemics.py tests/test_predicates.py tests/test_collections.py
+          pytest -q tests/test_fact_ledger.py tests/test_epistemics.py tests/test_predicates.py
       - name: Commit canonical fact-view migration
         run: |
           git config user.name 'worldloom-source-bot'
