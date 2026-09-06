@@ -25,6 +25,13 @@ from .core import (
     manifest_for,
 )
 
+__worldloom_seam__ = {
+    "name": "pipeline",
+    "purpose": "Typed orchestration shared by SDK callers, CLI commands, and harness skills.",
+    "canonical_import": "worldloom.pipeline",
+    "compatibility_imports": [],
+}
+
 __all__ = [
     "PIPELINE_SCHEMA",
     "Pipeline",
