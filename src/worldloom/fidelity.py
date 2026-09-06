@@ -151,29 +151,54 @@ def _as_float(value: Any) -> float | None:
 
 
 def infer_kinds(
-    rows: Sequence[Mapping[str, Any]], *, overrides: Mapping[str, Kind] | None = None,
+    reference: Sequence[Mapping[str, Any]],
+    synthetic: Sequence[Mapping[str, Any]] = (),
+    *,
+    overrides: Mapping[str, Kind] | None = None,
 ) -> dict[str, Kind]:
-    """Numeric if every present value parses as a number, else categorical.
+    """Numeric if every present *reference* value parses as a number, else categorical.
+
+    From the reference alone, deliberately. Inferring over both tables let one
+    malformed synthetic value — a stray ``"n/a"`` in an amount column — flip
+    the whole column to categorical and *remove* the KS, Wasserstein and mean
+    readings for exactly the broken output they exist to expose (Codex review,
+    PR #40). The reference says what a column is; the synthetic side is judged
+    against that, and a value that does not parse is reported as malformed
+    rather than allowed to redefine the column. A column only the synthetic
+    side has is typed from the synthetic side, being all there is.
 
     A column of ids that happen to be numeric is the classic misread, which is
-    what ``overrides`` is for — and why the CLI's ``--categorical`` exists.
-    Sorted by name so the report's column order is the schema's, not the file's.
+    what ``overrides`` is for — and why the CLI's ``--categorical`` and
+    ``--numeric`` exist. Sorted by name so the report's column order is the
+    schema's, not the file's.
     """
     overrides = dict(overrides or {})
     columns: set[str] = set()
-    for row in rows:
+    for row in reference:
         columns.update(row)
+    synthetic_only: set[str] = set()
+    for row in synthetic:
+        synthetic_only.update(name for name in row if name not in columns)
     kinds: dict[str, Kind] = {}
-    for column in sorted(columns):
+    for column in sorted(columns | synthetic_only):
         if column in overrides:
             kinds[column] = overrides[column]
             continue
-        present = [row.get(column) for row in rows if row.get(column) not in (None, "")]
+        source = synthetic if column in synthetic_only else reference
+        present = [row.get(column) for row in source if row.get(column) not in (None, "")]
         if present and all(_as_float(value) is not None for value in present):
             kinds[column] = "numeric"
         else:
             kinds[column] = "categorical"
     return kinds
+
+
+def _malformed_rate(rows: Sequence[Mapping[str, Any]], column: str) -> float:
+    """The share of present values in a numeric column that do not parse."""
+    present = [row.get(column) for row in rows if row.get(column) not in (None, "")]
+    if not present:
+        return 0.0
+    return round(sum(1 for value in present if _as_float(value) is None) / len(present), 4)
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +299,7 @@ def univariate(
             a, b = _numeric(real, column), _numeric(synthetic, column)
             entry.update({
                 "n_real": len(a), "n_synthetic": len(b),
+                "malformed_synthetic": _malformed_rate(synthetic, column),
                 "ks": _round(ks_statistic(a, b)),
                 "wasserstein": _round(wasserstein_1(a, b)),
                 "mean_real": _round(float(np.mean(a))) if len(a) else None,
@@ -331,12 +357,17 @@ def pairwise(
     out: dict[str, Any] = {"numeric_pairs": 0, "categorical_pairs": 0}
 
     if len(numeric) >= 2:
-        a, b = _numeric_matrix(real, numeric), _numeric_matrix(synthetic, numeric)
         diffs: list[tuple[float, str, str]] = []
         for i in range(len(numeric)):
             for j in range(i + 1, len(numeric)):
-                ra = _pearson(a[:, i], a[:, j]) if len(a) else float("nan")
-                rb = _pearson(b[:, i], b[:, j]) if len(b) else float("nan")
+                # Complete cases *for this pair*, not for every numeric column at
+                # once: a sparse column elsewhere in the table would otherwise
+                # drop rows from — and could empty — a pair it has nothing to
+                # do with (Codex review, PR #40).
+                pair = [numeric[i], numeric[j]]
+                a, b = _numeric_matrix(real, pair), _numeric_matrix(synthetic, pair)
+                ra = _pearson(a[:, 0], a[:, 1]) if len(a) else float("nan")
+                rb = _pearson(b[:, 0], b[:, 1]) if len(b) else float("nan")
                 if not (math.isnan(ra) or math.isnan(rb)):
                     diffs.append((abs(ra - rb), numeric[i], numeric[j]))
         if diffs:
@@ -514,10 +545,12 @@ class FidelityReport:
         lines.append("univariate")
         for column, entry in self.columns.items():
             if entry["kind"] == "numeric":
+                malformed = entry.get("malformed_synthetic", 0.0)
                 lines.append(
                     f"  {column:<28} numeric  KS {entry['ks']!s:<8} W1 {entry['wasserstein']!s:<12}"
                     f" mean {entry['mean_real']} → {entry['mean_synthetic']}"
                     f"  missing {entry['missing_real']} → {entry['missing_synthetic']}"
+                    + (f"  MALFORMED {malformed}" if malformed else "")
                 )
             else:
                 lines.append(
@@ -563,7 +596,7 @@ def compute(
     """The whole vector for two row sets. ``kinds`` overrides inference per column."""
     if not real or not synthetic:
         raise ValueError("fidelity needs rows on both sides")
-    resolved = infer_kinds(list(real) + list(synthetic), overrides=kinds)
+    resolved = infer_kinds(real, synthetic, overrides=kinds)
     for column in slices:
         if column not in resolved:
             raise ValueError(f"slice column {column!r} is in neither table")

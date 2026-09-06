@@ -31,8 +31,10 @@ reproducibility even when no API moved.
   from versioned rules in `data/surface/rules.json`, every value a pure function
   of `seed / rules version / entity type / entity id / field`. Checksums are the
   issuing bodies' own (ABN, USt-IdNr, Austrian UID, UK VAT, NZBN, IBAN) and are
-  tested against their published examples. `master_data` takes `"identifiers": 1`;
-  an un-opted register writes the same bytes it always did.
+  tested against their published examples. `master_data` takes `"identifiers": 1`
+  — the value names the rules version, every version is kept in the data file,
+  and a corpus replays under the one it recorded; an un-opted register writes
+  the same bytes it always did.
 - **`causal.py` / `build --causal` / `worldloom causal check|trace`** — a DAG
   of named quantities with linear effects, dated interventions (`do()`) and
   drives that make a node's value an imperfection kind's budget. Distinct from

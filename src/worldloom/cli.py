@@ -5927,6 +5927,10 @@ def fidelity(
         None, "--categorical",
         help="Treat this column as categorical even though every value parses as a number — an id, a code. Repeatable.",
     ),
+    numeric: list[str] = typer.Option(
+        None, "--numeric",
+        help="Treat this column as numeric even though the reference carries a value that does not parse. Repeatable.",
+    ),
     ignore: list[str] = typer.Option(None, "--ignore", help="Leave this column out entirely. Repeatable."),
     slices: list[str] = typer.Option(
         None, "--slices",
@@ -5952,6 +5956,7 @@ def fidelity(
         real_rows = fidelity_module.load_rows(reference, table=table)
         synthetic_rows = fidelity_module.load_rows(synthetic, table=table)
         kinds: dict[str, Any] = {name: "categorical" for name in (categorical or ())}
+        kinds.update({name: "numeric" for name in (numeric or ())})
         kinds.update({name: "ignore" for name in (ignore or ())})
         report = fidelity_module.compute(
             real_rows, synthetic_rows, kinds=kinds, slices=tuple(slices or ()), seed=seed,

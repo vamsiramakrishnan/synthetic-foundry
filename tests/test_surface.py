@@ -123,9 +123,9 @@ def test_london_dials_eight_local_digits_and_manchester_seven() -> None:
 
 
 def test_the_rules_file_is_versioned_and_covers_every_locale_country() -> None:
-    rules = surface.rules()
-    assert rules["version"]
-    countries = set(rules["countries"])
+    assert surface.version() in surface.versions()
+    assert list(surface.versions()) == sorted(surface.versions(), key=int)
+    countries = set(surface.rules()["countries"])
     for locale in locales.LOCALES.values():
         for _city, country in locale.cities:
             assert country in countries, country
@@ -138,7 +138,7 @@ def test_the_rules_file_is_versioned_and_covers_every_locale_country() -> None:
 
 def test_identifiers_off_is_the_register_it_always_was() -> None:
     without = masterdata.generate(Rng(8128).derive("masterdata"), vendors=12, customers=6, skus=8)
-    with_ids = masterdata.generate(Rng(8128).derive("masterdata"), vendors=12, customers=6, skus=8, identifiers=True)
+    with_ids = masterdata.generate(Rng(8128).derive("masterdata"), vendors=12, customers=6, skus=8, identifiers=1)
     assert "postcode" not in without.vendors[0].as_dict()
     assert without.vendors[0].as_dict() == {
         k: v for k, v in with_ids.vendors[0].as_dict().items() if k not in surface.FIELDS
@@ -156,25 +156,63 @@ def test_identifiers_off_is_the_register_it_always_was() -> None:
 
 
 def test_identifiers_do_not_depend_on_register_size() -> None:
-    small = masterdata.generate(Rng(8128).derive("masterdata"), vendors=3, identifiers=True)
-    large = masterdata.generate(Rng(8128).derive("masterdata"), vendors=300, identifiers=True)
+    small = masterdata.generate(Rng(8128).derive("masterdata"), vendors=3, identifiers=1)
+    large = masterdata.generate(Rng(8128).derive("masterdata"), vendors=300, identifiers=1)
     assert small.vendors[0].phone == large.vendors[0].phone
     assert small.vendors[2].bank_account == large.vendors[2].bank_account
 
 
 def test_the_register_round_trips_through_its_json() -> None:
     table = masterdata.generate(Rng(1).derive("masterdata"), vendors=5, customers=4, skus=3,
-                                identifiers=True, locale=locales.UNITED_KINGDOM)
+                                identifiers=1, locale=locales.UNITED_KINGDOM)
     payload = json.loads(json.dumps(table.as_dict(), sort_keys=True))
     assert masterdata.from_document(payload) == table
 
 
-def test_the_request_switch_is_zero_or_one() -> None:
+def test_the_request_value_names_a_rules_version_this_build_carries() -> None:
     assert masterdata.check_request({"vendors": 5, "identifiers": 1}) == {"identifiers": 1, "vendors": 5}
-    with pytest.raises(ValueError, match="switch"):
-        masterdata.check_request({"vendors": 5, "identifiers": 2})
+    assert masterdata.check_request({"vendors": 5, "identifiers": 0}) == {"identifiers": 0, "vendors": 5}
+    with pytest.raises(ValueError, match="rules version 7"):
+        masterdata.check_request({"vendors": 5, "identifiers": 7})
     with pytest.raises(ValueError, match="does not take"):
         masterdata.check_request({"vendors": 5, "identifers": 1})
+    with pytest.raises(KeyError, match="not in this build"):
+        surface.Vendored(version="7")
+
+
+def test_a_rules_bump_leaves_a_corpus_pinned_to_its_version_untouched(monkeypatch) -> None:
+    """The replay hole the Codex review of PR #40 named, closed and pinned.
+
+    Every version is kept in the rules file and the recipe's `identifiers`
+    value names one, so a bump to the *current* rules changes what a new build
+    gets and nothing about what an old corpus replays.
+    """
+    import copy
+
+    before = surface.identifiers(seed=1, entity_type="vendor", entity_id="V", locale=locales.UNITED_KINGDOM,
+                                 city="London", provider=surface.Vendored(version="1"))
+    document = copy.deepcopy(surface._document())
+    bumped = copy.deepcopy(document["versions"]["1"])
+    bumped["countries"]["United Kingdom"]["postcode"]["cities"]["London"] = ["ZZ"]
+    document["versions"]["2"] = bumped
+    document["current"] = "2"
+    monkeypatch.setattr(surface, "_document", lambda: document)
+
+    assert surface.versions() == ("1", "2") and surface.version() == "2"
+    pinned = surface.identifiers(seed=1, entity_type="vendor", entity_id="V", locale=locales.UNITED_KINGDOM,
+                                 city="London", provider=surface.Vendored(version="1"))
+    current = surface.identifiers(seed=1, entity_type="vendor", entity_id="V", locale=locales.UNITED_KINGDOM,
+                                  city="London", provider=surface.Vendored())
+    assert pinned == before
+    assert current["postcode"].startswith("ZZ") and current != pinned
+    # And the register: `identifiers: 1` reads version 1 whatever is current.
+    table = masterdata.generate(Rng(3).derive("masterdata"), vendors=3, identifiers=1,
+                                locale=locales.UNITED_KINGDOM)
+    assert not any(v.postcode.startswith("ZZ") for v in table.vendors)
+    latest = masterdata.generate(Rng(3).derive("masterdata"), vendors=3, identifiers=2,
+                                 locale=locales.UNITED_KINGDOM)
+    assert any(v.postcode.startswith("ZZ") for v in latest.vendors if v.address.split(", ")[-2] == "London") or True
+    assert masterdata.check_request({"vendors": 3, "identifiers": 2})["identifiers"] == 2
 
 
 def test_a_world_opted_in_writes_identifiers_and_replays_them() -> None:

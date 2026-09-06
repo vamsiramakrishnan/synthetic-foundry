@@ -82,6 +82,39 @@ def test_slices_report_the_univariate_block_per_value() -> None:
         fidelity.compute(_rows(1, 10), _rows(2, 10), slices=["nope"])
 
 
+def test_a_malformed_synthetic_value_is_reported_not_allowed_to_retype_the_column() -> None:
+    """Inferring over both tables let one stray "n/a" flip an amount column to
+    categorical and delete the very readings that would have exposed it (Codex
+    review, PR #40). The reference decides the kind; the synthetic side is judged."""
+    real = _rows(1, 200)
+    synthetic = _rows(2, 200)
+    synthetic[3] = {**synthetic[3], "amount": "n/a"}
+    report = fidelity.compute(real, synthetic)
+    entry = report.columns["amount"]
+    assert entry["kind"] == "numeric" and "ks" in entry
+    assert entry["malformed_synthetic"] == round(1 / 200, 4)
+    assert entry["n_synthetic"] == 199
+    assert fidelity.compute(real, real).columns["amount"]["malformed_synthetic"] == 0.0
+    assert "MALFORMED" in str(report)
+    # The override in the other direction, for a reference that is itself dirty.
+    dirty_reference = [{**row, "amount": "?"} if index == 0 else row for index, row in enumerate(real)]
+    assert fidelity.infer_kinds(dirty_reference)["amount"] == "categorical"
+    assert fidelity.compute(dirty_reference, synthetic, kinds={"amount": "numeric"}).columns["amount"]["kind"] == "numeric"
+
+
+def test_a_sparse_unrelated_column_does_not_empty_a_pair() -> None:
+    """Complete cases are per pair (Codex review, PR #40): a third numeric column
+    that is almost always missing must not drop the rows two full columns share."""
+    real = [{**row, "rare": (row["qty"] if index % 97 == 0 else None)} for index, row in enumerate(_rows(1, 300))]
+    synthetic = [{**row, "rare": (row["qty"] if index % 89 == 0 else None)} for index, row in enumerate(_rows(2, 300))]
+    report = fidelity.compute(real, synthetic, kinds={"rare": "numeric"})
+    assert report.pairwise["numeric_pairs"] == 3
+    without = fidelity.compute(_rows(1, 300), _rows(2, 300))
+    assert without.pairwise["numeric_pairs"] == 1
+    # The amount/qty pair reads the same whether or not the sparse column is present.
+    assert abs(report.pairwise["correlation_error_mean"]) >= 0.0
+
+
 def test_kinds_are_inferred_and_overridable() -> None:
     rows = [{"code": "101", "amount": "3.5"}, {"code": "102", "amount": "4"}]
     assert fidelity.infer_kinds(rows) == {"amount": "numeric", "code": "numeric"}

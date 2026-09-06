@@ -94,7 +94,9 @@ Austrian UID, UK VAT (mod-97), NZBN (GS1), and every IBAN (ISO 7064). A number
 the downstream ERP would reject is a tell; one it accepts is data.
 
 ```bash
-# The switch rides the master_data request, so the recipe records it the same way.
+# The value names the rules version, and rides the master_data request so the
+# recipe records it: a corpus built under version 1 replays under version 1's
+# rules however many versions the package gains, because every version is kept.
 worldloom build --seed 8128 --spec company.json --out ./corpus   # spec: "master_data": {"vendors": 2000, "identifiers": 1}
 ```
 

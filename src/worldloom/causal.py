@@ -256,9 +256,20 @@ def lint(model: CausalModel, *, physics: Parameters = DEFAULT_PHYSICS) -> list[s
         if intervention.node not in seen:
             findings.append(f"intervention {index} sets {intervention.node!r}, which is not declared")
 
+    by_name = {spec.name: spec for spec in model.nodes}
     for index, drive in enumerate(model.drives):
         if drive.node not in seen:
             findings.append(f"drive {index} reads {drive.node!r}, which is not declared")
+        elif by_name[drive.node].low is None or by_name[drive.node].low < 0:  # type: ignore[operator]
+            # A budget is a count, and `Messiness` refuses a negative one — at
+            # build time, after `causal check` had passed the model. The floor
+            # is what makes the budget's sign a property of the declaration
+            # rather than of the draw (Codex review, PR #40).
+            findings.append(
+                f"drive {index} budgets from {drive.node!r}, which declares no"
+                " non-negative `low`; a budget is a count, so the node must say it"
+                " cannot go below zero"
+            )
         if drive.imperfection not in messiness_module.KINDS:
             findings.append(
                 f"drive {index} budgets {drive.imperfection!r}; imperfection kinds are"
@@ -613,7 +624,7 @@ TEMPLATE: dict[str, Any] = {
              " archive carries; the delay sizes how many secondary documents"
              " disagree with their source.",
     "nodes": [
-        {"name": "supplier_quality", "level": 0.8,
+        {"name": "supplier_quality", "level": 0.8, "low": 0.0, "high": 1.0,
          "about": "Share of suppliers whose invoices arrive clean."},
         {"name": "manual_touch_rate", "level": 0.15,
          "about": "Share of invoices somebody keys by hand."},

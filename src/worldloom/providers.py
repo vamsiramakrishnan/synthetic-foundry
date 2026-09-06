@@ -72,6 +72,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
@@ -362,8 +363,15 @@ def _allocate(total: float, weights: Sequence[float], decimals: int) -> list[flo
     units = round(total * scale)
     weight_sum = sum(weights) or 1.0
     exact = [units * w / weight_sum for w in weights]
-    floors = [int(x) for x in exact]
+    # `math.floor`, not `int()`: `int` truncates toward zero, so on a negative
+    # total — a credit note, a refund batch — every share rounded *up* and the
+    # remainder went negative, and slicing with a negative count handed the
+    # spare units to nobody. -1.00 over 1:2:3 came back as -0.97 (Codex review,
+    # PR #40). Flooring keeps every fractional part in [0, 1) whatever the sign,
+    # so the remainder is a non-negative count of units still to place.
+    floors = [math.floor(x) for x in exact]
     remainder = units - sum(floors)
+    assert 0 <= remainder <= len(floors), (units, floors)
     # Spare units to the largest fractional parts; index order breaks ties so
     # the same rows get them every rebuild.
     order = sorted(range(len(exact)), key=lambda i: (-(exact[i] - floors[i]), i))

@@ -381,6 +381,7 @@ worldloom fidelity <REFERENCE> <SYNTHETIC>
 | `--categorical` | Treat this column as categorical even though every value parses as a number — an id, a code. Repeatable. |
 | `--ignore` | Leave this column out entirely. Repeatable. |
 | `--json` | Emit the whole vector as JSON — stable keys, safe to diff. |
+| `--numeric` | Treat this column as numeric even though the reference carries a value that does not parse. Repeatable. |
 | `--seed` | Seed for the subsample the two quadratic blocks take past 2,000 rows. |
 | `--slices` | Report the per-column block again per value of this column, most frequent first. Repeatable. |
 | `--table` | When either side is a corpus directory, the detail table to read from it. |

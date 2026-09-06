@@ -66,14 +66,45 @@ _ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 @lru_cache(maxsize=1)
-def rules() -> dict[str, Any]:
-    """The vendored rules, read once. Absence is a packaging defect, surfaced at
+def _document() -> dict[str, Any]:
+    """The rules file, read once. Absence is a packaging defect, surfaced at
     first use rather than as a silently empty register."""
     return json.loads(_RULES_PATH.read_text(encoding="utf-8"))
 
 
 def version() -> str:
-    return str(rules()["version"])
+    """The rules version a *new* build uses."""
+    return str(_document()["current"])
+
+
+def versions() -> tuple[str, ...]:
+    """Every rules version the file still carries, oldest first.
+
+    Every version is kept, because a corpus records the one it was built
+    under and must replay under exactly those rules. The Codex review of PR
+    #40 named the hole this closes: with one live rule set, a bump would have
+    re-derived every postcode in every existing corpus on its next rebuild,
+    the version being in every stream's path.
+    """
+    return tuple(sorted(_document()["versions"], key=int))
+
+
+def rules(version: str | None = None) -> dict[str, Any]:
+    """The rule set for *version* (the current one when ``None``)."""
+    chosen = str(version) if version is not None else version_default()
+    try:
+        return _document()["versions"][chosen]
+    except KeyError:
+        raise KeyError(
+            f"surface rules version {chosen!r} is not in this build; it carries"
+            f" {list(versions())}. A corpus built under a version this package"
+            " has lost cannot replay its identifiers — versions are kept, never"
+            " removed, precisely so this does not happen."
+        ) from None
+
+
+def version_default() -> str:
+    return version()
 
 
 # ---------------------------------------------------------------------------
@@ -264,13 +295,21 @@ class Vendored:
     jurisdiction can span more than one country's numbering — the Gulf locale
     has Dubai and Doha, and a Qatari company with a UAE tax number is exactly
     the punctuation-level tell ``locales.py`` was written to stop.
+
+    Pinned to one rules version for its whole life. ``DEFAULT`` is pinned to
+    the current one; a replay constructs ``Vendored(version=...)`` from what
+    the recipe recorded, and reads that version's rules and nothing newer.
     """
 
     id = "vendored"
 
+    def __init__(self, version: str | None = None) -> None:
+        self._version = str(version) if version is not None else version_default()
+        rules(self._version)  # refuse an unknown version at construction, not at the first vendor
+
     @property
     def version(self) -> str:
-        return version()
+        return self._version
 
     # -- resolution ---------------------------------------------------------
 
@@ -285,7 +324,7 @@ class Vendored:
 
     def _rules_for(self, locale: Locale, city: str) -> tuple[str, Mapping[str, Any]]:
         country = self.country_of(locale, city)
-        table = rules()["countries"]
+        table = rules(self._version)["countries"]
         if country in table:
             return country, table[country]
         return country, table["_generic"]
@@ -380,7 +419,8 @@ def identifiers(
     city: str,
     provider: Any = DEFAULT,
 ) -> dict[str, str]:
-    """The four leaf values for one entity, each from its own stable stream."""
+    """The four leaf values for one entity, each from its own stable stream,
+    under whatever rules version *provider* is pinned to."""
     def key(field: str) -> StableKey:
         return StableKey(seed, entity_type, entity_id, field)
 
@@ -411,5 +451,5 @@ def receipt(*, seed: int, filled: int, provider: Any = DEFAULT, locale: str = ""
 __all__ = [
     "DEFAULT", "FIELDS", "Vendored", "abn", "abn_valid", "at_uid", "at_uid_valid",
     "de_ustid", "de_ustid_valid", "gb_vat", "gb_vat_valid", "gs1_check", "iban",
-    "iban_valid", "identifiers", "mod97", "receipt", "rules", "version",
+    "iban_valid", "identifiers", "mod97", "receipt", "rules", "version", "versions",
 ]

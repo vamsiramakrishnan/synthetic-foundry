@@ -77,6 +77,29 @@ def test_lint_names_every_structural_defect() -> None:
         assert expected in findings, expected
 
 
+def test_a_driven_node_must_declare_a_non_negative_floor() -> None:
+    """A budget is a count. Without the floor, `causal check` passed a model whose
+    node could go negative and `build --causal` then failed inside `Messiness`
+    (Codex review, PR #40); the sign is now a property of the declaration."""
+    unfloored = causal.from_document(_model(
+        nodes=[{"name": "rate", "level": 0.1}], interventions=[],
+        drives=[{"node": "rate", "imperfection": "staleness", "scale": 10}],
+    ))
+    assert any("non-negative `low`" in f for f in causal.lint(unfloored))
+    negative_floor = causal.from_document(_model(
+        nodes=[{"name": "rate", "level": -1.0, "low": -5.0}], interventions=[],
+        drives=[{"node": "rate", "imperfection": "staleness", "scale": 10}],
+    ))
+    assert any("non-negative `low`" in f for f in causal.lint(negative_floor))
+    floored = causal.from_document(_model(
+        nodes=[{"name": "rate", "level": -1.0, "low": 0.0}], interventions=[],
+        drives=[{"node": "rate", "imperfection": "staleness", "scale": 10}],
+    ))
+    assert causal.lint(floored) == []
+    [only] = causal.evaluate(floored, ["2026-01"], rng=Rng(1))
+    assert only.values["rate"] == 0.0 and only.budgets == {"staleness": 0}
+
+
 def test_an_unknown_physics_parameter_is_a_finding() -> None:
     model = causal.from_document(_model(nodes=[{"name": "a", "parameter": "retail.margin.budgt"}]))
     assert any("physics registry does not carry" in f for f in causal.lint(model))

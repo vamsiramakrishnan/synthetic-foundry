@@ -128,6 +128,22 @@ def test_accept_refuses_before_it_reconciles() -> None:
     assert any("missing" in line for line in acceptance.refusals)
 
 
+def test_a_negative_total_reconciles_exactly_too() -> None:
+    """A credit note is a total like any other. `int()` truncated toward zero
+    and -1.00 over 1:2:3 came back as -0.97 (Codex review, PR #40); flooring
+    keeps the remainder a count of units still to place, whatever the sign."""
+    from worldloom.providers import _allocate
+
+    for total in (-1.00, -0.05, -1234.57, 0.0, 0.01):
+        for weights in ([1, 2, 3], [1, 1, 1], [0.7, 0.2, 0.1, 0.0]):
+            shares = _allocate(total, weights, 2)
+            assert round(sum(shares), 2) == round(total, 2), (total, weights, shares)
+    assert _allocate(-1.00, [1, 2, 3], 2) == [-0.17, -0.33, -0.5]
+    candidate = EvenSynthesizer().propose(columns=["amount"], rows=9, seed=2)
+    rows, _, _ = accept(candidate, totals={"amount": -250.25})
+    assert round(sum(row["amount"] for row in rows), 2) == -250.25
+
+
 def test_a_total_with_nothing_to_allocate_over_is_an_error() -> None:
     candidate = Candidate(backend="x", backend_version="1", configuration_digest=digest({}),
                           rows=({"amount": None},))

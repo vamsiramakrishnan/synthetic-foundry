@@ -274,14 +274,18 @@ REQUEST_LIMITS = {
 def check_request(request: Mapping[str, Any]) -> dict[str, int]:
     """A ``master_data`` request normalised, or a ValueError naming the defect.
 
-    ``identifiers`` is the one key that is a switch rather than a count — 1 to
-    fill postcodes, phones, registration numbers and bank accounts on every
-    vendor and customer from ``surface.py``, 0 (or absent) to leave the
-    register as it was. It rides the same request so the recipe records it the
-    same way, and it is an int rather than a bool for the same reason: a
-    recipe is JSON, and one representation is what lets two recipes that mean
-    the same thing compare equal.
+    ``identifiers`` is the one key that is not a count: it names the **surface
+    rules version** (``surface.versions()``) to fill postcodes, phones,
+    registration numbers and bank accounts from, or 0 (absent) to leave the
+    register as it was. The value *is* the pin: a recipe recording
+    ``identifiers: 1`` replays under version 1's rules however many versions
+    the package has gained since, because the version is in every value's
+    stream path and a corpus whose vendors renumbered on rebuild would fail the
+    reason recipes exist (Codex review, PR #40). An unknown version is refused
+    here, before a world is built around it.
     """
+    from .. import surface
+
     unknown = sorted(set(request) - REQUEST_KEYS)
     if unknown:
         raise ValueError(
@@ -294,8 +298,11 @@ def check_request(request: Mapping[str, Any]) -> dict[str, int]:
         value = int(request[key])
         if value < 0:
             raise ValueError(f"master_data.{key} is a count, and {value} is not one")
-        if key == "identifiers" and value not in (0, 1):
-            raise ValueError(f"master_data.identifiers is a switch, 0 or 1; got {value}")
+        if key == "identifiers" and value != 0 and str(value) not in surface.versions():
+            raise ValueError(
+                f"master_data.identifiers names surface rules version {value}, and this"
+                f" build carries {[int(v) for v in surface.versions()]}; 0 fills none"
+            )
         elif key in REQUEST_LIMITS and value > REQUEST_LIMITS[key]:
             raise ValueError(
                 f"master_data.{key} asks for {value} unique rows, but the"
@@ -394,18 +401,19 @@ def generate(
     skus: int = 0,
     locale: Locale = DEFAULT_LOCALE,
     categories: Sequence[str] = (),
-    identifiers: bool = False,
+    identifiers: int = 0,
     surface_provider: Any = None,
 ) -> MasterData:
     """Mint the requested reference tables. Same seed, same rows, every time.
 
-    ``identifiers`` fills the four surface values on every vendor and
-    customer through ``surface_provider`` (the vendored default when
-    ``None``). Each value is keyed by ``StableKey(seed, entity type, entity
-    id, field)`` under the provider's version — *not* drawn from this
-    function's streams — so switching identifiers on moves no name, address
-    or contact, and a vendor's phone number is the same whether the register
-    has ten rows or ten thousand.
+    ``identifiers`` names the surface rules version to fill the four surface
+    values on every vendor and customer from (0 fills none), through
+    ``surface_provider`` when one is given and the vendored provider pinned
+    to that version otherwise. Each value is keyed by ``StableKey(seed,
+    entity type, entity id, field)`` under the provider's version — *not*
+    drawn from this function's streams — so switching identifiers on moves no
+    name, address or contact, and a vendor's phone number is the same whether
+    the register has ten rows or ten thousand.
 
     ``categories`` is the world's own spend/category vocabulary when the caller
     has one; empty falls back to the data file's generic spend categories, so a
@@ -428,6 +436,10 @@ def generate(
         )
     pool = tuple(categories) or _VOCAB["spend_categories"]
     contacts = _contacts(rng.derive("contacts"), locale)
+    if identifiers and surface_provider is None:
+        from .. import surface
+
+        surface_provider = surface.Vendored(version=str(identifiers))
 
     vendor_rows: list[Vendor] = []
     if vendors:
@@ -457,7 +469,7 @@ def generate(
                 address=address,
                 contact_name=contact.name,
                 contact_email=f"{contact.email_local}@{_domain_of(name)}",
-                **_identifiers(rng, "vendor", vendor_id, locale, city, identifiers, surface_provider),
+                **_identifiers(rng, "vendor", vendor_id, locale, city, bool(identifiers), surface_provider),
             ))
 
     customer_rows: list[Customer] = []
@@ -483,7 +495,7 @@ def generate(
                 address=address,
                 contact_name=contact.name,
                 contact_email=f"{contact.email_local}@{_domain_of(name)}",
-                **_identifiers(rng, "customer", customer_id, locale, city, identifiers, surface_provider),
+                **_identifiers(rng, "customer", customer_id, locale, city, bool(identifiers), surface_provider),
             ))
 
     sku_rows: list[Sku] = []
@@ -532,7 +544,7 @@ def _identifiers(rng: Rng, entity_type: str, entity_id: str, locale: Locale, cit
 
     return surface.identifiers(
         seed=rng.seed, entity_type=entity_type, entity_id=entity_id,
-        locale=locale, city=city, provider=provider or surface.DEFAULT,
+        locale=locale, city=city, provider=provider,
     )
 
 
@@ -566,7 +578,7 @@ def applied(world: Any, request: Mapping[str, Any] | None, *,
         skus=counts.get("skus", 0),
         locale=locale,
         categories=tuple(category.name for category in world._categories),
-        identifiers=bool(counts.get("identifiers", 0)),
+        identifiers=counts.get("identifiers", 0),
     )
     return _replace(world, _masterdata=table)
 
