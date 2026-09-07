@@ -17,6 +17,37 @@ from .eval_design import EvalShape
 
 _READ_OPS = frozenset({"read", "extract", "search", "get"})
 
+#: Every assertion kind `grade_trace` decides. Kept beside the chain that
+#: implements them and checked before it, because that chain has no else: an
+#: unrecognised kind used to fall through and grade clean, so a typo passed.
+#:
+#: Adding a branch below without adding its name here makes the assertion
+#: unreachable, which is the failure this set is shaped to make loud rather
+#: than silent.
+_KNOWN_ASSERTIONS = frozenset(
+    {
+        "tool_called",
+        "order",
+        "artifact_created",
+        "per_item",
+        "branch_exclusive",
+        "state_equals",
+        "deleted",
+        "denial_surfaced",
+        "report_not_found",
+        "clarify_before_write",
+        "no_write",
+        "continue_on_branch_failure",
+        "confirm_before",
+        "surface_archived",
+        "existence_check_first",
+        "projection_used",
+        "pagination_used",
+        "no_retry_storm",
+        "reads_contain",
+    }
+)
+
 
 def _span_dict(span: ConnectorSpan | Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(span, Mapping):
@@ -209,9 +240,23 @@ def grade_trace(
 
     for assertion in assertions:
         kind = assertion.get("type")
+        if kind not in _KNOWN_ASSERTIONS:
+            # The chain below has no else, so an unrecognised kind used to fall
+            # straight through and grade clean. A typo in an assertion type is
+            # then indistinguishable from a passing check, which is the worst
+            # way for a grader to be wrong: it reports success for a rule it
+            # never applied.
+            fails.append(f"unknown_assertion:{kind}")
+            continue
         if kind == "tool_called":
             node_id = str(assertion["node"])
-            node = nodes_by_id[node_id]
+            node = nodes_by_id.get(node_id)
+            if node is None:
+                # An assertion naming a node the DAG does not contain used to
+                # raise KeyError out of the grader. A malformed row should fail
+                # its own grade, not abort the run that was grading it.
+                fails.append(f"unknown_node:{node_id}")
+                continue
             if node_id in skipped or "gated" in node.get("flags", ()) or node.get("optional"):
                 continue
             node_spans = by_node.get(node_id, ())
@@ -258,11 +303,28 @@ def grade_trace(
                 for span in by_node.get(node_id, ())
                 for write in span.get("writes", ())
             ]
+            if not targets:
+                # Nothing was written, so there is no state to compare and the
+                # loop below never ran: `state_equals` graded `ok` for a run
+                # that never executed the node at all, and for one that
+                # executed it and wrote nothing. "The system was updated"
+                # passing on a system that was never updated is the exact
+                # failure an outcome grader exists to catch.
+                #
+                # `skipped` and `stopped` are already handled above, so
+                # reaching here means the node was expected to write.
+                node = nodes_by_id.get(node_id) or {}
+                if not ("gated" in node.get("flags", ()) or node.get("optional")):
+                    fails.append(f"state_not_written:{node_id}")
+                continue
             expected_state = str(assertion["state"]).casefold()
             for target in targets:
                 record = post_state.get(str(target))
                 if record is None:
-                    continue
+                    # Written, then absent from the post-state. Distinct from a
+                    # mismatch and previously silent.
+                    fails.append(f"state_missing:{node_id}")
+                    break
                 states = {
                     str(record.get("state", "")).casefold(),
                     str(record.get("status", "")).casefold(),
@@ -315,6 +377,26 @@ def grade_trace(
             _assert_projection(assertion, materialized, by_node, fails)
         elif kind == "pagination_used":
             _assert_pagination(assertion, materialized, fails)
+        elif kind == "reads_contain":
+            # The resultset outcome: not merely that a read happened, but that
+            # it returned the records the case names. Every other kind here
+            # grades the trajectory or a side effect; nothing graded what came
+            # back, so "find the open incidents for this change" could pass by
+            # reading any record at all.
+            node_id = str(assertion["node"])
+            if node_id in skipped or node_id in stopped:
+                continue
+            wanted = {str(rid) for rid in assertion.get("records", ())}
+            if not wanted:
+                continue
+            seen = {
+                str(read)
+                for span in by_node.get(node_id, ())
+                for read in span.get("reads", ())
+            }
+            missing = sorted(wanted - seen)
+            if missing:
+                fails.append(f"reads_missing:{node_id}:{','.join(missing)}")
         elif kind == "no_retry_storm":
             denied_count = sum(
                 1 for error in errors.values() if error.get("code") == 403
