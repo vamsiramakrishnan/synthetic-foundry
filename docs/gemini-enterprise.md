@@ -78,10 +78,25 @@ model performance.
 
 **Nothing about the trace.** Eval Studio's stream parser keeps
 `answer.replies[].groundedContent.content.text` and discards everything else,
-so tool calls and grounding metadata never leave the browser. `connector_trace`
-decides eighteen assertion kinds and there is no wire to feed it. Every score
-this loop produces is a judgement about a final answer, and a corpus whose
-value is partly in *how* an answer was reached is only partly exercised by it.
+so nothing about how an answer was reached reaches a grader. Every score this
+loop produces is a judgement about a final answer, and a corpus whose value is
+partly in *how* an answer was reached is only partly exercised by it.
+
+That is worth separating into the half that could be fixed and the half that
+could not, because "capture the trace" sounds like one job.
+
+The API carries more than Eval Studio reads. `StreamAssistResponse` also has
+`invocationTools` (the tool names invoked), `invokedSkills`, and
+`textGroundingMetadata`: per-segment byte offsets, `groundingScore`, and
+references carrying `documentMetadata.document` and `.uri`. That last one is
+the document id `datastore` mints, so a citation could be checked against the
+corpus exactly rather than by reading the prose for a source name.
+
+The API carries tool *arguments* and tool *results* nowhere. Checked across all
+973 schemas of the v1 discovery document (revision 20260831): no schema has an
+arguments-like property, and `invokedSkills` entries are `{name, displayName}`
+only. So an assertion about what a tool was called with is not reachable
+through this surface at any amount of effort.
 
 Two consequences worth stating plainly. A `citation_required` case can only be
 graded on whether the response *text* names its source, not on whether a

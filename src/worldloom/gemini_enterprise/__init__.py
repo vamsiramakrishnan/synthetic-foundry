@@ -19,11 +19,24 @@ as Discovery Engine documents, permissions included, which is the only way the
 golden answers mean anything.
 
 **It does not observe the run.** Its stream parser keeps
-`answer.replies[].groundedContent.content.text` and discards the rest, so tool
-calls and grounding metadata never leave the browser. `connector_trace`
-grades eighteen assertion kinds and there is no wire to feed it. Every score
-that comes back here is a judgement about a final answer, and this package says
-so rather than implying a trace was checked.
+`answer.replies[].groundedContent.content.text` and discards the rest, so
+nothing about how an answer was reached reaches a grader. That is a choice its
+parser makes, not a limit of the API: `StreamAssistResponse` also carries
+`invocationTools` (the tool names invoked), `invokedSkills`, and
+`textGroundingMetadata` with per-segment offsets, grounding scores and
+references down to `documentMetadata.document` -- which is the id `datastore`
+mints, so a citation could be checked against the corpus exactly.
+
+What the API carries nowhere, checked across all 973 schemas of the v1
+discovery document (revision 20260831), is tool *arguments* or tool *results*.
+So even a parser that kept everything would reach the assertion kinds
+`connector_trace` decides about tool selection, ordering and citation, and
+never the ones about what a tool was called with. Worth stating precisely,
+because "capture the trace" sounds like one job and is two: one small and
+upstream, one impossible from here.
+
+Every score that comes back through this package is a judgement about a final
+answer, and it says so rather than implying a trace was checked.
 
 Between those two, the fit is nearly exact and worth stating plainly: Eval
 Studio reads a CSV of `query,golden`, and an `EvaluationCase` already carries
