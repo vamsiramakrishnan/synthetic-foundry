@@ -285,10 +285,24 @@ class EnterpriseConnectorRuntime:
     def _target_id(
         fixture: QueryFixture,
         dependencies: Mapping[str, Any],
+        *,
+        connector: str = "",
+        entity: str = "",
     ) -> str | None:
         for dependency in reversed(tuple(dependencies.values())):
             if isinstance(dependency, Mapping) and dependency.get("record_id"):
                 return str(dependency["record_id"])
+        # The record this node addresses, when the fixture holds one for exactly
+        # this connector and entity. Without it a source read is handed
+        # `destination_record_id` -- the record the *write* will target -- so
+        # every `read-0` in a planned DAG asked SharePoint's id of ServiceNow
+        # and 404'd. The fixture keys these as "{connector}:{entity}"
+        # (`enterprise_corpus.py:240`), and a write or verify node finds nothing
+        # here because its destination is not a source, which is what keeps the
+        # destination fallback below correct for them.
+        sourced = fixture.input_record_ids.get(f"{connector}:{entity}", ())
+        if sourced:
+            return sourced[0]
         if fixture.destination_record_id:
             return fixture.destination_record_id
         return next(
@@ -388,17 +402,30 @@ class EnterpriseConnectorRuntime:
                 definition, requested_tool, entity
             )
             tool = definition.tool(canonical_tool)
-            concrete = self._concrete_entity(
-                definition,
-                entity,
-                generation_map,
-                dependency_map,
-                emulator,
+            # Resolved on demand, not up front. Only `create` and `transition`
+            # need a concrete member; `search` passes the alias through and
+            # `get`/`update` address a record by id. Resolving eagerly meant a
+            # read of a multi-member alias raised `legacy entity alias 'issue'
+            # needs one concrete member` before it could do anything, even
+            # though the concrete member was never going to be used: the
+            # disambiguators are the write's `output_format` and a prior node's
+            # record, and a source read has neither.
+            def concrete_entity() -> str:
+                return self._concrete_entity(
+                    definition,
+                    entity,
+                    generation_map,
+                    dependency_map,
+                    emulator,
+                )
+
+            target = self._target_id(
+                fixture, dependency_map, connector=connector, entity=entity
             )
-            target = self._target_id(fixture, dependency_map)
             node_id = str(arguments.get("node_id") or "")
             common = {"_node": node_id}
             if tool.op in {"create", "send", "post", "upload"}:
+                concrete = concrete_entity()
                 payload = emulator.call(
                     canonical_tool,
                     entity=concrete,
@@ -435,7 +462,7 @@ class EnterpriseConnectorRuntime:
                     **common,
                 )
             elif tool.op == "transition":
-                workflow = definition.entities[concrete].workflow
+                workflow = definition.entities[concrete_entity()].workflow
                 if workflow is None or len(workflow.states) < 2:
                     raise ConnectorError(
                         400,

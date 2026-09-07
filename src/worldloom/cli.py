@@ -158,11 +158,7 @@ def enterprise_evals_plan(
         if profile_path
         else None
     )
-    registry = (
-        apply_scenario_profile(builtin_registry(), scenario)
-        if scenario
-        else builtin_registry()
-    )
+    registry = _scenario_registry(scenario, apply_scenario_profile, builtin_registry)
     coverage = (
         scenario.coverage.model_copy(update={"strengths": strength})
         if scenario
@@ -234,11 +230,7 @@ def enterprise_evals_build(
         if profile_path
         else None
     )
-    registry = (
-        apply_scenario_profile(builtin_registry(), scenario)
-        if scenario
-        else builtin_registry()
-    )
+    registry = _scenario_registry(scenario, apply_scenario_profile, builtin_registry)
     coverage = (
         scenario.coverage.model_copy(update={"strengths": strength})
         if scenario
@@ -310,29 +302,21 @@ def enterprise_evals_simulate(
 
     from .enterprise_corpus import score_trace
     from .enterprise_io import load_exported_corpus
-    from .enterprise_runner import RunnerConfig, ToolBinding, execute_query
+    from .enterprise_runner import RunnerConfig, execute_query
     from .enterprise_simulator import ConnectorSimulator
 
     corpus = load_exported_corpus(corpus_path)
     queries = corpus.queries[:limit]
     fixtures = {fixture.query_id: fixture for fixture in corpus.fixtures}
-    bindings = tuple(
-        ToolBinding(
-            connector=connector,
-            operation=operation,
-            entity=entity,
-            tool_name=f"{connector}.{operation}",
-        )
-        for connector, operation, entity in sorted(
-            {
-                (node["connector"], node["kind"], node["entity"])
-                for query in queries
-                for node in query.expected_dag
-                if node["connector"] != "model"
-            }
-        )
-    )
-    config = RunnerConfig(bindings=bindings)
+    # No bindings: `RunnerConfig.bindings` is for *external* tool overrides, and
+    # manufacturing one per DAG triple defeated the resolution it exists to
+    # override. `resolve` consults bindings before the connector definition, so
+    # a synthesised `sharepoint.readback` won over the definition lookup that
+    # normalises `readback` and `cross_system` to `read` -- and every verify
+    # node died on `KeyError: sharepoint/file does not define operation
+    # 'readback'`. Resolving through the installed definitions is what the DAG's
+    # verb-level kinds are written against.
+    config = RunnerConfig()
     simulator = ConnectorSimulator(corpus)
 
     async def run() -> list[tuple[Any, Any]]:
@@ -462,6 +446,7 @@ _REFUSALS: dict[str, str] = {
     "replay_many_providers": "the corpus was narrated by several providers; one pass replays one",
     "replay_recipe_mismatch": "the replayed corpus's recipe and this build's flags disagree",
     "resume_invalid": "a completed world does not validate for resume",
+    "scenario_profile_rejected": "the enterprise scenario profile names something this registry does not hold, or selects nothing",
     "results_unjoinable": "an external harness's results cannot be attributed to cases in this corpus",
     "results_unreadable": "an external harness's results file cannot be read",
     "schema_version": "the corpus's schema version cannot be carried to this engine's by the migration chain",
@@ -580,6 +565,23 @@ def _refuse_exec_error(exc: Any) -> NoReturn:
             "\n[dim]child stderr, last lines:[/dim]\n" + escape(exc.stderr_tail)
         )
     _refuse(exc.code, message, **exc.data)
+
+
+def _scenario_registry(scenario: Any, apply: Any, builtin: Any) -> Any:
+    """Apply a scenario profile, turning its refusal into a CLI refusal.
+
+    `apply_scenario_profile` raises `ValueError` carrying every finding, which
+    reached the terminal as a traceback. That was survivable while the only way
+    to trip it was a registry failing `review()`; it is not now that a mistyped
+    connector name refuses too, which is the common case rather than the exotic
+    one.
+    """
+    if scenario is None:
+        return builtin()
+    try:
+        return apply(builtin(), scenario)
+    except ValueError as error:
+        _refuse("scenario_profile_rejected", str(error))
 
 
 def _load(name_or_path: str) -> World:
