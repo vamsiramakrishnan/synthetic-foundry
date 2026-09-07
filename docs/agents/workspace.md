@@ -1,8 +1,8 @@
 ---
 title: Workspace layout
 description: Lay a corpus out as a permissioned drive, and make it untidy the way real drives are.
-read-when: Pointing an assistant or connector at the corpus as a drive, or adding filesystem noise.
-tags: [workspace, permissions, filesystem-noise, layout]
+read-when: Pointing an assistant or connector at the corpus as a drive, adding filesystem noise, or running the corpus against Gemini Enterprise.
+tags: [workspace, permissions, filesystem-noise, layout, gemini-enterprise]
 ---
 
 # Laying the corpus out as a drive
@@ -60,3 +60,32 @@ This is *filesystem* noise and not the same thing as `--messiness`, which is
 content noise: a page nobody updated, two documents disagreeing, an author who
 left. Both are real and they fail differently. A
 corpus wanting a realistic archive wants both.
+
+## Handing the drive to Gemini Enterprise
+
+```bash
+worldloom gemini-enterprise datastore ./corpus ./drive --uri-prefix gs://bucket/drive -o ./documents.jsonl
+worldloom gemini-enterprise cases ./corpus -o ./shards
+worldloom gemini-enterprise score ./corpus ./results.csv
+```
+
+[Eval Studio](https://github.com/GoogleCloudPlatform/gemini-enterprise-eval-studio)
+reaches a Gemini Enterprise instance and times it, and does two things it does
+not do: it selects data stores that already exist, so it has no way to put this
+corpus in front of the assistant, and its stream parser keeps only the answer
+text, so tool calls and grounding never leave the browser.
+
+`datastore` reads a drive this page just wrote, **not a layout recomputed**, for
+the reason `workspace` copies rendered files rather than re-rendering them: the
+tree on disk is what gets uploaded, and a second layout is a second chance to
+disagree with it. It emits Discovery Engine documents carrying `aclInfo` from
+`permissions.jsonl`, which is what makes a permission failure observable at all.
+Junk files matter here and are the reason document ids come from the path rather
+than the artifact id: a copy shares the id of what it copies, and importing them
+under it collapses the duplicates into one document.
+
+`cases` shards the evaluation set by grading shape because Eval Studio applies
+one auto-rater instruction per run, and one similarity rubric scores an
+abstention backwards. `score` reads results back; its output carries no case id,
+so the join is on the query text. Full loop and its failure modes:
+[Gemini Enterprise](../gemini-enterprise.md).
