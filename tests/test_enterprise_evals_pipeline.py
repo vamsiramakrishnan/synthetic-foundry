@@ -136,6 +136,41 @@ def test_every_planned_query_executes(built: Path) -> None:
     assert report["average_dag_score"] > 0.7
 
 
+def test_a_write_targets_the_destination_even_when_it_is_also_a_source() -> None:
+    """A destination is sometimes also a source, and the write must not drift.
+
+    `customer_health` reads and upserts the same `salesforce/account`, so the
+    fixture holds the source record and the destination record under one key.
+    Preferring the source unconditionally made the write mutate an input record
+    instead of the destination materialised for the mutation, and `verify` then
+    followed the same wrong id and reported a clean trajectory over a corrupted
+    side effect: a green run that had broken the thing it was measuring.
+
+    Only a node with nothing upstream reads a source. `verify` is a read too,
+    but it depends on the write, so it resolves through `dependencies`.
+    """
+    from worldloom.connectors.enterprise import EnterpriseConnectorRuntime
+    from worldloom.enterprise_corpus import QueryFixture
+
+    source, destination = "REC-SOURCE", "REC-DESTINATION"
+    fixture = QueryFixture(
+        query_id="Q1",
+        input_record_ids={"salesforce:account": (source, destination)},
+        destination_record_id=destination,
+        overrides=(),
+        expected_side_effects=(),
+    )
+    target = EnterpriseConnectorRuntime._target_id
+    common = {"connector": "salesforce", "entity": "account"}
+
+    assert target(fixture, {}, **common, prefer_source=True) == source
+    assert target(fixture, {}, **common, prefer_source=False) == destination
+    assert (
+        target(fixture, {"write": {"record_id": destination}}, **common, prefer_source=False)
+        == destination
+    )
+
+
 def test_a_mistyped_connector_is_refused_rather_than_silently_empty(
     tmp_path: Path,
 ) -> None:

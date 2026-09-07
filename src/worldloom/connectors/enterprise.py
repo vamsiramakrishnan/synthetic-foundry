@@ -288,6 +288,7 @@ class EnterpriseConnectorRuntime:
         *,
         connector: str = "",
         entity: str = "",
+        prefer_source: bool = False,
     ) -> str | None:
         for dependency in reversed(tuple(dependencies.values())):
             if isinstance(dependency, Mapping) and dependency.get("record_id"):
@@ -297,11 +298,18 @@ class EnterpriseConnectorRuntime:
         # `destination_record_id` -- the record the *write* will target -- so
         # every `read-0` in a planned DAG asked SharePoint's id of ServiceNow
         # and 404'd. The fixture keys these as "{connector}:{entity}"
-        # (`enterprise_corpus.py:240`), and a write or verify node finds nothing
-        # here because its destination is not a source, which is what keeps the
-        # destination fallback below correct for them.
+        # (`enterprise_corpus.py:240`).
+        #
+        # Gated on `prefer_source` because a destination is sometimes also a
+        # source: `customer_health` reads and upserts the same
+        # `salesforce/account`, and there the fixture holds both the source
+        # record and the destination under one key. Letting a write take the
+        # first of them mutated an input record instead of the destination
+        # materialised for the mutation, and `verify` then followed the same
+        # wrong id and reported a clean trajectory over a corrupted side
+        # effect. Only a node with nothing upstream reads a source this way.
         sourced = fixture.input_record_ids.get(f"{connector}:{entity}", ())
-        if sourced:
+        if prefer_source and sourced:
             return sourced[0]
         if fixture.destination_record_id:
             return fixture.destination_record_id
@@ -420,7 +428,15 @@ class EnterpriseConnectorRuntime:
                 )
 
             target = self._target_id(
-                fixture, dependency_map, connector=connector, entity=entity
+                fixture,
+                dependency_map,
+                connector=connector,
+                entity=entity,
+                # A source read is a read with nothing upstream. `verify` is a
+                # read too, but it depends on the write, so it resolves through
+                # `dependencies` and must fall back to the destination rather
+                # than to a source that happens to share connector and entity.
+                prefer_source=tool.op in _READ_OPERATIONS and not dependency_map,
             )
             node_id = str(arguments.get("node_id") or "")
             common = {"_node": node_id}
