@@ -200,6 +200,15 @@ def _install() -> None:
     from . import eval_interventions as _eval_interventions  # noqa: F401
     from . import eval_witnesses as _eval_witnesses  # noqa: F401
 
+    # And for the `eval_plausibility` check group, for the same reason as
+    # `cohorts` above: the group reads the request tuple on a corpus's own
+    # evaluation cases at check time, so nothing on the way to building or
+    # loading a world imports it, and `worldloom validate <corpus>` in a fresh
+    # process would otherwise report a clean run having checked none of them.
+    from .evals import plausibility as _eval_plausibility
+
+    _eval_plausibility.install()
+
     # Same contract again, one level up: importing this is what registers the
     # `Imperfections` recipe verb, and a corpus built with a messiness profile
     # cannot rebuild itself in a process where that verb is unknown. `recipe.rebuild`

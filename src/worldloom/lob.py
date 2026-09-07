@@ -40,7 +40,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from dataclasses import field as _field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -54,6 +54,7 @@ __all__ = [
     "Participant", "load_seed", "open", "resolve", "publish", "installed",
     "describe", "lint_seed", "lint_roles", "lint_responsibilities",
     "lint_bindings", "participation", "accountability_constraints",
+    "Ask", "asks_about", "may_ask_about",
 ]
 
 
@@ -847,6 +848,136 @@ def accountability_constraints(
                 magnitude=tolerance_pct,
             ))
     return tuple(constraints)
+
+
+@dataclass(frozen=True)
+class Ask:
+    """One thing a role could plausibly ask about, and why it may."""
+
+    role_key: str
+    title: str
+    fact_kinds: tuple[str, ...]
+    """Kinds this role may ask about, in declaration order."""
+    artifact_types: tuple[str, ...]
+    """Artifact types this role may ask about, in declaration order."""
+    direction: Literal["own", "down", "up"]
+    """Whose responsibility made the ask reachable.
+
+    ``own`` is the role's own edge. ``down`` is a report's, which is how a
+    manager asks for status. ``up`` is the manager's, which is how someone
+    asks for the approval or the policy that governs their own work."""
+    via: str
+    """The role whose responsibility edge granted it — the evidence."""
+
+
+def asks_about(lob: Lob, role_key: str, *, depth: int = 1) -> tuple[Ask, ...]:
+    """What *role_key* could plausibly ask about — a join, never a table.
+
+    The inverse of ``participation``. A responsibility edge says a role
+    *answers for* some fact kinds and *authors or approves* some artifact
+    types; read the other way round, it says what that person has standing to
+    ask about. Nobody types a per-industry question table: a credit officer
+    asks about covenant breaches because the edge says she answers for them,
+    and a merchandising manager asks about category margin for the same
+    reason. Industry flavour arrives through the slots, not through a costume.
+
+    Three directions, following ``RoleSpec.reports_to``, because real requests
+    do not only travel along one's own accountability. A role asks about its
+    own kinds; *down* the line for status on what its reports answer for; and
+    *up* for the approval, policy or authority its own work depends on. Asking
+    sideways is deliberately absent: two roles with no reporting edge between
+    them share no declared reason to ask, and inventing one here would be the
+    second account that can disagree with the responsibilities, which is the
+    defect this primitive exists to prevent.
+
+    ``depth`` bounds how far up or down the chain to walk. The default of one
+    is the honest one: a director asks their own reports, and a request that
+    skips two levels is a real thing but not a *derivable* thing.
+
+    Order is declaration order throughout (own edges first, then down, then
+    up; roles in the LOB's order, kinds in the edge's order), so the same LOB
+    derives the same asks every time. Returns an empty tuple for a role the
+    LOB does not declare, which is not an error: asking what an unknown role
+    may ask is a question with the honest answer "nothing".
+    """
+    if depth < 0:
+        raise ValueError("depth must not be negative")
+    roles = {role.key: role for role in lob.roles}
+    if role_key not in roles:
+        return ()
+
+    def _walk(start: str, attr: str) -> list[str]:
+        """Role keys reachable from *start* by following one edge, bounded."""
+        found: list[str] = []
+        if attr == "up":
+            current = roles.get(start)
+            for _ in range(depth):
+                parent = current.reports_to if current is not None else None
+                if parent is None or parent not in roles or parent in found:
+                    break
+                found.append(parent)
+                current = roles[parent]
+            return found
+        frontier = [start]
+        for _ in range(depth):
+            below = [
+                role.key
+                for role in lob.roles
+                if role.reports_to in frontier and role.key not in found
+                and role.key != start
+            ]
+            if not below:
+                break
+            found.extend(below)
+            frontier = below
+        return found
+
+    reach: list[tuple[str, Literal["own", "down", "up"]]] = [(role_key, "own")]
+    reach.extend((key, "down") for key in _walk(role_key, "down"))
+    reach.extend((key, "up") for key in _walk(role_key, "up"))
+
+    asks: list[Ask] = []
+    for key, direction in reach:
+        kinds: list[str] = []
+        artifacts: list[str] = []
+        for resp in lob.responsibilities:
+            if resp.role_key != key:
+                continue
+            for kind in resp.fact_kinds:
+                if kind not in kinds:
+                    kinds.append(kind)
+            for artifact in resp.artifact_types:
+                if artifact not in artifacts:
+                    artifacts.append(artifact)
+        if not kinds and not artifacts:
+            continue
+        asks.append(Ask(
+            role_key=role_key,
+            title=roles[role_key].title,
+            fact_kinds=tuple(kinds),
+            artifact_types=tuple(artifacts),
+            direction=direction,
+            via=key,
+        ))
+    return tuple(asks)
+
+
+def may_ask_about(lob: Lob, role_key: str, kind: str, *, depth: int = 1) -> bool:
+    """Whether *role_key* has standing to ask about fact *kind*.
+
+    The predicate form of ``asks_about``, under ``factkinds.covers``'s
+    dot-boundary rule so that answering for ``financial.revenue`` grants
+    standing over ``financial.revenue.actual``. This is the rule a
+    plausibility check calls; a question whose asker fails it is a finding,
+    not a question.
+    """
+    from . import factkinds
+
+    return any(
+        factkinds.covers(family, kind)
+        for ask in asks_about(lob, role_key, depth=depth)
+        for family in ask.fact_kinds
+    )
 
 
 # ---------------------------------------------------------------------------

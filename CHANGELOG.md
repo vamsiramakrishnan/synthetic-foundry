@@ -11,6 +11,54 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Added: an evaluation case can carry a request, not only a question
+
+An `EvaluationCase` had eleven fields and none of them said who wanted to
+know. A question with no asker has no reason to exist beyond "this fact is
+checkable", which is what makes a generated set read as a quiz rather than as
+work: real requests come from someone, at a moment, through a channel, under
+a constraint, and usually name what they want back.
+
+- **`EvaluationCase` gains the request tuple**: `asker`, `asker_person_id`,
+  `occasion`, `intent`, `channel`, `constraint`, `deliverable`. All optional,
+  and serialized only when set, on the contract `CanonicalFact` already
+  established for its bitemporal fields. A case with no request writes exactly
+  the bytes it always did, so no corpus is rewritten, no schema version moves
+  and no migration step is owed. Verified against a `git archive HEAD` tree:
+  a default `build --seed 8128` is byte-identical.
+- **`worldloom.evals.intents`**, forty work verbs as authored data
+  (`_data/evals/intents.json`, schema `worldloom.eval-intents/v1`): brief,
+  triage a queue, chase, escalate, sign off, reject with reason, reconcile,
+  attest, close out, abstain and the rest. Each declares its answer shape,
+  the evidence it rests on, whether it reads or writes, what a write produces,
+  the mistake it is posed to catch, and which activity types it suits.
+  `EvaluationType` is untouched and stays the grading shape; intent is the
+  work shape, and each verb names the grading shape that checks it, so adding
+  a verb never adds a grader.
+- **`lob.asks_about`**, the responsibility primitive read backwards. A role
+  answers for some fact kinds, so those are the kinds it has standing to ask
+  about; `reports_to` extends that down the line for status and up it for the
+  authority its own work needs. A join, never a table, on the same argument
+  `participation` makes. Industry flavour arrives through the slots: a credit
+  officer asks about covenant breaches because an edge says she answers for
+  them, and nobody types a per-industry question table.
+- **`process_bindings.situations`**, a binding crossed with the verbs its
+  activity type admits. The compiled catalogue already declares the activity,
+  the owning unit and country, the system of record, the control and the named
+  exception; the cross supplies the occasion a request arrives on. The twelve
+  shipped industries compile 6,975 bindings and yield 189,346 situations,
+  against 103 hand-typed question keys across the four engines today.
+- **The `eval_plausibility` check group**, registered from `_install` like
+  every vertical's. It refuses what a corpus can be wrong about: an intent
+  nothing declares, a grading shape the intent does not name, a write with no
+  deliverable. Whether a seat would realistically ask a given thing is a
+  judgement about the world rather than a disagreement inside it, so
+  `evals.plausibility.findings` reports those as sentences in the shape
+  `phrasing.findings` uses, and they never fail a build.
+- **Generation**: none. Default builds, `evals construct` and
+  `enterprise-evals build` are byte-identical; every field above is opt-in and
+  no shipped generator populates one yet.
+
 ### Proposal engines behind the compiler boundary
 
 - **`providers.py`**, four extension seams on the pattern `narrative.providers`
