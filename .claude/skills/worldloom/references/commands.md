@@ -440,6 +440,49 @@ worldloom fleet qualify <FLEET_DIR>
 
 List the renderers this installation has.
 
+### `worldloom gemini-enterprise`
+
+Export a corpus and its evaluation set for Gemini Enterprise Eval Studio.
+
+### `worldloom gemini-enterprise cases`
+
+Write the evaluation set as one uploadable CSV per grading shape.
+
+```
+worldloom gemini-enterprise cases <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--limit` | Rows per shard; Eval Studio truncates uploads past 100. |
+| `--out`, `-o` | Directory to write the shards into. |
+| `--overwrite` | Replace an existing directory. |
+
+### `worldloom gemini-enterprise datastore`
+
+Write the workspace as Discovery Engine documents, permissions included.
+
+```
+worldloom gemini-enterprise datastore <CORPUS> <WORKSPACE>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--out`, `-o` | Write documents.jsonl here instead of stdout. |
+| `--uri-prefix` | Where the files will live: gs://bucket/prefix. |
+
+### `worldloom gemini-enterprise score`
+
+Rejoin Eval Studio's results to the set and slice them.
+
+```
+worldloom gemini-enterprise score <CORPUS> <RESULTS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the scorecard as JSON. |
+
 ### `worldloom inspect`
 
 Show what a corpus contains. Nothing is hidden.

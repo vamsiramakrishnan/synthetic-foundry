@@ -186,6 +186,7 @@ ignore = [
 # is read at decoration time to build the CLI. Moving the calls into the
 # function body is how typer is not used.
 "src/worldloom/cli.py" = ["B008"]
+"src/worldloom/gemini_enterprise/cli.py" = ["B008"]
 
 # Type gate. This package ships `py.typed`, and a typed public surface nobody
 # checks is an advisory type system — by this repository's own principle, not

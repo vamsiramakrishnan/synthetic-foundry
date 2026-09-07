@@ -96,11 +96,13 @@ enterprise_evals_app = typer.Typer(
 app.add_typer(enterprise_evals_app, name="enterprise-evals")
 
 # Keep operational generation in its own command module, not this monolith.
+from .gemini_enterprise.cli import app as gemini_enterprise_app
 from .seams_cli import seams_command
 from .synthesis_cli import app as synthesis_app
 
 app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
+app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
 
 
 @enterprise_evals_app.command("space")
@@ -405,9 +407,11 @@ _REFUSALS: dict[str, str] = {
     "causal_and_messiness": "--causal drives imperfections and --messiness names them; two passes would spend the same corrections twice",
     "causal_model_lint": "the causal model has lint findings; data.findings names each",
     "causal_model_unreadable": "the causal model file cannot be read as a CausalModel",
+    "cases_unexportable": "the corpus holds no evaluation case an external harness could score",
     "conflict": "a resolution conflict whose rule has no individually registered code",
     "corpus_unloadable": "the corpus (or something it depends on) cannot be read",
     "destination_exists": "the output destination exists and --overwrite was not given",
+    "datastore_unexportable": "the workspace could not be written as Discovery Engine documents",
     "doctor_unhealthy": "this installation cannot do everything the docs promise",
     "duplicate_facet": "one facet dimension was given two values",
     "empty_query": "the search query is empty",
@@ -458,6 +462,8 @@ _REFUSALS: dict[str, str] = {
     "replay_many_providers": "the corpus was narrated by several providers; one pass replays one",
     "replay_recipe_mismatch": "the replayed corpus's recipe and this build's flags disagree",
     "resume_invalid": "a completed world does not validate for resume",
+    "results_unjoinable": "an external harness's results cannot be attributed to cases in this corpus",
+    "results_unreadable": "an external harness's results file cannot be read",
     "schema_version": "the corpus's schema version cannot be carried to this engine's by the migration chain",
     "shard_state_error": "the shard state on disk cannot be read or does not match this plan",
     "stats_failed": "the corpus does not carry what the statistics need",

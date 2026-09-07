@@ -11,6 +11,68 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Added: a corpus and its evaluation set can be run against Gemini Enterprise
+
+`GoogleCloudPlatform/gemini-enterprise-eval-studio` solves the part of an
+enterprise-agent evaluation that is genuinely hard and uninteresting to build
+twice: reaching a Gemini Enterprise instance. Workforce Identity Federation,
+OIDC and SAML, the `streamAssist` stream and its TTFT/TTFA/TTLT telemetry are
+all there. What it does not do is populate the index it searches or observe the
+run, and both of those are this engine's.
+
+**Generation: none.** Nothing here builds, draws, or changes what a seed
+produces. Every command reads a corpus that already exists and writes a new
+projection of it.
+
+- **`worldloom gemini-enterprise datastore`** writes a workspace as Discovery
+  Engine documents in the `gcsSource` `dataSchema: "document"` format:
+  `content.uri` into Cloud Storage, `structData` carrying the authority,
+  lifecycle, policy, folder and supersession a two-column CSV cannot, and
+  `aclInfo` carrying the drive's own readers -- which is what makes a
+  permission failure observable at all. Eval Studio selects data stores and has
+  no ingestion path, so without this the assistant is asked questions about a
+  company nobody holds the answers for.
+  - Document ids are derived from the path, not only the artifact id. A drive's
+    noise copies deliberately share the id of what they copy, and importing
+    them under it makes `importDocuments` read the second as an update of the
+    first: the duplicates collapse, the store holds one document where the
+    drive holds four, and the corpus's hardest content disappears between
+    export and index with nothing red anywhere.
+  - A file whose type Discovery Engine will not accept is skipped and named,
+    never relabelled. `.md` to `text/plain` is a wire-type declaration and is
+    fine; `.xlsx` to `text/plain` is a corrupt document that indexes as
+    mojibake and degrades every query that reaches it.
+- **`worldloom gemini-enterprise cases`** writes the evaluation set as one CSV
+  per `EvaluationType`, each with the auto-rater instruction its shape claims.
+  Eval Studio applies one instruction to a whole run, and its default asks for
+  semantic similarity to the golden answer -- which grades an
+  `expected_abstention` case exactly backwards, rewarding a confident invented
+  answer for its fluency and scoring the refusal the case exists to reward as
+  though it were an attempt. `RUBRICS` gives each shape a grader that matches
+  what the shape claims.
+  - Shards are capped at a hundred rows, because `csv.service.ts` truncates an
+    upload with `results.data.slice(0, 100)`. Rows past the cap are not
+    rejected, they are never sent, and the run reports a clean pass over a set
+    it never saw.
+  - A case with no `expected_answer` is left out rather than exported with an
+    empty golden: Eval Studio scores a falsy golden as 0 without calling the
+    grader, which is indistinguishable in the results from a model that
+    answered and was wrong.
+- **`worldloom gemini-enterprise score`** reads the results back and slices
+  them by the structure the CSV could not carry. `processRow` builds its
+  `ResultRow` from scratch, so nothing sent up beyond `query` and `golden`
+  comes back down; the join is on the query text and it refuses rather than
+  guesses when two cases ask the same question. A row whose auto-rater call
+  failed is counted and excluded from every mean rather than averaged in as a
+  zero, because Eval Studio returns `score: 0` both for a wrong answer and for
+  its own grader failing.
+- **What this does not do, said once here so no result implies it**: grade the
+  trace. Eval Studio's stream parser keeps
+  `answer.replies[].groundedContent.content.text` and discards the rest, so
+  tool calls and grounding metadata never leave the browser and
+  `connector_trace`'s eighteen assertion kinds have no wire to read. Every
+  score this returns is a judgement about a final answer.
+
 ### Added: an evaluation case can carry a request, not only a question
 
 An `EvaluationCase` had eleven fields and none of them said who wanted to
