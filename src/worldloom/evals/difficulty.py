@@ -98,10 +98,16 @@ class RequestFeatures(Model):
         `fitted` says so, and `DifficultyCalibrator.estimate` is what a caller
         should use once a cohort has been run.
         """
+        # Bounded the way `slice_key` buckets it, so a case with a thousand
+        # distractors is "hard" rather than off the scale. Declaring
+        # `distractor_density` as the near-miss pressure and then omitting it
+        # here would make the label disagree with the feature beside it.
+        density = 0 if self.distractor_density == 0 else (1 if self.distractor_density < 1 else 2)
         weight = (
             self.evidence_kinds
             + min(self.facts_required, 5)
             + min(self.artifacts_required, 5)
+            + density
             + (2 if self.writes else 0)
             + (2 if self.cross_channel else 0)
             + (2 if self.temporal else 0)

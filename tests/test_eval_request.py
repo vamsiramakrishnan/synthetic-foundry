@@ -485,3 +485,124 @@ def test_available_defers_to_the_binding_coverage_the_generator_saw() -> None:
     counts = coverage.available(compiled)
     assert counts["intents_declared"] == len(intents_module.intents())
     assert counts["situations"] > counts["occasions"]
+
+
+# ---------------------------------------------------------------------------
+# Review findings, each pinned so it cannot come back
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("over", "code"),
+    [
+        # A sign_off marked as an abstention is graded as a refusal by
+        # `evaluate.score`, which branches on the flag and not on the type.
+        (
+            {
+                "intent": "sign_off",
+                "evaluation_type": EvaluationType.AUTHORITY_RESOLUTION,
+                "deliverable": "an approval",
+                "expects_abstention": True,
+                "expected_fact_ids": [],
+            },
+            "abstention_disagrees",
+        ),
+        # And an abstain that forgets the flag is graded as an ordinary lookup.
+        (
+            {"intent": "abstain", "evaluation_type": EvaluationType.EXPECTED_ABSTENTION},
+            "abstention_disagrees",
+        ),
+    ],
+)
+def test_the_abstention_flag_must_agree_with_the_grading_shape(
+    over: dict[str, object], code: str
+) -> None:
+    violations, _ = _checks(_World((_case(**over),)))
+    assert code in [v.code for v in violations]
+
+
+def test_an_abstention_that_agrees_is_not_a_violation() -> None:
+    case = _case(
+        intent="abstain",
+        evaluation_type=EvaluationType.EXPECTED_ABSTENTION,
+        expects_abstention=True,
+        expected_fact_ids=[],
+    )
+    violations, _ = _checks(_World((case,)))
+    assert violations == []
+
+
+class _PeopledWorld(_World):
+    """A world that also holds people, for the referential check."""
+
+    def __init__(self, cases, people=()) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(cases)
+        self.people = people
+
+
+def test_a_seated_asker_must_name_somebody_the_world_holds() -> None:
+    """Referential, so a violation: the same defect as citing a missing fact,
+    in a new field the evaluation branch of `validate` never looked at."""
+
+    class _Person:
+        id = "PERSON-0001"
+
+    case = _case(asker="controller", asker_person_id="PERSON-9999")
+    violations, _ = _checks(_PeopledWorld((case,), people=(_Person(),)))
+    assert [v.code for v in violations] == ["asker_not_found"]
+
+    seated = _case(asker="controller", asker_person_id="PERSON-0001")
+    violations, _ = _checks(_PeopledWorld((seated,), people=(_Person(),)))
+    assert violations == []
+
+
+def test_standing_is_checked_against_the_facts_the_case_cites(
+    installed_finance_lob,
+) -> None:
+    """The rule `may_ask_about` was added for, which an earlier draft declared
+    and never applied: holding some responsibility is not standing to ask this."""
+    from worldloom.world import World
+
+    world = World.load("examples/retail-close")
+    hr_fact = next(
+        (f for f in world.facts if not f.kind.startswith("financial.")), None
+    )
+    assert hr_fact is not None, "retail-close holds a non-financial fact to ask about"
+
+    case = _case(asker="controller", intent="triage_queue", expected_fact_ids=[hr_fact.id])
+
+    class _Probe(_World):
+        def __init__(self) -> None:
+            super().__init__((case,))
+            self.facts = world.facts
+
+    reported = findings(_Probe())
+    assert any(hr_fact.kind in line for line in reported), reported
+
+
+def test_used_share_divides_like_by_like() -> None:
+    """Occasions over triples understated utilisation by the number of verbs
+    per occasion."""
+    from worldloom.evals import coverage
+
+    cases = [
+        _case(id=f"E{n}", occasion="PCA-1", intent=verb, channel="email", deliverable=None)
+        for n, verb in enumerate(("triage_queue", "find_exception", "reconcile"))
+    ]
+    report = coverage.report(cases, situations_available=6)
+
+    assert report.occasions_used == 1
+    assert report.situations_used == 3
+    assert report.used_share == 0.5
+
+
+def test_the_difficulty_bucket_reads_the_density_it_declares() -> None:
+    from worldloom.evals import difficulty
+
+    clean = difficulty.features_for(_case(required_artifact_ids=["A1"]))
+    crowded = difficulty.features_for(
+        _case(required_artifact_ids=["A1"], distractor_artifact_ids=["D1", "D2", "D3"])
+    )
+
+    assert crowded.distractor_density > clean.distractor_density
+    assert crowded.bucket() != clean.bucket() or crowded.slice_key() != clean.slice_key()

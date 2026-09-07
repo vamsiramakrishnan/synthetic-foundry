@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..models import EvaluationType
 from .intents import intents
 
 
@@ -86,6 +87,31 @@ def _standing(role_key: str) -> tuple[bool, tuple[str, ...]]:
     return known, tuple(granted)
 
 
+def _unreachable_kinds(world: Any, case: Any, granted: tuple[str, ...]) -> set[str]:
+    """Fact kinds this case cites that *granted* does not cover.
+
+    Resolved from the world rather than from the case, because a case carries
+    fact ids and standing is declared over kinds. A fact id that resolves to
+    nothing is not this function's business: the referential check owns that,
+    and reporting it twice in two vocabularies would be the second account
+    this module exists to avoid.
+    """
+    from .. import factkinds
+
+    facts = getattr(world, "facts", None)
+    if facts is None or not granted:
+        return set()
+    unreachable: set[str] = set()
+    for fact_id in getattr(case, "expected_fact_ids", ()):
+        fact = facts.by_id(fact_id) if hasattr(facts, "by_id") else None
+        if fact is None:
+            continue
+        kind = getattr(fact, "kind", None)
+        if kind and not any(factkinds.covers(family, kind) for family in granted):
+            unreachable.add(kind)
+    return unreachable
+
+
 def _checks(world: Any) -> tuple[list, int]:
     """The ``eval_plausibility`` group: a request that agrees with its own tables.
 
@@ -107,7 +133,27 @@ def _checks(world: Any) -> tuple[list, int]:
             Violation(group="eval_plausibility", code=code, subject=subject, detail=detail)
         )
 
+    people = getattr(world, "people", None)
+
     for case in cases:
+        # Referential, so a violation rather than a finding: `validate` already
+        # refuses a case citing a fact or artifact the world does not hold, and
+        # a request naming a person it does not hold is the same defect in a
+        # new field. The evaluation branch in `validate` checks facts and
+        # artifacts only, so without this the provenance could point outside
+        # the world and still pass a clean run.
+        if case.asker_person_id is not None and people is not None:
+            checks += 1
+            if not (
+                people.by_id(case.asker_person_id)
+                if hasattr(people, "by_id")
+                else any(getattr(x, "id", None) == case.asker_person_id for x in people)
+            ):
+                fail(
+                    "asker_not_found",
+                    case.id,
+                    f"asker_person_id {case.asker_person_id!r} names nobody in this world",
+                )
         if case.intent is None:
             continue
         checks += 1
@@ -122,6 +168,22 @@ def _checks(world: Any) -> tuple[list, int]:
                 case.id,
                 f"intent {intent.id!r} grades as {intent.grading.value!r} but the"
                 f" case is {case.evaluation_type.value!r}",
+            )
+        # `evaluate.score` and `evaluate.across` branch on `expects_abstention`,
+        # not on the evaluation type, so a case whose flag and grading shape
+        # disagree is scored under a rule its verb never claimed: a `sign_off`
+        # marked as expecting abstention is graded as a refusal, and an
+        # `abstain` that forgets the flag is graded as an ordinary lookup.
+        # The base model ties the flag to the fact list and to nothing else,
+        # so this is the only place the two can be held together.
+        checks += 1
+        abstains = intent.grading is EvaluationType.EXPECTED_ABSTENTION
+        if abstains != case.expects_abstention:
+            fail(
+                "abstention_disagrees",
+                case.id,
+                f"intent {intent.id!r} grades as {intent.grading.value!r} but"
+                f" expects_abstention is {case.expects_abstention}",
             )
         checks += 1
         if intent.effect == "write" and case.deliverable is None:
@@ -188,6 +250,18 @@ def findings(world: Any) -> list[str]:
                 f"{case.id!r} is asked by {case.asker!r}, which holds no"
                 " responsibility and so has no declared reason to ask"
             )
+        else:
+            # The point of the rule, and the part an earlier draft left out:
+            # holding *some* responsibility is not standing to ask *this*.
+            # A controller who answers for financial kinds has no declared
+            # reason to ask about an HR fact, and `may_ask_about` exists to
+            # say so under the dot-boundary rule.
+            for kind in sorted(_unreachable_kinds(world, case, granted)):
+                out.append(
+                    f"{case.id!r} is asked by {case.asker!r}, which answers for"
+                    f" {', '.join(granted)} and so has no declared reason to ask"
+                    f" about {kind!r}"
+                )
 
     if askers and not lobs:
         # Said once, at the end, rather than per case: without a LOB there is

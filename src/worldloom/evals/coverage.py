@@ -51,6 +51,12 @@ class CoverageReport(Model):
     asker_counts: dict[str, int] = Field(default_factory=dict)
 
     occasions_used: int
+    situations_used: int = 0
+    """Distinct (occasion, intent, channel) triples the set reached.
+
+    Counted separately from `occasions_used` because `situations_available`
+    counts triples too, and dividing occasions by triples understates
+    utilisation by as much as the number of verbs per occasion."""
     channels_used: int
     channel_counts: dict[str, int] = Field(default_factory=dict)
 
@@ -69,10 +75,15 @@ class CoverageReport(Model):
 
     @property
     def used_share(self) -> float:
-        """Situations used over situations available, when both are known."""
+        """Situations used over situations available, when both are known.
+
+        Both sides are (occasion, intent, channel) triples. An earlier draft
+        put occasions over triples, which reported a tenth of the true share
+        wherever an occasion carried ten verbs.
+        """
         if not self.situations_available:
             return 0.0
-        return self.occasions_used / self.situations_available
+        return self.situations_used / self.situations_available
 
     def gaps(self) -> list[str]:
         """What this set does not say, as sentences.
@@ -117,6 +128,13 @@ def report(
     asker_counts = Counter(c.asker for c in requests if c.asker)
     channel_counts = Counter(c.channel for c in requests if c.channel)
     occasions = {c.occasion for c in requests if c.occasion}
+    # The same triple `process_bindings.situations` yields, so the numerator
+    # and the denominator of `used_share` count the same thing.
+    situation_keys = {
+        (c.occasion, c.intent, c.channel)
+        for c in requests
+        if c.occasion and c.intent and c.channel
+    }
 
     table = intents()
     writes = sum(
@@ -140,6 +158,7 @@ def report(
         askers_used=len(asker_counts),
         asker_counts=dict(sorted(asker_counts.items())),
         occasions_used=len(occasions),
+        situations_used=len(situation_keys),
         channels_used=len(channel_counts),
         channel_counts=dict(sorted(channel_counts.items())),
         write_share=writes / total if total else 0.0,
