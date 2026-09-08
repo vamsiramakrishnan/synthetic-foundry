@@ -89,38 +89,94 @@ The consequence is worth stating plainly, because it is easy to miss while
 looking at a green report: an agent can be graded as fully correct on its
 trajectory while returning an answer nobody checked.
 
-### 3. The default queryset path does not return
+### 3. The unnarrowed queryset path does not return
 
-`plan_queries(world, limit=3)` on the golden corpus ran for over 109 seconds
-without yielding a single query. The cause is an ordering: with the default
-`strategy="covering"`, `constrained_cover` consumes the entire candidate stream
-before anything is yielded, and `limit` is applied afterwards
-(`enterprise_queries.py:363`), so it bounds the output and not the work.
+**Corrected.** An earlier draft of this document said "the default queryset path
+hangs" and stopped there. That overstated it: the hang is real but it is the
+*unnarrowed* default only, and there are two routes that return promptly. A
+reader of the first version would have concluded the step was unusable, which it
+is not.
 
-Narrowing the profile does not help either, because `max_candidates` is a
-safety valve that *raises* rather than a bound that truncates:
-`CoverageProfile(max_candidates=50_000, connector_counts=(1,), failures=("none",))`
-refuses with `valid candidate count exceeds max_candidates=50000` after 3.1
-seconds. The default is 10,000,000, high enough that the refusal almost never
-fires and the caller simply waits.
+The hang: `plan_queries(world, limit=3)` on the golden corpus ran for over 109
+seconds without yielding a query. With the default `strategy="covering"`,
+`constrained_cover` consumes the entire candidate stream before anything is
+yielded, and `limit` is applied afterwards (`enterprise_queries.py:363`), so it
+bounds the output and not the work. Lowering `max_candidates` does not bound the
+work either, because it is a safety valve that *raises* rather than a bound that
+truncates. Its default of 10,000,000 is high enough that the refusal almost
+never fires and the caller simply waits.
 
-There is a fast path, and it works: `strategy="exhaustive", limit=4` returns in
-0.5 seconds. It is not in the skill documentation, so the documented route is
-the one that hangs.
+Both working routes were measured on `examples/retail-close`:
 
-### 4. Custom fields are a hook nothing reads
+- a narrowed `ScenarioProfile` (three connectors, one workflow, two failure
+  modes) covers 5,120 candidates to 79 queries in **0.88 seconds**, and two runs
+  produce byte-identical output;
+- `strategy="exhaustive", limit=N` is lazy, and returns in **0.5 seconds**.
 
-`SourceRequirement.required_fields` is declared in `enterprise_specs.py:50` and
-defaults to `()`. Nothing in the enterprise query path reads it. It does not
-reach fixture generation, so a record need not carry the field; it does not
-reach the query text, so no request mentions it; it does not reach the DAG, so
-no node filters on it; and it does not reach grading, so no assertion can
-require it.
+So what is actually missing is not a working path but a way to find one:
+`enterprise-evals space`, the command for sizing a selection before committing
+to it, takes no `--profile`, so it can only size the unnarrowed space. Neither
+route is in the skill documentation.
 
-A declared field with no consumer is worse than an absent one, because it reads
-as support. This is the same defect class as a check that cannot fail.
+### 4. Custom fields do not reach the covering planner
 
-### 5. Nothing serves the connectors to an external agent
+**Corrected.** An earlier draft said "custom fields are a hook nothing reads",
+which was too broad and would have caused someone to rebuild working machinery.
+Custom fields *do* work, on the other track: a field added through
+`ConnectorDefinition.with_fields` and passed to `run_eval_row(definitions=...)`
+propagates end to end, and that was verified by execution.
+
+What is true is narrower. `SourceRequirement.required_fields` is declared in
+`enterprise_specs.py:50`, defaults to `()`, and nothing in the *covering
+planner's* path reads it: it reaches neither fixture generation, nor the query
+text, nor the DAG, nor grading. Every planned row carries
+`"required_fields": []`.
+
+So the two halves of the engine disagree about custom fields rather than lacking
+them. The working machinery lives at `eval_design.RecordShapeRequirement.custom_fields`
+into `eval_shape.shape_connector_definitions` into
+`connector_fields.synthesize_custom_fields`, and its entry point
+`bind_eval_connectors` has no caller in `src/`. The work is connecting the
+planner to it, not building it.
+
+A declared field with no consumer is still worse than an absent one, because it
+reads as support. That part of the original finding stands.
+
+### 5. The planned trajectory could not be executed at all (fixed)
+
+**Added after the first draft, which missed it entirely, and since fixed.**
+
+The first version of this document treated "does the loop run end to end?" as an
+open question. It did not. `worldloom enterprise-evals simulate` on a corpus this
+repository plans and validates reported `completed: 0` of 12: every query stopped
+at its first node. Three defects held it there, one per module, each invisible to
+the others and none caught by any unit test, because no test invoked an
+`enterprise-evals` command at all.
+
+- `_target_id` (`connectors/enterprise.py`) chose the target record by fixture
+  field rather than by the connector and entity the node addresses, so every
+  source read was handed `destination_record_id`, the record the *write* would
+  target, and 404'd.
+- The `simulate` command manufactured a `ToolBinding` per DAG triple. Since
+  `RunnerConfig.resolve` consults bindings before the connector definition, a
+  synthesised `sharepoint.readback` beat the definition lookup that normalises
+  `readback` and `cross_system` to `read`, and every verify node died on
+  `KeyError`.
+- `_op_get` (`connector_emulator.py`) resolved entity aliases in the requested
+  position only, so a record stored under the alias `file` was invisible to the
+  `docx` tool that should have read it. Separately, `_concrete_entity` was
+  resolved eagerly for every operation although only `create` and `transition`
+  use it, so a read of a multi-member alias such as `jira/issue` refused before
+  it could do anything.
+
+Fixed, measured cumulatively on the same twelve-query corpus: 0 of 12, then 3,
+then 6, then **12 of 12 at mean DAG score 0.777**. None of it is a Generation
+change; no generated byte moves. `tests/test_enterprise_evals_pipeline.py` now
+runs plan, build, validate and simulate through the CLI and asserts the exact
+count, because an assertion of `completed > 0` would have passed with two of the
+three defects still in place.
+
+### 6. Nothing serves the connectors to an external agent
 
 `ConnectorEmulator` is in-process. There is no HTTP surface anywhere in `src/`,
 and `worldloom mcp` speaks stdio and exposes corpus introspection rather than
@@ -138,22 +194,29 @@ ordering is by what unblocks the most downstream rather than by ease.
 
 | # | Workstream | Size | Unblocks |
 |---|---|---|---|
-| A | Queryset ergonomics | S, ~1 day | Everything; today the first step hangs |
-| B | Answer and resultset outcomes | M, ~1 week | Three of five outcome kinds becoming five |
-| C | Custom fields end to end | M, ~1 week | The "customisations" half of selection |
+| ~~0~~ | ~~Make the planned trajectory executable~~ | **done** | The loop runs: 12 of 12, mean 0.777 |
+| A | Queryset ergonomics | S, ~1 day | Sizing a selection before committing to it |
+| B | Outcome grading: a producer, not a vocabulary | M, ~1 week | Three of five outcome kinds becoming five |
+| C | Custom fields reach the covering planner | M, ~1 week | The "customisations" half of selection |
 | D | DAG grammar and node arguments | L, ~3 to 5 weeks | Trajectory variety; the 42 shapes |
 | E | A served connector estate | M to L, ~2 to 4 weeks | Grading a real product rather than a simulation |
 
 ### A. Queryset ergonomics
 
-Give `constrained_cover` an optional bound so `limit` stops the covering pass
-rather than trimming its output, and thread it from `plan_queries`. Add the
-selection surface the ask actually describes, as a CLI over what already
-exists: choose connectors, choose formats, get a queryset. Document
-`strategy="exhaustive"` in the skill.
+Two routes already return promptly, so this is no longer about making one work.
+Give `enterprise-evals space` a `--profile` so a narrowed selection can be sized
+before it is committed to, which is the actual missing step, and document both
+routes in the skill. Optionally give `constrained_cover` a bound so `limit`
+stops the covering pass rather than trimming its output.
 
-Not a Generation change if the new bound defaults to the current behaviour,
+Not a Generation change if any new bound defaults to the current behaviour,
 which it should.
+
+A mistyped connector name no longer produces an empty corpus at exit 0:
+`apply_scenario_profile` now refuses, naming every unknown connector and
+workflow at once, and refuses a selection that admits no workflow. That was the
+worst failure this surface had, because the build succeeded and the eval set
+tested nothing.
 
 ### B. Answer and resultset outcomes
 
@@ -228,15 +291,32 @@ That is workstream A plus half of B, it is a few days rather than a few weeks,
 and it turns every later workstream into a widening of something that works
 instead of a bet on something that does not exist yet.
 
-## What is not yet established
+## What was not established, and now is
 
-The probe that produced the findings above covered selection, queryset,
-trajectory and the outcome taxonomy. Three things it has not yet settled, and
-which change the estimates if they go the wrong way:
+The first draft listed three open questions. All three have since been answered
+by running the code, and two of the answers changed this document.
 
-- Whether `materialize_corpus` proves that the fixtures satisfy the query, or
-  assumes it. If satisfaction is assumed, B and C both grow.
-- Whether `run_eval_row` executes end to end today, given it is reachable from
-  no CLI command and therefore has no user exercising it.
-- What test coverage these paths actually carry, which decides how much of each
-  workstream is new tests rather than new code.
+- **Does `run_eval_row` execute end to end?** No, and neither did the `simulate`
+  command above it: 0 of 12. Now 12 of 12; see finding 5.
+- **What test coverage do these paths carry?** None. No test invoked any
+  `enterprise-evals` command, and `score_trace` had no test at all. That is why
+  three defects in three modules could ship together: every unit passed, and
+  nothing checked that the units reached each other.
+  `tests/test_enterprise_evals_pipeline.py` is the first test to run the loop.
+- **Does `materialize_corpus` prove the fixtures satisfy the query?** Partly.
+  `validate_corpus` checks source requirements against `input_record_ids` and
+  refuses dangling records, so satisfaction is checked rather than assumed. What
+  is not checked is the *shape* of what it produces: records carry placeholder
+  values, and injected failure modes are recorded without being enforced.
+
+## Still open
+
+- Whether the reference artifact a query declares matches its own
+  `ArtifactRequirement`. It is real bytes of the right format, but its shape was
+  reported as not matching the requirement that asked for it, and as
+  non-deterministic. That gates the file outcome in B.
+- Three modules appear dead: `query_planning.py` is a second planner with no
+  `expected_dag` and no caller, `enterprise_cli.py` has zero importers, and
+  `field_manifests.py` has zero importers. Deleting them is a separate,
+  low-risk change and should be confirmed before it is made, not assumed from a
+  grep.

@@ -306,6 +306,22 @@ def apply_scenario_profile(
     merged_processes.update(
         {process.name: process for process in profile.additional_processes}
     )
+    # A name this registry does not hold is a typo, and it used to behave like
+    # a filter that matched nothing: `connectors: ["sharepont"]` planned zero
+    # candidates, wrote an empty corpus and exited 0. A selection that silently
+    # selects nothing is the worst failure this surface has, because the build
+    # succeeds and the eval set tests nothing. Every unknown name is named at
+    # once, the way `review()` reports below.
+    unknown = [
+        f"unknown connector {name!r}"
+        for name in sorted(set(profile.connectors) - set(registry.connectors))
+    ] + [
+        f"unknown workflow {name!r}"
+        for name in sorted(set(profile.workflows) - set(merged_workflows))
+    ]
+    if unknown:
+        refuse("enterprise scenario profile", unknown)
+
     connectors = set(profile.connectors) or set(registry.connectors)
     workflows = set(profile.workflows) or set(merged_workflows)
     selected_workflows = []
@@ -337,6 +353,20 @@ def apply_scenario_profile(
         selected_workflows,
         merged_processes.values(),
     )
+    if not selected_workflows:
+        # Every name resolved, and the cross of them still admits nothing: a
+        # workflow whose sources or destinations all sit outside the chosen
+        # connectors is dropped at the `continue` above. Same silent-empty
+        # outcome as an unknown name, reached a different way, so it is refused
+        # in the same place rather than left to surface as `queries: 0`.
+        refuse(
+            "enterprise scenario profile",
+            [
+                "no workflow survives this selection: "
+                f"connectors {sorted(connectors)} cover neither the sources nor"
+                f" the destinations of workflows {sorted(workflows)}"
+            ],
+        )
     findings = selected.review()
     if findings:
         refuse("enterprise scenario profile", findings)
