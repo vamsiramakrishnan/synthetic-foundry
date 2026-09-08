@@ -1,0 +1,140 @@
+{
+  "compile_seconds": 67.29223298099896,
+  "dataset": {
+    "accepted": 1000,
+    "batches": 36,
+    "cases": 998,
+    "companies": 36,
+    "complete": true,
+    "equivalent_plans_removed": 0,
+    "facets": {
+      "dag_shape": {
+        "conditional": 193,
+        "deep_chain": 148,
+        "diamond": 155,
+        "fan_in": 153,
+        "fan_out": 150,
+        "map_read": 149,
+        "read_chain": 52
+      },
+      "failure": {
+        "none": 500,
+        "partial_write": 500
+      },
+      "operation": {
+        "draft": 1000
+      },
+      "output_format": {
+        "html": 1000
+      },
+      "source_set": {
+        "email": 235,
+        "jira": 96,
+        "jira+email": 112,
+        "jira+servicenow": 112,
+        "salesforce": 190,
+        "salesforce+email": 159,
+        "servicenow": 96
+      },
+      "workflow": {
+        "inventory_exception_review": 500,
+        "loan_arrears_review": 500
+      }
+    },
+    "findings": [],
+    "largest_split_group": 32,
+    "planned_candidates": 1152,
+    "refusals": {},
+    "remaining": {
+      "banking-none": 0,
+      "banking-partial_write": 0,
+      "retail-none": 0,
+      "retail-partial_write": 0
+    },
+    "requests": 126,
+    "split_counts": {
+      "test": 106,
+      "train": 798,
+      "validation": 96
+    },
+    "split_groups": 36,
+    "target": 1000,
+    "tasks": 50
+  },
+  "equivalent_plan_probe": {
+    "accepted": 4,
+    "batches": 1,
+    "cases": 4,
+    "companies": 1,
+    "complete": true,
+    "equivalent_plans_removed": 392,
+    "facets": {
+      "dag_shape": {
+        "map_read": 4
+      },
+      "failure": {
+        "none": 1,
+        "partial_write": 1,
+        "permission_denied": 2
+      },
+      "operation": {
+        "draft": 4
+      },
+      "output_format": {
+        "html": 4
+      },
+      "source_set": {
+        "jira+servicenow": 1,
+        "jira+servicenow+email": 1,
+        "servicenow": 1,
+        "servicenow+email": 1
+      },
+      "workflow": {
+        "inventory_exception_review": 4
+      }
+    },
+    "findings": [],
+    "largest_split_group": 3,
+    "planned_candidates": 448,
+    "refusals": {},
+    "remaining": {
+      "quotient": 0
+    },
+    "requests": 4,
+    "split_counts": {
+      "train": 4
+    },
+    "split_groups": 2,
+    "target": 4,
+    "tasks": 4
+  },
+  "limits": [
+    "Two business workflows, four requested strata; not enterprise-wide semantic coverage.",
+    "Company-disjoint splits; executable task families may occur in multiple splits.",
+    "Reference connector assertions; no measured target-agent difficulty or prose-quality gate."
+  ],
+  "metadata_only_100k_split_probe": {
+    "groups": 10000,
+    "largest": 10,
+    "rows": 100000,
+    "seconds": 0.9961391249998996,
+    "splits": {
+      "test": 10000,
+      "train": 80000,
+      "validation": 10000
+    }
+  },
+  "offline_replay_seconds": 65.45517941999788,
+  "plan_digest": "be97642b16760860f9f98390fe436c66",
+  "plan_file": "examples/datasets/retail-banking.json",
+  "plan_sha256": "4443f45c757d06de2b80d353a393fdc8792922d25be6ce08f7889c063987214f",
+  "replay_manifest_identical": true,
+  "source_sha256": {
+    "src/worldloom/evals/dataset.py": "c03fff9db0d9d4044013786d7ddbf0bb2ce994e1663250932c8b1a69c332dd1a",
+    "src/worldloom/evals/dataset_contract.py": "1fd6b0d32e3f6ddb1837ea495e368893958315a335982444d1faeb9c3990e7ed",
+    "src/worldloom/evals/dataset_identity.py": "7070c7930d7e0e51b467be5d4f1a6f2a70a924c855cc0f070de5ad8a02261f96",
+    "tools/measure_dataset_compiler.py": "21ed652b76182e811c2474d1e970db2b185074eb383748e7824d26e940f020b4"
+  },
+  "started_from_checkpoint": true,
+  "verification_context": "The 36 generated batch checkpoints were copied into an isolated run directory, recovered by request identity, verified and replayed. Timings measure checkpoint compilation/replay, not cold generation."
+}

@@ -96,6 +96,7 @@ enterprise_evals_app = typer.Typer(
 app.add_typer(enterprise_evals_app, name="enterprise-evals")
 
 from .connector_serving_cli import serve_command
+from .dataset_cli import dataset_app
 from .enterprise_qualification_cli import qualify_command
 from .quality_cli import calibration_app, readers_app
 
@@ -103,6 +104,7 @@ enterprise_evals_app.command("serve")(serve_command)
 enterprise_evals_app.command("qualify")(qualify_command)
 narrate_app.add_typer(readers_app, name="readers")
 evals_app.add_typer(calibration_app, name="calibration")
+evals_app.add_typer(dataset_app, name="dataset")
 
 # Keep operational generation in its own command module, not this monolith.
 from .gemini_enterprise.cli import app as gemini_enterprise_app
@@ -507,6 +509,8 @@ _REFUSALS: dict[str, str] = {
     "corpus_unloadable": "the corpus (or something it depends on) cannot be read",
     "destination_exists": "the output destination exists and --overwrite was not given",
     "datastore_unexportable": "the workspace could not be written as Discovery Engine documents",
+    "dataset_rejected": "dataset plan, source or checkpoint was refused; detail names the contract",
+    "dataset_incomplete": "dataset quotas, diversity or split obligations remain; the run can be inspected or resumed",
     "doctor_unhealthy": "this installation cannot do everything the docs promise",
     "duplicate_facet": "one facet dimension was given two values",
     "empty_query": "the search query is empty",

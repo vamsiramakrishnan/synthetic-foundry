@@ -17,6 +17,7 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 | Design an eval, then generate candidate corpora for it | [Eval-first generation](eval-first.md) | [Eval-first world compilation](eval-first-world-compilation.md) and [Python SDK](sdk.md) |
 | Build one corpus | [README quickstart](../README.md#quickstart) | [Architecture and invariants](architecture.md) |
 | Generate operational records and counterfactuals | [Operational synthesis](operational-synthesis.md) | [Agent skills](skills.md) |
+| Compile a diverse queryset with quotas and isolated splits | [Dataset compiler](dataset-compiler.md) | [Qualification](enterprise-qualification.md) and [Quality gates](quality-calibration.md) |
 | Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
 | Use Worldloom from Python | [Python SDK](sdk.md) | [Episode grammar](episode-grammar.md) |
 | Drive Worldloom with a coding agent | [Agent skills](skills.md) | [AGENTS.md](../AGENTS.md) |

@@ -1,0 +1,4433 @@
+{
+  "schema_version": "worldloom.dataset/v1",
+  "seed": 8128,
+  "builder_id": "worldloom-dataset-source/v1",
+  "strata": [
+    {
+      "id": "retail-none",
+      "count": 250,
+      "source": {
+        "company": {
+          "engine": "retail",
+          "geo": "united_kingdom"
+        },
+        "scenario": {
+          "name": "inventory_exception_review",
+          "industry": "retail",
+          "company_description": "Declared retail operational simulation.",
+          "workflows": [
+            "inventory_exception_review"
+          ],
+          "additional_workflows": [
+            {
+              "name": "inventory_exception_review",
+              "purpose": "store-product stock availability and replenishment exception review",
+              "process": "retail_replenishment",
+              "sources": [
+                {
+                  "connector": "jira",
+                  "entities": [
+                    "issue"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                },
+                {
+                  "connector": "servicenow",
+                  "entities": [
+                    "incident"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                },
+                {
+                  "connector": "email",
+                  "entities": [
+                    "thread"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                }
+              ],
+              "destinations": [
+                {
+                  "connector": "email",
+                  "entities": [
+                    "message"
+                  ],
+                  "operations": [
+                    "draft"
+                  ],
+                  "formats": [
+                    "html"
+                  ],
+                  "target_state": null,
+                  "target_state_field": "state"
+                }
+              ],
+              "content_actions": [
+                "reconcile",
+                "generate"
+              ],
+              "audiences": [
+                "retail_operations"
+              ],
+              "topologies": [
+                "chain",
+                "fan_in",
+                "fan_out",
+                "diamond"
+              ],
+              "verification": [
+                "readback",
+                "cross_system"
+              ],
+              "prompt_template": "Prepare {purpose} for {company}. Use {sources}. Join case_id and use the attached observation histories. {action_instruction} {output_label} in {destination}, then {verification_instruction}.{failure_instruction}"
+            }
+          ],
+          "additional_connectors": [],
+          "additional_processes": [],
+          "connectors": [
+            "email",
+            "jira",
+            "servicenow"
+          ],
+          "vocabulary": {},
+          "coverage": {
+            "name": "enterprise-default",
+            "strengths": 2,
+            "connector_counts": [
+              1,
+              2,
+              4,
+              6
+            ],
+            "failures": [
+              "none"
+            ],
+            "max_candidates": 10000000
+          }
+        },
+        "period": null,
+        "periods": 1,
+        "simulation": {
+          "schema_version": "worldloom.synthesis/v1",
+          "namespace": "retail_operations",
+          "ticks": 24,
+          "parameters": [
+            {
+              "name": "target_stock",
+              "value": 15,
+              "minimum": 5,
+              "maximum": 200,
+              "mutable": true
+            },
+            {
+              "name": "initial_stock",
+              "value": 8,
+              "minimum": 0,
+              "maximum": 200,
+              "mutable": true
+            },
+            {
+              "name": "promotion_pct",
+              "value": 25,
+              "minimum": 0,
+              "maximum": 100,
+              "mutable": true
+            }
+          ],
+          "tables": [
+            {
+              "name": "store",
+              "count": 4,
+              "temporal": false,
+              "columns": [
+                {
+                  "name": "demand_scale",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 75,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 125,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "store_scale"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "percent",
+                  "intervenable": false
+                },
+                {
+                  "name": "region",
+                  "expression": {
+                    "op": "mod",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "_entity",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 4,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": null,
+                  "intervenable": false
+                }
+              ],
+              "relations": [],
+              "constraints": []
+            },
+            {
+              "name": "product",
+              "count": 8,
+              "temporal": false,
+              "columns": [
+                {
+                  "name": "base_demand",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 5,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 16,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "product_demand"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "price",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 150,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 2500,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "price"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "cost",
+                  "expression": {
+                    "op": "div",
+                    "args": [
+                      {
+                        "op": "mul",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "price",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 65,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 100,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                }
+              ],
+              "relations": [],
+              "constraints": []
+            },
+            {
+              "name": "inventory",
+              "count": 32,
+              "temporal": true,
+              "columns": [
+                {
+                  "name": "opening",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "param",
+                        "args": [],
+                        "value": null,
+                        "name": "initial_stock",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "closing",
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "receipts",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "order",
+                    "steps": 2,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "pipeline",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "order",
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "market",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 80,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 120,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "tick",
+                    "stream": "market"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "index",
+                  "intervenable": false
+                },
+                {
+                  "name": "noise",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 75,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 125,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": "demand_noise"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "index",
+                  "intervenable": false
+                },
+                {
+                  "name": "promotion",
+                  "expression": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "mod",
+                            "args": [
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "_tick",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "literal",
+                                "args": [],
+                                "value": 7,
+                                "name": null,
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 5,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "param",
+                        "args": [],
+                        "value": null,
+                        "name": "promotion_pct",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "percent",
+                  "intervenable": true
+                },
+                {
+                  "name": "demand",
+                  "expression": {
+                    "op": "div",
+                    "args": [
+                      {
+                        "op": "mul",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "product.base_demand",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "store.demand_scale",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "market",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "noise",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "add",
+                            "args": [
+                              {
+                                "op": "literal",
+                                "args": [],
+                                "value": 100,
+                                "name": null,
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "promotion",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 100000000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": true
+                },
+                {
+                  "name": "available",
+                  "expression": {
+                    "op": "add",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "opening",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "receipts",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "sold",
+                  "expression": {
+                    "op": "min",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "demand",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "available",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "lost",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "demand",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "closing",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "available",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "order",
+                  "expression": {
+                    "op": "max",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "sub",
+                        "args": [
+                          {
+                            "op": "param",
+                            "args": [],
+                            "value": null,
+                            "name": "target_stock",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "add",
+                            "args": [
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "closing",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "pipeline",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "revenue",
+                  "expression": {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "product.price",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "cost",
+                  "expression": {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "product.cost",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "margin",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "revenue",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "cost",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                }
+              ],
+              "relations": [
+                {
+                  "name": "store",
+                  "table": "store",
+                  "stride": 8,
+                  "offset": 0
+                },
+                {
+                  "name": "product",
+                  "table": "product",
+                  "stride": 1,
+                  "offset": 0
+                }
+              ],
+              "constraints": [
+                {
+                  "name": "stock_conservation",
+                  "predicate": {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "opening",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "receipts",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "sold",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "closing",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                },
+                {
+                  "name": "demand_conservation",
+                  "predicate": {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "demand",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "sold",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "lost",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                },
+                {
+                  "name": "no_oversell",
+                  "predicate": {
+                    "op": "le",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "available",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "incident_rule": {
+          "table": "inventory",
+          "signal": "lost",
+          "title": "Stock availability",
+          "threshold": 0
+        },
+        "dag_shapes": [
+          "*"
+        ],
+        "where": {},
+        "pool_size": 32,
+        "planning_budget": 512,
+        "acknowledged_unmet": []
+      }
+    },
+    {
+      "id": "retail-partial_write",
+      "count": 250,
+      "source": {
+        "company": {
+          "engine": "retail",
+          "geo": "united_kingdom"
+        },
+        "scenario": {
+          "name": "inventory_exception_review",
+          "industry": "retail",
+          "company_description": "Declared retail operational simulation.",
+          "workflows": [
+            "inventory_exception_review"
+          ],
+          "additional_workflows": [
+            {
+              "name": "inventory_exception_review",
+              "purpose": "store-product stock availability and replenishment exception review",
+              "process": "retail_replenishment",
+              "sources": [
+                {
+                  "connector": "jira",
+                  "entities": [
+                    "issue"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                },
+                {
+                  "connector": "servicenow",
+                  "entities": [
+                    "incident"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                },
+                {
+                  "connector": "email",
+                  "entities": [
+                    "thread"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                }
+              ],
+              "destinations": [
+                {
+                  "connector": "email",
+                  "entities": [
+                    "message"
+                  ],
+                  "operations": [
+                    "draft"
+                  ],
+                  "formats": [
+                    "html"
+                  ],
+                  "target_state": null,
+                  "target_state_field": "state"
+                }
+              ],
+              "content_actions": [
+                "reconcile",
+                "generate"
+              ],
+              "audiences": [
+                "retail_operations"
+              ],
+              "topologies": [
+                "chain",
+                "fan_in",
+                "fan_out",
+                "diamond"
+              ],
+              "verification": [
+                "readback",
+                "cross_system"
+              ],
+              "prompt_template": "Prepare {purpose} for {company}. Use {sources}. Join case_id and use the attached observation histories. {action_instruction} {output_label} in {destination}, then {verification_instruction}.{failure_instruction}"
+            }
+          ],
+          "additional_connectors": [],
+          "additional_processes": [],
+          "connectors": [
+            "email",
+            "jira",
+            "servicenow"
+          ],
+          "vocabulary": {},
+          "coverage": {
+            "name": "enterprise-default",
+            "strengths": 2,
+            "connector_counts": [
+              1,
+              2,
+              4,
+              6
+            ],
+            "failures": [
+              "partial_write"
+            ],
+            "max_candidates": 10000000
+          }
+        },
+        "period": null,
+        "periods": 1,
+        "simulation": {
+          "schema_version": "worldloom.synthesis/v1",
+          "namespace": "retail_operations",
+          "ticks": 24,
+          "parameters": [
+            {
+              "name": "target_stock",
+              "value": 15,
+              "minimum": 5,
+              "maximum": 200,
+              "mutable": true
+            },
+            {
+              "name": "initial_stock",
+              "value": 8,
+              "minimum": 0,
+              "maximum": 200,
+              "mutable": true
+            },
+            {
+              "name": "promotion_pct",
+              "value": 25,
+              "minimum": 0,
+              "maximum": 100,
+              "mutable": true
+            }
+          ],
+          "tables": [
+            {
+              "name": "store",
+              "count": 4,
+              "temporal": false,
+              "columns": [
+                {
+                  "name": "demand_scale",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 75,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 125,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "store_scale"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "percent",
+                  "intervenable": false
+                },
+                {
+                  "name": "region",
+                  "expression": {
+                    "op": "mod",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "_entity",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 4,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": null,
+                  "intervenable": false
+                }
+              ],
+              "relations": [],
+              "constraints": []
+            },
+            {
+              "name": "product",
+              "count": 8,
+              "temporal": false,
+              "columns": [
+                {
+                  "name": "base_demand",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 5,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 16,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "product_demand"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "price",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 150,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 2500,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "price"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "cost",
+                  "expression": {
+                    "op": "div",
+                    "args": [
+                      {
+                        "op": "mul",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "price",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 65,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 100,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                }
+              ],
+              "relations": [],
+              "constraints": []
+            },
+            {
+              "name": "inventory",
+              "count": 32,
+              "temporal": true,
+              "columns": [
+                {
+                  "name": "opening",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "param",
+                        "args": [],
+                        "value": null,
+                        "name": "initial_stock",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "closing",
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "receipts",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "order",
+                    "steps": 2,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "pipeline",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "order",
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "market",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 80,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 120,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "tick",
+                    "stream": "market"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "index",
+                  "intervenable": false
+                },
+                {
+                  "name": "noise",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 75,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 125,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": "demand_noise"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "index",
+                  "intervenable": false
+                },
+                {
+                  "name": "promotion",
+                  "expression": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "mod",
+                            "args": [
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "_tick",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "literal",
+                                "args": [],
+                                "value": 7,
+                                "name": null,
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 5,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "param",
+                        "args": [],
+                        "value": null,
+                        "name": "promotion_pct",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "percent",
+                  "intervenable": true
+                },
+                {
+                  "name": "demand",
+                  "expression": {
+                    "op": "div",
+                    "args": [
+                      {
+                        "op": "mul",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "product.base_demand",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "store.demand_scale",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "market",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "noise",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "add",
+                            "args": [
+                              {
+                                "op": "literal",
+                                "args": [],
+                                "value": 100,
+                                "name": null,
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "promotion",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 100000000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": true
+                },
+                {
+                  "name": "available",
+                  "expression": {
+                    "op": "add",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "opening",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "receipts",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "sold",
+                  "expression": {
+                    "op": "min",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "demand",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "available",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "lost",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "demand",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "closing",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "available",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "order",
+                  "expression": {
+                    "op": "max",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "sub",
+                        "args": [
+                          {
+                            "op": "param",
+                            "args": [],
+                            "value": null,
+                            "name": "target_stock",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "add",
+                            "args": [
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "closing",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "pipeline",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "units",
+                  "intervenable": false
+                },
+                {
+                  "name": "revenue",
+                  "expression": {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "product.price",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "cost",
+                  "expression": {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "product.cost",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "margin",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "revenue",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "cost",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                }
+              ],
+              "relations": [
+                {
+                  "name": "store",
+                  "table": "store",
+                  "stride": 8,
+                  "offset": 0
+                },
+                {
+                  "name": "product",
+                  "table": "product",
+                  "stride": 1,
+                  "offset": 0
+                }
+              ],
+              "constraints": [
+                {
+                  "name": "stock_conservation",
+                  "predicate": {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "opening",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "receipts",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "sold",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "closing",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                },
+                {
+                  "name": "demand_conservation",
+                  "predicate": {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "demand",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "sold",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "lost",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                },
+                {
+                  "name": "no_oversell",
+                  "predicate": {
+                    "op": "le",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "sold",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "available",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "incident_rule": {
+          "table": "inventory",
+          "signal": "lost",
+          "title": "Stock availability",
+          "threshold": 0
+        },
+        "dag_shapes": [
+          "*"
+        ],
+        "where": {},
+        "pool_size": 32,
+        "planning_budget": 512,
+        "acknowledged_unmet": []
+      }
+    },
+    {
+      "id": "banking-none",
+      "count": 250,
+      "source": {
+        "company": {
+          "engine": "banking",
+          "geo": "united_kingdom"
+        },
+        "scenario": {
+          "name": "loan_arrears_review",
+          "industry": "banking",
+          "company_description": "Declared banking operational simulation.",
+          "workflows": [
+            "loan_arrears_review"
+          ],
+          "additional_workflows": [
+            {
+              "name": "loan_arrears_review",
+              "purpose": "loan servicing, payment and arrears review",
+              "process": "loan_servicing",
+              "sources": [
+                {
+                  "connector": "salesforce",
+                  "entities": [
+                    "case"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                },
+                {
+                  "connector": "email",
+                  "entities": [
+                    "thread"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                }
+              ],
+              "destinations": [
+                {
+                  "connector": "email",
+                  "entities": [
+                    "message"
+                  ],
+                  "operations": [
+                    "draft"
+                  ],
+                  "formats": [
+                    "html"
+                  ],
+                  "target_state": null,
+                  "target_state_field": "state"
+                }
+              ],
+              "content_actions": [
+                "reconcile",
+                "generate"
+              ],
+              "audiences": [
+                "servicing_operations"
+              ],
+              "topologies": [
+                "chain",
+                "fan_in",
+                "fan_out",
+                "diamond"
+              ],
+              "verification": [
+                "readback",
+                "cross_system"
+              ],
+              "prompt_template": "Prepare {purpose} for {company}. Use {sources}. Join case_id and use the attached observation histories. {action_instruction} {output_label} in {destination}, then {verification_instruction}.{failure_instruction}"
+            }
+          ],
+          "additional_connectors": [],
+          "additional_processes": [],
+          "connectors": [
+            "email",
+            "salesforce"
+          ],
+          "vocabulary": {},
+          "coverage": {
+            "name": "enterprise-default",
+            "strengths": 2,
+            "connector_counts": [
+              1,
+              2,
+              4,
+              6
+            ],
+            "failures": [
+              "none"
+            ],
+            "max_candidates": 10000000
+          }
+        },
+        "period": null,
+        "periods": 1,
+        "simulation": {
+          "schema_version": "worldloom.synthesis/v1",
+          "namespace": "loan_servicing",
+          "ticks": 16,
+          "parameters": [
+            {
+              "name": "monthly_rate_bps",
+              "value": 50,
+              "minimum": 0,
+              "maximum": 200,
+              "mutable": true
+            },
+            {
+              "name": "payment_pct",
+              "value": 5,
+              "minimum": 1,
+              "maximum": 30,
+              "mutable": true
+            },
+            {
+              "name": "income_shock_pct",
+              "value": 0,
+              "minimum": 0,
+              "maximum": 60,
+              "mutable": true
+            }
+          ],
+          "tables": [
+            {
+              "name": "borrower",
+              "count": 24,
+              "temporal": false,
+              "columns": [
+                {
+                  "name": "principal",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 100000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 2000000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "principal"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "capacity_pct",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 2,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 9,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "capacity"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "percent",
+                  "intervenable": false
+                },
+                {
+                  "name": "risk_band",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 3,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "risk"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": null,
+                  "intervenable": false
+                }
+              ],
+              "relations": [],
+              "constraints": []
+            },
+            {
+              "name": "loan",
+              "count": 24,
+              "temporal": true,
+              "columns": [
+                {
+                  "name": "opening",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "borrower.principal",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "closing",
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "interest",
+                  "expression": {
+                    "op": "div",
+                    "args": [
+                      {
+                        "op": "mul",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "opening",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "param",
+                            "args": [],
+                            "value": null,
+                            "name": "monthly_rate_bps",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 10000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "owed",
+                  "expression": {
+                    "op": "add",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "opening",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "interest",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "prior_arrears",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "arrears",
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "scheduled",
+                  "expression": {
+                    "op": "min",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "owed",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "div",
+                        "args": [
+                          {
+                            "op": "mul",
+                            "args": [
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "borrower.principal",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "param",
+                                "args": [],
+                                "value": null,
+                                "name": "payment_pct",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 100,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "due",
+                  "expression": {
+                    "op": "min",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "owed",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "scheduled",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "prior_arrears",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "income_noise",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 70,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 130,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": "income_noise"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "index",
+                  "intervenable": false
+                },
+                {
+                  "name": "capacity",
+                  "expression": {
+                    "op": "div",
+                    "args": [
+                      {
+                        "op": "mul",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "borrower.principal",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "borrower.capacity_pct",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "income_noise",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "sub",
+                            "args": [
+                              {
+                                "op": "literal",
+                                "args": [],
+                                "value": 100,
+                                "name": null,
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "param",
+                                "args": [],
+                                "value": null,
+                                "name": "income_shock_pct",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 1000000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": true
+                },
+                {
+                  "name": "paid",
+                  "expression": {
+                    "op": "min",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "due",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "capacity",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "closing",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "owed",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "paid",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "arrears",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "due",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "paid",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "missed_periods",
+                  "expression": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "lt",
+                        "args": [
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 0,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "arrears",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "lag",
+                            "args": [
+                              {
+                                "op": "literal",
+                                "args": [],
+                                "value": 0,
+                                "name": null,
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": "missed_periods",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 1,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": null,
+                  "intervenable": false
+                }
+              ],
+              "relations": [
+                {
+                  "name": "borrower",
+                  "table": "borrower",
+                  "stride": 1,
+                  "offset": 0
+                }
+              ],
+              "constraints": [
+                {
+                  "name": "balance_conservation",
+                  "predicate": {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "opening",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "interest",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "paid",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "closing",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                },
+                {
+                  "name": "arrears_within_balance",
+                  "predicate": {
+                    "op": "le",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "arrears",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "closing",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "incident_rule": {
+          "table": "loan",
+          "signal": "arrears",
+          "title": "Payment arrears",
+          "threshold": 0
+        },
+        "dag_shapes": [
+          "*"
+        ],
+        "where": {},
+        "pool_size": 32,
+        "planning_budget": 512,
+        "acknowledged_unmet": [
+          "the 'flat' trading year: the banking engine's world builder has no `seasonality` field, so nothing carries one. Only the retail engine reads a trading year today (`generators/finance` is the one generator that consults it)."
+        ]
+      }
+    },
+    {
+      "id": "banking-partial_write",
+      "count": 250,
+      "source": {
+        "company": {
+          "engine": "banking",
+          "geo": "united_kingdom"
+        },
+        "scenario": {
+          "name": "loan_arrears_review",
+          "industry": "banking",
+          "company_description": "Declared banking operational simulation.",
+          "workflows": [
+            "loan_arrears_review"
+          ],
+          "additional_workflows": [
+            {
+              "name": "loan_arrears_review",
+              "purpose": "loan servicing, payment and arrears review",
+              "process": "loan_servicing",
+              "sources": [
+                {
+                  "connector": "salesforce",
+                  "entities": [
+                    "case"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                },
+                {
+                  "connector": "email",
+                  "entities": [
+                    "thread"
+                  ],
+                  "operations": [
+                    "search",
+                    "read"
+                  ],
+                  "minimum": 1,
+                  "required_fields": []
+                }
+              ],
+              "destinations": [
+                {
+                  "connector": "email",
+                  "entities": [
+                    "message"
+                  ],
+                  "operations": [
+                    "draft"
+                  ],
+                  "formats": [
+                    "html"
+                  ],
+                  "target_state": null,
+                  "target_state_field": "state"
+                }
+              ],
+              "content_actions": [
+                "reconcile",
+                "generate"
+              ],
+              "audiences": [
+                "servicing_operations"
+              ],
+              "topologies": [
+                "chain",
+                "fan_in",
+                "fan_out",
+                "diamond"
+              ],
+              "verification": [
+                "readback",
+                "cross_system"
+              ],
+              "prompt_template": "Prepare {purpose} for {company}. Use {sources}. Join case_id and use the attached observation histories. {action_instruction} {output_label} in {destination}, then {verification_instruction}.{failure_instruction}"
+            }
+          ],
+          "additional_connectors": [],
+          "additional_processes": [],
+          "connectors": [
+            "email",
+            "salesforce"
+          ],
+          "vocabulary": {},
+          "coverage": {
+            "name": "enterprise-default",
+            "strengths": 2,
+            "connector_counts": [
+              1,
+              2,
+              4,
+              6
+            ],
+            "failures": [
+              "partial_write"
+            ],
+            "max_candidates": 10000000
+          }
+        },
+        "period": null,
+        "periods": 1,
+        "simulation": {
+          "schema_version": "worldloom.synthesis/v1",
+          "namespace": "loan_servicing",
+          "ticks": 16,
+          "parameters": [
+            {
+              "name": "monthly_rate_bps",
+              "value": 50,
+              "minimum": 0,
+              "maximum": 200,
+              "mutable": true
+            },
+            {
+              "name": "payment_pct",
+              "value": 5,
+              "minimum": 1,
+              "maximum": 30,
+              "mutable": true
+            },
+            {
+              "name": "income_shock_pct",
+              "value": 0,
+              "minimum": 0,
+              "maximum": 60,
+              "mutable": true
+            }
+          ],
+          "tables": [
+            {
+              "name": "borrower",
+              "count": 24,
+              "temporal": false,
+              "columns": [
+                {
+                  "name": "principal",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 100000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 2000000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "principal"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "capacity_pct",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 2,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 9,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "capacity"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "percent",
+                  "intervenable": false
+                },
+                {
+                  "name": "risk_band",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 3,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "entity",
+                    "stream": "risk"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": null,
+                  "intervenable": false
+                }
+              ],
+              "relations": [],
+              "constraints": []
+            },
+            {
+              "name": "loan",
+              "count": 24,
+              "temporal": true,
+              "columns": [
+                {
+                  "name": "opening",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "borrower.principal",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "closing",
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "interest",
+                  "expression": {
+                    "op": "div",
+                    "args": [
+                      {
+                        "op": "mul",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "opening",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "param",
+                            "args": [],
+                            "value": null,
+                            "name": "monthly_rate_bps",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 10000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "owed",
+                  "expression": {
+                    "op": "add",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "opening",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "interest",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "prior_arrears",
+                  "expression": {
+                    "op": "lag",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": "arrears",
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "scheduled",
+                  "expression": {
+                    "op": "min",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "owed",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "div",
+                        "args": [
+                          {
+                            "op": "mul",
+                            "args": [
+                              {
+                                "op": "ref",
+                                "args": [],
+                                "value": null,
+                                "name": "borrower.principal",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "param",
+                                "args": [],
+                                "value": null,
+                                "name": "payment_pct",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 100,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "due",
+                  "expression": {
+                    "op": "min",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "owed",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "scheduled",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "prior_arrears",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "income_noise",
+                  "expression": {
+                    "op": "uniform",
+                    "args": [
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 70,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 130,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": "income_noise"
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "index",
+                  "intervenable": false
+                },
+                {
+                  "name": "capacity",
+                  "expression": {
+                    "op": "div",
+                    "args": [
+                      {
+                        "op": "mul",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "borrower.principal",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "borrower.capacity_pct",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "income_noise",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "sub",
+                            "args": [
+                              {
+                                "op": "literal",
+                                "args": [],
+                                "value": 100,
+                                "name": null,
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              },
+                              {
+                                "op": "param",
+                                "args": [],
+                                "value": null,
+                                "name": "income_shock_pct",
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 1000000,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": true
+                },
+                {
+                  "name": "paid",
+                  "expression": {
+                    "op": "min",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "due",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "capacity",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "closing",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "owed",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "paid",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "arrears",
+                  "expression": {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "due",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "paid",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": "minor_currency",
+                  "intervenable": false
+                },
+                {
+                  "name": "missed_periods",
+                  "expression": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "lt",
+                        "args": [
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 0,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "arrears",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "lag",
+                            "args": [
+                              {
+                                "op": "literal",
+                                "args": [],
+                                "value": 0,
+                                "name": null,
+                                "steps": 1,
+                                "scope": "cell",
+                                "stream": null
+                              }
+                            ],
+                            "value": null,
+                            "name": "missed_periods",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "literal",
+                            "args": [],
+                            "value": 1,
+                            "name": null,
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "literal",
+                        "args": [],
+                        "value": 0,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  },
+                  "kind": "int",
+                  "minimum": 0,
+                  "maximum": null,
+                  "unit": null,
+                  "intervenable": false
+                }
+              ],
+              "relations": [
+                {
+                  "name": "borrower",
+                  "table": "borrower",
+                  "stride": 1,
+                  "offset": 0
+                }
+              ],
+              "constraints": [
+                {
+                  "name": "balance_conservation",
+                  "predicate": {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "opening",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "interest",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "paid",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          },
+                          {
+                            "op": "ref",
+                            "args": [],
+                            "value": null,
+                            "name": "closing",
+                            "steps": 1,
+                            "scope": "cell",
+                            "stream": null
+                          }
+                        ],
+                        "value": null,
+                        "name": null,
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                },
+                {
+                  "name": "arrears_within_balance",
+                  "predicate": {
+                    "op": "le",
+                    "args": [
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "arrears",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      },
+                      {
+                        "op": "ref",
+                        "args": [],
+                        "value": null,
+                        "name": "closing",
+                        "steps": 1,
+                        "scope": "cell",
+                        "stream": null
+                      }
+                    ],
+                    "value": null,
+                    "name": null,
+                    "steps": 1,
+                    "scope": "cell",
+                    "stream": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "incident_rule": {
+          "table": "loan",
+          "signal": "arrears",
+          "title": "Payment arrears",
+          "threshold": 0
+        },
+        "dag_shapes": [
+          "*"
+        ],
+        "where": {},
+        "pool_size": 32,
+        "planning_budget": 512,
+        "acknowledged_unmet": [
+          "the 'flat' trading year: the banking engine's world builder has no `seasonality` field, so nothing carries one. Only the retail engine reads a trading year today (`generators/finance` is the one generator that consults it)."
+        ]
+      }
+    }
+  ],
+  "max_batches": 250,
+  "max_per_task": 62,
+  "max_per_case": 3,
+  "max_per_request": 31,
+  "minimum_tasks": 16,
+  "minimum_companies": 8,
+  "split_by": "company",
+  "split_weights": {
+    "train": 80,
+    "validation": 10,
+    "test": 10
+  }
+}

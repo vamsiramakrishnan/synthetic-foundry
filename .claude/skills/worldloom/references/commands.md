@@ -424,6 +424,32 @@ worldloom evals construct <SPEC>
 | `--period` | The period the base episode runs. |
 | `--periods` | Number of episodes, spaced by the company's registered domain cadence. |
 
+### `worldloom evals dataset`
+
+Compile dataset quotas into diverse, qualified queries with isolated splits.
+
+### `worldloom evals dataset compile`
+
+Generate missing coverage, enforce admission, then export isolated splits.
+
+```
+worldloom evals dataset compile <PLAN_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--batch-limit` | Pause after this many total batches. |
+| `--out`, `-o` | Dataset run directory; reuse it to resume the same plan. |
+| `--replay` | Require committed batches; never call a generator or executor. |
+
+### `worldloom evals dataset verify`
+
+Check the dataset's content inventory without generation or execution.
+
+```
+worldloom evals dataset verify <DIRECTORY>
+```
+
 ### `worldloom evals export`
 
 Export the evaluation set as JSONL, ready to score a retrieval system.
