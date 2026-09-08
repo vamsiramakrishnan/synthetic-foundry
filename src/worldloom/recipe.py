@@ -32,11 +32,12 @@ That works only if the corpus knows how to rebuild itself.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
     from .locales import Locale
+    from .providers import Receipt
     from .world import World
 
 #: Where a corpus's jurisdiction is recorded. One key, because a locale is one
@@ -57,6 +58,11 @@ PRESENTATION_KEY = "presentation"
 #: reach a build through the domain's own ``lore_claims`` field and never pass
 #: through this module on the way in — see ``_with_lore_claims`` for the way out.
 LORE_CLAIMS_KEY = "lore_claims"
+
+# Receipts describe external estimates, while ``physics`` records the ranges
+# actually used after explicit overrides. Keeping both avoids attributing an
+# operator's chosen range to an estimator that never proposed it.
+PRIOR_RECEIPTS_KEY = "prior_receipts"
 
 
 class RecipeError(Exception):
@@ -389,6 +395,29 @@ def with_presentation(recipe: dict[str, Any], profile: Any) -> dict[str, Any]:
     if resolved.overrides:
         document["overrides"] = {k: dict(v) for k, v in resolved.overrides.items()}
     return {**recipe, PRESENTATION_KEY: document}
+
+
+def with_prior_receipts(
+    recipe: dict[str, Any], receipts: Sequence[Receipt | Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Retain estimator provenance without changing the resolved physics.
+
+    Source rows never enter this metadata. An empty input on an ordinary
+    recipe remains absent, preserving every uncalibrated build's bytes.
+    """
+    from .providers import Receipt
+
+    by_key: dict[str, Receipt] = {}
+    for raw in (*recipe.get(PRIOR_RECEIPTS_KEY, ()), *receipts):
+        receipt = raw if isinstance(raw, Receipt) else Receipt.model_validate(raw)
+        if receipt.operation != "estimate_priors":
+            raise ValueError("prior receipt must describe estimate_priors")
+        if receipt.key in by_key and by_key[receipt.key] != receipt:
+            raise ValueError(f"conflicting prior receipt: {receipt.key}")
+        by_key[receipt.key] = receipt
+    if not by_key:
+        return dict(recipe)
+    return {**recipe, PRIOR_RECEIPTS_KEY: [by_key[key].model_dump(mode="json") for key in sorted(by_key)]}
 
 
 def with_locale(recipe: dict[str, Any], locale: str | Locale) -> dict[str, Any]:
@@ -731,6 +760,11 @@ def rebuild(
         raise RecipeError(f"this corpus's recorded physics does not load: {exc}") from exc
 
     try:
+        provenance = with_prior_receipts({}, recipe.get(PRIOR_RECEIPTS_KEY, ()))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RecipeError(f"this corpus's prior receipts do not load: {exc}") from exc
+
+    try:
         seasonality = (
             None if recipe.get("seasonality") is None
             else _profiles.from_document(recipe["seasonality"])
@@ -844,6 +878,8 @@ def rebuild(
     # it was given, never the resolved `Locale`.
     if recipe.get(LOCALE_KEY) is not None and not localised:
         world = world.extend(recipe={**world.recipe, LOCALE_KEY: recipe[LOCALE_KEY]})
+    if provenance:
+        world = world.extend(recipe={**world.recipe, **provenance})
 
     # The structural genome, re-attached for the locale's reason one field along
     # — and unconditionally, because unlike the locale there is no spec field it
@@ -984,7 +1020,7 @@ def has_actor_step(recipe: dict[str, Any]) -> bool:
 
 
 __all__ = [
-    "LOCALE_KEY", "PRESENTATION_KEY", "RecipeError", "STEPS", "build_recipe",
+    "LOCALE_KEY", "PRESENTATION_KEY", "PRIOR_RECEIPTS_KEY", "RecipeError", "STEPS", "build_recipe",
     "has_actor_step", "locale_of", "presentation_of", "rebuild", "register_step",
-    "with_locale", "with_presentation", "with_step",
+    "with_locale", "with_presentation", "with_prior_receipts", "with_step",
 ]

@@ -1,7 +1,7 @@
 ---
 name: worldloom-agent-evals
 description: Author, plan, generate, validate, and score realistic multi-connector enterprise MCP workflow evaluation corpora with WorldLoom.
-tags: [worldloom, evals, mcp, connectors, workflows, scoring]
+metadata: {tags: [worldloom, evals, mcp, connectors, workflows, scoring]}
 ---
 
 # WorldLoom enterprise agent evaluations
@@ -13,9 +13,10 @@ Use this skill when a task concerns realistic enterprise prompts, connector fixt
 When the deliverable is a benchmark, start from the design, not from a corpus:
 
 1. Write an `EvalSpec` (steps with `depends_on`, `connector`, `entity`, `operation`, `effect`; `WorldRequirement`s with a `kind` and a selector of field equalities). Read `docs/eval-first.md` for the contracts.
-2. Run `worldloom evals construct design.json --out ./campaign` (or `EvalCampaign(spec).construct(base_builder)` from Python). Every demand the design compiles to is constructed on a base world: witnesses the connector search finds plus one near miss per constrained field, the write step's precondition record, artifact families, access policies, events, revision chains. A demand for a file format is met by rendering it.
+2. Resolve the company using `/worldloom-company`. Run `worldloom evals construct design.json --company-spec company.json --out ./campaign` (or compose `candidate_builder(blueprint, pipeline)` with `EvalCampaign(spec).construct` in Python). Existing tactics construct supported demands on the company's own episode. Read `docs/company-eval-reuse.md` for the complete path and narration reading order.
 3. Read the manifest's `constructions`. A refusal names the seam that owns the missing state (a fact belongs to an episode; a derived artifact field belongs to a revision chain). Change the design or the base, never the validator.
-4. Prove each instance through the emulated connectors with `emulator_executor()` and `execute_reference`; a proof that fails is a defect found before any model runs.
+4. Narrate and render via `run.map_worlds(...)`; this revalidates and rebinds the final evidence. Check `attempts[].validation.shape_checks`, including unsupported volume/layout constraints. Use `run.select(count)` for measured diversity while preserving all attempts.
+5. Prove the finalized run with `run.prove(emulator_executor())`, then `run.export(...)`. These reuse the same worlds. Reference executability is not semantic answer correctness: see the executor limits in the reuse guide. A failed proof is a defect found before evaluating an agent.
 
 ## Workflow: from an existing world
 

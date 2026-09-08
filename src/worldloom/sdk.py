@@ -54,12 +54,15 @@ from dataclasses import dataclass, replace
 from dataclasses import field as _field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import archetypes, domains, landscape, profiles
 from .company import FUNCTIONS as _FUNCTIONS
 from .parameters import DEFAULT, Parameters, Span
 from .roles import from_shape, to_rows
+
+if TYPE_CHECKING:
+    from .providers import Receipt
 
 __all__ = [
     "Blueprint", "Built", "as_fleet", "banking", "built", "companies", "cross",
@@ -89,10 +92,20 @@ class Blueprint:
     seed: int = 8128
     archetype_key: str | None = None
     physics_overrides: Mapping[str, Span] = _field(default_factory=dict)
+    prior_receipts: tuple[Receipt, ...] = ()
+    """External estimator receipts; resolved ``physics_overrides`` still decide
+    the ranges after explicit overrides. They travel with the recipe so an SDK
+    candidate does not lose its source and privacy provenance at build time."""
     shape: Mapping[str, Any] | None = None
     calendar_name: str | None = None
     estate_size: str | None = None
     estate_vocabulary: str | None = None
+    policy_level: str | None = None
+    """Standing documents, minted by the domain builder before episodes.
+
+    Kept on the blueprint because a resolved company can request policies;
+    dropping that consequence here silently built a company without its rules.
+    """
     employees: int | None = None
     annual_revenue: int | None = None
     """The company's scale in the archetype's own ``currency_unit``. Unlike
@@ -197,7 +210,10 @@ class Blueprint:
         resolved = snapshot if isinstance(snapshot, PriorSnapshot) else PriorSnapshot.read(snapshot)
         merged = dict(resolved.overrides())
         merged.update(self.physics_overrides)
-        return replace(self, physics_overrides=merged)
+        receipts = self.prior_receipts
+        if resolved.receipt not in receipts:
+            receipts += (resolved.receipt.model_copy(deep=True),)
+        return replace(self, physics_overrides=merged, prior_receipts=receipts)
 
     def org(
         self,
@@ -245,6 +261,12 @@ class Blueprint:
         if vocabulary is not None:
             landscape.named(vocabulary)
         return replace(self, estate_size=size, estate_vocabulary=vocabulary)
+
+    def policies(self, level: str) -> Blueprint:
+        """Select standing documents through the domain's existing build seam."""
+        from .policies import check_level
+
+        return replace(self, policy_level=check_level(level))
 
     def facets(self, **chosen: str) -> Blueprint:
         """What the company *is* — listed, legacy, private-equity owned.
@@ -521,6 +543,7 @@ class Blueprint:
             "shape": dict(self.shape) if self.shape else None,
             "calendar": self.calendar_name,
             "estate": self.estate_size,
+            **({} if self.policy_level is None else {"policies": self.policy_level}),
             "vocabulary": self.vocabulary_name,
             "locale": self.locale_name,
             "revenue": self.annual_revenue,
@@ -554,6 +577,11 @@ class Blueprint:
             changes["seasonality"] = self.seasonality
         if self.estate_size is not None:
             changes["estate"] = self.estate_size
+        if self.policy_level is not None:
+            # The domain builder owns both minting and recipe recording. Applying
+            # policies after build or during episodes would shift ids and dates,
+            # and repeat them when an episode history grows.
+            changes["policies"] = self.policy_level
         if self.implied_lore:
             # Only when there is something to add. An unconditional keyword would
             # be harmless here but would make every domain outside this
@@ -606,6 +634,10 @@ class Blueprint:
             except TypeError:
                 pass
         world = spec.build()
+        if self.prior_receipts:
+            from .recipe import with_prior_receipts
+
+            world = world.extend(recipe=with_prior_receipts(world.recipe, self.prior_receipts))
         if self.locale_name is not None:
             # On the recipe, after the build, exactly as `cli._localised` does
             # it and for the reason `recipe.locale_of` gives: the recipe is the
@@ -678,6 +710,12 @@ class Built:
 
         registered = domains.by_name(self.blueprint.domain_name)
         assert registered is not None
+        cap = registered.max_periods
+        if cap is not None and periods > cap:
+            raise ValueError(
+                f"{registered.name} builds at most {cap} period(s) per corpus;"
+                f" {periods} requested"
+            )
         world = self.world
         for index in range(max(1, periods)):
             stamp = _step(start, index, registered.period_step_months)
@@ -973,6 +1011,7 @@ def from_resolution(resolution: Any, *, seed: int = 8128) -> Blueprint:
         physics_overrides=dict(resolution.physics),
         calendar_name=resolution.calendar,
         estate_size=resolution.estate,
+        policy_level=resolution.policies,
         locale_name=resolution.locale,
         facet_choices=dict(resolution.facet_choices),
         implied_lore=tuple(resolution.lore_claims),

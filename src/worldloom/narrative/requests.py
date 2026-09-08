@@ -22,6 +22,20 @@ if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact
 
 
+def fact_available_to(
+    fact: CanonicalFact, *, observer: str, cutoff: datetime | None
+) -> bool:
+    """Whether an author may receive this record in a bounded request.
+
+    Validity may have ended: an RCA can discuss a superseded hypothesis. A
+    transaction that has not arrived, or was withdrawn before the author wrote,
+    is different: it is absent from that author's recorded view.
+    """
+    return fact.visible_to(observer) and (
+        cutoff is None or (fact.valid_from <= cutoff and fact.known_at(cutoff))
+    )
+
+
 def superseded_for(fact: CanonicalFact, cutoff: datetime | None) -> bool:
     """Whether *fact* was already superseded for an author writing at *cutoff*.
 
@@ -103,7 +117,11 @@ class NarrativeRequest(Model):
     target_words: int = 190
     """Matches the compiler's "medium" brief — see `narrative.compiler._request`."""
     fact_digest: str = ""
-    """Content address of the facts supplied, so the ledger key moves when they do."""
+    """Content address of the complete request and supplied fact records.
+
+    A changed purpose, author, cutoff or supersession is a changed writing task
+    even if no numeric value moved.
+    """
 
     @model_validator(mode="after")
     def _required_must_be_allowed(self) -> NarrativeRequest:

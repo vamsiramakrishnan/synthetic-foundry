@@ -1,7 +1,7 @@
 ---
 name: worldloom-sdk
-description: Write Python against Worldloom instead of driving its CLI: compose blueprints, cross and disperse them, build many worlds in a loop, and filter on what came out. Use when a corpus request needs an arrangement no single command expresses: several organisation shapes crossed with several calendars, a sweep of one parameter, keeping only the worlds whose blast radius exceeds some number, or anything where the answer is a comprehension rather than a flag.
-tags: [worldloom, sdk, python, blueprints, sweeps]
+description: "Write Python against Worldloom instead of driving its CLI: compose blueprints, cross and disperse them, build many worlds in a loop, and filter on what came out. Use when a corpus request needs an arrangement no single command expresses: several organisation shapes crossed with several calendars, a sweep of one parameter, keeping only the worlds whose blast radius exceeds some number, or anything where the answer is a comprehension rather than a flag."
+metadata: {tags: [worldloom, sdk, python, blueprints, sweeps]}
 ---
 
 # Worldloom as a library
@@ -64,6 +64,10 @@ One world, one command, or a shell pipeline: `worldloom build`,
 loop, a filter, or a product.
 
 ## Read next
+
+- `docs/company-eval-reuse.md`: reuse company resolution, a typed pipeline and
+  `evals.candidate_builder`; construct once, narrate and render through
+  `CampaignRun.map_worlds`, then prove and export without rebuilding.
 
 - `references/blueprint.md`: every builder method and what it sets; load when
   composing a blueprint beyond seed/org/calendar.

@@ -364,7 +364,8 @@ worldloom evals construct <SPEC>
 
 | Option | Purpose |
 | --- | --- |
-| `--archetype` | The company each candidate starts from. |
+| `--archetype` | Base company archetype; defaults to omnichannel_retailer without --company-spec. |
+| `--company-spec` | Company specification from the interview; resolved through the existing SDK. |
 | `--count` | Candidates to attempt; default is the design's candidate_count. |
 | `--format`, `-f` | Render each accepted corpus in these formats. |
 | `--incident` | Run the base close with its operational incident. |
@@ -372,6 +373,7 @@ worldloom evals construct <SPEC>
 | `--out`, `-o` | Campaign directory: accepted candidates, their corpora and evals. |
 | `--overwrite` | Replace an existing campaign directory. |
 | `--period` | The period the base episode runs. |
+| `--periods` | Number of episodes, spaced by the company's registered domain cadence. |
 
 ### `worldloom evals export`
 

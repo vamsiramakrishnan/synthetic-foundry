@@ -11,6 +11,58 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: narration contracts and calibration provenance
+
+- `section_prose@6` and `artifact_plan@2` bind accepted authorship to the
+  complete request and full fact records. Requests exclude future,
+  observer-hidden and transaction-unavailable facts before external authors
+  receive them. Terminology and record time now reach the JSON handshake.
+- A changed cutoff, author, purpose, authority or supersession invalidates
+  stale reuse even if numeric values stay equal. Accepted plans must match
+  the current contract; conflicting current plans are refused. Cold narration
+  replay installs planning evidence before compiling its outline.
+- These identities change nonempty authored ledgers. Reaccept authoring under
+  the new contract or use the prior engine to replay prior bytes; no unsafe
+  fallback treats an old key as a current acceptance. Golden fixtures and the
+  hand-authored grocery narration source are unchanged.
+- SDK and CLI builds with calibrated priors retain content-addressed estimator
+  receipts in the recipe and replay them offline. Final physics overrides
+  remain authoritative. Uncalibrated builds omit this metadata.
+- SDK company specifications that request policies now generate them through
+  the existing domain builder, matching CLI company builds. This changes output
+  for SDK specifications whose policy setting was previously silently dropped.
+
+### Generation: candidate shape admission
+
+- Candidate validations now serialize observed shape checks. Designs with
+  unsatisfied record, artifact or thread requirements no longer emit accepted
+  instances. Layout and execution constraints lacking independent witnesses
+  explicitly reject as unsupported. This changes campaign manifests and
+  acceptance; it does not synthesize new fixture records to make a check pass.
+
+### Added: reuse company profiles across finalized evaluation campaigns
+
+- `evals.candidate_builder(blueprint, pipeline)` composes the existing immutable
+  company blueprint and typed stages using each candidate's planned seed.
+  `evals construct --company-spec FILE --periods N` uses that same path and
+  retains the company resolution and unmet claims beside the campaign.
+  SDK company resolution also carries the existing policy generation setting,
+  which was previously dropped between resolution and build.
+- `CampaignRun.map_worlds` revalidates and rebinds transformed worlds.
+  `select`, `prove`, and `export` preserve the actual candidate and construction
+  provenance without invoking its builder again. All attempts remain in the
+  manifest, including rejected and deliberately unselected candidates.
+- `EvalCampaign.search` delegates to existing adaptive candidate feedback.
+  Selection reuses measured outcome diversity. No second campaign framework,
+  narrator, episode grammar or evolutionary search engine is introduced.
+- Candidate shape constraints now affect acceptance. Observed record, field,
+  payload, artifact and thread counts are checked; native layout and execution
+  constraints lacking independent witnesses explicitly reject as unsupported.
+  Plan validation rejects a plan from a different immutable eval design.
+- Company, author, SDK and eval skills route to the same composition path.
+  `docs/company-eval-reuse.md` records the audit, narration reading order,
+  runnable example, calibration boundary and remaining implementation gaps.
+
 ### Generation: executable enterprise DAG grammar
 
 - Opt-in `enterprise-dag@1` plans carry typed arguments, result references,

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from ..models import CanonicalFact
 from . import references
-from .requests import NarrativeRequest
+from .requests import NarrativeRequest, superseded_for
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,8 @@ class Prompt:
             lines.append(
                 f"  {fact_id}  [{fact.authority.value}] {statement}"
                 f" (valid from {fact.valid_from.isoformat()})"
+                f" (recorded at {fact.recorded_at.isoformat()};"
+                f" superseded: {str(superseded_for(fact, request.temporal_cutoff)).lower()})"
                 + (f" (prior period: {prior})" if prior else "")
                 + required
             )
@@ -57,6 +59,7 @@ class Prompt:
             traits=f"\nWriting tendencies: {traits}" if traits else "",
             hierarchy="\n".join(f"  {k} — {v}" for k, v in sorted(request.hierarchy.items())) or "  (none)",
             background="\n".join(f"  - {b}" for b in request.background) or "  (none)",
+            terminology="\n".join(f"  {term} — {note}" for term, note in sorted(request.terminology.items())) or "  (none)",
             artifact_type=request.artifact_type.replace("_", " "),
             audience=request.audience.replace("_", " "),
             author_title=request.author_title,
@@ -90,7 +93,9 @@ SECTION_PROSE = Prompt(
     # names are not entities, and explanation that a reference substitutes the
     # fact's rendered statement verbatim so prose must write grammar around it.
     # The handshake.RULES changed, so the ledger key must.
-    version="5",
+    # v6 exposes terminology, recorded time and author-relative supersession on
+    # both writer surfaces. Ledger identities now bind the whole request.
+    version="6",
     template="""\
 Write the "{section}" section of a {artifact_type} for {audience}.
 
@@ -100,7 +105,7 @@ What this section has to do:
 You are writing as: {author_title}{persona}
 Voice: {voice}{traits}
 Target length: about {target_words} words.
-You know only what was true at: {cutoff}
+You know only what had been recorded and was available to this author at: {cutoff}
 
 Facts you may use. Reference each one as {{{{fact:ID}}}} — never write a figure out:
 {facts}
@@ -116,6 +121,9 @@ Standing context. This explains why the figures look as they do. Reason from it
 and allude to it; do not assert it as a finding and do not cite it:
 {background}
 
+Terminology guidance:
+{terminology}
+
 You must not claim:
 {forbidden}
 {feedback}
@@ -123,6 +131,7 @@ Rules:
 - No digits anywhere outside a {{{{fact:ID}}}} reference — the check is lexical.
   Spell any other number (an ordinal, a count) out in words, or leave it out.
 - Every assertion must be supported by at least one of the facts above.
+- Every fact reference in prose must also be cited by a claim.
 - Do not mention anything not present in the facts above.
 - Facts marked REQUIRED must appear.
 - A fact whose validity had ended by your cut-off is a past belief. Tell it as

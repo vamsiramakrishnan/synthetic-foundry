@@ -1,7 +1,7 @@
 ---
 name: worldloom-author
-description: Author a whole Worldloom company from the top, covering what it is, its lines of business, its processes, and its paperwork, and run it into a narrated, validated corpus by driving one loop at every layer: propose, be refused with findings, revise, until accepted. Use when the ask is a complete authored world rather than one layer of it, when unsure which layer skill a change belongs to, or when asked how the authoring layers fit together.
-tags: [worldloom, authoring, cascade, refusal-loop, routing]
+description: "Author a whole Worldloom company from the top, covering what it is, its lines of business, its processes, and its paperwork, and run it into a narrated, validated corpus by driving one loop at every layer: propose, be refused with findings, revise, until accepted. Use when the ask is a complete authored world rather than one layer of it, when unsure which layer skill a change belongs to, or when asked how the authoring layers fit together."
+metadata: {tags: [worldloom, authoring, cascade, refusal-loop, routing]}
 ---
 
 # Authoring a world, top to bottom
@@ -24,6 +24,11 @@ editing the corpus, loosening a check, or answering a different question.
 `narrate accept` rejecting your prose is this same loop over sentences.
 
 ## Route to the layer: load the skill, do not duplicate it
+
+When the deliverable is an evalset, resolve the company and author the eval
+design before generating candidate data. Route through `/worldloom-agent-evals`
+and `docs/company-eval-reuse.md`; episodes supply business mechanisms, while
+the existing campaign and pipeline APIs own orchestration and acceptance.
 
 | # | Stage | What you author | Skill |
 | --- | --- | --- | --- |

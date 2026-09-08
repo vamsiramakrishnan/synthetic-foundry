@@ -21,8 +21,10 @@ from ..eval_interventions import (
     ConstructionResult,
     construct_candidate,
 )
+from ..eval_search import AdaptiveCandidateBuilder, CandidateContext, CandidateFeedback
 from ..eval_tactics import TacticPlan
 from ..eval_witnesses import ConstructionRefused
+from .builders import candidate_builder
 from .campaign import CampaignRun, EvalCampaign
 from .coverage import CoverageReport
 from .coverage import report as coverage_report
@@ -97,8 +99,12 @@ def seam_contract() -> dict[str, object]:
 
 
 __all__ = [
+    "candidate_builder",
+    "AdaptiveCandidateBuilder",
     "CampaignRun",
     "CandidateBuilder",
+    "CandidateContext",
+    "CandidateFeedback",
     "CoverageReport",
     "CandidatePlan",
     "ConstructionFinding",

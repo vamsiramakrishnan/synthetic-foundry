@@ -19,8 +19,10 @@ from .eval_design import (
     EvalSpec,
     RequirementKind,
     WorldRequirement,
+    design_digest,
     plan_candidates,
 )
+from .eval_shape_validation import ShapeCheck, check_candidate_shape
 from .models import Model
 from .predicates import Predicate, evaluate
 
@@ -43,6 +45,7 @@ class CandidateValidation(Model):
     candidate_seed: int
     accepted: bool
     checks: tuple[RequirementCheck, ...]
+    shape_checks: tuple[ShapeCheck, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -254,14 +257,18 @@ def validate_candidate(plan: CandidatePlan, spec: EvalSpec, world: World) -> Can
         raise ValueError(
             f"candidate world seed {world.seed!r} does not match plan seed {plan.seed}"
         )
+    if (plan.design_digest != design_digest(spec) or plan.requirements != spec.requirements
+            or plan.shape != spec.shape):
+        raise ValueError("candidate plan does not match the immutable eval design")
     realism = realism_profile(world)
     checks = tuple(
         check_requirement(requirement, world, realism=realism)
         for requirement in plan.requirements
     )
     hard = {requirement.id: requirement.hard for requirement in plan.requirements}
+    shape_checks = check_candidate_shape(plan.shape, world, project=lambda name: _connector_records(world, name))
     coherence = world.validate()
-    accepted = coherence.ok and all(
+    accepted = coherence.ok and all(check.satisfied for check in shape_checks) and all(
         check.satisfied or not hard[check.requirement_id] for check in checks
     )
     return CandidateValidation(
@@ -269,6 +276,7 @@ def validate_candidate(plan: CandidatePlan, spec: EvalSpec, world: World) -> Can
         candidate_seed=plan.seed,
         accepted=accepted,
         checks=checks,
+        shape_checks=shape_checks,
     )
 
 

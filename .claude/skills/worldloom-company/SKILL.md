@@ -1,7 +1,7 @@
 ---
 name: worldloom-company
 description: Describe a company once, in one document, instead of assembling it from nine flags (industry, geography, revenue, size, margins, listing, competition, leadership), and let the description be refused when it contradicts itself. Use when a corpus has to be a *particular* kind of business ("a listed mid-size German insurer, thin margins, fragmented market"), when you find yourself reaching for --facet and --locale and --physics and --pack in one command, or when asked whether Worldloom can express some attribute of a company.
-tags: [worldloom, company-spec, facets, locale, refusal-loop]
+metadata: {tags: [worldloom, company-spec, facets, locale, refusal-loop]}
 ---
 
 # One document that says what kind of company this is
@@ -46,6 +46,12 @@ the specification's `physics` block. A probe argues the numbers; a
 specification says what kind of company holds them.
 
 ## Read next
+
+- For an evaluation deliverable, route the resolved company into
+  `/worldloom-agent-evals` before generating data. Put connector entities,
+  volumes and task outcomes in the eval design, not invented company-spec
+  fields. Read `docs/company-eval-reuse.md` for the shared pipeline and retain
+  the resolution's `unmet` findings.
 
 - `references/spec-fields.md`: every field, the seam it resolves into, what
   you may write where, and the identity/pack boundary. Load before writing the

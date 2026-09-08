@@ -177,13 +177,14 @@ def validate(
     if request.temporal_cutoff is not None:
         for fact_id in sorted(cited):
             fact = facts.get(fact_id)
-            if fact is not None and (fact.valid_from > request.temporal_cutoff or fact.recorded_at > request.temporal_cutoff):
+            if fact is not None and (fact.valid_from > request.temporal_cutoff or not fact.known_at(request.temporal_cutoff)):
                 violations.append(
                     Violation(
                         code="not_yet_known",
                         detail=(
-                            f"{fact_id} is valid from {fact.valid_from.isoformat()} and recorded at {fact.recorded_at.isoformat()},"
-                            f" after the author's cut-off of {request.temporal_cutoff.isoformat()}"
+                            f"{fact_id} is outside the author's recorded view at {request.temporal_cutoff.isoformat()}:"
+                            f" valid from {fact.valid_from.isoformat()}, recorded at {fact.recorded_at.isoformat()},"
+                            f" transaction ends {fact.tx_to.isoformat() if fact.tx_to else 'never'}"
                         ),
                     )
                 )

@@ -2131,6 +2131,11 @@ def build(
                 claimed_calendar.append(carried_year)
         world = _shaped(_localised_recipe(_localised(builder).build()))
 
+    if priors is not None:
+        from .recipe import with_prior_receipts
+
+        world = world.extend(recipe=with_prior_receipts(world.recipe, (snapshot.receipt,)))
+
     workforce = None
     workforce_path: tuple[int, ...] | None = None
     if single_episode is None and (employees is not None or headcount_end is not None):
@@ -4806,8 +4811,10 @@ def evals_export(
 def evals_construct(
     spec: Path = typer.Argument(..., help="An eval design (EvalSpec) as JSON."),
     out: Path = typer.Option(..., "--out", "-o", help="Campaign directory: accepted candidates, their corpora and evals."),
-    archetype: str = typer.Option("omnichannel_retailer", "--archetype", help="The company each candidate starts from."),
+    archetype: str | None = typer.Option(None, "--archetype", help="Base company archetype; defaults to omnichannel_retailer without --company-spec."),
+    company_spec: Path | None = typer.Option(None, "--company-spec", help="Company specification from the interview; resolved through the existing SDK."),
     period: str = typer.Option("2026-03", "--period", help="The period the base episode runs."),
+    periods: int = typer.Option(1, "--periods", min=1, help="Number of episodes, spaced by the company's registered domain cadence."),
     incident: bool = typer.Option(False, "--incident", help="Run the base close with its operational incident."),
     count: int | None = typer.Option(None, "--count", help="Candidates to attempt; default is the design's candidate_count."),
     formats: list[str] = typer.Option([], "--format", "-f", help="Render each accepted corpus in these formats."),
@@ -4826,30 +4833,59 @@ def evals_construct(
     """
     from pydantic import ValidationError
 
-    from . import domains
+    from . import company as company_module
+    from . import domains, sdk
     from .archetypes import get as archetype_get
+    from .corpus import write_json
     from .evals import EvalCampaign, EvalSpec
-    from .scenarios import MonthEndClose
+    from .evals.builders import candidate_builder
+    from .pipeline import standard_pipeline
 
     try:
         design = EvalSpec.model_validate_json(spec.read_text(encoding="utf-8"))
     except (OSError, ValueError, ValidationError) as exc:
         _refuse("eval_spec_unloadable", f"{spec}: {exc}", error=str(exc))
-    try:
-        shape = archetype_get(archetype)
-    except KeyError as exc:
-        _refuse("unknown_archetype", str(exc), archetype=archetype)
-    domain = domains.for_archetype(shape.key)
-    if domain is None:
-        _refuse("unknown_archetype", f"archetype {archetype!r} belongs to no registered domain", archetype=archetype)
+    resolution = None
+    if company_spec is not None:
+        if archetype is not None:
+            _refuse("cannot_combine", "--company-spec and --archetype both describe the base company",
+                    flags=["--company-spec", "--archetype"])
+        try:
+            resolution = company_module.resolve(company_module.from_document(company_spec))
+        except (OSError, ValueError) as exc:
+            _refuse("unreadable_document", f"{company_spec}: {exc}", path=str(company_spec))
+        if not resolution.ok:
+            _refuse(
+                _conflict_code(resolution.conflicts),
+                "this description cannot be built: " + "; ".join(map(str, resolution.conflicts)),
+                conflicts=[conflict.as_dict() for conflict in resolution.conflicts],
+            )
+        blueprint = sdk.from_resolution(resolution)
+    else:
+        key = archetype or "omnichannel_retailer"
+        try:
+            shape = archetype_get(key)
+        except KeyError as exc:
+            _refuse("unknown_archetype", str(exc), archetype=key)
+        domain = domains.for_archetype(shape.key)
+        if domain is None:
+            _refuse("unknown_archetype", f"archetype {key!r} belongs to no registered domain", archetype=key)
+        blueprint = sdk.company(domain.name).archetype(key)
 
-    def base(plan: Any) -> Any:
-        world = domain.world(seed=plan.seed, archetype=shape).build()
-        episode = (
-            domain.single_episode(period) if domain.single_episode is not None
-            else MonthEndClose(period=period, include_operational_incident=incident)
+    selected_domain = domains.by_name(blueprint.domain_name)
+    assert selected_domain is not None
+    cap = selected_domain.max_periods
+    if cap is not None and periods > cap:
+        _refuse("period_cap", f"{selected_domain.name} builds at most {cap} period(s) per corpus",
+                cap=cap, asked=periods)
+
+    base = candidate_builder(
+        blueprint,
+        standard_pipeline(
+            period, periods=periods, incident=incident,
+            compile_artifacts=False, validate=False,
         )
-        return world.run(episode)
+    )
 
     campaign = EvalCampaign(design)
     try:
@@ -4857,6 +4893,12 @@ def evals_construct(
     except FileExistsError as exc:
         _refuse("destination_exists", str(exc), fix="pass --overwrite", destination=str(out))
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    if resolution is not None:
+        # Keep the interview resolution beside the campaign. The World's recipe
+        # still carries executable consequences, never a second company model.
+        write_json(root / "company-resolution.json", resolution.as_dict())
+        manifest["company_resolution"] = "company-resolution.json"
+        write_json(root / "manifest.json", manifest)
     if manifest["candidate_count"] == 0:
         findings = [
             finding for construction in manifest["constructions"] for finding in construction["findings"]
@@ -4877,6 +4919,9 @@ def evals_construct(
         f"[green]✓[/green] {manifest['candidate_count']} of {manifest['attempt_count']} candidate(s)"
         f" accepted for [bold]{design.id}[/bold]; campaign at [bold]{root}[/bold]"
     )
+    if resolution is not None:
+        for want in resolution.unmet:
+            console.print(f"[yellow]unmet:[/yellow] {escape(want)}")
     for construction in manifest["constructions"]:
         applied = len(construction["applied"])
         refused = len(construction["findings"])

@@ -1,0 +1,228 @@
+"""Measure candidate shape without treating generation requests as evidence.
+
+The World exposes canonical records and compiled content. Native layout and
+tool execution require different witnesses; until supplied, those constraints
+are explicitly unsupported and cannot admit a candidate.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Callable, Sequence
+from pathlib import PurePosixPath
+from typing import TYPE_CHECKING, Any
+
+from .connector_data import ConnectorRecord, builtin_projections
+from .eval_design import EvalShape
+from .models import Model
+
+if TYPE_CHECKING:
+    from .world import World
+
+_NATIVE_SUFFIXES = (".docx", ".xlsx", ".pptx", ".pdf", ".html", ".md")
+
+
+class ShapeCheck(Model):
+    requirement_id: str
+    satisfied: bool
+    observed: int
+    required: int
+    evidence_ids: tuple[str, ...] = ()
+    detail: str = ""
+    supported: bool = True
+
+
+def _bytes(value: Any) -> int:
+    return len(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+
+
+def _artifact_sizes(world: World) -> dict[tuple[str, str], int]:
+    """Sizes of actual renderings, including files restored by ``World.load``.
+
+    An in-memory render supersedes persisted output. The manifest only locates
+    a file: a missing file or a path escaping the corpus proves no shape.
+    """
+    sizes: dict[tuple[str, str], int] = {}
+    if world._rendered:
+        for item in world._rendered:
+            if not item.path.endswith(".citations.md"):
+                key = (item.artifact_id, PurePosixPath(item.path).suffix)
+                sizes[key] = max(sizes.get(key, 0), len(item.payload))
+    elif world.root is not None:
+        root = world.root.resolve()
+        for artifact in world.artifacts:
+            path = PurePosixPath(artifact.path)
+            if (not path.name or path.is_absolute() or ".." in path.parts
+                    or artifact.path.endswith(".citations.md")):
+                continue
+            # The manifest records one primary format. Native renderers share
+            # one basename (render.slug_for), so other formats are located as
+            # siblings, and count only after their own bytes have been read.
+            paths = {path, *(path.with_suffix(suffix) for suffix in _NATIVE_SUFFIXES)}
+            for candidate in sorted(paths):
+                try:
+                    source = (root / candidate).resolve(strict=True)
+                    if not source.is_relative_to(root) or not source.is_file():
+                        continue
+                    size = 0
+                    with source.open("rb") as stream:
+                        while chunk := stream.read(65_536):
+                            size += len(chunk)
+                except (OSError, RuntimeError):
+                    # Unreadable files and symlink loops provide no evidence either.
+                    continue
+                key = (artifact.id, candidate.suffix)
+                sizes[key] = max(sizes.get(key, 0), size)
+    return sizes
+
+
+def check_candidate_shape(
+    shape: EvalShape,
+    world: World,
+    *,
+    project: Callable[[str], Sequence[ConnectorRecord]] | None = None,
+) -> tuple[ShapeCheck, ...]:
+    """Check all constraints; each count includes only jointly eligible items.
+
+    Record fields and byte counts describe the canonical connector payload, not
+    an estimate from a custom-field manifest. Native artifact instances require
+    rendered bytes. Layout, evidence placement and execution-pressure constraints
+    fail closed instead of being inferred from IR or a connector declaration.
+    """
+    checks: list[ShapeCheck] = []
+    cache: dict[str, Sequence[ConnectorRecord]] = {}
+
+    def records(connector: str) -> Sequence[ConnectorRecord]:
+        if connector not in cache:
+            cache[connector] = (project(connector) if project is not None
+                                else builtin_projections().project(connector, world))
+        return cache[connector]
+
+    def count(key: str, ids: Sequence[str], required: int, detail: str) -> None:
+        evidence = tuple(sorted(set(ids)))
+        checks.append(ShapeCheck(requirement_id=key, satisfied=len(evidence) >= required,
+                                 observed=len(evidence), required=required,
+                                 evidence_ids=evidence, detail=detail))
+
+    def unsupported(key: str, fields: Sequence[str]) -> None:
+        for field in fields:
+            checks.append(ShapeCheck(requirement_id=f"{key}.{field}", satisfied=False,
+                                     observed=0, required=1, supported=False,
+                                     detail=f"unsupported shape constraint: {field} requires an independent witness"))
+
+    for index, requirement in enumerate(shape.records):
+        key = f"shape.records[{index}]"
+        unavailable = [name for name in ("custom_fields", "projection_required", "maximum_read_bytes")
+                       if getattr(requirement, name)]
+        if requirement.fill_rate_scale != 1.0:
+            unavailable.append("fill_rate_scale")
+        unsupported(key, unavailable)
+        try:
+            matches = [record.id for record in records(requirement.connector)
+                       if record.entity == requirement.entity
+                       and len(record.fields) >= requirement.total_fields
+                       and sum(value is not None and value != "" and value != [] and value != {}
+                               for value in record.fields.values()) >= requirement.minimum_populated_fields
+                       and _bytes(record.fields) >= requirement.minimum_payload_bytes]
+        except ValueError as error:
+            checks.append(ShapeCheck(requirement_id=key, satisfied=False, observed=0,
+                                     required=requirement.records, detail=str(error)))
+            continue
+        count(key, matches, requirement.records,
+              "records jointly meeting canonical field, populated-field and UTF-8 payload-byte minima")
+
+    native_formats = {suffix[1:] for suffix in _NATIVE_SUFFIXES} | {"markdown"}
+    irs = {ir.id: ir for ir in world.artifact_irs}
+    intents = {intent.id: intent for intent in world.artifact_intents}
+    artifact_sizes = _artifact_sizes(world) if shape.artifacts else {}
+    for index, artifact_requirement in enumerate(shape.artifacts):
+        key = f"shape.artifacts[{index}]"
+        native = artifact_requirement.artifact_type in native_formats
+        unsupported_fields = [name for name in (
+            "pages", "slides", "sheets", "rows_per_sheet", "columns_per_sheet",
+            "image_bytes", "speaker_note_slides", "hidden_slides", "native_charts",
+            "formulas", "comments", "evidence_index", "evidence_modality", "locator_required",
+        ) if getattr(artifact_requirement, name)]
+        if native and artifact_requirement.paragraphs:
+            unsupported_fields.append("paragraphs")
+        unsupported(key, unsupported_fields)
+        suffix = "md" if artifact_requirement.artifact_type == "markdown" else artifact_requirement.artifact_type
+        rendered: dict[str, int] = {}
+        for (identifier, extension), size in artifact_sizes.items():
+            if identifier not in intents:
+                continue
+            if not native or extension == f".{suffix}":
+                rendered[identifier] = max(rendered.get(identifier, 0), size)
+        candidates = set(rendered) if native else {
+            identifier for identifier, intent in intents.items()
+            if intent.artifact_type == artifact_requirement.artifact_type and identifier in irs
+        }
+        eligible: list[str] = []
+        for identifier in sorted(candidates):
+            ir = irs.get(identifier)
+            if artifact_requirement.file_size_bytes and rendered.get(identifier, 0) < artifact_requirement.file_size_bytes:
+                continue
+            if artifact_requirement.paragraphs:
+                paragraphs = sum(len(re.split(r"\n\s*\n", section.body.strip()))
+                                 for section in ir.sections if section.body and section.body.strip()) if ir else 0
+                if paragraphs < artifact_requirement.paragraphs:
+                    continue
+            # Versions are a traversable family, never a mutable version label.
+            chain = {identifier}
+            cursor = intents.get(identifier)
+            while cursor and cursor.revises in candidates and cursor.revises not in chain:
+                chain.add(cursor.revises)
+                cursor = intents.get(cursor.revises)
+            if len(chain) >= artifact_requirement.versions:
+                eligible.append(identifier)
+        count(key, eligible, artifact_requirement.instances,
+              "rendered native artifacts or compiled logical artifacts meeting size, paragraph and revision minima")
+
+    for index, thread_requirement in enumerate(shape.threads):
+        key = f"shape.threads[{index}]"
+        if thread_requirement.pagination_required:
+            unsupported(key, ("pagination_required",))
+        if thread_requirement.entity != "message":
+            unsupported(key, ("thread_membership",))
+            continue
+        try:
+            messages = [record for record in records(thread_requirement.connector) if record.entity == "message"]
+        except ValueError as error:
+            checks.append(ShapeCheck(requirement_id=key, satisfied=False, observed=0,
+                                     required=thread_requirement.threads, detail=str(error)))
+            continue
+        groups: dict[str, list[ConnectorRecord]] = {}
+        for message in messages:
+            thread_id = message.fields.get("thread_id")
+            if isinstance(thread_id, str) and thread_id:
+                groups.setdefault(thread_id, []).append(message)
+        eligible = []
+        for thread_id, group in sorted(groups.items()):
+            by_id = {record.external_id: record for record in group}
+            group = list(by_id.values())
+            depths = []
+            for message in group:
+                seen = {message.external_id}
+                parent = message.fields.get("in_reply_to")
+                while isinstance(parent, str) and parent in by_id and parent not in seen:
+                    seen.add(parent)
+                    parent = by_id[parent].fields.get("in_reply_to")
+                depths.append(0 if isinstance(parent, str) and parent in seen else len(seen))
+            attachments = {
+                json.dumps(attachment, sort_keys=True) for record in group
+                for attachment in (record.fields.get("attachments", [])
+                                   if isinstance(record.fields.get("attachments", []), list) else [])
+                if isinstance(attachment, dict) and attachment
+            }
+            if (len(by_id) >= thread_requirement.messages_per_thread
+                    and max(depths, default=0) >= thread_requirement.reply_depth
+                    and len(attachments) >= thread_requirement.attachments_per_thread
+                    and sum(_bytes(record.fields) for record in group) >= thread_requirement.minimum_payload_bytes):
+                eligible.append(thread_id)
+        count(key, eligible, thread_requirement.threads,
+              "actual messages grouped by thread_id; reply links only count within the same thread")
+    return tuple(checks)
+
+
+__all__ = ["ShapeCheck", "check_candidate_shape"]

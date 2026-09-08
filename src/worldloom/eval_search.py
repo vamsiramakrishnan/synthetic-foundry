@@ -22,6 +22,7 @@ from .eval_candidates import (
     validate_candidate,
 )
 from .eval_design import CandidatePlan, EvalSpec, plan_candidates
+from .eval_shape_validation import ShapeCheck
 
 if TYPE_CHECKING:  # pragma: no cover
     from .world import World
@@ -33,10 +34,12 @@ class CandidateFeedback:
     seed: int
     accepted: bool
     checks: tuple[RequirementCheck, ...]
+    shape_checks: tuple[ShapeCheck, ...] = ()
 
     @property
     def failed(self) -> tuple[str, ...]:
-        return tuple(check.requirement_id for check in self.checks if not check.satisfied)
+        return (tuple(check.requirement_id for check in self.checks if not check.satisfied)
+                + tuple(check.requirement_id for check in self.shape_checks if not check.satisfied))
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,7 @@ def search_candidates(
                 seed=plan.seed,
                 accepted=validation.accepted,
                 checks=validation.checks,
+                shape_checks=validation.shape_checks,
             )
         )
     return tuple(attempts)

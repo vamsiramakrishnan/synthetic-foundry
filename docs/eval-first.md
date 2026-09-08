@@ -1,5 +1,10 @@
 # Eval-first generation
 
+For the company interview, SDK pipeline, narration, calibration and replay
+path, read [Company-driven campaign reuse](company-eval-reuse.md). It reuses
+`EvalCampaign` and shows how to finalize and export a completed `CampaignRun`
+without regenerating its candidate worlds.
+
 Worldloom can generate a corpus first and inspect it for questions. That is useful for corpus QA.
 
 It is not the right default when the corpus exists to support an evaluation.
