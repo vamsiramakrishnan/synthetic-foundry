@@ -293,3 +293,39 @@ def test_every_branch_of_the_chain_is_declared_known() -> None:
     source = Path("src/worldloom/connector_trace.py").read_text(encoding="utf-8")
     branched = set(re.findall(r'kind == "([a-z_]+)"', source))
     assert branched <= _KNOWN_ASSERTIONS, sorted(branched - _KNOWN_ASSERTIONS)
+
+
+def test_state_equals_grades_the_record_the_row_names_not_the_one_the_agent_chose() -> None:
+    """An outcome assertion must not let the agent pick its own target.
+
+    Resolving the target from the trace's writes meant an agent that wrote to
+    some *other* record passed: it chose what it was graded on. `deleted`
+    already anchors on its declared `fixture`; this is the same rule.
+    """
+    row = _state_row()
+    row["expected_dag"]["nodes"][0]["fixture"] = "REC-WANTED"
+    post = {"REC-WANTED": {"state": "open"}, "REC-ELSEWHERE": {"state": "fixed"}}
+
+    # The agent writes to the wrong record, and that record happens to be in
+    # the state the assertion wants. Previously this graded ok.
+    astray = grade_trace(
+        [_span("write", writes=("REC-ELSEWHERE",))], row, post_state=post
+    )
+    assert astray["fails"] == ["state_mismatch:write"]
+
+    right = grade_trace(
+        [_span("write", writes=("REC-WANTED",))],
+        row,
+        post_state={"REC-WANTED": {"state": "fixed"}},
+    )
+    assert right["status"] == "ok"
+
+
+def test_state_equals_still_falls_back_to_observed_writes() -> None:
+    """A row naming no fixture is the shape every existing caller emits."""
+    grade = grade_trace(
+        [_span("write", writes=("REC-1",))],
+        _state_row(),
+        post_state={"REC-1": {"state": "fixed"}},
+    )
+    assert grade["status"] == "ok"

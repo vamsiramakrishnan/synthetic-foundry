@@ -298,11 +298,26 @@ def grade_trace(
             node_id = str(assertion["node"])
             if node_id in skipped or node_id in stopped:
                 continue
-            targets = [
-                write
-                for span in by_node.get(node_id, ())
-                for write in span.get("writes", ())
-            ]
+            # The record the row says should end in this state, when it names
+            # one. Anchoring on the row rather than on the trace matters more
+            # than it looks: resolving the target from what the agent wrote
+            # lets the agent choose what it is graded on, so writing to some
+            # other record passed. `deleted` already anchors on its declared
+            # `fixture`; this is the same rule for the same reason. Observed
+            # writes stay as the fallback, because a row that names no fixture
+            # is the shape every existing caller emits.
+            declared = assertion.get("fixture") or nodes_by_id.get(node_id, {}).get(
+                "fixture"
+            )
+            targets = (
+                [declared]
+                if declared
+                else [
+                    write
+                    for span in by_node.get(node_id, ())
+                    for write in span.get("writes", ())
+                ]
+            )
             if not targets:
                 # Nothing was written, so there is no state to compare and the
                 # loop below never ran: `state_equals` graded `ok` for a run
