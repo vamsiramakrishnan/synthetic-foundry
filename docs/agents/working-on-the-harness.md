@@ -55,18 +55,22 @@ Use the enterprise harness when the deliverable is a grounded multi-connector
 query corpus rather than Worldloom's native retrieval benchmark:
 
 ```bash
-worldloom enterprise-evals space
+worldloom enterprise-evals space --profile examples/enterprise-evals/omnichannel-retailer.json --max-candidates 100000
 worldloom enterprise-evals plan dist/world queries.jsonl --profile examples/enterprise-evals/omnichannel-retailer.json --exhaustive --limit 2000
 worldloom enterprise-evals build dist/world dist/enterprise-evals --profile examples/enterprise-evals/omnichannel-retailer.json --exhaustive --limit 2000 --render-limit 30
 worldloom enterprise-evals validate dist/enterprise-evals
 worldloom enterprise-evals simulate dist/enterprise-evals --limit 500
-worldloom enterprise-evals score query.json trace.json
+worldloom enterprise-evals score query.json trace.json --fixture fixture.json
 ```
 
 Industry workflows belong in a `ScenarioProfile` as `additional_workflows` and
 `additional_processes`; do not add industry names to the query planner. Use
 covering mode to prove t-way coverage and bounded exhaustive mode to stream a
-large, balanced corpus. Both routes must remain deterministic.
+large, balanced corpus. Both routes must remain deterministic. Covering mode
+examines the entire selection before applying `--limit`; narrow the profile
+first. `space --profile` sizes that same selection. Its `exhaustive: false`
+report gives an `at_least` lower bound when the candidate ceiling is exceeded,
+not an exact count. `--max-candidates` overrides the profile's ceiling.
 
 ## Checking determinism somewhere other than seed 8128
 
@@ -133,3 +137,9 @@ bit-identically on a machine with no model at all: the generation ledger's
 argument, applied to a retriever. `src/worldloom/evaluate/embedding.py` makes
 that case in full, and
 `.claude/skills/worldloom/references/evaluating.md` has the reading.
+
+Executable trajectories are opt-in with `--dag-shape` on `enterprise-evals plan`
+and `enterprise-evals build`. Use `--dag-shape '*'` for the versioned catalogue,
+or repeat a shape name to select a subset. See
+[the executable grammar contract](../enterprise-dag-grammar.md) for bindings,
+branch predicates, iteration bounds, source requirements, and trace receipts.

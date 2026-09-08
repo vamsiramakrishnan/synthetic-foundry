@@ -107,6 +107,8 @@ def _canonical_record(record: ConnectorRecord | Mapping[str, Any]) -> dict[str, 
 def _coerce_predicate(value: Predicate | Mapping[str, Any] | None, *, entity: str | None) -> Predicate:
     if value is None:
         return Predicate(entity=entity)
+    if isinstance(value, Mapping) and "where" in value:
+        value = Predicate.model_validate(value)
     if isinstance(value, Predicate):
         if entity is None or value.entity is None or value.entity == entity:
             return value if value.entity is not None else value.model_copy(update={"entity": entity})
@@ -347,13 +349,6 @@ class ConnectorEmulator:
             actor=self.actor,
         )
         try:
-            active_faults = self.faults.get(canonical_name, ()) + self.faults.get("*", ())
-            if "timeout" in active_faults:
-                raise ConnectorError(504, "Gateway timeout", "timeout")
-            if "rate_limit_429" in active_faults:
-                raise ConnectorError(429, "Too many requests", "rate_limit")
-            if "permission_denied" in active_faults:
-                raise self._error("denied")
             write_ops = {
                 "create",
                 "update",
@@ -367,10 +362,28 @@ class ConnectorEmulator:
                 "forward",
                 "upload",
             }
+            active_faults = self.faults.get(canonical_name, ()) + self.faults.get("*", ()) + self.faults.get(f"@node:{node}", ())
+            if tool.op in write_ops:
+                active_faults += self.faults.get("@write", ())
+            if args.get("id") is not None:
+                try:
+                    fault_record = self.resolve(args["id"])
+                except ConnectorError:
+                    pass  # The operation owns its normal not-found response.
+                else:
+                    active_faults += self.faults.get(f"@record:{fault_record}", ())
+                    if tool.op in write_ops:
+                        active_faults += self.faults.get(f"@record_write:{fault_record}", ())
+            if "timeout" in active_faults:
+                raise ConnectorError(504, "Gateway timeout", "timeout")
+            if "rate_limit_429" in active_faults:
+                raise ConnectorError(429, "Too many requests", "rate_limit")
+            if "missing_stable_id" in active_faults:
+                raise ConnectorError(422, "Source record has no stable identifier", "missing_stable_id")
+            if "permission_denied" in active_faults:
+                raise self._error("denied")
             if tool.op in write_ops and "version_conflict" in active_faults:
                 raise ConnectorError(409, "Version conflict", "version_conflict")
-            if tool.op in write_ops and "partial_write" in active_faults:
-                raise ConnectorError(207, "Partial write", "partial_write")
             handler_op = {
                 "send": "create",
                 "post": "create",
@@ -379,6 +392,11 @@ class ConnectorEmulator:
             }.get(tool.op, tool.op)
             operation = getattr(self, f"_op_{handler_op}")
             result = operation(tool, span, **args)
+            if tool.op in write_ops and "partial_write" in active_faults:
+                # The side effect committed but the operation did not finish
+                # successfully. Preserve writes and post-state for reconciliation;
+                # raising before the handler was a refusal, not a partial write.
+                raise ConnectorError(207, "Write applied; completion failed", "partial_write")
             span.bytes = _json_bytes(result)
             return result
         except ConnectorError as error:
@@ -581,7 +599,7 @@ class ConnectorEmulator:
         }
         workflow = entity_definition.workflow
         if workflow is not None:
-            record[workflow.field] = workflow.states[0]
+            record[workflow.field] = tool.initial_state or workflow.states[0]
         self.records[fid] = record
         self.by_entity[selected].append(fid)
         self._index_references(fid, record)

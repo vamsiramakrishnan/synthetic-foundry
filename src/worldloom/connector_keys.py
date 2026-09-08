@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, TypeAlias
 
-FrozenKey: TypeAlias = str | int | float | bool | None | tuple["FrozenKey", ...]
+FrozenKey: TypeAlias = str | int | float | bool | tuple["FrozenKey", ...] | None
 
 
 def freeze_key(value: Any) -> FrozenKey:

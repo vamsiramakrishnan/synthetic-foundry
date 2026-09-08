@@ -78,40 +78,41 @@ transform for in-memory content.
 
 ## Query-first generation
 
-The worldloom.query_planning module inverts the pipeline:
-
-    declare query space
-      -> select exhaustive or t-way covering plan
-      -> derive record and mutation requirements
-      -> generate connector projections
-      -> bind exact records to each query
-      -> inject conflict or failure state
-      -> emit the executable evaluation case
-
-The declared space varies workflow, source connector set, write target and
-verb, output kind, content verb, DAG topology, failure mode, and verification
-policy. Source connector sets include one, two, three, four, and six inputs.
-The destination adds another connector hop.
-
-Exhaustive mode materialises the full Cartesian product. Covering mode uses
-WorldLoom's existing deterministic covering-array engine. At strength two,
-every pair of dimension values occurs at least once. At strength three, every
-triple occurs. The plan therefore has an explicit denominator and holes can be
-measured rather than inferred from random samples.
+Use `worldloom.enterprise_queries.plan_queries` to plan executable workflows,
+then `worldloom.enterprise_corpus.materialize_corpus` to bind their source and
+destination records. Each query carries `generation` requirements and an
+`expected_dag`. The planner admits only combinations allowed by its connector
+and workflow registry.
 
     from worldloom import World
-    from worldloom.query_planning import build_query_driven_corpus
+    from worldloom.enterprise_queries import plan_queries
+    from worldloom.enterprise_corpus import materialize_corpus, validate_corpus
 
     world = World.load("./corpus")
-    generated = build_query_driven_corpus(
-        world,
-        strategy="covering",
-        strength=2,
-    )
+    queries, coverage = plan_queries(world, strategy="exhaustive", limit=100)
+    generated = materialize_corpus(world, queries)
+    assert not validate_corpus(generated)
 
-Every planned query carries RecordRequirement and MutationRequirement objects.
-Generation then creates only the connectors the plan requires and binds stable
-record IDs to each input. Create operations receive an empty destination.
-Update, patch, upsert, and reply operations receive an existing destination
-record. Failure families add ambiguous joins, missing identifiers, permission
-denials, partial writes, stale sources, or version conflicts.
+Exhaustive mode streams a deterministic prefix when `limit` is set. Covering
+mode examines the entire selected space before applying `limit`; use a
+narrowed `ScenarioProfile` for that path. Size the selection before planning:
+
+```bash
+worldloom enterprise-evals space --profile examples/enterprise-evals/omnichannel-retailer.json --max-candidates 100000
+worldloom enterprise-evals plan ./corpus queries.jsonl --profile examples/enterprise-evals/omnichannel-retailer.json --exhaustive --limit 100
+```
+
+`space` uses the profile's candidate ceiling unless `--max-candidates` overrides
+it. `exhaustive: true` means the count is exact. Otherwise `at_least` is the
+number of witnessed candidates, including one beyond the ceiling; it is a
+lower bound, not a coverage claim. Unknown connectors and selections admitting
+no workflow are refused by the same validation used by `plan` and `build`.
+
+The former `worldloom.query_planning` API is deprecated. It remains available
+for callers of its published nine-axis schema and emits a deprecation warning.
+Migration is explicit: `QueryDrivenCorpus.plan` becomes `EnterpriseCorpus.queries`,
+`query.sources` becomes `query.generation.source_requirements`, `query.mutation`
+becomes `query.generation.mutation`, and `fixture.output_record_id` becomes
+`fixture.destination_record_id`. Rebuild and revalidate when migrating; the
+planners produce different schemas and generation bytes. New integrations must
+use the executable planner above.

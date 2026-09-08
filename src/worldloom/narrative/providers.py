@@ -383,16 +383,12 @@ class ViolatingProvider:
 def digest(facts: list[CanonicalFact]) -> str:
     """A content address for the facts supplied to a request.
 
-    Includes values, not only IDs, so that correcting a figure changes the ledger
-    key and the prose about it is regenerated rather than replayed stale.
+    Authority, subject, supersession and access metadata can change what an
+    author may say without changing the value. Hash the complete records.
     """
-    parts: list[str] = []
-    for fact in sorted(facts, key=lambda f: f.id):
-        rendered = fact.text_value if fact.text_value else (
-            f"{fact.value.amount}:{fact.value.unit}" if fact.value else ""
-        )
-        parts.append(f"{fact.id}|{fact.kind}|{rendered}|{fact.valid_from.isoformat()}")
-    return content_key(*parts)
+    return content_key("narration-facts/v2", tuple(
+        fact.model_dump(mode="json") for fact in sorted(facts, key=lambda f: f.id)
+    ))
 
 
 def parse_structured_narrative(raw: str) -> GeneratedNarrative:

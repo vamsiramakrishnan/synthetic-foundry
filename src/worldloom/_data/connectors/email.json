@@ -1,0 +1,234 @@
+{
+  "acl": {
+    "model": "mailbox_permissions"
+  },
+  "capability_notes": [
+    "Provider-neutral mailbox and thread fixture contract. Production mailbox adapters bind these tools explicitly."
+  ],
+  "clock": "2026-09-05T09:00:00+08:00",
+  "connector": "email",
+  "entities": {
+    "message": {
+      "kind": "message",
+      "ops": {
+        "create": "create_draft",
+        "draft": "create_draft",
+        "extract": "get_message",
+        "forward": "forward_message",
+        "read": "get_message",
+        "reply": "reply_message",
+        "search": "search_messages",
+        "send": "send_message"
+      },
+      "required_on_create": [
+        "subject"
+      ],
+      "searchable": "*",
+      "workflow": {
+        "field": "state",
+        "states": [
+          "draft",
+          "sent",
+          "deleted"
+        ],
+        "transitions": {
+          "deleted": [],
+          "draft": [
+            "sent",
+            "deleted"
+          ],
+          "sent": [
+            "deleted"
+          ]
+        }
+      }
+    },
+    "thread": {
+      "kind": "thread",
+      "ops": {
+        "extract": "get_thread",
+        "read": "get_thread",
+        "search": "search_threads"
+      },
+      "required_on_create": [],
+      "searchable": "*"
+    }
+  },
+  "errors": {
+    "bad_transition": [
+      400,
+      "Invalid email state"
+    ],
+    "denied": [
+      403,
+      "Mailbox access denied"
+    ],
+    "not_found": [
+      404,
+      "Message or thread not found: {id}"
+    ],
+    "validation": [
+      400,
+      "Required email field: {field}"
+    ]
+  },
+  "faults": [
+    "timeout",
+    "rate_limit_429",
+    "partial_page"
+  ],
+  "id": {
+    "field": "id",
+    "pattern": "email_record_id"
+  },
+  "maturity": "product_surface",
+  "payload_shape": "email_message",
+  "query_fields": {
+    "recipient": "to",
+    "sender": "from",
+    "sent_at": "sent_at",
+    "state": "state",
+    "subject": "subject",
+    "thread": "thread_id"
+  },
+  "query_language": "odata",
+  "schema": "worldloom.connector-definition/v1",
+  "tools": {
+    "create_draft": {
+      "entities": [
+        "message"
+      ],
+      "idempotency": {
+        "key": [
+          "subject",
+          "to"
+        ],
+        "window_s": 300
+      },
+      "max_results": 1000,
+      "op": "create",
+      "page_size": 50,
+      "params": {
+        "entity": "string?",
+        "fields": "object",
+        "name": "string?"
+      },
+      "projection": false
+    },
+    "forward_message": {
+      "entities": [
+        "message"
+      ],
+      "idempotency": null,
+      "max_results": 1000,
+      "op": "forward",
+      "page_size": 50,
+      "params": {
+        "body": "string?",
+        "id": "string",
+        "to": "array"
+      },
+      "projection": false
+    },
+    "get_message": {
+      "entities": [
+        "message"
+      ],
+      "idempotency": null,
+      "max_results": 1000,
+      "op": "get",
+      "page_size": 50,
+      "params": {
+        "fields": "array?",
+        "id": "string"
+      },
+      "projection": true
+    },
+    "get_thread": {
+      "entities": [
+        "thread"
+      ],
+      "idempotency": null,
+      "max_results": 1000,
+      "op": "get",
+      "page_size": 50,
+      "params": {
+        "fields": "array?",
+        "id": "string"
+      },
+      "projection": true
+    },
+    "reply_message": {
+      "entities": [
+        "message"
+      ],
+      "idempotency": null,
+      "max_results": 1000,
+      "op": "reply",
+      "page_size": 50,
+      "params": {
+        "body": "string",
+        "id": "string"
+      },
+      "projection": false
+    },
+    "search_messages": {
+      "entities": [
+        "message"
+      ],
+      "idempotency": null,
+      "max_results": 1000,
+      "op": "search",
+      "page_size": 50,
+      "params": {
+        "fields": "array?",
+        "max_results": "int?",
+        "predicate": "object?",
+        "query": "string?",
+        "start_at": "int?"
+      },
+      "projection": true
+    },
+    "search_threads": {
+      "entities": [
+        "thread"
+      ],
+      "idempotency": null,
+      "max_results": 1000,
+      "op": "search",
+      "page_size": 50,
+      "params": {
+        "fields": "array?",
+        "max_results": "int?",
+        "predicate": "object?",
+        "query": "string?",
+        "start_at": "int?"
+      },
+      "projection": true
+    },
+    "send_message": {
+      "entities": [
+        "message"
+      ],
+      "idempotency": {
+        "key": [
+          "subject",
+          "to"
+        ],
+        "window_s": 60
+      },
+      "initial_state": "sent",
+      "max_results": 1000,
+      "op": "send",
+      "page_size": 50,
+      "params": {
+        "entity": "string?",
+        "fields": "object",
+        "name": "string?"
+      },
+      "projection": false
+    }
+  },
+  "vendor_product": "Worldloom Email",
+  "version": "1"
+}

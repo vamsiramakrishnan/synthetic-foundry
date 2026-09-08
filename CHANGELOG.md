@@ -11,6 +11,134 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: narration contracts and calibration provenance
+
+- `section_prose@6` and `artifact_plan@2` bind accepted authorship to the
+  complete request and full fact records. Requests exclude future,
+  observer-hidden and transaction-unavailable facts before external authors
+  receive them. Terminology and record time now reach the JSON handshake.
+- A changed cutoff, author, purpose, authority or supersession invalidates
+  stale reuse even if numeric values stay equal. Accepted plans must match
+  the current contract; conflicting current plans are refused. Cold narration
+  replay installs planning evidence before compiling its outline.
+- These identities change nonempty authored ledgers. Reaccept authoring under
+  the new contract or use the prior engine to replay prior bytes; no unsafe
+  fallback treats an old key as a current acceptance. Golden fixtures and the
+  hand-authored grocery narration source are unchanged.
+- SDK and CLI builds with calibrated priors retain content-addressed estimator
+  receipts in the recipe and replay them offline. Final physics overrides
+  remain authoritative. Uncalibrated builds omit this metadata.
+- SDK company specifications that request policies now generate them through
+  the existing domain builder, matching CLI company builds. This changes output
+  for SDK specifications whose policy setting was previously silently dropped.
+
+### Generation: candidate shape admission
+
+- Candidate validations now serialize observed shape checks. Designs with
+  unsatisfied record, artifact or thread requirements no longer emit accepted
+  instances. Layout and execution constraints lacking independent witnesses
+  explicitly reject as unsupported. This changes campaign manifests and
+  acceptance; it does not synthesize new fixture records to make a check pass.
+
+### Added: reuse company profiles across finalized evaluation campaigns
+
+- `evals.candidate_builder(blueprint, pipeline)` composes the existing immutable
+  company blueprint and typed stages using each candidate's planned seed.
+  `evals construct --company-spec FILE --periods N` uses that same path and
+  retains the company resolution and unmet claims beside the campaign.
+  SDK company resolution also carries the existing policy generation setting,
+  which was previously dropped between resolution and build.
+- `CampaignRun.map_worlds` revalidates and rebinds transformed worlds.
+  `select`, `prove`, and `export` preserve the actual candidate and construction
+  provenance without invoking its builder again. All attempts remain in the
+  manifest, including rejected and deliberately unselected candidates.
+- `EvalCampaign.search` delegates to existing adaptive candidate feedback.
+  Selection reuses measured outcome diversity. No second campaign framework,
+  narrator, episode grammar or evolutionary search engine is introduced.
+- Candidate shape constraints now affect acceptance. Observed record, field,
+  payload, artifact and thread counts are checked; native layout and execution
+  constraints lacking independent witnesses explicitly reject as unsupported.
+  Plan validation rejects a plan from a different immutable eval design.
+- Company, author, SDK and eval skills route to the same composition path.
+  `docs/company-eval-reuse.md` records the audit, narration reading order,
+  runnable example, calibration boundary and remaining implementation gaps.
+
+### Generation: executable enterprise DAG grammar
+
+- Opt-in `enterprise-dag@1` plans carry typed arguments, result references,
+  result-dependent conditions and bounded iteration. Eight authored shapes
+  exercise chains, joins, branches, repeated reads and multiple writes. Shape
+  selection participates in coverage and sharding before limiting the output.
+- Mapped reads require at least two source records. Conditional campaigns
+  deterministically request one- or two-record witnesses. These change planned
+  query identities, selected fixture inputs and exported bytes when enabled.
+  The default retains the legacy trajectory. No coverage of an unavailable
+  external 42-shape catalogue is asserted.
+
+### Added: external connector execution and independent trace grading
+
+- `enterprise-evals serve` exposes MCP StreamableHTTP connector tools with
+  isolated runs, per-principal bearer authentication, bounded requests and
+  responses, captured native result receipts, trace retrieval and grading.
+  The optional `mcp` dependency uses SDK 2.2 APIs; the existing stdio commands
+  use the same version. TLS, OAuth deployment and a live Gemini Enterprise
+  integration are separate deployment work.
+- Both reference and external runs use the same connector emulator and
+  assertions. An exact `failure_at` contract checks the declared error, write
+  effects and stopped descendants. Partial writes persist their effects before
+  returning an error; an unrelated failure cannot satisfy the contract.
+- Simulation retains the failure finding and distinguishes completion, a
+  designed write failure, an earlier stop and a runtime exception. Grammar
+  assertion grades are reported separately from legacy weighted DAG scores.
+- Ambiguous joins and stale sources remain data perturbations. Their response
+  policies are unimplemented and the grammar refuses those combinations.
+
+### Generation: enterprise state, field and evidence requirements
+
+- Drive now projects rendered PowerPoint artifacts as distinct `pptx`
+  connector records. Presentation-rendered corpora gain records and may select
+  different source fixtures, changing replay bytes from the prior generation.
+  Existing non-PowerPoint record identities and unrendered projections remain
+  stable.
+- Planned mutations carry an authored target state, derived from a legal
+  connector workflow transition or explicitly declared on the destination.
+  Required source fields carry their canonical connector definitions through
+  query export, deterministic materialization, filtering and grading.
+- Fixtures pin expected World facts and, separately, content-addressed
+  operational observations. Source evidence never borrows a World fact id to
+  disguise missing evidence. Failure overlays name a record belonging to their
+  connector and distinguish source failures from destination failures.
+- Source fixtures select the declared minimum and both runtimes read that whole
+  set. Create and create-path upsert fixtures cannot inherit a preexisting
+  destination merely because another query updates the same entity type.
+- These additions change `queries.jsonl` and `fixtures.jsonl`; required custom
+  fields also change connector records. Existing plans load with empty optional
+  contracts. Rematerialize legacy fixtures to obtain verifiable evidence pins.
+  Seed replay is stable within this generation; it does not promise byte
+  identity with the previous generation.
+
+### Fixed: executable connector vocabulary and checked outcomes
+
+- The bounded, interleaved 400-query reference population now resolves every
+  connector operation. Email has an authored connector definition. Patch maps
+  to update; upsert chooses create or update from the explicit preexistence
+  requirement. File aliases resolve to the selected format before tool lookup.
+- Create payloads satisfy the connector's required fields. Verification follows
+  the actual created record. Alias destinations retain their artifact assertion.
+  Sending email applies the authored sent state rather than creating a draft.
+- State grading requires a persisted write to the declared fixture and an
+  available post-state. An unchanged initial state, wrong record, or missing
+  post-state cannot satisfy a state assertion. A declared, exactly matched
+  partial-write failure can establish its recorded persisted effect.
+- Evidence validation rejects empty placeholders. Operational evidence has a
+  distinct local integrity contract; it does not claim macro reconciliation or
+  independent replay of an unavailable synthesis ledger.
+- `enterprise-evals space --profile` sizes the selected scenario and reports
+  an exact count or a witnessed lower bound. Unused enterprise CLI and field
+  manifest implementations were removed after field predicates moved to
+  `ConnectorFieldDefinition`. The published `query_planning` API remains
+  deprecated with its return schema preserved.
+
 ### Added: a corpus and its evaluation set can be run against Gemini Enterprise
 
 `GoogleCloudPlatform/gemini-enterprise-eval-studio` solves the part of an

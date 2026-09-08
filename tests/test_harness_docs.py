@@ -94,6 +94,7 @@ DOCUMENTS = (
     "docs/enterprise-agent-evals.md",
     "docs/artifact-ecology.md",
     "docs/eval-first.md",
+    "docs/company-eval-reuse.md",
     "docs/eval-first-world-compilation.md",
     "docs/narration-programs.md",
     "docs/process-bindings.md",

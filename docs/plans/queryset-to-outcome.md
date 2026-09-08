@@ -1,5 +1,12 @@
 # From a selection to a graded outcome
 
+This is the historical design analysis. The state assertions, executable
+vocabulary, evidence contracts, custom fields, typed DAG grammar and connector
+HTTP service are now implemented. Read the
+[current status and measurements](../enterprise-execution-status.md) for the
+implemented scope, remaining limits and reproducible checks; the original
+diagnosis below is retained as design history.
+
 The ask, in the words it was asked in: generate a queryset by selecting
 connectors, file formats and customisations like custom fields; use that
 queryset to generate an expected trajectory; then create the data that

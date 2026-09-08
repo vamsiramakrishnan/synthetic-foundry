@@ -39,7 +39,23 @@ _LEGACY_OPERATIONS = {
     "readback": "read",
     "cross_system": "read",
     "list": "search",
+    "patch": "update",
+    "draft": "create",
 }
+
+
+def canonical_operation(operation: str, *, preexisting_record: bool | None = None) -> str:
+    """Resolve a planned verb using its fixture's declared precondition.
+
+    Upsert has no unconditional tool alias. The planner fixes whether the
+    destination already exists, so the reference trajectory selects that arm;
+    callers without that information must retain the ambiguity as a refusal.
+    """
+    if operation == "upsert":
+        if preexisting_record is None:
+            raise ValueError("upsert requires an explicit preexisting_record precondition")
+        return "update" if preexisting_record else "create"
+    return _LEGACY_OPERATIONS.get(operation, operation)
 
 
 class RunnerConfig(Model):
@@ -48,7 +64,11 @@ class RunnerConfig(Model):
     bindings: tuple[ToolBinding, ...] = ()
     model_tool: str = "content.transform"
 
-    def resolve(self, connector: str, operation: str, entity: str) -> str:
+    def resolve(
+        self, connector: str, operation: str, entity: str, *,
+        concrete_hint: str | None = None,
+        preexisting_record: bool | None = None,
+    ) -> str:
         if connector == "model":
             return self.model_tool
         for binding in self.bindings:
@@ -59,9 +79,11 @@ class RunnerConfig(Model):
             ):
                 return binding.tool_name
         definition = load_connector_definition(connector)
-        canonical_operation = _LEGACY_OPERATIONS.get(operation, operation)
+        canonical = canonical_operation(operation, preexisting_record=preexisting_record)
         try:
-            tool = definition.tool_for(entity, canonical_operation)
+            members = definition.entity_members(entity)
+            concrete = concrete_hint if concrete_hint in members else entity
+            tool = definition.tool_for(concrete, canonical)
         except KeyError as error:
             raise KeyError(
                 f"no connector tool for {connector}.{operation}.{entity}"
@@ -110,8 +132,14 @@ async def execute_query(
             if checkpoint:
                 checkpoint(result)
             return result
+        mutation = query.generation.mutation
+        is_destination = (node["connector"], node["entity"]) == (
+            mutation.connector, mutation.entity
+        )
         tool_name = config.resolve(
-            node["connector"], node["kind"], node["entity"]
+            node["connector"], node["kind"], node["entity"],
+            concrete_hint=mutation.output_format if is_destination else None,
+            preexisting_record=mutation.preexisting_record if is_destination else None,
         )
         arguments: dict[str, Any] = {
             "query_id": query.id,
@@ -133,7 +161,9 @@ async def execute_query(
                 entity=node["entity"],
                 depends_on=dependencies,
                 record_id=response.get("record_id"),
+                record_ids=tuple(response.get("record_ids", ())),
                 fact_ids=tuple(response.get("fact_ids", ())),
+                evidence_ids=tuple(response.get("evidence_ids", ())),
                 succeeded=bool(response.get("succeeded", True)),
             )
         )

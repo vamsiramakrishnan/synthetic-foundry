@@ -1,0 +1,104 @@
+{
+  "by_failure": {
+    "missing_stable_id": {
+      "compiled": 63,
+      "executed": 63,
+      "execution_with_tool_error": 63,
+      "grade_behavior": 63
+    },
+    "none": {
+      "compiled": 63,
+      "executed": 63,
+      "grade_behavior": 10,
+      "grade_ok": 53
+    },
+    "partial_write": {
+      "compiled": 63,
+      "executed": 63,
+      "execution_with_tool_error": 63,
+      "grade_behavior": 63
+    },
+    "permission_denied": {
+      "compiled": 124,
+      "executed": 124,
+      "execution_with_tool_error": 124,
+      "grade_behavior": 124
+    },
+    "version_conflict": {
+      "compiled": 43,
+      "executed": 43,
+      "execution_with_tool_error": 43,
+      "grade_behavior": 43
+    }
+  },
+  "by_shape": {
+    "conditional": 64,
+    "deep_chain": 64,
+    "diamond": 64,
+    "fan_in": 63,
+    "fan_out": 20,
+    "map_read": 63,
+    "read_chain": 14,
+    "write_chain": 48
+  },
+  "compile_percent": 89.0,
+  "compile_refusals": {
+    "read-0: insufficient bound source records": 42,
+    "read-1: insufficient bound source records": 2
+  },
+  "compiled": 356,
+  "coverage": null,
+  "execution": {
+    "executed": 356,
+    "execution_with_tool_error": 293,
+    "grade_behavior": 303,
+    "grade_ok": 53
+  },
+  "grade_failures": {},
+  "parameters": {
+    "dag_shapes": [
+      "*"
+    ],
+    "failures": [
+      "none",
+      "ambiguous_join",
+      "missing_stable_id",
+      "permission_denied",
+      "partial_write",
+      "stale_source",
+      "version_conflict"
+    ],
+    "limit": 400,
+    "strategy": "exhaustive",
+    "world": "examples/retail-close"
+  },
+  "population": 400,
+  "refused": 44,
+  "revision": "d48c723e4319ce357db8048ca058e5f3723b833b",
+  "runtime_error_rows": [],
+  "runtime_errors": {},
+  "validation_examples": [
+    "query 886724b4f23110fc055fef09323d33ca: unmet source requirement salesforce:account",
+    "query 886724b4f23110fc055fef09323d33ca: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query 08509fd77f6cb9798a03978fc2ba677d: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query a1598770a5915f340c77294dcd56db1d: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query 0f0b11343b21d79380bd3455df240c2d: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query 4e361fd86455df57ece69736df7fb0e2: unmet source requirement salesforce:account",
+    "query 4e361fd86455df57ece69736df7fb0e2: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query 004356c9fc62385c07b9a91ea6445171: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query b7ce0f282dac836793deb12699922b18: unmet source requirement servicenow:change_request",
+    "query b7ce0f282dac836793deb12699922b18: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query 72199d9b6d378542a8704ae4ff3ea08f: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query c0ef72053944be71217032e52397e0d5: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query 6a7e911b5e91479e2be86ad979aed048: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query a3326808484109357d8aa60f20550eaf: unmet source requirement servicenow:change_request",
+    "query a3326808484109357d8aa60f20550eaf: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query eb9ec71049bae820a297b7181e105bf8: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query 1ff529ad39f4c4fb107f2c6404f6672e: unmet source requirement servicenow:change_request",
+    "query 1ff529ad39f4c4fb107f2c6404f6672e: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query c8e486a560952e25be3ec45206012406: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query 257a3b12b8aad11e2cfe4dc769658239: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)"
+  ],
+  "validation_finding_count": 212,
+  "working_tree_dirty": false
+}

@@ -5,7 +5,7 @@ the loop came to be shipped unable to execute a single query it planned. The
 unit tests passed throughout: every piece worked, and nothing checked that the
 pieces reached each other.
 
-So this asserts the number that says the loop works. `completed` is the count
+So this asserts every row reaches completion or its exact designed failure point. `completed` is the count
 of planned DAGs the simulator drove to their last node, and it was `0` out of
 `12` on a corpus this same file builds. Three defects held it there, each in a
 different module and each invisible to the others:
@@ -96,12 +96,20 @@ def _profile(tmp_path: Path, **overrides: object) -> Path:
 def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """A corpus built through the CLI, shared by the assertions below."""
     tmp_path = tmp_path_factory.mktemp("enterprise-evals")
+    # This positive demand uses evidence actually present in the golden world.
+    # The historical broader demand remains unchanged and must fail validation
+    # in the dedicated missing-evidence test below.
+    workflow = dict(PROFILE["additional_workflows"][0])
+    workflow["sources"] = [
+        {"connector": "servicenow", "entities": ["incident"]},
+        {"connector": "jira", "entities": ["issue"]},
+    ]
     out = tmp_path / "corpus"
     result = RUNNER.invoke(
         app,
         [
             "enterprise-evals", "build", "examples/retail-close", str(out),
-            "--profile", str(_profile(tmp_path)), "--limit", "12",
+            "--profile", str(_profile(tmp_path, additional_workflows=[workflow])), "--limit", "12",
         ],
     )
     assert result.exit_code == 0, result.output
@@ -124,15 +132,23 @@ def test_the_corpus_validates(built: Path) -> None:
 def test_every_planned_query_executes(built: Path) -> None:
     """The number this file exists for.
 
-    `completed` was 0/12 as shipped, 3/12 with one fix, 6/12 with two. The exact
-    count is asserted so a partial regression cannot pass.
+    Completion and the declared write denials partition the entire corpus.
+    Neither a missing source nor harness breakage may enter the denial count.
     """
     result = RUNNER.invoke(app, ["enterprise-evals", "simulate", str(built)])
     assert result.exit_code == 0, result.output
     report = json.loads(result.output.strip().splitlines()[-1])
     assert report["queries"] == 12
-    assert report["completed"] == 12, f"only {report['completed']}/12 executed"
-    assert report["blocked_by_injected_failure"] == 0
+    from worldloom.enterprise_io import load_exported_corpus
+
+    queries = load_exported_corpus(built).queries
+    designed = sum(query.dimensions.get("failure") == "permission_denied" for query in queries)
+    assert designed, "this fixture must exercise an actual injected denial"
+    assert report["completed"] == len(queries) - designed
+    assert report["blocked_at_designed_write"] == designed
+    assert report["stopped_before_failure_point"] == 0
+    assert report["raised"] == 0
+    assert all(item["finding"] == "node write failed" for item in report["results"] if item["outcome"] == "blocked_at_designed_write")
     assert report["average_dag_score"] > 0.7
 
 
@@ -209,3 +225,13 @@ def test_a_selection_that_admits_no_workflow_is_refused(tmp_path: Path) -> None:
     )
     assert result.exit_code != 0
     assert "no workflow survives" in result.output
+
+
+def test_build_refuses_original_profile_whose_change_evidence_is_only_a_placeholder(tmp_path: Path) -> None:
+    result = RUNNER.invoke(app, [
+        "enterprise-evals", "build", "examples/retail-close", str(tmp_path / "out"),
+        "--profile", str(_profile(tmp_path)), "--limit", "12",
+    ])
+    assert result.exit_code == 1, result.output
+    assert "carries no fact (servicenow:change_request)" in result.output
+    assert not (tmp_path / "out" / "manifest.json").exists()

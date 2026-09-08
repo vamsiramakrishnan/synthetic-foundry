@@ -48,7 +48,7 @@ worldloom enterprise-evals plan dist/retail-close shard.jsonl --exhaustive --lim
 worldloom enterprise-evals build dist/retail-close dist/enterprise-evals --exhaustive --limit 500 --render-limit 50 --profile examples/enterprise-evals/omnichannel-retailer.json
 worldloom enterprise-evals validate dist/enterprise-evals
 worldloom enterprise-evals simulate dist/enterprise-evals --limit 500
-worldloom enterprise-evals score query.json trace.json
+worldloom enterprise-evals score query.json trace.json --fixture fixture.json
 ```
 
 ## Query and fixture contract
@@ -62,3 +62,44 @@ The scorer measures required semantic calls, dependency order, write verificatio
 `render_corpus_artifacts` produces real XLSX, DOCX, PPTX, and PDF files. XLSX output contains structured evidence, chart data, a native chart, and provenance; PPTX output includes native charts and source slides. Optional imports preserve the package's bare-install contract.
 
 `ConnectorSimulator` is an executable in-memory MCP target for harness tests. It applies fixture permissions, stale versions, missing identifiers, ambiguous joins, partial writes, version conflicts, idempotent writes, and dependency-based readback instead of merely carrying failure labels.
+
+## External connector agents
+
+`worldloom enterprise-evals serve dist/enterprise-evals --check` validates the
+connector server configuration. Remove `--check` to serve StreamableHTTP at
+`http://127.0.0.1:8000/mcp`. Each external agent run has isolated fixture state,
+captured connector spans and the same assertion grader as local execution.
+See [connector serving](connector-serving.md) for the SDK, per-principal bearer
+authentication, limits, trace retrieval and Gemini Enterprise setup.
+The fixture pins the exact facts in the selected input records. `score --fixture`
+measures their coverage from successful source reads and penalizes invented IDs.
+Without a fixture, provenance is unverified and scores zero. Older exports without
+`expected_fact_ids` must be materialized again before validation. Selection now
+honors `SourceRequirement.minimum`; both reference runtimes read every selected
+record instead of silently obligating three records and reading one.
+
+Operational projections use a separate `SYNOBS:` observation namespace. Their
+recipe and program digests, scope, record identities, consecutive history and
+values are checked and pinned in `expected_evidence_ids`. This verifies local
+history integrity. It does not replay an unavailable synthesis ledger or prove
+that operational totals reconcile with the World's financial facts. A placeholder
+with neither fact evidence nor valid operational observations fails validation;
+`strict_sources` remains opt-in.
+
+Simulation reports each query's finding and one of `completed`,
+`blocked_at_designed_write`, `stopped_before_failure_point`, or `raised`.
+Permission and version failures target the intended destination; missing stable
+IDs stop at the source. A partial write applies the mutation, then returns 207,
+with its writes and post-state preserved for reconciliation. Compiled rows declare
+an exact `failure_at` assertion and block dependent nodes while independent
+branches remain executable. Changing the failure kind, writing another target,
+or continuing a blocked descendant fails the grade. Ambiguous joins and stale
+sources remain data perturbations; they do not yet prove that an agent resolved
+ambiguity or selected an authoritative replacement.
+
+For typed DAGs, simulation executes the grammar and reports `assertion_grade`
+per query, plus `assertion_passed` and `assertion_failed` totals. Its `dag_score`
+is null. `average_dag_score` averages only the legacy weighted scores and is
+null when no legacy rows ran; it never treats an assertion pass as a numeric
+weighted score. See [the DAG grammar](enterprise-dag-grammar.md) and the
+[implementation measurements](enterprise-execution-status.md).

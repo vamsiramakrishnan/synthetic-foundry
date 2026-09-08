@@ -2479,20 +2479,19 @@ def _planned_sections(
     outside that set, so this cannot narrow a legitimate plan — it is the second
     of the two checks, and the one that would catch a ledger edited by hand.
     """
-    entry = next(
-        (e for e in world.ledger if e.call_site == f"{intent.id}/plan"),
-        None,
-    )
-    if entry is None:
+    from .compiler.handshake import recorded_plan
+
+    plan = recorded_plan(world, intent)
+    if plan is None:
         return []
 
     allowed = {fact.id for fact in facts}
     sections: list[ArtifactSection] = []
-    for beat in entry.output.get("beats", ()):
+    for beat in plan.beats:
         assigned = [
-            reference["fact_id"]
-            for reference in beat.get("evidence", ())
-            if reference.get("fact_id") in allowed
+            reference.fact_id
+            for reference in beat.evidence
+            if reference.fact_id in allowed
         ]
         # Same rule as the outline path: a section with nothing to say does not
         # belong in the document. A plan may legitimately name a beat whose facts
@@ -2508,12 +2507,12 @@ def _planned_sections(
                 # `compose.plan_from_ir` slugifies its keys instead, so the two
                 # plan sources spell keys differently; nothing joins on them
                 # today, and anything that starts to must normalise first.
-                heading=beat["key"],
+                heading=beat.key,
                 body=None,
                 fact_ids=assigned,
-                purpose=beat.get("purpose", ""),
-                semantic_role=beat.get("semantic_role", ""),
-                optional=bool(beat.get("optional", False)),
+                purpose=beat.purpose,
+                semantic_role=beat.semantic_role,
+                optional=beat.optional,
             )
         )
     return sections

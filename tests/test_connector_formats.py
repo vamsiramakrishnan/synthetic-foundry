@@ -1,7 +1,7 @@
 """A connector is not a file format.
 
-SharePoint is one connector that holds docx, xlsx, pptx and pdf; Drive holds a
-different set. Until this layer, a SharePoint record was one ``file`` item per
+SharePoint and Drive hold docx, xlsx, pptx and pdf as binary files. Until this
+layer, a SharePoint record was one ``file`` item per
 artifact with the artifact's flattened text and no format, so an eval could
 not ask for "the deck" as opposed to "the workbook" of the same pack, and an
 agent that fetched the item got prose rather than bytes. These tests pin the
@@ -31,6 +31,7 @@ from worldloom.eval_design import (
     plan_candidates,
 )
 from worldloom.eval_interventions import construct_candidate
+from worldloom.narrative import DeterministicProvider
 from worldloom.retail import RetailWorld
 from worldloom.scenarios import MonthEndClose
 
@@ -41,7 +42,7 @@ def _world(seed: int = 8128):  # type: ignore[no-untyped-def]
 
 def test_each_file_connector_declares_the_formats_it_holds() -> None:
     assert file_formats("sharepoint") == ("docx", "xlsx", "pptx", "pdf")
-    assert file_formats("drive") == ("pdf", "docx", "xlsx")
+    assert file_formats("drive") == ("pdf", "docx", "xlsx", "pptx")
     assert file_formats("jira") == ()
 
 
@@ -71,9 +72,30 @@ def test_a_rendered_world_projects_one_record_per_artifact_and_format() -> None:
         assert record.fields["sha256"] == hashlib.sha256(payload).hexdigest()
         assert record.fields["name"].endswith(f".{record.fields['format']}")
 
-    # Drive holds no decks, so the same world projects fewer formats there.
-    drive = {record.entity for record in generate_artifact_projection(world, "drive")}
-    assert "pptx" not in drive and drive <= {"docx", "xlsx", "pdf"}
+    # A stored PowerPoint file stays pptx; uploading it to Drive does not
+    # silently convert it into a native Google Slides presentation.
+    drive_records = generate_artifact_projection(world, "drive")
+    drive_by_artifact: dict[str, set[str]] = {}
+    for record in drive_records:
+        drive_by_artifact.setdefault(record.fields["world_artifact_id"], set()).add(record.entity)
+    assert drive_by_artifact == by_artifact
+
+
+def test_drive_preserves_a_rendered_powerpoint_as_a_binary_file() -> None:
+    world = RetailWorld(seed=8128).build().run(
+        MonthEndClose(period="2026-03", include_operational_incident=True)
+    ).narrate(DeterministicProvider()).render("pptx")
+    drive_records = generate_artifact_projection(world, "drive")
+    decks = [record for record in drive_records if record.entity == "pptx"]
+    assert decks, "every rendered presentation must project into Drive"
+    emulator = ConnectorEmulator(load_connector_definition("drive"), drive_records)
+    for deck in decks:
+        payload = rendered_payload(world, deck)
+        assert payload is not None
+        fetched = emulator.call("get_file", id=deck.external_id)
+        assert fetched["mimeType"] == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        assert fetched["sha256Checksum"] == hashlib.sha256(payload).hexdigest()
+        assert int(fetched["size"]) == len(payload)
 
 
 def test_the_emulator_searches_across_formats_and_serves_the_hash() -> None:

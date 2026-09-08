@@ -47,7 +47,12 @@ from ..ids import content_key, format_id, highest_numeric_suffix
 from ..models import ArtifactIR, ArtifactSection, GenerationLedgerEntry
 from . import claims as claim_checks
 from . import prompts, providers
-from .requests import GeneratedNarrative, NarrativeRequest
+from .requests import (
+    GeneratedNarrative,
+    NarrativeRequest,
+    fact_available_to,
+    superseded_for,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..models import CanonicalFact
@@ -111,7 +116,7 @@ def _comparators(
     """Each measured fact paired with the same measure one period earlier."""
     by_measure: dict[tuple[str, str, str], str] = {}
     for fact in facts.values():
-        if fact.period and fact.value is not None and not fact.is_superseded:
+        if fact.period and fact.value is not None and not superseded_for(fact, cutoff):
             by_measure.setdefault((fact.kind, fact.subject, fact.period), fact.id)
 
     out: dict[str, str] = {}
@@ -184,13 +189,10 @@ def _request_for(
     # later RCA discuss the hypothesis that triage got wrong.
     cutoff = manifest.created_at if manifest else None
 
-    # Keep legacy request bytes stable. Explicit observer/transaction metadata
-    # narrows new requests before a writer sees them; historic evidence remains
-    # citable, but a backdated correction cannot arrive before its record time.
+    # Filter before a writer sees the request. Rejecting a future citation after
+    # generation cannot undo disclosure of the answer in the author's input.
     allowed = [fact_id for fact_id in allowed
-               if facts[fact_id].visible_to(author.id)
-               and (facts[fact_id].tx_from is None or cutoff is None
-                    or facts[fact_id].recorded_at <= cutoff)]
+               if fact_available_to(facts[fact_id], observer=author.id, cutoff=cutoff)]
 
     required = [
         fact_id
@@ -204,14 +206,12 @@ def _request_for(
     # movement the writer worked out in their head. Without this the harness
     # would be right to reject "the third consecutive month" — there would be
     # nothing supporting it.
-    comparators = {
-        key: value for key, value in _comparators(allowed, facts, cutoff).items()
-        if facts[value].visible_to(author.id)
-        and (cutoff is None or facts[value].recorded_at <= cutoff)
-    }
+    comparable = {fact_id: fact for fact_id, fact in facts.items()
+                  if fact_available_to(fact, observer=author.id, cutoff=cutoff)}
+    comparators = _comparators(allowed, comparable, cutoff)
     allowed = allowed + [c for c in comparators.values() if c not in allowed]
 
-    return NarrativeRequest(
+    request = NarrativeRequest(
         artifact_id=ir.id,
         artifact_type=intent.artifact_type,
         section=section.heading,
@@ -235,8 +235,8 @@ def _request_for(
         required_fact_ids=required,
         forbidden_claims=_forbidden_for(intent.artifact_type),
         # World-level, not fact-scoped: a vocabulary note holds for every
-        # section, and there are never more than a handful. Not part of the
-        # fact digest, so adding one cannot orphan a recorded narration.
+        # section, and there are never more than a handful. Advisory vocabulary
+        # still changes the writing contract, so it participates in its digest.
         terminology={
             constraint.target: constraint.effect
             for commitment in world.lore
@@ -252,8 +252,11 @@ def _request_for(
         # old numbers, retrieval hardness reads exactly as before (26 of 51),
         # so the pin's move is attributable here and nowhere else.
         target_words={"small": 110, "medium": 190, "long": 300}.get(intent.size_profile, 190),
-        fact_digest=providers.digest([facts[f] for f in allowed]),
     )
+    return request.model_copy(update={"fact_digest": content_key(
+        "narration-request/v2", request.model_dump(mode="json", exclude={"fact_digest"}),
+        providers.digest([facts[f] for f in allowed]),
+    )})
 
 
 @dataclass
@@ -607,9 +610,10 @@ def _generate(
     """
     feedback = ""
     attempts = 0
+    scoped_facts = {fact_id: facts[fact_id] for fact_id in request.allowed_fact_ids}
 
     while True:
-        narrative = provider.complete(request, prompt, facts, feedback=feedback)
+        narrative = provider.complete(request, prompt, scoped_facts, feedback=feedback)
         verdict = claim_checks.validate(request, narrative, facts, entity_names=entity_names)
         if verdict.accepted:
             return narrative, attempts

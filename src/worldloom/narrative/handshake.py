@@ -122,6 +122,7 @@ def _fact_payload(
         "kind": fact.kind,
         "authority": fact.authority.value,
         "valid_from": fact.valid_from.isoformat(),
+        "recorded_at": fact.recorded_at.isoformat(),
         # Relative to the author's cut-off, never the corpus's final state.
         # `fact.is_superseded` here handed a triage-era author `close.status =
         # delayed` stamped superseded, while the section's purpose demanded
@@ -146,6 +147,7 @@ def _request_payload(request: NarrativeRequest, facts: dict[str, CanonicalFact])
         "audience": request.audience,
         "background": list(request.background),
         "hierarchy": dict(request.hierarchy),
+        "terminology": dict(request.terminology),
         "target_words": request.target_words,
         "knows_as_of": request.temporal_cutoff.isoformat() if request.temporal_cutoff else None,
         "must_not_claim": list(request.forbidden_claims),
@@ -229,6 +231,10 @@ def parse_responses(payload: dict[str, Any]) -> dict[str, GeneratedNarrative]:
         if not isinstance(row, dict) or "id" not in row:
             raise ValueError(f"response {index} has no 'id'")
         identifier = row["id"]
+        if not isinstance(identifier, str) or not identifier:
+            raise ValueError(f"response {index} has no non-empty string 'id'")
+        if identifier in out:
+            raise ValueError(f"duplicate response id: {identifier}")
         try:
             out[identifier] = GeneratedNarrative(
                 text=row.get("text", ""),
@@ -257,7 +263,16 @@ def review(
     entity_names = known_entity_names(world)
 
     verdicts: dict[str, Verdict] = {}
-    for request in pending(world):
+    requests = pending(world)
+    if not requests:
+        # The CLI owns its established nothing_awaiting_prose refusal.
+        return verdicts
+    expected = {f"{request.artifact_id}/{request.section}" for request in requests}
+    for identifier in sorted(set(responses) - expected):
+        verdicts[identifier] = Verdict(accepted=False, violations=[Violation(
+            code="unexpected_response", detail="response does not name a pending request",
+        )])
+    for request in requests:
         identifier = f"{request.artifact_id}/{request.section}"
         narrative = responses.get(identifier)
         if narrative is None:

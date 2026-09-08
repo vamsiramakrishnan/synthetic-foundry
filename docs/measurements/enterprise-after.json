@@ -1,0 +1,101 @@
+{
+  "by_failure": {
+    "ambiguous_join": {
+      "compiled": 33,
+      "executed": 33,
+      "grade_ok": 33
+    },
+    "missing_stable_id": {
+      "compiled": 31,
+      "executed": 31,
+      "execution_with_tool_error": 31,
+      "grade_behavior": 31
+    },
+    "none": {
+      "compiled": 68,
+      "executed": 68,
+      "grade_ok": 68
+    },
+    "partial_write": {
+      "compiled": 71,
+      "executed": 71,
+      "execution_with_tool_error": 71,
+      "grade_behavior": 71
+    },
+    "permission_denied": {
+      "compiled": 88,
+      "executed": 88,
+      "execution_with_tool_error": 88,
+      "grade_behavior": 88
+    },
+    "stale_source": {
+      "compiled": 70,
+      "executed": 70,
+      "grade_ok": 70
+    },
+    "version_conflict": {
+      "compiled": 39,
+      "executed": 39,
+      "execution_with_tool_error": 39,
+      "grade_behavior": 39
+    }
+  },
+  "by_shape": {
+    "legacy": 400
+  },
+  "compile_percent": 100.0,
+  "compile_refusals": {},
+  "compiled": 400,
+  "coverage": null,
+  "execution": {
+    "executed": 400,
+    "execution_with_tool_error": 229,
+    "grade_behavior": 229,
+    "grade_ok": 171
+  },
+  "grade_failures": {},
+  "parameters": {
+    "dag_shapes": [],
+    "failures": [
+      "none",
+      "ambiguous_join",
+      "missing_stable_id",
+      "permission_denied",
+      "partial_write",
+      "stale_source",
+      "version_conflict"
+    ],
+    "limit": 400,
+    "strategy": "exhaustive",
+    "world": "examples/retail-close"
+  },
+  "population": 400,
+  "refused": 0,
+  "revision": "d48c723e4319ce357db8048ca058e5f3723b833b",
+  "runtime_error_rows": [],
+  "runtime_errors": {},
+  "validation_examples": [
+    "query 4ed89f2e96d70293c0cb1e3cf734977c: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query 90f5f0ba2f342d104aafb79086b7cf58: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query b4fce13bf6e703618e88255339920c9a: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query 093ab3c64af24a854fb03930961edc55: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query 70e3a0f9873e5702be1391600a4c1fdb: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query 34723591e511cbc4f8b42ed45ab54957: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query ee0f62ec1973f297dc84033bef0decf0: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query 72e059a1f12fd0d4bc2807e76b45d9f4: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query 8a4eb83f244944eb0bca05a004408599: evidence CONN-SALESFORCE-4B1E56B5A9DA carries no fact (salesforce:account)",
+    "query 1114861c4cb5247dd395e40ea18de3f9: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query 89989a02fdf04eaefd69fe4622203ba3: evidence 371b9fc7ced54a595b548ff0073361b5 carries no fact (salesforce:opportunity)",
+    "query 4384ad00ffd0f699bc1650ec6ac7df3b: evidence 371b9fc7ced54a595b548ff0073361b5 carries no fact (salesforce:opportunity)",
+    "query 09c0756740ffeb1c89c12818ce439dda: evidence 371b9fc7ced54a595b548ff0073361b5 carries no fact (salesforce:opportunity)",
+    "query 9d0f8da88e410ef605c5cb6904e69082: evidence 371b9fc7ced54a595b548ff0073361b5 carries no fact (salesforce:opportunity)",
+    "query 0a70b2c512eefdb284945764be783ec9: evidence 441eff8bb91ca6d48d2e4e6f1010ff0d carries no fact (email:thread)",
+    "query d3fe264acfff581c2b0bcd5dcd5d6e2f: evidence 371b9fc7ced54a595b548ff0073361b5 carries no fact (salesforce:opportunity)",
+    "query 4742e9956c2b7cc22affdc72e5f21882: evidence 441eff8bb91ca6d48d2e4e6f1010ff0d carries no fact (email:thread)",
+    "query c613e88bfee2c55576ae240ebaeee2dd: evidence 441eff8bb91ca6d48d2e4e6f1010ff0d carries no fact (email:thread)",
+    "query 7e36b8de208d9a05aab02af2b16fed70: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)",
+    "query 9de451e1b15f8ce3b348b05806b8db76: evidence 94b0ec8a280125d8f7f84e4d0601ce29 carries no fact (servicenow:change_request)"
+  ],
+  "validation_finding_count": 200,
+  "working_tree_dirty": false
+}

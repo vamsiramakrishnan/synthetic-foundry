@@ -99,4 +99,5 @@ def test_runtime_keeps_invalid_connector_workflow_visible() -> None:
     assert result.behaviors == ("validation_error",)
     assert result.spans[0].error is not None
     assert result.spans[0].error["kind"] == "bad_transition"
-    assert result.grade["status"] == "behavior"
+    assert result.grade["status"] == "fail"
+    assert result.grade["fails"] == ["tool_not_called:n1"]

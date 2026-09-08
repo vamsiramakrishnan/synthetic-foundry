@@ -34,6 +34,7 @@ class EnterpriseEvalHarness:
     limit: int | None = None
     projections: ConnectorProjectionRegistry | None = None
     strict_sources: bool = False
+    dag_shapes: tuple[str, ...] = ()
 
     @classmethod
     def from_world(cls, world: World) -> EnterpriseEvalHarness:
@@ -81,11 +82,19 @@ class EnterpriseEvalHarness:
         """Refuse missing source evidence instead of generating placeholder rows."""
         return replace(self, strict_sources=True)
 
+    def with_dag_grammar(self, *shapes: str) -> EnterpriseEvalHarness:
+        """Opt into versioned executable shapes; no arguments selects the catalogue."""
+        from .enterprise_dag import shape_catalogue
+        unknown = set(shapes) - shape_catalogue().keys()
+        if unknown:
+            raise ValueError(f"unknown DAG shapes: {sorted(unknown)}")
+        return replace(self, dag_shapes=tuple(shapes) or ("*",))
+
     def take(self, count: int) -> EnterpriseEvalHarness:
         return replace(self, limit=count)
 
     def plan(self) -> tuple[tuple[PlannedEnterpriseQuery, ...], CoverageReport | None]:
-        queries, report = plan_queries(self.world, registry=self.registry, profile=self.profile, strategy=self.strategy, limit=self.limit)
+        queries, report = plan_queries(self.world, registry=self.registry, profile=self.profile, strategy=self.strategy, limit=self.limit, dag_shapes=self.dag_shapes)
         return tuple(queries), report
 
     def build(self) -> tuple[EnterpriseCorpus, CoverageReport | None]:
@@ -121,5 +130,6 @@ class EnterpriseEvalHarness:
             limit=self.limit,
             shard_index=index,
             shard_count=count,
+            dag_shapes=self.dag_shapes,
         )
         return tuple(queries), report

@@ -1,0 +1,107 @@
+{
+  "by_failure": {
+    "ambiguous_join": {
+      "compiled": 4,
+      "executed": 4,
+      "execution_with_tool_error": 1,
+      "grade_behavior": 1,
+      "grade_ok": 3
+    },
+    "missing_stable_id": {
+      "compiled": 8,
+      "executed": 8,
+      "execution_with_tool_error": 8,
+      "grade_behavior": 4,
+      "grade_fail": 4
+    },
+    "none": {
+      "compiled": 19,
+      "executed": 19,
+      "execution_with_tool_error": 11,
+      "grade_behavior": 7,
+      "grade_fail": 4,
+      "grade_ok": 8
+    },
+    "partial_write": {
+      "compiled": 18,
+      "executed": 18,
+      "execution_with_tool_error": 10,
+      "grade_behavior": 5,
+      "grade_fail": 5,
+      "grade_ok": 8
+    },
+    "permission_denied": {
+      "compiled": 24,
+      "executed": 24,
+      "execution_with_tool_error": 8,
+      "grade_behavior": 3,
+      "grade_fail": 5,
+      "grade_ok": 16
+    },
+    "stale_source": {
+      "compiled": 12,
+      "executed": 12,
+      "execution_with_tool_error": 6,
+      "grade_behavior": 3,
+      "grade_fail": 3,
+      "grade_ok": 6
+    },
+    "version_conflict": {
+      "compiled": 12,
+      "executed": 12,
+      "grade_ok": 12
+    }
+  },
+  "compile_percent": 24.25,
+  "compile_refusals": {
+    "confluence/page has no tool for 'patch'": 7,
+    "confluence/page has no tool for 'upsert'": 27,
+    "connector 'email' has no definition": 140,
+    "drive/file has no tool for 'create'": 12,
+    "drive/file has no tool for 'patch'": 11,
+    "drive/file has no tool for 'update'": 12,
+    "drive/file has no tool for 'upsert'": 14,
+    "salesforce/account has no tool for 'patch'": 4,
+    "salesforce/account has no tool for 'upsert'": 6,
+    "salesforce/case has no tool for 'patch'": 7,
+    "salesforce/case has no tool for 'upsert'": 2,
+    "salesforce/opportunity has no tool for 'patch'": 6,
+    "salesforce/opportunity has no tool for 'upsert'": 5,
+    "sharepoint/file has no tool for 'patch'": 26,
+    "sharepoint/file has no tool for 'upsert'": 24
+  },
+  "compiled": 97,
+  "coverage": null,
+  "execution": {
+    "executed": 97,
+    "execution_with_tool_error": 44,
+    "grade_behavior": 23,
+    "grade_fail": 21,
+    "grade_ok": 53
+  },
+  "grade_failures": {
+    "artifact_missing:write": 21
+  },
+  "parameters": {
+    "failures": [
+      "none",
+      "ambiguous_join",
+      "missing_stable_id",
+      "permission_denied",
+      "partial_write",
+      "stale_source",
+      "version_conflict"
+    ],
+    "limit": 400,
+    "strategy": "exhaustive",
+    "world": "examples/retail-close"
+  },
+  "population": 400,
+  "refused": 303,
+  "revision": "2f79e5bdbd2aff1e5a19c890e29a454c783a761b",
+  "runtime_error_rows": [],
+  "runtime_errors": {},
+  "validation_examples": [],
+  "validation_finding_count": 0,
+  "working_tree_dirty": true
+}

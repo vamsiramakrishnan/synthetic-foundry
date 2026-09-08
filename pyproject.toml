@@ -78,7 +78,7 @@ arrow = ["pyarrow>=15.0"]
 # `worldloom diversity`, `topology`, `series` and `validate`, which need no
 # protocol at all. No model-SDK extra exists: this package never calls a
 # language model — the coding harness driving it is the writer.
-mcp = ["mcp>=1.2"]
+mcp = ["mcp>=2.2,<3"]
 # `worldloom evaluate --retriever embedding` — dense retrieval, so a hardness
 # claim rests on something other than 1990s lexical matching. An extra, and
 # emphatically not a core dependency, for two reasons. It is the only thing in
@@ -103,11 +103,11 @@ all = [
     "python-docx>=1.1",
     "reportlab>=4.0",
     "python-pptx>=1.0",
-    "mcp>=1.2",
+    "mcp>=2.2,<3",
 ]
 dev = [
     "pytest>=8.0", "openpyxl>=3.1", "python-docx>=1.1", "reportlab>=4.0",
-    "python-pptx>=1.0", "mcp>=1.2",
+    "python-pptx>=1.0", "mcp>=2.2,<3",
     # `tests/test_properties.py`. Dev-only and never imported from `src/`: the
     # rest of this project's determinism rests on nothing under `src/` drawing
     # randomness, and Hypothesis draws plenty — seeded, test-side, and

@@ -793,8 +793,17 @@ class World:
         """
         from .narrative import compiler
 
-        staged = self if self._artifact_irs else self.compile()
         available = self._ledger if ledger is None else ledger
+        if self._artifact_irs:
+            staged = self
+        else:
+            # Planning rows must be present before compilation chooses sections.
+            # Attaching a replay ledger only to the prose compiler rebuilt the
+            # default outline and then missed every differently-headed prose key.
+            compiling = {entry.key: entry for entry in self._ledger}
+            compiling.update({entry.key: entry for entry in available
+                              if entry.call_site.endswith("/plan")})
+            staged = replace(self, _ledger=tuple(compiling.values())).compile()
         result = compiler.narrate(
             staged, provider, ledger=available, retries=retries,
             concurrency=concurrency, on_accepted=on_accepted,
@@ -810,13 +819,20 @@ class World:
         # Keyed by ledger key rather than appended, because narration legitimately
         # re-records an entry it replayed and two rows for one content address
         # would make "which call produced this" ambiguous.
-        merged = {entry.key: entry for entry in self._ledger}
+        merged = {entry.key: entry for entry in staged._ledger}
         merged.update({entry.key: entry for entry in result.ledger})
+        prose_changed = result.irs != staged._artifact_irs
         return replace(
             staged,
             _artifact_irs=result.irs,
             _ledger=tuple(merged.values()),
             _narration=(result.provider_calls, result.replayed, result.rejected),
+            # Rendering belongs to the previous IR. Clearing only the in-memory
+            # bytes still lets export copy stale files from a loaded corpus's
+            # root; the changed world must become an unrendered in-memory value.
+            _rendered=() if prose_changed else staged._rendered,
+            _artifacts=staged._manifest_for(result.irs) if prose_changed else staged._artifacts,
+            root=None if prose_changed else staged.root,
         )
 
     def render(self, *formats: str) -> World:

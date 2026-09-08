@@ -9,12 +9,16 @@ semantics live in data. Engines stay generic.
 from __future__ import annotations
 
 import json
+import math
+from collections.abc import Mapping
+from datetime import date, datetime
 from importlib.resources import files
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
 from .models import Model
+from .predicates import Predicate, RelativeTime, evaluate
 
 CONNECTOR_DEFINITION_SCHEMA: Literal["worldloom.connector-definition/v1"] = (
     "worldloom.connector-definition/v1"
@@ -27,6 +31,7 @@ REFERENCE_CONNECTORS = (
     "sharepoint",
     "drive",
     "outlook",
+    "email",
     "onedrive",
     "teams",
     "slack",
@@ -95,6 +100,7 @@ class ConnectorFieldDefinition(Model):
     query_name: str | None = None
     payload_name: str | None = None
     average_bytes: int = Field(default=32, ge=0)
+    present_when: Predicate | None = None
 
     @model_validator(mode="after")
     def _field_shape(self) -> ConnectorFieldDefinition:
@@ -102,7 +108,78 @@ class ConnectorFieldDefinition(Model):
             raise ValueError(f"{self.id}: option-like fields need a non-empty option domain")
         if self.cardinality is not None and self.options and self.cardinality < len(self.options):
             raise ValueError(f"{self.id}: cardinality cannot be smaller than the option domain")
+        if len(set(self.options)) != len(self.options):
+            raise ValueError(f"{self.id}: duplicate field options")
+        # Population must depend only on this immutable record. A historical,
+        # relational, or relative-time condition cannot be evaluated without a
+        # context the payload shaper does not own.
+        if self.present_when is not None and (
+            self.present_when.as_of is not None
+            or self.present_when.joins
+            or any(isinstance(item.value, RelativeTime) for item in self.present_when.where)
+        ):
+            raise ValueError("field presence conditions must be record-local")
         return self
+
+    def is_present(self, record: Mapping[str, Any]) -> bool:
+        """Whether this record permits the field, independently of sparsity."""
+        return self.present_when is None or evaluate(self.present_when, record)
+
+    def valid_value(self, value: Any) -> bool:
+        """Validate a populated value without conflating null with requiredness."""
+        if value is None:
+            return True
+        if self.field_type in {"text", "rich_text", "reference", "url"}:
+            return isinstance(value, str)
+        if self.field_type == "boolean":
+            return isinstance(value, bool)
+        if self.field_type == "integer":
+            return isinstance(value, int) and not isinstance(value, bool)
+        if self.field_type == "number":
+            return (isinstance(value, int) and not isinstance(value, bool)) or (
+                isinstance(value, float) and math.isfinite(value)
+            )
+        if self.field_type == "option":
+            return isinstance(value, str) and value in self.options
+        if self.field_type == "multi_option":
+            return isinstance(value, (list, tuple)) and all(
+                isinstance(item, str) and item in self.options for item in value
+            )
+        if self.field_type in {"date", "datetime"}:
+            if not isinstance(value, str):
+                return False
+            try:
+                if self.field_type == "date":
+                    date.fromisoformat(value)
+                else:
+                    datetime.fromisoformat(value)
+                return True
+            except ValueError:
+                return False
+        if self.field_type == "user":
+            return isinstance(value, str) or (
+                isinstance(value, Mapping) and isinstance(value.get("id"), str)
+            )
+        if self.field_type == "multi_user":
+            return isinstance(value, (list, tuple)) and all(
+                isinstance(item, str) or (
+                    isinstance(item, Mapping) and isinstance(item.get("id"), str)
+                ) for item in value
+            )
+        if self.field_type == "cascading":
+            if not isinstance(value, Mapping) or value.get("value") not in self.options:
+                return False
+            child = value.get("child")
+            return child is None or (
+                isinstance(child, Mapping) and child.get("value") in self.options
+            )
+        if self.field_type == "json":
+            try:
+                json.dumps(value, allow_nan=False)
+                return True
+            except (TypeError, ValueError):
+                return False
+        return False
 
 
 class ConnectorWorkflow(Model):
@@ -160,6 +237,7 @@ class ConnectorToolDefinition(Model):
     max_results: int = Field(ge=1)
     projection: bool = False
     idempotency: ConnectorIdempotency | None = None
+    initial_state: str | None = None
 
     @model_validator(mode="after")
     def _valid_limits(self) -> ConnectorToolDefinition:
@@ -222,6 +300,13 @@ class ConnectorDefinition(Model):
             missing = set(tool.entities) - entity_names
             if missing:
                 raise ValueError(f"tool {name!r} references unknown entities {sorted(missing)}")
+            if tool.initial_state is not None:
+                if tool.op not in {"create", "send", "post", "upload"}:
+                    raise ValueError(f"tool {name!r}: initial_state requires a create operation")
+                for entity in tool.entities:
+                    workflow = self.entities[entity].workflow
+                    if workflow is None or tool.initial_state not in workflow.states:
+                        raise ValueError(f"tool {name!r}: initial_state is absent from {entity!r} workflow")
         for entity_name, entity_definition in self.entities.items():
             missing = set(entity_definition.ops.values()) - tool_names
             if missing:
@@ -310,9 +395,14 @@ class ConnectorDefinition(Model):
 
     def fields_for(self, entity: str) -> tuple[ConnectorFieldDefinition, ...]:
         members = self.entity_members(entity)
-        if len(members) != 1:
-            return ()
-        return self.field_manifests.get(members[0], ())
+        fields = self.field_manifests.get(members[0], ())
+        if len(members) == 1:
+            return fields
+        # An alias can expose only fields whose full definitions agree across
+        # every concrete member. This preserves authored overlays on aliases
+        # without guessing which incompatible schema a record meant.
+        others = [{field.id: field for field in self.field_manifests.get(member, ())} for member in members[1:]]
+        return tuple(field for field in fields if all(manifest.get(field.id) == field for manifest in others))
 
     def resolve_field(self, entity: str, name: str) -> ConnectorFieldDefinition | None:
         folded = name.casefold()

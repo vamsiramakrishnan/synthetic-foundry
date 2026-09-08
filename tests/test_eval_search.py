@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from worldloom.eval_design import (
+    EvalShape,
     EvalSpec,
     EvalStepSpec,
+    RecordShapeRequirement,
     RequirementKind,
     WorldRequirement,
 )
@@ -62,3 +64,21 @@ def test_adaptive_search_replays_identically() -> None:
 
     assert [attempt.plan for attempt in first] == [attempt.plan for attempt in second]
     assert [attempt.validation for attempt in first] == [attempt.validation for attempt in second]
+
+
+def test_search_reports_observed_volume_shortfall_to_next_builder() -> None:
+    seen: list[CandidateContext] = []
+
+    def builder(context: CandidateContext):  # type: ignore[no-untyped-def]
+        seen.append(context)
+        return RetailWorld(seed=context.plan.seed).build().run(MonthEndClose(period="2026-03"))
+
+    spec = _spec().model_copy(update={"shape": EvalShape(records=(
+        RecordShapeRequirement(connector="servicenow", entity="incident", records=9999),
+    ))})
+    search_candidates(spec, builder, count=2)
+    feedback = seen[1].history[0]
+    assert "shape.records[0]" in feedback.failed
+    check = feedback.shape_checks[0]
+    assert check.supported and check.observed < check.required == 9999
+    assert not feedback.accepted

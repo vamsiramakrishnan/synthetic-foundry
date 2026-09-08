@@ -13,6 +13,7 @@ from .connector_data import (
     ConnectorRecord,
     generate_connector_data,
 )
+from .enterprise_evidence import observation_evidence
 from .enterprise_queries import PlannedEnterpriseQuery
 from .ids import content_key
 from .models import Model
@@ -34,6 +35,8 @@ class QueryFixture(Model):
     destination_record_id: str | None
     overrides: tuple[StateOverride, ...]
     expected_side_effects: tuple[str, ...]
+    expected_fact_ids: tuple[str, ...] = ()
+    expected_evidence_ids: tuple[str, ...] = ()
 
 
 class EnterpriseCorpus(Model):
@@ -42,19 +45,31 @@ class EnterpriseCorpus(Model):
     fixtures: tuple[QueryFixture, ...]
 
 
-def _override(kind: str, query: PlannedEnterpriseQuery, record_ids: Mapping[str, tuple[str, ...]]) -> StateOverride:
+def _override(
+    kind: str,
+    query: PlannedEnterpriseQuery,
+    record_ids: Mapping[str, tuple[str, ...]],
+    destination_record_id: str | None,
+) -> StateOverride:
+    # Source defects belong to evidence. Write defects belong to the mutation's
+    # record (or its create operation when no record exists yet). Crossing those
+    # namespaces made destination ACLs name a foreign source id and never fire.
+    source_side = kind in {"ambiguous_join", "missing_stable_id", "stale_source"}
+    source = next(((key, ids[0]) for key, ids in sorted(record_ids.items()) if ids), None)
     connector = query.generation.mutation.connector
-    first = next((ids[0] for ids in record_ids.values() if ids), None)
+    target = destination_record_id
+    if source_side and source is not None:
+        connector = source[0].split(":", 1)[0]
+        target = source[1]
     details_by_kind: dict[str, dict[str, Any]] = {
-        "ambiguous_join": {"duplicate_candidate": first, "resolution": "human_review"},
+        "ambiguous_join": {"duplicate_candidate": target, "resolution": "human_review"},
         "missing_stable_id": {"remove_field": "stable_id", "resolution": "skip_and_report"},
         "permission_denied": {"principal": "requesting_actor", "access": "denied"},
         "partial_write": {"fail_after": 1, "rollback": False},
         "stale_source": {"version_delta": -1, "authoritative_copy_available": True},
         "version_conflict": {"etag": "newer-than-read", "expected_status": 409},
     }
-    details = details_by_kind[kind]
-    return StateOverride(kind=kind, connector=connector, record_id=first, details=details)
+    return StateOverride(kind=kind, connector=connector, record_id=target, details=details_by_kind[kind])
 
 
 def _entity_matches(connector: str, requested: str, actual: str) -> bool:
@@ -131,20 +146,32 @@ def materialize_corpus(
                 },
             )
         )
+    from .enterprise_fields import enrich_required_fields
+
+    records = enrich_required_fields(records, planned)
     data = ConnectorDataset(capabilities=data.capabilities, records=records)
+    by_id = {record.id: record for record in data.records}
+    destination_ids = set(destinations.values())
     fixtures: list[QueryFixture] = []
     for query in planned:
         inputs: dict[str, tuple[str, ...]] = {}
         for requirement in query.generation.source_requirements:
-            matches = tuple(record.id for record in data.records if record.connector == requirement.connector and record.entity == requirement.entity)
+            matches = tuple(record.id for record in data.records if record.connector == requirement.connector and _entity_matches(requirement.connector, requirement.entity, record.entity) and record.id not in destination_ids)
             if strict_sources and len(matches) < requirement.minimum:
                 raise ValueError(f"insufficient_sources: {requirement.connector}:{requirement.entity} needs {requirement.minimum}, found {len(matches)}")
-            inputs[f"{requirement.connector}:{requirement.entity}"] = matches[: max(requirement.minimum, 3)]
+            inputs[f"{requirement.connector}:{requirement.entity}"] = matches[:requirement.minimum]
         mutation = query.generation.mutation
-        destination_id = destinations.get((mutation.connector, mutation.entity))
-        overrides = tuple(_override(kind, query, inputs) for kind in query.generation.state_overrides)
+        # The shared record pool also contains targets required by other rows.
+        # A create must not inherit an update row's preexisting destination.
+        destination_id = (
+            destinations.get((mutation.connector, mutation.entity))
+            if mutation.preexisting_record else None
+        )
+        overrides = tuple(_override(kind, query, inputs, destination_id) for kind in query.generation.state_overrides)
         effects = (f"{mutation.operation}:{mutation.connector}:{mutation.entity}", f"verify:{mutation.connector}:{mutation.entity}")
-        fixtures.append(QueryFixture(query_id=query.id, input_record_ids=inputs, destination_record_id=destination_id, overrides=overrides, expected_side_effects=effects))
+        expected_facts = tuple(sorted({fact for ids in inputs.values() for rid in ids for fact in by_id[rid].fact_ids}))
+        expected_evidence = tuple(sorted({evidence for ids in inputs.values() for rid in ids for evidence in observation_evidence(by_id[rid].fields)[0]}))
+        fixtures.append(QueryFixture(query_id=query.id, input_record_ids=inputs, destination_record_id=destination_id, overrides=overrides, expected_side_effects=effects, expected_fact_ids=expected_facts, expected_evidence_ids=expected_evidence))
     return EnterpriseCorpus(queries=planned, connector_data=data, fixtures=tuple(fixtures))
 
 
@@ -155,7 +182,9 @@ class TraceCall(Model):
     entity: str
     depends_on: tuple[str, ...] = ()
     record_id: str | None = None
+    record_ids: tuple[str, ...] = ()
     fact_ids: tuple[str, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
     succeeded: bool = True
 
 
@@ -171,7 +200,12 @@ class ScoreReport(Model):
     findings: tuple[str, ...] = ()
 
 
-def score_trace(query: PlannedEnterpriseQuery, calls: Iterable[TraceCall]) -> ScoreReport:
+def score_trace(
+    query: PlannedEnterpriseQuery,
+    calls: Iterable[TraceCall],
+    *,
+    fixture: QueryFixture | None = None,
+) -> ScoreReport:
     trace = tuple(calls)
     positions = {call.id: index for index, call in enumerate(trace)}
     findings: list[str] = []
@@ -208,7 +242,43 @@ def score_trace(query: PlannedEnterpriseQuery, calls: Iterable[TraceCall]) -> Sc
     else:
         failure_handling = 1.0
         write_verification = 1.0 if writes and verifies and positions[writes[-1].id] < positions[verifies[-1].id] else 0.0
-    provenance = sum(bool(call.fact_ids or call.record_id) for call in trace) / len(trace) if trace else 0.0
+    if fixture is not None and fixture.query_id != query.id:
+        raise ValueError(f"fixture {fixture.query_id} does not belong to query {query.id}")
+    expected_facts = set(fixture.expected_fact_ids) if fixture is not None else set()
+    expected_evidence = set(fixture.expected_evidence_ids) if fixture is not None else set()
+    source_records = {
+        (key.split(":", 1)[0], rid)
+        for key, ids in (fixture.input_record_ids.items() if fixture is not None else ())
+        for rid in ids
+    }
+    observed_facts = {
+        fact
+        for call in trace
+        if call.succeeded and call.operation in {"read", "get", "search", "extract", "download", "list"} and all((call.connector, rid) in source_records for rid in (call.record_ids or (call.record_id,)))
+        for fact in call.fact_ids
+    }
+    observed_evidence = {
+        evidence for call in trace
+        if call.succeeded and call.operation in {"read", "get", "search", "extract", "download", "list"} and all((call.connector, rid) in source_records for rid in (call.record_ids or (call.record_id,)))
+        for evidence in call.evidence_ids
+    }
+    # Distinct namespaces prevent operational observations from impersonating
+    # World facts. Padding either set with invented ids lowers precision.
+    wanted = {("fact", value) for value in expected_facts} | {("observation", value) for value in expected_evidence}
+    observed = {("fact", value) for value in observed_facts} | {("observation", value) for value in observed_evidence}
+    provenance = len(wanted & observed) / len(wanted | observed) if wanted else 0.0
+    if fixture is None:
+        findings.append("provenance unverified: expected fact fixture was not supplied")
+    elif not wanted:
+        findings.append("provenance unverified: evidence carries no expected facts or observations")
+    if expected_facts - observed_facts:
+        findings.append(f"missing expected facts {sorted(expected_facts - observed_facts)}")
+    if observed_facts - expected_facts:
+        findings.append(f"unexpected facts {sorted(observed_facts - expected_facts)}")
+    if expected_evidence - observed_evidence:
+        findings.append(f"missing expected observations {sorted(expected_evidence - observed_evidence)}")
+    if observed_evidence - expected_evidence:
+        findings.append(f"unexpected observations {sorted(observed_evidence - expected_evidence)}")
     write_keys = [(call.connector, call.operation, call.entity, call.record_id) for call in writes]
     idempotency = 1.0 if len(write_keys) == len(set(write_keys)) else 0.0
     total = 0.25 * dag_order + 0.25 * required_calls + 0.15 * write_verification + 0.10 * provenance + 0.10 * idempotency + 0.15 * failure_handling
@@ -217,7 +287,8 @@ def score_trace(query: PlannedEnterpriseQuery, calls: Iterable[TraceCall]) -> Sc
 
 def validate_corpus(corpus: EnterpriseCorpus) -> tuple[str, ...]:
     findings: list[str] = []
-    record_ids = {record.id for record in corpus.connector_data.records}
+    by_id = {record.id: record for record in corpus.connector_data.records}
+    record_ids = set(by_id)
     if len(record_ids) != len(corpus.connector_data.records):
         findings.append("connector data: duplicate internal record ids")
     stable_fields = {
@@ -245,6 +316,24 @@ def validate_corpus(corpus: EnterpriseCorpus) -> tuple[str, ...]:
                 findings.append(
                     f"query {query.id}: dangling input records {sorted(dangling)}"
                 )
+        observed_facts: set[str] = set()
+        observed_evidence: set[str] = set()
+        for key, inputs in sorted(fixture.input_record_ids.items()):
+            for rid in inputs:
+                evidence_record = by_id.get(rid)
+                if evidence_record is None:
+                    continue
+                observed_facts.update(evidence_record.fact_ids)
+                evidence_ids, evidence_findings = observation_evidence(evidence_record.fields)
+                observed_evidence.update(evidence_ids)
+                if not evidence_record.fact_ids and not evidence_ids:
+                    findings.append(f"query {query.id}: evidence {rid} carries no fact ({key})")
+                for finding in evidence_findings:
+                    findings.append(f"query {query.id}: evidence {rid}: {finding}")
+        if observed_facts != set(fixture.expected_fact_ids):
+            findings.append(f"query {query.id}: evidence facts differ from pinned expected_fact_ids; rematerialize legacy fixtures")
+        if observed_evidence != set(fixture.expected_evidence_ids):
+            findings.append(f"query {query.id}: operational evidence differs from pinned observations")
         if (
             fixture.destination_record_id is not None
             and fixture.destination_record_id not in record_ids
@@ -252,6 +341,11 @@ def validate_corpus(corpus: EnterpriseCorpus) -> tuple[str, ...]:
             findings.append(
                 f"query {query.id}: dangling destination record {fixture.destination_record_id}"
             )
+        for override in fixture.overrides:
+            if override.record_id is not None:
+                override_record = by_id.get(override.record_id)
+                if override_record is None or override_record.connector != override.connector:
+                    findings.append(f"query {query.id}: override {override.kind} targets absent {override.connector} record {override.record_id}")
         if query.generation.state_overrides and not fixture.overrides:
             findings.append(f"query {query.id}: failure dimension has no state override")
     return tuple(findings)

@@ -40,23 +40,24 @@ editing the wording of a request changes what a seed's plan means, and a version
 bump is what makes that an explicit, replayable decision rather than a silent
 one.
 
-Deliberately not wired into ``documents.py`` or ``compile()``. An accepted plan
-here is provable and committed, but nothing yet reads it back into the section
-outline a corpus actually renders — that integration is a separate, later change.
+Accepted plans are read by ``documents._planned_sections`` when the caller
+extends the ledger and recompiles. The CLI performs that sequence atomically.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
 
 from ..ids import content_key, format_id, highest_numeric_suffix
-from ..models import GenerationLedgerEntry, Model
+from ..models import ArtifactIntent, CanonicalFact, GenerationLedgerEntry, Model
 from ..narrative import references
 from ..narrative.providers import digest as fact_digest
+from ..narrative.requests import fact_available_to, superseded_for
 from .components import REGISTRY, roles_for
 from .grammar import GRAMMARS, Grammar, check
 from .plan import ArtifactPlan, EvidenceRef, NarrativeBeat
@@ -70,7 +71,7 @@ if TYPE_CHECKING:  # pragma: no cover
 #: means, and a silent edit would replay stale plans against a request an agent
 #: never actually saw. Bump the version, not the text in place.
 PLAN_PROMPT_NAME = "artifact_plan"
-PLAN_PROMPT_VERSION = "1"
+PLAN_PROMPT_VERSION = "2"
 PLAN_PROMPT_KEY = f"{PLAN_PROMPT_NAME}@{PLAN_PROMPT_VERSION}"
 
 #: A heading is a label, not a sentence. 60 characters comfortably fits a real
@@ -104,6 +105,8 @@ RULES: tuple[str, ...] = (
     " handshake exists to act on — vary it where the argument allows.",
     "Facts and figures are not yours to decide here. `evidence` cites a fact by"
     " id; it never restates one.",
+    "Only facts available to this author at `knows_as_of` are supplied. A fact"
+    " marked superseded is a historical position, not the current one.",
 )
 
 
@@ -126,6 +129,8 @@ class PlanRequest:
     voice: str
     """The author's persona voice."""
     size_class: str
+    temporal_cutoff: datetime | None = None
+    purpose: str = ""
     available_facts: list[dict[str, Any]] = field(default_factory=list)
     """Every fact this plan may cite: ``id``, ``subject`` (a name, not an id), and
     ``statement`` — a request must be answerable without a second lookup."""
@@ -139,10 +144,14 @@ class PlanRequest:
     `grammar.py` declares) and in plain sentences under ``"prose"``."""
     recent_headings: list[str] = field(default_factory=list)
     """Headings this same author already used on other artifacts in this
-    corpus, so a plan has a reason to vary rather than repeat them."""
+    corpus by this artifact's cutoff, so a plan can vary without seeing future
+    conclusions."""
     fact_digest: str = ""
-    """Content address of ``available_facts``, so the ledger key moves when
-    the facts a plan was built against do."""
+    """Content address of the substantive request and complete supplied facts.
+
+    Recent headings are stylistic feedback, excluded so recompiling accepted
+    plans does not invalidate the batch that supplied those headings.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -335,15 +344,61 @@ def _headings_by_author(world: World) -> dict[str, dict[str, list[str]]]:
 
 
 def _recent_headings(
-    headings_by_author: dict[str, dict[str, list[str]]], author_id: str, current_id: str
+    headings_by_author: dict[str, dict[str, list[str]]], author_id: str, current_id: str,
+    *, created_at: dict[str, datetime], cutoff: datetime | None,
 ) -> list[str]:
+    if cutoff is None:
+        return []
     seen: dict[str, None] = {}
     for artifact_id, headings in headings_by_author.get(author_id, {}).items():
-        if artifact_id == current_id:
+        written = created_at.get(artifact_id)
+        # A heading can disclose a conclusion just as readily as a cited fact.
+        # Missing source chronology cannot establish that the author knew it.
+        if artifact_id == current_id or written is None or written > cutoff:
             continue
         for heading in headings:
             seen.setdefault(heading, None)
     return list(seen)
+
+
+def _request_for_intent(
+    world: World, intent: ArtifactIntent, facts: dict[str, CanonicalFact],
+    names: dict[str, str], available_ids: list[str], *, cutoff: datetime | None,
+    recent_headings: list[str],
+) -> PlanRequest | None:
+    author = world.people.by_id(intent.author_id)
+    persona = world.personas.get(author.persona_id) if author.persona_id else None
+    available_ids = [fid for fid in sorted(set(available_ids)) if fid in facts
+                     and fact_available_to(facts[fid], observer=author.id, cutoff=cutoff)]
+    if not available_ids:
+        return None
+    request = PlanRequest(
+        id=f"{intent.id}/plan", artifact_id=intent.id, artifact_type=intent.artifact_type,
+        audience=intent.audience, written_by=author.title,
+        voice=persona.voice if persona else "plain", size_class=intent.size_profile,
+        temporal_cutoff=cutoff,
+        purpose=intent.rationale or "",
+        available_facts=[{
+            "id": fid, "subject": names.get(facts[fid].subject, facts[fid].subject),
+            "statement": references.describe(facts[fid], names.get(facts[fid].subject)),
+            "authority": facts[fid].authority.value,
+            "valid_from": facts[fid].valid_from.isoformat(),
+            "recorded_at": facts[fid].recorded_at.isoformat(),
+            "superseded": superseded_for(facts[fid], cutoff),
+        } for fid in available_ids],
+        required_fact_ids=[fid for fid in intent.required_fact_ids if fid in available_ids],
+        vocabulary=_vocabulary(),
+        constraints=_constraints(intent.artifact_type, GRAMMARS.get(intent.artifact_type)),
+        recent_headings=recent_headings,
+        fact_digest=fact_digest([facts[fid] for fid in available_ids]),
+    )
+    # Recent headings are feedback from other accepted plans. Including that
+    # feedback would invalidate the just-accepted batch when it recompiles.
+    contract = _request_payload(request)
+    contract.pop("recent_headings")
+    return replace(request, fact_digest=content_key(
+        "artifact-plan-request/v2", contract, request.fact_digest,
+    ))
 
 
 def requests(world: World) -> list[PlanRequest]:
@@ -355,49 +410,22 @@ def requests(world: World) -> list[PlanRequest]:
     """
     facts = {fact.id: fact for fact in world.facts}
     names = world.entity_names()
-    vocabulary = _vocabulary()
     headings_by_author = _headings_by_author(world)
+    created_at = {artifact.id: artifact.created_at for artifact in world.artifacts}
 
     out: list[PlanRequest] = []
     for ir in world.artifact_irs:
-        available_ids = ir.fact_ids()
-        if not available_ids:
-            # Nothing to plan around and nothing to plan with. Better no request
-            # than one an agent could not possibly answer.
-            continue
-
         intent = world.artifact_intents.by_id(ir.intent_id)
-        author = world.people.by_id(intent.author_id)
-        persona = world.personas.get(author.persona_id) if author.persona_id else None
-
-        available_facts = [
-            {
-                "id": fact_id,
-                "subject": names.get(facts[fact_id].subject, facts[fact_id].subject),
-                "statement": references.describe(facts[fact_id], names.get(facts[fact_id].subject)),
-            }
-            for fact_id in available_ids
-            if fact_id in facts
-        ]
-        required = [f for f in intent.required_fact_ids if f in available_ids]
-
-        out.append(
-            PlanRequest(
-                id=f"{intent.id}/plan",
-                artifact_id=intent.id,
-                artifact_type=intent.artifact_type,
-                audience=intent.audience,
-                written_by=author.title,
-                voice=persona.voice if persona else "plain",
-                size_class=intent.size_profile,
-                available_facts=available_facts,
-                required_fact_ids=required,
-                vocabulary=vocabulary,
-                constraints=_constraints(intent.artifact_type, GRAMMARS.get(intent.artifact_type)),
-                recent_headings=_recent_headings(headings_by_author, intent.author_id, ir.id),
-                fact_digest=fact_digest([facts[f] for f in available_ids if f in facts]),
-            )
+        manifest = world.artifacts.get(ir.id)
+        cutoff = manifest.created_at if manifest else None
+        request = _request_for_intent(
+            world, intent, facts, names, ir.fact_ids(),
+            cutoff=cutoff,
+            recent_headings=_recent_headings(headings_by_author, intent.author_id, ir.id,
+                                            created_at=created_at, cutoff=cutoff),
         )
+        if request is not None:
+            out.append(request)
     return out
 
 
@@ -410,6 +438,8 @@ def _request_payload(request: PlanRequest) -> dict[str, Any]:
         "written_by": request.written_by,
         "voice": request.voice,
         "size_class": request.size_class,
+        "knows_as_of": request.temporal_cutoff.isoformat() if request.temporal_cutoff else None,
+        "purpose": request.purpose,
         "available_facts": request.available_facts,
         "required_fact_ids": request.required_fact_ids,
         "vocabulary": request.vocabulary,
@@ -462,6 +492,10 @@ def parse_responses(payload: dict[str, Any]) -> dict[str, ProposedPlan]:
         if not isinstance(row, dict) or "id" not in row:
             raise ValueError(f"plan {index} has no 'id'")
         identifier = row["id"]
+        if not isinstance(identifier, str) or not identifier:
+            raise ValueError(f"plan {index} has no non-empty string 'id'")
+        if identifier in out:
+            raise ValueError(f"duplicate plan id: {identifier}")
         try:
             out[identifier] = ProposedPlan(
                 intent=row.get("intent", ""),
@@ -705,6 +739,50 @@ def accept(world: World, responses: dict[str, ProposedPlan], *, model_id: str) -
     )
 
 
+def recorded_plan(world: World, intent: ArtifactIntent) -> ArtifactPlan | None:
+    """Resolve an accepted plan against the contract this compilation will use.
+
+    Ledger order is not a selection policy: it can contain stale contracts or
+    entries merged from different worlds and model runs. A current contract may
+    have only one accepted identity; conflicting model identities are explicit.
+    """
+    from ..documents import written_at
+
+    candidates = [entry for entry in world.ledger if entry.call_site == f"{intent.id}/plan"
+                  and entry.world_seed == world.seed and entry.prompt_version == PLAN_PROMPT_KEY]
+    if not candidates:
+        return None
+    facts = {fact.id: fact for fact in world.facts}
+    request = _request_for_intent(
+        world, intent, facts, world.entity_names(), list(intent.required_fact_ids),
+        cutoff=written_at(intent, facts), recent_headings=[],
+    )
+    if request is None:
+        return None
+    matches = [entry for entry in candidates if entry.input_facts_digest == request.fact_digest]
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise ValueError(f"{intent.id}: ambiguous recorded plans for the current contract; "
+                         "select one planning model's ledger before recompiling")
+    entry = matches[0]
+    expected = content_key(world.seed, request.id, entry.ordinal, request.fact_digest,
+                           entry.model_id, PLAN_PROMPT_KEY)
+    if entry.key != expected:
+        raise ValueError(f"{intent.id}: recorded plan key does not match its contract")
+    plan = ArtifactPlan.model_validate(entry.output)
+    proposal = ProposedPlan(intent=plan.intent, emphasis=plan.emphasis, beats=[
+        ProposedBeat(heading=beat.key, purpose=beat.purpose, semantic_role=beat.semantic_role,
+                     optional=beat.optional, evidence=[ProposedEvidence(**ref.model_dump())
+                                                       for ref in beat.evidence])
+        for beat in plan.beats
+    ])
+    checked, violations = _validate(request, proposal)
+    if violations or checked != plan:
+        raise ValueError(f"{intent.id}: recorded plan does not satisfy the current contract")
+    return plan
+
+
 __all__ = [
     "PLAN_PROMPT_KEY",
     "PLAN_PROMPT_NAME",
@@ -723,4 +801,5 @@ __all__ = [
     "parse_responses",
     "dump",
     "accept",
+    "recorded_plan",
 ]

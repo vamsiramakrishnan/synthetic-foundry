@@ -78,3 +78,14 @@ def test_every_engine_has_a_starting_point(engine: str) -> None:
 def test_an_unknown_engine_says_which_exist() -> None:
     with pytest.raises(KeyError, match="known"):
         sdk.engine("logistics")
+
+
+def test_episode_limit_is_refused_before_running_any_episode(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    built = sdk.insurance().build()
+
+    def unexpected_run(*_args):  # type: ignore[no-untyped-def]
+        raise AssertionError("an episode ran before checking the registered limit")
+
+    monkeypatch.setattr("worldloom.world.World.run", unexpected_run)
+    with pytest.raises(ValueError, match="insurance builds at most 1 period"):
+        built.episodes("2026-03", periods=2)

@@ -4,6 +4,8 @@ import asyncio
 from collections.abc import Mapping
 from typing import Any
 
+import pytest
+
 from worldloom.enterprise_corpus import QueryFixture
 from worldloom.enterprise_queries import (
     GenerationRequirement,
@@ -13,6 +15,7 @@ from worldloom.enterprise_queries import (
 from worldloom.enterprise_runner import (
     RunnerConfig,
     ToolBinding,
+    canonical_operation,
     execute_query,
     shard_queries,
 )
@@ -160,3 +163,42 @@ def test_runner_stops_after_failed_write() -> None:
     assert not result.completed
     assert result.finding == "node write failed"
     assert len(result.calls) == 1
+
+
+@pytest.mark.parametrize("preexisting,tool", [(True, "update_sheet"), (False, "create_sheet")])
+def test_upsert_selects_the_declared_precondition_arm(preexisting, tool) -> None:
+    assert RunnerConfig().resolve(
+        "drive", "upsert", "file", concrete_hint="gsheet", preexisting_record=preexisting,
+    ) == f"drive.{tool}"
+
+
+def test_upsert_without_a_precondition_refuses() -> None:
+    with pytest.raises(ValueError, match="explicit preexisting_record"):
+        RunnerConfig().resolve("confluence", "upsert", "page")
+
+
+def test_patch_and_draft_resolve_as_declared_writes() -> None:
+    assert canonical_operation("patch") == "update"
+    assert RunnerConfig().resolve("email", "draft", "message") == "email.create_draft"
+    assert RunnerConfig().resolve("drive", "patch", "file", concrete_hint="gdoc") == "drive.update_doc"
+
+
+def test_executor_passes_mutation_context_to_tool_resolution() -> None:
+    query = _query("upsert-new")
+    query = query.model_copy(update={
+        "generation": query.generation.model_copy(update={
+            "mutation": query.generation.mutation.model_copy(update={
+                "connector": "drive", "operation": "upsert", "output_format": "gsheet",
+            }),
+        }),
+        "expected_dag": ({"id": "write", "kind": "upsert", "connector": "drive", "entity": "file", "depends_on": []},),
+    })
+    fixture = QueryFixture(query_id=query.id, input_record_ids={}, destination_record_id=None, overrides=(), expected_side_effects=())
+    seen: list[str] = []
+
+    async def invoke(tool_name: str, arguments: Mapping[str, Any]) -> dict[str, object]:
+        seen.append(tool_name)
+        return {"succeeded": True}
+
+    assert asyncio.run(execute_query(query, fixture, RunnerConfig(), invoke)).completed
+    assert seen == ["drive.create_sheet"]

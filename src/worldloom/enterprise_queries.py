@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, model_validator
 
+from .connector_definition import ConnectorFieldDefinition, load_connector_definition
 from .enterprise_specs import (
     CoverageProfile,
     SourceRole,
@@ -29,6 +30,7 @@ class SourceRequirement(Model):
     minimum: int = Field(default=1, ge=1)
     input_format: str = "record"
     required_fields: tuple[str, ...] = ()
+    field_definitions: tuple[ConnectorFieldDefinition, ...] = ()
 
 
 class MutationRequirement(Model):
@@ -38,6 +40,8 @@ class MutationRequirement(Model):
     output_format: str
     preexisting_record: bool
     verify_after_write: bool = True
+    target_state: str | None = None
+    target_state_field: str = "state"
 
 
 class ArtifactRequirement(Model):
@@ -305,20 +309,61 @@ def _render(world: World, workflow: WorkflowSpec, row: Mapping[str, str]) -> str
     return workflow.prompt_template.format(period=world.period or "current-period", purpose=workflow.purpose, company=world.company.name, audience=row["audience"], sources=sources, action_instruction=action_instruction, output_label=row["output_format"].upper() if row["output_format"] != "record" else row["destination_entity"].replace("_", " "), destination=row["destination"].replace("servicenow", "ServiceNow").replace("sharepoint", "SharePoint").title(), verification_instruction="read the saved result back and verify the change" if row["verification"] == "readback" else "verify the result against the authoritative source", failure_instruction=failure_instruction)
 
 
+def _mutation_state(workflow: WorkflowSpec, row: Mapping[str, str]) -> tuple[str | None, str]:
+    """Derive a legal update outcome from the authored connector workflow."""
+    role = next(
+        role for role in workflow.destinations
+        if role.connector == row["destination"] and row["destination_entity"] in role.entities
+    )
+    if row["operation"] not in {"update", "patch", "upsert"}:
+        if role.target_state is not None:
+            raise ValueError("target_state requires an update, patch, or existing-record upsert")
+        return None, "state"
+    try:
+        definition = load_connector_definition(role.connector)
+        workflows = [definition.entities[name].workflow for name in definition.entity_members(row["destination_entity"])]
+    except (KeyError, ValueError):
+        workflows = []
+    if role.target_state is not None:
+        for item in workflows:
+            if item is None:
+                continue
+            target = item.canonical_state(role.target_state)
+            if role.target_state_field != item.field or target not in item.states:
+                raise ValueError(f"invalid authored target state for {role.connector}/{row['destination_entity']}")
+            if item.strict and target != item.states[0] and target not in item.transitions.get(item.states[0], item.states):
+                raise ValueError(f"authored target state is not reachable from the destination fixture's initial state: {target}")
+        target = next((item.canonical_state(role.target_state) for item in workflows if item is not None), role.target_state)
+        return target, role.target_state_field
+    outcomes = {
+        (item.states[1], item.field)
+        for item in workflows if item is not None and len(item.states) > 1
+        and (not item.strict or item.states[1] in item.transitions.get(item.states[0], item.states))
+    }
+    if len(outcomes) == 1 and all(item is not None for item in workflows):
+        return next(iter(outcomes))
+    return None, "state"
+
+
 def _plan(world: World, row: dict[str, str], registry: SpecRegistry) -> PlannedEnterpriseQuery:
     workflow = registry.workflows[row["workflow"]]
     input_formats = row["input_formats"].split("+")
+    from .enterprise_fields import source_requirement
+
     sources = tuple(
-        SourceRequirement(
+        source_requirement(
             connector=value.split(":", 1)[0],
             entity=value.split(":", 1)[1],
             input_format=input_format,
+            registry=registry,
+            workflow=workflow,
         )
         for value, input_format in zip(
             row["source_entities"].split("+"), input_formats, strict=True
         )
     )
-    mutation = MutationRequirement(connector=row["destination"], entity=row["destination_entity"], operation=row["operation"], output_format=row["output_format"], preexisting_record=row["operation"] in {"update", "patch", "upsert", "reply"})
+    target_state, target_state_field = _mutation_state(workflow, row)
+    mutation = MutationRequirement(connector=row["destination"], entity=row["destination_entity"], operation=row["operation"], output_format=row["output_format"], preexisting_record=row["operation"] in {"update", "patch", "upsert", "reply"}, target_state=target_state, target_state_field=target_state_field)
     artifact = {
         "xlsx": ArtifactRequirement(format="xlsx", sheets=("Summary", "Detail", "Exceptions", "Provenance"), charts=("status_breakdown", "period_trend")),
         "pptx": ArtifactRequirement(format="pptx", slides=("Title", "Executive summary", "Metrics", "Risks", "Actions", "Sources"), charts=("status_breakdown", "period_trend")),
@@ -329,12 +374,21 @@ def _plan(world: World, row: dict[str, str], registry: SpecRegistry) -> PlannedE
         "markdown": ArtifactRequirement(format="markdown", sections=("Summary", "Findings", "Actions", "Sources")),
     }.get(row["output_format"])
     states = () if row["failure"] == "none" else (row["failure"],)
-    read_nodes = tuple({"id": f"read-{index}", "kind": "read", "connector": source.connector, "entity": source.entity, "depends_on": []} for index, source in enumerate(sources))
+    read_nodes: tuple[dict[str, Any], ...] = tuple({"id": f"read-{index}", "kind": "search" if source.required_fields else "read", "connector": source.connector, "entity": source.entity, "depends_on": []} for index, source in enumerate(sources))
     transform = {"id": "transform", "kind": row["content_action"], "connector": "model", "entity": row["output_format"], "depends_on": [node["id"] for node in read_nodes]}
     write = {"id": "write", "kind": row["operation"], "connector": row["destination"], "entity": row["destination_entity"], "depends_on": ["transform"]}
     verify = {"id": "verify", "kind": row["verification"], "connector": row["destination"], "entity": row["destination_entity"], "depends_on": ["write"]}
-    identifier = content_key("enterprise-query", *[f"{key}={row[key]}" for key in sorted(row)])
-    return PlannedEnterpriseQuery(id=identifier, workflow=workflow.name, query=_render(world, workflow, row), dimensions=row, generation=GenerationRequirement(process=workflow.process, source_requirements=sources, mutation=mutation, artifact=artifact, state_overrides=states), expected_dag=read_nodes + (transform, write, verify))
+    request = _render(world, workflow, row)
+    for source in sources:
+        if source.required_fields:
+            request += f" Filter {source.connector}/{source.entity} to records with non-null {', '.join(source.required_fields)} and include those fields in the result."
+    if mutation.target_state is not None:
+        request += f" Set {mutation.connector}/{mutation.entity} {mutation.target_state_field} to {mutation.target_state!r}."
+    contract = tuple(source.model_dump_json() for source in sources if source.required_fields or source.field_definitions)
+    if mutation.target_state is not None:
+        contract += (mutation.model_dump_json(),)
+    identifier = content_key("enterprise-query", *[f"{key}={row[key]}" for key in sorted(row)], *contract)
+    return PlannedEnterpriseQuery(id=identifier, workflow=workflow.name, query=request, dimensions=row, generation=GenerationRequirement(process=workflow.process, source_requirements=sources, mutation=mutation, artifact=artifact, state_overrides=states), expected_dag=read_nodes + (transform, write, verify))
 
 
 def plan_queries(
@@ -346,6 +400,7 @@ def plan_queries(
     limit: int | None = None,
     shard_index: int | None = None,
     shard_count: int | None = None,
+    dag_shapes: tuple[str, ...] = (),
 ) -> tuple[Iterator[PlannedEnterpriseQuery], CoverageReport | None]:
     registry = registry or builtin_registry()
     profile = profile or CoverageProfile()
@@ -353,6 +408,19 @@ def plan_queries(
     if findings:
         raise ValueError("invalid registry: " + "; ".join(findings))
     rows: Iterable[dict[str, str]] = valid_rows(registry, profile)
+    if dag_shapes:
+        from .enterprise_dag_planning import compatible_shapes
+
+        def expanded(candidates: Iterable[dict[str, str]]) -> Iterator[dict[str, str]]:
+            emitted = False
+            for candidate in candidates:
+                for shape in compatible_shapes(candidate, dag_shapes):
+                    emitted = True
+                    yield {**candidate, "dag_shape": shape}
+            if not emitted:
+                raise ValueError("requested DAG shapes admit no executable workflow")
+
+        rows = expanded(rows)
     report = None
     if strategy == "covering":
         selected, report = constrained_cover(rows, profile.strengths)
@@ -365,4 +433,11 @@ def plan_queries(
         rows = itertools.islice(rows, shard_index, None, shard_count)
     if limit is not None:
         rows = itertools.islice(rows, limit)
-    return (_plan(world, row, registry) for row in rows), report
+    def planned(row: dict[str, str]) -> PlannedEnterpriseQuery:
+        query = _plan(world, row, registry)
+        if dag_shapes:
+            from .enterprise_dag_planning import apply_dag_shape
+            query = apply_dag_shape(query, row["dag_shape"])
+        return query
+
+    return (planned(row) for row in rows), report

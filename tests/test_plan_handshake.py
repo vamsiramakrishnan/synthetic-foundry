@@ -9,6 +9,8 @@ rule and the offending beat clearly enough to fix in one round trip.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 from typer.testing import CliRunner
@@ -17,6 +19,9 @@ from worldloom import MonthEndClose, RetailWorld, World
 from worldloom.cli import app
 from worldloom.compiler import handshake
 from worldloom.compiler.grammar import GRAMMARS
+from worldloom.models import Authority
+from worldloom.narrative.providers import DeterministicProvider, UnreachableProvider
+from worldloom.recipe import rebuild
 
 runner = CliRunner()
 PERIOD = "2026-03"
@@ -75,6 +80,78 @@ def _compliant_plan(request: dict) -> dict:
 def answer(document: dict) -> dict:
     """Answer every request the way a compliant agent would."""
     return {"plans": [_compliant_plan(request) for request in document["requests"]]}
+
+
+@pytest.mark.parametrize("change", ["purpose", "authority", "cutoff"])
+def test_replanning_selects_the_current_contract_not_the_first_ledger_row(world: World, change: str, monkeypatch) -> None:
+    from worldloom import documents
+
+    responses = handshake.parse_responses(answer(handshake.requests_document(world)))
+    accepted = handshake.accept(world, responses, model_id="planner")
+    staged = world.extend(ledger=accepted.ledger)
+    intent = next(i for i in world.artifact_intents if i.artifact_type == "cfo_variance_memo")
+    if change == "purpose":
+        staged = replace(staged, _artifact_intents=tuple(
+            i.model_copy(update={"rationale": "Explain the changed executive decision."}) if i.id == intent.id else i
+            for i in staged.artifact_intents
+        ))
+    elif change == "authority":
+        fid = intent.required_fact_ids[0]
+        staged = replace(staged, _facts=tuple(
+            f.model_copy(update={"authority": Authority.WORKING_DOCUMENT}) if f.id == fid else f
+            for f in staged.facts
+        ))
+    else:
+        written_at = documents.written_at
+        monkeypatch.setattr(documents, "written_at", lambda candidate, facts: written_at(candidate, facts)
+                            + (timedelta(minutes=1) if candidate.id == intent.id else timedelta()))
+    staged = staged.compile()
+    current_intent = staged.artifact_intents.by_id(intent.id)
+    assert handshake.recorded_plan(staged, current_intent) is None
+    document = answer(handshake.requests_document(staged))
+    proposal = next(p for p in document["plans"] if p["id"] == f"{intent.id}/plan")
+    proposal["beats"][0]["heading"] = "The revised argument"
+    updated = handshake.accept(staged, handshake.parse_responses(document), model_id="planner")
+    assert updated.accepted
+    compiled = staged.extend(ledger=updated.ledger).compile()
+    ir = next(ir for ir in compiled.artifact_irs if ir.id == intent.id)
+    assert ir.sections[0].heading == "The revised argument"
+
+
+def test_planned_outline_replays_with_its_current_contract(world: World) -> None:
+    proposals = handshake.parse_responses(answer(handshake.requests_document(world)))
+    accepted = handshake.accept(world, proposals, model_id="planner")
+    compiled = world.extend(ledger=accepted.ledger).compile()
+    replayed = rebuild(world.recipe, ledger=accepted.ledger).extend(ledger=accepted.ledger).compile()
+    assert tuple(replayed.artifact_irs) == tuple(compiled.artifact_irs)
+
+
+def test_cold_narration_replay_compiles_against_the_supplied_planning_ledger(world: World) -> None:
+    proposals = handshake.parse_responses(answer(handshake.requests_document(world)))
+    accepted = handshake.accept(world, proposals, model_id="planner")
+    narrated = world.extend(ledger=accepted.ledger).compile().narrate(DeterministicProvider())
+    cold = rebuild(world.recipe)
+    assert not cold.artifact_irs
+    replayed = cold.narrate(UnreachableProvider(), ledger=tuple(narrated.ledger))
+    assert replayed._narration[0] == 0
+    assert tuple(replayed.artifact_irs) == tuple(narrated.artifact_irs)
+    assert tuple(replayed.ledger) == tuple(narrated.ledger)
+
+
+def test_multiple_current_planning_models_are_an_explicit_ambiguity(world: World) -> None:
+    proposals = handshake.parse_responses(answer(handshake.requests_document(world)))
+    first = handshake.accept(world, proposals, model_id="first-planner")
+    second = handshake.accept(world, proposals, model_id="second-planner")
+    with pytest.raises(ValueError, match="ambiguous recorded plans"):
+        world.extend(ledger=(*first.ledger, *second.ledger)).compile()
+
+
+def test_a_foreign_seed_plan_never_selects_an_outline(world: World) -> None:
+    proposals = handshake.parse_responses(answer(handshake.requests_document(world)))
+    accepted = handshake.accept(world, proposals, model_id="planner")
+    foreign = tuple(entry.model_copy(update={"world_seed": world.seed + 1}) for entry in accepted.ledger)
+    compiled = world.extend(ledger=foreign).compile()
+    assert tuple(compiled.artifact_irs) == tuple(world.artifact_irs)
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +247,28 @@ def test_recent_headings_reflect_only_this_authors_other_documents(world: World)
 def test_requests_are_deterministic(world: World) -> None:
     assert handshake.requests(world) == handshake.requests(world)
     assert handshake.requests_document(world) == handshake.requests_document(world)
+
+
+def test_recent_headings_include_prior_work_but_withhold_future_conclusions(world: World) -> None:
+    target, prior, future = tuple(world.artifact_irs)[:3]
+    author_id = world.artifact_intents.by_id(target.intent_id).author_id
+    cutoff = world.artifacts.by_id(target.id).created_at
+    headings = {prior.id: "Earlier working analysis", future.id: "Future root cause resolved"}
+    times = {prior.id: cutoff - timedelta(minutes=1), future.id: cutoff + timedelta(minutes=1)}
+    staged = replace(
+        world,
+        _artifact_intents=tuple(i.model_copy(update={"author_id": author_id})
+                               if i.id in {prior.intent_id, future.intent_id} else i
+                               for i in world.artifact_intents),
+        _artifact_irs=tuple(ir.model_copy(update={"sections": [
+            ir.sections[0].model_copy(update={"heading": headings[ir.id]}), *ir.sections[1:]
+        ]}) if ir.id in headings else ir for ir in world.artifact_irs),
+        _artifacts=tuple(a.model_copy(update={"created_at": times[a.id]})
+                         if a.id in times else a for a in world.artifacts),
+    )
+    request = next(r for r in handshake.requests(staged) if r.artifact_id == target.id)
+    assert headings[prior.id] in request.recent_headings
+    assert headings[future.id] not in request.recent_headings
 
 
 # ---------------------------------------------------------------------------

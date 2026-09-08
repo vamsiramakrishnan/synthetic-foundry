@@ -165,6 +165,7 @@ def test_cli_calibrates_and_a_build_carries_the_priors_on_its_recipe(tmp_path: P
     recipe = json.loads((corpus / "world.json").read_text())["recipe"]
     assert set(recipe["physics"]) == {"retail.revenue.miss_pct", "retail.margin.budget"}
     assert "calibrated from column 'margin'" in recipe["physics"]["retail.margin.budget"]["source"]
+    assert recipe["prior_receipts"] == [snapshot.receipt.model_dump(mode="json")]
     assert runner.invoke(app, ["validate", str(corpus)]).exit_code == 0
 
     template = runner.invoke(app, ["calibrate", "--template"])
