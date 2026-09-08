@@ -72,7 +72,7 @@ import csv
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -89,9 +89,9 @@ Kind = Literal["numeric", "categorical", "ignore"]
 #: megabytes, for a statistic whose precision the extra points do not change.
 QUADRATIC_SAMPLE = 2_000
 
-#: Slice values reported, most frequent in the reference first. A slice column
-#: with 400 distinct values is a key, not a segment, and a report over all of
-#: them is a second table rather than a reading.
+#: Conditional metric blocks reported, most frequent in the reference first.
+#: Support counts cover the entire union even when conditional metrics are
+#: capped; high cardinality must be an explicit omission, never a silent pass.
 MAX_SLICES = 12
 
 
@@ -140,14 +140,55 @@ def _as_float(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value) if math.isfinite(float(value)) else None
+        try:
+            parsed = float(value)
+        except OverflowError:
+            return None
+        return parsed if math.isfinite(parsed) else None
     text = str(value).strip().replace(",", "")
     if not text:
         return None
     try:
-        return float(text)
-    except ValueError:
+        parsed = float(text)
+    except (ValueError, OverflowError):
         return None
+    # float("nan") and float("inf") succeed, but neither is a numeric
+    # observation. Letting them through poisoned every downstream distance.
+    return parsed if math.isfinite(parsed) else None
+
+
+def _category_key(value: Any) -> str:
+    """Typed JSON identity: 1, "1", 1.0 and True are different categories.
+
+    Delimiter concatenation and str(value) both collapse distinct populations.
+    Canonical JSON also avoids mapping insertion order becoming an identity.
+    """
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        kind = "str"
+    elif isinstance(value, bool):
+        kind = "bool"
+    elif isinstance(value, int):
+        kind = "int"
+    elif isinstance(value, float):
+        kind = "float"
+    elif isinstance(value, (list, dict)):
+        kind = "json"
+    else:
+        raise ValueError(f"unsupported categorical value type: {type(value).__name__}")
+    try:
+        return kind + ":" + json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("categorical values must have a stable JSON representation") from exc
+
+
+def _cell_key(row: Mapping[str, Any], column: str) -> str:
+    if column not in row:
+        return "missing"
+    if row[column] == "":
+        return "empty"
+    return _category_key(row[column])
 
 
 def infer_kinds(
@@ -211,9 +252,9 @@ def _numeric(rows: Sequence[Mapping[str, Any]], column: str) -> np.ndarray:
     return np.array([v for v in values if v is not None], dtype=float)
 
 
-def _missing_rate(rows: Sequence[Mapping[str, Any]], column: str) -> float:
+def _missing_rate(rows: Sequence[Mapping[str, Any]], column: str) -> float | None:
     if not rows:
-        return 0.0
+        return None
     missing = sum(1 for row in rows if row.get(column) in (None, ""))
     return round(missing / len(rows), 4)
 
@@ -246,7 +287,7 @@ def _distribution(rows: Sequence[Mapping[str, Any]], column: str) -> dict[str, f
         value = row.get(column)
         if value in (None, ""):
             continue
-        key = str(value)
+        key = _category_key(value)
         counts[key] = counts.get(key, 0) + 1
         total += 1
     return {key: count / total for key, count in sorted(counts.items())} if total else {}
@@ -292,6 +333,8 @@ def univariate(
             continue
         entry: dict[str, Any] = {
             "kind": kind,
+            "rows_real": len(real),
+            "rows_synthetic": len(synthetic),
             "missing_real": _missing_rate(real, column),
             "missing_synthetic": _missing_rate(synthetic, column),
         }
@@ -299,6 +342,7 @@ def univariate(
             a, b = _numeric(real, column), _numeric(synthetic, column)
             entry.update({
                 "n_real": len(a), "n_synthetic": len(b),
+                "malformed_real": _malformed_rate(real, column),
                 "malformed_synthetic": _malformed_rate(synthetic, column),
                 "ks": _round(ks_statistic(a, b)),
                 "wasserstein": _round(wasserstein_1(a, b)),
@@ -404,7 +448,7 @@ def _joint(rows: Sequence[Mapping[str, Any]], a: str, b: str) -> dict[str, float
         va, vb = row.get(a), row.get(b)
         if va in (None, "") or vb in (None, ""):
             continue
-        key = f"{va}\x1f{vb}"
+        key = json.dumps([_category_key(va), _category_key(vb)], separators=(",", ":"))
         counts[key] = counts.get(key, 0) + 1
         total += 1
     return {key: count / total for key, count in sorted(counts.items())} if total else {}
@@ -484,8 +528,8 @@ def privacy(
     seed: int = 0,
 ) -> dict[str, Any]:
     compared = [c for c, k in sorted(kinds.items()) if k != "ignore"]
-    keys = {tuple(str(row.get(c, "")) for c in compared) for row in real}
-    matches = sum(1 for row in synthetic if tuple(str(row.get(c, "")) for c in compared) in keys)
+    keys = {tuple(_cell_key(row, c) for c in compared) for row in real}
+    matches = sum(1 for row in synthetic if tuple(_cell_key(row, c) for c in compared) in keys)
     out: dict[str, Any] = {
         "compared_columns": len(compared),
         "exact_match_rate": _round(matches / len(synthetic)) if synthetic else None,
@@ -516,6 +560,167 @@ def privacy(
 # ---------------------------------------------------------------------------
 
 
+SliceValueKind = Literal["value", "missing", "null", "empty"]
+SupportCode = Literal[
+    "slice_reference_only", "slice_synthetic_only", "slice_metrics_omitted",
+    "slice_no_observed_values",
+]
+
+
+@dataclass(frozen=True)
+class SlicePopulation:
+    """One population in the union, including populations with no counterpart."""
+
+    key: str
+    label: str
+    kind: SliceValueKind
+    reference_count: int
+    synthetic_count: int
+    metrics_reported: bool
+
+
+@dataclass(frozen=True)
+class FidelitySupportFinding:
+    code: SupportCode
+    column: str
+    value_key: str = ""
+    reference_count: int = 0
+    synthetic_count: int = 0
+
+
+@dataclass(frozen=True)
+class SliceSupport:
+    column: str
+    populations: tuple[SlicePopulation, ...]
+    metrics_limit: int
+
+    @property
+    def reference_rows(self) -> int:
+        return sum(p.reference_count for p in self.populations)
+
+    @property
+    def synthetic_rows(self) -> int:
+        return sum(p.synthetic_count for p in self.populations)
+
+    @property
+    def reference_categories(self) -> int:
+        return sum(p.kind == "value" and p.reference_count > 0 for p in self.populations)
+
+    @property
+    def synthetic_categories(self) -> int:
+        return sum(p.kind == "value" and p.synthetic_count > 0 for p in self.populations)
+
+    @property
+    def shared_categories(self) -> int:
+        return sum(p.kind == "value" and p.reference_count > 0 and p.synthetic_count > 0 for p in self.populations)
+
+    @property
+    def reference_category_coverage(self) -> float | None:
+        return self.shared_categories / self.reference_categories if self.reference_categories else None
+
+    @property
+    def reference_supported_rows(self) -> int:
+        return sum(p.reference_count for p in self.populations if p.synthetic_count)
+
+    @property
+    def synthetic_supported_rows(self) -> int:
+        return sum(p.synthetic_count for p in self.populations if p.reference_count)
+
+    @property
+    def omitted(self) -> tuple[SlicePopulation, ...]:
+        return tuple(p for p in self.populations if not p.metrics_reported)
+
+    def findings(self) -> tuple[FidelitySupportFinding, ...]:
+        findings: list[FidelitySupportFinding] = []
+        for population in self.populations:
+            codes: list[SupportCode] = []
+            if not population.synthetic_count:
+                codes.append("slice_reference_only")
+            if not population.reference_count:
+                codes.append("slice_synthetic_only")
+            if not population.metrics_reported:
+                codes.append("slice_metrics_omitted")
+            findings.extend(FidelitySupportFinding(
+                code, self.column, population.key,
+                population.reference_count, population.synthetic_count,
+            ) for code in codes)
+        if not self.reference_categories or not self.synthetic_categories:
+            findings.append(FidelitySupportFinding(
+                "slice_no_observed_values", self.column,
+                reference_count=self.reference_rows, synthetic_count=self.synthetic_rows,
+            ))
+        return tuple(findings)
+
+    @property
+    def complete(self) -> bool:
+        """Every union population has both sides and measured slice metrics.
+
+        Equal support is not equal frequency. Null/empty/absent populations are
+        permitted when represented on both sides; an all-missing slice is not
+        a measured segment. This predicate deliberately fails if metrics were
+        capped, even when the uncapped population counts prove equal support.
+        """
+        return not self.findings()
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            **asdict(self),
+            "reference_rows": self.reference_rows,
+            "synthetic_rows": self.synthetic_rows,
+            "reference_categories": self.reference_categories,
+            "synthetic_categories": self.synthetic_categories,
+            "shared_categories": self.shared_categories,
+            "reference_category_coverage": self.reference_category_coverage,
+            "reference_supported_rows": self.reference_supported_rows,
+            "synthetic_supported_rows": self.synthetic_supported_rows,
+            "omitted_keys": [p.key for p in self.omitted],
+            "complete": self.complete,
+        }
+
+
+def _slice_populations(
+    real: Sequence[Mapping[str, Any]], synthetic: Sequence[Mapping[str, Any]],
+    column: str, limit: int,
+) -> tuple[SliceSupport, dict[str, list[Mapping[str, Any]]], dict[str, list[Mapping[str, Any]]]]:
+    real_groups: dict[str, list[Mapping[str, Any]]] = {}
+    synthetic_groups: dict[str, list[Mapping[str, Any]]] = {}
+    labels: dict[str, str] = {}
+    for rows, groups in ((real, real_groups), (synthetic, synthetic_groups)):
+        for row in rows:
+            key = _cell_key(row, column)
+            groups.setdefault(key, []).append(row)
+            labels[key] = (
+                f"<{key}>" if key in ("missing", "null", "empty")
+                else row[column] if isinstance(row[column], str)
+                else key
+            )
+    # Preserve familiar string labels, but never let a literal "<null>" or
+    # "int:1" steal another population's dictionary entry. If any collision
+    # exists all labels become canonical keys, an injective representation.
+    if len(set(labels.values())) != len(labels):
+        labels = {key: key for key in labels}
+    ranked = sorted(labels, key=lambda key: (-len(real_groups.get(key, ())), key))
+    populations = tuple(SlicePopulation(
+        key=key, label=labels[key],
+        kind="missing" if key == "missing" else "null" if key == "null" else "empty" if key == "empty" else "value",
+        reference_count=len(real_groups.get(key, ())),
+        synthetic_count=len(synthetic_groups.get(key, ())),
+        metrics_reported=index < limit,
+    ) for index, key in enumerate(ranked))
+    return SliceSupport(column, populations, limit), real_groups, synthetic_groups
+
+
+def _json_finite(value: Any) -> Any:
+    """Unmeasurable distances serialize as null, never nonstandard JSON NaN."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _json_finite(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_finite(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True)
 class FidelityReport:
     n_real: int
@@ -526,10 +731,24 @@ class FidelityReport:
     multivariate: dict[str, Any]
     privacy: dict[str, Any]
     slices: dict[str, dict[str, dict[str, dict[str, Any]]]] = field(default_factory=dict)
-    """``slice column → slice value → column → univariate entry``."""
+    """``slice column → slice label → column → univariate entry``."""
+    slice_support: dict[str, SliceSupport] = field(default_factory=dict)
+    """Uncapped population counts; metric blocks alone cannot prove support."""
+
+    def support_findings(self) -> tuple[FidelitySupportFinding, ...]:
+        return tuple(finding for _, support in sorted(self.slice_support.items()) for finding in support.findings())
+
+    @property
+    def support_complete(self) -> bool:
+        """Strict admission predicate for the requested slices, not a fidelity score.
+
+        With no requested slices the condition is vacuously true. Callers must
+        choose their required segments and separately bound the metric vector.
+        """
+        return not self.support_findings()
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        result: dict[str, Any] = {
             "n_real": self.n_real,
             "n_synthetic": self.n_synthetic,
             "kinds": dict(sorted(self.kinds.items())),
@@ -538,7 +757,11 @@ class FidelityReport:
             "multivariate": self.multivariate,
             "privacy": self.privacy,
             "slices": self.slices,
+            "slice_support": {column: support.as_dict() for column, support in sorted(self.slice_support.items())},
+            "support_findings": [asdict(finding) for finding in self.support_findings()],
+            "support_complete": self.support_complete,
         }
+        return {key: _json_finite(value) for key, value in result.items()}
 
     def __str__(self) -> str:
         lines = [f"reference {self.n_real} rows · synthetic {self.n_synthetic} rows", ""]
@@ -574,12 +797,23 @@ class FidelityReport:
         for column, by_value in self.slices.items():
             lines.append("")
             lines.append(f"slices by {column}")
-            for value, entries in by_value.items():
-                worst = max(
-                    ((e.get("ks") if e["kind"] == "numeric" else e.get("total_variation")) or 0.0, c)
-                    for c, e in entries.items()
-                ) if entries else (0.0, "")
-                lines.append(f"  {value:<28} worst column {worst[1]} at {worst[0]}")
+            support = self.slice_support[column]
+            for population in support.populations:
+                counts = f"reference {population.reference_count} → synthetic {population.synthetic_count}"
+                if not population.metrics_reported:
+                    lines.append(f"  {population.label:<28} {counts}; metrics omitted (limit {support.metrics_limit})")
+                    continue
+                entries = by_value[population.label]
+                measured = [
+                    (distance, name) for name, entry in entries.items()
+                    if isinstance(distance := entry.get("ks" if entry["kind"] == "numeric" else "total_variation"), (int, float))
+                    and math.isfinite(distance)
+                ]
+                worst = max(measured) if measured else None
+                detail = f"worst column {worst[1]} at {worst[0]}" if worst else "distance unmeasurable"
+                lines.append(f"  {population.label:<28} {counts}; {detail}")
+            for finding in support.findings():
+                lines.append(f"  {finding.code}: {finding.value_key or column}")
         lines.append("")
         lines.append("No single score is reported. Read the dimension your use depends on.")
         return "\n".join(lines)
@@ -592,42 +826,50 @@ def compute(
     kinds: Mapping[str, Kind] | None = None,
     slices: Sequence[str] = (),
     seed: int = 0,
+    max_slices: int = MAX_SLICES,
 ) -> FidelityReport:
-    """The whole vector for two row sets. ``kinds`` overrides inference per column."""
+    """The whole vector for two row sets. ``kinds`` overrides reference inference.
+
+    ``max_slices`` bounds conditional metric blocks per slice column, not its
+    support census. Missing counterparts and omitted blocks always remain in
+    ``slice_support`` and make the strict ``support_complete`` predicate false.
+    A requested slice retains its global marginal unless explicitly ignored.
+    """
     if not real or not synthetic:
         raise ValueError("fidelity needs rows on both sides")
+    if isinstance(max_slices, bool) or not isinstance(max_slices, int) or max_slices < 1:
+        raise ValueError("max_slices must be a positive integer")
     resolved = infer_kinds(real, synthetic, overrides=kinds)
-    for column in slices:
+    for column in sorted(set(slices)):
         if column not in resolved:
             raise ValueError(f"slice column {column!r} is in neither table")
-        resolved[column] = "ignore"
+    # Slice requests add conditional measurements. They must not remove the
+    # global marginal that reveals a missing region or changed segment mix.
     sliced: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
-    for column in slices:
-        counts: dict[str, int] = {}
-        for row in real:
-            value = row.get(column)
-            if value not in (None, ""):
-                counts[str(value)] = counts.get(str(value), 0) + 1
-        top = [value for value, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:MAX_SLICES]]
-        sliced[column] = {}
-        for value in top:
-            real_slice = [row for row in real if str(row.get(column)) == value]
-            synthetic_slice = [row for row in synthetic if str(row.get(column)) == value]
-            if not real_slice or not synthetic_slice:
-                continue
-            sliced[column][value] = univariate(real_slice, synthetic_slice, resolved)
+    supports: dict[str, SliceSupport] = {}
+    for column in sorted(set(slices)):
+        support, real_groups, synthetic_groups = _slice_populations(real, synthetic, column, max_slices)
+        supports[column] = support
+        compared = {name: kind for name, kind in resolved.items() if name != column}
+        sliced[column] = {
+            population.label: univariate(
+                real_groups.get(population.key, ()), synthetic_groups.get(population.key, ()), compared,
+            )
+            for population in support.populations if population.metrics_reported
+        }
     return FidelityReport(
         n_real=len(real), n_synthetic=len(synthetic), kinds=resolved,
         columns=univariate(real, synthetic, resolved),
         pairwise=pairwise(real, synthetic, resolved),
         multivariate=multivariate(real, synthetic, resolved, seed=seed),
         privacy=privacy(real, synthetic, resolved, seed=seed),
-        slices=sliced,
+        slices=sliced, slice_support=supports,
     )
 
 
 __all__ = [
-    "FidelityReport", "MAX_SLICES", "QUADRATIC_SAMPLE", "compute", "infer_kinds",
+    "FidelityReport", "FidelitySupportFinding", "SlicePopulation", "SliceSupport",
+    "MAX_SLICES", "QUADRATIC_SAMPLE", "compute", "infer_kinds",
     "jensen_shannon", "ks_statistic", "load_rows", "multivariate", "pairwise",
     "privacy", "total_variation", "univariate", "wasserstein_1",
 ]

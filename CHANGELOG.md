@@ -11,6 +11,42 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: opt-in evidence admission and empirical noise calibration
+
+- A shared `reader/v2` plan/check/accept boundary covers full eval-critical
+  evidence in ordinary narration and program expansions. Rendered prose and
+  aspects go to the reader; expected facts remain in the checker. Current
+  identity, reader configuration, visibility and artifact witnesses bind the
+  acceptance. Missing, ambiguous, stale and unrecoverable targets refuse.
+- Accepted and rejected reviews retain responses and findings through the
+  generation ledger and `NarrationReaders` recipe step. This changes opted-in
+  ledger/recipe bytes; unchanged accepted checks replay without reader calls.
+  Legacy reader serialization, default program generation and golden corpora
+  are unchanged.
+- `evals.calibration.calibrate_noise` reuses Messiness, campaign revalidation,
+  reader/fidelity admission, empirical cohort estimates and Archive. Each
+  variant starts from isolated baseline generator state. Finite budgets,
+  uncertainty, refusals, niche holes and frozen held-out selection are recorded;
+  complete records replay without external callbacks. Exports retain the
+  exact selected trial worlds and split-labeled receipts.
+- Newly added noise prose uses the existing deterministic template provider,
+  with its own explicit authorship and ledger namespace. It is not reported as
+  model-authored. Offline narration replay can resolve an explicit set of
+  recorded model IDs against exact current request keys, refusing ambiguous
+  matches and preserving actual authorship. CLI replay uses those recorded IDs.
+
+### Fixed: complete fidelity populations and provenance-bound difficulty
+
+- Fidelity slice columns retain global marginals. The full typed union census
+  includes one-sided, missing, null and empty populations even when metrics are
+  capped. Nonfinite numeric values cannot satisfy metric gates. CLI strict slice
+  support rejects omitted or unsupported groups while retaining diagnostics.
+- Difficulty calibration supports versioned eval and request features with
+  intervention conditions. Trial replay is idempotent; configuration drift and
+  eval/corpus split leakage refuse. Estimates expose Wilson intervals, minimum
+  support and provenance. Held-out Brier/ECE retain unsupported denominators;
+  legacy counts and reference executions cannot claim fitted agent difficulty.
+
 ### Generation: opt-in operational case binding and qualified coverage
 
 - `with_operational_case_binding()` scopes enterprise queries to deterministic

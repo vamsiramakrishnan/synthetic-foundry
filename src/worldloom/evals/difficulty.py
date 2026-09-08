@@ -10,13 +10,14 @@ first line: expose stable structural features, key a slice off them, and
 estimate a pass rate per agent cohort from observed runs rather than asserting
 a number. What it did not have was any feature of the *request*, because until
 now a case had no request. This module supplies those, on the same contract,
-so `DifficultyCalibrator` can consume them without changing: a slice key is a
-string, and it does not care which features produced it.
+so `DifficultyCalibrator` can consume them through a versioned feature contract.
+Request and eval-plan slices have separate namespaces; similar key spellings
+cannot silently pool observations from different measurement contracts.
 
 The label stays. It is demoted to what it honestly is, a coarse bucket derived
-from the features, and `RequestFeatures.fitted` is `False` everywhere until a
-cohort has actually been run. Shipping an unfitted number that claims to be
-measured would be worse than the label it replaced.
+from the features. `RequestFeatures.fitted` stays `False`: structural labels
+do not become measurements. `DifficultyCalibrator` returns a separate estimate
+with cohort observations, support and uncertainty.
 
 Nothing here reads a clock or draws. Every feature is a function of the case,
 the situation it came from, and optionally the world it was built against.
@@ -42,7 +43,7 @@ class RequestFeatures(Model):
     facts_required: int = Field(ge=0)
     """How many canonical facts the answer cites."""
     artifacts_required: int = Field(ge=0)
-    distractor_density: float = Field(ge=0.0)
+    distractor_density: float = Field(ge=0.0, allow_inf_nan=False)
     """Distractor artifacts per required artifact. The near-miss pressure."""
     writes: bool = False
     """Whether answering changes state, which is the difference between being

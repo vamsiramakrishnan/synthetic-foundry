@@ -299,6 +299,8 @@ def _plan(
     estimate that could drift from it.
     """
     by_key = {entry.key: entry for entry in ledger}
+    if len(by_key) != len(ledger):
+        raise NarrationError("duplicate narration ledger keys")
     ir_slots: list[list[_Slot]] = []
     live_jobs: list[_Slot] = []
 
@@ -327,6 +329,16 @@ def _plan(
             )
 
             existing = by_key.get(key)
+            if isinstance(provider, providers.UnreachableProvider) and provider.allowed_model_ids:
+                matches = []
+                for model_id in provider.allowed_model_ids:
+                    replay_key = ledger_key(seed=world.seed, call_site=call_site, ordinal=ordinal,
+                                            fact_digest=request.fact_digest, model_id=model_id, prompt_version=prompt.key)
+                    if replay_key in by_key:
+                        matches.append((replay_key, by_key[replay_key]))
+                if len(matches) > 1:
+                    raise NarrationError(f"ambiguous narration replay for {call_site}")
+                key, existing = matches[0] if matches else (key, None)
             if existing is not None:
                 slots.append(_Slot(section=section, kind="replay", key=key, existing=existing))
                 continue
@@ -527,15 +539,19 @@ def narrate(
     filled: list[ArtifactIR] = []
     provider_calls = replayed = rejected = 0
 
-    for ir, slots in zip(world._artifact_irs, ir_slots):
+    for ir, slots in zip(world._artifact_irs, ir_slots, strict=True):
+        authors: set[str] = set()
         sections: list[ArtifactSection] = []
         for slot in slots:
             if slot.kind in ("keep", "empty"):
+                if slot.section.body and ir.metadata.get("narrated_by"):
+                    authors.add(ir.metadata["narrated_by"])
                 sections.append(slot.section)
                 continue
 
             if slot.kind == "replay":
                 assert slot.existing is not None
+                authors.add(slot.existing.model_id)
                 narrative = GeneratedNarrative.model_validate(slot.existing.output)
                 replayed += 1
                 # A checkpoint callback cannot know this section's sequential
@@ -553,6 +569,7 @@ def narrate(
                     recorded.append(slot.existing)
             else:
                 assert slot.result is not None
+                authors.add(provider.id)
                 narrative, attempts = slot.result
                 provider_calls += 1 + attempts
                 rejected += attempts
@@ -580,8 +597,12 @@ def narrate(
         metadata = dict(ir.metadata)
         if any(not s.awaiting_prose and s.body for s in sections):
             metadata.pop("awaiting_prose", None)
-            metadata["narrated_by"] = provider.id
-            metadata["prompt_version"] = prompt.key
+            if len(authors) > 1:
+                raise NarrationError(f"mixed section authors in {ir.id}; an artifact needs one recorded owner")
+            if authors:
+                metadata["narrated_by"] = min(authors)
+            if any(slot.kind in {"live", "replay"} for slot in slots):
+                metadata["prompt_version"] = prompt.key
         filled.append(ir.model_copy(update={"sections": sections, "metadata": metadata}))
 
     return Narration(

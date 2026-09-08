@@ -9,7 +9,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from string import Template
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import Field, model_validator
 
@@ -20,6 +20,9 @@ from ..world import World
 from . import claims, handshake, references
 from .providers import ResponseProvider
 from .requests import GeneratedClaim, GeneratedNarrative, NarrativeRequest
+
+if TYPE_CHECKING:
+    from .reader_checks import ReaderPlan
 
 
 class ProgramClause(Model):
@@ -336,7 +339,7 @@ def measure(expansion: Expansion) -> DiversityReport:
 
 
 def commit(world: World, expansion: Expansion, *, require_diversity: bool = True,
-           reader_responses: Sequence[Any] = ()) -> World:
+           reader_responses: Sequence[Any] = (), reader_plan: ReaderPlan | None = None) -> World:
     """Recheck freshness, hashes, reader results, diversity and existing claims."""
     staged = world if world.artifact_irs else world.compile()
     if _world_digest(staged) != expansion.plan.world_digest:
@@ -348,7 +351,14 @@ def commit(world: World, expansion: Expansion, *, require_diversity: bool = True
         if section.output_digest != content_key(section.narrative.model_dump(mode="json")):
             raise ValueError("corrupt expansion output")
     reader_findings: list[dict[str, Any]] = []
-    if expansion.plan.budget.reader_check_share:
+    if reader_plan is not None:
+        from .reader_checks import ReaderResponse, accept
+
+        parsed = tuple(ReaderResponse.model_validate(response) for response in reader_responses)
+        accepted = accept(staged, reader_plan, parsed, expansion=expansion).raise_if_failed()
+        staged = accepted.world
+        reader_findings = [finding.model_dump(mode="json") for finding in accepted.review.findings]
+    elif expansion.plan.budget.reader_check_share:
         from .reader_checks import ReaderResponse, check
 
         parsed = tuple(ReaderResponse.model_validate(response) for response in reader_responses)

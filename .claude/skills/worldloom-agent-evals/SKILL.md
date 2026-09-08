@@ -29,6 +29,23 @@ With operational projections, enable the SDK's
 Inspect `docs/enterprise-outcome-reuse.md` before claiming enterprise breadth,
 prose quality or calibrated difficulty from these connector proofs.
 
+## Quality and calibrated noise
+
+Read `docs/quality-calibration.md` when prose must support eval-critical evidence
+or a pass-rate band needs measured support. Use `reader_checks.plan` with the
+full eval oracle; give an independent reader only `requests_document()`. Persist
+failed reviews and repair the named prose through the existing authoring path.
+Require complete fidelity slices and explicit distance thresholds. Ingest
+observed trials with exact corpus/configuration provenance; a structural
+difficulty label or reference-executor pass rate is not fitted agent difficulty.
+
+Use `evals.calibration.calibrate_noise` to compose existing campaign transforms,
+Messiness, reader/fidelity gates, cohort estimates and Archive. Declare finite
+variants and disjoint held-out candidate ordinals before selection. Do not
+forward its oracle-bearing grading input to the agent under evaluation. Preserve
+refusals, niche holes, uncertainty and held-out status. Replay accepted records
+before spending new calls; keep transport adapters outside the generation core.
+
 The lower-level seams remain useful for inspecting individual stages:
 
 1. Load and validate a `World`; never invent company facts outside it.

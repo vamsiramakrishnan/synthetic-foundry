@@ -1,0 +1,229 @@
+{
+  "claims": 9,
+  "export_file_sha256": {
+    "artifact-intents.jsonl": "1de7b84b566613a8e411e2fd461b0e17c6693fd1e4e151173b19f78ec4e7ff93",
+    "artifact-ir.jsonl": "ad4e3597bfebace7997537116718a1aeb4455e9a3250c83d33bfae6d8dce2b15",
+    "artifact-manifest.jsonl": "86be759463c51d5eb9de7a468a138d1b1563f04331a23180d9a03aa6f827e259",
+    "evals.jsonl": "c2926adbccc47a923e9f2b106080e06abec6ba6b9af5a7de21bfbfe59319ce50",
+    "events.jsonl": "d35500dfad473543a08dc42a794c3fc6542a7a3cc10973cc70e3227615b10a51",
+    "facts.jsonl": "841143b5dc4c60a05b44aeef603d726039667413fa4561a19f30a9e866678e1d",
+    "generation-ledger.jsonl": "ac33f526c9e9ea0f942e51d033d31d2ccbe54721f11b940f49717cba0c9483ac",
+    "intentional-errors.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lore.jsonl": "a69a2c7979de4a2e64d752073958767d1444d04d1a041541895483663159403c",
+    "world.json": "fd2ff80d57e8586f7c9ef3947c844162dc7ff1c41bdbf97335f81f7c52d7c5b0"
+  },
+  "implementation_sha256": {
+    "src/worldloom/narrative/compiler.py": "39c7bbb9152189d5f19d3369f494e16b1a289c9d904ca466c59f80d149c8552f",
+    "src/worldloom/narrative/providers.py": "d62f602c2d1c0ead39fb44535a96168c7f0896df35ec98ce4f781eb8f10f08a1",
+    "src/worldloom/narrative/reader_checks.py": "4ebfa171c32718b6213456d6688ee15948af94e385f402d25de133b3fb9211de",
+    "src/worldloom/recipe.py": "7e4886343e780807880eb5e4353ce6e711cb4f3d2ce41f3879846a61d9c311da",
+    "tools/measure_blind_reader.py": "e75f1b99017fbf2824935fdcba5ed2644fa5e7818d7133bc2fe9700d406d59c0"
+  },
+  "invalid_quotes": 0,
+  "limitations": [
+    "Lexical subject/value recovery, not semantic entailment or comprehension scoring.",
+    "One small sample; not a model comparison or enterprise population estimate.",
+    "Existing prose is intentionally unchanged; its rejected review is retained."
+  ],
+  "passed_sections": 0,
+  "public_requests": {
+    "contract_version": "reader/v2",
+    "instructions": "Read each passage independently. Recover claims for the named aspects. Copy the subject and displayed value exactly from the passage and provide a verbatim quote containing both in the same sentence. Do not infer missing claims. Return each request's id, request_id, text_digest, reader_id and contract_version unchanged. No answer key is supplied.",
+    "reader_id": "independent-blind-reader/v1",
+    "requests": [
+      {
+        "aspects": [
+          "financial.revenue.actual"
+        ],
+        "contract_version": "reader/v2",
+        "id": "63d1450343ec5b78745f8c5f2fbd9127",
+        "reader_id": "independent-blind-reader/v1",
+        "request_id": "ART-0003/By business unit",
+        "text": "Australian Food carries the period. Revenue of AUD 3,493,500 thousands against AUD 3,583,800 thousands is AUD 90,300 thousands adverse against plan, and margin of 24.20% against a budgeted 25.34% produces a gross profit shortfall of AUD 62,703 thousands adverse \u2014 the largest of the four divisions by a wide margin. Digital and Marketplace is the second call on attention: revenue AUD 779,900 thousands against AUD 797,000 thousands, AUD 17,100 thousands adverse against plan, with margin at 27.47% against 27.96%, and a forecast that has not been re-based since the platform changed. New Zealand Food at AUD 614,400 thousands and General Merchandise at AUD 485,000 thousands came in AUD 12,200 thousands adverse and AUD 4,200 thousands adverse respectively. Both behaved normally and neither warrants time this month.",
+        "text_digest": "d7e7d3e50576811b3e08423c9070ad8d"
+      },
+      {
+        "aspects": [
+          "ops.cause_ruled_out"
+        ],
+        "contract_version": "reader/v2",
+        "id": "dae5e0add540c41d96fb5c59e8fc7e86",
+        "reader_id": "independent-blind-reader/v1",
+        "request_id": "ART-0007/Initial assessment and why it was wrong",
+        "text": "The first assessment pointed upstream, to an interruption in the overnight window. On the evidence available at the time that was the reasonable read: the failure appeared in an overnight batch, the job had no history of reference-data faults, and an upstream interruption would have produced precisely the symptom seen. It was tested rather than assumed, and it did not survive the test \u2014 ERP logs show no interruption during the valuation window. That finding is what redirected the investigation from infrastructure to data, and it did so within the same working day. Recording the hypothesis was not the error, and this section should not be read as though it were. Withholding an assessment until it was certain would have left the incident without a working direction during exactly the hours when the close was most at risk. The hypothesis did its job by being specific enough to disprove quickly.",
+        "text_digest": "1e66f0ab62258330cb30437f6e95d64b"
+      },
+      {
+        "aspects": [
+          "ops.cause",
+          "ops.feed_status",
+          "ops.incident_opened"
+        ],
+        "contract_version": "reader/v2",
+        "id": "2b7fccf2a298a0e75ffbae541b916379",
+        "reader_id": "independent-blind-reader/v1",
+        "request_id": "ART-0016/2 \u00b7 Adaeze Haverkamp \u00b7 01 Apr 09:31",
+        "text": "Position update on INC0035338 opened at priority P2 against inventory-valuation. Triage assessment: Overnight ERP outage. Run was overnight batch. The feed is failed. No immediate mitigation yet. Platform running diagnostics now.",
+        "text_digest": "dce606ad07732703d9a6583b05892764"
+      },
+      {
+        "aspects": [
+          "ops.cause",
+          "ops.feed_status",
+          "ops.incident_opened"
+        ],
+        "contract_version": "reader/v2",
+        "id": "17de1edebd7c59293e3c34378216e92b",
+        "reader_id": "independent-blind-reader/v1",
+        "request_id": "ART-0016/4 \u00b7 Isaura Trbojevic to Takoda Fitzmaurice \u00b7 02 Apr 09:25",
+        "text": "Incident on INC0035338 opened at priority P2 against inventory-valuation continues. failed confirmed. The position is Overnight ERP outage; that was the initial triage, but the root cause is now confirmed as Stale legacy-to-new product hierarchy mapping in the merchandising master. Workaround is in progress. Close will not complete on the committed date. delayed as of this morning and escalation has gone to the CFO per the standing protocol. Valuation team is priority; everything downstream is blocked until that completes.",
+        "text_digest": "e6a43173e183dc553ddf8b87861f7997"
+      }
+    ],
+    "response_schema": {
+      "$defs": {
+        "RecoveredClaim": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "quote": {
+              "minLength": 1,
+              "title": "Quote",
+              "type": "string"
+            },
+            "subject": {
+              "title": "Subject",
+              "type": "string"
+            },
+            "value": {
+              "title": "Value",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "subject",
+            "value",
+            "quote"
+          ],
+          "title": "RecoveredClaim",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/RecoveredClaim"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "contract_version": {
+          "default": "reader/v1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "reader_id": {
+          "default": "",
+          "title": "Reader Id",
+          "type": "string"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "text_digest": {
+          "title": "Text Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "text_digest",
+        "claims"
+      ],
+      "title": "ReaderResponse",
+      "type": "object"
+    }
+  },
+  "reader_config": {
+    "adapter": "isolated-codex-agent",
+    "prompt_version": "reader-document/v1"
+  },
+  "reader_identity": "independent-blind-reader/v1",
+  "reader_input": "Only the public requests document; no repository, World, private plan, facts or oracle.",
+  "recovered_target_occurrences": 2,
+  "requests": 4,
+  "responses_sha256": "db721824c67052c2c526e7c574cd6e1e9e1e033523465c5dd4ff78e9871f3731",
+  "resubmission_byte_identical": true,
+  "review": {
+    "contract_version": "reader/v2",
+    "critical_fact_ids": [],
+    "findings": [
+      {
+        "invalid_quotes": 0,
+        "missing_fact_ids": [
+          "FACT-1341"
+        ],
+        "passed": false,
+        "recovered_fact_ids": [
+          "FACT-1342",
+          "FACT-1343"
+        ],
+        "request_id": "ART-0003/By business unit"
+      },
+      {
+        "invalid_quotes": 0,
+        "missing_fact_ids": [
+          "FACT-0005"
+        ],
+        "passed": false,
+        "recovered_fact_ids": [],
+        "request_id": "ART-0007/Initial assessment and why it was wrong"
+      },
+      {
+        "invalid_quotes": 0,
+        "missing_fact_ids": [
+          "FACT-0002",
+          "FACT-0003",
+          "FACT-0004"
+        ],
+        "passed": false,
+        "recovered_fact_ids": [],
+        "request_id": "ART-0016/2 \u00b7 Adaeze Haverkamp \u00b7 01 Apr 09:31"
+      },
+      {
+        "invalid_quotes": 0,
+        "missing_fact_ids": [
+          "FACT-0002",
+          "FACT-0003",
+          "FACT-0004"
+        ],
+        "passed": false,
+        "recovered_fact_ids": [],
+        "request_id": "ART-0016/4 \u00b7 Isaura Trbojevic to Takoda Fitzmaurice \u00b7 02 Apr 09:25"
+      }
+    ],
+    "issues": [],
+    "missing_critical_fact_ids": [],
+    "passed": false,
+    "plan_id": "5b9e52ffcfa19185144fa8cfa97295bf",
+    "reader_id": "independent-blind-reader/v1",
+    "recovered_critical_fact_ids": []
+  },
+  "schema": "worldloom.blind-reader-probe/v1",
+  "scope": "One isolated reader, four sampled passages from existing authored narration; no eval-critical set declared.",
+  "seed": 8128,
+  "source": "examples/grocery-close/narration.json",
+  "source_sha256": "7800f3ae35ad5ede644dc62ff115a84ffba6237343e94504f7219698eff05b9d",
+  "target_occurrences": 10
+}

@@ -77,7 +77,8 @@ def test_slices_report_the_univariate_block_per_value() -> None:
     report = fidelity.compute(_rows(1, 400), _rows(2, 400), slices=["region"])
     assert set(report.slices["region"]) == {"N", "S", "E", "W"}
     assert "amount" in report.slices["region"]["N"]
-    assert "region" not in report.columns, "a slice column is not also a compared column"
+    assert report.columns["region"]["kind"] == "categorical", "slicing must retain the global segment marginal"
+    assert "region" not in report.slices["region"]["N"]
     with pytest.raises(ValueError, match="neither table"):
         fidelity.compute(_rows(1, 10), _rows(2, 10), slices=["nope"])
 
@@ -127,7 +128,8 @@ def test_the_report_is_json_with_no_aggregate_score() -> None:
     payload = fidelity.compute(_rows(1, 50), _rows(2, 50)).as_dict()
     json.dumps(payload)
     assert set(payload) == {"n_real", "n_synthetic", "kinds", "univariate", "pairwise",
-                            "multivariate", "privacy", "slices"}
+                            "multivariate", "privacy", "slices", "slice_support",
+                            "support_findings", "support_complete"}
     assert not any("score" in key for key in payload)
 
 
@@ -158,3 +160,24 @@ def test_cli_emits_the_vector_as_json(tmp_path: Path) -> None:
     assert plain.exit_code == 0 and "No single score" in plain.output
     missing = runner.invoke(app, ["fidelity", str(a), str(tmp_path / "nope.jsonl")])
     assert missing.exit_code == 2
+
+
+def test_cli_strict_support_preserves_missing_population_and_cap(tmp_path: Path) -> None:
+    reference, synthetic = tmp_path / "real.jsonl", tmp_path / "synthetic.jsonl"
+    reference.write_text('\n'.join(json.dumps(row) for row in [
+        {"geo": "north", "amount": 1}, {"geo": "south", "amount": 1},
+    ]))
+    synthetic.write_text(json.dumps({"geo": "north", "amount": 1}))
+    args = ["fidelity", str(reference), str(synthetic), "--json", "--require-slice-support"]
+    no_slice = runner.invoke(app, args, env={"WORLDLOOM_OUTPUT": "json"})
+    assert no_slice.exit_code == 2 and "fidelity_support_missing" in no_slice.output
+    missing = runner.invoke(app, [*args, "--slices", "geo"], env={"WORLDLOOM_OUTPUT": "json"})
+    assert missing.exit_code == 3, missing.output
+    report = json.loads(missing.stdout)
+    assert report["univariate"]["geo"]["kind"] == "categorical"
+    assert report["slices"]["geo"]["south"]["amount"]["n_synthetic"] == 0
+    synthetic.write_bytes(reference.read_bytes())
+    complete = runner.invoke(app, [*args, "--slices", "geo"])
+    assert complete.exit_code == 0, complete.output
+    capped = runner.invoke(app, [*args, "--slices", "geo", "--max-slices", "1"], env={"WORLDLOOM_OUTPUT": "json"})
+    assert capped.exit_code == 3 and "fidelity_support_missing" in capped.output

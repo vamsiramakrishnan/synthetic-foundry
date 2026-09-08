@@ -97,6 +97,7 @@ DOCUMENTS = (
     "docs/company-eval-reuse.md",
     "docs/enterprise-qualification.md",
     "docs/enterprise-outcome-reuse.md",
+    "docs/quality-calibration.md",
     "docs/eval-first-world-compilation.md",
     "docs/narration-programs.md",
     "docs/process-bindings.md",

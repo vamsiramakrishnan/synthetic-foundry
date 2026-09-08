@@ -373,6 +373,36 @@ worldloom enterprise-evals validate <PATH>
 
 Work with a corpus's evaluation set.
 
+### `worldloom evals calibration`
+
+Ingest observed cohort trials and measure held-out calibration.
+
+### `worldloom evals calibration ingest`
+
+Validate provenance and split isolation, then save an identified snapshot.
+
+| Option | Purpose |
+| --- | --- |
+| `--from`, `-i` | Observed CalibrationObservation JSON/JSONL; no outcomes are generated here. |
+| `--out`, `-o` | Immutable calibration snapshot destination; exact replay is allowed. |
+| `--resume` | Previous snapshot to extend into a new destination. |
+
+### `worldloom evals calibration report`
+
+Expose support, uncertainty and held-out scoring against training only.
+
+```
+worldloom evals calibration report <SNAPSHOT_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--bins` | Probability bins for expected calibration error. |
+| `--cohort` | Exact cohort identity to measure. |
+| `--min-trials` | Training observations required for a fitted slice. |
+| `--out`, `-o` | Report JSON; defaults to stdout. |
+| `--split` | Held-out split: holdout or validation; never trains predictions. |
+
 ### `worldloom evals construct`
 
 Make candidate worlds satisfy an eval design, then export the accepted ones with their evals.
@@ -448,7 +478,9 @@ worldloom fidelity <REFERENCE> <SYNTHETIC>
 | `--categorical` | Treat this column as categorical even though every value parses as a number: an id, a code. Repeatable. |
 | `--ignore` | Leave this column out entirely. Repeatable. |
 | `--json` | Emit the whole vector as JSON: stable keys, safe to diff. |
+| `--max-slices` | Maximum metric groups per slice column; omitted groups remain in support accounting. |
 | `--numeric` | Treat this column as numeric even though the reference carries a value that does not parse. Repeatable. |
+| `--require-slice-support` | Exit with a refusal when requested slices have missing support or omitted metrics. |
 | `--seed` | Seed for the subsample the two quadratic blocks take past 2,000 rows. |
 | `--slices` | Report the per-column block again per value of this column, most frequent first. Repeatable. |
 | `--table` | When either side is a corpus directory, the detail table to read from it. |
@@ -642,6 +674,44 @@ worldloom narrate loop <CORPUS>
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
 | `--shell` | Run the command through the shell. This is the opt-in for pipelines. |
 | `--timeout` | Seconds the child may run per round before it is killed and refused. |
+
+### `worldloom narrate readers`
+
+Check whether independent readers recover the corpus's evidence.
+
+### `worldloom narrate readers accept`
+
+Persist the complete reader verdict, including rejected evidence.
+
+```
+worldloom narrate readers accept <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--critical-fact` | Same critical facts as requests; repeat as needed. |
+| `--eval-instance` | Same EvalInstance JSON paths as requests; repeat as needed. |
+| `--from`, `-i` | Reader response array or {responses: [...]}; omit only to replay accepted evidence. |
+| `--reader-config` | Same JSON reader configuration as requests. |
+| `--reader-id` | Same independent reader identity as requests. |
+| `--share` | Same background sample as requests. |
+
+### `worldloom narrate readers requests`
+
+Emit blind passages and response schema; checker targets stay private.
+
+```
+worldloom narrate readers requests <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--critical-fact` | Fact that every accepted check must recover; repeat as needed. |
+| `--eval-instance` | EvalInstance JSON whose complete oracle supplies critical targets; repeat as needed. |
+| `--out`, `-o` | Public request JSON; defaults to stdout. |
+| `--reader-config` | JSON reader configuration, sealed into the private check plan. |
+| `--reader-id` | Independent reader identity; include the model and prompt version. |
+| `--share` | Additional background section sample, after complete critical coverage. |
 
 ### `worldloom narrate requests`
 

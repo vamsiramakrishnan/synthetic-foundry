@@ -1,0 +1,94 @@
+{
+  "responses": [
+    {
+      "id": "63d1450343ec5b78745f8c5f2fbd9127",
+      "request_id": "ART-0003/By business unit",
+      "text_digest": "d7e7d3e50576811b3e08423c9070ad8d",
+      "reader_id": "independent-blind-reader/v1",
+      "contract_version": "reader/v2",
+      "claims": [
+        {
+          "kind": "financial.revenue.actual",
+          "subject": "Digital and Marketplace",
+          "value": "AUD 779,900 thousands",
+          "quote": "Digital and Marketplace is the second call on attention: revenue AUD 779,900 thousands against AUD 797,000 thousands, AUD 17,100 thousands adverse against plan, with margin at 27.47% against 27.96%, and a forecast that has not been re-based since the platform changed."
+        },
+        {
+          "kind": "financial.revenue.actual",
+          "subject": "New Zealand Food",
+          "value": "AUD 614,400 thousands",
+          "quote": "New Zealand Food at AUD 614,400 thousands and General Merchandise at AUD 485,000 thousands came in AUD 12,200 thousands adverse and AUD 4,200 thousands adverse respectively."
+        },
+        {
+          "kind": "financial.revenue.actual",
+          "subject": "General Merchandise",
+          "value": "AUD 485,000 thousands",
+          "quote": "New Zealand Food at AUD 614,400 thousands and General Merchandise at AUD 485,000 thousands came in AUD 12,200 thousands adverse and AUD 4,200 thousands adverse respectively."
+        }
+      ]
+    },
+    {
+      "id": "dae5e0add540c41d96fb5c59e8fc7e86",
+      "request_id": "ART-0007/Initial assessment and why it was wrong",
+      "text_digest": "1e66f0ab62258330cb30437f6e95d64b",
+      "reader_id": "independent-blind-reader/v1",
+      "contract_version": "reader/v2",
+      "claims": [
+        {
+          "kind": "ops.cause_ruled_out",
+          "subject": "ERP logs",
+          "value": "no interruption during the valuation window",
+          "quote": "It was tested rather than assumed, and it did not survive the test — ERP logs show no interruption during the valuation window."
+        }
+      ]
+    },
+    {
+      "id": "2b7fccf2a298a0e75ffbae541b916379",
+      "request_id": "ART-0016/2 · Adaeze Haverkamp · 01 Apr 09:31",
+      "text_digest": "dce606ad07732703d9a6583b05892764",
+      "reader_id": "independent-blind-reader/v1",
+      "contract_version": "reader/v2",
+      "claims": [
+        {
+          "kind": "ops.cause",
+          "subject": "Triage assessment",
+          "value": "Overnight ERP outage",
+          "quote": "Triage assessment: Overnight ERP outage."
+        },
+        {
+          "kind": "ops.feed_status",
+          "subject": "The feed",
+          "value": "failed",
+          "quote": "The feed is failed."
+        },
+        {
+          "kind": "ops.incident_opened",
+          "subject": "INC0035338",
+          "value": "opened at priority P2 against inventory-valuation",
+          "quote": "Position update on INC0035338 opened at priority P2 against inventory-valuation."
+        }
+      ]
+    },
+    {
+      "id": "17de1edebd7c59293e3c34378216e92b",
+      "request_id": "ART-0016/4 · Isaura Trbojevic to Takoda Fitzmaurice · 02 Apr 09:25",
+      "text_digest": "e6a43173e183dc553ddf8b87861f7997",
+      "reader_id": "independent-blind-reader/v1",
+      "contract_version": "reader/v2",
+      "claims": [
+        {
+          "kind": "ops.cause",
+          "subject": "root cause",
+          "value": "Stale legacy-to-new product hierarchy mapping in the merchandising master",
+          "quote": "The position is Overnight ERP outage; that was the initial triage, but the root cause is now confirmed as Stale legacy-to-new product hierarchy mapping in the merchandising master."
+        },
+        {
+          "kind": "ops.incident_opened",
+          "subject": "INC0035338",
+          "value": "opened at priority P2 against inventory-valuation",
+          "quote": "Incident on INC0035338 opened at priority P2 against inventory-valuation continues."
+        }
+      ]
+    }
+  ]
+}

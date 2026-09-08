@@ -18,9 +18,9 @@ remain the existing owners of their contracts.
 | `enterprise_queries.constrained_cover` | Select semantic interactions and actual cases after qualification; recompute holes after caps | Streaming selection is deterministic, not globally optimal |
 | `validate_corpus`, `compile_rows`, `run_eval_row` | Establish connector evidence and executable assertion outcomes before admitting coverage | Legacy model transforms and semantic answer quality remain outside the proof |
 | Artifact byte inventory and native renderers | Require actual source-file witnesses, retain byte receipts and reject metadata-only claims | Existence is not native layout compliance or correct analysis |
-| Narration contracts, generation ledger, programs, reader checks | Existing authoring and replay path; programs amortize repeated families | A shared critical-evidence reader gate is still needed |
-| `Archive`, diversity, dispersion, evolution | Reuse after qualification to retain and improve candidates in declared niches | Current integration does not launch automatic evolutionary calibration |
-| `fidelity`, difficulty features and calibrator | Retain separate distribution and cohort measurements | Missing slices and feature-contract gaps must be fixed before calibrated claims |
+| Narration contracts, generation ledger, programs, reader checks | Shared critical-evidence admission for ordinary prose and expansions, with offline review replay | Lexical recovery does not establish semantic entailment or synthesis |
+| `Archive`, diversity, dispersion, evolution | Bounded observed-noise selection after revalidation and quality admission | Variant menus are declared; arbitrary mutation-program synthesis is not implemented |
+| `fidelity`, difficulty features and calibrator | Complete population accounting and versioned, provenance-bound cohort estimates | Actual intended cohorts and reference populations must be measured |
 
 The new code is an admission/composition adapter and a source-binding adapter.
 Another episode grammar, narrator, campaign engine or covering library would
@@ -142,19 +142,15 @@ clause grammar binds one fact at a time; it does not itself deliver multi-fact
 business synthesis. Claim validation checks allowed support, required references
 and contract rules; it does not prove semantic entailment or readable conclusions.
 
-`reader_checks.requests/check` already withholds expected answers from the reader,
-requires quoted text and rejects missing, stale or invalid responses. Currently
-it is connected to `programs.commit`, uses the original unnarrated world and an
-`Expansion`, and checks only narration-required facts (currently at most three
-per section). Scripted readers prove this protocol, not independent comprehension.
-
-A bounded next integration is a shared reader gate over both ordinary responses
-and expansions. Join `EvalInstance.oracle.fact_ids` to authored sections, send
-only prose and requested aspects to the reader, and retain expected targets in
-the checker. Require recovery for evaluation-critical evidence plus a budgeted
-background sample. Persist text/target digests, reader identity, replies and
-findings through the existing ledger. Repair named sections or families and
-recheck them; unchanged accepted text should replay without a provider call.
+The shared `reader_checks.plan/check_plan/accept` boundary now covers ordinary
+narrated Worlds and expansions. It joins every `EvalInstance.oracle.fact_ids`
+target to visible cited prose and required artifact witnesses, adds a budgeted
+background sample, and sends only rendered text/aspects to the reader. Missing,
+ambiguous and stale targets refuse. Text/target/context and reader configuration
+bind receipts; accepted and rejected responses persist in the existing ledger.
+Unchanged accepted reviews replay without callbacks. The older `requests/check`
+interface remains compatible but retains its sampled writer-required scope.
+See [quality and calibration](quality-calibration.md) for the shared workflow.
 
 Keep quality measures separate:
 
@@ -171,20 +167,27 @@ Keep quality measures separate:
   bytes are not proof of completed enterprise analysis. Adapt bounded sources
   into the existing IR pipeline before claiming authored deliverable quality.
 
-## Calibration boundaries still open
+## Calibration gaps addressed and limits retained
 
-The fidelity audit found a missing geography slice: reference records contained
-`north` and `south`, synthetic records only `north`; `fidelity.compute` with
-`slices=("geo",)` reported only `north`, while the global geography result had
-`geo_kind="ignore"`. Missing slice support must be explicit before optimizing
-fidelity. A good score on the surviving slice is not geographic representativeness.
+The baseline fidelity audit lost the reference-only `south` geography and
+ignored geography's global marginal. The implementation now retains that
+marginal, reports the full typed population union and exposes omitted metrics.
+Strict support admission rejects missing populations; distance thresholds remain
+separate because equal support is not equal frequency.
 
-Difficulty also has an integration gap. `evals.difficulty.RequestFeatures` exposes
-a request slice key and correctly reports `fitted=False`. Despite its integration
-description, `eval_metrics.DifficultyCalibrator.observe/estimate` currently accept
-`EvalSpec` and compute `eval_metrics.features_for(spec)` internally. Request slice
-keys cannot simply be passed unchanged. Connect measured cohort outcomes and a
-versioned feature contract before treating difficulty buckets as calibrated rates.
+`DifficultyCalibrator` now accepts versioned eval/request feature contracts,
+intervention conditions and provenance-bearing observations. Trials replay
+idempotently; configuration changes and eval/corpus split leakage refuse.
+Wilson intervals, support status and held-out scoring retain denominators.
+Structural buckets, legacy unverified counts and reference-executor successes
+cannot establish fitted agent difficulty.
+
+`evals.calibration.calibrate_noise` composes these gates with existing campaign
+transforms, Messiness and Archive. Variants derive independently from baseline
+worlds, quality failures do not train, and selection freezes before holdout.
+The finite loop preserves refused attempts, budget exhaustion and niche holes.
+These mechanisms require actual cohort measurements; scripted integration
+outcomes do not demonstrate production agent calibration.
 
 ## Recommended enterprise outcome scorecard
 
@@ -201,9 +204,9 @@ versioned feature contract before treating difficulty buckets as calibrated rate
 The implemented priority is executable qualification plus case-bound coverage:
 refused candidates contribute no witnessed coverage; same-case joins remain
 valid; holes retain bounded denominators; exports preserve executed evidence.
-The next integration is the critical-evidence reader gate with an independent
-reader. Fix missing fidelity slices and connect versioned difficulty features to
-observed cohort outcomes before allowing an optimizer to claim calibration.
+The shared reader gate, full fidelity accounting and observed-noise controller
+now extend that admission path. Run an independent reader and the intended
+agent cohort before claiming quality or calibrated rates for that population.
 Record these dimensions separately instead of collapsing them into an
 unsupported headline.
 

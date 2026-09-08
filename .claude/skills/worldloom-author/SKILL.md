@@ -15,13 +15,15 @@ seed → Session → Brief (context + constraints) → propose → lint →
 refuse-with-findings → revise → accept → resolve → install → replay
 ```
 
-**Every stage is propose → refuse → revise.** A refusal is data, not failure.
+**Every authoring stage is propose → refuse → revise.** A refusal is data, not failure.
 It carries every finding at once, each naming what you proposed, the rule it
 broke, and what to do instead. Nothing is committed on a refusal, so revision
 starts from the same state your proposal was judged against. Fix those
 specific things, resubmit, loop until accepted. Never work around a refusal by
 editing the corpus, loosening a check, or answering a different question.
 `narrate accept` rejecting your prose is this same loop over sentences.
+Quality reviews additionally persist rejected replies and findings for audit;
+their receipt does not admit the reviewed corpus or train a calibration cohort.
 
 ## Route to the layer: load the skill, do not duplicate it
 
@@ -40,6 +42,7 @@ the existing campaign and pipeline APIs own orchestration and acceptance.
 | 6 | **Run** | Install the specs, build, run periods; arrangements the CLI lacks are Python | `/worldloom-sdk` |
 | 7 | **Narrate** | The prose, source-blind, refused when it contradicts the facts | `/worldloom-narrate` |
 | 8 | **Validate / evaluate** | Render, check every document agrees, score | `/worldloom-render`, `/worldloom-evaluate` |
+| 9 | **Qualify / calibrate** | Recover eval-critical evidence with an independent reader; measure populations and observed cohorts | `/worldloom-agent-evals`, `docs/quality-calibration.md` |
 
 Before any of this: an industry the engines do not model at all (a hospital, an
 airline) is `/worldloom-vertical`, and a loose ask (no seed, no shape chosen)
