@@ -95,6 +95,10 @@ enterprise_evals_app = typer.Typer(
 )
 app.add_typer(enterprise_evals_app, name="enterprise-evals")
 
+from .connector_serving_cli import serve_command
+
+enterprise_evals_app.command("serve")(serve_command)
+
 # Keep operational generation in its own command module, not this monolith.
 from .gemini_enterprise.cli import app as gemini_enterprise_app
 from .seams_cli import seams_command
@@ -107,27 +111,43 @@ app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
 
 @enterprise_evals_app.command("space")
 def enterprise_evals_space(
-    max_candidates: int = typer.Option(10_000_000, min=1),
+    max_candidates: int | None = typer.Option(None, min=1, help="Override the profile's candidate ceiling (default: 10,000,000)."),
+    profile_path: Path | None = typer.Option(None, "--profile"),
 ) -> None:
     """Count semantically valid query candidates without generating fixtures."""
-    from .enterprise_queries import valid_rows
-    from .enterprise_specs import CoverageProfile, builtin_registry
+    from itertools import islice
 
-    profile = CoverageProfile(max_candidates=max_candidates)
+    from .enterprise_queries import valid_rows
+    from .enterprise_specs import (
+        CoverageProfile,
+        ScenarioProfile,
+        apply_scenario_profile,
+        builtin_registry,
+    )
+
+    scenario = (
+        ScenarioProfile.model_validate_json(profile_path.read_text(encoding="utf-8"))
+        if profile_path
+        else None
+    )
+    registry = _scenario_registry(scenario, apply_scenario_profile, builtin_registry)
+    profile = scenario.coverage if scenario else CoverageProfile()
+    if max_candidates is not None:
+        profile = profile.model_copy(update={"max_candidates": max_candidates})
     # The default space is larger than the default ceiling, and the enumerator
     # refuses past the ceiling by design (a planner must narrow, not wander).
     # For a count that is the question, the ceiling is an answer: "at least
     # this many", stated as such rather than as a traceback.
-    count = 0
-    exhaustive = True
-    try:
-        for _ in valid_rows(builtin_registry(), profile):
-            count += 1
-    except ValueError:
-        exhaustive = False
+    # Read one extra witness to distinguish exact exhaustion at the ceiling
+    # from a larger space. Do not swallow arbitrary planner ValueErrors as if
+    # they were evidence of a large space.
+    count = sum(1 for _ in islice(valid_rows(registry, profile), profile.max_candidates + 1))
+    exhaustive = count <= profile.max_candidates
     payload: dict[str, Any] = {"profile": profile.name, "valid_candidates": count, "exhaustive": exhaustive}
+    if scenario is not None:
+        payload["scenario_profile"] = scenario.name
     if not exhaustive:
-        payload["at_least"] = max_candidates
+        payload["at_least"] = count
     typer.echo(json.dumps(payload, sort_keys=True))
 
 
@@ -141,6 +161,7 @@ def enterprise_evals_plan(
     profile_path: Path | None = typer.Option(None, "--profile"),
     shard_index: int | None = typer.Option(None, "--shard-index"),
     shard_count: int | None = typer.Option(None, "--shard-count"),
+    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat or use * for the versioned catalogue."),
 ) -> None:
     """Write grounded query plans as JSONL."""
     from .enterprise_queries import plan_queries
@@ -172,6 +193,7 @@ def enterprise_evals_plan(
         limit=limit,
         shard_index=shard_index,
         shard_count=shard_count,
+        dag_shapes=tuple(dag_shape or ()),
     )
     with output.open("w", encoding="utf-8") as handle:
         for query in queries:
@@ -209,6 +231,7 @@ def enterprise_evals_build(
     profile_path: Path | None = typer.Option(None, "--profile"),
     shard_index: int | None = typer.Option(None, "--shard-index"),
     shard_count: int | None = typer.Option(None, "--shard-count"),
+    dag_shape: list[str] | None = typer.Option(None, "--dag-shape", help="Executable DAG shape; repeat or use * for the versioned catalogue."),
     render_limit: int = typer.Option(0, "--render-limit", min=0),
 ) -> None:
     """Plan, materialize, validate, export, and optionally render a connector corpus."""
@@ -244,6 +267,7 @@ def enterprise_evals_build(
         limit=limit,
         shard_index=shard_index,
         shard_count=shard_count,
+        dag_shapes=tuple(dag_shape or ()),
     )
     corpus = materialize_corpus(world, queries)
     findings = validate_corpus(corpus)
@@ -277,9 +301,10 @@ def enterprise_evals_build(
 def enterprise_evals_score(
     query_path: Path,
     trace_path: Path,
+    fixture_path: Path | None = typer.Option(None, "--fixture", help="Fixture JSON pinning the expected fact and observation coverage."),
 ) -> None:
     """Score an MCP trace against one planned query's semantic DAG."""
-    from .enterprise_corpus import TraceCall, score_trace
+    from .enterprise_corpus import QueryFixture, TraceCall, score_trace
     from .enterprise_queries import PlannedEnterpriseQuery
 
     query = PlannedEnterpriseQuery.model_validate_json(
@@ -289,7 +314,8 @@ def enterprise_evals_score(
         TraceCall.model_validate(item)
         for item in json.loads(trace_path.read_text(encoding="utf-8"))
     ]
-    typer.echo(score_trace(query, calls).model_dump_json())
+    fixture = QueryFixture.model_validate_json(fixture_path.read_text(encoding="utf-8")) if fixture_path else None
+    typer.echo(score_trace(query, calls, fixture=fixture).model_dump_json())
 
 
 @enterprise_evals_app.command("simulate")
@@ -319,31 +345,110 @@ def enterprise_evals_simulate(
     config = RunnerConfig()
     simulator = ConnectorSimulator(corpus)
 
-    async def run() -> list[tuple[Any, Any]]:
-        results = []
+    async def run() -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
         for query in queries:
-            result = await execute_query(
-                query, fixtures[query.id], config, simulator.invoke
-            )
-            results.append((result, score_trace(query, result.calls)))
+            fixture = fixtures.get(query.id)
+            try:
+                if fixture is None:
+                    raise ValueError(f"query {query.id} has no fixture")
+                if query.dimensions.get("dag_grammar"):
+                    from .connector_eval_runtime import run_eval_row
+                    from .enterprise_rows import compile_row, runtime_records
+
+                    records = runtime_records(corpus.connector_data.records)
+                    row = compile_row(query, fixture, records)
+                    execution = run_eval_row(row, records)
+                    if execution.grade["status"] == "fail":
+                        raise ValueError("reference trajectory failed assertions: " + "; ".join(execution.grade["fails"]))
+                    failed = next((span for span in execution.spans if span.error), None)
+                    write_nodes = {str(node["id"]) for node in query.expected_dag if node.get("kind") == "write"}
+                    expected_failures = {
+                        str(assertion["node"]): assertion["kind"]
+                        for assertion in row["assertions"] if assertion["type"] == "failure_at"
+                    }
+                    designed_write = (
+                        failed is not None and failed.node in write_nodes
+                        and (failed.error or {}).get("kind") == expected_failures.get(str(failed.node))
+                    )
+                    results.append({
+                        "query_id": query.id,
+                        "outcome": "completed" if failed is None else "blocked_at_designed_write" if designed_write else "stopped_before_failure_point",
+                        "finding": None if failed is None else f"node {failed.node} failed: {(failed.error or {}).get('kind')}",
+                        "failed_node": None if failed is None else failed.node,
+                        # Assertion grades and the legacy weighted semantic score
+                        # have different denominators. Never average them together.
+                        "dag_score": None,
+                        "assertion_grade": dict(execution.grade),
+                        "score_findings": list(execution.grade["fails"]),
+                    })
+                    continue
+                result = await execute_query(query, fixture, config, simulator.invoke)
+                score = score_trace(query, result.calls, fixture=fixture)
+                mutation = query.generation.mutation
+                write_nodes = {
+                    str(node["id"])
+                    for node in query.expected_dag
+                    if (node["connector"], node["entity"], node["kind"])
+                    == (mutation.connector, mutation.entity, mutation.operation)
+                }
+                failed_node = next(
+                    (str(node["id"]) for node in query.expected_dag if result.finding == f"node {node['id']} failed"),
+                    None,
+                )
+                injected = {
+                    "denied" if override.kind == "permission_denied" else override.kind
+                    for override in fixture.overrides if override.connector == mutation.connector
+                }
+                response = result.outputs.get(failed_node or "", {})
+                expected_error = isinstance(response, dict) and response.get("error") in injected
+                outcome = (
+                    "completed" if result.completed
+                    else "blocked_at_designed_write" if failed_node in write_nodes and expected_error
+                    else "stopped_before_failure_point"
+                )
+                results.append({
+                    "query_id": query.id,
+                    "outcome": outcome,
+                    "finding": result.finding,
+                    "failed_node": failed_node,
+                    "dag_score": score.total,
+                    "score_findings": list(score.findings),
+                })
+            except Exception as error:
+                # A bad binding or a missing fixture is harness breakage. Keep
+                # its cause and continue the batch; never count it as a designed
+                # refusal merely because the query did not complete.
+                results.append({
+                    "query_id": query.id,
+                    "outcome": "raised",
+                    "finding": f"{type(error).__name__}: {error}",
+                    "failed_node": None,
+                    "dag_score": None if query.dimensions.get("dag_grammar") else 0.0,
+                    "score_findings": [],
+                    **({"assertion_grade": {"status": "fail", "fails": [str(error)]}}
+                       if query.dimensions.get("dag_grammar") else {}),
+                })
         return results
 
     results = asyncio.run(run())
-    completed = sum(result.completed for result, _ in results)
-    blocked = sum(not result.completed for result, _ in results)
-    average = (
-        round(sum(score.total for _, score in results) / len(results), 4)
-        if results
-        else 0.0
-    )
+    counts = {
+        outcome: sum(result["outcome"] == outcome for result in results)
+        for outcome in ("completed", "blocked_at_designed_write", "stopped_before_failure_point", "raised")
+    }
+    scores = [result["dag_score"] for result in results if result["dag_score"] is not None]
+    average = round(sum(scores) / len(scores), 4) if scores else None
+    assertion_grades = [result["assertion_grade"] for result in results if "assertion_grade" in result]
     typer.echo(
         json.dumps(
             {
                 "queries": len(results),
-                "completed": completed,
-                "blocked_by_injected_failure": blocked,
+                **counts,
                 "average_dag_score": average,
+                "assertion_passed": sum(grade["status"] in {"ok", "behavior"} for grade in assertion_grades),
+                "assertion_failed": sum(grade["status"] == "fail" for grade in assertion_grades),
                 "simulator_records": len(simulator.records),
+                "results": results,
             },
             sort_keys=True,
         )
@@ -393,6 +498,7 @@ _REFUSALS: dict[str, str] = {
     "causal_model_unreadable": "the causal model file cannot be read as a CausalModel",
     "cases_unexportable": "the corpus holds no evaluation case an external harness could score",
     "conflict": "a resolution conflict whose rule has no individually registered code",
+    "connector_serve_failed": "the connector evaluation server cannot start; the detail names the configuration error",
     "corpus_unloadable": "the corpus (or something it depends on) cannot be read",
     "destination_exists": "the output destination exists and --overwrite was not given",
     "datastore_unexportable": "the workspace could not be written as Discovery Engine documents",

@@ -11,6 +11,82 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: executable enterprise DAG grammar
+
+- Opt-in `enterprise-dag@1` plans carry typed arguments, result references,
+  result-dependent conditions and bounded iteration. Eight authored shapes
+  exercise chains, joins, branches, repeated reads and multiple writes. Shape
+  selection participates in coverage and sharding before limiting the output.
+- Mapped reads require at least two source records. Conditional campaigns
+  deterministically request one- or two-record witnesses. These change planned
+  query identities, selected fixture inputs and exported bytes when enabled.
+  The default retains the legacy trajectory. No coverage of an unavailable
+  external 42-shape catalogue is asserted.
+
+### Added: external connector execution and independent trace grading
+
+- `enterprise-evals serve` exposes MCP StreamableHTTP connector tools with
+  isolated runs, per-principal bearer authentication, bounded requests and
+  responses, captured native result receipts, trace retrieval and grading.
+  The optional `mcp` dependency uses SDK 2.2 APIs; the existing stdio commands
+  use the same version. TLS, OAuth deployment and a live Gemini Enterprise
+  integration are separate deployment work.
+- Both reference and external runs use the same connector emulator and
+  assertions. An exact `failure_at` contract checks the declared error, write
+  effects and stopped descendants. Partial writes persist their effects before
+  returning an error; an unrelated failure cannot satisfy the contract.
+- Simulation retains the failure finding and distinguishes completion, a
+  designed write failure, an earlier stop and a runtime exception. Grammar
+  assertion grades are reported separately from legacy weighted DAG scores.
+- Ambiguous joins and stale sources remain data perturbations. Their response
+  policies are unimplemented and the grammar refuses those combinations.
+
+### Generation: enterprise state, field and evidence requirements
+
+- Drive now projects rendered PowerPoint artifacts as distinct `pptx`
+  connector records. Presentation-rendered corpora gain records and may select
+  different source fixtures, changing replay bytes from the prior generation.
+  Existing non-PowerPoint record identities and unrendered projections remain
+  stable.
+- Planned mutations carry an authored target state, derived from a legal
+  connector workflow transition or explicitly declared on the destination.
+  Required source fields carry their canonical connector definitions through
+  query export, deterministic materialization, filtering and grading.
+- Fixtures pin expected World facts and, separately, content-addressed
+  operational observations. Source evidence never borrows a World fact id to
+  disguise missing evidence. Failure overlays name a record belonging to their
+  connector and distinguish source failures from destination failures.
+- Source fixtures select the declared minimum and both runtimes read that whole
+  set. Create and create-path upsert fixtures cannot inherit a preexisting
+  destination merely because another query updates the same entity type.
+- These additions change `queries.jsonl` and `fixtures.jsonl`; required custom
+  fields also change connector records. Existing plans load with empty optional
+  contracts. Rematerialize legacy fixtures to obtain verifiable evidence pins.
+  Seed replay is stable within this generation; it does not promise byte
+  identity with the previous generation.
+
+### Fixed: executable connector vocabulary and checked outcomes
+
+- The bounded, interleaved 400-query reference population now resolves every
+  connector operation. Email has an authored connector definition. Patch maps
+  to update; upsert chooses create or update from the explicit preexistence
+  requirement. File aliases resolve to the selected format before tool lookup.
+- Create payloads satisfy the connector's required fields. Verification follows
+  the actual created record. Alias destinations retain their artifact assertion.
+  Sending email applies the authored sent state rather than creating a draft.
+- State grading requires a persisted write to the declared fixture and an
+  available post-state. An unchanged initial state, wrong record, or missing
+  post-state cannot satisfy a state assertion. A declared, exactly matched
+  partial-write failure can establish its recorded persisted effect.
+- Evidence validation rejects empty placeholders. Operational evidence has a
+  distinct local integrity contract; it does not claim macro reconciliation or
+  independent replay of an unavailable synthesis ledger.
+- `enterprise-evals space --profile` sizes the selected scenario and reports
+  an exact count or a witnessed lower bound. Unused enterprise CLI and field
+  manifest implementations were removed after field predicates moved to
+  `ConnectorFieldDefinition`. The published `query_planning` API remains
+  deprecated with its return schema preserved.
+
 ### Added: a corpus and its evaluation set can be run against Gemini Enterprise
 
 `GoogleCloudPlatform/gemini-enterprise-eval-studio` solves the part of an

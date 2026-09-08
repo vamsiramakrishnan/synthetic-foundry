@@ -37,7 +37,7 @@ from typing import Any
 #: Exit code and message when the SDK is missing. Same posture as the renderer
 #: extras: name the fix, do not traceback.
 _MISSING = (
-    "the MCP server needs the `mcp` package. Install it with"
+    "the MCP server needs `mcp>=2.2,<3`. Install it with"
     " `pip install 'worldloom[mcp]'`."
 )
 
@@ -48,6 +48,8 @@ def _require_mcp() -> Any:
         import mcp.types
     except ImportError as exc:  # pragma: no cover - exercised by the bare-install job
         raise RuntimeError(_MISSING) from exc
+    if not hasattr(mcp.server, "MCPServer"):
+        raise RuntimeError(_MISSING)
     import mcp.server.stdio
     import mcp.types
 
@@ -512,45 +514,48 @@ def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def serve() -> None:  # pragma: no cover - exercised by a live harness, not by pytest
+def create_server() -> Any:
+    """Build the stdio surface using the current SDK's synchronous tool API."""
+    _require_mcp()
+    from mcp.server import MCPServer
+    from mcp.server.mcpserver.tools import Tool
+    from mcp.server.mcpserver.utilities.func_metadata import ArgModelBase, FuncMetadata
+    from pydantic import ConfigDict, create_model
+
+    class Arguments(ArgModelBase):
+        model_config = ConfigDict(extra="forbid")
+
+    registrations = []
+    scalar_types = {"string": str, "integer": int, "number": float,
+                    "boolean": bool, "object": dict[str, Any], "array": list[Any]}
+    for declaration in TOOLS:
+        schema = declaration["schema"]
+        required = schema.get("required", ())
+        fields = {
+            key: (scalar_types.get(value.get("type"), Any), ...)
+            if key in required else (scalar_types.get(value.get("type"), Any) | None, None)
+            for key, value in schema["properties"].items()
+        }
+        model = create_model(declaration["name"] + "Arguments", __base__=Arguments, **fields)
+
+        def invoke(name: str = declaration["name"], **arguments: Any) -> dict[str, Any]:
+            return call(name, {key: value for key, value in arguments.items() if value is not None})
+
+        registrations.append(Tool(name=declaration["name"], description=declaration["description"],
+                                  parameters=schema, fn=invoke, is_async=False,
+                                  fn_metadata=FuncMetadata(arg_model=model)))
+    return MCPServer("worldloom", tools=registrations)
+
+
+def serve() -> None:  # pragma: no cover - stdio lifecycle is owned by the SDK
     """Run the stdio MCP server until the client disconnects."""
-    import anyio
-
-    mcp = _require_mcp()
-    from mcp.server import Server
-    from mcp.server.stdio import stdio_server
-
-    server = Server("worldloom")
-
-    @server.list_tools()  # type: ignore[no-untyped-call, misc]
-    async def _list() -> list[Any]:
-        return [
-            mcp.types.Tool(
-                name=tool["name"],
-                description=tool["description"],
-                inputSchema=tool["schema"],
-            )
-            for tool in TOOLS
-        ]
-
-    @server.call_tool()  # type: ignore[no-untyped-call, misc]
-    async def _call(name: str, arguments: dict[str, Any]) -> list[Any]:
-        # Run the tool body off the event loop: `measure_corpus` on a large
-        # corpus is seconds of CPU-bound set arithmetic, and doing it inline
-        # would stall the server's own protocol handling for the duration.
-        result = await anyio.to_thread.run_sync(lambda: call(name, arguments))
-        return [mcp.types.TextContent(type="text", text=json.dumps(result, indent=2))]
-
-    async def _run() -> None:
-        async with stdio_server() as (read, write):
-            await server.run(read, write, server.create_initialization_options())
-
-    anyio.run(_run)
+    create_server().run(transport="stdio")
 
 
 __all__ = [
     "TOOLS",
     "call",
+    "create_server",
     "corpus_series",
     "corpus_topology",
     "measure_corpus",

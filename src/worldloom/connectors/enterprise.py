@@ -9,15 +9,16 @@ canonical :class:`worldloom.connector_emulator.ConnectorEmulator`.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
 from ..connector_data import ConnectorRecord
-from ..connector_definition import ConnectorDefinition, load_connector_definition
+from ..connector_definition import ConnectorDefinition
 from ..connector_emulator import ConnectorEmulator, ConnectorError
-from ..enterprise_corpus import EnterpriseCorpus, QueryFixture, StateOverride
-from ..ids import content_key
+from ..enterprise_corpus import EnterpriseCorpus, QueryFixture
+from ..enterprise_evidence import observation_evidence
+from ..enterprise_failures import build_query_emulator
 
 _READ_OPERATIONS = frozenset({"search", "get", "read", "extract", "download"})
 _MODEL_OPERATIONS = frozenset(
@@ -33,23 +34,6 @@ _MODEL_OPERATIONS = frozenset(
         "classify",
     }
 )
-_STABLE_ID_FIELDS = (
-    "stable_id",
-    "key",
-    "sys_id",
-    "id",
-    "page_id",
-    "item_id",
-    "file_id",
-    "message_id",
-    "thread_id",
-)
-
-
-def _override_rows(
-    fixture: QueryFixture, connector: str
-) -> tuple[StateOverride, ...]:
-    return tuple(item for item in fixture.overrides if item.connector == connector)
 
 
 def _record_fact_ids(record: Mapping[str, Any]) -> tuple[str, ...]:
@@ -78,7 +62,10 @@ class EnterpriseConnectorRuntime:
     """Query-isolated compatibility runtime backed by connector definitions."""
 
     def __init__(self, corpus: EnterpriseCorpus) -> None:
+        from ..enterprise_fields import query_connector_definitions
+
         self._corpus = corpus
+        self._definitions = query_connector_definitions(corpus.queries)
         self._source: dict[str, tuple[ConnectorRecord, ...]] = {}
         for record in corpus.connector_data.records:
             self._source.setdefault(record.connector, ())
@@ -209,73 +196,18 @@ class EnterpriseConnectorRuntime:
             self._latest = key
             return existing
 
-        definition = load_connector_definition(connector)
+        definition = self._definitions[connector]
         records = [
             _emulator_record(record) for record in self._source.get(connector, ())
         ]
-        overrides = _override_rows(fixture, connector)
-        for override in overrides:
-            if override.record_id is None:
-                continue
-            target = next(
-                (
-                    record
-                    for record in records
-                    if record.get("fid") == override.record_id
-                ),
-                None,
-            )
-            if target is None:
-                continue
-            if override.kind == "stale_source":
-                target["version"] = max(0, int(target.get("version", 1)) - 1)
-            elif override.kind == "missing_stable_id":
-                for field in _STABLE_ID_FIELDS:
-                    target.pop(field, None)
-            elif override.kind == "ambiguous_join":
-                duplicate = deepcopy(target)
-                duplicate_id = content_key(
-                    "ambiguous-enterprise-record",
-                    fixture.query_id,
-                    override.record_id,
-                )
-                duplicate["fid"] = duplicate_id
-                duplicate["ident"] = duplicate_id
-                duplicate["external_id"] = duplicate_id
-                records.append(duplicate)
-
-        faults: dict[str, Sequence[str]] = {}
-        acl: dict[str, dict[str, Any]] = {}
-        for override in overrides:
-            if override.kind == "permission_denied":
-                if override.record_id is not None:
-                    acl[override.record_id] = {"denied": True}
-                else:
-                    faults["*"] = (
-                        *faults.get("*", ()),
-                        "permission_denied",
-                    )
-            elif override.kind in {"version_conflict", "partial_write"}:
-                mutation = generation.get("mutation")
-                if not isinstance(mutation, Mapping):
-                    continue
-                mutation_entity = str(mutation.get("entity") or "record")
-                mutation_operation = str(mutation.get("operation") or "update")
-                if mutation_operation == "readback":
-                    mutation_operation = "read"
-                try:
-                    tool = definition.tool_for(
-                        mutation_entity, mutation_operation
-                    )
-                except KeyError:
-                    tool = "*"
-                faults[tool] = (*faults.get(tool, ()), override.kind)
-
-        emulator = ConnectorEmulator(
+        query = next((item for item in self._corpus.queries if item.id == fixture.query_id), None)
+        nodes = query.expected_dag if query is not None else ()
+        emulator = build_query_emulator(
             definition,
             records,
-            acl=acl,
-            faults=faults,
+            overrides=fixture.overrides,
+            mutation_nodes=nodes,
+            query_id=fixture.query_id,
         )
         self._queries[key] = emulator
         self._latest = key
@@ -340,6 +272,10 @@ class EnterpriseConnectorRuntime:
                 for fact in _record_fact_ids(emulator.records[fid])
             }
         )
+        evidence = sorted({
+            evidence_id for fid in ids if fid in emulator.records
+            for evidence_id in observation_evidence(emulator.records[fid])[0]
+        })
         records = [
             deepcopy(emulator.records[fid])
             for fid in span.reads
@@ -350,6 +286,7 @@ class EnterpriseConnectorRuntime:
             "status": status,
             "record_id": first,
             "fact_ids": facts,
+            "evidence_ids": evidence,
             "records": records,
             "payload": payload,
         }
@@ -452,10 +389,20 @@ class EnterpriseConnectorRuntime:
                 )
                 return self._response(emulator, payload, status=201)
             if tool.op in _READ_OPERATIONS:
+                field_payload: dict[str, Any] = {}
+                if not dependency_map:
+                    from ..enterprise_fields import required_field_payload
+                    from ..enterprise_queries import SourceRequirement
+
+                    for raw in generation_map.get("source_requirements", ()):
+                        requirement = SourceRequirement.model_validate(raw)
+                        if (requirement.connector, requirement.entity) == (connector, entity) and requirement.required_fields:
+                            field_payload = required_field_payload(requirement, definition)
                 if tool.op == "search":
                     payload = emulator.call(
                         canonical_tool,
                         entity=entity,
+                        **field_payload,
                         **common,
                     )
                 else:
@@ -466,15 +413,31 @@ class EnterpriseConnectorRuntime:
                             "records": [],
                             "fact_ids": [],
                         }
+                    targets = fixture.input_record_ids.get(f"{connector}:{entity}", ()) if not dependency_map else ()
+                    if len(targets) > 1:
+                        responses = [self._response(emulator, emulator.call(canonical_tool, id=rid, **common)) for rid in targets]
+                        return {
+                            "succeeded": True, "status": 200,
+                            "record_id": responses[0].get("record_id"),
+                            "record_ids": [response.get("record_id") for response in responses],
+                            "fact_ids": sorted({fact for response in responses for fact in response.get("fact_ids", ())}),
+                            "evidence_ids": sorted({evidence for response in responses for evidence in response.get("evidence_ids", ())}),
+                            "records": [record for response in responses for record in response.get("records", ())],
+                            "payload": [response.get("payload") for response in responses],
+                        }
                     payload = emulator.call(canonical_tool, id=target, **common)
                 return self._response(emulator, payload)
             if target is None:
                 raise ConnectorError(404, "No target record", "not_found")
             if tool.op == "update":
+                mutation = generation_map.get("mutation", {})
+                patch = {"last_query_id": fixture.query_id}
+                if mutation.get("target_state") is not None:
+                    patch[str(mutation.get("target_state_field", "state"))] = mutation["target_state"]
                 payload = emulator.call(
                     canonical_tool,
                     id=target,
-                    fields={"last_query_id": fixture.query_id},
+                    fields=patch,
                     **common,
                 )
             elif tool.op == "transition":
@@ -500,7 +463,15 @@ class EnterpriseConnectorRuntime:
                 )
             elif tool.op == "delete":
                 payload = emulator.call(canonical_tool, id=target, **common)
-            elif tool.op in {"transform", "forward"}:
+            elif tool.op == "forward":
+                payload = emulator.call(
+                    canonical_tool,
+                    id=target,
+                    to=arguments.get("to") or ("recipient@example.invalid",),
+                    body=f"Worldloom eval {fixture.query_id}",
+                    **common,
+                )
+            elif tool.op == "transform":
                 mutation = generation_map.get("mutation")
                 output_format = (
                     mutation.get("output_format")

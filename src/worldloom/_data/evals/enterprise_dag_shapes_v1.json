@@ -1,0 +1,13 @@
+{
+  "version": "enterprise-dag@1",
+  "shapes": {
+    "conditional": {"reads": "search", "control": "conditional", "instruction": "Choose the primary write when the first source returns at least two records; otherwise use the fallback write. Verify only the branch that ran."},
+    "deep_chain": {"reads": "parallel", "control": "deep_chain", "instruction": "Collect the evidence, project its record identifiers, remove duplicate identifiers, write the result, and read it back."},
+    "diamond": {"reads": "parallel", "control": "diamond", "instruction": "Project record identifiers and titles independently, join both projections into the write, and verify it."},
+    "fan_in": {"reads": "parallel", "control": "fan_in", "instruction": "Read all sources, collect their evidence, write one result, and read it back."},
+    "fan_out": {"reads": "parallel", "control": "fan_out", "instruction": "Create two independently named outputs from the same collected evidence and verify both."},
+    "map_read": {"reads": "map", "control": "fan_in", "instruction": "Search each source, fetch every matching record up to the declared bound, collect the records, write one result, and verify it."},
+    "read_chain": {"reads": "chain", "control": "fan_in", "instruction": "Read the sources in their listed order before collecting evidence, writing, and verifying."},
+    "write_chain": {"reads": "parallel", "control": "write_chain", "instruction": "Write and read back the result, then update that exact returned record with its verification marker and read it back again."}
+  }
+}

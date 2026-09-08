@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import Field, model_validator
 
 from .cascade import Brief, CascadeModel, Finding, load, refuse
+from .connector_definition import ConnectorFieldDefinition
 
 
 class Operation(StrEnum):
@@ -48,6 +49,15 @@ class EntitySpec(CascadeModel):
     operations: tuple[Operation, ...]
     formats: tuple[str, ...] = ()
     required_fields: tuple[str, ...] = ()
+    field_definitions: tuple[ConnectorFieldDefinition, ...] = ()
+
+    @model_validator(mode="after")
+    def _unique_fields(self) -> EntitySpec:
+        for attribute in ("id", "canonical"):
+            values = [getattr(field, attribute) for field in self.field_definitions]
+            if len(values) != len(set(values)):
+                raise ValueError(f"{self.name}: field {attribute} values must be unique")
+        return self
 
 
 class ConnectorSpec(CascadeModel):
@@ -68,6 +78,7 @@ class SourceRole(CascadeModel):
     entities: tuple[str, ...]
     operations: tuple[Operation, ...] = (Operation.SEARCH, Operation.READ)
     minimum: int = Field(default=1, ge=1)
+    required_fields: tuple[str, ...] = ()
 
 
 class DestinationRole(CascadeModel):
@@ -75,6 +86,8 @@ class DestinationRole(CascadeModel):
     entities: tuple[str, ...]
     operations: tuple[Operation, ...]
     formats: tuple[str, ...] = ()
+    target_state: str | None = None
+    target_state_field: str = "state"
 
 
 class WorkflowSpec(CascadeModel):
@@ -133,6 +146,7 @@ class ScenarioProfile(CascadeModel):
     company_description: str
     workflows: tuple[str, ...] = ()
     additional_workflows: tuple[WorkflowSpec, ...] = ()
+    additional_connectors: tuple[ConnectorSpec, ...] = ()
     additional_processes: tuple[ProcessSpec, ...] = ()
     connectors: tuple[str, ...] = ()
     vocabulary: dict[str, str] = Field(default_factory=dict)
@@ -166,6 +180,13 @@ class SpecRegistry:
                     except KeyError:
                         findings.append(f"workflow {workflow.name}: replace unknown {role.connector} entity {entity}")
                         continue
+                    if entity_spec.required_fields or entity_spec.field_definitions or role.required_fields:
+                        from .enterprise_fields import source_requirement
+
+                        try:
+                            source_requirement(connector=role.connector, entity=entity, input_format="record", registry=self, workflow=workflow)
+                        except (ValueError, KeyError) as error:
+                            findings.append(f"workflow {workflow.name}: {error}")
                     unsupported = set(role.operations) - set(entity_spec.operations)
                     if unsupported:
                         findings.append(
@@ -298,6 +319,8 @@ def builtin_spec() -> EnterpriseEvalSpec:
 def apply_scenario_profile(
     registry: SpecRegistry, profile: ScenarioProfile
 ) -> SpecRegistry:
+    merged_connectors = {**registry.connectors}
+    merged_connectors.update({item.name: item for item in profile.additional_connectors})
     merged_workflows = {**registry.workflows}
     merged_workflows.update(
         {workflow.name: workflow for workflow in profile.additional_workflows}
@@ -314,7 +337,7 @@ def apply_scenario_profile(
     # once, the way `review()` reports below.
     unknown = [
         f"unknown connector {name!r}"
-        for name in sorted(set(profile.connectors) - set(registry.connectors))
+        for name in sorted(set(profile.connectors) - set(merged_connectors))
     ] + [
         f"unknown workflow {name!r}"
         for name in sorted(set(profile.workflows) - set(merged_workflows))
@@ -322,7 +345,7 @@ def apply_scenario_profile(
     if unknown:
         refuse("enterprise scenario profile", unknown)
 
-    connectors = set(profile.connectors) or set(registry.connectors)
+    connectors = set(profile.connectors) or set(merged_connectors)
     workflows = set(profile.workflows) or set(merged_workflows)
     selected_workflows = []
     for workflow in merged_workflows.values():
@@ -349,7 +372,7 @@ def apply_scenario_profile(
             )
         )
     selected = SpecRegistry(
-        (item for name, item in registry.connectors.items() if name in connectors),
+        (item for name, item in merged_connectors.items() if name in connectors),
         selected_workflows,
         merged_processes.values(),
     )

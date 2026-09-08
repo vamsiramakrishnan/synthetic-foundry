@@ -1,9 +1,16 @@
-"""Plan a massive agent query space, then materialise exactly what it needs."""
+"""Deprecated query planner retained for its published SDK return contract.
+
+New code uses enterprise_queries.plan_queries and enterprise_corpus.materialize_corpus.
+The legacy nine-axis schema cannot be redirected to their executable DAG schema
+without changing both returned types and generation replay. Remove this module
+only after its documented callers have migrated.
+"""
 
 from __future__ import annotations
 
 import itertools
 import math
+import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
@@ -16,6 +23,17 @@ from .models import Model
 
 if TYPE_CHECKING:
     from .world import World
+
+
+warnings.warn(
+    "worldloom.query_planning is deprecated; use "
+    "worldloom.enterprise_queries.plan_queries and "
+    "worldloom.enterprise_corpus.materialize_corpus. The new API returns "
+    "EnterpriseCorpus.queries with generation requirements and executable DAGs; "
+    "see docs/agent-workflow-evals.md for the schema migration.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 CONNECTORS = (

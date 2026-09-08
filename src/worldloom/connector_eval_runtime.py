@@ -16,6 +16,7 @@ from .connector_data import ConnectorRecord
 from .connector_definition import ConnectorDefinition, builtin_connector_definitions
 from .connector_emulator import ConnectorEmulator, ConnectorError, ConnectorSpan
 from .connector_trace import grade_trace
+from .enterprise_failures import build_query_emulator
 from .eval_design import EvalShape
 
 _CREATE_OPS = frozenset({"create", "send", "post", "upload"})
@@ -134,9 +135,16 @@ def run_eval_row(
     row; they are read from the connector definition.
     """
 
+    if row.get("grammar") == "enterprise-dag@1":
+        from .enterprise_dag_runtime import run_grammar_row
+        return run_grammar_row(row, records, acl=acl, definitions=definitions, shape=shape)
+
     materialized_records = tuple(_record_dict(record) for record in records)
     by_fid = {str(record.get("fid")): record for record in materialized_records if record.get("fid")}
-    available = dict(definitions or builtin_connector_definitions())
+    available = builtin_connector_definitions()
+    available.update({name: ConnectorDefinition.model_validate(value) for name, value in row.get("connector_definitions", {}).items()})
+    if definitions is not None:
+        available.update(definitions)
     nodes = tuple(row.get("expected_dag", {}).get("nodes", ()))
     edges = tuple(row.get("expected_dag", {}).get("edges", ()))
     servers = {str(node.get("server")) for node in nodes if node.get("server")}
@@ -144,7 +152,7 @@ def run_eval_row(
     if missing:
         raise ValueError(f"eval row references connectors with no definition: {sorted(missing)}")
     emulators = {
-        server: ConnectorEmulator(available[server], materialized_records, acl=acl)
+        server: build_query_emulator(available[server], materialized_records, acl=acl, overrides=row.get("state_overrides", ()), mutation_nodes=nodes, query_id=str(row.get("id", "")))
         for server in sorted(servers)
     }
     parents = {
@@ -156,6 +164,7 @@ def run_eval_row(
     spans: list[ConnectorSpan] = []
     behaviors: list[str] = []
     stopped = False
+    failed_nodes: set[str] = set()
 
     def collect(local: ConnectorSpan) -> None:
         global_id = f"s{len(spans) + 1}"
@@ -172,9 +181,22 @@ def run_eval_row(
         payload = dict(node.get("payload") or {})
         entity = str(node["entity"]) if node.get("entity") else None
         parent_ids = parents[node_id]
+        if failed_nodes.intersection(parent_ids):
+            failed_nodes.add(node_id)
+            behaviors.append("dependency_failed")
+            continue
         consumed = tuple(span_id for parent in parent_ids for span_id in node_span_ids.get(parent, ()))
         fixture = by_fid.get(str(node.get("fixture"))) if node.get("fixture") else None
         reference = _reference(fixture, payload)
+        if node.get("reference_from"):
+            producer = str(node["reference_from"])
+            references = outputs.get(producer, ())
+            if len(references) != 1:
+                # Missing/ambiguous output is a broken verification binding,
+                # never permission to grade a different fixture record.
+                behaviors.append("unresolved_reference")
+                continue
+            reference = references[0]
         iterations: list[Any | None] = [None]
         if node.get("for_each"):
             iterations = list(outputs.get(parent_ids[0], ())) if parent_ids else []
@@ -201,33 +223,35 @@ def run_eval_row(
                 if not items:
                     behaviors.append("empty_search")
             elif tool.op in _READ_OPS:
-                result = emulator.call(
-                    tool_name,
-                    _node=node_id,
-                    _consumed=consumed,
-                    id=reference,
-                    fields=payload.get("fields"),
-                )
-                collect(emulator.trace[-1])
-                if isinstance(result, Mapping):
-                    made.append(
-                        result.get("id")
-                        or result.get("key")
-                        or result.get("number")
-                        or reference
+                references = [
+                    _reference(by_fid.get(str(fid)), {}) for fid in node.get("fixtures", ())
+                ] or [reference]
+                for read_reference in references:
+                    result = emulator.call(
+                        tool_name,
+                        _node=node_id,
+                        _consumed=consumed,
+                        id=read_reference,
+                        fields=payload.get("fields"),
                     )
+                    collect(emulator.trace[-1])
+                    if isinstance(result, Mapping):
+                        made.append(result.get("id") or result.get("key") or result.get("number") or read_reference)
             else:
                 for item in iterations:
                     target = item if item is not None else reference
                     common = {"_node": node_id, "_consumed": consumed}
                     if tool.op in _CREATE_OPS:
+                        arguments = {
+                            "entity": entity,
+                            "name": (f"{payload.get('name')} ({item})" if item is not None and payload.get("name") else payload.get("name")),
+                            "fields": _write_fields(payload),
+                            "parent": payload.get("parent") or payload.get("dest"),
+                        }
                         result = emulator.call(
                             tool_name,
                             **common,
-                            entity=entity,
-                            name=(f"{payload.get('name')} ({item})" if item is not None and payload.get("name") else payload.get("name")),
-                            fields=_write_fields(payload),
-                            parent=payload.get("parent") or payload.get("dest"),
+                            **{key: value for key, value in arguments.items() if key in tool.params},
                         )
                     elif tool.op == "update":
                         result = emulator.call(tool_name, **common, id=target, fields=_write_fields(payload))
@@ -278,6 +302,7 @@ def run_eval_row(
                             or target
                         )
         except ConnectorError as error:
+            failed_nodes.add(node_id)
             collect(emulator.trace[-1])
             if error.code == 403:
                 behaviors.append("denial_surfaced")

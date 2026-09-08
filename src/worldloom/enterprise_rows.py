@@ -1,41 +1,9 @@
-"""A planned query, compiled into a row the connector runtime can execute.
+"""Compile authored enterprise requirements into executable connector rows.
 
-Worldloom holds two accounts of an expected trajectory and until now they never
-met. `enterprise_queries` plans a verb-level DAG and `enterprise_corpus.score_trace`
-grades it as a weighted number; `connector_eval_runtime.run_eval_row` executes a
-tool-level DAG and `connector_trace.grade_trace` decides nineteen assertion
-kinds over it, with post-state, `for_each` and ACLs. The second is the one that
-can answer "was the system actually updated", and no CLI reached it: a search
-for its callers across `src/` finds only re-exports.
-
-That is the shape of the gap this module closes. `state_equals` was already
-implemented and already correct; what it lacked was a producer. So no grading
-vocabulary is added here. A planned query is rewritten into the row the executor
-already consumes, and the outcome kinds come along for free.
-
-Four details of that row are not guessable and were each established by running
-the executor:
-
-**`node["tool"]` is the bare tool name.** `servicenow.search_records` raises
-`KeyError: unknown servicenow tool`. The qualified spelling exists only on the
-way out, where `ConnectorEmulator.call` stamps `f"{server}.{tool}"` on the span
-and `grade_trace` rebuilds the same string from the node to compare against it.
-A compiler that emitted the qualified name would fail the lookup and, if it
-somehow got past that, would make the grader compare against
-`servicenow.servicenow.search_records`.
-
-**`node["fixture"]` is the record's internal fid**, not its external id. An
-external id resolves to nothing and the node reports `not_found`, which grades
-as a plausible behaviour rather than as the compiler error it is.
-
-**Edges are two-element sequences.** `{"from": ..., "to": ...}` does not error;
-it unpacks to its keys and silently mis-resolves `for_each`.
-
-**A `model` node is refused outright**: `run_eval_row` raises
-`eval row references connectors with no definition: ['model']` before executing
-anything. The planner puts exactly one in every DAG, so dropping it and rewiring
-its edges transitively is not an optimisation, it is the precondition for the
-row running at all.
+Connector definitions choose tools, entity aliases and required payload fields.
+Model-only nodes are removed and dependencies rewired. Outcome assertions
+anchor on fixture inputs or destination records. Field contracts travel with
+the row so exported plans retain their filters and native projections.
 """
 
 from __future__ import annotations
@@ -46,11 +14,11 @@ from typing import Any
 
 from .connector_definition import (
     ConnectorDefinition,
-    builtin_connector_definitions,
 )
 from .enterprise_corpus import QueryFixture
+from .enterprise_failures import compile_failure_contract
 from .enterprise_queries import PlannedEnterpriseQuery
-from .enterprise_runner import _LEGACY_OPERATIONS
+from .enterprise_runner import canonical_operation
 
 #: The connector name the planner uses for its transform node. It names no
 #: definition, so it cannot execute; see the module docstring.
@@ -105,6 +73,8 @@ def _tool_name(
     operation: str,
     query_id: str,
     concrete_hint: str | None = None,
+    *,
+    preexisting_record: bool | None = None,
 ) -> tuple[str, str]:
     """The bare tool and the concrete entity for one node.
 
@@ -113,9 +83,14 @@ def _tool_name(
     a compiler picking one arbitrarily would produce a row that executes and
     grades against the wrong tool.
     """
-    canonical = _LEGACY_OPERATIONS.get(operation, operation)
     try:
-        tool = definition.tool_for(entity, canonical)
+        canonical = canonical_operation(operation, preexisting_record=preexisting_record)
+    except ValueError as error:
+        raise RowError(query_id, str(error)) from error
+    try:
+        members = definition.entity_members(entity)
+        concrete = concrete_hint if concrete_hint in members else entity
+        tool = definition.tool_for(concrete, canonical)
     except KeyError as error:
         raise RowError(
             query_id, f"{definition.connector}/{entity} has no tool for {canonical!r}"
@@ -126,12 +101,11 @@ def _tool_name(
     # knows what it is. The planner names the alias and puts the concrete
     # member in the mutation's `output_format`, so the compiler resolves it
     # here rather than leaving the emulator to guess between `docx` and `xlsx`.
-    members = definition.entity_members(entity)
     if len(members) == 1:
         return tool, members[0]
+    if concrete != entity:
+        return tool, concrete
     if canonical in _WRITE_NEEDS_CONCRETE:
-        if concrete_hint and concrete_hint in members:
-            return tool, concrete_hint
         raise RowError(
             query_id,
             f"{definition.connector}/{entity} is an alias over {sorted(members)}"
@@ -151,6 +125,19 @@ def _fid(records_by_id: Mapping[str, str], record_id: str | None) -> str | None:
     return records_by_id.get(record_id, record_id)
 
 
+def create_payload(
+    definition: ConnectorDefinition, entity: str, query_id: str, node_id: str,
+) -> dict[str, Any]:
+    """An explicit reference payload satisfying the declared create contract."""
+    name = f"{query_id[:12]}-{node_id}"
+    supplied_by_name = {"name", "title", "summary", "Name", "Subject", "short_description", "issuetype"}
+    fields = {
+        field: name for field in definition.entities[entity].required_on_create
+        if field not in supplied_by_name and field not in {"parent", "parents"}
+    }
+    return {"name": name, "fields": fields, "parent": "worldloom-eval"}
+
+
 def compile_row(
     query: PlannedEnterpriseQuery,
     fixture: QueryFixture,
@@ -165,7 +152,13 @@ def compile_row(
     best effort: a row that silently drops its write node would grade clean
     while testing nothing, which is the failure this whole seam exists to stop.
     """
-    available = dict(definitions or builtin_connector_definitions())
+    if query.dimensions.get("dag_grammar") == "enterprise-dag@1":
+        from .enterprise_dag_rows import compile_dag_row
+        return compile_dag_row(query, fixture, records, definitions=definitions)
+
+    from .enterprise_fields import query_connector_definitions, required_field_payload
+
+    available = query_connector_definitions((query,), definitions)
     by_external = {
         str(record.get("id")): str(record.get("fid"))
         for record in records
@@ -191,6 +184,8 @@ def compile_row(
         ]
 
     mutation = query.generation.mutation
+    if mutation.operation == "upsert" and mutation.preexisting_record != bool(fixture.destination_record_id):
+        raise RowError(query.id, "upsert fixture contradicts its preexisting_record precondition")
     sources = {
         f"{source.connector}:{source.entity}": source
         for source in query.generation.source_requirements
@@ -207,13 +202,15 @@ def compile_row(
         definition = available.get(connector)
         if definition is None:
             raise RowError(query.id, f"connector {connector!r} has no definition")
-        is_destination = (connector, entity) == (mutation.connector, mutation.entity)
+        is_source_read = str(node["kind"]) in {"read", "search", "get", "extract"}
+        is_destination = (connector, entity) == (mutation.connector, mutation.entity) and not is_source_read
         tool, concrete = _tool_name(
             definition,
             entity,
             str(node["kind"]),
             query.id,
             mutation.output_format if is_destination else None,
+            preexisting_record=mutation.preexisting_record if is_destination else None,
         )
 
         key = f"{connector}:{entity}"
@@ -221,7 +218,7 @@ def compile_row(
         # destination. The two coincide when a workflow reads and writes one
         # entity, which is why this asks what the node is for rather than
         # which key happens to hold a record.
-        if key in sources and not is_destination:
+        if key in sources and not node.get("depends_on"):
             chosen = next(iter(fixture.input_record_ids.get(key, ())), None)
         else:
             chosen = fixture.destination_record_id or next(
@@ -234,15 +231,47 @@ def compile_row(
             "tool": tool,
             "entity": concrete,
             "op": str(node["kind"]),
+            "resolved_operation": definition.tool(tool).op,
         }
+        if key in sources and not node.get("depends_on"):
+            source_fids = [by_external.get(rid, rid) for rid in fixture.input_record_ids.get(key, ())]
+            if len(source_fids) > 1:
+                compiled["fixtures"] = source_fids
         target = _fid(by_external, chosen)
+        if str(node["kind"]) in {"readback", "cross_system"}:
+            # Verification follows the actual write output. A create has no
+            # destination fixture yet; falling back to a source id can make a
+            # successful write verify the wrong object or fail with a 404.
+            write_parent = next(iter(node.get("depends_on", ())), None)
+            if write_parent is not None:
+                compiled["reference_from"] = str(write_parent)
+                target = None
         if target is not None:
             compiled["fixture"] = target
-        if _LEGACY_OPERATIONS.get(str(node["kind"]), str(node["kind"])) in _WRITE_NEEDS_CONCRETE:
+        if canonical_operation(
+            str(node["kind"]),
+            preexisting_record=mutation.preexisting_record if is_destination else None,
+        ) in _WRITE_NEEDS_CONCRETE:
             # `invalidRequest: name is required`. Derived from the query id so
             # two compilations of one corpus produce the same bytes; nothing
             # here draws or reads a clock.
-            compiled["payload"] = {"name": f"{query.id[:12]}-{node_id}"}
+            # Required create fields belong to the definition. The synthetic
+            # reference payload supplies them explicitly instead of turning a
+            # missing subject/body into a supposedly valid failed trajectory.
+            compiled["payload"] = create_payload(definition, concrete, query.id, node_id)
+        if is_source_read and key in sources and sources[key].required_fields:
+            compiled["tool"] = definition.tool_for(entity, "search")
+            compiled["op"] = "search"
+            compiled["payload"] = required_field_payload(sources[key], definition)
+            compiled["required_fields"] = list(sources[key].required_fields)
+        if is_destination and str(node["kind"]) not in {"readback", "cross_system"} and mutation.target_state is not None:
+            payload = compiled.setdefault("payload", {})
+            payload.setdefault("fields", {})[mutation.target_state_field] = mutation.target_state
+        if "payload" in compiled:
+            # Reference defaults span several APIs; the concrete tool owns its
+            # wire arguments (email create, for example, accepts no parent).
+            admitted = definition.tool(compiled["tool"]).params
+            compiled["payload"] = {key: value for key, value in compiled["payload"].items() if key in admitted}
         nodes.append(compiled)
         for dep in node.get("depends_on", ()):
             for source_id in resolve(str(dep)):
@@ -251,12 +280,17 @@ def compile_row(
     if not nodes:
         raise RowError(query.id, "every node was a model transform")
 
-    return {
+    custom_connectors = {source.connector for source in query.generation.source_requirements if source.field_definitions}
+    return compile_failure_contract({
+        **({"connector_definitions": {name: available[name].wire_dict() for name in sorted(custom_connectors)}} if custom_connectors else {}),
         "id": query.id,
         "expected_dag": {"nodes": nodes, "edges": edges},
         "assertions": _assertions(query, fixture, nodes, edges, by_external),
         "ground_truth": {},
-    }
+        "expected_fact_ids": list(fixture.expected_fact_ids),
+        "expected_evidence_ids": list(fixture.expected_evidence_ids),
+        "state_overrides": [override.model_dump(mode="json") for override in fixture.overrides],
+    })
 
 
 def _assertions(
@@ -296,22 +330,30 @@ def _assertions(
             # A get addresses exactly one record: the one the node names. The
             # first draft asserted every record under the key, which failed a
             # correct run for reading one record when the fixture held two.
-            wanted = [str(node["fixture"])] if node.get("fixture") else []
+            wanted = list(node.get("fixtures", ())) or ([str(node["fixture"])] if node.get("fixture") else [])
         if wanted:
             out.append(
                 {"type": "reads_contain", "node": str(node["id"]), "records": wanted}
             )
+
+    for node in nodes:
+        if node.get("required_fields"):
+            out.append({"type": "fields_used", "node": str(node["id"]), "fields": node["required_fields"], "payload_fields": node["payload"]["fields"]})
 
     mutation = query.generation.mutation
     write = next(
         (
             node
             for node in nodes
-            if (node["server"], node.get("entity")) == (mutation.connector, mutation.entity)
+            if node["server"] == mutation.connector
             and str(node.get("op")) not in {"read", "search", "extract", "get", "readback", "cross_system"}
         ),
         None,
     )
+    if write is not None and mutation.target_state is not None:
+        if fixture.destination_record_id is None:
+            raise RowError(query.id, "checked target state requires a destination fixture")
+        out.append({"type": "state_equals", "node": str(write["id"]), "state": mutation.target_state, "field": mutation.target_state_field, "fixture": _fid(by_external, fixture.destination_record_id)})
     if write is not None and query.generation.artifact is not None:
         # The file outcome. `artifact_created` checks a non-errored span on the
         # node; the shape of the produced file is not checked anywhere yet, and
@@ -344,6 +386,7 @@ def runtime_records(records: Iterable[Any]) -> tuple[dict[str, Any], ...]:
         out.append(
             {
                 **held,
+                **fields,
                 "fid": str(held.get("fid") or held.get("id")),
                 "server": str(held.get("server") or held.get("connector")),
                 "fields": fields,
@@ -384,4 +427,5 @@ __all__ = [
     "RowError",
     "compile_row",
     "compile_rows",
+    "create_payload",
 ]

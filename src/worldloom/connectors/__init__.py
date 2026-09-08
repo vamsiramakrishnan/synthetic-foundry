@@ -28,6 +28,12 @@ from ..connector_eval_runtime import EvalRuntimeResult, run_eval_row
 from ..connector_query import compile_native, parse_native
 from ..connector_trace import executed_dag, grade_trace, shape_assertions
 from .enterprise import EnterpriseConnectorRuntime
+from .serving import (
+    ConnectorEvaluationService,
+    ServingError,
+    ServingLimits,
+    create_connector_app,
+)
 
 __worldloom_seam__ = {
     "name": "connectors",
@@ -71,6 +77,7 @@ __all__ = [
     "ConnectorDefinition",
     "ConnectorEmulator",
     "ConnectorEntityDefinition",
+    "ConnectorEvaluationService",
     "ConnectorError",
     "ConnectorFieldDefinition",
     "ConnectorIdDefinition",
@@ -81,6 +88,9 @@ __all__ = [
     "ConnectorWorkflow",
     "EnterpriseConnectorRuntime",
     "EvalRuntimeResult",
+    "ServingError",
+    "ServingLimits",
+    "create_connector_app",
     "builtin_connector_definitions",
     "compile_native",
     "executed_dag",

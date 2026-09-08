@@ -50,16 +50,26 @@ def _text(record: Mapping[str, Any]) -> str:
     return ""
 
 
-def _manifest_value(
+def manifest_value(
     definition: ConnectorDefinition,
     record: Mapping[str, Any],
     field: ConnectorFieldDefinition,
+    *,
+    required: bool = False,
 ) -> Any:
+    """Reuse canonical values or derive deterministic nuisance-field shape.
+
+    A required field bypasses sparse population, but never its authored
+    presence condition. Callers can therefore detect an unsatisfied required
+    field instead of fabricating a value forbidden by the record's schema.
+    """
+    if not field.is_present(record):
+        return None
     for key in (field.canonical, field.id, field.payload_name):
         if key and key in record:
             return record[key]
     chooser = int(content_key("field-population", _fid(record), field.id)[:12], 16)
-    if chooser % 10_000 >= int(field.fill_rate * 10_000):
+    if not required and chooser % 10_000 >= int(field.fill_rate * 10_000):
         return None
     token = content_key("field-value", _fid(record), field.id)
     if field.field_type in {"option", "multi_option", "cascading"}:
@@ -102,7 +112,7 @@ def _manifest_value(
 def _wide_fields(definition: ConnectorDefinition, record: Mapping[str, Any]) -> dict[str, Any]:
     entity = _entity(record)
     return {
-        field.payload_name or field.id: _manifest_value(definition, record, field)
+        field.payload_name or field.id: manifest_value(definition, record, field)
         for field in definition.fields_for(entity)
     }
 
@@ -208,6 +218,9 @@ def _mime(entity: str) -> str | None:
         "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "pdf": "application/pdf",
+        "csv": "text/csv",
+        "html": "text/html",
+        "markdown": "text/markdown",
         "gdoc": "application/vnd.google-apps.document",
         "gsheet": "application/vnd.google-apps.spreadsheet",
         "gslides": "application/vnd.google-apps.presentation",
@@ -253,6 +266,23 @@ def _shape_drive(definition: ConnectorDefinition, r: Mapping[str, Any]) -> dict[
         "size": str(r.get("size_bytes", 0) or 0),
         "sha256Checksum": r.get("sha256"),
         "content": None if _entity(r) == "folder" else _text(r),
+        **_wide_fields(definition, r),
+    }
+
+
+def _shape_email(definition: ConnectorDefinition, r: Mapping[str, Any]) -> dict[str, Any]:
+    """Provider-neutral mailbox records; no Graph or Gmail API is implied."""
+    identifier = str(r.get("ident") or r.get("external_id") or _fid(r))
+    return {
+        "id": identifier,
+        "thread_id": r.get("thread_id") or (identifier if _entity(r) == "thread" else None),
+        "subject": r.get("subject") or _name(r),
+        "from": r.get("from") or r.get("sender"),
+        "to": r.get("to") or r.get("recipients") or [],
+        "body": _text(r),
+        "state": r.get("state", "sent"),
+        "sent_at": r.get("sent_at") or r.get("created_at", definition.clock),
+        "attachments": r.get("attachments") or [],
         **_wide_fields(definition, r),
     }
 
@@ -382,6 +412,7 @@ _SHAPERS = {
     "confluence_page": _shape_confluence,
     "sharepoint_item": _shape_sharepoint,
     "drive_file": _shape_drive,
+    "email_message": _shape_email,
     "msgraph_message": _shape_outlook,
     "msgraph_drive_item": _shape_onedrive,
     "msgraph_chat_message": _shape_teams,
@@ -414,4 +445,4 @@ def shape_payload(
     return {key: value for key, value in out.items() if key in requested or key in identity}
 
 
-__all__ = ["shape_payload"]
+__all__ = ["manifest_value", "shape_payload"]

@@ -73,3 +73,29 @@ def test_unknown_workflow_state_is_rejected() -> None:
 
     with pytest.raises(ValidationError, match="unknown states"):
         ConnectorDefinition.model_validate(broken)
+
+
+def test_email_read_draft_send_reply_and_forward_preserve_mail_semantics() -> None:
+    from worldloom.connector_emulator import ConnectorEmulator
+
+    email = load_connector_definition("email")
+    emulator = ConnectorEmulator(email, ({"fid": "thread", "server": "email", "entity": "thread", "ident": "T1", "subject": "A thread"},))
+    assert emulator.call("get_thread", id="T1")["thread_id"] == "T1"
+    draft = emulator.call("create_draft", entity="message", name="Draft", fields={"subject": "Draft"})
+    sent = emulator.call("send_message", entity="message", name="Sent", fields={"subject": "Sent", "to": ["reader@example.invalid"]})
+    assert draft["state"] == "draft"
+    assert sent["state"] == "sent"
+    assert emulator.call("get_message", id=sent["id"])["subject"] == "Sent"
+    reply = emulator.call("reply_message", id=sent["id"], body="Response")
+    assert reply["body"] == "Response"
+    assert reply["id"] != sent["id"]
+    forwarded = emulator.call("forward_message", id=sent["id"], to=["other@example.invalid"])
+    assert forwarded["to"] == ["other@example.invalid"]
+    assert forwarded["subject"] == "Fwd: Sent"
+
+
+def test_tool_initial_state_must_belong_to_its_entity_workflow() -> None:
+    email = load_connector_definition("email").wire_dict()
+    email["tools"]["send_message"]["initial_state"] = "lost"
+    with pytest.raises(ValidationError, match="initial_state is absent"):
+        ConnectorDefinition.model_validate(email)

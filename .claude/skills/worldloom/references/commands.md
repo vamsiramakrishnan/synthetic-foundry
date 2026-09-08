@@ -262,6 +262,7 @@ worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
 
 | Option | Purpose |
 | --- | --- |
+| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
 | `--exhaustive` |  |
 | `--limit` |  |
 | `--profile` |  |
@@ -280,6 +281,7 @@ worldloom enterprise-evals plan <WORLD_PATH> <OUTPUT>
 
 | Option | Purpose |
 | --- | --- |
+| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
 | `--exhaustive` |  |
 | `--limit` |  |
 | `--profile` |  |
@@ -294,6 +296,30 @@ Score an MCP trace against one planned query's semantic DAG.
 ```
 worldloom enterprise-evals score <QUERY_PATH> <TRACE_PATH>
 ```
+
+| Option | Purpose |
+| --- | --- |
+| `--fixture` | Fixture JSON pinning the expected fact and observation coverage. |
+
+### `worldloom enterprise-evals serve`
+
+Serve isolated enterprise evaluations as StreamableHTTP MCP connector tools.
+
+```
+worldloom enterprise-evals serve <CORPUS_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--allowed-host` | Trusted external Host header; repeat for multiple proxy names. |
+| `--check` | Validate the server configuration and exit without listening. |
+| `--host` |  |
+| `--max-calls` |  |
+| `--max-runs` |  |
+| `--port` |  |
+| `--query-id` | Serve only these query IDs; repeat to select more. |
+| `--tokens-env` | Environment variable holding a JSON map of principal names to bearer secrets. |
+| `--tool` | Allow a connector.tool; repeat. Every selected query must remain executable. |
 
 ### `worldloom enterprise-evals simulate`
 
@@ -313,7 +339,8 @@ Count semantically valid query candidates without generating fixtures.
 
 | Option | Purpose |
 | --- | --- |
-| `--max-candidates` |  |
+| `--max-candidates` | Override the profile's candidate ceiling (default: 10,000,000). |
+| `--profile` |  |
 
 ### `worldloom enterprise-evals validate`
 

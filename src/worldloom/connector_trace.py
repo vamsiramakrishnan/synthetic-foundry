@@ -26,9 +26,11 @@ _READ_OPS = frozenset({"read", "extract", "search", "get"})
 #: than silent.
 _KNOWN_ASSERTIONS = frozenset(
     {
+        "execution_contract",
         "tool_called",
         "order",
         "artifact_created",
+        "failure_at",
         "per_item",
         "branch_exclusive",
         "state_equals",
@@ -42,6 +44,7 @@ _KNOWN_ASSERTIONS = frozenset(
         "surface_archived",
         "existence_check_first",
         "projection_used",
+        "fields_used",
         "pagination_used",
         "no_retry_storm",
         "reads_contain",
@@ -156,6 +159,41 @@ def _assert_projection(
         fails.append(f"no_projection{suffix}")
 
 
+def _assert_fields_used(
+    assertion: Mapping[str, Any], row: Mapping[str, Any],
+    by_node: Mapping[str, list[dict[str, Any]]], fails: list[str],
+) -> None:
+    from .connector_definition import ConnectorDefinition, load_connector_definition
+    from .connector_query import parse_native
+    from .predicates import Predicate
+
+    node_id = str(assertion["node"])
+    required = set(assertion.get("fields", ()))
+    projected = set(assertion.get("payload_fields", required))
+    successful = [span for span in by_node.get(node_id, ()) if not span.get("error") and span.get("reads")]
+    used: set[str] = set()
+    seen_projection: set[str] = set()
+    for span in successful:
+        args = span.get("args", {})
+        active = args.get("predicate")
+        try:
+            if active is not None:
+                predicate = active if isinstance(active, Predicate) else Predicate.model_validate(active)
+            elif args.get("query"):
+                connector = str(span["tool"]).split(".", 1)[0]
+                raw = row.get("connector_definitions", {}).get(connector)
+                definition = ConnectorDefinition.model_validate(raw) if raw else load_connector_definition(connector)
+                predicate = parse_native(definition, str(args["query"]), entity=args.get("entity"))
+            else:
+                continue
+        except (ValueError, KeyError, TypeError):
+            continue
+        used.update(item.field for item in predicate.where)
+        seen_projection.update(args.get("fields") or ())
+    if not required or not required <= used or not projected <= seen_projection:
+        fails.append(f"fields_not_used:{node_id}")
+
+
 def _assert_pagination(
     assertion: Mapping[str, Any],
     spans: list[dict[str, Any]],
@@ -212,6 +250,19 @@ def grade_trace(
     if shape is not None:
         assertions.extend(shape_assertions(shape))
 
+    expected_failures = {
+        str(assertion.get("node")): str(assertion.get("kind"))
+        for assertion in assertions if assertion.get("type") == "failure_at"
+    }
+    failure_stopped: set[str] = set()
+    for assertion in assertions:
+        if assertion.get("type") != "failure_at":
+            continue
+        node_id = str(assertion.get("node"))
+        if any((span.get("error") or {}).get("kind") == assertion.get("kind") for span in by_node.get(node_id, ())):
+            if not assertion.get("writes_persist"):
+                failure_stopped.add(node_id)
+            failure_stopped.update(str(value) for value in assertion.get("blocked_nodes", ()))
     branch = next(
         (assertion for assertion in assertions if assertion.get("type") == "branch_exclusive"),
         None,
@@ -248,7 +299,12 @@ def grade_trace(
             # never applied.
             fails.append(f"unknown_assertion:{kind}")
             continue
-        if kind == "tool_called":
+        if kind in {"artifact_created", "state_equals", "deleted", "reads_contain", "fields_used", "fact_coverage"} and str(assertion.get("node")) in failure_stopped:
+            continue
+        if kind == "execution_contract":
+            from .enterprise_dag_trace import grade_execution_contract
+            fails.extend(grade_execution_contract(materialized, row, post_state))
+        elif kind == "tool_called":
             node_id = str(assertion["node"])
             node = nodes_by_id.get(node_id)
             if node is None:
@@ -264,8 +320,48 @@ def grade_trace(
                 continue
             if node.get("op") == "create" and "updated_existing" in behavior_set and node_spans:
                 continue
-            if not any(span["tool"] == tool_of.get(node_id) for span in node_spans):
+            if not any(
+                span["tool"] == tool_of.get(node_id)
+                and (not span.get("error") or span["error"].get("kind") == expected_failures.get(node_id))
+                for span in node_spans
+            ):
                 fails.append(f"tool_not_called:{node_id}")
+        elif kind == "failure_at":
+            node_id = str(assertion.get("node"))
+            if node_id not in nodes_by_id:
+                fails.append(f"unknown_node:{node_id}")
+                continue
+            node_spans = by_node.get(node_id, ())
+            if not node_spans and nodes_by_id[node_id].get("condition") and any(item.get("type") == "execution_contract" for item in assertions):
+                # The grammar grader reconstructs the condition from bound
+                # evidence and requires a call exactly on its selected branch.
+                continue
+            matching = [span for span in node_spans if (span.get("error") or {}).get("kind") == assertion.get("kind")]
+            if not matching:
+                fails.append(f"failure_not_observed:{node_id}:{assertion.get('kind')}")
+            if any(span.get("writes") for span in matching) != bool(assertion.get("writes_persist")):
+                fails.append(f"failure_side_effect_mismatch:{node_id}")
+            if any(span.get("error") and span["error"].get("kind") != assertion.get("kind") for span in node_spans):
+                fails.append(f"unexpected_error:{node_id}")
+            if any(not span.get("error") for span in node_spans):
+                fails.append(f"unexpected_success:{node_id}")
+            if assertion.get("writes_persist") and post_state is None:
+                fails.append(f"failure_post_state_missing:{node_id}")
+            declared = assertion.get("fixture")
+            if declared and assertion.get("writes_persist") and any(set(span.get("writes", ())) != {str(declared)} for span in matching):
+                fails.append(f"failure_target_mismatch:{node_id}")
+            if declared and assertion.get("writes_persist") and nodes_by_id[node_id].get("op") != "delete" and str(declared) not in (post_state or {}):
+                fails.append(f"failure_post_state_missing:{node_id}")
+            created = assertion.get("created_record")
+            if isinstance(created, Mapping) and assertion.get("writes_persist"):
+                for span in matching:
+                    for fid in span.get("writes", ()):
+                        created_record = (post_state or {}).get(str(fid), {})
+                        if not created_record or any(value is not None and created_record.get(key) != value for key, value in created.items()):
+                            fails.append(f"failure_target_mismatch:{node_id}")
+            for blocked_id in assertion.get("blocked_nodes", ()):
+                if by_node.get(str(blocked_id)):
+                    fails.append(f"executed_after_failure:{blocked_id}")
         elif kind == "order":
             before = by_node.get(str(assertion["before"]), ())
             after = by_node.get(str(assertion["after"]), ())
@@ -278,7 +374,12 @@ def grade_trace(
             if node_id in skipped or node_id in stopped:
                 continue
             successful_spans = [
-                span for span in by_node.get(node_id, ()) if not span.get("error")
+                span for span in by_node.get(node_id, ())
+                if not span.get("error") or (
+                    expected_failures.get(node_id) == "partial_write"
+                    and span.get("error", {}).get("kind") == "partial_write"
+                    and span.get("writes")
+                )
             ]
             if not successful_spans and "updated_existing" not in behavior_set:
                 fails.append(f"artifact_missing:{node_id}")
@@ -294,9 +395,12 @@ def grade_trace(
             ran = [group for group in groups if any(by_node.get(str(node)) for node in group)]
             if len(ran) != 1:
                 fails.append("branch_not_exclusive")
-        elif kind == "state_equals" and post_state is not None:
+        elif kind == "state_equals":
             node_id = str(assertion["node"])
             if node_id in skipped or node_id in stopped:
+                continue
+            if post_state is None:
+                fails.append(f"state_unavailable:{node_id}")
                 continue
             # The record the row says should end in this state, when it names
             # one. Anchoring on the row rather than on the trace matters more
@@ -333,6 +437,14 @@ def grade_trace(
                     fails.append(f"state_not_written:{node_id}")
                 continue
             expected_state = str(assertion["state"]).casefold()
+            persisted_writes = {
+                str(write) for span in by_node.get(node_id, ())
+                if not span.get("error") or (
+                    expected_failures.get(node_id) == "partial_write"
+                    and span.get("error", {}).get("kind") == "partial_write"
+                )
+                for write in span.get("writes", ())
+            }
             for target in targets:
                 record = post_state.get(str(target))
                 if record is None:
@@ -340,7 +452,7 @@ def grade_trace(
                     # mismatch and previously silent.
                     fails.append(f"state_missing:{node_id}")
                     break
-                states = {
+                states = {str(record.get(str(assertion["field"]), "")).casefold()} if assertion.get("field") else {
                     str(record.get("state", "")).casefold(),
                     str(record.get("status", "")).casefold(),
                     str(record.get("state_label", "")).casefold(),
@@ -348,10 +460,17 @@ def grade_trace(
                 if expected_state not in states:
                     fails.append(f"state_mismatch:{node_id}")
                     break
-        elif kind == "deleted" and post_state is not None:
+                if str(target) not in persisted_writes:
+                    # A preexisting matching state proves no side effect. The
+                    # successful write must address the row's declared record.
+                    fails.append(f"state_not_written:{node_id}")
+                    break
+        elif kind == "deleted":
             node_id = str(assertion["node"])
-            if node_id not in skipped and node_id not in stopped and not assertion.get("per_item"):
-                if str(assertion["fixture"]) in post_state:
+            if node_id not in skipped and node_id not in stopped:
+                if post_state is None:
+                    fails.append(f"deletion_unverified:{node_id}")
+                elif not assertion.get("per_item") and str(assertion["fixture"]) in post_state:
                     fails.append(f"not_deleted:{node_id}")
         elif kind == "denial_surfaced":
             if not any(error.get("code") == 403 for error in errors.values()) and "denial_surfaced" not in behavior_set:
@@ -363,7 +482,7 @@ def grade_trace(
             if adversarial in {"ambiguity", "wrong_system"} and "clarify" not in behavior_set:
                 fails.append("no_clarify")
             if "clarify" in behavior_set and any(
-                span.get("writes") for span in materialized if not span.get("error")
+                span.get("writes") for span in materialized
             ):
                 fails.append("write_after_clarify")
         elif kind == "no_write":
@@ -373,7 +492,7 @@ def grade_trace(
                 "missing_entity",
                 "invalid_op",
                 "contradiction",
-            } and any(span.get("writes") for span in materialized if not span.get("error")):
+            } and any(span.get("writes") for span in materialized):
                 fails.append("unexpected_write")
         elif kind == "continue_on_branch_failure":
             hub = next((node for node in nodes if node.get("op") not in _READ_OPS), None)
@@ -388,6 +507,9 @@ def grade_trace(
         elif kind == "existence_check_first":
             if not by_node.get(str(assertion.get("node"))):
                 fails.append("no_existence_check")
+        elif kind == "fields_used":
+            if str(assertion["node"]) not in skipped | stopped:
+                _assert_fields_used(assertion, row, by_node, fails)
         elif kind == "projection_used":
             _assert_projection(assertion, materialized, by_node, fails)
         elif kind == "pagination_used":

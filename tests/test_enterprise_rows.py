@@ -173,3 +173,64 @@ def test_compiling_is_deterministic(corpus) -> None:
     first = compile_rows(corpus.queries, corpus.fixtures, records).rows
     second = compile_rows(corpus.queries, corpus.fixtures, records).rows
     assert first == second
+
+
+@pytest.mark.parametrize("connector", ["drive", "sharepoint"])
+@pytest.mark.parametrize("output_format", ["docx", "xlsx", "pptx", "pdf", "csv", "html", "markdown"])
+@pytest.mark.parametrize("operation,preexisting", [("create", False), ("update", True), ("patch", True), ("upsert", True), ("upsert", False)])
+def test_file_mutations_resolve_the_concrete_format_before_the_tool(
+    corpus, connector, output_format, operation, preexisting,
+) -> None:
+    from worldloom.enterprise_corpus import QueryFixture
+
+    base = corpus.queries[0]
+    query = base.model_copy(update={
+        "generation": base.generation.model_copy(update={
+            "source_requirements": (),
+            "mutation": base.generation.mutation.model_copy(update={
+                "connector": connector, "entity": "file", "operation": operation,
+                "output_format": output_format, "preexisting_record": preexisting,
+            }),
+        }),
+        "expected_dag": (
+            {"id": "write", "kind": operation, "connector": connector, "entity": "file", "depends_on": []},
+            {"id": "verify", "kind": "readback", "connector": connector, "entity": "file", "depends_on": ["write"]},
+        ),
+    })
+    destination = "existing-file" if preexisting else None
+    fixture = QueryFixture(query_id=query.id, input_record_ids={}, destination_record_id=destination, overrides=(), expected_side_effects=())
+    records = ({"fid": "existing-file", "server": connector, "entity": output_format, "ident": "native-file", "name": "Existing"},) if preexisting else ()
+    row = compile_row(query, fixture, records)
+    assert row["expected_dag"]["nodes"][0]["entity"] == output_format
+    result = run_eval_row(row, records)
+    assert result.grade["status"] == "ok", result.grade
+    write, verify = result.spans
+    assert write.writes and verify.reads == write.writes
+    if preexisting:
+        assert write.writes == ("existing-file",)
+    else:
+        assert write.writes != ("existing-file",)
+
+
+def test_upsert_refuses_a_fixture_that_contradicts_its_precondition(corpus) -> None:
+    base = corpus.queries[0]
+    mutation = base.generation.mutation.model_copy(update={"operation": "upsert", "preexisting_record": True})
+    query = base.model_copy(update={"generation": base.generation.model_copy(update={"mutation": mutation})})
+    fixture = corpus.fixtures[0].model_copy(update={"destination_record_id": None})
+    with pytest.raises(RowError, match="contradicts"):
+        compile_row(query, fixture)
+
+
+def test_default_registry_four_hundred_rows_name_executable_tools() -> None:
+    world = World.load("examples/retail-close")
+    queries, _ = plan_queries(world, strategy="exhaustive", limit=400)
+    materialized = materialize_corpus(world, tuple(queries))
+    records = runtime_records(materialized.connector_data.records)
+    report = compile_rows(materialized.queries, materialized.fixtures, records)
+    assert report.compiled == 400, report.reasons()
+    assert not report.refusals
+    for row in report.rows:
+        # Designed failures are tested separately. This gate establishes that
+        # the full shipped vocabulary admits an error-free reference execution.
+        result = run_eval_row({**row, "state_overrides": []}, records)
+        assert not any(span.error for span in result.spans), (row["id"], result.spans)
