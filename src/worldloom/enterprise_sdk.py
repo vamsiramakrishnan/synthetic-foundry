@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .connector_data import ConnectorProjectionRegistry
+from .connector_data import (
+    ConnectorDataset,
+    ConnectorProjectionRegistry,
+    generate_connector_data,
+)
 from .enterprise_artifacts import RenderedEvalArtifact, render_corpus_artifacts
 from .enterprise_corpus import EnterpriseCorpus, materialize_corpus
 from .enterprise_queries import CoverageReport, PlannedEnterpriseQuery, plan_queries
@@ -20,6 +25,7 @@ from .enterprise_specs import (
 )
 
 if TYPE_CHECKING:
+    from .enterprise_qualification import EnterpriseQualification, QueryBinder
     from .synthesis.connectors import IncidentRule
     from .synthesis.engine import Simulator
     from .world import World
@@ -35,6 +41,7 @@ class EnterpriseEvalHarness:
     projections: ConnectorProjectionRegistry | None = None
     strict_sources: bool = False
     dag_shapes: tuple[str, ...] = ()
+    operational_max_cases: int | None = None
 
     @classmethod
     def from_world(cls, world: World) -> EnterpriseEvalHarness:
@@ -82,6 +89,12 @@ class EnterpriseEvalHarness:
         """Refuse missing source evidence instead of generating placeholder rows."""
         return replace(self, strict_sources=True)
 
+    def with_operational_case_binding(self, *, max_cases: int = 128) -> EnterpriseEvalHarness:
+        """Bind each query to a bounded cohort of actual cross-connector cases."""
+        if type(max_cases) is not int or not 1 <= max_cases <= 128:
+            raise ValueError("max_cases must be an integer in [1,128]")
+        return replace(self, operational_max_cases=max_cases, strict_sources=True)
+
     def with_dag_grammar(self, *shapes: str) -> EnterpriseEvalHarness:
         """Opt into versioned executable shapes; no arguments selects the catalogue."""
         from .enterprise_dag import shape_catalogue
@@ -95,7 +108,53 @@ class EnterpriseEvalHarness:
 
     def plan(self) -> tuple[tuple[PlannedEnterpriseQuery, ...], CoverageReport | None]:
         queries, report = plan_queries(self.world, registry=self.registry, profile=self.profile, strategy=self.strategy, limit=self.limit, dag_shapes=self.dag_shapes)
-        return tuple(queries), report
+        planned = tuple(queries)
+        binder = self._case_binder(planned)
+        if binder is not None:
+            planned = tuple(binder(query, ordinal) for ordinal, query in enumerate(planned))
+        return planned, report
+
+    def _case_binder(self, queries: tuple[PlannedEnterpriseQuery, ...]) -> QueryBinder | None:
+        if self.operational_max_cases is None:
+            return None
+        from .synthesis.connectors import bind_case_query
+
+        connectors = tuple(sorted({source.connector for query in queries
+                                   for source in query.generation.source_requirements}))
+        data: ConnectorDataset | None = None
+        max_cases = self.operational_max_cases
+
+        def bind(query: PlannedEnterpriseQuery, ordinal: int) -> PlannedEnterpriseQuery:
+            nonlocal data
+            if data is None:
+                data = generate_connector_data(self.world, connectors, projections=self.projections)
+            return bind_case_query(query, data.records, ordinal=ordinal, max_cases=max_cases)
+
+        return bind
+
+    def qualify(self, *, pool_size: int, max_selected: int | None = None) -> EnterpriseQualification:
+        """Execute a finite exhaustive pool before selecting semantic and case coverage.
+
+        The pool uses the planner's interleaved exhaustive order, independently
+        of ``take`` or the ordinary planning strategy. ``take`` supplies the
+        output cap unless ``max_selected`` overrides it. One lookahead query
+        establishes whether the bounded pool exhausted the requested space.
+        """
+        from .enterprise_qualification import qualify_queries
+
+        if pool_size < 1:
+            raise ValueError("pool_size must be positive")
+        cap = self.limit if max_selected is None else max_selected
+        if cap is not None and cap < 1:
+            raise ValueError("max_selected must be positive")
+        queries, _ = plan_queries(self.world, registry=self.registry, profile=self.profile,
+                                  strategy="exhaustive", dag_shapes=self.dag_shapes)
+        bounded = tuple(islice(queries, pool_size + 1))
+        pool = bounded[:pool_size]
+        return qualify_queries(self.world, pool, pool_size=pool_size,
+                               pool_exhausted=len(bounded) <= pool_size,
+                               strength=self.profile.strengths, max_selected=cap,
+                               projections=self.projections, binder=self._case_binder(pool))
 
     def build(self) -> tuple[EnterpriseCorpus, CoverageReport | None]:
         queries, report = self.plan()
@@ -132,4 +191,8 @@ class EnterpriseEvalHarness:
             shard_count=count,
             dag_shapes=self.dag_shapes,
         )
-        return tuple(queries), report
+        planned = tuple(queries)
+        binder = self._case_binder(planned)
+        if binder is not None:
+            planned = tuple(binder(query, index + ordinal * count) for ordinal, query in enumerate(planned))
+        return planned, report

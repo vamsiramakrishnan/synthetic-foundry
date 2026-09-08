@@ -12,6 +12,7 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 | Goal | Start here | Then read |
 | --- | --- | --- |
 | Interview a company and reuse it across eval-driven candidates | [Company-driven campaign reuse](company-eval-reuse.md) | [Company specification](agents/company-specification.md) and [Narration rules](agents/writing-responses.md) |
+| Measure executable enterprise coverage and real operational cases | [Enterprise qualification](enterprise-qualification.md) | [Measured module reuse and remaining gaps](enterprise-outcome-reuse.md) |
 | Design an eval, then generate candidate corpora for it | [Eval-first generation](eval-first.md) | [Eval-first world compilation](eval-first-world-compilation.md) and [Python SDK](sdk.md) |
 | Build one corpus | [README quickstart](../README.md#quickstart) | [Architecture and invariants](architecture.md) |
 | Generate operational records and counterfactuals | [Operational synthesis](operational-synthesis.md) | [Agent skills](skills.md) |

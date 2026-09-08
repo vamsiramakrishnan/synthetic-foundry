@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -14,9 +15,10 @@ from .connector_data import (
     generate_connector_data,
 )
 from .enterprise_evidence import observation_evidence
-from .enterprise_queries import PlannedEnterpriseQuery
+from .enterprise_queries import PlannedEnterpriseQuery, SourceRequirement
 from .ids import content_key
 from .models import Model
+from .predicates import evaluate
 
 if TYPE_CHECKING:
     from .world import World
@@ -92,6 +94,74 @@ def _entity_matches(connector: str, requested: str, actual: str) -> bool:
         return False
 
 
+def source_matches(requirement: SourceRequirement, record: ConnectorRecord) -> bool:
+    """The same source contract used by materialization and independent review."""
+    if (record.connector != requirement.connector
+            or not _entity_matches(requirement.connector, requirement.entity, record.entity)):
+        return False
+    if requirement.predicate is None:
+        return True
+    # Envelope identity cannot be shadowed by caller-controlled native fields.
+    fields = {**record.fields, "id": record.id, "external_id": record.external_id,
+              "title": record.title, "connector": record.connector, "entity": record.entity}
+    return evaluate(requirement.predicate, fields)
+
+
+def operational_case_ids(query: PlannedEnterpriseQuery) -> tuple[str, ...]:
+    """Read the opt-in cohort contract, never infer one from matching records."""
+    if "operational_case_binding" not in query.dimensions:
+        return ()
+    if query.dimensions["operational_case_binding"] != "case-cohort/v1":
+        raise ValueError("unsupported operational case binding")
+    try:
+        cases = json.loads(query.dimensions["operational_case_ids"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("invalid operational_case_ids") from error
+    if (not isinstance(cases, list) or not 1 <= len(cases) <= 128
+            or not all(isinstance(case, str) and case for case in cases)
+            or cases != sorted(set(cases))):
+        raise ValueError("operational_case_ids must be one to 128 distinct sorted case IDs")
+    return tuple(cases)
+
+
+def operational_record_case_id(record: ConnectorRecord) -> str:
+    """Verify a case label against the episode that its observations identify."""
+    from .synthesis.compiler import digest
+
+    evidence, findings = observation_evidence(record.fields)
+    if findings or not evidence:
+        raise ValueError(f"{record.id}: {findings or ('no operational observations',)}")
+    provenance = record.fields["synthesis_provenance"]
+    expected = digest(["episode/v1", provenance["recipe_digest"], provenance["trigger"],
+                       record.fields["history"][0]["record_id"]])
+    if record.fields.get("case_id") != expected:
+        raise ValueError(f"{record.id}: case_id does not identify its observation episode")
+    return expected
+
+
+def _select_sources(
+    records: list[ConnectorRecord], minimum: int, cases: tuple[str, ...],
+) -> tuple[str, ...]:
+    if not cases:
+        return tuple(record.id for record in records[:minimum])
+    # A connector may carry several messages for one case. Picking a plain
+    # prefix could meet the record count while silently omitting another case.
+    chosen: list[str] = []
+    ordered = sorted(records, key=lambda record: record.id)
+    for case in cases:
+        match = next((record for record in ordered if record.fields.get("case_id") == case), None)
+        if match is None:
+            raise ValueError(f"missing_case_source: {case}")
+        operational_record_case_id(match)
+        chosen.append(match.id)
+    for record in ordered:
+        if len(chosen) >= minimum:
+            break
+        if record.id not in chosen:
+            chosen.append(record.id)
+    return tuple(chosen)
+
+
 def materialize_corpus(
     world: World,
     queries: Iterable[PlannedEnterpriseQuery],
@@ -114,7 +184,9 @@ def materialize_corpus(
         if any(record.connector == connector and _entity_matches(connector, entity, record.entity)
                for record in records):
             continue
-        if strict_sources:
+        if strict_sources or any(requirement.predicate is not None for query in planned
+                                 for requirement in query.generation.source_requirements
+                                 if (requirement.connector, requirement.entity) == (connector, entity)):
             raise ValueError(f"missing_source: {connector}:{entity}; generate operational evidence before planning this query")
         record_id = content_key("query-required-record", connector, entity, world.company.id)
         stable_field = stable_fields.get((connector, entity), "stable_id")
@@ -155,11 +227,14 @@ def materialize_corpus(
     fixtures: list[QueryFixture] = []
     for query in planned:
         inputs: dict[str, tuple[str, ...]] = {}
+        cases = operational_case_ids(query)
         for requirement in query.generation.source_requirements:
-            matches = tuple(record.id for record in data.records if record.connector == requirement.connector and _entity_matches(requirement.connector, requirement.entity, record.entity) and record.id not in destination_ids)
-            if strict_sources and len(matches) < requirement.minimum:
+            matches = [record for record in data.records
+                       if record.id not in destination_ids and source_matches(requirement, record)
+                       and (not cases or record.fields.get("case_id") in cases)]
+            if (strict_sources or requirement.predicate is not None or cases) and len(matches) < requirement.minimum:
                 raise ValueError(f"insufficient_sources: {requirement.connector}:{requirement.entity} needs {requirement.minimum}, found {len(matches)}")
-            inputs[f"{requirement.connector}:{requirement.entity}"] = matches[:requirement.minimum]
+            inputs[f"{requirement.connector}:{requirement.entity}"] = _select_sources(matches, requirement.minimum, cases)
         mutation = query.generation.mutation
         # The shared record pool also contains targets required by other rows.
         # A create must not inherit an update row's preexisting destination.
@@ -307,15 +382,41 @@ def validate_corpus(corpus: EnterpriseCorpus) -> tuple[str, ...]:
         if fixture is None:
             findings.append(f"query {query.id}: missing fixture")
             continue
+        try:
+            cases = operational_case_ids(query)
+        except ValueError as error:
+            findings.append(f"query {query.id}: {error}")
+            cases = ()
         for requirement in query.generation.source_requirements:
             key = f"{requirement.connector}:{requirement.entity}"
-            if len(fixture.input_record_ids.get(key, ())) < requirement.minimum:
+            selected = fixture.input_record_ids.get(key, ())
+            if len(set(selected)) < requirement.minimum:
                 findings.append(f"query {query.id}: unmet source requirement {key}")
+            if len(set(selected)) != len(selected):
+                findings.append(f"query {query.id}: duplicate input records {key}")
             dangling = set(fixture.input_record_ids.get(key, ())) - record_ids
             if dangling:
                 findings.append(
                     f"query {query.id}: dangling input records {sorted(dangling)}"
                 )
+            for identifier in selected:
+                source_record = by_id.get(identifier)
+                if source_record is None:
+                    continue
+                try:
+                    matches = source_matches(requirement, source_record)
+                except ValueError as error:
+                    findings.append(f"query {query.id}: invalid source predicate {key}: {error}")
+                    continue
+                if not matches:
+                    findings.append(f"query {query.id}: source predicate mismatch {key}: {identifier}")
+                if cases:
+                    try:
+                        operational_record_case_id(source_record)
+                    except ValueError as error:
+                        findings.append(f"query {query.id}: invalid operational case {key}: {error}")
+            if cases and {by_id[rid].fields.get("case_id") for rid in selected if rid in by_id} != set(cases):
+                findings.append(f"query {query.id}: source case cohort mismatch {key}")
         observed_facts: set[str] = set()
         observed_evidence: set[str] = set()
         for key, inputs in sorted(fixture.input_record_ids.items()):
