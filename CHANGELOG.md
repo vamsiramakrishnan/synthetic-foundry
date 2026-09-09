@@ -11,6 +11,21 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: opt-in dataset compilation and split isolation
+
+- Add a sealed dataset plan with exact stratum quotas, repetition caps, task
+  and company minima and a finite generation budget. Deficits drive existing
+  company/episode/synthesis builders; equivalent executable plans are removed
+  before fixture materialization and qualified rows alone consume quotas.
+- Derive task/case/request identities from executable contracts and evidence.
+  Reserve admission capacity for diversity; isolate transitive shared evidence
+  and task or company groups before assigning splits. Incomplete runs cannot
+  emit a publishable queryset.
+- Persist exact batch Worlds, fixtures, proofs and content receipts. Resume
+  generates only missing batches; complete replay makes no external calls.
+  Add `evals dataset compile` and `verify`, SDK composition and a measured
+  retail/banking example. Existing generation paths retain their bytes.
+
 ### Generation: opt-in evidence admission and empirical noise calibration
 
 - A shared `reader/v2` plan/check/accept boundary covers full eval-critical

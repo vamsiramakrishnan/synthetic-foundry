@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 #: repository root: a stray scratch file with a broken example should not fail
 #: the build, and a new agent-facing document should be added here deliberately.
 DOCUMENTS = (
+    "docs/dataset-compiler.md",
     "AGENTS.md",
     # AGENTS.md's progressively-disclosed half: one topic file per deep section,
     # routed to from the core's map. Checked exactly like the core, because a
@@ -175,15 +176,16 @@ def _invocations(text: str) -> list[list[str]]:
 def _resolve(tokens: list[str], surface: dict[str, set[str]]) -> tuple[str | None, list[str]]:
     """Split tokens into a command path and the flags used with it.
 
-    Two-word paths are tried before one-word, so ``narrate accept`` resolves to
-    the leaf rather than to the group with a stray argument.
+    Resolve the longest registered path. Nested apps such as ``evals dataset
+    compile`` must reach their leaf; a fixed two-word limit treated valid leaf
+    options as options on the parent and never checked the actual command.
     """
     words = [t for t in tokens if not t.startswith("-")]
     if not words:
         # A bare `worldloom --help`. Real, and the first line of the setup
         # instructions, so it must not read as an unknown command.
         return "", []
-    for length in (2, 1):
+    for length in range(max((len(path.split()) for path in surface), default=0), 0, -1):
         candidate = " ".join(words[:length])
         if candidate in surface:
             flags = [t.split("=", 1)[0] for t in tokens if t.startswith("-")]
