@@ -1,0 +1,84 @@
+{
+  "eval_plan_change_reuses_company": true,
+  "generated_divisions": [
+    "Food",
+    "General Merchandise",
+    "Digital"
+  ],
+  "identical_offline_replay": true,
+  "one_world_across_batches": true,
+  "plan_digest": "58c22d3fd2dedfea45cb5193becf8f4d",
+  "real_agent_difficulty_measured": false,
+  "reference_qualification_only": true,
+  "report": {
+    "accepted": 96,
+    "batches": 6,
+    "cases": 93,
+    "companies": 1,
+    "complete": true,
+    "equivalent_plans_removed": 1584,
+    "facets": {
+      "dag_shape": {
+        "conditional": 16,
+        "deep_chain": 16,
+        "diamond": 15,
+        "fan_in": 15,
+        "fan_out": 7,
+        "map_read": 14,
+        "read_chain": 6,
+        "write_chain": 7
+      },
+      "failure": {
+        "none": 64,
+        "partial_write": 32
+      },
+      "operation": {
+        "draft": 48,
+        "patch": 48
+      },
+      "output_format": {
+        "html": 48,
+        "record": 48
+      },
+      "source_set": {
+        "email": 22,
+        "jira": 8,
+        "jira+email": 7,
+        "jira+servicenow": 7,
+        "jira+servicenow+email": 7,
+        "servicenow": 24,
+        "servicenow+email": 21
+      },
+      "workflow": {
+        "inventory_escalation": 48,
+        "inventory_exception_review": 48
+      }
+    },
+    "findings": [],
+    "largest_split_group": 10,
+    "planned_candidates": 2448,
+    "refusals": {},
+    "remaining": {
+      "operations-review": 0,
+      "replenishment-escalation": 0
+    },
+    "requests": 96,
+    "split_counts": {
+      "test": 10,
+      "train": 76,
+      "validation": 10
+    },
+    "split_groups": 27,
+    "target": 96,
+    "tasks": 68
+  },
+  "reproduce": "python tools/measure_company_studio.py --out ./studio-pilot --report ./studio-pilot.json",
+  "scope": "one company; inventory review and state-changing replenishment escalation",
+  "source_sha256": {
+    "src/worldloom/evals/company_dataset.py": "dd518782e1d99ef035c9e9505ec86c58ff99da52c0d61940e80d6d00a5680fb9",
+    "src/worldloom/evals/dataset.py": "591b2d1a4a8fe970cec33fe59a7cf0d57bf07aa2fc236957f65cd89929a578d5",
+    "src/worldloom/studio/models.py": "b57fb8dfbe0985de7c55d4112db00ad86cfce33dff7adf16da1b084c815b99e2",
+    "src/worldloom/studio/service.py": "a545b06e43b72bf75251dadbde7a769692d42ea919beb63d3f315b46c9d7bb1e",
+    "tools/measure_company_studio.py": "79d8ae3c8fbc0fcfea53eaed5d039790d6cd2eeabd0a54af7e08948ae34f2f4f"
+  }
+}

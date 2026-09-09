@@ -1110,6 +1110,93 @@ worldloom status <CORPUS>
 | --- | --- |
 | `--json` | Emit machine-readable state instead of the table. |
 
+### `worldloom studio`
+
+Interview, build and evaluate one persistent company.
+
+### `worldloom studio init`
+
+Create a project from an explicit company contract.
+
+```
+worldloom studio init <SPEC_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio interview`
+
+Exchange bounded company proposals with your coding harness.
+
+### `worldloom studio interview accept`
+
+Validate a harness response; proposals remain reviewable until applied.
+
+```
+worldloom studio interview accept <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--apply` | Commit the reviewed proposal if its company revision is still current. |
+| `--from` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio interview request`
+
+Write the bounded interview request for a coding harness.
+
+```
+worldloom studio interview request <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--message` |  |
+| `--out`, `-o` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio run`
+
+Run an exact company revision synchronously, retaining resumable checkpoints.
+
+```
+worldloom studio run <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--batch-limit` |  |
+| `--harness-command` |  |
+| `--operation` | build, compile or narrate |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio serve`
+
+Open the local company console; slow work runs in a separate process.
+
+| Option | Purpose |
+| --- | --- |
+| `--harness` | Use an installed codex or claude CLI with its existing login. |
+| `--harness-command` | Trusted local adapter: JSON stdin, JSON stdout; no shell. |
+| `--port` |  |
+| `--timeout` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio show`
+
+Inspect company structure, unresolved claims, interview turns and runs.
+
+```
+worldloom studio show <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
 ### `worldloom synth`
 
 Generate relational operational records from executable causal specifications.

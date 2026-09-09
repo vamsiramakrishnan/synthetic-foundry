@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 #: repository root: a stray scratch file with a broken example should not fail
 #: the build, and a new agent-facing document should be added here deliberately.
 DOCUMENTS = (
+    "docs/studio.md",
     "docs/dataset-compiler.md",
     "AGENTS.md",
     # AGENTS.md's progressively-disclosed half: one topic file per deep section,

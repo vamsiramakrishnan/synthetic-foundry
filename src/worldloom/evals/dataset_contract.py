@@ -54,7 +54,7 @@ class DatasetStratum(Model):
 
 
 class DatasetPlan(Model):
-    schema_version: Literal["worldloom.dataset/v1"] = "worldloom.dataset/v1"
+    schema_version: Literal["worldloom.dataset/v1", "worldloom.company-dataset/v1"] = "worldloom.dataset/v1"
     seed: int = Field(default=8128, strict=True)
     builder_id: str = "worldloom-dataset-source/v1"
     strata: tuple[DatasetStratum, ...]
@@ -64,7 +64,7 @@ class DatasetPlan(Model):
     max_per_request: int = Field(default=10, ge=1, strict=True)
     minimum_tasks: int = Field(default=2, ge=1, strict=True)
     minimum_companies: int = Field(default=2, ge=1, strict=True)
-    split_by: Literal["task", "company"] = "task"
+    split_by: Literal["task", "company", "case"] = "task"
     split_weights: dict[str, int] = Field(default_factory=lambda: {"train": 80, "validation": 10, "test": 10})
 
     @model_validator(mode="after")

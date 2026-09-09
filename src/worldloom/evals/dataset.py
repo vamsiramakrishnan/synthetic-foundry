@@ -113,7 +113,7 @@ def _discard_pending(root: Path, request: DatasetRequest) -> Path:
     return staging
 
 
-def _commit_batch(root: Path, request: DatasetRequest, builder: DatasetBuilder) -> None:
+def _commit_batch(root: Path, request: DatasetRequest, builder: DatasetBuilder, *, company_root: Path | None = None) -> None:
     staging = _discard_pending(root, request)
     staging.mkdir(parents=True)
     write_json(staging / "request.json", request.model_dump(mode="json"))
@@ -146,15 +146,28 @@ def _commit_batch(root: Path, request: DatasetRequest, builder: DatasetBuilder) 
                 continue
             seen.add(key)
             pool_list.append(query)
-            if len(pool_list) == source.pool_size:
+            if company_root is None and len(pool_list) == source.pool_size:
                 break
+        if company_root is not None and pool_list:
+            start = (request.ordinal * source.pool_size) % len(pool_list)
+            pool_list = (pool_list[start:] + pool_list[:start])[:source.pool_size]
         pool = tuple(pool_list)
         if not pool:
             raise DatasetRefused("no_matching_plans: no query met the cell contract within its planning budget")
-        qualified = qualify_queries(harness.world, pool, pool_size=source.pool_size, pool_exhausted=False,
-                                    projections=harness.projections, binder=harness._case_binder(pool))
-        qualified.export(staging / "qualified")
         harness.world.export(staging / "world")
+        if company_root is not None and _files(staging / "world") != _files(company_root / "world"):
+            raise ValueError("company builder changed the canonical world; create a new revision")
+        binder = harness._case_binder(pool)
+        if company_root is not None and binder is not None:
+            original_binder = binder
+
+            def advance_case(query: Any, ordinal: int) -> Any:
+                return original_binder(query, ordinal + request.ordinal * source.pool_size)
+
+            binder = advance_case
+        qualified = qualify_queries(harness.world, pool, pool_size=source.pool_size, pool_exhausted=False,
+                                    projections=harness.projections, binder=binder)
+        qualified.export(staging / "qualified")
         write_json(staging / "source.json", built.metadata)
         write_json(staging / "outcome.json", {"refusals": [r.code for r in qualified.report.refusals],
                                              "planned_candidates": inspected, "equivalent_plans_removed": equivalent})
@@ -221,10 +234,11 @@ def compile_dataset(
     plan. Calling again resumes. A completed checkpoint performs no builder or
     executor calls. Single-writer directory; committed batches are immutable.
     """
-    plan = DatasetPlan.model_validate(plan.model_dump(mode="json"))
+    from .company_dataset import CompanyDatasetPlan, load_dataset_plan, prepare_company
+
+    plan = load_dataset_plan(plan.model_dump(mode="json"))
     json.dumps(plan.model_dump(mode="json"), allow_nan=False)
-    builder = builder or CompanyDatasetBuilder()
-    if builder.id != plan.builder_id and not replay_only:
+    if builder is not None and builder.id != plan.builder_id and not replay_only:
         raise DatasetRefused("builder identity does not match the dataset plan")
     if batch_limit is not None and batch_limit < 1:
         raise ValueError("batch_limit must be positive")
@@ -236,6 +250,14 @@ def compile_dataset(
     else:
         root.mkdir(parents=True, exist_ok=True)
         write_json(root / "plan.json", plan.model_dump(mode="json"))
+    company_root = None
+    if isinstance(plan, CompanyDatasetPlan):
+        builder = prepare_company(root, plan, builder, replay_only=replay_only)
+        company_root = root / "company"
+    else:
+        builder = builder or CompanyDatasetBuilder()
+    if builder.id != plan.builder_id and not replay_only:
+        raise DatasetRefused("builder identity does not match the dataset plan")
     (root / "batches").mkdir(exist_ok=True)
     remaining = {s.id: s.count for s in plan.strata}
     strata = {s.id: s for s in plan.strata}
@@ -266,8 +288,11 @@ def compile_dataset(
         if not destination.exists():
             if replay_only:
                 raise DatasetRefused(f"replay requires committed batch {index}")
-            _commit_batch(destination, request, builder)
+            _commit_batch(destination, request, builder, company_root=company_root)
         pool, findings = _load_batch(destination, request, index)
+        if company_root is not None and (destination / "world").exists():
+            if _files(destination / "world") != _files(company_root / "world"):
+                raise DatasetRefused("batch evidence belongs to a different company revision")
         # Recovery can encounter a copied/stale staging directory beside a
         # committed batch. Its identity must agree before discarding it, and
         # the committed receipt is verified first. Never replace good evidence
@@ -346,6 +371,8 @@ def compile_dataset(
         for entry in entries:
             value = {**entry.model_dump(mode="json"), "split": assignment[entry.id],
                      "qualification": f"batches/{entry.batch:08d}/qualified"}
+            if isinstance(plan, CompanyDatasetPlan):
+                value["lineage"] = plan.lineage.get(entry.stratum, {})
             handle.write(json.dumps(value, sort_keys=True, ensure_ascii=False) + "\n")
     if report.complete:
         with (root / "agent-requests.jsonl").open("w", encoding="utf-8", newline="\n") as handle:
@@ -360,7 +387,9 @@ def verify_dataset(out: str | Path) -> DatasetReport:
     """Verify the published content inventory, including every batch receipt."""
     root = Path(out)
     manifest = _read(root / "manifest.json")
-    plan = DatasetPlan.model_validate(_read(root / "plan.json"))
+    from .company_dataset import load_dataset_plan
+
+    plan = load_dataset_plan(_read(root / "plan.json"))
     report = DatasetReport.model_validate(_read(root / "report.json"))
     if (manifest.get("schema") != plan.schema_version
             or manifest.get("plan_digest") != digest(plan.model_dump(mode="json"))

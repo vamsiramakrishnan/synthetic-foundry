@@ -19,11 +19,11 @@ def compile_command(
 ) -> None:
     """Generate missing coverage, enforce admission, then export isolated splits."""
     from .cli import _refuse
+    from .evals.company_dataset import load_dataset_plan
     from .evals.dataset import _read, compile_dataset
-    from .evals.dataset_contract import DatasetPlan
 
     try:
-        plan = DatasetPlan.model_validate(_read(plan_path))
+        plan = load_dataset_plan(_read(plan_path))
         run = compile_dataset(plan, out, batch_limit=batch_limit, replay_only=replay)
     except (OSError, ValueError) as error:
         _refuse("dataset_rejected", str(error))

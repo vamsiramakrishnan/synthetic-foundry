@@ -88,7 +88,10 @@ def assign_splits(entries: list[DatasetEntry], plan: DatasetPlan) -> tuple[dict[
     owners: dict[str, int] = {}
     for i, entry in enumerate(entries):
         keys = ["case:" + entry.case_id, *entry.evidence]
-        keys.append("task:" + entry.task_id if plan.split_by == "task" else "company:" + entry.company_id)
+        if plan.split_by == "task":
+            keys.append("task:" + entry.task_id)
+        elif plan.split_by == "company":
+            keys.append("company:" + entry.company_id)
         for key in keys:
             if key in owners:
                 a, b = root(i), root(owners[key])

@@ -1,0 +1,136 @@
+"""Project intent references existing company, LOB, process and eval contracts."""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import Field, model_validator
+
+from ..company import from_document, resolve
+from ..enterprise_specs import ScenarioProfile
+from ..evals.dataset_contract import DatasetSource
+from ..lob import Lob, lint_lob
+from ..models import Model
+from ..packs import Pack, PackUnit
+from ..process_bindings.models import CompanySpec as ProcessCompany
+from ..synthesis.connectors import IncidentRule
+from ..synthesis.models import Program
+
+
+class UseCase(Model):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    title: str = Field(min_length=1, max_length=200)
+    objective: str = Field(min_length=1, max_length=4000)
+    owner: str = ""
+    lob: str = ""
+    activities: tuple[str, ...] = ()
+    count: int = Field(default=12, ge=1, le=100_000, strict=True)
+    scenario: ScenarioProfile | None = None
+    simulation: Program | None = None
+    incident_rule: IncidentRule | None = None
+    dag_shapes: tuple[str, ...] = ("*",)
+    where: dict[str, str] = Field(default_factory=dict)
+
+    def source(self, project: ProjectSpec) -> DatasetSource:
+        if self.scenario is None:
+            raise ValueError(f"use case {self.id} needs an executable workflow contract")
+        return DatasetSource(company=project.company, scenario=self.scenario,
+                             simulation=self.simulation, incident_rule=self.incident_rule,
+                             dag_shapes=self.dag_shapes, where=self.where,
+                             pool_size=project.pool_size, planning_budget=project.planning_budget,
+                             acknowledged_unmet=project.acknowledged_unmet)
+
+
+class ProjectSpec(Model):
+    schema_version: Literal["worldloom.project/v1"] = "worldloom.project/v1"
+    company: dict[str, Any]
+    seed: int = Field(default=8128, strict=True)
+    structure: ProcessCompany | None = None
+    lobs: tuple[Lob, ...] = ()
+    divisions: tuple[PackUnit, ...] = ()
+    episodes: tuple[str, ...] = ()
+    narration_job: str | None = Field(default=None, pattern=r"^[a-f0-9]{30,64}$")
+    use_cases: tuple[UseCase, ...] = ()
+    acknowledged_unmet: tuple[str, ...] = ()
+    max_batches: int = Field(default=16, ge=1, le=10_000, strict=True)
+    pool_size: int = Field(default=24, ge=1, le=512, strict=True)
+    planning_budget: int = Field(default=1024, ge=1, le=100_000, strict=True)
+    max_per_task: int = Field(default=24, ge=1, strict=True)
+    max_per_case: int = Field(default=3, ge=1, strict=True)
+    max_per_request: int = Field(default=12, ge=1, strict=True)
+    minimum_tasks: int = Field(default=2, ge=1, strict=True)
+    split_by: Literal["task", "case"] = "case"
+    split_weights: dict[str, int] = Field(default_factory=lambda: {"train": 80, "validation": 10, "test": 10})
+
+    @model_validator(mode="after")
+    def _references(self) -> ProjectSpec:
+        from datetime import date
+
+        from ..process_bindings import compile_company
+
+        spec = from_document(self.company)
+        if spec.pack:
+            raise ValueError("studio projects embed company identity; external pack paths are not portable")
+        if spec.identity is None or not spec.identity.company_name.strip():
+            raise ValueError("name the company before creating its project")
+        resolution = resolve(spec)
+        resolution.raise_for_conflicts()
+        if self.divisions:
+            if resolution.pack is None:
+                raise ValueError("explicit revenue divisions require a resolved company identity")
+            Pack.model_validate({**resolution.pack.model_dump(mode="json"),
+                                 "units": [unit.model_dump(mode="json") for unit in self.divisions]})
+            if len({unit.key for unit in self.divisions}) != len(self.divisions):
+                raise ValueError("revenue division keys must be unique")
+        if set(self.acknowledged_unmet) - set(resolution.unmet):
+            raise ValueError("company limitation acknowledgement is stale or unknown")
+        if self.structure and self.structure.name != spec.identity.company_name:
+            raise ValueError("process structure and company profile must name the same company")
+        if len({u.id for u in self.use_cases}) != len(self.use_cases):
+            raise ValueError("use case IDs must be unique")
+        if len({lob.name for lob in self.lobs}) != len(self.lobs):
+            raise ValueError("LOB names must be unique")
+        if any(lob.engine != resolution.engine for lob in self.lobs):
+            raise ValueError("LOB engine differs from the company engine")
+        lob_findings = [finding for lob in self.lobs for finding in lint_lob(lob, base=resolution.engine)]
+        if lob_findings:
+            raise ValueError("; ".join(lob_findings))
+        if self.episodes != tuple(sorted(set(self.episodes))):
+            raise ValueError("episode periods must be unique and chronological")
+        for period in self.episodes:
+            if len(period) != 7:
+                raise ValueError("episode periods use YYYY-MM")
+            date.fromisoformat(period + "-01")
+        rows = compile_company(self.structure).rows if self.structure else ()
+        units = {bu.name for bu in self.structure.bus} if self.structure else set()
+        for case in self.use_cases:
+            if case.owner and case.owner not in units:
+                raise ValueError(f"use case {case.id} names an unknown business unit")
+            if case.lob and case.lob not in {lob.name for lob in self.lobs}:
+                raise ValueError(f"use case {case.id} names an unknown LOB")
+            available = {row.activity_id for row in rows if not case.owner or row.owner_bu == case.owner}
+            if set(case.activities) - available:
+                raise ValueError(f"use case {case.id} names a process outside its owner")
+            if case.scenario is not None:
+                case.source(self)
+            elif case.simulation is not None or case.incident_rule is not None:
+                raise ValueError("an evidence generator needs an executable scenario")
+        return self
+
+
+class InterviewReply(Model):
+    request_id: str
+    message: str = Field(min_length=1, max_length=8000)
+    questions: tuple[str, ...] = Field(default=(), max_length=5)
+    proposal: ProjectSpec | None = None
+
+
+class RunOptions(Model):
+    operation: Literal["build", "compile", "interview", "narrate"]
+    batch_limit: int | None = Field(default=None, ge=1, le=10_000, strict=True)
+    message: str = Field(default="", max_length=8000)
+    max_rounds: int = Field(default=2, ge=1, le=8, strict=True)
+    harness_identity: str = ""
+
+
+__all__ = ["ProjectSpec", "UseCase", "InterviewReply", "RunOptions"]

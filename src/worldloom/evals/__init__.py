@@ -26,6 +26,7 @@ from ..eval_tactics import TacticPlan
 from ..eval_witnesses import ConstructionRefused
 from .builders import candidate_builder
 from .campaign import CampaignRun, EvalCampaign
+from .company_dataset import CompanyDatasetPlan, FrozenCompanyBuilder, load_dataset_plan
 from .coverage import CoverageReport
 from .coverage import report as coverage_report
 from .dataset import (
@@ -107,6 +108,7 @@ def seam_contract() -> dict[str, object]:
 
 
 __all__ = [
+    "CompanyDatasetPlan", "FrozenCompanyBuilder", "load_dataset_plan",
     "CompanyDatasetBuilder",
     "DatasetBuild",
     "DatasetPlan",

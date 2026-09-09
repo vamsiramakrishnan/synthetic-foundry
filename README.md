@@ -16,6 +16,11 @@ Python 3.11+ · pre-release, install from source · Apache-2.0
 [Quickstart](#quickstart) · [Design a corpus](docs/enterprise-corpus.md) ·
 [Python SDK](docs/sdk.md) · [Documentation site](https://vamsiramakrishnan.github.io/worldloom/)
 
+[Worldloom Studio](docs/studio.md) provides a local UI for company interviews,
+operating structure, use cases, generation runs and qualified evaluations.
+Start it with `worldloom studio serve`. Each company retains its own revisions
+and evidence; eval batches reuse that company rather than generate replacements.
+
 Status: 0.1.0, the first release. The source-install path below targets this
 repository checkout. The library never calls an LLM service by itself.
 

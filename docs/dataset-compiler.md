@@ -1,5 +1,12 @@
 # Compile a dataset, not a row count
 
+For a dataset belonging to **one company**, use `CompanyDatasetPlan` or
+[Worldloom Studio](studio.md). It freezes one world across all batches and
+measures task and evidence diversity within that company. The historical
+`DatasetPlan` and retail/banking example below are a **benchmark collection**
+spanning independent company worlds. Their company minimum is not a diversity
+requirement for a customer-shaped company dataset.
+
 `DatasetPlan` declares the population cells, exact row quotas, repetition caps,
 minimum executable task families and companies, split policy and finite budget.
 The compiler generates missing coverage through the existing company SDK,

@@ -11,6 +11,22 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: one-company datasets and local Studio
+
+- Add `CompanyDatasetPlan`, separate from the existing multi-company
+  collection schema. Freeze one canonical world, keep process simulation seeds
+  stable, advance real case cohorts across batches, and refuse company drift.
+  Task/case splits retain transitive evidence isolation; insufficient diversity
+  remains incomplete instead of producing another company.
+- Add a local Studio UI and shared SDK/CLI for company profiles, real revenue
+  divisions, LOB roles, operating-process definitions, use cases, interviews,
+  narration selection, revision history and durable generation jobs. Eval-only
+  edits reuse the company; timeline additions replay and extend its history.
+- Run bounded interview and narration requests through installed coding
+  CLIs, custom JSON adapters or file exchange. Proposals require
+  revision-bound application and never approve their own evidence. Existing
+  collection plans and default generation paths retain their replay contracts.
+
 ### Generation: opt-in dataset compilation and split isolation
 
 - Add a sealed dataset plan with exact stratum quotas, repetition caps, task

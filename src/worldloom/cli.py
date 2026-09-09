@@ -109,10 +109,12 @@ evals_app.add_typer(dataset_app, name="dataset")
 # Keep operational generation in its own command module, not this monolith.
 from .gemini_enterprise.cli import app as gemini_enterprise_app
 from .seams_cli import seams_command
+from .studio_cli import studio_app
 from .synthesis_cli import app as synthesis_app
 
 app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
+app.add_typer(studio_app, name="studio")
 app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
 
 
@@ -510,6 +512,7 @@ _REFUSALS: dict[str, str] = {
     "destination_exists": "the output destination exists and --overwrite was not given",
     "datastore_unexportable": "the workspace could not be written as Discovery Engine documents",
     "dataset_rejected": "dataset plan, source or checkpoint was refused; detail names the contract",
+    "studio_rejected": "company project, harness proposal or run was refused; detail names the contract",
     "dataset_incomplete": "dataset quotas, diversity or split obligations remain; the run can be inspected or resumed",
     "doctor_unhealthy": "this installation cannot do everything the docs promise",
     "duplicate_facet": "one facet dimension was given two values",
