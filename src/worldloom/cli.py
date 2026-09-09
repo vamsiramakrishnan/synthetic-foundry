@@ -96,8 +96,10 @@ enterprise_evals_app = typer.Typer(
 app.add_typer(enterprise_evals_app, name="enterprise-evals")
 
 from .connector_serving_cli import serve_command
+from .enterprise_qualification_cli import qualify_command
 
 enterprise_evals_app.command("serve")(serve_command)
+enterprise_evals_app.command("qualify")(qualify_command)
 
 # Keep operational generation in its own command module, not this monolith.
 from .gemini_enterprise.cli import app as gemini_enterprise_app
@@ -508,6 +510,7 @@ _REFUSALS: dict[str, str] = {
     "eval_spec_unloadable": "the eval design file is not a valid EvalSpec; data.error names the field",
     "eval_unconstructible": "no candidate could be made to satisfy the eval design; data.findings names the seam per refusal",
     "engine_lacks_roles": "a facet implies roles and this engine has no role table to append them to",
+    "enterprise_qualification_failed": "enterprise qualification could not evaluate the requested pool; detail names the contract",
     "episode_replaces_nothing": "the episode declares it replaces a loop this build does not run",
     "estate_unavailable": "an estate was asked for in a vertical with no landscape vocabulary",
     "exactly_one": "exactly one of a set of mutually exclusive flags must be given",
@@ -528,6 +531,7 @@ _REFUSALS: dict[str, str] = {
     "invalid_actions": "the submitted actions cannot be applied to this episode",
     "loop_exhausted": "narrate loop hit --max-rounds with sections still rejected; nothing was committed",
     "mcp_unavailable": "the MCP server cannot start in this installation",
+    "no_qualified_evals": "no enterprise query passed evidence and execution admission; data.report retains every finding",
     "missing_flag": "a required companion flag was not given",
     "mosaic_failed": "the mosaic could not be planned or built",
     "narration_conflict": "--narrate-exec names the writer and cannot ride with --no-narrate",

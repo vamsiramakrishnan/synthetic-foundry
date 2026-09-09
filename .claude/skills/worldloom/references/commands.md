@@ -289,6 +289,25 @@ worldloom enterprise-evals plan <WORLD_PATH> <OUTPUT>
 | `--shard-index` |  |
 | `--strength` |  |
 
+### `worldloom enterprise-evals qualify`
+
+Qualify actual evidence and execution, then select enterprise coverage.
+
+```
+worldloom enterprise-evals qualify <WORLD_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
+| `--json` | Print the complete qualification report. |
+| `--limit` | Maximum qualified outputs; uncovered interactions remain in the report. |
+| `--out`, `-o` | Qualified corpus, coverage findings and exact execution proofs. |
+| `--overwrite` | Replace an existing qualification export. |
+| `--pool-size` | Maximum query candidates to inspect before admission and selection. |
+| `--profile` | Existing enterprise ScenarioProfile JSON. |
+| `--strength` | Interaction strength for selection after qualification. |
+
 ### `worldloom enterprise-evals score`
 
 Score an MCP trace against one planned query's semantic DAG.

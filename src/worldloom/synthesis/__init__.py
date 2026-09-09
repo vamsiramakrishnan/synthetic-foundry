@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from .compiler import compile_program
 from .connectors import (
+    OPERATIONAL_CASE_DIMENSIONS,
     IncidentRule,
+    bind_case_queries,
+    bind_case_query,
     exception_episodes,
     operational_profile,
     operational_projections,
@@ -57,4 +60,5 @@ __all__ = [
     "retail_search_plan", "search", "with_parameters",
     "export", "iter_export", "load_simulator", "merge_exports", "verify_export",
     "IncidentRule", "exception_episodes", "operational_profile", "operational_projections",
+    "OPERATIONAL_CASE_DIMENSIONS", "bind_case_queries", "bind_case_query",
 ]

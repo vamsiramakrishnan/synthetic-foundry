@@ -20,6 +20,17 @@ When the deliverable is a benchmark, start from the design, not from a corpus:
 
 ## Workflow: from an existing world
 
+For an executable benchmark, use `worldloom enterprise-evals qualify ./corpus
+--pool-size 128 --limit 64 --out ./qualified`. Read
+`docs/enterprise-qualification.md`: admission precedes coverage, refusals retain
+the requested pool denominator, and exports preserve exact tested records.
+With operational projections, enable the SDK's
+`with_operational_case_binding()` so coverage exercises actual shared cases.
+Inspect `docs/enterprise-outcome-reuse.md` before claiming enterprise breadth,
+prose quality or calibrated difficulty from these connector proofs.
+
+The lower-level seams remain useful for inspecting individual stages:
+
 1. Load and validate a `World`; never invent company facts outside it.
 2. Start from `builtin_registry()` or author connector, process, and workflow specs. Run `registry.review()` and resolve every finding.
 3. Choose a `CoverageProfile`. Use constrained covering for routine evals; exhaustive generation must stream and normally use a limit or shard.

@@ -11,6 +11,24 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: opt-in operational case binding and qualified coverage
+
+- `with_operational_case_binding()` scopes enterprise queries to deterministic
+  real case cohorts shared by all source roles. Bound query IDs, user-facing
+  source references, source predicates and metadata change. Unbound query
+  serialization and generated source records retain their existing bytes.
+- `EnterpriseEvalHarness.qualify(pool_size=...)` and `enterprise-evals qualify`
+  admit a bounded pool through strict source evidence, independent validation,
+  compilation and executable assertions before selecting coverage. Native
+  input formats require actual World artifact bytes; metadata alone refuses.
+- Semantic interactions and operational cases have separate measured coverage.
+  Output caps recompute holes against the requested pool. Refused candidates
+  remain inspectable and contribute no witnessed coverage.
+- Qualification exports keep the exact shared connector dataset, selected
+  fixtures, compiled rows and execution proofs. Source native-byte receipts
+  remain bound to admission; the source World retains the native files.
+  Default enterprise build behavior is unchanged.
+
 ### Generation: narration contracts and calibration provenance
 
 - `section_prose@6` and `artifact_plan@2` bind accepted authorship to the
