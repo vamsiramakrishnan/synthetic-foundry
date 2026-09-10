@@ -332,9 +332,18 @@ class UnreachableProvider:
     bare-construction use — and staying a class attribute so subclasses that
     override it keep working (the constructor only writes when given an id)."""
 
-    def __init__(self, id: str | None = None) -> None:
+    def __init__(self, id: str | None = None, *, allowed_model_ids: tuple[str, ...] = ()) -> None:
         if id is not None:
             self.id = id
+        if len(set(allowed_model_ids)) != len(allowed_model_ids) or any(not name for name in allowed_model_ids):
+            raise ValueError("replay model identities must be distinct and nonempty")
+        self.allowed_model_ids = tuple(sorted(allowed_model_ids))
+        """Explicit mixed-author replay. Each current section must have one receipt.
+
+        This never broadens live generation: complete still always raises. A
+        current request with receipts from two allowed authors is ambiguous and
+        refused rather than choosing an author's words by iteration order.
+        """
 
     def complete(self, request, prompt, facts, *, feedback=""):  # type: ignore[no-untyped-def]
         raise ProviderError(

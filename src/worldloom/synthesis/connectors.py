@@ -8,7 +8,8 @@ World fact IDs. The originating synthesis export remains the evidence ledger.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+import json
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -25,8 +26,101 @@ from .engine import Simulator
 from .models import Row, SynthesisError
 
 if TYPE_CHECKING:
+    from ..enterprise_queries import PlannedEnterpriseQuery
     from ..enterprise_specs import ScenarioProfile
     from ..world import World
+
+OPERATIONAL_CASE_DIMENSIONS = frozenset({
+    "operational_case_binding", "operational_case_ids", "operational_base_query_id",
+    "operational_available_cases",
+})
+
+
+def bind_case_query(
+    query: PlannedEnterpriseQuery, records: Iterable[ConnectorRecord], *,
+    ordinal: int = 0, max_cases: int = 128,
+) -> PlannedEnterpriseQuery:
+    """Bind one planned workflow to a real shared cohort of operational cases.
+
+    Consecutive ordinals cycle the sorted available cases. Multi-record source
+    minima become bounded cohorts, with one member available on every source.
+    The adapter only selects observations; no record or World fact is minted.
+    """
+    from ..enterprise_corpus import operational_record_case_id, source_matches
+    from ..ids import content_key
+    from ..predicates import FieldPredicate, Predicate, PredicateOp
+
+    if type(ordinal) is not int or ordinal < 0 or type(max_cases) is not int or not 1 <= max_cases <= 128:
+        raise SynthesisError("case_binding_budget", "nonnegative ordinal and max_cases in [1,128] required")
+    if OPERATIONAL_CASE_DIMENSIONS & query.dimensions.keys():
+        raise SynthesisError("case_binding_applied", query.id)
+    sources = query.generation.source_requirements
+    if not sources or len({(source.connector, source.entity) for source in sources}) != len(sources):
+        raise SynthesisError("case_binding_sources", "distinct connector/entity source requirements required")
+    width = max(source.minimum for source in sources)
+    if width > max_cases:
+        raise SynthesisError("case_binding_budget", f"source minimum {width} exceeds case budget {max_cases}")
+    materialized = tuple(records)
+    available: set[str] | None = None
+    for source in sources:
+        cases: set[str] = set()
+        for record in materialized:
+            try:
+                matches = source_matches(source, record)
+            except ValueError as error:
+                raise SynthesisError("case_binding_predicate", str(error)) from error
+            if not matches:
+                continue
+            case_id = record.fields.get("case_id")
+            if not isinstance(case_id, str) or not case_id or "synthesis_provenance" not in record.fields:
+                continue
+            try:
+                cases.add(operational_record_case_id(record))
+            except ValueError as error:
+                raise SynthesisError("case_binding_evidence", str(error)) from error
+        available = cases if available is None else available & cases
+    ordered = sorted(available or ())
+    if len(ordered) < width:
+        raise SynthesisError("insufficient_case_cohort", f"{query.id}: needs {width} cases on every source, found {len(ordered)}")
+    selected = tuple(sorted(ordered[(ordinal + offset) % len(ordered)] for offset in range(width)))
+    selection = FieldPredicate(field="case_id", op=PredicateOp.IN, value=selected)
+    bound = []
+    references: list[str] = []
+    for source in sources:
+        predicate = source.predicate or Predicate()
+        where = tuple(sorted((*[item for item in predicate.where if item.field != "case_id"], selection),
+                             key=lambda item: item.field))
+        bound.append(source.model_copy(update={"predicate": predicate.model_copy(update={"where": where}),
+                                                "minimum": width}))
+        # Match materialization's first sorted record per case, so customer
+        # instructions name the actual native sources rather than opaque case
+        # hashes or the internal predicate language.
+        eligible = sorted((record for record in materialized if source_matches(source, record)),
+                          key=lambda record: record.id)
+        for case in selected:
+            record = next(record for record in eligible if record.fields.get("case_id") == case)
+            # Operational email threads reuse the internal case key as their
+            # external ID; their real title is the useful customer reference.
+            native_id = "" if record.external_id == case else f" {record.external_id}"
+            references.append(f"{source.connector} {source.entity}{native_id} ({record.title})")
+    case_json = json.dumps(selected, separators=(",", ":"))
+    return query.model_copy(update={
+        "id": content_key("operational-case-query/v1", query.id, case_json),
+        "query": query.query + " Scope this work to these source records: " + "; ".join(references) + ".",
+        "generation": query.generation.model_copy(update={"source_requirements": tuple(bound)}),
+        "dimensions": {**query.dimensions, "operational_case_binding": "case-cohort/v1",
+                       "operational_case_ids": case_json, "operational_base_query_id": query.id,
+                       "operational_available_cases": str(len(ordered))},
+    })
+
+
+def bind_case_queries(
+    queries: Iterable[PlannedEnterpriseQuery], records: Iterable[ConnectorRecord], *, max_cases: int = 128,
+) -> tuple[PlannedEnterpriseQuery, ...]:
+    """Bind a finite query pool; per-query callers can retain individual refusals."""
+    materialized = tuple(records)
+    return tuple(bind_case_query(query, materialized, ordinal=index, max_cases=max_cases)
+                 for index, query in enumerate(queries))
 
 
 class IncidentRule(Model):

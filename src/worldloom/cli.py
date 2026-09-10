@@ -96,16 +96,25 @@ enterprise_evals_app = typer.Typer(
 app.add_typer(enterprise_evals_app, name="enterprise-evals")
 
 from .connector_serving_cli import serve_command
+from .dataset_cli import dataset_app
+from .enterprise_qualification_cli import qualify_command
+from .quality_cli import calibration_app, readers_app
 
 enterprise_evals_app.command("serve")(serve_command)
+enterprise_evals_app.command("qualify")(qualify_command)
+narrate_app.add_typer(readers_app, name="readers")
+evals_app.add_typer(calibration_app, name="calibration")
+evals_app.add_typer(dataset_app, name="dataset")
 
 # Keep operational generation in its own command module, not this monolith.
 from .gemini_enterprise.cli import app as gemini_enterprise_app
 from .seams_cli import seams_command
+from .studio_cli import studio_app
 from .synthesis_cli import app as synthesis_app
 
 app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
+app.add_typer(studio_app, name="studio")
 app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
 
 
@@ -502,12 +511,16 @@ _REFUSALS: dict[str, str] = {
     "corpus_unloadable": "the corpus (or something it depends on) cannot be read",
     "destination_exists": "the output destination exists and --overwrite was not given",
     "datastore_unexportable": "the workspace could not be written as Discovery Engine documents",
+    "dataset_rejected": "dataset plan, source or checkpoint was refused; detail names the contract",
+    "studio_rejected": "company project, harness proposal or run was refused; detail names the contract",
+    "dataset_incomplete": "dataset quotas, diversity or split obligations remain; the run can be inspected or resumed",
     "doctor_unhealthy": "this installation cannot do everything the docs promise",
     "duplicate_facet": "one facet dimension was given two values",
     "empty_query": "the search query is empty",
     "eval_spec_unloadable": "the eval design file is not a valid EvalSpec; data.error names the field",
     "eval_unconstructible": "no candidate could be made to satisfy the eval design; data.findings names the seam per refusal",
     "engine_lacks_roles": "a facet implies roles and this engine has no role table to append them to",
+    "enterprise_qualification_failed": "enterprise qualification could not evaluate the requested pool; detail names the contract",
     "episode_replaces_nothing": "the episode declares it replaces a loop this build does not run",
     "estate_unavailable": "an estate was asked for in a vertical with no landscape vocabulary",
     "exactly_one": "exactly one of a set of mutually exclusive flags must be given",
@@ -519,6 +532,10 @@ _REFUSALS: dict[str, str] = {
     "evolve_failed": "the evolution run could not complete",
     "facet_syntax": "--facet takes name=value",
     "fidelity_unreadable": "one side of the fidelity comparison cannot be read as rows",
+    "fidelity_support_missing": "requested fidelity slices lack complete measured population support",
+    "reader_plan_rejected": "reader targets cannot be checked against the current corpus",
+    "reader_check_rejected": "persisted independent reader review failed evidence admission",
+    "calibration_rejected": "observed trial or snapshot violates the calibration contract",
     "fleet_error": "the fleet directory cannot be qualified or curated",
     "history_too_short": "the corpus's history is too short for this decomposition",
     "implausible_productivity": "revenue and employees describe an implausible revenue per head",
@@ -528,6 +545,7 @@ _REFUSALS: dict[str, str] = {
     "invalid_actions": "the submitted actions cannot be applied to this episode",
     "loop_exhausted": "narrate loop hit --max-rounds with sections still rejected; nothing was committed",
     "mcp_unavailable": "the MCP server cannot start in this installation",
+    "no_qualified_evals": "no enterprise query passed evidence and execution admission; data.report retains every finding",
     "missing_flag": "a required companion flag was not given",
     "mosaic_failed": "the mosaic could not be planned or built",
     "narration_conflict": "--narrate-exec names the writer and cannot ride with --no-narrate",
@@ -549,7 +567,6 @@ _REFUSALS: dict[str, str] = {
     "physics_unsupported": "--physics was given and this specification type accepts none",
     "recipe_error": "the corpus's recipe and this engine version disagree",
     "render_failed": "a requested format could not be rendered",
-    "replay_many_providers": "the corpus was narrated by several providers; one pass replays one",
     "replay_recipe_mismatch": "the replayed corpus's recipe and this build's flags disagree",
     "resume_invalid": "a completed world does not validate for resume",
     "scenario_profile_rejected": "the enterprise scenario profile names something this registry does not hold, or selects nothing",
@@ -2634,7 +2651,12 @@ def build(
 
     if narrate or replay is not None:
         from . import recipe as recipe_module
-        from .narrative import DeterministicProvider, ProviderError, UnreachableProvider
+        from .narrative import (
+            DeterministicProvider,
+            NarrationError,
+            ProviderError,
+            UnreachableProvider,
+        )
 
         ledger = ()
         provider = DeterministicProvider()
@@ -2707,23 +2729,15 @@ def build(
                 for ir in source._artifact_irs
                 if "narrated_by" in ir.metadata
             }
-            if len(narrated_ids) > 1:
-                _refuse(
-                    "replay_many_providers",
-                    f"[red]error:[/red] {replay} was narrated by several providers"
-                    f" ({', '.join(sorted(narrated_ids))}); one narrate pass"
-                    " replays one provider's keys",
-                    providers=sorted(narrated_ids),
-                )
             provider = (
-                UnreachableProvider(id=narrated_ids.pop())
+                UnreachableProvider(allowed_model_ids=tuple(sorted(narrated_ids)))
                 if narrated_ids
                 else UnreachableProvider()
             )
 
         try:
             world = world.narrate(provider, ledger=ledger)
-        except ProviderError as exc:
+        except (ProviderError, NarrationError) as exc:
             _refuse("narration_failed", f"[red]error:[/red] {escape(str(exc))}")
 
         calls, replayed, rejected = world._narration
@@ -4419,7 +4433,7 @@ def verify(
     from . import corpus as corpus_module
     from . import recipe as recipe_module
     from .actors import ActorProviderError, UnreachableActorProvider
-    from .narrative import ProviderError, UnreachableProvider
+    from .narrative import NarrationError, ProviderError, UnreachableProvider
     from .recipe import RecipeError
 
     world = _load(corpus)
@@ -4436,8 +4450,8 @@ def verify(
     ledger = tuple(world._ledger)
     # The same replay stance `build --replay` takes, for the same reasons: the
     # provider id is a key component, so it comes from what the artifacts
-    # record as `narrated_by`; several providers cannot be replayed in one
-    # pass; and a rebuild that quietly *generated* where the ledger missed
+    # record as `narrated_by`; exact current requests may replay only those
+    # recorded model identities. A rebuild that *generated* where the ledger missed
     # would prove that a plausible corpus exists, not that this one is its own
     # record — which is why both providers below are the unreachable kind.
     narrated_ids = {
@@ -4445,14 +4459,6 @@ def verify(
         for ir in world._artifact_irs
         if "narrated_by" in ir.metadata
     }
-    if len(narrated_ids) > 1:
-        _refuse(
-            "replay_many_providers",
-            f"[red]error:[/red] {corpus} was narrated by several providers"
-            f" ({', '.join(sorted(narrated_ids))}); one narrate pass replays"
-            " one provider's keys",
-            providers=sorted(narrated_ids),
-        )
     if narrated_ids and not ledger:
         _refuse(
             "no_ledger",
@@ -4470,13 +4476,13 @@ def verify(
         )
         if narrated_ids:
             rebuilt = rebuilt.narrate(
-                UnreachableProvider(id=narrated_ids.pop()), ledger=ledger
+                UnreachableProvider(allowed_model_ids=tuple(sorted(narrated_ids))), ledger=ledger
             )
     except RecipeError as exc:
         _refuse("recipe_error", f"[red]error:[/red] {escape(str(exc))}")
     except ActorProviderError as exc:
         _refuse("actor_episode_failed", f"[red]error:[/red] {escape(str(exc))}")
-    except ProviderError as exc:
+    except (ProviderError, NarrationError) as exc:
         _refuse("narration_failed", f"[red]error:[/red] {escape(str(exc))}")
     # Mirror what `build --out` does before exporting, so an unnarrated
     # corpus's rebuild carries the same artifact IR and manifest files its
@@ -6194,6 +6200,8 @@ def fidelity(
         None, "--slices",
         help="Report the per-column block again per value of this column, most frequent first. Repeatable.",
     ),
+    max_slices: int = typer.Option(12, "--max-slices", min=1, help="Maximum metric groups per slice column; omitted groups remain in support accounting."),
+    require_slice_support: bool = typer.Option(False, "--require-slice-support", help="Exit with a refusal when requested slices have missing support or omitted metrics."),
     seed: int = typer.Option(0, "--seed", help="Seed for the subsample the two quadratic blocks take past 2,000 rows."),
     as_json: bool = typer.Option(False, "--json", help="Emit the whole vector as JSON: stable keys, safe to diff."),
 ) -> None:
@@ -6210,6 +6218,8 @@ def fidelity(
     from . import fidelity as fidelity_module
     from .corpus import CorpusError
 
+    if require_slice_support and not slices:
+        _refuse("fidelity_support_missing", "slice support requires at least one --slices column")
     try:
         real_rows = fidelity_module.load_rows(reference, table=table)
         synthetic_rows = fidelity_module.load_rows(synthetic, table=table)
@@ -6218,6 +6228,7 @@ def fidelity(
         kinds.update({name: "ignore" for name in (ignore or ())})
         report = fidelity_module.compute(
             real_rows, synthetic_rows, kinds=kinds, slices=tuple(slices or ()), seed=seed,
+            max_slices=max_slices,
         )
     except (OSError, ValueError, CorpusError, json.JSONDecodeError) as exc:
         _refuse("fidelity_unreadable", f"[red]error:[/red] {escape(str(exc))}")
@@ -6226,8 +6237,13 @@ def fidelity(
             {"reference": str(reference), "synthetic": str(synthetic), **report.as_dict()},
             indent=2,
         ))
-        return
-    console.print(escape(str(report)))
+    else:
+        console.print(escape(str(report)))
+    if require_slice_support and not report.support_complete:
+        from dataclasses import asdict
+
+        _refuse("fidelity_support_missing", "requested slices have incomplete support or omitted metrics",
+                exit_code=3, findings=[asdict(finding) for finding in report.support_findings()])
 
 
 @app.command()

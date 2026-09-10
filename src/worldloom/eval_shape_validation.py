@@ -7,6 +7,7 @@ are explicitly unsupported and cannot admit a candidate.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Callable, Sequence
@@ -33,22 +34,42 @@ class ShapeCheck(Model):
     supported: bool = True
 
 
+class ArtifactByteWitness(Model):
+    """Identity of bytes read from one in-memory or persisted World artifact."""
+
+    artifact_id: str
+    format: str
+    path: str
+    size_bytes: int
+    payload_digest: str
+
+
 def _bytes(value: Any) -> int:
     return len(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
 
 
-def _artifact_sizes(world: World) -> dict[tuple[str, str], int]:
-    """Sizes of actual renderings, including files restored by ``World.load``.
+def artifact_byte_witnesses(world: World) -> dict[tuple[str, str], ArtifactByteWitness]:
+    """Receipts for actual renderings, including files restored by ``World.load``.
 
     An in-memory render supersedes persisted output. The manifest only locates
     a file: a missing file or a path escaping the corpus proves no shape.
     """
-    sizes: dict[tuple[str, str], int] = {}
+    witnesses: dict[tuple[str, str], ArtifactByteWitness] = {}
+
+    def witness(artifact_id: str, path: str, size: int, payload_digest: str) -> None:
+        suffix = PurePosixPath(path).suffix
+        key = (artifact_id, suffix)
+        item = ArtifactByteWitness(artifact_id=artifact_id,
+                                   format="markdown" if suffix == ".md" else suffix.removeprefix("."),
+                                   path=path, size_bytes=size, payload_digest=payload_digest)
+        prior = witnesses.get(key)
+        if prior is None or (size, payload_digest, path) > (prior.size_bytes, prior.payload_digest, prior.path):
+            witnesses[key] = item
+
     if world._rendered:
         for item in world._rendered:
             if not item.path.endswith(".citations.md"):
-                key = (item.artifact_id, PurePosixPath(item.path).suffix)
-                sizes[key] = max(sizes.get(key, 0), len(item.payload))
+                witness(item.artifact_id, item.path, len(item.payload), hashlib.sha256(item.payload).hexdigest())
     elif world.root is not None:
         root = world.root.resolve()
         for artifact in world.artifacts:
@@ -66,15 +87,20 @@ def _artifact_sizes(world: World) -> dict[tuple[str, str], int]:
                     if not source.is_relative_to(root) or not source.is_file():
                         continue
                     size = 0
+                    payload_hash = hashlib.sha256()
                     with source.open("rb") as stream:
                         while chunk := stream.read(65_536):
                             size += len(chunk)
+                            payload_hash.update(chunk)
                 except (OSError, RuntimeError):
                     # Unreadable files and symlink loops provide no evidence either.
                     continue
-                key = (artifact.id, candidate.suffix)
-                sizes[key] = max(sizes.get(key, 0), size)
-    return sizes
+                witness(artifact.id, str(candidate), size, payload_hash.hexdigest())
+    return witnesses
+
+
+def _artifact_sizes(world: World) -> dict[tuple[str, str], int]:
+    return {key: witness.size_bytes for key, witness in artifact_byte_witnesses(world).items()}
 
 
 def check_candidate_shape(
@@ -225,4 +251,4 @@ def check_candidate_shape(
     return tuple(checks)
 
 
-__all__ = ["ShapeCheck", "check_candidate_shape"]
+__all__ = ["ArtifactByteWitness", "ShapeCheck", "artifact_byte_witnesses", "check_candidate_shape"]

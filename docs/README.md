@@ -11,10 +11,14 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 
 | Goal | Start here | Then read |
 | --- | --- | --- |
+| Explore, interview and generate one persistent company through a UI | [Worldloom Studio](studio.md) | [Company dataset and collection distinction](dataset-compiler.md) |
 | Interview a company and reuse it across eval-driven candidates | [Company-driven campaign reuse](company-eval-reuse.md) | [Company specification](agents/company-specification.md) and [Narration rules](agents/writing-responses.md) |
+| Measure executable enterprise coverage and real operational cases | [Enterprise qualification](enterprise-qualification.md) | [Measured module reuse and remaining gaps](enterprise-outcome-reuse.md) |
+| Admit blind evidence, compare complete populations and calibrate noise | [Quality and calibration](quality-calibration.md) | [Company campaign ownership](company-eval-reuse.md) |
 | Design an eval, then generate candidate corpora for it | [Eval-first generation](eval-first.md) | [Eval-first world compilation](eval-first-world-compilation.md) and [Python SDK](sdk.md) |
 | Build one corpus | [README quickstart](../README.md#quickstart) | [Architecture and invariants](architecture.md) |
 | Generate operational records and counterfactuals | [Operational synthesis](operational-synthesis.md) | [Agent skills](skills.md) |
+| Compile a diverse queryset with quotas and isolated splits | [Dataset compiler](dataset-compiler.md) | [Qualification](enterprise-qualification.md) and [Quality gates](quality-calibration.md) |
 | Generate a large enterprise dataset | [Enterprise corpus generation](enterprise-corpus.md) | [Generation model](generation-model.md) and [Artifact compiler](artifact-compiler.md) |
 | Use Worldloom from Python | [Python SDK](sdk.md) | [Episode grammar](episode-grammar.md) |
 | Drive Worldloom with a coding agent | [Agent skills](skills.md) | [AGENTS.md](../AGENTS.md) |

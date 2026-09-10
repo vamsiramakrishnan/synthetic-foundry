@@ -11,6 +11,91 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: one-company datasets and local Studio
+
+- Add `CompanyDatasetPlan`, separate from the existing multi-company
+  collection schema. Freeze one canonical world, keep process simulation seeds
+  stable, advance real case cohorts across batches, and refuse company drift.
+  Task/case splits retain transitive evidence isolation; insufficient diversity
+  remains incomplete instead of producing another company.
+- Add a local Studio UI and shared SDK/CLI for company profiles, real revenue
+  divisions, LOB roles, operating-process definitions, use cases, interviews,
+  narration selection, revision history and durable generation jobs. Eval-only
+  edits reuse the company; timeline additions replay and extend its history.
+- Run bounded interview and narration requests through installed coding
+  CLIs, custom JSON adapters or file exchange. Proposals require
+  revision-bound application and never approve their own evidence. Existing
+  collection plans and default generation paths retain their replay contracts.
+
+### Generation: opt-in dataset compilation and split isolation
+
+- Add a sealed dataset plan with exact stratum quotas, repetition caps, task
+  and company minima and a finite generation budget. Deficits drive existing
+  company/episode/synthesis builders; equivalent executable plans are removed
+  before fixture materialization and qualified rows alone consume quotas.
+- Derive task/case/request identities from executable contracts and evidence.
+  Reserve admission capacity for diversity; isolate transitive shared evidence
+  and task or company groups before assigning splits. Incomplete runs cannot
+  emit a publishable queryset.
+- Persist exact batch Worlds, fixtures, proofs and content receipts. Resume
+  generates only missing batches; complete replay makes no external calls.
+  Add `evals dataset compile` and `verify`, SDK composition and a measured
+  retail/banking example. Existing generation paths retain their bytes.
+
+### Generation: opt-in evidence admission and empirical noise calibration
+
+- A shared `reader/v2` plan/check/accept boundary covers full eval-critical
+  evidence in ordinary narration and program expansions. Rendered prose and
+  aspects go to the reader; expected facts remain in the checker. Current
+  identity, reader configuration, visibility and artifact witnesses bind the
+  acceptance. Missing, ambiguous, stale and unrecoverable targets refuse.
+- Accepted and rejected reviews retain responses and findings through the
+  generation ledger and `NarrationReaders` recipe step. This changes opted-in
+  ledger/recipe bytes; unchanged accepted checks replay without reader calls.
+  Legacy reader serialization, default program generation and golden corpora
+  are unchanged.
+- `evals.calibration.calibrate_noise` reuses Messiness, campaign revalidation,
+  reader/fidelity admission, empirical cohort estimates and Archive. Each
+  variant starts from isolated baseline generator state. Finite budgets,
+  uncertainty, refusals, niche holes and frozen held-out selection are recorded;
+  complete records replay without external callbacks. Exports retain the
+  exact selected trial worlds and split-labeled receipts.
+- Newly added noise prose uses the existing deterministic template provider,
+  with its own explicit authorship and ledger namespace. It is not reported as
+  model-authored. Offline narration replay can resolve an explicit set of
+  recorded model IDs against exact current request keys, refusing ambiguous
+  matches and preserving actual authorship. CLI replay uses those recorded IDs.
+
+### Fixed: complete fidelity populations and provenance-bound difficulty
+
+- Fidelity slice columns retain global marginals. The full typed union census
+  includes one-sided, missing, null and empty populations even when metrics are
+  capped. Nonfinite numeric values cannot satisfy metric gates. CLI strict slice
+  support rejects omitted or unsupported groups while retaining diagnostics.
+- Difficulty calibration supports versioned eval and request features with
+  intervention conditions. Trial replay is idempotent; configuration drift and
+  eval/corpus split leakage refuse. Estimates expose Wilson intervals, minimum
+  support and provenance. Held-out Brier/ECE retain unsupported denominators;
+  legacy counts and reference executions cannot claim fitted agent difficulty.
+
+### Generation: opt-in operational case binding and qualified coverage
+
+- `with_operational_case_binding()` scopes enterprise queries to deterministic
+  real case cohorts shared by all source roles. Bound query IDs, user-facing
+  source references, source predicates and metadata change. Unbound query
+  serialization and generated source records retain their existing bytes.
+- `EnterpriseEvalHarness.qualify(pool_size=...)` and `enterprise-evals qualify`
+  admit a bounded pool through strict source evidence, independent validation,
+  compilation and executable assertions before selecting coverage. Native
+  input formats require actual World artifact bytes; metadata alone refuses.
+- Semantic interactions and operational cases have separate measured coverage.
+  Output caps recompute holes against the requested pool. Refused candidates
+  remain inspectable and contribute no witnessed coverage.
+- Qualification exports keep the exact shared connector dataset, selected
+  fixtures, compiled rows and execution proofs. Source native-byte receipts
+  remain bound to admission; the source World retains the native files.
+  Default enterprise build behavior is unchanged.
+
 ### Generation: narration contracts and calibration provenance
 
 - `section_prose@6` and `artifact_plan@2` bind accepted authorship to the

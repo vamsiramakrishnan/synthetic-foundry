@@ -75,6 +75,12 @@ This measures actual output; a guessed number of variants is not a guarantee.
 
 ## Blind reader checks
 
+For evaluation-critical admission, use the shared
+[reader plan and persisted review](quality-calibration.md), supplying the full
+`EvalInstance` oracle and `expansion=sections`. It also accepts ordinary narrated
+Worlds, binds reader configuration and supports offline accepted-review replay.
+The compatibility interface below only checks its sampled writer-required facts.
+
 ```python
 from worldloom.narrative import reader_checks
 

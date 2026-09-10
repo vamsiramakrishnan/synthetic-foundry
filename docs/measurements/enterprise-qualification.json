@@ -1,0 +1,4289 @@
+{
+  "companies": [
+    {
+      "artifacts": 15,
+      "company_specification": {
+        "engine": "retail",
+        "geo": "germany",
+        "identity": {
+          "company_name": "Qualification Retail germany"
+        }
+      },
+      "engine": "retail",
+      "episode": "MonthEndClose",
+      "geography": "germany",
+      "narration": "not authored; native structural evidence only",
+      "period": "2026-03",
+      "qualification": {
+        "connector_data_digest": "2e15b38ecca90c4408548d87fbc0a66a",
+        "connector_records": 80,
+        "distinct_native_source_witnesses": 4,
+        "distinct_selected_cases": 0,
+        "eligible": 56,
+        "eligible_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 1721,
+          "hole_count": 849,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "permission_denied"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "record+html"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "xlsx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "operation",
+                "send"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "source_entities",
+                "email:thread"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 1721,
+        "pool_count": 128,
+        "pool_exhausted": false,
+        "pool_size": 128,
+        "pool_source_formats": {
+          "csv": 3,
+          "docx": 8,
+          "html": 14,
+          "markdown": 13,
+          "pdf": 12,
+          "pptx": 5,
+          "record": 110,
+          "xlsx": 8
+        },
+        "proofs_digest": "5006ef396c2478505a62f46ce6e337f2",
+        "refusal_distribution": {
+          "preflight:ValueError": 43,
+          "validation:invalid_corpus": 5,
+          "validation:source_format_mismatch": 24
+        },
+        "refusal_examples": [
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "90f5f0ba2f342d104aafb79086b7cf58",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "093ab3c64af24a854fb03930961edc55",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "34723591e511cbc4f8b42ed45ab54957",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "72e059a1f12fd0d4bc2807e76b45d9f4",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "1114861c4cb5247dd395e40ea18de3f9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "89989a02fdf04eaefd69fe4622203ba3",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "4384ad00ffd0f699bc1650ec6ac7df3b",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "09c0756740ffeb1c89c12818ce439dda",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "9d0f8da88e410ef605c5cb6904e69082",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "0a70b2c512eefdb284945764be783ec9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "d3fe264acfff581c2b0bcd5dcd5d6e2f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "4742e9956c2b7cc22affdc72e5f21882",
+            "stage": "preflight"
+          }
+        ],
+        "refusal_findings": 72,
+        "refused_queries": 72,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 56,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "a9f41d81a4aea882d72195affc931e79c9137ceee287bb447394cea705a1dcb6",
+            "fixtures.jsonl": "7f14d06dc887b58db8b90f211161fc126a703f397632b5c27adee4b57a9a634b",
+            "manifest.json": "0f608da89e64d48269fa3237dc04c7d2dd90534f36b9c58c8f8630421da4aeff",
+            "pool-queries.jsonl": "f598f41d042dd3c191b91610ad8e9a951803228367733143be8146fd112758f1",
+            "proofs.jsonl": "d1804668eee7ec4a3108101f3f2af31ded97cb89b9e1f04594e916527808cf9a",
+            "qualification.json": "1a875acd3adb28eacdb71ac77ea0d34a52d3cde410406e421308bdb0538fcf5c",
+            "qualified-rows.jsonl": "8411e30838ca1de7a9a02a76062d7b55bd2b0e01d9f707e569b0d4cb0748076f",
+            "queries.jsonl": "ff71b16f573971a7b62783f6c2ed681e6c59d407bdd46c41995a0e281643f496"
+          },
+          "grade_statuses": {
+            "behavior": 35,
+            "ok": 21
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 35
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 0,
+        "requested_interactions": 2570,
+        "selected": 56,
+        "selected_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 1721,
+          "hole_count": 849,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "permission_denied"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "record+html"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "xlsx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "operation",
+                "send"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "source_entities",
+                "email:thread"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 33,
+        "selected_shapes": {
+          "legacy": 56
+        },
+        "selected_workflows": {
+          "change_assurance": 22,
+          "customer_health": 10,
+          "executive_digest": 15,
+          "incident_review": 9
+        },
+        "selection_cap": 64,
+        "shared_findings": []
+      },
+      "query_profile": "enterprise-default",
+      "render_formats_requested": [
+        "xlsx",
+        "docx",
+        "pptx",
+        "pdf",
+        "html",
+        "markdown",
+        "confluence",
+        "jira",
+        "servicenow"
+      ],
+      "rendered_bytes": 739517,
+      "rendered_files_by_suffix": {
+        ".docx": 6,
+        ".html": 15,
+        ".json": 4,
+        ".jsonl": 7,
+        ".md": 12,
+        ".pdf": 6,
+        ".pptx": 1,
+        ".xlsx": 1
+      },
+      "resolution": {
+        "annual_revenue": null,
+        "archetype": "omnichannel_retailer",
+        "calendar": "flat",
+        "company_name": "Qualification Retail germany",
+        "conflicts": [],
+        "employees": null,
+        "engine": "retail",
+        "estate": null,
+        "facets": {
+          "competition": "concentrated",
+          "governance": "professional",
+          "listing": "unlisted",
+          "margin_profile": "standard",
+          "maturity": "established",
+          "scale": "midmarket",
+          "trading_pattern": "steady"
+        },
+        "locale": "germany",
+        "lore": [],
+        "master_data": null,
+        "pack": "qualification-retail-germany",
+        "physics": {},
+        "policies": null,
+        "role_table": null,
+        "unmet": []
+      },
+      "seed": 8128,
+      "status": "measured"
+    },
+    {
+      "artifacts": 15,
+      "company_specification": {
+        "engine": "retail",
+        "geo": "united_kingdom",
+        "identity": {
+          "company_name": "Qualification Retail united_kingdom"
+        }
+      },
+      "engine": "retail",
+      "episode": "MonthEndClose",
+      "geography": "united_kingdom",
+      "narration": "not authored; native structural evidence only",
+      "period": "2026-03",
+      "qualification": {
+        "connector_data_digest": "eaa69f8b1b04e11b4316dd274571107d",
+        "connector_records": 80,
+        "distinct_native_source_witnesses": 4,
+        "distinct_selected_cases": 0,
+        "eligible": 56,
+        "eligible_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 1721,
+          "hole_count": 849,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "permission_denied"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "record+html"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "xlsx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "operation",
+                "send"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "source_entities",
+                "email:thread"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 1721,
+        "pool_count": 128,
+        "pool_exhausted": false,
+        "pool_size": 128,
+        "pool_source_formats": {
+          "csv": 3,
+          "docx": 8,
+          "html": 14,
+          "markdown": 13,
+          "pdf": 12,
+          "pptx": 5,
+          "record": 110,
+          "xlsx": 8
+        },
+        "proofs_digest": "8930028f47ecb4055ee5d01ca7cd0ffb",
+        "refusal_distribution": {
+          "preflight:ValueError": 43,
+          "validation:invalid_corpus": 5,
+          "validation:source_format_mismatch": 24
+        },
+        "refusal_examples": [
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "90f5f0ba2f342d104aafb79086b7cf58",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "093ab3c64af24a854fb03930961edc55",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "34723591e511cbc4f8b42ed45ab54957",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "72e059a1f12fd0d4bc2807e76b45d9f4",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:change_request; generate operational evidence before planning this query",
+            "query_id": "1114861c4cb5247dd395e40ea18de3f9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "89989a02fdf04eaefd69fe4622203ba3",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "4384ad00ffd0f699bc1650ec6ac7df3b",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "09c0756740ffeb1c89c12818ce439dda",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "9d0f8da88e410ef605c5cb6904e69082",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "0a70b2c512eefdb284945764be783ec9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "d3fe264acfff581c2b0bcd5dcd5d6e2f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "4742e9956c2b7cc22affdc72e5f21882",
+            "stage": "preflight"
+          }
+        ],
+        "refusal_findings": 72,
+        "refused_queries": 72,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 56,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "3b94535cc8c00df4ff4c0355fe27e6a0d683193b1064cc5c7feff6372113e3eb",
+            "fixtures.jsonl": "7f14d06dc887b58db8b90f211161fc126a703f397632b5c27adee4b57a9a634b",
+            "manifest.json": "32ab8686f420c01353e7231bf30f2c9baabd7a97933140ebe1349c4f933a19fb",
+            "pool-queries.jsonl": "55316e6ca867a4f20ce2b0da1a7ad6f67b1ef23009b7d61933a422f9cd0dc68c",
+            "proofs.jsonl": "337302c297eba68b88dd91cf96b9890c486b8feef4c355f74338119adf9e75be",
+            "qualification.json": "1a875acd3adb28eacdb71ac77ea0d34a52d3cde410406e421308bdb0538fcf5c",
+            "qualified-rows.jsonl": "8411e30838ca1de7a9a02a76062d7b55bd2b0e01d9f707e569b0d4cb0748076f",
+            "queries.jsonl": "7b4c285333b7015f0482d679543aaf85deb643176f40d1ce5ede97dde553382e"
+          },
+          "grade_statuses": {
+            "behavior": 35,
+            "ok": 21
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 35
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 0,
+        "requested_interactions": 2570,
+        "selected": 56,
+        "selected_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 1721,
+          "hole_count": 849,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "permission_denied"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "record+html"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "xlsx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "operation",
+                "send"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "source_entities",
+                "email:thread"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 33,
+        "selected_shapes": {
+          "legacy": 56
+        },
+        "selected_workflows": {
+          "change_assurance": 22,
+          "customer_health": 10,
+          "executive_digest": 15,
+          "incident_review": 9
+        },
+        "selection_cap": 64,
+        "shared_findings": []
+      },
+      "query_profile": "enterprise-default",
+      "render_formats_requested": [
+        "xlsx",
+        "docx",
+        "pptx",
+        "pdf",
+        "html",
+        "markdown",
+        "confluence",
+        "jira",
+        "servicenow"
+      ],
+      "rendered_bytes": 740941,
+      "rendered_files_by_suffix": {
+        ".docx": 6,
+        ".html": 15,
+        ".json": 4,
+        ".jsonl": 7,
+        ".md": 12,
+        ".pdf": 6,
+        ".pptx": 1,
+        ".xlsx": 1
+      },
+      "resolution": {
+        "annual_revenue": null,
+        "archetype": "omnichannel_retailer",
+        "calendar": "flat",
+        "company_name": "Qualification Retail united_kingdom",
+        "conflicts": [],
+        "employees": null,
+        "engine": "retail",
+        "estate": null,
+        "facets": {
+          "competition": "concentrated",
+          "governance": "professional",
+          "listing": "unlisted",
+          "margin_profile": "standard",
+          "maturity": "established",
+          "scale": "midmarket",
+          "trading_pattern": "steady"
+        },
+        "locale": "united_kingdom",
+        "lore": [],
+        "master_data": null,
+        "pack": "qualification-retail-united-kingdom",
+        "physics": {},
+        "policies": null,
+        "role_table": null,
+        "unmet": []
+      },
+      "seed": 8128,
+      "status": "measured"
+    },
+    {
+      "artifacts": 12,
+      "company_specification": {
+        "engine": "banking",
+        "geo": "germany",
+        "identity": {
+          "company_name": "Qualification Banking germany"
+        }
+      },
+      "engine": "banking",
+      "episode": "QuarterlyCapitalReturn",
+      "geography": "germany",
+      "narration": "not authored; native structural evidence only",
+      "period": "2026-03",
+      "qualification": {
+        "connector_data_digest": "e94f443620932184dd3f37b4a406a90c",
+        "connector_records": 101,
+        "distinct_native_source_witnesses": 2,
+        "distinct_selected_cases": 0,
+        "eligible": 47,
+        "eligible_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 1543,
+          "hole_count": 1027,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "content_action",
+                "compare"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "case"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "ambiguous_join"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 1543,
+        "pool_count": 128,
+        "pool_exhausted": false,
+        "pool_size": 128,
+        "pool_source_formats": {
+          "csv": 3,
+          "docx": 8,
+          "html": 14,
+          "markdown": 13,
+          "pdf": 12,
+          "pptx": 5,
+          "record": 110,
+          "xlsx": 8
+        },
+        "proofs_digest": "b4bc74fb4a8cafc7cc40bec10aab3c85",
+        "refusal_distribution": {
+          "preflight:ValueError": 32,
+          "validation:invalid_corpus": 5,
+          "validation:source_format_mismatch": 24,
+          "validation:source_format_unsupported": 20
+        },
+        "refusal_examples": [
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "89989a02fdf04eaefd69fe4622203ba3",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "4384ad00ffd0f699bc1650ec6ac7df3b",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "09c0756740ffeb1c89c12818ce439dda",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "9d0f8da88e410ef605c5cb6904e69082",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "0a70b2c512eefdb284945764be783ec9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "d3fe264acfff581c2b0bcd5dcd5d6e2f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "4742e9956c2b7cc22affdc72e5f21882",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:case; generate operational evidence before planning this query",
+            "query_id": "0bed6360e4d48a33e2b07924de366f40",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "c613e88bfee2c55576ae240ebaeee2dd",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:case; generate operational evidence before planning this query",
+            "query_id": "b73670768ceb8507459b658a95d1568f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:case; generate operational evidence before planning this query",
+            "query_id": "d86ef18c7a37483dd096a0f5281f6642",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:case; generate operational evidence before planning this query",
+            "query_id": "e3b0cb852a5b7cc51cb1f7e4f6294802",
+            "stage": "preflight"
+          }
+        ],
+        "refusal_findings": 81,
+        "refused_queries": 81,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 47,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "6da6dcddb2b00291e79bfc340b7c43879469f854c38280579226df359185842a",
+            "fixtures.jsonl": "874c7019fed05a4547950aaab322502605d34d5099518c0fa7dc8b8da26dca07",
+            "manifest.json": "9405bfd23b92bc88a345f55d29cf27c8919d24d2963da0c7da4d50debb82bcc8",
+            "pool-queries.jsonl": "d3921bbf7e4b8755ae10669cc0fe06662284a58b07cec19400fcd65196ef2b1e",
+            "proofs.jsonl": "fc19023ebd8bcc4e5a6b2986db9652b6e6377817a8a29e482574138ed5c947bb",
+            "qualification.json": "3bb6663014e3c8f52f6e7717cec4f72c38109f3925cb5869fcd1eb85e6a24a54",
+            "qualified-rows.jsonl": "d116be2a0e987850ce0a2f04c984765f6b9a95bafabb9690dda411a733f10ff4",
+            "queries.jsonl": "6b59128028c473ccb6bac7d6ee7ff947d06dbea870b225eefbdb9e9e31bd8620"
+          },
+          "grade_statuses": {
+            "behavior": 28,
+            "ok": 19
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 28
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 0,
+        "requested_interactions": 2570,
+        "selected": 47,
+        "selected_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 1543,
+          "hole_count": 1027,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "content_action",
+                "compare"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "case"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "ambiguous_join"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 19,
+        "selected_shapes": {
+          "legacy": 47
+        },
+        "selected_workflows": {
+          "change_assurance": 18,
+          "customer_health": 5,
+          "executive_digest": 9,
+          "incident_review": 15
+        },
+        "selection_cap": 64,
+        "shared_findings": []
+      },
+      "query_profile": "enterprise-default",
+      "render_formats_requested": [
+        "xlsx",
+        "docx",
+        "pptx",
+        "pdf",
+        "html",
+        "markdown",
+        "confluence",
+        "jira",
+        "servicenow"
+      ],
+      "rendered_bytes": 479349,
+      "rendered_files_by_suffix": {
+        ".docx": 6,
+        ".html": 12,
+        ".json": 2,
+        ".jsonl": 2,
+        ".md": 8,
+        ".pdf": 6,
+        ".xlsx": 3
+      },
+      "resolution": {
+        "annual_revenue": null,
+        "archetype": "midsize_adi",
+        "calendar": null,
+        "company_name": "Qualification Banking germany",
+        "conflicts": [],
+        "employees": null,
+        "engine": "banking",
+        "estate": null,
+        "facets": {
+          "competition": "concentrated",
+          "governance": "professional",
+          "listing": "unlisted",
+          "margin_profile": "standard",
+          "maturity": "established",
+          "scale": "midmarket",
+          "trading_pattern": "steady"
+        },
+        "locale": "germany",
+        "lore": [],
+        "master_data": null,
+        "pack": "qualification-banking-germany",
+        "physics": {},
+        "policies": null,
+        "role_table": null,
+        "unmet": [
+          "the 'flat' trading year: the banking engine's world builder has no `seasonality` field, so nothing carries one. Only the retail engine reads a trading year today (`generators/finance` is the one generator that consults it)."
+        ]
+      },
+      "seed": 8128,
+      "status": "measured"
+    },
+    {
+      "artifacts": 12,
+      "company_specification": {
+        "engine": "banking",
+        "geo": "united_kingdom",
+        "identity": {
+          "company_name": "Qualification Banking united_kingdom"
+        }
+      },
+      "engine": "banking",
+      "episode": "QuarterlyCapitalReturn",
+      "geography": "united_kingdom",
+      "narration": "not authored; native structural evidence only",
+      "period": "2026-03",
+      "qualification": {
+        "connector_data_digest": "8817b1ddc7d6949265cce02298b60573",
+        "connector_records": 101,
+        "distinct_native_source_witnesses": 2,
+        "distinct_selected_cases": 0,
+        "eligible": 47,
+        "eligible_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 1543,
+          "hole_count": 1027,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "content_action",
+                "compare"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "case"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "ambiguous_join"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 1543,
+        "pool_count": 128,
+        "pool_exhausted": false,
+        "pool_size": 128,
+        "pool_source_formats": {
+          "csv": 3,
+          "docx": 8,
+          "html": 14,
+          "markdown": 13,
+          "pdf": 12,
+          "pptx": 5,
+          "record": 110,
+          "xlsx": 8
+        },
+        "proofs_digest": "5e9cdc57932b3e71d345135001bd4eaa",
+        "refusal_distribution": {
+          "preflight:ValueError": 32,
+          "validation:invalid_corpus": 5,
+          "validation:source_format_mismatch": 24,
+          "validation:source_format_unsupported": 20
+        },
+        "refusal_examples": [
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "89989a02fdf04eaefd69fe4622203ba3",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "4384ad00ffd0f699bc1650ec6ac7df3b",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "09c0756740ffeb1c89c12818ce439dda",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "9d0f8da88e410ef605c5cb6904e69082",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "0a70b2c512eefdb284945764be783ec9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "d3fe264acfff581c2b0bcd5dcd5d6e2f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "4742e9956c2b7cc22affdc72e5f21882",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:case; generate operational evidence before planning this query",
+            "query_id": "0bed6360e4d48a33e2b07924de366f40",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "c613e88bfee2c55576ae240ebaeee2dd",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:case; generate operational evidence before planning this query",
+            "query_id": "b73670768ceb8507459b658a95d1568f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:case; generate operational evidence before planning this query",
+            "query_id": "d86ef18c7a37483dd096a0f5281f6642",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:case; generate operational evidence before planning this query",
+            "query_id": "e3b0cb852a5b7cc51cb1f7e4f6294802",
+            "stage": "preflight"
+          }
+        ],
+        "refusal_findings": 81,
+        "refused_queries": 81,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 47,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "081b88f789d15f63c54d2353a21a320246321bff7c73e806b4e69452e4d358ca",
+            "fixtures.jsonl": "874c7019fed05a4547950aaab322502605d34d5099518c0fa7dc8b8da26dca07",
+            "manifest.json": "fdda9bd53774d3c21562c31ffb601a92502112be77762f1b403d70170ad4e034",
+            "pool-queries.jsonl": "fcba4a64f9b88bd5fff30598f6f9919582367e012aa65814ef1f0b50702d99fc",
+            "proofs.jsonl": "b752af99774533caa230815640c03dcdc7c19222f06de1a842259f75e2035040",
+            "qualification.json": "3bb6663014e3c8f52f6e7717cec4f72c38109f3925cb5869fcd1eb85e6a24a54",
+            "qualified-rows.jsonl": "d116be2a0e987850ce0a2f04c984765f6b9a95bafabb9690dda411a733f10ff4",
+            "queries.jsonl": "12ae81d71beb29179a0fefd8956d921ed1240e8da9e7ec848e7cef10a978b686"
+          },
+          "grade_statuses": {
+            "behavior": 28,
+            "ok": 19
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 28
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 0,
+        "requested_interactions": 2570,
+        "selected": 47,
+        "selected_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 1543,
+          "hole_count": 1027,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "content_action",
+                "compare"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "case"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "ambiguous_join"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 19,
+        "selected_shapes": {
+          "legacy": 47
+        },
+        "selected_workflows": {
+          "change_assurance": 18,
+          "customer_health": 5,
+          "executive_digest": 9,
+          "incident_review": 15
+        },
+        "selection_cap": 64,
+        "shared_findings": []
+      },
+      "query_profile": "enterprise-default",
+      "render_formats_requested": [
+        "xlsx",
+        "docx",
+        "pptx",
+        "pdf",
+        "html",
+        "markdown",
+        "confluence",
+        "jira",
+        "servicenow"
+      ],
+      "rendered_bytes": 481773,
+      "rendered_files_by_suffix": {
+        ".docx": 6,
+        ".html": 12,
+        ".json": 2,
+        ".jsonl": 2,
+        ".md": 8,
+        ".pdf": 6,
+        ".xlsx": 3
+      },
+      "resolution": {
+        "annual_revenue": null,
+        "archetype": "midsize_adi",
+        "calendar": null,
+        "company_name": "Qualification Banking united_kingdom",
+        "conflicts": [],
+        "employees": null,
+        "engine": "banking",
+        "estate": null,
+        "facets": {
+          "competition": "concentrated",
+          "governance": "professional",
+          "listing": "unlisted",
+          "margin_profile": "standard",
+          "maturity": "established",
+          "scale": "midmarket",
+          "trading_pattern": "steady"
+        },
+        "locale": "united_kingdom",
+        "lore": [],
+        "master_data": null,
+        "pack": "qualification-banking-united-kingdom",
+        "physics": {},
+        "policies": null,
+        "role_table": null,
+        "unmet": [
+          "the 'flat' trading year: the banking engine's world builder has no `seasonality` field, so nothing carries one. Only the retail engine reads a trading year today (`generators/finance` is the one generator that consults it)."
+        ]
+      },
+      "seed": 8128,
+      "status": "measured"
+    },
+    {
+      "artifacts": 8,
+      "company_specification": {
+        "engine": "insurance",
+        "geo": "germany",
+        "identity": {
+          "company_name": "Qualification Insurance germany"
+        }
+      },
+      "engine": "insurance",
+      "episode": "QuarterlyReserving",
+      "geography": "germany",
+      "narration": "not authored; native structural evidence only",
+      "period": "2026-03",
+      "qualification": {
+        "connector_data_digest": "1e36bdbf55be4657dd7de08966581340",
+        "connector_records": 68,
+        "distinct_native_source_witnesses": 2,
+        "distinct_selected_cases": 0,
+        "eligible": 35,
+        "eligible_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 1367,
+          "hole_count": 1203,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "content_action",
+                "compare"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "case"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "ambiguous_join"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "version_conflict"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 1367,
+        "pool_count": 128,
+        "pool_exhausted": false,
+        "pool_size": 128,
+        "pool_source_formats": {
+          "csv": 3,
+          "docx": 8,
+          "html": 14,
+          "markdown": 13,
+          "pdf": 12,
+          "pptx": 5,
+          "record": 110,
+          "xlsx": 8
+        },
+        "proofs_digest": "83d0f8987b6b06b02a9f2ada34ae798d",
+        "refusal_distribution": {
+          "preflight:ValueError": 48,
+          "validation:invalid_corpus": 5,
+          "validation:source_format_mismatch": 24,
+          "validation:source_format_unsupported": 16
+        },
+        "refusal_examples": [
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "56f9518a52d57b55b9252072c02e506f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "550b527eec0b0d7098d50e3317dea49e",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "1fc175530b3896af486fd13e20ce9fff",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "9abb75c642ac186181ffe5f105527b57",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "9197768fbda637a279af1df713157f75",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "89989a02fdf04eaefd69fe4622203ba3",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "4384ad00ffd0f699bc1650ec6ac7df3b",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "09c0756740ffeb1c89c12818ce439dda",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "9d0f8da88e410ef605c5cb6904e69082",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "0a70b2c512eefdb284945764be783ec9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "d3fe264acfff581c2b0bcd5dcd5d6e2f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "4742e9956c2b7cc22affdc72e5f21882",
+            "stage": "preflight"
+          }
+        ],
+        "refusal_findings": 93,
+        "refused_queries": 93,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 35,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "1ef6ce7b056be0621c321d06cfa983d5835287def5ac5e38965b07f956fcce9c",
+            "fixtures.jsonl": "76d2367bc559f4bfde4d809551a91c9a55ccb0bb698e296c272a31bf200830fb",
+            "manifest.json": "efe4c4a19e6bc635f6e1d1e7d4c13b3b7a070742444e29dd7227a8b9c7f99e2c",
+            "pool-queries.jsonl": "1fa17b46aab7ef27c0dacfe132c96e4a2fd3ed93d031a3894a0e3e33322b6f08",
+            "proofs.jsonl": "3719341065c21f788e8f20817ed4d51b0fec2eb7165f051828018eedbba48812",
+            "qualification.json": "9eb7db532c9cf2655e353e4a3fb5c613136c69973cee678618ea6d049e5ace7f",
+            "qualified-rows.jsonl": "29c6b2c3c6c2f31d62d33c676109c277567fc9768ce5aae4756209a5c7ec4397",
+            "queries.jsonl": "eb5f184896b43dea3e6df39a2cf1a38756997441bc94f94dc298dcc94a6bd332"
+          },
+          "grade_statuses": {
+            "behavior": 20,
+            "ok": 15
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 20
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 0,
+        "requested_interactions": 2570,
+        "selected": 35,
+        "selected_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 1367,
+          "hole_count": 1203,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "content_action",
+                "compare"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "case"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "ambiguous_join"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "version_conflict"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 17,
+        "selected_shapes": {
+          "legacy": 35
+        },
+        "selected_workflows": {
+          "change_assurance": 12,
+          "customer_health": 5,
+          "executive_digest": 9,
+          "incident_review": 9
+        },
+        "selection_cap": 64,
+        "shared_findings": []
+      },
+      "query_profile": "enterprise-default",
+      "render_formats_requested": [
+        "xlsx",
+        "docx",
+        "pptx",
+        "pdf",
+        "html",
+        "markdown",
+        "confluence",
+        "jira",
+        "servicenow"
+      ],
+      "rendered_bytes": 427440,
+      "rendered_files_by_suffix": {
+        ".docx": 6,
+        ".html": 8,
+        ".md": 6,
+        ".pdf": 6,
+        ".xlsx": 2
+      },
+      "resolution": {
+        "annual_revenue": null,
+        "archetype": "midsize_general_insurer",
+        "calendar": null,
+        "company_name": "Qualification Insurance germany",
+        "conflicts": [],
+        "employees": null,
+        "engine": "insurance",
+        "estate": null,
+        "facets": {
+          "competition": "concentrated",
+          "governance": "professional",
+          "listing": "unlisted",
+          "margin_profile": "standard",
+          "maturity": "established",
+          "scale": "midmarket",
+          "trading_pattern": "steady"
+        },
+        "locale": "germany",
+        "lore": [],
+        "master_data": null,
+        "pack": "qualification-insurance-germany",
+        "physics": {},
+        "policies": null,
+        "role_table": null,
+        "unmet": [
+          "the 'flat' trading year: the insurance engine's world builder has no `seasonality` field, so nothing carries one. Only the retail engine reads a trading year today (`generators/finance` is the one generator that consults it)."
+        ]
+      },
+      "seed": 8128,
+      "status": "measured"
+    },
+    {
+      "artifacts": 8,
+      "company_specification": {
+        "engine": "insurance",
+        "geo": "united_kingdom",
+        "identity": {
+          "company_name": "Qualification Insurance united_kingdom"
+        }
+      },
+      "engine": "insurance",
+      "episode": "QuarterlyReserving",
+      "geography": "united_kingdom",
+      "narration": "not authored; native structural evidence only",
+      "period": "2026-03",
+      "qualification": {
+        "connector_data_digest": "356cda19d13dafc451f1299789f5ff6c",
+        "connector_records": 68,
+        "distinct_native_source_witnesses": 2,
+        "distinct_selected_cases": 0,
+        "eligible": 35,
+        "eligible_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 1367,
+          "hole_count": 1203,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "content_action",
+                "compare"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "case"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "ambiguous_join"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "version_conflict"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 1367,
+        "pool_count": 128,
+        "pool_exhausted": false,
+        "pool_size": 128,
+        "pool_source_formats": {
+          "csv": 3,
+          "docx": 8,
+          "html": 14,
+          "markdown": 13,
+          "pdf": 12,
+          "pptx": 5,
+          "record": 110,
+          "xlsx": 8
+        },
+        "proofs_digest": "b3873caf4eaee4214fc5de652fd1af7a",
+        "refusal_distribution": {
+          "preflight:ValueError": 48,
+          "validation:invalid_corpus": 5,
+          "validation:source_format_mismatch": 24,
+          "validation:source_format_unsupported": 16
+        },
+        "refusal_examples": [
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "56f9518a52d57b55b9252072c02e506f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "550b527eec0b0d7098d50e3317dea49e",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "1fc175530b3896af486fd13e20ce9fff",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "9abb75c642ac186181ffe5f105527b57",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "9197768fbda637a279af1df713157f75",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "89989a02fdf04eaefd69fe4622203ba3",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "4384ad00ffd0f699bc1650ec6ac7df3b",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "09c0756740ffeb1c89c12818ce439dda",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "9d0f8da88e410ef605c5cb6904e69082",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "0a70b2c512eefdb284945764be783ec9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "d3fe264acfff581c2b0bcd5dcd5d6e2f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "4742e9956c2b7cc22affdc72e5f21882",
+            "stage": "preflight"
+          }
+        ],
+        "refusal_findings": 93,
+        "refused_queries": 93,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 35,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "53a467d423c6c221eb03b007e4ced6ac32e35afb48e983ddc31f70e6544316c6",
+            "fixtures.jsonl": "76d2367bc559f4bfde4d809551a91c9a55ccb0bb698e296c272a31bf200830fb",
+            "manifest.json": "02914f0497b650742b8782b7641eca06d3bb018576b73fa33ad5468349bcfb79",
+            "pool-queries.jsonl": "0529b1dfb13f309b408d93024cd1f7fafe819fc75fe5ffe97fb9b7528e85d934",
+            "proofs.jsonl": "8b50bc3ac331942c0ba96956ee08c5e4e2dd3f1936da68444f8a34ff95f28ef8",
+            "qualification.json": "9eb7db532c9cf2655e353e4a3fb5c613136c69973cee678618ea6d049e5ace7f",
+            "qualified-rows.jsonl": "29c6b2c3c6c2f31d62d33c676109c277567fc9768ce5aae4756209a5c7ec4397",
+            "queries.jsonl": "ed5bfe47172ddcf975bfa9805018749548ac934e004563e9ad0f23c1e36ae8de"
+          },
+          "grade_statuses": {
+            "behavior": 20,
+            "ok": 15
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 20
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 0,
+        "requested_interactions": 2570,
+        "selected": 35,
+        "selected_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 1367,
+          "hole_count": 1203,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "content_action",
+                "compare"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "case"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "ambiguous_join"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "version_conflict"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 17,
+        "selected_shapes": {
+          "legacy": 35
+        },
+        "selected_workflows": {
+          "change_assurance": 12,
+          "customer_health": 5,
+          "executive_digest": 9,
+          "incident_review": 9
+        },
+        "selection_cap": 64,
+        "shared_findings": []
+      },
+      "query_profile": "enterprise-default",
+      "render_formats_requested": [
+        "xlsx",
+        "docx",
+        "pptx",
+        "pdf",
+        "html",
+        "markdown",
+        "confluence",
+        "jira",
+        "servicenow"
+      ],
+      "rendered_bytes": 427553,
+      "rendered_files_by_suffix": {
+        ".docx": 6,
+        ".html": 8,
+        ".md": 6,
+        ".pdf": 6,
+        ".xlsx": 2
+      },
+      "resolution": {
+        "annual_revenue": null,
+        "archetype": "midsize_general_insurer",
+        "calendar": null,
+        "company_name": "Qualification Insurance united_kingdom",
+        "conflicts": [],
+        "employees": null,
+        "engine": "insurance",
+        "estate": null,
+        "facets": {
+          "competition": "concentrated",
+          "governance": "professional",
+          "listing": "unlisted",
+          "margin_profile": "standard",
+          "maturity": "established",
+          "scale": "midmarket",
+          "trading_pattern": "steady"
+        },
+        "locale": "united_kingdom",
+        "lore": [],
+        "master_data": null,
+        "pack": "qualification-insurance-united-kingdom",
+        "physics": {},
+        "policies": null,
+        "role_table": null,
+        "unmet": [
+          "the 'flat' trading year: the insurance engine's world builder has no `seasonality` field, so nothing carries one. Only the retail engine reads a trading year today (`generators/finance` is the one generator that consults it)."
+        ]
+      },
+      "seed": 8128,
+      "status": "measured"
+    },
+    {
+      "artifacts": 7,
+      "company_specification": {
+        "engine": "procurement",
+        "geo": "germany",
+        "identity": {
+          "company_name": "Qualification Procurement germany"
+        }
+      },
+      "engine": "procurement",
+      "episode": "PurchaseToPayCycle",
+      "geography": "germany",
+      "narration": "not authored; native structural evidence only",
+      "period": "2026-03",
+      "qualification": {
+        "connector_data_digest": "835866af4859770f99b9fc0c7854cddd",
+        "connector_records": 55,
+        "distinct_native_source_witnesses": 2,
+        "distinct_selected_cases": 0,
+        "eligible": 40,
+        "eligible_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 1502,
+          "hole_count": 1068,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "version_conflict"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "record+markdown"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "operation",
+                "reply"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 1502,
+        "pool_count": 128,
+        "pool_exhausted": false,
+        "pool_size": 128,
+        "pool_source_formats": {
+          "csv": 3,
+          "docx": 8,
+          "html": 14,
+          "markdown": 13,
+          "pdf": 12,
+          "pptx": 5,
+          "record": 110,
+          "xlsx": 8
+        },
+        "proofs_digest": "9d5594439a54f6189c919fc011eb9b03",
+        "refusal_distribution": {
+          "preflight:ValueError": 43,
+          "validation:invalid_corpus": 5,
+          "validation:source_format_mismatch": 24,
+          "validation:source_format_unsupported": 16
+        },
+        "refusal_examples": [
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "56f9518a52d57b55b9252072c02e506f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "550b527eec0b0d7098d50e3317dea49e",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "1fc175530b3896af486fd13e20ce9fff",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "9abb75c642ac186181ffe5f105527b57",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "9197768fbda637a279af1df713157f75",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "89989a02fdf04eaefd69fe4622203ba3",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "4384ad00ffd0f699bc1650ec6ac7df3b",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "09c0756740ffeb1c89c12818ce439dda",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "9d0f8da88e410ef605c5cb6904e69082",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "0a70b2c512eefdb284945764be783ec9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "d3fe264acfff581c2b0bcd5dcd5d6e2f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "4742e9956c2b7cc22affdc72e5f21882",
+            "stage": "preflight"
+          }
+        ],
+        "refusal_findings": 88,
+        "refused_queries": 88,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 40,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "6d328fb738f77740f6345361c04d10fdee37d956b1dae24dde5d83ee56f0c6ff",
+            "fixtures.jsonl": "8e8c7172b9acff6321147c8ef82ba5e8e0c6ff920cfdd21f027b61a9cf90b61f",
+            "manifest.json": "8bacf0c7bd5bff9f19602e6f17ef41ebafbfe59482a9b824bc06092119b8e348",
+            "pool-queries.jsonl": "ceac6ced589a8268d895eef235d15c42a628fe35ca3723731c7306881e6b0b4b",
+            "proofs.jsonl": "a11139e71a01b7f7f4873af384fea4b5fc7f3ca9df9d6ba76138f5a52d73fd72",
+            "qualification.json": "193f2863955f7f5b57fe2ac7003cee5827adc44579e55810f30c8dbe3dff72c3",
+            "qualified-rows.jsonl": "c933d1b74af441ceb009813be2df4daf4d9bec0aaeb647680221e4bba98c3101",
+            "queries.jsonl": "11fedc3ad9d75c4a9956d943679b959476f769695ad950c4d6b636e58b4f53bb"
+          },
+          "grade_statuses": {
+            "behavior": 22,
+            "ok": 18
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 22
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 0,
+        "requested_interactions": 2570,
+        "selected": 40,
+        "selected_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 1502,
+          "hole_count": 1068,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "version_conflict"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "record+markdown"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "operation",
+                "reply"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 17,
+        "selected_shapes": {
+          "legacy": 40
+        },
+        "selected_workflows": {
+          "change_assurance": 12,
+          "customer_health": 10,
+          "executive_digest": 9,
+          "incident_review": 9
+        },
+        "selection_cap": 64,
+        "shared_findings": []
+      },
+      "query_profile": "enterprise-default",
+      "render_formats_requested": [
+        "xlsx",
+        "docx",
+        "pptx",
+        "pdf",
+        "html",
+        "markdown",
+        "confluence",
+        "jira",
+        "servicenow"
+      ],
+      "rendered_bytes": 271638,
+      "rendered_files_by_suffix": {
+        ".docx": 3,
+        ".html": 7,
+        ".md": 3,
+        ".pdf": 3,
+        ".xlsx": 4
+      },
+      "resolution": {
+        "annual_revenue": null,
+        "archetype": "midsize_infrastructure_services",
+        "calendar": null,
+        "company_name": "Qualification Procurement germany",
+        "conflicts": [],
+        "employees": null,
+        "engine": "procurement",
+        "estate": null,
+        "facets": {
+          "competition": "concentrated",
+          "governance": "professional",
+          "listing": "unlisted",
+          "margin_profile": "standard",
+          "maturity": "established",
+          "scale": "midmarket",
+          "trading_pattern": "steady"
+        },
+        "locale": "germany",
+        "lore": [],
+        "master_data": null,
+        "pack": "qualification-procurement-germany",
+        "physics": {},
+        "policies": null,
+        "role_table": null,
+        "unmet": [
+          "the 'flat' trading year: the procurement engine's world builder has no `seasonality` field, so nothing carries one. Only the retail engine reads a trading year today (`generators/finance` is the one generator that consults it)."
+        ]
+      },
+      "seed": 8128,
+      "status": "measured"
+    },
+    {
+      "artifacts": 7,
+      "company_specification": {
+        "engine": "procurement",
+        "geo": "united_kingdom",
+        "identity": {
+          "company_name": "Qualification Procurement united_kingdom"
+        }
+      },
+      "engine": "procurement",
+      "episode": "PurchaseToPayCycle",
+      "geography": "united_kingdom",
+      "narration": "not authored; native structural evidence only",
+      "period": "2026-03",
+      "qualification": {
+        "connector_data_digest": "a35190a27b5f6600155f81dda79db6d6",
+        "connector_records": 55,
+        "distinct_native_source_witnesses": 2,
+        "distinct_selected_cases": 0,
+        "eligible": 40,
+        "eligible_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 1502,
+          "hole_count": 1068,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "version_conflict"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "record+markdown"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "operation",
+                "reply"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 1502,
+        "pool_count": 128,
+        "pool_exhausted": false,
+        "pool_size": 128,
+        "pool_source_formats": {
+          "csv": 3,
+          "docx": 8,
+          "html": 14,
+          "markdown": 13,
+          "pdf": 12,
+          "pptx": 5,
+          "record": 110,
+          "xlsx": 8
+        },
+        "proofs_digest": "6e2a9bb064b8c9c9809cc23a98855b42",
+        "refusal_distribution": {
+          "preflight:ValueError": 43,
+          "validation:invalid_corpus": 5,
+          "validation:source_format_mismatch": 24,
+          "validation:source_format_unsupported": 16
+        },
+        "refusal_examples": [
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "56f9518a52d57b55b9252072c02e506f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "550b527eec0b0d7098d50e3317dea49e",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "1fc175530b3896af486fd13e20ce9fff",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "9abb75c642ac186181ffe5f105527b57",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: servicenow:incident; generate operational evidence before planning this query",
+            "query_id": "9197768fbda637a279af1df713157f75",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "89989a02fdf04eaefd69fe4622203ba3",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "4384ad00ffd0f699bc1650ec6ac7df3b",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "09c0756740ffeb1c89c12818ce439dda",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "9d0f8da88e410ef605c5cb6904e69082",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "0a70b2c512eefdb284945764be783ec9",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: salesforce:opportunity; generate operational evidence before planning this query",
+            "query_id": "d3fe264acfff581c2b0bcd5dcd5d6e2f",
+            "stage": "preflight"
+          },
+          {
+            "code": "ValueError",
+            "detail": "missing_source: email:thread; generate operational evidence before planning this query",
+            "query_id": "4742e9956c2b7cc22affdc72e5f21882",
+            "stage": "preflight"
+          }
+        ],
+        "refusal_findings": 88,
+        "refused_queries": 88,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 40,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "be7a2f3913770093ec414fda2451732564acaf68adb19d2601223f8d25ebf785",
+            "fixtures.jsonl": "8e8c7172b9acff6321147c8ef82ba5e8e0c6ff920cfdd21f027b61a9cf90b61f",
+            "manifest.json": "651c4273c71235eeb61b55c8257202e0e0078de5860ed94d3c78ae55fcf7308c",
+            "pool-queries.jsonl": "c68160c649cfbadb647d7271f8af1b67b88ddaf99f213acc6bfc2f92395ad869",
+            "proofs.jsonl": "142d7232dd871a2cace2594b5255565bc83d1258a41f6340e599585f191b579d",
+            "qualification.json": "193f2863955f7f5b57fe2ac7003cee5827adc44579e55810f30c8dbe3dff72c3",
+            "qualified-rows.jsonl": "c933d1b74af441ceb009813be2df4daf4d9bec0aaeb647680221e4bba98c3101",
+            "queries.jsonl": "e1e2851855c5476a00cd980275cee5901160055295699263994defba3743100a"
+          },
+          "grade_statuses": {
+            "behavior": 22,
+            "ok": 18
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 22
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 0,
+        "requested_interactions": 2570,
+        "selected": 40,
+        "selected_case_coverage": {
+          "covered_interactions": 0,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 0,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 1502,
+          "hole_count": 1068,
+          "hole_examples": [
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination",
+                "drive"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "destination_entity",
+                "account"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "failure",
+                "version_conflict"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "csv"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "docx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "pptx"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "input_formats",
+                "record+markdown"
+              ]
+            ],
+            [
+              [
+                "audience",
+                "analyst"
+              ],
+              [
+                "operation",
+                "reply"
+              ]
+            ]
+          ],
+          "required_interactions": 2570,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 17,
+        "selected_shapes": {
+          "legacy": 40
+        },
+        "selected_workflows": {
+          "change_assurance": 12,
+          "customer_health": 10,
+          "executive_digest": 9,
+          "incident_review": 9
+        },
+        "selection_cap": 64,
+        "shared_findings": []
+      },
+      "query_profile": "enterprise-default",
+      "render_formats_requested": [
+        "xlsx",
+        "docx",
+        "pptx",
+        "pdf",
+        "html",
+        "markdown",
+        "confluence",
+        "jira",
+        "servicenow"
+      ],
+      "rendered_bytes": 271966,
+      "rendered_files_by_suffix": {
+        ".docx": 3,
+        ".html": 7,
+        ".md": 3,
+        ".pdf": 3,
+        ".xlsx": 4
+      },
+      "resolution": {
+        "annual_revenue": null,
+        "archetype": "midsize_infrastructure_services",
+        "calendar": null,
+        "company_name": "Qualification Procurement united_kingdom",
+        "conflicts": [],
+        "employees": null,
+        "engine": "procurement",
+        "estate": null,
+        "facets": {
+          "competition": "concentrated",
+          "governance": "professional",
+          "listing": "unlisted",
+          "margin_profile": "standard",
+          "maturity": "established",
+          "scale": "midmarket",
+          "trading_pattern": "steady"
+        },
+        "locale": "united_kingdom",
+        "lore": [],
+        "master_data": null,
+        "pack": "qualification-procurement-united-kingdom",
+        "physics": {},
+        "policies": null,
+        "role_table": null,
+        "unmet": [
+          "the 'flat' trading year: the procurement engine's world builder has no `seasonality` field, so nothing carries one. Only the retail engine reads a trading year today (`generators/finance` is the one generator that consults it)."
+        ]
+      },
+      "seed": 8128,
+      "status": "measured"
+    }
+  ],
+  "dependency_versions": {
+    "XlsxWriter": "3.2.9",
+    "pydantic": "2.13.5",
+    "python-docx": "1.2.0",
+    "python-pptx": "1.0.2",
+    "reportlab": "5.0.1"
+  },
+  "measurement_errors": [],
+  "measurement_script_sha256": "e926f206f1958a1c233d0a7b2b8775b7731b07c39d9b4f06e555b48de0b207be",
+  "operational": [
+    {
+      "available_exception_cases": 17,
+      "case_binding": {
+        "connector_data_digest": "4d0bae764f259a13c625a3d505618bfb",
+        "connector_records": 68,
+        "distinct_native_source_witnesses": 0,
+        "distinct_selected_cases": 17,
+        "eligible": 24,
+        "eligible_case_coverage": {
+          "covered_interactions": 17,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 17,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 323,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 323,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 323,
+        "pool_count": 24,
+        "pool_exhausted": false,
+        "pool_size": 24,
+        "pool_source_formats": {
+          "record": 39
+        },
+        "proofs_digest": "27cf5d52a885a1667603b891596e3ddc",
+        "refusal_distribution": {},
+        "refusal_examples": [],
+        "refusal_findings": 0,
+        "refused_queries": 0,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 21,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "206de4cd77b62a9f19ebe8b781e38b3c6c4223cb2b032bd07d8c7b5a04c6826d",
+            "fixtures.jsonl": "32389b16c92b70bf2183988a729d9208e919d73060cbfc4e6eb92794d1949e18",
+            "manifest.json": "d4a4aee3824a9096b213d92d38886f4d823a9839481a0525596bda8cfce14135",
+            "pool-queries.jsonl": "b9475f50d1840eebe7eb6d3127ad36e2aacdbfc5abbcac4526b9ab897d591df7",
+            "proofs.jsonl": "a0ac3adfc01ba341cf9c4145e9e12ed8bbc7504024a4ef9f31d3377c2bda4056",
+            "qualification.json": "a3eec74e6c8cd4f2fc235d543c38d13910f4ac71b201b7a8fb8c489abafaa166",
+            "qualified-rows.jsonl": "2c044c9180d2d8937cc4184a27bcf2675f0d1fa4d2a8e0e47f1caf44476d59d3",
+            "queries.jsonl": "405dbe311a923f86e1e9b51abae01753997ca3dfcc9a2ee416e6fe8df04a80a2"
+          },
+          "grade_statuses": {
+            "ok": 21
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 0
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 17,
+        "requested_interactions": 323,
+        "selected": 21,
+        "selected_case_coverage": {
+          "covered_interactions": 17,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 17,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 323,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 323,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 0,
+        "selected_shapes": {
+          "legacy": 21
+        },
+        "selected_workflows": {
+          "inventory_exception_review": 21
+        },
+        "selection_cap": 24,
+        "shared_findings": []
+      },
+      "default_binding": {
+        "connector_data_digest": "4d0bae764f259a13c625a3d505618bfb",
+        "connector_records": 68,
+        "distinct_native_source_witnesses": 0,
+        "distinct_selected_cases": 1,
+        "eligible": 24,
+        "eligible_case_coverage": {
+          "covered_interactions": 1,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 1,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 323,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 323,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 323,
+        "pool_count": 24,
+        "pool_exhausted": false,
+        "pool_size": 24,
+        "pool_source_formats": {
+          "record": 39
+        },
+        "proofs_digest": "4b9b0c702543bb0208b6770d302c3505",
+        "refusal_distribution": {},
+        "refusal_examples": [],
+        "refusal_findings": 0,
+        "refused_queries": 0,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 21,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "206de4cd77b62a9f19ebe8b781e38b3c6c4223cb2b032bd07d8c7b5a04c6826d",
+            "fixtures.jsonl": "31c4cd8526bf448476d433fc30302a19f9aa2294b36c35800bfd9cca08d4f8f4",
+            "manifest.json": "170bb50c6add46b962dfdf5f414be27ec8d697064fd9f9fa974e28de5d53f887",
+            "pool-queries.jsonl": "26d6cba8efa74f027e8800d615a171bb9ef6ac1ea1b3c31fb880a698e263ac6f",
+            "proofs.jsonl": "3676491090b5b0654592d9849ea98f072e73516b2f18b10667ead14ea067da88",
+            "qualification.json": "33304e442b93930874fe710ce0d70c6668f8110aae1b1f7a707f58305716efa2",
+            "qualified-rows.jsonl": "426b1789b12400fd30bc9cb1fae1ca1b572d260ca8a7aa695e7db3820ccc4b41",
+            "queries.jsonl": "5e233b9f9266aaae9ad1c4c0e87cb7dedda43d408b80ca3c57cc61840ec2ed44"
+          },
+          "grade_statuses": {
+            "ok": 21
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 0
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 1,
+        "requested_interactions": 323,
+        "selected": 21,
+        "selected_case_coverage": {
+          "covered_interactions": 1,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 1,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 323,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 323,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 0,
+        "selected_shapes": {
+          "legacy": 21
+        },
+        "selected_workflows": {
+          "inventory_exception_review": 21
+        },
+        "selection_cap": 24,
+        "shared_findings": []
+      },
+      "failures": [
+        "none"
+      ],
+      "pool_size": 24,
+      "seed": 8128,
+      "selection_cap": 24,
+      "shape": "straight",
+      "simulator_recipe_digest": "c2f57a8dc5f02bfdd6b7753918a5aa6cfaad653418f4d54b5a601901509726a7",
+      "status": "measured",
+      "vertical": "retail"
+    },
+    {
+      "available_exception_cases": 17,
+      "case_binding": {
+        "connector_data_digest": "4d0bae764f259a13c625a3d505618bfb",
+        "connector_records": 68,
+        "distinct_native_source_witnesses": 0,
+        "distinct_selected_cases": 17,
+        "eligible": 24,
+        "eligible_case_coverage": {
+          "covered_interactions": 17,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 17,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 388,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 388,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 388,
+        "pool_count": 24,
+        "pool_exhausted": false,
+        "pool_size": 24,
+        "pool_source_formats": {
+          "record": 39
+        },
+        "proofs_digest": "1ab385200687ccbe79be595f88a1912d",
+        "refusal_distribution": {},
+        "refusal_examples": [],
+        "refusal_findings": 0,
+        "refused_queries": 0,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 21,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "206de4cd77b62a9f19ebe8b781e38b3c6c4223cb2b032bd07d8c7b5a04c6826d",
+            "fixtures.jsonl": "de975d5e1e54028b585c6e251468d9a5f5c22345a14c0196ed120bc84c66c35b",
+            "manifest.json": "9283e712e6e121440f56da3b9fc138bfe2d66915be791ab600b7122c63759f7d",
+            "pool-queries.jsonl": "511830cf1a1a6c00e657ff3608ffb88617749e03ace00a373eceb6d2e190a47a",
+            "proofs.jsonl": "fe755489b31970ceb0d9434133ef9564e6105c79c1e240e9bbd0570479102701",
+            "qualification.json": "71169b16bd9635df440c7931d80132f0d305f319f3a4982721fcd508bba25453",
+            "qualified-rows.jsonl": "41a61a6f321728e899ae9563161a7149ccbe4806ada9b2758e8c7644378afb8e",
+            "queries.jsonl": "8a8d994412c2580849f037cc0d1711c04993b421728217c6d151208bb67f301c"
+          },
+          "grade_statuses": {
+            "ok": 21
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 0
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 17,
+        "requested_interactions": 388,
+        "selected": 21,
+        "selected_case_coverage": {
+          "covered_interactions": 17,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 17,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 388,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 388,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 0,
+        "selected_shapes": {
+          "map_read": 21
+        },
+        "selected_workflows": {
+          "inventory_exception_review": 21
+        },
+        "selection_cap": 24,
+        "shared_findings": []
+      },
+      "default_binding": {
+        "connector_data_digest": "4d0bae764f259a13c625a3d505618bfb",
+        "connector_records": 68,
+        "distinct_native_source_witnesses": 0,
+        "distinct_selected_cases": 2,
+        "eligible": 24,
+        "eligible_case_coverage": {
+          "covered_interactions": 2,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 2,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 388,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 388,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 388,
+        "pool_count": 24,
+        "pool_exhausted": false,
+        "pool_size": 24,
+        "pool_source_formats": {
+          "record": 39
+        },
+        "proofs_digest": "c7b1ab2ed94b9877c81409dce67317fe",
+        "refusal_distribution": {},
+        "refusal_examples": [],
+        "refusal_findings": 0,
+        "refused_queries": 0,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 21,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "206de4cd77b62a9f19ebe8b781e38b3c6c4223cb2b032bd07d8c7b5a04c6826d",
+            "fixtures.jsonl": "1b762eaa91d0d3ac1413510b0b1f66dd749f49a685b3c44dc55326ae3b34d746",
+            "manifest.json": "63f1aa6840e638bcff3392f4bee140b875b6b624bff71b87ffa9333295a27717",
+            "pool-queries.jsonl": "26cb2e590e6dcde5c69879d8eb0412e3e032ec05e407df6a7786de072e65fdde",
+            "proofs.jsonl": "aa0e9423e7dcbc37c76fa8a5d6846eb44a3525f905ad778b7d8adec56b9752e8",
+            "qualification.json": "34daf5df427cf750ef7ccb51a9e66d39f5546e40d987b463fa7f95f5322c1738",
+            "qualified-rows.jsonl": "de75b53c51e1f586f6f3e8578c40a78001bac63f97de986d2fdb5bb09506eeb1",
+            "queries.jsonl": "e1f94b83d7dce5b1d0269645d9174716eca9ed23ef1b13e787b1f65692ab28cf"
+          },
+          "grade_statuses": {
+            "ok": 21
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 0
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 2,
+        "requested_interactions": 388,
+        "selected": 21,
+        "selected_case_coverage": {
+          "covered_interactions": 2,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 2,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 388,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 388,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 0,
+        "selected_shapes": {
+          "map_read": 21
+        },
+        "selected_workflows": {
+          "inventory_exception_review": 21
+        },
+        "selection_cap": 24,
+        "shared_findings": []
+      },
+      "failures": [
+        "none"
+      ],
+      "pool_size": 24,
+      "seed": 8128,
+      "selection_cap": 24,
+      "shape": "map_read",
+      "simulator_recipe_digest": "c2f57a8dc5f02bfdd6b7753918a5aa6cfaad653418f4d54b5a601901509726a7",
+      "status": "measured",
+      "vertical": "retail"
+    },
+    {
+      "available_exception_cases": 9,
+      "case_binding": {
+        "connector_data_digest": "1e685207e93052e7b5170b29ced71aa8",
+        "connector_records": 27,
+        "distinct_native_source_witnesses": 0,
+        "distinct_selected_cases": 9,
+        "eligible": 24,
+        "eligible_case_coverage": {
+          "covered_interactions": 9,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 9,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 219,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 219,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 219,
+        "pool_count": 24,
+        "pool_exhausted": false,
+        "pool_size": 24,
+        "pool_source_formats": {
+          "record": 32
+        },
+        "proofs_digest": "0c088f7bbb9aaecf9f496bc2e9d9fefa",
+        "refusal_distribution": {},
+        "refusal_examples": [],
+        "refusal_findings": 0,
+        "refused_queries": 0,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 16,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "48f7e875faa5f647228bc7c05f388a1993ced41fcf22e821477d22cc8bffc5bb",
+            "fixtures.jsonl": "98efa210e050ff502e4e333bbab155034398fb181129569e6476af06666b2a57",
+            "manifest.json": "364a1b2413c643783de6c77f1c651af13ba6e36c58f5b4e2d3049ca608bafe57",
+            "pool-queries.jsonl": "00cc9d1ef6ad875737b62a29423f84ebb9b5293597f5029434a47f91dd34eafe",
+            "proofs.jsonl": "7de779458c90b7d20620ebfd5a261cef031128f9cc3c83b2f24b095c89c0f37d",
+            "qualification.json": "be7e206882081ebbe1db9982d8a494ddc45d265262d48373b98a855ac52f321e",
+            "qualified-rows.jsonl": "47c555f23c88035666560cf9ac39b4cc90f21cedbd61ce7b0107721ac7d4112a",
+            "queries.jsonl": "bffc04ab18a799dda1110a1fe702e3d0fbed2b79476aaf7a621c6cb41bd783d1"
+          },
+          "grade_statuses": {
+            "ok": 16
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 0
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 9,
+        "requested_interactions": 219,
+        "selected": 16,
+        "selected_case_coverage": {
+          "covered_interactions": 9,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 9,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 219,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 219,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 0,
+        "selected_shapes": {
+          "legacy": 16
+        },
+        "selected_workflows": {
+          "loan_arrears_review": 16
+        },
+        "selection_cap": 24,
+        "shared_findings": []
+      },
+      "default_binding": {
+        "connector_data_digest": "1e685207e93052e7b5170b29ced71aa8",
+        "connector_records": 27,
+        "distinct_native_source_witnesses": 0,
+        "distinct_selected_cases": 1,
+        "eligible": 24,
+        "eligible_case_coverage": {
+          "covered_interactions": 1,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 1,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 219,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 219,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 219,
+        "pool_count": 24,
+        "pool_exhausted": false,
+        "pool_size": 24,
+        "pool_source_formats": {
+          "record": 32
+        },
+        "proofs_digest": "c94a17180b81eb50efe8a9f02518f5de",
+        "refusal_distribution": {},
+        "refusal_examples": [],
+        "refusal_findings": 0,
+        "refused_queries": 0,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 16,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "48f7e875faa5f647228bc7c05f388a1993ced41fcf22e821477d22cc8bffc5bb",
+            "fixtures.jsonl": "2aa861433f515fa546afb9f84729321d3abaa91315e779d1462bfb1db9c7ac84",
+            "manifest.json": "1968ee47ad380f38ab4a582e22b0493216a62ed2a6fbf0d917cb65c2ef1f8091",
+            "pool-queries.jsonl": "427a7622d68cc04ad2bb8c9a7ce85e685a99c657a7019513027165b0bcc1058a",
+            "proofs.jsonl": "b115ca2800145f8c81c454feb9e41e84f295b6639bb18a0909b0886ebc023910",
+            "qualification.json": "6b1a5d76cd58626eee9331fc3902ab570d1cc523d5be83d62a9ceb981aed105a",
+            "qualified-rows.jsonl": "9171be8b7c811db5f704b0101398c8e74c728f79241dd781df67ca781349e4ab",
+            "queries.jsonl": "729d979788eae5f24eaf2cc152ce45ed12142eae1feb40a60d0f8f2f98dd5e96"
+          },
+          "grade_statuses": {
+            "ok": 16
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 0
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 1,
+        "requested_interactions": 219,
+        "selected": 16,
+        "selected_case_coverage": {
+          "covered_interactions": 1,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 1,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 219,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 219,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 0,
+        "selected_shapes": {
+          "legacy": 16
+        },
+        "selected_workflows": {
+          "loan_arrears_review": 16
+        },
+        "selection_cap": 24,
+        "shared_findings": []
+      },
+      "failures": [
+        "none"
+      ],
+      "pool_size": 24,
+      "seed": 8128,
+      "selection_cap": 24,
+      "shape": "straight",
+      "simulator_recipe_digest": "fb5c83a05244caeb0f2abda9263a3c073b0f87364ff00947a85ab2fd63afb225",
+      "status": "measured",
+      "vertical": "banking"
+    },
+    {
+      "available_exception_cases": 9,
+      "case_binding": {
+        "connector_data_digest": "1e685207e93052e7b5170b29ced71aa8",
+        "connector_records": 27,
+        "distinct_native_source_witnesses": 0,
+        "distinct_selected_cases": 9,
+        "eligible": 24,
+        "eligible_case_coverage": {
+          "covered_interactions": 9,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 9,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 266,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 266,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 266,
+        "pool_count": 24,
+        "pool_exhausted": false,
+        "pool_size": 24,
+        "pool_source_formats": {
+          "record": 32
+        },
+        "proofs_digest": "8a9665b020f299f1262dbede1addd8df",
+        "refusal_distribution": {},
+        "refusal_examples": [],
+        "refusal_findings": 0,
+        "refused_queries": 0,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 16,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "48f7e875faa5f647228bc7c05f388a1993ced41fcf22e821477d22cc8bffc5bb",
+            "fixtures.jsonl": "d188bd01afeb93bc80518bcc880d9c5c5faf984d027bcec6dfa7482687ef8cad",
+            "manifest.json": "7fda8507a796de5d0b3e9dd0d1c35298446aef1911b9de0e6d9d603b4c7ba0a3",
+            "pool-queries.jsonl": "cb37c9c590bafc8d764a9883c455ee25cb8091f5e4d14e3eecc1e24dc287efa2",
+            "proofs.jsonl": "6ba5ac3813e0308fa021af8d26ad3aee4c222ee9da9b3ae76a555ee79e2cf514",
+            "qualification.json": "4b4463302e3e6c50f913c5246f8978f164f1c3ec16f80426e53f36ae7338fa73",
+            "qualified-rows.jsonl": "e5c7be146f28e3b0deb23e61192c06d12428076586a01616ca4c91626bc26af5",
+            "queries.jsonl": "4f5c85ebc8b4b798089cff54467adde662a84e934484c12fce8720037469962a"
+          },
+          "grade_statuses": {
+            "ok": 16
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 0
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 9,
+        "requested_interactions": 266,
+        "selected": 16,
+        "selected_case_coverage": {
+          "covered_interactions": 9,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 9,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 266,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 266,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 0,
+        "selected_shapes": {
+          "map_read": 16
+        },
+        "selected_workflows": {
+          "loan_arrears_review": 16
+        },
+        "selection_cap": 24,
+        "shared_findings": []
+      },
+      "default_binding": {
+        "connector_data_digest": "1e685207e93052e7b5170b29ced71aa8",
+        "connector_records": 27,
+        "distinct_native_source_witnesses": 0,
+        "distinct_selected_cases": 2,
+        "eligible": 24,
+        "eligible_case_coverage": {
+          "covered_interactions": 2,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 2,
+          "strength": 1
+        },
+        "eligible_coverage": {
+          "covered_interactions": 266,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 266,
+          "strength": 2
+        },
+        "observed_achievable_interactions": 266,
+        "pool_count": 24,
+        "pool_exhausted": false,
+        "pool_size": 24,
+        "pool_source_formats": {
+          "record": 32
+        },
+        "proofs_digest": "18ac0953d00b0615eb4095b5fc703dba",
+        "refusal_distribution": {},
+        "refusal_examples": [],
+        "refusal_findings": 0,
+        "refused_queries": 0,
+        "reload": {
+          "assertion_failed": 0,
+          "assertion_passed": 16,
+          "corpus_equal": true,
+          "execution_proofs_equal": true,
+          "export_sha256": {
+            "connector-data.json": "48f7e875faa5f647228bc7c05f388a1993ced41fcf22e821477d22cc8bffc5bb",
+            "fixtures.jsonl": "97a40cc7a9e783d424bc1ea3531f452640aef1b6b5307aeaae9eb64a8a3ed598",
+            "manifest.json": "918045710b43963acb577cf173089707198b18833e37b72bca31ad6845ffc6f9",
+            "pool-queries.jsonl": "d594ad53eb313cee5500d2a9e2ef10cf0ca80ecfc231b518da522b3a76562a26",
+            "proofs.jsonl": "5e29573540fc1d776ccb170f057575b654bdb9835e973e95d3527f8631b9f956",
+            "qualification.json": "9400c17ace5a2d86940c0614d0feec852dc5d172519c32e8d288282c8b85119d",
+            "qualified-rows.jsonl": "503f94cd21e7431aab310100890fa53ebc68bc099b3b931a135bf3fd528cae0e",
+            "queries.jsonl": "7eadfb016318b3fb1be7a0c06c5f3cbb6efe024f9fd3fc96bdc11eac19763fe8"
+          },
+          "grade_statuses": {
+            "ok": 16
+          },
+          "pool_report_proof_digests_verified": true,
+          "recompiled_rows_equal": true,
+          "tool_error_spans": 0
+        },
+        "repeat_export_byte_equal": true,
+        "requested_cases": 2,
+        "requested_interactions": 266,
+        "selected": 16,
+        "selected_case_coverage": {
+          "covered_interactions": 2,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 2,
+          "strength": 1
+        },
+        "selected_coverage": {
+          "covered_interactions": 266,
+          "hole_count": 0,
+          "hole_examples": [],
+          "required_interactions": 266,
+          "strength": 2
+        },
+        "selected_native_source_witnesses": 0,
+        "selected_shapes": {
+          "map_read": 16
+        },
+        "selected_workflows": {
+          "loan_arrears_review": 16
+        },
+        "selection_cap": 24,
+        "shared_findings": []
+      },
+      "failures": [
+        "none"
+      ],
+      "pool_size": 24,
+      "seed": 8128,
+      "selection_cap": 24,
+      "shape": "map_read",
+      "simulator_recipe_digest": "fb5c83a05244caeb0f2abda9263a3c073b0f87364ff00947a85ab2fd63afb225",
+      "status": "measured",
+      "vertical": "banking"
+    }
+  ],
+  "parameters": {
+    "company_cap": 64,
+    "company_pool": 128,
+    "engines": [
+      "retail",
+      "banking",
+      "insurance",
+      "procurement"
+    ],
+    "geographies": [
+      "germany",
+      "united_kingdom"
+    ],
+    "operational_pool_and_cap": 24,
+    "seed": 8128,
+    "strength": 2
+  },
+  "python_version": "3.12.13 (main, Aug  7 2026, 02:25:39) [Clang 22.1.3 ]",
+  "schema": "worldloom.enterprise-qualification-measurement/v1",
+  "scope": [
+    "Finite interleaved query pools, not the whole declared space.",
+    "Four engine-backed company profiles share the built-in enterprise query catalogue.",
+    "Geographies use resolved identity packs; unmet resolution capabilities remain reported.",
+    "Native source file bytes are rendered, not inferred from requested formats.",
+    "Reference emulator assertions measure executable plumbing, not autonomous agent ability or semantic prose quality.",
+    "Observed achievable coverage is restricted to eligible rows in each measured pool.",
+    "Operational arms use failure=none and identical simulator configuration and pool budget.",
+    "Exact selected corpus exports and rerun proof comparisons include retained shared connector records."
+  ],
+  "source_files_sha256": {
+    "pyproject.toml": "7db703404fcb99920aad79ed4c21b675fb213195c9ccdf2ffededaecd11c6171",
+    "src/worldloom/__init__.py": "cc9e73400a763d861d235d710e4b9cd7c898a620c738df6a79e389d63c2fca7a",
+    "src/worldloom/_data/bpi-licenses.jsonl": "65948eddf80036226fcdc6ca6280e4bd186f09eb84eccdbe1e7a0e51e96e2273",
+    "src/worldloom/_data/connectors/confluence.json": "9a5bc0be242f8e43647f827ba5b2204cc8833814138fa6529c0778d059158b94",
+    "src/worldloom/_data/connectors/drive.json": "634c0de633b8a7158661a2747ac6e5bb7829972a671839864bbb7c884f63b989",
+    "src/worldloom/_data/connectors/email.json": "e1224715de5b822949863bc00f92e80e650baa60560cd0306bbd8f57bcda3dde",
+    "src/worldloom/_data/connectors/jira.json": "b604930d5419142bfece8b80fbf9c88c667b91d72e801b7f65671f24c25d19dc",
+    "src/worldloom/_data/connectors/onedrive.json": "eabf103e5fdeb2204cd3a5d22b90b1e87418ee4c3a94daa616128f95249c55dd",
+    "src/worldloom/_data/connectors/outlook.json": "2839cfcce8849092d8cba033c3972c2ce47baeac23c38fd28b1c98095bb4aead",
+    "src/worldloom/_data/connectors/rovo.json": "ba33c98f41b2f2dcabea23141e520df7fc3a6e009c224fe669e3137c44f22ee1",
+    "src/worldloom/_data/connectors/salesforce.json": "33cf284ab8701e23d19218e910b80a65d8157803ef5e92a52ab465f70240dfbb",
+    "src/worldloom/_data/connectors/servicenow.json": "fa09cef563cf4db1567c61609fa874cdf5f918224d79ab6e62aecaaceb23ca5e",
+    "src/worldloom/_data/connectors/sharepoint.json": "177ad6fa034b2bbaf21d18167ebf0c60f459fd1153d062a037ee331bf5a6718e",
+    "src/worldloom/_data/connectors/slack.json": "8bff5c98aeaf22e4e185425d9c3cecc62007abb1d8cbce540616454f027083a3",
+    "src/worldloom/_data/connectors/teams.json": "caec7a57da710bab9cbce8138e7444f8cb98c9f73a8428de963e5669f5fa49a6",
+    "src/worldloom/_data/connectors/teamwork_graph.json": "24218ae52dc734f1719fa97c4d015a6f2941b9edc6248b1fe1b3fdd35fd544e9",
+    "src/worldloom/_data/evals/enterprise_dag_shapes_v1.json": "9cdc9ddbe614ba00cb564ade116937004a5e8c5119f41a60e05b5237ac0b0844",
+    "src/worldloom/_data/evals/intents.json": "12d9e390ac3838213f20686fc3038ea8ad660938fc98766455c34fed3822568a",
+    "src/worldloom/_data/lexicon/bpi-2020-travel-permit-activities.jsonl": "288f4467d0621e7b9d6cb2f2493c2a953e76e3bb836273c795b272f735b053cf",
+    "src/worldloom/_data/priors/bpi-2020-travel-permit-priors.json": "8b260ef755c5abe303fd5575f6eaf14f86b9d0046388e540a697b54b6c35fc55",
+    "src/worldloom/_data/process-catalogue/bindings-provenance.json": "833ee22bb4e50993eb40a6311e6c989eb0359656116a1fee14d5a795f256546d",
+    "src/worldloom/_data/process-catalogue/catalogue.json": "fc6a8f8167b385a06cf2a2adc2085f3b2a03bbf601c5ee7d372acac8ccccc908",
+    "src/worldloom/_data/process-catalogue/coverage.csv": "017903639576a64bf8e613223df1c16c45167fed948cf5503b126ed19ae80b28",
+    "src/worldloom/_data/process-catalogue/default-manifest.json": "3473e2860e329c94b1262bf518c58c27120a5d13483c1e101907c93d7bb6b2c9",
+    "src/worldloom/_data/process-catalogue/defaults.json": "aa161484052f48589569a2dee96502c4159e9be6eb294a6f84c26c06a849772b",
+    "src/worldloom/_data/process-catalogue/defaults.zip": "f798c129e8a0a5d7edd7348ca457c382524f0d334f365ed26f8908a8fdb6bba7",
+    "src/worldloom/_data/process-catalogue/provenance.json": "668166b2c968006521fd3c6a75c585992ee6a265917c7212c50d3597d20edb0a",
+    "src/worldloom/_data/process-catalogue/source-compile_processes.py.txt": "fe4104036b4acc917d52396ca8408e7e9373670ca27bb3364696bafeb16f0f16",
+    "src/worldloom/_data/process-catalogue/source-coverage.csv": "017903639576a64bf8e613223df1c16c45167fed948cf5503b126ed19ae80b28",
+    "src/worldloom/_data/processes/catalogue.json.gz": "be13da598580cf485fbdbe33c1856fec74b7c6e77e7da62c2dd4c81d30c03eed",
+    "src/worldloom/_data/processes/defaults.json.gz": "f23356509c09184aa74fb73c7461b31fe16b4ea83e84a438ec1a8028a67b1554",
+    "src/worldloom/_data/processes/intake.json": "e62df45e03a7aa911354855c5d78f97ca9e300b5fc40ef42c7157fdf307d4af4",
+    "src/worldloom/_data/vocabulary-sources.json": "37cfb3bed6fb2a7fc3620258c3b13027eba38a060b12f004f80f4a876c0f6081",
+    "src/worldloom/actors/__init__.py": "409b09c5c84dbdff740ce4674b9f0c8b25053eeb2dde5353eee2d55af719b740",
+    "src/worldloom/actors/evaluation.py": "1ca5dec8f528db0a7ddbda4cfe2fa440007de9da59ea940aa9deb0641fbf7a67",
+    "src/worldloom/actors/handshake.py": "22ceec96f9f61786e4af624123effe87e614cd68329d1a301fd8d5ab647d22d9",
+    "src/worldloom/actors/models.py": "d4cd5b435df5280d51c61f6b663d792c9b69b175b3266550d2492333cce34d84",
+    "src/worldloom/actors/observation.py": "d3fd81901527f27f86056907480f124e116d2d79d15f7b878b9317f14a73414f",
+    "src/worldloom/actors/policy.py": "0541c8d7082ac895ab218d95ba07918270f6f47e7d854c1bcbdb527c914326d1",
+    "src/worldloom/actors/providers.py": "7c5d6db1aaed7a10e794f088352c1035419939826368fbb7e3043a332f81f3de",
+    "src/worldloom/actors/runtime.py": "9675ddd392258f0ee8c5325bfe5871810d91b73074ac8a9460e079c0d463b513",
+    "src/worldloom/actors/scheduler.py": "28ddddd12a3e42ada39bb883efc2d1382b1d35908df3356534908994213befdf",
+    "src/worldloom/actors/tools/__init__.py": "95be916d7e08a5930035461fe76ec5ba5881bf45e6d272c25661fee5c927a48c",
+    "src/worldloom/actors/tools/artifacts.py": "b99eb8e1bc473128ca98707e51f3efb182d014e667a4d5270fdf7bc9428e8377",
+    "src/worldloom/actors/tools/base.py": "a50e214816d3db78c88775828f2ddf407c357f1f86bb150f508cf5b261d87910",
+    "src/worldloom/actors/tools/engineering.py": "fde8085e9fe2d9a764c00bbb20ab2dc171c554630f6b7d30c52d2d426dbba57c",
+    "src/worldloom/actors/tools/finance.py": "8481c2228de151c5afdba59241065829d1f8ab5f3524c6049edeefa3cf1151dd",
+    "src/worldloom/actors/tools/incidents.py": "14d233d81dc66c64ee5174e26999052f7d9fecdec485b0c0fc90ef6780a68d8d",
+    "src/worldloom/adjacency.py": "3f426320f4db78fd032945a3b5e96b5de8096808455339d2fac6b2be4fc53193",
+    "src/worldloom/agent_evals.py": "2e97de664a93c18a88c546ca8c9c96899f7c1645fb8acbaf8bb4adf50871d5f4",
+    "src/worldloom/archetypes.py": "a6c6a346dc1752ff6803fe4278129dcb8e2d1ea92280223e5a73d542c9cce16b",
+    "src/worldloom/archive.py": "cac7558314460a66159bf3b7f1bda25c295a3fb27c76121219f8aaa52de6cb22",
+    "src/worldloom/artifact_ecology.py": "25e3d4be57a96c03de373a7684d697bb7a1d3f5bf1663db8ed4a8fd9ac4443dd",
+    "src/worldloom/artifact_media.py": "4e580ff0b45a2ea2a7bc7c56aa697e47e628273464aa6f0e18ea37534fb656a0",
+    "src/worldloom/artifact_realism.py": "5b65a33d70d2ef0146a576b3807759cf92da87abb81b806b6daede9fa402fc67",
+    "src/worldloom/artifact_shape.py": "cbf89cfa1596c3aacdd69ae4f49a1d4ce8076ffd379c8b29fd5cdcbf6f51f245",
+    "src/worldloom/artifact_shape_materialize.py": "2ef4109176ecc60653d113640043c4adf2c4bbef8d9f51773878e30ceead6cd4",
+    "src/worldloom/asymmetry.py": "c314fd63f03d081ae5d6d835b63f62ea5aa707ab1ec4faf207d40c6242bb85d3",
+    "src/worldloom/axes.py": "b101fef6bab3e67707602d65f8d69ddd01a20bd19b29353419ffa570144180ed",
+    "src/worldloom/banking.py": "5cadcf0d314cd298c78a49cde3cbffd3a65984f6ccf388cc323543d3e2fa9797",
+    "src/worldloom/banking_documents.py": "aec81fb345330677b6e0271c66cc42961cf7ff3cdc2c32cb5b89bf2eb1330f5f",
+    "src/worldloom/banking_scenarios.py": "189d820e75f069b1a6646eec0b6207cdc0204b56ab26c53ec0cf8ccde8c87727",
+    "src/worldloom/batch.py": "2996ace7dd69c3cb6f83192106f9d6b9b0c94df88d418eae513beb16f3b96277",
+    "src/worldloom/benchmark.py": "fe6ebdfab97652cb73740e8cfd4cf0508ea38c2f7859f9000032b99b56575ece",
+    "src/worldloom/calibrate.py": "aa144f5e45438eecd572597c92df1a0fc907aa259fa48ba52d21b9c8bc4497d4",
+    "src/worldloom/cascade.py": "7b653d5c5d81d08747dd13609164446e2665e5ec43ca74ecf82abdb6ffaaa180",
+    "src/worldloom/causal.py": "58a9bba207ac19df6e9ba7b4fe1f7b164bee4bfadbdf49e4591d9e8e9033635b",
+    "src/worldloom/cli.py": "3a57173ee57aa975f53e02f19258faeab60f504aacabfb33054c8d2d867f1c20",
+    "src/worldloom/cohorts.py": "e8b6b7fe5a7ead3629fa961e00067f6f1728bcad0fbe62ea117bf5cfe5fecd41",
+    "src/worldloom/collections.py": "d2707109672a819749f4bbf91f57d5a592f1186b2909588e401bb4a7d6740c61",
+    "src/worldloom/columns.py": "4b91099ecf61cebe3b65919a706e482ff3d4964cb3833dc20247cf33b46e4063",
+    "src/worldloom/company.py": "6d148b58cda6705a5f2f3289e3a3a82dbc03350194be1c14ff9be5633865738b",
+    "src/worldloom/compiler/__init__.py": "95b058a44ef57e87977b5bfa99514885eac72db376eabe695fb0bf34c87d922a",
+    "src/worldloom/compiler/audit.py": "a73f1af157e03f2fa5512c254f83682643656f17c191e204e7f8724a2ade5413",
+    "src/worldloom/compiler/components.py": "5f3f91bf4390667fc1e7f8419cfa02228740b10af71b47af4037fa43600b42bb",
+    "src/worldloom/compiler/compose.py": "b0ba44e8e5977b219d49480c5c1e19f13e8c928448d048f8d144f0d8f960e2c6",
+    "src/worldloom/compiler/diversity.py": "ab77f8aee57262bdc717883123dfdcf6665f69abc5c95fa16e0e56bfc4d474d4",
+    "src/worldloom/compiler/grammar.py": "0caf1511e5c762ff0498433325874f52502ae75e5d788be965771ab3c67e197b",
+    "src/worldloom/compiler/handshake.py": "fcae966eb9eb2989e624b86a86392106f1d28a2e8b415fcef17dfbe4334086f3",
+    "src/worldloom/compiler/mechanical.py": "036c55c045bbffeb350e99218768556a40b199a02593fe2f3582458e3978a214",
+    "src/worldloom/compiler/plan.py": "e9328e6ed8cfce381ede2da46ad641289d91912cc4dddfcc13b493eca4cb5da2",
+    "src/worldloom/compiler/style.py": "b0462d76c44fd57df42f69e4a7a294e991ae591f9679bf3e02ae5e875f59a2e3",
+    "src/worldloom/compose.py": "bd2876a508848b006b47452acff6fa2a8ba981faa86eccd85bd888b02334a0f7",
+    "src/worldloom/connector_data.py": "0316c8ae83ad2e563328fc830b00278a0e002c8bf173526abd3a0c45113aa568",
+    "src/worldloom/connector_definition.py": "b64915643743192a68eef38b6986006a5608018b4b8b0ac8d3ab8d604c0150bb",
+    "src/worldloom/connector_emulator.py": "caae063a50b3d93ed3b9397723562cb308165a72f0f0f804ad00aa4f6a95cfab",
+    "src/worldloom/connector_eval_runtime.py": "8d4d204c56349e69d1dd3d2f562ca8084dcac55deb2a80d64a3208268ea9f6a6",
+    "src/worldloom/connector_fields.py": "376f315b6de9fc3fc2f9883d2d925be001b25f4d54d7bcc574b65b4cd20818ec",
+    "src/worldloom/connector_keys.py": "7c4b1973c949e1cc711a5be309c7d875f41a606689bfd88fe1ab52f03d6ba121",
+    "src/worldloom/connector_payload.py": "8e091977e2ba88542825edd905fa21458de3b8076bd9418aa65e279562c335dd",
+    "src/worldloom/connector_query.py": "c9bc217964505a403c1269e71f37826c9b5e4712835f9b4b3a944f889083811b",
+    "src/worldloom/connector_realism.py": "3b97b7972b78c89fbfbd7cab323c81dc22e1a8b1e783b62b29a554e699acf892",
+    "src/worldloom/connector_results.py": "bfe386e9835e887123a65112ed917830ea499abac5e8eb837e9a1a2620779433",
+    "src/worldloom/connector_seed.py": "2ca81267db5b25f7d0a7c1ef2fd51e5f3dc756dcafd77441bd41f846ca133eac",
+    "src/worldloom/connector_serving_cli.py": "12964f6d8f2bc551e3a63dc37b1f969a27c952ff5423bad0b44e45ad99b963e3",
+    "src/worldloom/connector_trace.py": "b28d81ad5b88b66f290b0f650002d5363f20a02095263dbddb3d6541e6ccede3",
+    "src/worldloom/connectors/__init__.py": "92e1d50bf6f51823767584721d7f7d036fe6538b0d66d986b10b12f7603d4b36",
+    "src/worldloom/connectors/enterprise.py": "8f727ad7cdd7a6c89dbfd79b1c200c6e9eb6ef16472df298a71494456e05b9a3",
+    "src/worldloom/connectors/serving.py": "aed273336d8d603aed92523c29d2b0bb35f01b5f5e39caacb850049366db050d",
+    "src/worldloom/conversation.py": "9cae1de642edb7f3c174ec7bd7b0d9925397856a3591714773d9b1a371d2ee4c",
+    "src/worldloom/corpus.py": "8dc2698d37c7704c522ad8da1ab4927ff438e227e045f44f19b9d42f3ec8afd2",
+    "src/worldloom/covering.py": "b5fb3bffc02906c3cb7531d9d0c4d130388f922d8ac5d56946394ba6775b0042",
+    "src/worldloom/data/detail_pools.json": "252e4f949ac89e5b3a2436e38ab8e59df138ac96547eb03df46c0d86d478e8f6",
+    "src/worldloom/data/surface/rules.json": "fbac6e6f2f40762b165b623492d8a60485d9757f3e6c143e7dd3b86919ec25ec",
+    "src/worldloom/data/vocab/australia.json": "0a88e9ad594d8faa28b696e56f97338fd1ac7fa46902cf576975707474c60168",
+    "src/worldloom/data/vocab/germany.json": "df1387e360e30cbf82edecd2ef4f1a05f48b8a5eb83e2db4cbe7447e06d6cf5d",
+    "src/worldloom/data/vocab/gulf.json": "6fec30959eee70fce139eaf9a048c35095371a2822d4d4a044c60dc6d1887918",
+    "src/worldloom/data/vocab/masterdata.json": "23acadf7a564c87cc1ccdd475172672c737654b0c344484a9cc22c5123a512c2",
+    "src/worldloom/data/vocab/united_kingdom.json": "0eade69ccddfc655a26f9d77aeb77ffadab4a9916b25bdac738eb91ed74d207f",
+    "src/worldloom/detail.py": "244227277cedafb0ae40e6cf51990902eb7e7ff10246de46e15aded347d17b42",
+    "src/worldloom/dispersion.py": "8a933c8ac1fa55eaeedcc227a01d94f9a9a0da88426cb35535aad7d4b221c23a",
+    "src/worldloom/divisions.py": "b9009f34c9e46b4e15d547955ac3f709a6f9b5cd26497b67877cafdbdc32b6e4",
+    "src/worldloom/docs.py": "189e01c4db358a7c185f841d3ebdb47e0610f028b1149d4a23cc10fe49576296",
+    "src/worldloom/doctypes.py": "c19ec3aa7dbf3800509eeb0432eba05a318a29e385d2af84705477e2025d7594",
+    "src/worldloom/documents.py": "f604f5a413a7885e98728275d946e9da704b5850021ba2e29b4e7b7402cc6783",
+    "src/worldloom/domains.py": "212986aedadbf5d338b1049f15cebb21a77decf106157f990a4091422bf8103a",
+    "src/worldloom/ecology.py": "512a9091173c4c58805ea289e7802801d38d1f2eed65108ca799d68d372b92ef",
+    "src/worldloom/enterprise_artifacts.py": "2e9b534ad61f2b8ad742956550887fc438313755d9fe8c1adba1cb6946187c39",
+    "src/worldloom/enterprise_corpus.py": "8a1e55b6514ba565f1439b6a404d825a092ef3dcd86f93e4ec228bcdabb7bde8",
+    "src/worldloom/enterprise_dag.py": "56a2b3de0fa43fd116e59af957d1a8fb815e5ba629304dade95e4a2786ffe2cc",
+    "src/worldloom/enterprise_dag_planning.py": "d28c9a12c9f296053764522cf427833a80607df1f9318c33718609601cba2c99",
+    "src/worldloom/enterprise_dag_rows.py": "b37a10de1dcb0df10d48367946272557f5f44b221733090c253f5698eefcbd09",
+    "src/worldloom/enterprise_dag_runtime.py": "3dee6478c6b26823dfcba8dc70656ae8134ef50e5a37062b0e9ee69cbf5f07ca",
+    "src/worldloom/enterprise_dag_trace.py": "0b8f755af114b791314254aebdeb57d75abd3d506ff3ca1fac77fffb30ff05f8",
+    "src/worldloom/enterprise_evidence.py": "642376c14148099214da709378ee985851e53485aab5912c7000923050c1cc34",
+    "src/worldloom/enterprise_failures.py": "4b11acb7ccfffa630f7b9a47857a70a2f871b0058bfcaea74dda35ef3fd1029a",
+    "src/worldloom/enterprise_fields.py": "367eb6a58007437ec4ae91e84405912735b5506860ddd38b0d5416f852fd2a79",
+    "src/worldloom/enterprise_io.py": "0333779fe3fde860b41f32c90eece00930ce18bd2f497b1ff32e8ad590ece1ad",
+    "src/worldloom/enterprise_qualification.py": "a3356e0e9392beb0f90d601ade12eeb46a4bdb1cd9f1b878e03a293b4067cc05",
+    "src/worldloom/enterprise_qualification_cli.py": "aaf5322fb5a09d2acc2440bff988ed2a6c23a76a5ed20650ef35fd8c845490d5",
+    "src/worldloom/enterprise_queries.py": "090288d12d3eacc30cc677ab6998a096a99be2466fe8e68cc00a898f793e3e4a",
+    "src/worldloom/enterprise_rows.py": "8e18a3fe727f2d449e97bb2573f1d619ccc181f942be052fc47589d441c670ac",
+    "src/worldloom/enterprise_runner.py": "fe7e6f9e88b73cf6f97feb88f7b4d6a05008876c87cf858132819cea2a59d482",
+    "src/worldloom/enterprise_sdk.py": "baa3874d3b28a211f830d0da891524c84299b39af85ff095a57379f1eb68019d",
+    "src/worldloom/enterprise_simulator.py": "11a87d93db12159662f171982ad265a7b77aa68ef0002c3ab430c91f4f17176c",
+    "src/worldloom/enterprise_specs.py": "48fa99d3c7aeaf2727103d99e55d87a1cd7d681457501170f9e215d99178226c",
+    "src/worldloom/episodes.py": "453796827cbde5453025c89ed3d98e94f6ee53fc460aa2ab0c7ff000abb033bf",
+    "src/worldloom/epistemics.py": "179b3b31f8fd447c1453b736a420d7518a8feef56ff3a8344f275d2d73aef046",
+    "src/worldloom/eval_candidates.py": "78f1330ff7bcf7c51e35ca973d12b22ceee7446a409ab10548353f5030de3fb2",
+    "src/worldloom/eval_connectors.py": "f25aab21356e4129fa8d597a1e81626ce4a8b2035ad6d43487a91443f14859e6",
+    "src/worldloom/eval_construction.py": "189ae6d6c7e07156fc705ec739ff48d3df76ef85a8f120d462480ae8283134d5",
+    "src/worldloom/eval_demands.py": "def327b93410ce735d87e8d39dba845ce2e3b359b77b54c460c368ce662e393e",
+    "src/worldloom/eval_design.py": "7490b782298e91a9460a0290c53083d39a41ca575157383bbca5c49d0fe4c190",
+    "src/worldloom/eval_execution.py": "30d01f03e14d5cc4e88613cd5ca387743db4d6da2a35be00fc75befd3d93f6c7",
+    "src/worldloom/eval_instances.py": "e026c8dc1912be13572d6e5db5c939a4ab6c16e48bfd03cfac83bc122ca5b78d",
+    "src/worldloom/eval_interventions.py": "7f406c4848d6abc400db6906d51505058e77cf6d1f82aa6b7d2c4c4f381196dc",
+    "src/worldloom/eval_metrics.py": "42c33f3882241cbf2737024c9c89f9ca21b602193fdecfa5e7709cef03c73a8d",
+    "src/worldloom/eval_reference.py": "ce03024fecf60d0122840d25c898753336c422c6ab58d0d64f1a3521be440334",
+    "src/worldloom/eval_search.py": "df3c848f98eed7aafec3bddceda08a72536bf07df35669b929bb4382ab549fa5",
+    "src/worldloom/eval_shape.py": "f8041900e52f3abb5bab913932ab4c2f1f4e3acfe0641b0049da71e086287d88",
+    "src/worldloom/eval_shape_validation.py": "ebc8d80e42aadefee71d22333471c8f38262493a3ef434c617a5c8594556c1f9",
+    "src/worldloom/eval_tactics.py": "44edf8ad21cfa91ed7f282ee60b2de4906f5e1528952eb78839684eba553ff5c",
+    "src/worldloom/eval_witnesses.py": "1ea1e4d26b785b712b7ba97bd04e1d5dbd266595a27f1795b17805d405f6c418",
+    "src/worldloom/evals/__init__.py": "4e6109205f57fae4ed7ccb597cfc6d83029902bcb214de9608e24df891d5efb6",
+    "src/worldloom/evals/builders.py": "32939446cb02f0d027bce7c666e8f7ce55dd0fee16cc0e4d1ee76672c7e27050",
+    "src/worldloom/evals/campaign.py": "b2e039d9dc2a358abbdf61a137df6b2b823a5a8e88a97b3bb3b94739c31e2467",
+    "src/worldloom/evals/coverage.py": "32a6f42ae25a599755559796838b26ca31c4e15ec040e7f68468be0b5787d701",
+    "src/worldloom/evals/difficulty.py": "6f03cb71b5f404572897fc676939f5b57157d2c782b44e22e4a63cb24f363cbd",
+    "src/worldloom/evals/intents.py": "1ff7c640aa88827c97e1d612c4c550457325a07187fa77a0a17d1edfeb9e56a0",
+    "src/worldloom/evals/plausibility.py": "8b6bb06d0cced6e0f78f89f416a6e62f2d7c9e326f2bd7cdaaa8e487f6673fa5",
+    "src/worldloom/evaluate/__init__.py": "af7d5d5b8f52081a02556e3d41f3cc640669e77954000781c7eba8261dc9db84",
+    "src/worldloom/evaluate/across.py": "abf836b3f6aeff457d85d1796997a051d17509d245f7789382dc8924b1ed79f8",
+    "src/worldloom/evaluate/bm25.py": "cc020afd4db35ff196aa8c32746660cc101140a042a1e093ee59c9abfc2900b1",
+    "src/worldloom/evaluate/embedding.py": "21d644735dd6e0c8705d221010f7c9c27e0f825fa62cbdd5d1b1ec58e6a0cbb8",
+    "src/worldloom/evaluate/index.py": "ccfd8587581120774deb5eb340e146ed63de9a212af38069b01cbab7f1a2cc74",
+    "src/worldloom/evaluate/phrasing.py": "3991aaeaa3049fcd8c821984046e1a679a41df83e9311c4d4f7463309688b32a",
+    "src/worldloom/evaluate/score.py": "22b642f43da8b2a9c0f31e98f3426c01446bb4d12738aef22d7e1b3b3b68bcd7",
+    "src/worldloom/evaluate/tfidf.py": "b0b50fdd099b254e9f04068a708b1d8069b73d0703ef57268ad3394846b9f4dd",
+    "src/worldloom/evidence_locator.py": "c3e5d16a20e1dd3d8558c4c4b141617caf45e1e3da13cbba7cfa6823db0056f1",
+    "src/worldloom/evidence_locators.py": "5d3a694dd198ca5d7e579c416fd0aaea34a267c435aa5168ca90180d9cba501b",
+    "src/worldloom/evolve.py": "9072a2915ee6b325659d6a3f60dbb4590ad82f542037e6187b1d4486a2fca872",
+    "src/worldloom/execseam.py": "96e70cb58f30bbb6e4f2caf68f0449539c4e47fc43d1bdc23301d35000d02479",
+    "src/worldloom/facets.py": "12e7c70154a0e982713087015fda82bfb2d01f049bfd8b7fdf6fb49eb0d15b10",
+    "src/worldloom/fact_ledger.py": "1dc662ad3ea0a15a01784679158ae258bf47021875173e34a191514cc5afa3e0",
+    "src/worldloom/factkinds.py": "ea3eb9dc1fa30bb19bbe12467b4fdfab992175097b034052e16b79383e5b8c01",
+    "src/worldloom/fidelity.py": "df4b6d6c38947a89079df981a8be496bc380391cb05d562f32416cf0d54f1e0a",
+    "src/worldloom/fleet.py": "fdb1323f21fd7a06698ac200f150d3aa3476971a7157c0cccd3525785cc06f16",
+    "src/worldloom/gemini_enterprise/__init__.py": "7898062635d90d3794304bdd9ffeb3df2cf833baedc790d2fd7e0668b491d9bf",
+    "src/worldloom/gemini_enterprise/cases.py": "2c7878d681e7eaecc0b7ceee9e640b7a390302113de8f7589428ea5c7f3c93ff",
+    "src/worldloom/gemini_enterprise/cli.py": "aef4e667f985b509825a41f63c19a043167a46f542cedc2998fef4882a39437d",
+    "src/worldloom/gemini_enterprise/datastore.py": "556f474ca1673bc2781cd7cff98cbc51987acf2fb4468cfb9ad931f3a9240ea6",
+    "src/worldloom/gemini_enterprise/results.py": "bc6702321de4a7ac33c651a842d161d3649d3200696be288f155c4d876d9d605",
+    "src/worldloom/generators/__init__.py": "b1fa1318db95aa892d7db1989315e4300c87bf73f5bace08299724f8bb30d14e",
+    "src/worldloom/generators/banking_evaluation.py": "acd98226c9fe52c14c689d0e4d29228e517c3c10f62d22cb01c0bfccaaa3c2cb",
+    "src/worldloom/generators/banking_network.py": "fe8cfec3fcc0e03d0371d1b69b7575e6c9881410352109cfcd8419e611750d8a",
+    "src/worldloom/generators/banking_org.py": "11a52205e5624f937ea856e8bf64eeca46727c0621d009d2824aa787549e1e61",
+    "src/worldloom/generators/capital.py": "f5d1b00263d3c3919b0b989b5ccae70c869290ddbaaf8583381e3f4f91cb2f80",
+    "src/worldloom/generators/cases.py": "876d1c3abfe5fe1ddbad32522d78daec7be983c7fe2f45e6127cf96af79495ea",
+    "src/worldloom/generators/communications.py": "51fbb8575561d20950001a8b0634c6f4d3904dfbee70a3be9d48779e19994308",
+    "src/worldloom/generators/distractors.py": "866c452c2346fcaeae42be0b1047d386a86cf7dd4eb99edad6fe6fefce058533",
+    "src/worldloom/generators/episode_text.py": "fd44b666c842d610d4305fa9331354ed08105130faed9cb59694e0f09e1796fd",
+    "src/worldloom/generators/estate.py": "4e41ac3d7167924d64bf96713b9bd187be65ef96657e28173bd1fedfae128d1e",
+    "src/worldloom/generators/evaluation.py": "598d286704a54491758c8124d62487633dfa9b5d49809e704726530352e9470f",
+    "src/worldloom/generators/finance.py": "275869935bc2a7d89cee37a72b9e132fde0723ea2d1ff05ae5027ceea82f0874",
+    "src/worldloom/generators/hierarchy.py": "832b1e919763de110dc3da7451bcb685f676166ea49bc4c9767cd379cc81139f",
+    "src/worldloom/generators/insurance_book.py": "d578170e7a816989e987cb24ed2fb2c2b0fa226dd0325cf91ebc7445ad246a7e",
+    "src/worldloom/generators/insurance_evaluation.py": "d0ce09e83ac5f61fce5e1f370fb6eb45bb54c4a2615c9baa06a40217720734cc",
+    "src/worldloom/generators/insurance_org.py": "b39b13db35a5e001eba66b4d682a11cf268aca99dbb0a5e296f471944f7e83cf",
+    "src/worldloom/generators/liquidity.py": "4d8bde0f90740241b2627770c077c3a3d4c693082f45fa5920fa2911be2bfca5",
+    "src/worldloom/generators/masterdata.py": "e948e07092096902a1c2dbe34c4880f3b282233d540077d9f4f6d8aca33285e2",
+    "src/worldloom/generators/names.py": "99b1bd5284ac58b68c38ec325f0feaa8f386ef2a367d7727087ca7ca8c3e70af",
+    "src/worldloom/generators/operations.py": "7416b17b830cc50c383295069ca5bea16a92df9594c1f0161c39a610886f99be",
+    "src/worldloom/generators/org_builder.py": "cf8ad5ab0f64a50e36e30747fabc54a0ced3f7c465a11ad88c25db2fd8097041",
+    "src/worldloom/generators/organisation.py": "955528d2b8d4f665587f59af0008bb9d508be2a2a438ddb0555e469d25eeeb78",
+    "src/worldloom/generators/personnel.py": "0ce8a6325acf347a820808d8d214f7a84c6e1aa20d577ac085d7b4bb2854ea53",
+    "src/worldloom/generators/planning.py": "f232ab8b2d068f8fbccb0dce15ce4c9b07ff8e46f32d7177a12abfc2feea18cb",
+    "src/worldloom/generators/primitives.py": "ca5cdf8c9c879d1c430ab70de8bcba1af894ef2af1d8f4b023e6c29600c69bef",
+    "src/worldloom/generators/procurement_cycle.py": "eb36fb006ef2420e578916a2b2d1a5ff9738d2c7c24b2bd645c2cf610c263f22",
+    "src/worldloom/generators/procurement_estate.py": "69867f3f94ae4ae0ae367e6ef66e8c33a3da16afffc8e81ed31af342ff3fbd78",
+    "src/worldloom/generators/procurement_evaluation.py": "f1da839bf0fed0a149489a2a0d3530dadd557700bef32422582cd02cb250a7f4",
+    "src/worldloom/generators/procurement_match.py": "b4720c5f3556dfe40c6764966c45b614a2fae08f093adde7cf3458e0682d8fd9",
+    "src/worldloom/generators/procurement_org.py": "6584c58ceb1a718ab8f05c3fcb03d6f1dbae7e9416df05332d95b1c46d201e53",
+    "src/worldloom/generators/regulatory.py": "c0ad1e9347063902a3e97b129444bb961c9cde20c0ba13e5b59b7e33cf57d909",
+    "src/worldloom/generators/reserving.py": "146ede29bbe31d1fbe9fc2fbc42ede90dd263d470cb85768bc7936ba87c38603",
+    "src/worldloom/generators/retail_estate.py": "64b05dfa8b8ee8c749fdcf18295914b45a3c09095a8c59c89bfd470e9c4c0da3",
+    "src/worldloom/generators/stockflow.py": "6094a06526d7c17518c214c80726948f0cf2a67347a2bdab05c58a2a4173315f",
+    "src/worldloom/generators/triangles.py": "1a40cc8f24bc5d9e207a8f4a82a0fa76cf12f624fd67b83ea7f9500aea66b882",
+    "src/worldloom/graphs.py": "9ecbba5253ba0f1e4e30ca0e12a2f9509d0fbfcbbdfee202b4bf9bf270fa1bb0",
+    "src/worldloom/ids.py": "25bf684655a689fa25d28f9ed6bb071b8e56abd3ca0a49ee83b984a796ba796c",
+    "src/worldloom/insurance.py": "b0a79383ce95a7e1d23b344f52f6b207133789fc59332e80c55ac6631cb6e9b9",
+    "src/worldloom/insurance_documents.py": "6a2174fc08b06672dc725d1fdcfa1be4f91b33b42c5bc76c30d787d35b57d383",
+    "src/worldloom/insurance_scenarios.py": "45558e1c97bfe5f87c5044c62969b9391c25bc9ff375cc75fd50fa8cf87e4db4",
+    "src/worldloom/landscape.py": "ab08b4084983db3a0bb9d811e5615ef45ad60d6dfbd59c23a742be6dce31e1c3",
+    "src/worldloom/lexicon.py": "595015e61943129c8e6934a916d62490f2a708598425878ca97e9c07cf97f4c3",
+    "src/worldloom/lob.py": "c06c39114197b953be1aa29d99381e85c7d91d09cab2f59ec3a091f2912f1ee7",
+    "src/worldloom/locales.py": "57d04bad60d3e59634146e013a38ef85af895c0993e2b94b50ab1b91d006b569",
+    "src/worldloom/mcp.py": "6589c887bc336d3c7e9e1a0d7b0d0c41d5b9323e24de121972133a64c284d60a",
+    "src/worldloom/messiness.py": "b5ab60187eeb1dd1b64f4e7cf8ca6e8c714d03ff6c33ec0ce2f3dd07376249af",
+    "src/worldloom/migrate.py": "8e490de350043e0605fa96e9b76d9523afca0e71a19f9d3289a5b2dff530acdc",
+    "src/worldloom/models.py": "edfeb4f29c78c62b30c8dbdcb34cd22fe7d83ac9c56ae9db9f0a75baf4f08916",
+    "src/worldloom/mosaic.py": "131e1f541902826d575302121158a5811d998341a0a6e97f77a07315c004a379",
+    "src/worldloom/narrative/__init__.py": "dd4d23a5fc833efb87a6af8c0e5441e6c3c0d6cbb303fb466c339ed96afdc34a",
+    "src/worldloom/narrative/claims.py": "6a036b0ed8fccc9319abe815e20627db568c54e30101f222012beda4735947c9",
+    "src/worldloom/narrative/compiler.py": "509a49928b1da4992e2eb5f8196eb379d9efbd4fb96034a7a89146b0541ee22e",
+    "src/worldloom/narrative/handshake.py": "f4aeb5dcad685759ec660c8a751c7f444f5ccf3a3c5db80327dde81e5d88afa3",
+    "src/worldloom/narrative/programs.py": "59b667d81e6691a4a2edacce84b1e0d5c51ec55ce8f34c9864d7b22b267f3586",
+    "src/worldloom/narrative/prompts.py": "e2f43978251b16a054472e57c1c0378d1a3bf8bf49378e8ad5c38dabd0364d34",
+    "src/worldloom/narrative/providers.py": "a76190ef44cc11bec5c077cf12d2e66c979c36d1b2c863f471f653d910cf6bea",
+    "src/worldloom/narrative/reader_checks.py": "5a9d03e1f59f92497d83882b84f127503ac9774c19b0c43bc17d41d3459a45b3",
+    "src/worldloom/narrative/references.py": "02c540484b7587eca07c28984b5eec3e652cbb9d58fed13d8ddd51f13ddb91b9",
+    "src/worldloom/narrative/requests.py": "d7ea545b1fe9ddfe94ef2506898df375ef7811f451625a92fc707147d10f91b5",
+    "src/worldloom/outcomes.py": "0979e99010cd458eb9b57d9cb375c6ebc54e0ad61cce1183de861af3638ed7d4",
+    "src/worldloom/pack_export.py": "a967648411a8d533ce4ae3cbd3ea28101bada41d1c60900259f450ca7483a200",
+    "src/worldloom/packs.py": "cead8fc5735a5641b313037f57ac69e5f123cba7a69f2c33b592546315980424",
+    "src/worldloom/parameters.py": "af6141b939eb883b69817c3fe06edc3642da8234cfd42f6e035cc33c57fb426c",
+    "src/worldloom/pipeline/__init__.py": "27f4d6ef68b1fbe8342680b6d3bf9cec2d53db5e50143ad9de67941a2fad5a8f",
+    "src/worldloom/pipeline/builtin.py": "389e08583c608a4d79257b89aff250a1022c606eacf852f46d112e8509cba3d7",
+    "src/worldloom/pipeline/core.py": "dd406abec3558fa044199ebe633ba3e7c6efa669fce628f80bcb0d414c8b2280",
+    "src/worldloom/policies.py": "a62c34c115186843e0ab8ccf377a2b5334fbee1d1963ab0fc3f9b62b9ed4ac37",
+    "src/worldloom/predicates.py": "2de53d5d54dd3eca47194b4a54f04f2b3a7956d46cc3d09d6e6f6c2326b407b3",
+    "src/worldloom/presentation.py": "32a99d5966726ecf5d7f91adc9c89313fc1524055d964e441869056dfa24b67a",
+    "src/worldloom/probe.py": "61a2ea5bcdd00b38eddee519bbf59444a29ce969f6b2ee9ac21358c637df15f3",
+    "src/worldloom/process.py": "cb703bdbb5a23bccdbf9c9fde5f2456ef9e0adf013f31b19efec073fe6ee051e",
+    "src/worldloom/process_bindings/__init__.py": "9e743aea4c6dea75849dc0d30a845f7c08eac143820fae41153ea8cc786ddb9a",
+    "src/worldloom/process_bindings/__main__.py": "e3b9c0fe8d4371ab396526496ce8b046f4827908b23303cc4600db724519de5b",
+    "src/worldloom/process_bindings/adapters.py": "2e8a8518884f30fe69473086c1008e885982d2f61bae30d747331c8b439c46b9",
+    "src/worldloom/process_bindings/compiler.py": "57f17d5c814441e790ae1d86fc41fb455ac86efe963188a8b021f923da8ac281",
+    "src/worldloom/process_bindings/models.py": "5f5ab9952d9f64a443119aa6cff7912b0b7da0fc19ea9af6f46e96491d880a86",
+    "src/worldloom/process_bindings/situations.py": "ab209ccb5d6d784b9e2e6d99536b4f7251a473a34386787f962cec07862f5a02",
+    "src/worldloom/process_bindings/storage.py": "4c034322a34ed93549f018e73624081a062acc28fa38216464e8448fa1ac0b1c",
+    "src/worldloom/process_catalogue.py": "edd925c218489223d3f2185cba01f9e70b83e5d9aff12a2f32df6773efb51304",
+    "src/worldloom/process_planning/__init__.py": "571dfd7c745d1e3d188957134657436d5dda5ef3de8bdf9152c696ac9fc114e9",
+    "src/worldloom/process_planning/__main__.py": "0a11c3102216c687714ec20479aef60f18352776b5bdb2eb31cf658b3a13e7bb",
+    "src/worldloom/process_planning/compiler.py": "9a2cc8712169adf90afb4d82f146d4f10a79b6bf59c1f9c0feb4f8b37c94ab76",
+    "src/worldloom/process_planning/io.py": "0d569ee80c777e3a8c7a1c609ff8cd1d567a2f40bc508586aeab24c9c381dd87",
+    "src/worldloom/process_planning/models.py": "4e81eab7f7fbc938029bf902183977aa2036e79c3e878ca44dbdeaa252788236",
+    "src/worldloom/procurement.py": "06d5a9d1811cfe5491c70d4374b3238b55916c6f3a892debd2da221b0c2cb07a",
+    "src/worldloom/procurement_documents.py": "10888918aa6a256451844fd5107e053763a87c7fdd845fb996cf11061aaa3f18",
+    "src/worldloom/procurement_scenarios.py": "bc9ba0223e68ba62d04fd49e18ff59cf0ad38690a91403992031501366f58291",
+    "src/worldloom/profiles.py": "c1323739d2f07ef535fadc59f2de357ecb69b156f43323e3a252b9d7a205d6f9",
+    "src/worldloom/providers.py": "503359a2e751ac2f95aa51835d219bbb113d3548751c5c053567fe83a4c1278b",
+    "src/worldloom/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/worldloom/query_planning.py": "928d59779b25f0c2f1f4777e2df2e97d16021428739704a404c348133d789803",
+    "src/worldloom/realism.py": "0e57599b2118cc54d241c94947bfc21022862621a31a5c3eee4675a999dbdf2f",
+    "src/worldloom/recipe.py": "d6ebd7be5c7c5eee0c7183594bb0effedc9610087eeaa99ce95a35c1438a36fb",
+    "src/worldloom/registries.py": "2bab7599c33ac10a410fb1cf5f92301a1a5b3b9b526efa18ddeba28b8ce88d70",
+    "src/worldloom/render/__init__.py": "fbe50030271382852c2f8f6c8968944abdf1564ac789f56cd5519f57f4b3cd6d",
+    "src/worldloom/render/bundles.py": "5f276b45810268639daa0ae1eadeb565eccbd90fe9a300b754a4c6b6ebc3c618",
+    "src/worldloom/render/docx.py": "79076761ce344a36252489ed6adc5e120d176904ecbba4bbc1b175c546f499d0",
+    "src/worldloom/render/fonts.py": "6e15d7cfaf287b306a1fd362fc46000b6353feee77788fe6934ee8ed90c87215",
+    "src/worldloom/render/html.py": "4968a461d59171fae5dc9ef32cbdeae6fef15e2645adafa8754097d18f711acf",
+    "src/worldloom/render/markdown.py": "5ce45789a4c373c7bdbb372cef72b4c0cf2023c5be80506cee5c7d28d77f516e",
+    "src/worldloom/render/ooxml.py": "cdeb19597b5bb9a91d62e7cae4297207e6dddaf44a32a6da4adab24b0c84e834",
+    "src/worldloom/render/pdf.py": "6d290b46002666879d18819735ece210d31d8e01d5761b3d4943810e00594bad",
+    "src/worldloom/render/pptx.py": "aa958c73e34c7df01273af1a6aca0d7ffdf0eb62822bbe5d58f44f709e5d6b01",
+    "src/worldloom/render/values.py": "b7c581f0bd7c5359eed73f13ac6e3957d5196342073e0117167bb95e68d6960d",
+    "src/worldloom/render/xlsx.py": "8cdde4f83b41a1ad59b2c673d70a882ae2ba7a6a9d50a06350a64a4d55cc5262",
+    "src/worldloom/retail.py": "5a13f7c1ee225414d8ba10a52c454e8ad86f22cc83f4fe11aaa473948a98724c",
+    "src/worldloom/rng.py": "ea1d39a14efe5353c15b72743a2bb1ee11bd3e8a4d3b798ed05b772a5db90bd4",
+    "src/worldloom/roles.py": "4a464a00180bfa5cd00cc8a92f72103f2028d607d2c1c0d67f9c0702ade3a6a0",
+    "src/worldloom/roleseq.py": "2d20e968ffb339800ba64b85ac5ab746deab01a21577cf99b7f7535c6309522d",
+    "src/worldloom/scenarios.py": "9288563e04235a0f9fae340ac331f11d195ad13bcc6b9471ccc4880e12d94048",
+    "src/worldloom/sdk.py": "e350b9d84d025564b74b3076dd38916b705039505b5857397ba572e4d4d13df6",
+    "src/worldloom/seams.py": "aa84e429f432e2bf5433a304d4bdab44bf35bd5f7e5cbd91975c6545513d1b32",
+    "src/worldloom/seams_cli.py": "cee15f2b372bc385131143d2c984a01b9a1ffd550848405f848c16b03811f275",
+    "src/worldloom/series.py": "a0a2f743f520b7152d94dc10e345de93d5e1d5453b1922802bf37fba7b490891",
+    "src/worldloom/similarity.py": "8b0965067ab860c7acff5fef97bfd6dda07eb83fd7c536a212f8f789bd6fe4d1",
+    "src/worldloom/spaces.py": "8852b1443ac7d189c8cc096a0aab01e73a7de02409f661d8b22bc71243587d32",
+    "src/worldloom/stats.py": "0d8bd3489594a446700cd3a6c311d2c31aebe909313d9dd02625830472b1775e",
+    "src/worldloom/storyboard.py": "b24048ec944f338d2159c3ee9de06cb9280a614f758fedb5b975f7eca7abfa40",
+    "src/worldloom/structure.py": "7074230f5bb009198bbc4ddcfb36d4dcc850c8225ce20fd27c8ce4cc9fe44d60",
+    "src/worldloom/surface.py": "892392facfa782098870a1cd0224ac1ada9f0e376ec1319fd456ba86a0f2809a",
+    "src/worldloom/synthesis/__init__.py": "2cbfa52031f5b0005d79fbe8b9718009e75e417c57824199f89c6a357bb0c48d",
+    "src/worldloom/synthesis/compiler.py": "25c30528057cdd41fdcad7e662a8307338679059e66b7bc15ae468dc79a5fdca",
+    "src/worldloom/synthesis/connectors.py": "d1af58781a622140e9a136fc0fbdb3a44e65fab7f3d701a125de05894716b1c0",
+    "src/worldloom/synthesis/engine.py": "cc305158aa7a60bd48b3cfc4d23d054da95ae0011ad6c8df1372e6081638fb12",
+    "src/worldloom/synthesis/harness.py": "b04a7226f5a50296a2bdea3af32df09213da0b00335f626e0832bd2cff2bc52d",
+    "src/worldloom/synthesis/models.py": "47392abee039f90501f882edd8862da410bb44ad75484af5b84d3cfb20ed459a",
+    "src/worldloom/synthesis/programs.py": "92d9843388b7f68a712a5390bf0b4e494535183d68ad527ca3651b1bf012823f",
+    "src/worldloom/synthesis/search.py": "5669fc755ef615959f859d0f44b51a84c88cc01774aa5f839614108cd61a34f7",
+    "src/worldloom/synthesis/storage.py": "5d0c801e75b26adf9ebf22c039e1375b6e4a75a9f2b874fbdcc8a0ac45466838",
+    "src/worldloom/synthesis_cli.py": "0d00d8e86b674c38bb656216a0e0e570e1873803436751b8a84a86837d7a7caa",
+    "src/worldloom/templating.py": "782a0a70609b28cab62cd3ce59942c7c52c33b147d0305efc04da4b872f03310",
+    "src/worldloom/timeline.py": "6eb3ad4cb05272f81fe100d0fada03cc035b438dbc7634b098cce9d26466d6de",
+    "src/worldloom/tool_surface.py": "344cc8c96386609ef82204f2a668d7d56fd78b300b0b55f60afd8397b7ff052b",
+    "src/worldloom/tool_traces.py": "6f1ee3e136f99c227a41447f8643facc7cbb9b391d5917622c824c949383ec4d",
+    "src/worldloom/twins.py": "7e849dddebce8d1c120aace6412a8a49b395904592e08f53add6ec818b12acb3",
+    "src/worldloom/validate.py": "53bfdd5fcca42b706697ecab87ac48974a19d71db49c96f65b8999b72061c86e",
+    "src/worldloom/vendi.py": "87369922778bf0391548b16ef670817da262f155bacb8d3372b4798602f3490c",
+    "src/worldloom/vocabulary.py": "02076548487bdd1f1f511d6e315040c1d1f71e095f28e0df029a2af9afa30a80",
+    "src/worldloom/workforce.py": "cc72b8cc6d596a5a88b55bdd27dffe8ed4ba43e221cdd388d2ee412c50465b5e",
+    "src/worldloom/workspace.py": "eada3c85fd68b8da044f8b6feb2fc0ea73fefa2fb54323f6eba0cf6633f44d65",
+    "src/worldloom/world.py": "7d7798b3ffab1a30b7bc09e1c8d8d8ecd8aaaa7568345ef880b8424f9fdbb74d",
+    "src/worldloom/world_transforms.py": "f75fe44761082814a78545be94bf26ae0b46e7d85a88acd5d2b607f9c5e52b39"
+  },
+  "source_revision": "ca4ea1a5e3cb30433de6668a4b949367c93f4ef1",
+  "summary": {
+    "company_probes_measured": 8,
+    "company_probes_requested": 8,
+    "measurement_error_count": 0,
+    "operational_comparisons_measured": 4,
+    "qualification_arms_measured": 16,
+    "refusal_distribution": {
+      "preflight:ValueError": 332,
+      "validation:invalid_corpus": 40,
+      "validation:source_format_mismatch": 192,
+      "validation:source_format_unsupported": 104
+    },
+    "selected_assertions_passed": 504
+  }
+}

@@ -26,8 +26,17 @@ from ..eval_tactics import TacticPlan
 from ..eval_witnesses import ConstructionRefused
 from .builders import candidate_builder
 from .campaign import CampaignRun, EvalCampaign
+from .company_dataset import CompanyDatasetPlan, FrozenCompanyBuilder, load_dataset_plan
 from .coverage import CoverageReport
 from .coverage import report as coverage_report
+from .dataset import (
+    CompanyDatasetBuilder,
+    DatasetBuild,
+    DatasetRefused,
+    DatasetRun,
+    compile_dataset,
+)
+from .dataset_contract import DatasetPlan, DatasetRequest, DatasetSource, DatasetStratum
 from .difficulty import RequestFeatures
 from .difficulty import features_for as request_features
 
@@ -99,6 +108,16 @@ def seam_contract() -> dict[str, object]:
 
 
 __all__ = [
+    "CompanyDatasetPlan", "FrozenCompanyBuilder", "load_dataset_plan",
+    "CompanyDatasetBuilder",
+    "DatasetBuild",
+    "DatasetPlan",
+    "DatasetRefused",
+    "DatasetRequest",
+    "DatasetRun",
+    "DatasetSource",
+    "DatasetStratum",
+    "compile_dataset",
     "candidate_builder",
     "AdaptiveCandidateBuilder",
     "CampaignRun",

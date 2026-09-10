@@ -111,6 +111,7 @@ STEPS: dict[str, tuple[str, ...]] = {
     # of the answer.
     "Compose": ("ledger_key",),
     "NarrationPrograms": ("keys",),
+    "NarrationReaders": ("keys",),
     "AddIrrelevantFacts": ("seed", "count"),
 }
 
@@ -1005,6 +1006,10 @@ def rebuild(
             from .narrative import programs
 
             world = programs.replay(world, keys=step["keys"], ledger=ledger)
+        elif name == "NarrationReaders":
+            from .narrative import reader_checks
+
+            world = reader_checks.replay(world, keys=step["keys"], ledger=ledger)
         elif name in _STEP_REGISTRY:
             _, build = _STEP_REGISTRY[name]
             kwargs = {key: value for key, value in step.items() if key != "scenario"}

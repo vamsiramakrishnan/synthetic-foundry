@@ -289,6 +289,25 @@ worldloom enterprise-evals plan <WORLD_PATH> <OUTPUT>
 | `--shard-index` |  |
 | `--strength` |  |
 
+### `worldloom enterprise-evals qualify`
+
+Qualify actual evidence and execution, then select enterprise coverage.
+
+```
+worldloom enterprise-evals qualify <WORLD_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--dag-shape` | Executable DAG shape; repeat or use * for the versioned catalogue. |
+| `--json` | Print the complete qualification report. |
+| `--limit` | Maximum qualified outputs; uncovered interactions remain in the report. |
+| `--out`, `-o` | Qualified corpus, coverage findings and exact execution proofs. |
+| `--overwrite` | Replace an existing qualification export. |
+| `--pool-size` | Maximum query candidates to inspect before admission and selection. |
+| `--profile` | Existing enterprise ScenarioProfile JSON. |
+| `--strength` | Interaction strength for selection after qualification. |
+
 ### `worldloom enterprise-evals score`
 
 Score an MCP trace against one planned query's semantic DAG.
@@ -354,6 +373,36 @@ worldloom enterprise-evals validate <PATH>
 
 Work with a corpus's evaluation set.
 
+### `worldloom evals calibration`
+
+Ingest observed cohort trials and measure held-out calibration.
+
+### `worldloom evals calibration ingest`
+
+Validate provenance and split isolation, then save an identified snapshot.
+
+| Option | Purpose |
+| --- | --- |
+| `--from`, `-i` | Observed CalibrationObservation JSON/JSONL; no outcomes are generated here. |
+| `--out`, `-o` | Immutable calibration snapshot destination; exact replay is allowed. |
+| `--resume` | Previous snapshot to extend into a new destination. |
+
+### `worldloom evals calibration report`
+
+Expose support, uncertainty and held-out scoring against training only.
+
+```
+worldloom evals calibration report <SNAPSHOT_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--bins` | Probability bins for expected calibration error. |
+| `--cohort` | Exact cohort identity to measure. |
+| `--min-trials` | Training observations required for a fitted slice. |
+| `--out`, `-o` | Report JSON; defaults to stdout. |
+| `--split` | Held-out split: holdout or validation; never trains predictions. |
+
 ### `worldloom evals construct`
 
 Make candidate worlds satisfy an eval design, then export the accepted ones with their evals.
@@ -374,6 +423,32 @@ worldloom evals construct <SPEC>
 | `--overwrite` | Replace an existing campaign directory. |
 | `--period` | The period the base episode runs. |
 | `--periods` | Number of episodes, spaced by the company's registered domain cadence. |
+
+### `worldloom evals dataset`
+
+Compile dataset quotas into diverse, qualified queries with isolated splits.
+
+### `worldloom evals dataset compile`
+
+Generate missing coverage, enforce admission, then export isolated splits.
+
+```
+worldloom evals dataset compile <PLAN_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--batch-limit` | Pause after this many total batches. |
+| `--out`, `-o` | Dataset run directory; reuse it to resume the same plan. |
+| `--replay` | Require committed batches; never call a generator or executor. |
+
+### `worldloom evals dataset verify`
+
+Check the dataset's content inventory without generation or execution.
+
+```
+worldloom evals dataset verify <DIRECTORY>
+```
 
 ### `worldloom evals export`
 
@@ -429,7 +504,9 @@ worldloom fidelity <REFERENCE> <SYNTHETIC>
 | `--categorical` | Treat this column as categorical even though every value parses as a number: an id, a code. Repeatable. |
 | `--ignore` | Leave this column out entirely. Repeatable. |
 | `--json` | Emit the whole vector as JSON: stable keys, safe to diff. |
+| `--max-slices` | Maximum metric groups per slice column; omitted groups remain in support accounting. |
 | `--numeric` | Treat this column as numeric even though the reference carries a value that does not parse. Repeatable. |
+| `--require-slice-support` | Exit with a refusal when requested slices have missing support or omitted metrics. |
 | `--seed` | Seed for the subsample the two quadratic blocks take past 2,000 rows. |
 | `--slices` | Report the per-column block again per value of this column, most frequent first. Repeatable. |
 | `--table` | When either side is a corpus directory, the detail table to read from it. |
@@ -623,6 +700,44 @@ worldloom narrate loop <CORPUS>
 | `--model-id` | Who wrote it. Recorded in the ledger and part of the replay key. |
 | `--shell` | Run the command through the shell. This is the opt-in for pipelines. |
 | `--timeout` | Seconds the child may run per round before it is killed and refused. |
+
+### `worldloom narrate readers`
+
+Check whether independent readers recover the corpus's evidence.
+
+### `worldloom narrate readers accept`
+
+Persist the complete reader verdict, including rejected evidence.
+
+```
+worldloom narrate readers accept <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--critical-fact` | Same critical facts as requests; repeat as needed. |
+| `--eval-instance` | Same EvalInstance JSON paths as requests; repeat as needed. |
+| `--from`, `-i` | Reader response array or {responses: [...]}; omit only to replay accepted evidence. |
+| `--reader-config` | Same JSON reader configuration as requests. |
+| `--reader-id` | Same independent reader identity as requests. |
+| `--share` | Same background sample as requests. |
+
+### `worldloom narrate readers requests`
+
+Emit blind passages and response schema; checker targets stay private.
+
+```
+worldloom narrate readers requests <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--critical-fact` | Fact that every accepted check must recover; repeat as needed. |
+| `--eval-instance` | EvalInstance JSON whose complete oracle supplies critical targets; repeat as needed. |
+| `--out`, `-o` | Public request JSON; defaults to stdout. |
+| `--reader-config` | JSON reader configuration, sealed into the private check plan. |
+| `--reader-id` | Independent reader identity; include the model and prompt version. |
+| `--share` | Additional background section sample, after complete critical coverage. |
 
 ### `worldloom narrate requests`
 
@@ -994,6 +1109,93 @@ worldloom status <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit machine-readable state instead of the table. |
+
+### `worldloom studio`
+
+Interview, build and evaluate one persistent company.
+
+### `worldloom studio init`
+
+Create a project from an explicit company contract.
+
+```
+worldloom studio init <SPEC_PATH>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio interview`
+
+Exchange bounded company proposals with your coding harness.
+
+### `worldloom studio interview accept`
+
+Validate a harness response; proposals remain reviewable until applied.
+
+```
+worldloom studio interview accept <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--apply` | Commit the reviewed proposal if its company revision is still current. |
+| `--from` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio interview request`
+
+Write the bounded interview request for a coding harness.
+
+```
+worldloom studio interview request <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--message` |  |
+| `--out`, `-o` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio run`
+
+Run an exact company revision synchronously, retaining resumable checkpoints.
+
+```
+worldloom studio run <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--batch-limit` |  |
+| `--harness-command` |  |
+| `--operation` | build, compile or narrate |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio serve`
+
+Open the local company console; slow work runs in a separate process.
+
+| Option | Purpose |
+| --- | --- |
+| `--harness` | Use an installed codex or claude CLI with its existing login. |
+| `--harness-command` | Trusted local adapter: JSON stdin, JSON stdout; no shell. |
+| `--port` |  |
+| `--timeout` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio show`
+
+Inspect company structure, unresolved claims, interview turns and runs.
+
+```
+worldloom studio show <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
 
 ### `worldloom synth`
 

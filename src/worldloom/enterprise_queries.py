@@ -7,7 +7,12 @@ from collections import deque
 from collections.abc import Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from .connector_definition import ConnectorFieldDefinition, load_connector_definition
 from .enterprise_specs import (
@@ -19,6 +24,7 @@ from .enterprise_specs import (
 )
 from .ids import content_key
 from .models import Model
+from .predicates import Predicate, RelativeTime
 
 if TYPE_CHECKING:
     from .world import World
@@ -31,6 +37,25 @@ class SourceRequirement(Model):
     input_format: str = "record"
     required_fields: tuple[str, ...] = ()
     field_definitions: tuple[ConnectorFieldDefinition, ...] = ()
+    predicate: Predicate | None = None
+
+    @model_validator(mode="after")
+    def _context_free_predicate(self) -> SourceRequirement:
+        if self.predicate is not None and (
+            self.predicate.joins or self.predicate.as_of is not None
+            or any(isinstance(item.value, RelativeTime) for item in self.predicate.where)
+        ):
+            raise ValueError("source predicates with joins, as_of or relative time require an explicit QueryContext")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _legacy_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Opt-in source binding must not alter historical query identities or
+        # exported bytes. The wrap serializer also applies when nested in a DAG.
+        data: dict[str, Any] = handler(self)
+        if self.predicate is None:
+            data.pop("predicate", None)
+        return data
 
 
 class MutationRequirement(Model):

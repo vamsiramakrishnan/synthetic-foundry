@@ -1,0 +1,1191 @@
+{
+  "fidelity": {
+    "capped_admitted": false,
+    "capped_support": {
+      "column": "region",
+      "complete": false,
+      "metrics_limit": 1,
+      "omitted_keys": [
+        "str:\"south\""
+      ],
+      "populations": [
+        {
+          "key": "str:\"north\"",
+          "kind": "value",
+          "label": "north",
+          "metrics_reported": true,
+          "reference_count": 2,
+          "synthetic_count": 2
+        },
+        {
+          "key": "str:\"south\"",
+          "kind": "value",
+          "label": "south",
+          "metrics_reported": false,
+          "reference_count": 2,
+          "synthetic_count": 2
+        }
+      ],
+      "reference_categories": 2,
+      "reference_category_coverage": 1.0,
+      "reference_rows": 4,
+      "reference_supported_rows": 4,
+      "shared_categories": 2,
+      "synthetic_categories": 2,
+      "synthetic_rows": 4,
+      "synthetic_supported_rows": 4
+    },
+    "findings": [
+      {
+        "code": "slice_reference_only",
+        "column": "region",
+        "reference_count": 2,
+        "synthetic_count": 0,
+        "value_key": "str:\"south\""
+      }
+    ],
+    "matched_admitted": true,
+    "missing_region": {
+      "kinds": {
+        "amount": "numeric",
+        "region": "categorical"
+      },
+      "multivariate": {
+        "columns": 1,
+        "expected_if_same_distribution": 0.4667,
+        "n_real": 4,
+        "n_synthetic": 2,
+        "nearest_neighbour_same_label": 0.6667
+      },
+      "n_real": 4,
+      "n_synthetic": 2,
+      "pairwise": {
+        "categorical_pairs": 0,
+        "numeric_pairs": 0
+      },
+      "privacy": {
+        "compared_columns": 2,
+        "dcr_median_real_to_real": 0.0,
+        "dcr_median_synthetic_to_real": 0.0,
+        "dcr_share_below_real_baseline": 0.0,
+        "exact_match_rate": 1.0
+      },
+      "slice_support": {
+        "region": {
+          "column": "region",
+          "complete": false,
+          "metrics_limit": 12,
+          "omitted_keys": [],
+          "populations": [
+            {
+              "key": "str:\"north\"",
+              "kind": "value",
+              "label": "north",
+              "metrics_reported": true,
+              "reference_count": 2,
+              "synthetic_count": 2
+            },
+            {
+              "key": "str:\"south\"",
+              "kind": "value",
+              "label": "south",
+              "metrics_reported": true,
+              "reference_count": 2,
+              "synthetic_count": 0
+            }
+          ],
+          "reference_categories": 2,
+          "reference_category_coverage": 0.5,
+          "reference_rows": 4,
+          "reference_supported_rows": 2,
+          "shared_categories": 1,
+          "synthetic_categories": 1,
+          "synthetic_rows": 2,
+          "synthetic_supported_rows": 2
+        }
+      },
+      "slices": {
+        "region": {
+          "north": {
+            "amount": {
+              "kind": "numeric",
+              "ks": 0.0,
+              "malformed_real": 0.0,
+              "malformed_synthetic": 0.0,
+              "mean_real": 15.0,
+              "mean_synthetic": 15.0,
+              "median_real": 15.0,
+              "median_synthetic": 15.0,
+              "missing_real": 0.0,
+              "missing_synthetic": 0.0,
+              "n_real": 2,
+              "n_synthetic": 2,
+              "rows_real": 2,
+              "rows_synthetic": 2,
+              "wasserstein": 0.0
+            }
+          },
+          "south": {
+            "amount": {
+              "kind": "numeric",
+              "ks": null,
+              "malformed_real": 0.0,
+              "malformed_synthetic": 0.0,
+              "mean_real": 15.0,
+              "mean_synthetic": null,
+              "median_real": 15.0,
+              "median_synthetic": null,
+              "missing_real": 0.0,
+              "missing_synthetic": null,
+              "n_real": 2,
+              "n_synthetic": 0,
+              "rows_real": 2,
+              "rows_synthetic": 0,
+              "wasserstein": null
+            }
+          }
+        }
+      },
+      "support_complete": false,
+      "support_findings": [
+        {
+          "code": "slice_reference_only",
+          "column": "region",
+          "reference_count": 2,
+          "synthetic_count": 0,
+          "value_key": "str:\"south\""
+        }
+      ],
+      "univariate": {
+        "amount": {
+          "kind": "numeric",
+          "ks": 0.0,
+          "malformed_real": 0.0,
+          "malformed_synthetic": 0.0,
+          "mean_real": 15.0,
+          "mean_synthetic": 15.0,
+          "median_real": 15.0,
+          "median_synthetic": 15.0,
+          "missing_real": 0.0,
+          "missing_synthetic": 0.0,
+          "n_real": 4,
+          "n_synthetic": 2,
+          "rows_real": 4,
+          "rows_synthetic": 2,
+          "wasserstein": 0.0
+        },
+        "region": {
+          "cardinality_real": 2,
+          "cardinality_synthetic": 1,
+          "jensen_shannon": 0.3113,
+          "kind": "categorical",
+          "missing_real": 0.0,
+          "missing_synthetic": 0.0,
+          "rows_real": 4,
+          "rows_synthetic": 2,
+          "total_variation": 0.5,
+          "unseen_share": 0
+        }
+      }
+    },
+    "missing_region_admitted": false,
+    "reference_digest": "84e7c53e91a2e6de60c5669f2c97f264",
+    "reference_rows": 4,
+    "synthetic_digest": "52da2cd4772a2d2170dfadb1747b4c52",
+    "synthetic_rows": 2
+  },
+  "noise_calibration": {
+    "all_probe_callback_counts": {
+      "fidelity": 21,
+      "holdout_evaluator": 8,
+      "reader_boundary": 21,
+      "train_evaluator": 13
+    },
+    "attempts": [
+      {
+        "actual_noise": {},
+        "corpus_digest": "4c2966a07961104d91a3d095de11a767",
+        "findings": [],
+        "ordinal": 0,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 26,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "0b3d55618a4bc93464241f6366aa3210",
+        "split": "train",
+        "variant": "clean"
+      },
+      {
+        "actual_noise": {
+          "hardcoded_value": 1
+        },
+        "corpus_digest": "f06276b48693f703ba67190fed1a8a24",
+        "findings": [],
+        "ordinal": 0,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 34,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "b28f75d15748eec8c4ab6cee3839638c",
+        "split": "train",
+        "variant": "lived-in"
+      },
+      {
+        "actual_noise": {},
+        "corpus_digest": "df293d32957355f7f8507122c28a7ba3",
+        "findings": [],
+        "ordinal": 1,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 27,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "edc12f5cfdf7b5bc278b9a45697bb23d",
+        "split": "train",
+        "variant": "clean"
+      },
+      {
+        "actual_noise": {
+          "hardcoded_value": 1
+        },
+        "corpus_digest": "30c521ca6e20d562450da226a2327117",
+        "findings": [],
+        "ordinal": 1,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 35,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "4a064aef68092fc23c574c8492689ea2",
+        "split": "train",
+        "variant": "lived-in"
+      },
+      {
+        "actual_noise": {},
+        "corpus_digest": "9fb56fc4f2dc8ab0208bf402ef29d126",
+        "findings": [],
+        "ordinal": 2,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 27,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "0bca26089311d789a52ea658fc306aaf",
+        "split": "train",
+        "variant": "clean"
+      },
+      {
+        "actual_noise": {
+          "hardcoded_value": 1
+        },
+        "corpus_digest": "b5e6052d0309ee4062570859454a82c7",
+        "findings": [],
+        "ordinal": 2,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 35,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "ba5c675ca611a654003c5e875c5730ce",
+        "split": "train",
+        "variant": "lived-in"
+      },
+      {
+        "actual_noise": {},
+        "corpus_digest": "f7a893804f1c998610795730c18b7b55",
+        "findings": [],
+        "ordinal": 3,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 27,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "ba79e536df7193ebddffb742f652984e",
+        "split": "train",
+        "variant": "clean"
+      },
+      {
+        "actual_noise": {
+          "hardcoded_value": 1
+        },
+        "corpus_digest": "a4ad284a7fea914d987b197863bf782b",
+        "findings": [],
+        "ordinal": 3,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 35,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "26496f10dc8660e11a7bf397678d565c",
+        "split": "train",
+        "variant": "lived-in"
+      },
+      {
+        "actual_noise": {},
+        "corpus_digest": "23f66a0c67c8f166fc84fb13ffca6af3",
+        "findings": [],
+        "ordinal": 4,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 27,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "1e281810b4ca48bb8836f5e46595b7b4",
+        "split": "holdout",
+        "variant": "clean"
+      },
+      {
+        "actual_noise": {
+          "hardcoded_value": 1
+        },
+        "corpus_digest": "e14f70ec6866e18bc880f4df3067524d",
+        "findings": [],
+        "ordinal": 4,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 35,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "716bc2906dfcf0e171054ec048d3bb5e",
+        "split": "holdout",
+        "variant": "lived-in"
+      },
+      {
+        "actual_noise": {},
+        "corpus_digest": "c34671844b18de1aa003dcfa024309e4",
+        "findings": [],
+        "ordinal": 5,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 55,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "98706dc3b9f37ddcd61c2d4920002622",
+        "split": "holdout",
+        "variant": "clean"
+      },
+      {
+        "actual_noise": {
+          "hardcoded_value": 1,
+          "stale_status": 1
+        },
+        "corpus_digest": "e46dc1ae218df4b9b6e6424bfdec5d75",
+        "findings": [],
+        "ordinal": 5,
+        "outcome": {
+          "details": {
+            "expected_count": 1,
+            "passages": 64,
+            "recovered": [
+              "2026-04-06"
+            ],
+            "solver": "public regex over authored passages"
+          },
+          "passed": true
+        },
+        "reader": {
+          "critical": 1,
+          "finding_count": 1,
+          "issues": [],
+          "missing_critical": 0,
+          "passed": true,
+          "recovered_critical": 1
+        },
+        "receipt_digest": "ee09837823ed46ce928d6d39ea468ef5",
+        "split": "holdout",
+        "variant": "lived-in"
+      }
+    ],
+    "baseline_world_digests": [
+      "f257d39039cdfcfa5f48111b05db6698",
+      "ec032d68a2f9812ff679621aa539f0e3",
+      "83eec2f258b24e045f0eba0fe68a52f1",
+      "c11532eb142ff045e1e53ef11d74d2f0",
+      "44154b1f28046c0535f28edc71524231",
+      "69c21e17d49ec1c6051bbf7721a5b83a"
+    ],
+    "baseline_worlds": 6,
+    "calibration": {
+      "default_support_estimate": {
+        "cohort": "scripted-protocol-probe/v1",
+        "confidence_level": 0.95,
+        "estimator_version": "laplace-wilson95/v1",
+        "evaluator_config_digest": "2333a309c77aae6ecfff4f005dc08aee",
+        "evaluator_kind": "agent",
+        "feature_schema": "eval/v1",
+        "interval_high": 1.0,
+        "interval_low": 0.5101091635454027,
+        "min_trials": 20,
+        "predicted_pass_rate": 0.8333333333333334,
+        "provenance_complete": true,
+        "slice_key": "d1:c0:w0:r0:t0:p0:x0:conditions=cf6525027fee5686e9203fc0b8580430",
+        "split": "train",
+        "status": "insufficient_data",
+        "successes": 4,
+        "trials": 4
+      },
+      "heldout_report": {
+        "bins": [
+          {
+            "count": 4,
+            "lower": 0.8,
+            "observed_pass_rate": 1.0,
+            "predicted_mean": 0.8333333333333334,
+            "upper": 0.9
+          }
+        ],
+        "brier_score": 0.027777777777777766,
+        "cohort": "scripted-protocol-probe/v1",
+        "estimator_version": "laplace-wilson95/v1",
+        "expected_calibration_error": 0.16666666666666663,
+        "min_trials": 2,
+        "observations": 4,
+        "scored": 4,
+        "snapshot_digest": "dc8bdeed448f8b4fdea5b384b1be1de7",
+        "split": "holdout",
+        "unsupported": 0,
+        "unsupported_trial_ids": []
+      },
+      "holdout_changed_training_estimates": false,
+      "observations": 12,
+      "reference_only_estimate": {
+        "cohort": "reference-protocol-probe/v1",
+        "confidence_level": 0.95,
+        "estimator_version": "laplace-wilson95/v1",
+        "evaluator_config_digest": "2333a309c77aae6ecfff4f005dc08aee",
+        "evaluator_kind": "reference_executor",
+        "feature_schema": "eval/v1",
+        "interval_high": 1.0,
+        "interval_low": 0.0,
+        "min_trials": 2,
+        "predicted_pass_rate": 0.5,
+        "provenance_complete": false,
+        "slice_key": "d1:c0:w0:r0:t0:p0:x0:conditions=cf6525027fee5686e9203fc0b8580430",
+        "split": "train",
+        "status": "reference_only",
+        "successes": 0,
+        "trials": 0
+      },
+      "replay_added_trials": 0,
+      "snapshot_byte_equal": true,
+      "snapshot_digest": "dc8bdeed448f8b4fdea5b384b1be1de7",
+      "split_overlap_refusal": "eval/corpus group overlaps train, validation, or holdout splits",
+      "splits": {
+        "holdout": 4,
+        "train": 8
+      }
+    },
+    "checkpoint_prefix_attempts": 5,
+    "cohort": "scripted-protocol-probe/v1",
+    "cohort_kind": "deterministic regex protocol probe; not an LLM",
+    "cold_replay_external_calls": 0,
+    "export_byte_equal": true,
+    "export_digest": "2c89fe198a4f947351ad069499450a9d",
+    "export_files": 264,
+    "failed_quality_replay_equal": true,
+    "generic_recipe_ledger_replay": {
+      "all_export_bytes_equal": true,
+      "calibration_record_used": false,
+      "unreachable_provider_calls": 0,
+      "worlds": [
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "c78d9303e0274575a46a496a94a164c1",
+          "export_files": 17,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 0,
+          "unreachable_provider_calls": 0,
+          "variant": "clean"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "cb6b5873bdf8741d9aa243ec90f85e9f",
+          "export_files": 17,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 1,
+          "unreachable_provider_calls": 0,
+          "variant": "clean"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "7ac449d48a67dd6ae27dba70061bf95a",
+          "export_files": 17,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 2,
+          "unreachable_provider_calls": 0,
+          "variant": "clean"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "5e0a16ed29e04e7f1302bdf99977197e",
+          "export_files": 17,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 3,
+          "unreachable_provider_calls": 0,
+          "variant": "clean"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "b2c8f8315b1b80af8126c1904fc3d45f",
+          "export_files": 17,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 4,
+          "unreachable_provider_calls": 0,
+          "variant": "clean"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "b6a27c03cbfdfd7fd90d85f6aa8a9f17",
+          "export_files": 26,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 5,
+          "unreachable_provider_calls": 0,
+          "variant": "clean"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "cc4b6512a9acc435aaf3c3ab48656174",
+          "export_files": 18,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 0,
+          "unreachable_provider_calls": 0,
+          "variant": "lived-in"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "469286692aa3e96fb5bcc7f3d6c32c05",
+          "export_files": 18,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 1,
+          "unreachable_provider_calls": 0,
+          "variant": "lived-in"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "a6ff7146da24e2f4038e7c8e0ed8c1d1",
+          "export_files": 18,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 2,
+          "unreachable_provider_calls": 0,
+          "variant": "lived-in"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "1b382694319d5a95d84299dabb6b848a",
+          "export_files": 18,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 3,
+          "unreachable_provider_calls": 0,
+          "variant": "lived-in"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "117a6e557a039a0ffc9e12ae57833b82",
+          "export_files": 18,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 4,
+          "unreachable_provider_calls": 0,
+          "variant": "lived-in"
+        },
+        {
+          "author_ids": [
+            "scripted-protocol-author/v1",
+            "worldloom-noise-template/v1"
+          ],
+          "export_byte_equal": true,
+          "export_digest": "8bd8e49363e6f1cad5378fbe30a63194",
+          "export_files": 28,
+          "native_formats": [
+            "markdown"
+          ],
+          "ordinal": 5,
+          "unreachable_provider_calls": 0,
+          "variant": "lived-in"
+        }
+      ],
+      "worlds_checked": 12
+    },
+    "missing_quality_refusals": {
+      "reader_input_missing": 8
+    },
+    "narrow_band_refusal": {
+      "findings": [],
+      "holdout_attempts": 0,
+      "holdout_budget_exhausted": false,
+      "holes": [
+        "current",
+        "decayed",
+        "unproposed"
+      ],
+      "selected_variants": [],
+      "status": "unfitted",
+      "training_attempts": 2,
+      "training_budget_exhausted": true,
+      "training_exhausted": false,
+      "variants": [
+        {
+          "estimate": {
+            "cohort": "scripted-protocol-probe/v1",
+            "confidence_level": 0.95,
+            "estimator_version": "laplace-wilson95/v1",
+            "evaluator_config_digest": "2333a309c77aae6ecfff4f005dc08aee",
+            "evaluator_kind": "agent",
+            "feature_schema": "eval/v1",
+            "interval_high": 1.0,
+            "interval_low": 0.20654931437723745,
+            "min_trials": 2,
+            "predicted_pass_rate": 0.6666666666666666,
+            "provenance_complete": true,
+            "slice_key": "d1:c0:w0:r0:t0:p0:x0:conditions=fdb6d2cfd8065b3f0dfa5c449f9f61a7",
+            "split": "train",
+            "status": "insufficient_data",
+            "successes": 1,
+            "trials": 1
+          },
+          "holdout_estimate": null,
+          "holdout_status": "not_selected",
+          "target_supported": false,
+          "variant": "clean"
+        },
+        {
+          "estimate": {
+            "cohort": "scripted-protocol-probe/v1",
+            "confidence_level": 0.95,
+            "estimator_version": "laplace-wilson95/v1",
+            "evaluator_config_digest": "2333a309c77aae6ecfff4f005dc08aee",
+            "evaluator_kind": "agent",
+            "feature_schema": "eval/v1",
+            "interval_high": 1.0,
+            "interval_low": 0.20654931437723745,
+            "min_trials": 2,
+            "predicted_pass_rate": 0.6666666666666666,
+            "provenance_complete": true,
+            "slice_key": "d1:c0:w0:r0:t0:p0:x0:conditions=5c3890822f58889e54c6fc485238f832",
+            "split": "train",
+            "status": "insufficient_data",
+            "successes": 1,
+            "trials": 1
+          },
+          "holdout_estimate": null,
+          "holdout_status": "not_selected",
+          "target_supported": false,
+          "variant": "lived-in"
+        }
+      ]
+    },
+    "plan": {
+      "cohort": "scripted-protocol-probe/v1",
+      "evaluator_config": {
+        "grader": "canonical-date-exact/v1",
+        "implementation": "close-date-public-regex/v1",
+        "measurement_kind": "scripted protocol, not language-model quality"
+      },
+      "evaluator_kind": "agent",
+      "fidelity_config": {
+        "projection": "all-fact-display-length/v1",
+        "reference_digest": "9c858e0723c6713b729cab42401a1697"
+      },
+      "fidelity_slices": [
+        "authority"
+      ],
+      "fidelity_thresholds": [
+        {
+          "maximum": 0.1,
+          "path": [
+            "univariate",
+            "display_length",
+            "ks"
+          ]
+        }
+      ],
+      "formats": [
+        "markdown"
+      ],
+      "holdout_ordinals": [
+        4,
+        5
+      ],
+      "max_holdout_attempts": 4,
+      "max_training_attempts": 8,
+      "min_support": 2,
+      "niches": [
+        "current",
+        "decayed",
+        "unproposed"
+      ],
+      "noise_author": "worldloom-noise-template/v1",
+      "reader_config": {
+        "implementation": "subject-aspect-value-regex/v1",
+        "share": 0
+      },
+      "reader_id": "scripted-protocol-reader/v1",
+      "target_high": 1.0,
+      "target_low": 0.2,
+      "variants": [
+        {
+          "budget": {},
+          "name": "clean",
+          "niche": "current"
+        },
+        {
+          "budget": {
+            "mechanical": 1,
+            "staleness": 1
+          },
+          "name": "lived-in",
+          "niche": "decayed"
+        }
+      ]
+    },
+    "record_digest": "340890c005ec99c882c901a4a1444337",
+    "report": {
+      "findings": [],
+      "holdout_attempts": 4,
+      "holdout_budget_exhausted": false,
+      "holes": [
+        "unproposed"
+      ],
+      "selected_variants": [
+        "clean",
+        "lived-in"
+      ],
+      "status": "selected",
+      "training_attempts": 8,
+      "training_budget_exhausted": false,
+      "training_exhausted": true,
+      "variants": [
+        {
+          "estimate": {
+            "cohort": "scripted-protocol-probe/v1",
+            "confidence_level": 0.95,
+            "estimator_version": "laplace-wilson95/v1",
+            "evaluator_config_digest": "2333a309c77aae6ecfff4f005dc08aee",
+            "evaluator_kind": "agent",
+            "feature_schema": "eval/v1",
+            "interval_high": 1.0,
+            "interval_low": 0.5101091635454027,
+            "min_trials": 2,
+            "predicted_pass_rate": 0.8333333333333334,
+            "provenance_complete": true,
+            "slice_key": "d1:c0:w0:r0:t0:p0:x0:conditions=cf6525027fee5686e9203fc0b8580430",
+            "split": "train",
+            "status": "fitted",
+            "successes": 4,
+            "trials": 4
+          },
+          "holdout_estimate": {
+            "cohort": "scripted-protocol-probe/v1",
+            "confidence_level": 0.95,
+            "estimator_version": "laplace-wilson95/v1",
+            "evaluator_config_digest": "2333a309c77aae6ecfff4f005dc08aee",
+            "evaluator_kind": "agent",
+            "feature_schema": "eval/v1",
+            "interval_high": 1.0,
+            "interval_low": 0.34238022750665303,
+            "min_trials": 2,
+            "predicted_pass_rate": 0.75,
+            "provenance_complete": true,
+            "slice_key": "d1:c0:w0:r0:t0:p0:x0:conditions=cf6525027fee5686e9203fc0b8580430",
+            "split": "holdout",
+            "status": "fitted",
+            "successes": 2,
+            "trials": 2
+          },
+          "holdout_status": "supported",
+          "target_supported": true,
+          "variant": "clean"
+        },
+        {
+          "estimate": {
+            "cohort": "scripted-protocol-probe/v1",
+            "confidence_level": 0.95,
+            "estimator_version": "laplace-wilson95/v1",
+            "evaluator_config_digest": "2333a309c77aae6ecfff4f005dc08aee",
+            "evaluator_kind": "agent",
+            "feature_schema": "eval/v1",
+            "interval_high": 1.0,
+            "interval_low": 0.5101091635454027,
+            "min_trials": 2,
+            "predicted_pass_rate": 0.8333333333333334,
+            "provenance_complete": true,
+            "slice_key": "d1:c0:w0:r0:t0:p0:x0:conditions=cbf062b37557087a02815bfbe0860570",
+            "split": "train",
+            "status": "fitted",
+            "successes": 4,
+            "trials": 4
+          },
+          "holdout_estimate": {
+            "cohort": "scripted-protocol-probe/v1",
+            "confidence_level": 0.95,
+            "estimator_version": "laplace-wilson95/v1",
+            "evaluator_config_digest": "2333a309c77aae6ecfff4f005dc08aee",
+            "evaluator_kind": "agent",
+            "feature_schema": "eval/v1",
+            "interval_high": 1.0,
+            "interval_low": 0.34238022750665303,
+            "min_trials": 2,
+            "predicted_pass_rate": 0.75,
+            "provenance_complete": true,
+            "slice_key": "d1:c0:w0:r0:t0:p0:x0:conditions=cbf062b37557087a02815bfbe0860570",
+            "split": "holdout",
+            "status": "fitted",
+            "successes": 2,
+            "trials": 2
+          },
+          "holdout_status": "supported",
+          "target_supported": true,
+          "variant": "lived-in"
+        }
+      ]
+    },
+    "resume_evaluator_calls": 7,
+    "seeds": [
+      8571307436819695493,
+      5639665314434668418,
+      2024675861105940467,
+      7171107624737265479,
+      7952567425673204482,
+      4561111526576897086
+    ]
+  },
+  "reader_admission": {
+    "accepted": {
+      "critical": 5,
+      "finding_count": 1,
+      "issues": [],
+      "missing_critical": 0,
+      "passed": true,
+      "recovered_critical": 5
+    },
+    "all_oracle_facts_targeted": true,
+    "artifacts": 7,
+    "author": "scripted-protocol-author/v1",
+    "empty_sample": {
+      "critical": 0,
+      "finding_count": 0,
+      "issues": [
+        {
+          "code": "empty_reader_sample",
+          "detail": "no evidence targets were selected",
+          "fact_ids": [],
+          "request_id": ""
+        }
+      ],
+      "missing_critical": 0,
+      "passed": false,
+      "recovered_critical": 0
+    },
+    "facts": 599,
+    "maximum_targets_per_request": 5,
+    "missing_response": {
+      "critical": 5,
+      "finding_count": 1,
+      "issues": [],
+      "missing_critical": 5,
+      "passed": false,
+      "recovered_critical": 0
+    },
+    "ordinary_replay": {
+      "export_byte_equal": true,
+      "export_digest": "005fbc955023623c608ca243f32f897d",
+      "export_files": 10,
+      "reader_calls": 0,
+      "replayed": true
+    },
+    "period": "2026-03",
+    "program_expansion": {
+      "families": 10,
+      "missing_response_commit_refused": true,
+      "replay": {
+        "export_byte_equal": true,
+        "export_digest": "c973c8dc47056b009c73f4a4d7ac6ad7",
+        "export_files": 10,
+        "reader_calls": 0,
+        "replayed": true
+      },
+      "review": {
+        "critical": 5,
+        "finding_count": 1,
+        "issues": [],
+        "missing_critical": 0,
+        "passed": true,
+        "recovered_critical": 5
+      },
+      "sections": 12
+    },
+    "public_payload_contains_private_targets": false,
+    "public_payload_digest": "40b7d001720e3b58b35320d3001513ca",
+    "public_requests": 1,
+    "reader": "scripted-protocol-reader/v1",
+    "reader_protocol": {
+      "implementation": "subject-aspect-value-regex/v1",
+      "share": 0
+    },
+    "rejected_ledger_export_equal": true,
+    "seed": 8128,
+    "stale_text": {
+      "critical": 5,
+      "finding_count": 1,
+      "issues": [
+        {
+          "code": "stale_reader_plan",
+          "detail": "text, targets, locale, cutoff or plan changed",
+          "fact_ids": [],
+          "request_id": ""
+        }
+      ],
+      "missing_critical": 5,
+      "passed": false,
+      "recovered_critical": 0
+    },
+    "target_count": 5,
+    "wrong_reader": {
+      "critical": 5,
+      "finding_count": 1,
+      "issues": [
+        {
+          "code": "wrong_reader_contract",
+          "detail": "reader identity or contract differs",
+          "fact_ids": [],
+          "request_id": "ART-0003/Position"
+        }
+      ],
+      "missing_critical": 5,
+      "passed": false,
+      "recovered_critical": 0
+    }
+  },
+  "runtime": {
+    "numpy": "2.4.6",
+    "pydantic": "2.13.5",
+    "python": "3.12.13",
+    "worldloom": "0.1.0"
+  },
+  "schema": "worldloom.quality-calibration-measurement/v1",
+  "scope": "Bounded integration and determinism measurement; no claim of production or language-model quality.",
+  "source_sha256": {
+    "src/worldloom/eval_metrics.py": "5f21fc1f98e9572a08f0db782d74b504d9f4641151b5aeec62eda8661d5d91bf",
+    "src/worldloom/evals/calibration.py": "07b02bcfd441a230c8eff5f114e4632f9d1ce73e05f10e5ff8d51f1a21fe0340",
+    "src/worldloom/evals/campaign.py": "b2e039d9dc2a358abbdf61a137df6b2b823a5a8e88a97b3bb3b94739c31e2467",
+    "src/worldloom/evals/difficulty.py": "a3f68014027c1b597afba2299b03f61bb5c63e70d15f83393d515281ffe64719",
+    "src/worldloom/fidelity.py": "1d26063613852c50c5c208b5655414b0bb108e09203a3a9735e90dde37752112",
+    "src/worldloom/messiness.py": "b5ab60187eeb1dd1b64f4e7cf8ca6e8c714d03ff6c33ec0ce2f3dd07376249af",
+    "src/worldloom/narrative/compiler.py": "39c7bbb9152189d5f19d3369f494e16b1a289c9d904ca466c59f80d149c8552f",
+    "src/worldloom/narrative/programs.py": "2c2117d8f79385e780a4a7b41ccb382d34766c93271b17bed9cc7cb1f99914d1",
+    "src/worldloom/narrative/providers.py": "d62f602c2d1c0ead39fb44535a96168c7f0896df35ec98ce4f781eb8f10f08a1",
+    "src/worldloom/narrative/reader_checks.py": "4ebfa171c32718b6213456d6688ee15948af94e385f402d25de133b3fb9211de",
+    "src/worldloom/recipe.py": "7e4886343e780807880eb5e4353ce6e711cb4f3d2ce41f3879846a61d9c311da",
+    "tools/measure_quality_calibration.py": "d688100e881af2b709a83d3b4119db4e2d2a89067408c74eead1526626c6504f"
+  }
+}
