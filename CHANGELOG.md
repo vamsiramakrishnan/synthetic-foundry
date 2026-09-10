@@ -11,6 +11,24 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: guided native suites and bounded context selection
+
+- Compile reviewable read, arithmetic, update and creation contracts from
+  accepted company sections. Group shared facts before allocating evidence
+  cases, reference-qualify actual Office outputs, and report source shortages
+  instead of copying content to meet a quota. Preserve other use-case contracts.
+- Add opt-in native noise candidates exposing grounded files from the same
+  evidence component. Divide the total training budget before sampling, seal
+  the training choice before one holdout, and retain authenticated replay.
+  This measures additional-file context; it does not implement prose mutation.
+- Share readiness, next actions, authenticated narration selection and native
+  suite preparation across Studio, SDK and CLI. Add explicit proposal review
+  and forms in the UI, plus a bounded workflow entry point in harness skills.
+  Native-only tasks no longer require an unrelated connector scenario.
+- Add an explicit Codex native-write option scoped to the task output working
+  directory for update/create requests. Keep authoring requests read-only and
+  preserve normal approval and network controls.
+
 ### Generation: native difficulty measurement and retail pilot
 
 - Add opt-in fixed-corpus native calibration using existing empirical

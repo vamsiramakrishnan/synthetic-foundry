@@ -30,6 +30,8 @@ terminal-capable agent can use it without slash-command support.
 
 | Task | Commands | Procedure |
 |---|---|---|
+| Resume a company dataset | `worldloom studio next`, `worldloom studio advance` | [Company workflow](studio.md#resume-a-company-workflow) |
+| Prepare native evaluations | `worldloom studio prepare-native` | [Native document tasks](studio.md#native-documents-and-file-tasks) |
 | Build a decided world | `worldloom build`, `worldloom status` | [Company specification](agents/company-specification.md) |
 | Propose an employee action | `worldloom act requests`, `worldloom act accept` | [Actors](agents/actors.md) |
 | Write fact-scoped prose | `worldloom narrate requests`, `worldloom narrate accept` | [Writing responses](agents/writing-responses.md) |
@@ -92,6 +94,9 @@ into one quality score.
 
 The primary end-to-end operator skill. Use it for a decided corpus generation
 journey: build, optional act/plan, narrate, render, validate, and evaluate.
+For a persistent company dataset it starts with a compact Studio workflow report,
+then loads the procedure for the current stage. Native-suite proposals derive
+from accepted company evidence and remain reviewable before application.
 
 Source: [`.claude/skills/worldloom/SKILL.md`](../.claude/skills/worldloom/SKILL.md)
 
@@ -333,7 +338,8 @@ easy to stale. Progressive disclosure keeps the two roles separate.
    identity and replay behavior.
 5. Reference figures using fact placeholders. Do not copy digits into prose.
 6. Persist accepted ledgers with the corpus.
-7. Use `worldloom status` to resume; do not infer stage from filenames.
+7. Use `worldloom status` for a corpus and `worldloom studio next` for a company
+   project to resume; do not infer stage from filenames.
 8. Report refusals and measurement results to the user. They are evidence that
    the guardrail ran.
 9. Use the SDK for loops, not shell-generated pseudo-APIs or new one-off flags.

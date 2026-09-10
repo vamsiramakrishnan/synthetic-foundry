@@ -1,7 +1,7 @@
 ---
 name: worldloom
 description: Generate a coherent synthetic enterprise corpus with Worldloom, building a world from a seed, writing prose under fact constraints, rendering XLSX/DOCX/PPTX/PDF/Markdown and business-system bundles, scoring retrieval baselines, and validating that every artifact agrees. Use when asked to create synthetic enterprise data, a RAG or agent evaluation corpus, a fictional company's documents, or to add a scenario, renderer, or industry to this repository.
-tags: [worldloom, synthetic-corpus, determinism, narration, rendering, evaluation]
+metadata: {tags: [worldloom, synthetic-corpus, determinism, narration, rendering, evaluation]}
 ---
 
 # Worldloom
@@ -16,6 +16,30 @@ facts.
 For an open-ended ask rather than a named stage, drive the whole thing with
 `/worldloom-design`; the stages below are each their own command too
 (`/worldloom-build`, `/worldloom-narrate`, `/worldloom-render`, `/worldloom-evaluate`).
+
+## A persistent company dataset
+
+For a company interview, use-case queryset, or native document evaluation,
+start with Studio's revision-bound workflow. Read
+[the company workflow](../../../../docs/studio.md#resume-a-company-workflow)
+for this mode. Keep the ordinary corpus commands below for a standalone build.
+
+```bash
+worldloom studio next PROJECT_ID --workspace ./worldloom-workspace
+```
+
+Use the compact report to choose the next action. Read only the named evidence,
+findings or proposal needed for that action; do not load all source files,
+private oracles or the entire generated command reference into the conversation.
+`advance` executes one ready step and returns updated state. It does not apply
+an interview answer or a generated native-suite proposal. Review those against
+the user's company and use cases, then apply through the revision-aware API.
+
+Report separate counts for requested tasks, reference-qualified tasks, distinct
+evidence components and observed target trials. Shared files or canonical facts
+keep cases correlated even when questions, formats or names change. A prepared
+queryset has no measured target pass rate. Never reduce support requirements or
+widen the target band merely to make a blocked calibration pass.
 
 ## The journey
 

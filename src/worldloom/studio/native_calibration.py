@@ -1,7 +1,7 @@
-"""Fixed native corpus difficulty, with evidence-disjoint observed holdouts.
+"""Native difficulty contracts with evidence-disjoint observed holdouts.
 
-No noise intervention is inferred here. The existing calibration ledger owns
-provenance, deduplication and Wilson intervals; this module owns sampling.
+The existing calibration ledger owns provenance, deduplication and Wilson
+intervals; this module owns sampling and bounded intervention declarations.
 """
 from __future__ import annotations
 
@@ -20,6 +20,13 @@ from ..native_tasks import NativeTask
 from ..providers import digest
 
 
+class NativeNoiseVariant(Model):
+    """Additional grounded files; source bytes and grading contracts stay fixed."""
+
+    name: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    distractor_files: int = Field(default=0, ge=0, le=64, strict=True)
+
+
 class NativeCalibrationPlan(Model):
     cohort: str = Field(min_length=1)
     target_low: float = Field(default=.3, ge=0, le=1, allow_inf_nan=False)
@@ -29,8 +36,16 @@ class NativeCalibrationPlan(Model):
     max_holdout_attempts: int = Field(default=128, ge=1, le=4096, strict=True)
     holdout_percent: int = Field(default=25, ge=1, le=99, strict=True)
 
+    noise_variants: tuple[NativeNoiseVariant, ...] = Field(default=(), max_length=16)
+
     @model_validator(mode="after")
     def contract(self) -> NativeCalibrationPlan:
+        if len({v.name for v in self.noise_variants}) != len(self.noise_variants):
+            raise ValueError("native noise variant names must be unique")
+        if len({v.distractor_files for v in self.noise_variants}) != len(self.noise_variants):
+            raise ValueError("native noise variants must have distinct interventions")
+        if self.noise_variants and self.noise_variants[0].distractor_files != 0:
+            raise ValueError("native noise search must start with an explicit zero-distractor baseline")
         if self.target_low >= self.target_high:
             raise ValueError("target_low must be below target_high")
         if self.cohort != self.cohort.strip():
@@ -65,6 +80,8 @@ def seal(plan: NativeCalibrationPlan, tasks: list[NativeTask], components: dict[
                   for key in sorted({key[0] for key in chosen})]
         ordered = [q[i] for i in range(max(map(len, queues), default=0)) for q in queues if i < len(q)]
         budget = plan.max_training_attempts if split == "train" else plan.max_holdout_attempts
+        if split == "train":
+            budget //= max(1, len(plan.noise_variants))
         samples[split] = ordered[:budget]
         support[split] = {}
         for key in strata:

@@ -14,6 +14,20 @@ flag, a new command, or a shell script gluing JSON between processes.
 
 You write Python. Use it.
 
+## Persistent company workflows
+
+Use `worldloom.studio.Studio` when the loop includes an interview, accepted
+narration, native files or resumable evaluation jobs. `worldloom.sdk.Blueprint`
+still owns company generation; Studio records revisions and coordinates those
+existing mechanisms. Read [the workflow API](../../../../docs/studio.md#resume-a-company-workflow)
+for `workflow`, `prepare_native`, `select_narration` and `advance`.
+
+Keep the revision returned by the store with every proposal. Reload the workflow
+after a mutation; never infer completion from a populated output directory.
+Advance one ready stage, inspect its receipt, and stop when the report needs a
+proposal decision, missing source evidence, or an unavailable harness. A loop
+must not repair a refusal by silently changing the user's calibration contract.
+
 ## The happy path
 
 ```python

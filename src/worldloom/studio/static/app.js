@@ -1,6 +1,6 @@
 /* Worldloom Studio: every displayed run and count comes from the local service. */
 "use strict";
-const state = {projects: [], catalogue: {}, company: null, page: "overview", harness: false, evals: [], offset: 0, filter: "", history: [], pending: false};
+const state = {projects: [], catalogue: {}, company: null, page: "overview", harness: false, evals: [], offset: 0, filter: "", history: [], pending: false, nativeProposal: null};
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const copy = (v) => structuredClone(v);
@@ -36,7 +36,7 @@ async function refresh() {
   state.company=await api(route());state.projects=state.projects.map(p=>p.id===state.company.id?state.company:p);
   if(state.company.revision!==previous){state.evals=[];state.offset=0;state.history=[];}
 }
-async function selectCompany(id) { state.company=await api(`/api/projects/${id}`);state.evals=[];state.offset=0;state.history=[];state.filter="";render(); }
+async function selectCompany(id) { state.nativeProposal=null; state.company=await api(`/api/projects/${id}`);state.evals=[];state.offset=0;state.history=[];state.filter="";render(); }
 function latestCompile() { return state.company?.jobs.find(j=>j.revision===state.company.revision && (j.options.operation==="compile" || j.options.operation==="foundry" && j.result?.frozen_dataset) && j.result?.report); }
 function report() { return latestCompile()?.result.report; }
 function latestFoundry() { return state.company?.jobs.find(j=>j.revision===state.company.revision && j.options.operation==="foundry"); }
@@ -44,11 +44,12 @@ const stageLabels = {requirements:"Requirements",construction:"Connected evidenc
 const statusColor = (value) => ["failed","rejected","blocked","holdout_failed"].includes(value)?"red":["complete","accepted","selected","frozen"].includes(value)?"green":["running","queued"].includes(value)?"blue":"amber";
 const percent = (value) => typeof value === "number" && Number.isFinite(value)?`${(value*100).toFixed(1)}%`:"Unmeasured";
 const findingText = (finding) => typeof finding === "string"?finding:finding.message||finding.detail&&(finding.use_case_id?`${finding.use_case_id}: ${finding.detail}`:finding.detail)||pretty(finding);
+function connectorReady() { return state.company.ready && (state.company.workflow?.capabilities?.connector_ready ?? true); }
 function foundryActions() {
   const job=latestFoundry();
   if(job && ["queued","running"].includes(job.status))return button("Run in progress","go-foundry","primary");
   if(job && ["failed","interrupted","paused"].includes(job.status))return button("Resume foundry run","retry","primary",`data-id="${esc(job.id)}"`);
-  return button("Run foundry","foundry","primary",!state.company.ready||!state.company.spec.calibration?"disabled":"");
+  return button("Run foundry","foundry","primary",!connectorReady()||!state.company.spec.calibration?"disabled":"");
 }
 function head(title, text, actions="") { return `<div class="page-head"><div><h1>${title}</h1><p>${text}</p></div><div class="actions">${actions}</div></div>`; }
 function modal(title, content) { $("#dialog-content").innerHTML=`${button("Close","close","close")}<h2>${title}</h2>${content}`;$("#editor").showModal(); }
@@ -69,9 +70,33 @@ function journey() {
   const p=state.company,r=report();
   return `<nav class="journey" aria-label="Build workflow">${[["interview","01 · Understand",p.interviews.length?"Continue interview":"Interview"],["company","02 · Model","Company & processes"],["usecases","03 · Specify",`${p.spec.use_cases.length} use cases`],["foundry","04 · Construct & measure","Foundry run"],["evals","05 · Evaluate",r?`${fmt(r.accepted)} qualified queries`:"Evaluations"]].map(([key,step,title])=>`<button type="button" data-page="${key}"><span>${step}</span>${title}</button>`).join("")}</nav>`;
 }
+function workflowButton(action, cls="") {
+  return action?button(esc(action.label),"workflow",cls,`data-workflow="${esc(JSON.stringify(action))}"`):"";
+}
+function workflowPanel() {
+  const w=state.company.workflow;
+  if(!w)return "";
+  return `<section class="panel workflow-panel" aria-label="Company dataset workflow"><div class="panel-head"><div><h2>Your next step</h2><p class="small muted">Progress is measured against this company revision.</p></div>${workflowButton(w.next_action,"primary")}</div><ol class="workflow-stages">${w.stages.map(stage=>`<li><div class="spaced"><h3>${esc(stage.title)}</h3>${badge(label(stage.status),statusColor(stage.status))}</div><p class="small muted">${esc(stage.detail)}</p>${workflowButton(stage.action,"quiet")}</li>`).join("")}</ol>${w.findings?.length?`<details><summary>What needs attention (${w.findings.length})</summary><ul class="findings">${w.findings.map(f=>`<li>${esc(f.message)} ${workflowButton(f.action,"quiet")}</li>`).join("")}</ul></details>`:""}</section>`;
+}
+function nativeSuiteEditor() {
+  const cases=state.company.spec.use_cases;
+  if(!cases.length){state.page="usecases";render();notify("Add a business use case before preparing file evaluations.");return;}
+  const choices=(name,values)=>`<fieldset class="choice-group"><legend>${name==="format"?"File formats":"Evaluated operations"}</legend>${values.map(v=>`<label><input type="checkbox" name="${name}_${v}" checked> ${esc(label(v))}</label>`).join("")}</fieldset>`;
+  modal("Prepare file evaluations",`<p class="small muted">Compile accepted company evidence into a proposed file corpus and executable tasks. Review the proposal before saving a revision.</p><form id="native-suite-form"><div class="field"><label for="native-use-case">Business use case</label><select name="use_case_id" id="native-use-case">${cases.map(c=>option(c.id,c.title,cases[0].id)).join("")}</select></div>${field("Source artifact IDs","source_artifact_ids","","text","Optional comma-separated artifact IDs from Browse accepted sources. Required for use cases scoped to a business unit, line of business or process activity.")}${choices("format",["docx","pptx","xlsx"])}${choices("operation",["read","analyze","update","create"])}<div class="form-grid"><div class="field"><label for="native-units">Minimum content units per file</label><input id="native-units" name="minimum_units" type="number" min="1" max="10000" value="2" required><p class="help">A unit is a document section, slide or worksheet evidence row. Distinct accepted evidence must support the requested size.</p></div><div class="field"><label for="native-cases">Maximum evaluation cases</label><input id="native-cases" name="max_cases" type="number" min="1" max="256" value="12" required></div></div><p class="help">Repeated facts and shared sources do not count as independent calibration samples.</p><div class="actions end"><button type="submit" class="primary">Prepare proposal</button></div></form>`);
+}
+function reviewNativeProposal(proposal, project, revision) {
+  state.nativeProposal={...proposal,revision,project};
+  modal("Review file evaluation proposal",`<p>Review the generated corpus and task contracts. Applying this proposal creates a company revision.</p><div class="stats">${[["Prepared cases",proposal.summary.prepared_cases],["Requested cases",proposal.summary.requested_cases],["Source components",proposal.summary.source_components],["Source sections",proposal.summary.source_sections]].map(([name,value])=>`<div class="stat"><div class="label">${name}</div><strong>${fmt(value)}</strong></div>`).join("")}</div>${proposal.summary.case_shortfall?`<div class="callout amber">${fmt(proposal.summary.case_shortfall)} requested cases lack sufficient source support. Review the limitations before applying.</div>`:""}<ul class="findings">${(proposal.summary.limitations||[]).map(v=>`<li>${esc(v)}</li>`).join("")}${(proposal.summary.unsupported||[]).map(v=>`<li>${esc(v.operation)} · ${esc(v.reason)}</li>`).join("")}</ul><details><summary>Proposal measurements</summary><pre>${esc(pretty(proposal.summary))}</pre></details><details><summary>Proposed corpus and evaluation tasks</summary><pre>${esc(pretty({native_corpus:proposal.spec.native_corpus,native_tasks:proposal.spec.native_tasks}))}</pre></details><div class="actions end">${button("Apply proposed revision","apply-native-proposal","primary",!proposal.summary.tasks?"disabled":"")}</div>`);
+}
+function nativeCalibrationEditor() {
+  const c=state.company.spec.native_calibration||{cohort:"",target_low:.3,target_high:.7,min_support:32,max_training_attempts:384,max_holdout_attempts:128,holdout_percent:25,noise_variants:[]};
+  const num=(title,name,value,min,max,step=1)=>`<div class="field"><label for="native-cal-${name}">${title}</label><input id="native-cal-${name}" name="${name}" value="${value}" type="number" min="${min}" max="${max}" step="${step}" required></div>`;
+  const variants=c.noise_variants?.length?c.noise_variants:[{name:"baseline",distractor_files:0},{name:"context",distractor_files:1}];
+  modal("Measure file-task difficulty",`<form id="native-calibration-form">${field("Target-agent cohort","cohort",c.cohort,"text","Identify the evaluator and its configuration.")}<div class="form-grid">${num("Minimum pass rate (%)","target_low",c.target_low*100,0,100,.1)}${num("Maximum pass rate (%)","target_high",c.target_high*100,0,100,.1)}${num("Independent samples per outcome and phase","min_support",c.min_support,1,4096)}${num("Holdout share (%)","holdout_percent",c.holdout_percent,1,99)}${num("Training trial budget","max_training_attempts",c.max_training_attempts,1,4096)}${num("Holdout trial budget","max_holdout_attempts",c.max_holdout_attempts,1,4096)}</div><fieldset class="choice-group"><legend>Grounded distractor candidates</legend><label><input type="checkbox" name="noise_enabled" ${c.noise_variants?.length?"checked":""}> Compare the baseline against additional company files</label></fieldset>${variants.map((v,i)=>`<div class="form-grid">${field("Candidate name",`noise_name_${i}`,v.name)}${num("Distractor files per trial",`noise_files_${i}`,v.distractor_files,0,64)}</div>`).join("")}<p class="help">Training selects a candidate before holdout. The total training budget is shared across candidates. Extra grounded files measure context distraction; this does not measure every kind of document noise.</p>${field("Reason for change","reason","Configured native difficulty measurement")}<div class="actions end"><button type="submit" class="primary">Validate & save revision</button></div></form>`);
+}
 function overview() {
   const p=state.company,s=p.spec,r=report();
-  return head(esc(companyName(p)),`${label(s.company.engine)} · ${label(s.company.geo)} · One persistent enterprise`,button("Continue interview","go-interview")+button("Open foundry","go-foundry","primary"))+journey()+
+  return head(esc(companyName(p)),`${label(s.company.engine)} · ${label(s.company.geo)} · One persistent enterprise`,button("Continue interview","go-interview")+button("Open foundry","go-foundry","primary"))+journey()+workflowPanel()+
     `<div class="stats">${[["Company","1","Shared identity across every batch"],["Business units",s.structure?.bus.length||0,"Declared operating structure"],["Use cases",s.use_cases.length,`${fmt(s.use_cases.reduce((n,c)=>n+c.count,0))} requested queries`],["Qualified queries",r?.accepted||0,r?`${r.tasks} task fingerprints · ${r.cases} evidence cases`:"Run generation to measure coverage"]].map(([name,value,detail])=>`<div class="stat"><div class="label">${name}</div><strong>${fmt(value)}</strong><p>${detail}</p></div>`).join("")}</div><div class="two-col"><section class="panel"><div class="panel-head"><div><h2>Company map</h2><p class="muted small">The business context behind your evaluations.</p></div>${button("Explore","go-company")}</div>${companyMap()}</section><div class="stack"><section class="panel"><div class="panel-head"><div><h2>Ready for the next run?</h2><p class="muted small">Declarations and measured results stay distinct.</p></div></div>${findings()}</section><section class="panel"><div class="panel-head"><h2>Recent runs</h2>${button("View all","go-changes","quiet")}</div><div id="run-list">${runList(3)}</div></section></div></div>`;
 }
 function companyMap() {
@@ -86,10 +111,11 @@ function runList(limit=100) {
   const jobs=state.company.jobs.slice(0,limit);
   if(!jobs.length)return '<p class="muted small">No runs yet. Build the company or generate its evalset.</p>';
   return jobs.map(j=>{
+    const native=j.options.operation==="native",nativeStatus=native&&j.result?.status;
     const r=j.result?.report,foundry=j.options.operation==="foundry",frozen=j.result?.frozen_dataset||j.progress?.frozen_dataset;
-    const status=j.status==="complete"?(foundry&&!frozen?"Not frozen":r&&!r.complete?"Coverage incomplete":"Complete"):label(j.status);
-    const color=j.status==="complete"&&(foundry&&!frozen||r&&!r.complete)?"amber":statusColor(j.status);
-    return `<div class="run-row"><div class="spaced"><strong>${esc(label(j.options.operation))}${j.revision!==state.company.revision?' · earlier revision':""}</strong>${badge(status,color)}</div>${foundry&&j.progress?.stage?`<p>${esc(stageLabels[j.progress.stage]||label(j.progress.stage))} · ${esc(label(j.progress.status))}</p>`:""}${r?`<p>${fmt(r.accepted)} / ${fmt(r.target)} queries · ${r.companies} company · ${r.batches} batches</p><progress value="${r.accepted}" max="${r.target}" aria-label="Qualified query quota"></progress>`:""}${j.result?.company?`<p>${esc(j.result.company)} · ${fmt(j.result.facts)} facts · ${fmt(j.result.artifacts)} artifacts</p>`:""}${j.result?.narrated?button(state.company.spec.narration_job===j.id?"Narration selected":"Use this narration","select-narration","quiet",`data-id="${esc(j.id)}" ${state.company.spec.narration_job===j.id?"disabled":""}`):""}${j.error?`<p>${esc(j.error)}</p>`:""}<div class="actions">${foundry?button("Inspect run","inspect-job","quiet",`data-id="${esc(j.id)}"`):""}${["failed","interrupted","paused"].includes(j.status)?button("Resume from checkpoint","retry","quiet",`data-id="${esc(j.id)}"`):""}</div>${r?.findings?.length?`<details><summary>Remaining coverage</summary><ul class="small">${r.findings.map(f=>`<li>${esc(findingText(f))}</li>`).join("")}</ul></details>`:""}</div>`;
+    const status=j.status==="complete"?(nativeStatus?label(nativeStatus):foundry&&!frozen?"Not frozen":r&&!r.complete?"Coverage incomplete":"Complete"):label(j.status);
+    const color=j.status==="complete"&&nativeStatus?statusColor(nativeStatus):j.status==="complete"&&(foundry&&!frozen||r&&!r.complete)?"amber":statusColor(j.status);
+    return `<div class="run-row"><div class="spaced"><strong>${esc(label(j.options.operation))}${j.revision!==state.company.revision?' · earlier revision':""}</strong>${badge(status,color)}</div>${native&&j.result?`<p>${fmt(j.result.passed_trials)} / ${fmt(j.result.observed_trials)} target trials passed · ${j.result.calibrated?"difficulty verified":"difficulty unverified"}</p>`:""}${foundry&&j.progress?.stage?`<p>${esc(stageLabels[j.progress.stage]||label(j.progress.stage))} · ${esc(label(j.progress.status))}</p>`:""}${r?`<p>${fmt(r.accepted)} / ${fmt(r.target)} queries · ${r.companies} company · ${r.batches} batches</p><progress value="${r.accepted}" max="${r.target}" aria-label="Qualified query quota"></progress>`:""}${j.result?.company?`<p>${esc(j.result.company)} · ${fmt(j.result.facts)} facts · ${fmt(j.result.artifacts)} artifacts</p>`:""}${j.result?.narrated?button(state.company.spec.narration_job===j.id?"Narration selected":"Use this narration","select-narration","quiet",`data-id="${esc(j.id)}" ${state.company.spec.narration_job===j.id?"disabled":""}`):""}${j.error?`<p>${esc(j.error)}</p>`:""}<div class="actions">${j.options.operation==="prepare_native"&&j.status==="complete"&&j.result?.spec?button("Review file proposal","review-native-proposal","primary",`data-id="${esc(j.id)}" ${j.revision!==state.company.revision?"disabled":""}`):""}${foundry||native||j.options.operation==="prepare_native"?button("Inspect run","inspect-job","quiet",`data-id="${esc(j.id)}"`):""}${["failed","interrupted","paused"].includes(j.status)?button("Resume from checkpoint","retry","quiet",`data-id="${esc(j.id)}"`):""}</div>${r?.findings?.length?`<details><summary>Remaining coverage</summary><ul class="small">${r.findings.map(f=>`<li>${esc(findingText(f))}</li>`).join("")}</ul></details>`:""}</div>`;
   }).join("");
 }
 function companyPage() {
@@ -112,12 +138,12 @@ function interviewPage() {
 }
 function usecasesPage() {
   const cases=state.company.spec.use_cases;
-  return head("Use cases → evaluations","Specify business outcomes. The compiler generates and checks the evidence needed to evaluate them.",button("Add use case","add-case")+button("Generate evalset","compile","primary",!state.company.ready?"disabled":""))+
+  return head("Use cases → evaluations","Specify business outcomes. The compiler generates and checks the evidence needed to evaluate them.",button("Add use case","add-case")+button("Generate evalset","compile","primary",!connectorReady()?"disabled":""))+
     (cases.length?cases.map(c=>`<article class="usecase"><div class="usecase-top"><div><div class="eyebrow">${esc(c.owner||"Company-wide")}${c.lob?` / ${esc(c.lob)}`:""}</div><h2>${esc(c.title)}</h2></div>${badge(c.scenario?"Contract defined":"Needs workflow",c.scenario?"blue":"amber")}</div><p>${esc(c.objective)}</p><div class="usecase-meta">${badge(`${c.count} requested queries`)}${badge(c.simulation?"Operational evidence":"Company records")}${c.scenario?.connectors.map(v=>badge(v)).join("")||""}</div>${c.activities.length?`<p class="help">Process activities: ${esc(c.activities.join(", "))}</p>`:""}<div class="foot"><span class="small muted">${esc(c.scenario?.workflows.join(", ")||"No executable workflow selected")}</span><div class="actions">${button("Edit use case","edit-case","",`data-id="${c.id}"`)}${button("Inspect contract","inspect-case","quiet",`data-id="${c.id}"`)}</div></div></article>`).join(""):`<div class="empty"><h2>Start with the work</h2><p>Define a task, its owning team and a verifiable outcome.</p>${button("Add use case","add-case","primary")}</div>`)+`<div class="callout">One company can contain many different business situations. New names and row counts do not earn task diversity. Missing evidence keeps an evalset incomplete.</div>`;
 }
 function evalsPage() {
   const r=report();
-  return head("Evaluations","Inspect the exact queries, ownership and evidence admitted by the compiler.",button("Refresh queries","load-evals")+button("Generate evalset","compile","primary",!state.company.ready?"disabled":""))+
+  return head("Evaluations","Inspect the exact queries, ownership and evidence admitted by the compiler.",button("Refresh queries","load-evals")+button("Generate evalset","compile","primary",!connectorReady()?"disabled":""))+
     (r?`<div class="stats">${[["Qualified queries",r.accepted,`${r.target} requested`],["Task fingerprints",r.tasks,"Executable contracts"],["Evidence cases",r.cases,"Shared evidence stays in one split"],["Company",r.companies,"One canonical company snapshot"]].map(([name,v,d])=>`<div class="stat"><div class="label">${name}</div><strong>${fmt(v)}</strong><p>${d}</p></div>`).join("")}</div><div class="spaced"><div class="actions">${Object.entries(r.split_counts).map(([name,count])=>badge(`${name}: ${count}`)).join("")}</div>${badge(r.complete?"Evalset complete":"Coverage incomplete",r.complete?"green":"amber")}</div><br>`:"")+
     `<section class="panel">${state.evals.length?state.evals.map(q=>`<article class="query-card"><div class="query-top">${badge(q.split,"blue")}${badge(label(q.dimensions.workflow))}${badge(label(q.dimensions.failure))}<span class="identity">${esc(q.id.slice(0,12))}</span></div><p>${esc(q.query)}</p><div class="usecase-meta"><span>Use case: ${esc(q.lineage?.use_case||q.stratum)}</span><span>Owner: ${esc(q.lineage?.business_unit||"Company-wide")}</span><span>Task: <code>${esc(q.task_id.slice(0,10))}</code></span></div><details><summary>Evidence and lineage</summary><dl class="definition"><dt>Company</dt><dd><code>${esc(q.company_id)}</code></dd><dt>Evidence case</dt><dd><code>${esc(q.case_id)}</code></dd><dt>Source records</dt><dd>${q.evidence.length} shared evidence keys</dd><dt>Qualification</dt><dd><code>${esc(q.qualification)}</code></dd><dt>Revision</dt><dd><code>${esc(q.lineage?.revision||"")}</code></dd></dl>${button("Inspect source evidence","inspect-evidence","",`data-id="${esc(q.id)}"`)}</details></article>`).join(""):`<div class="empty"><h2>${r?"Load the generated queries":"No evaluations generated yet"}</h2><p>${r?"Inspect qualified rows and their company lineage.":"Generate an evalset from the company’s use cases. Incomplete runs retain candidates for review."}</p>${button(r?"Load queries":"Go to use cases",r?"load-evals":"go-usecases","primary")}</div>`}${state.evals.length?`<div class="actions end">${button("Previous","eval-prev","",state.offset===0?"disabled":"")}<span class="small muted">${state.offset+1}–${state.offset+state.evals.length}</span>${button("Next","eval-next","",state.evals.length<25?"disabled":"")}</div>`:""}</section>`;
 }
@@ -172,16 +198,17 @@ function nativeCalibrationResults(result) {
   const c=result?.calibration;
   if(!c?.configured)return '<p class="small muted">Difficulty calibration not configured.</p>';
   const rows=["training","holdout"].flatMap(split=>Object.values(c[split]?.estimates||{}).map(e=>`<tr><td>${esc(split)}</td><td>${esc(e.use_case_id)} · ${esc(e.operation)}</td><td>${fmt(e.successes)} / ${fmt(e.trials)}</td><td>${Math.round(e.interval_low*100)}–${Math.round(e.interval_high*100)}%</td><td>${esc(e.status)}</td></tr>`));
-  const support=Object.entries(c.support||{}).flatMap(([split,groups])=>Object.values(groups).map(g=>`<li>${esc(split)} · ${esc(g.use_case_id)} · ${esc(g.operation)}: ${fmt(g.available)} available, ${fmt(g.planned)} planned, ${fmt(g.required)} required</li>`));
-  return `${badge(result.calibrated?"Difficulty band verified":"Calibration incomplete",result.calibrated?"green":"amber")}<p class="help">Fixed corpus, independent evidence components, 95% intervals. Noise evolution is not measured by this run.</p>${support.length?`<details><summary>Independent sample support</summary><ul>${support.join("")}</ul></details>`:""}${rows.length?`<div class="table-wrap"><table><thead><tr><th>Phase</th><th>Outcome</th><th>Passed / trials</th><th>Pass-rate interval</th><th>Support</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`:""}${c.findings?.length?`<p>${esc(c.findings.map(findingText).join("; "))}</p>`:""}`;
+  const candidates=(c.candidates||[]).flatMap(candidate=>Object.values(candidate.estimates||{}).map(e=>`<tr><td>${esc(candidate.variant)} ${candidate.variant===c.selected_variant?badge("Selected","blue"):""}</td><td>${esc(e.use_case_id)} · ${esc(e.operation)}</td><td>${fmt(e.successes)} / ${fmt(e.trials)}</td><td>${Math.round(e.interval_low*100)}–${Math.round(e.interval_high*100)}%</td><td>${badge(candidate.accepted?"Training accepted":"Training rejected",candidate.accepted?"green":"amber")}</td></tr>`));
+  const support=Object.entries(c.support||{}).flatMap(([split,groups])=>Object.values(groups).map(g=>`<tr><td>${esc(split)}</td><td>${esc(g.use_case_id)} · ${esc(g.operation)}</td><td>${fmt(g.available)} / ${fmt(g.required)}</td><td>${fmt(g.planned)}</td><td>${g.available<g.required?badge(`${fmt(g.required-g.available)} more independent samples needed`,"amber"):g.planned<g.required?badge(`Increase trial budget by at least ${fmt(g.required-g.planned)}`,"amber"):badge("Supported","green")}</td></tr>`));
+  return `${badge(result.calibrated?"Difficulty band verified":"Calibration incomplete",result.calibrated?"green":"amber")}<p class="help">Independent evidence components, 95% intervals. ${c.mode==="grounded_distractor_files"?`Grounded distractor selection: ${esc(c.selected_variant||"no candidate selected")}. ${result.noise_calibrated?"Selected noise passed training and holdout.":"Noise calibration incomplete."}`:"Fixed corpus; noise selection is not configured."}</p>${support.length?`<div class="table-wrap"><table><caption>Independent sample support</caption><thead><tr><th>Phase</th><th>Outcome</th><th>Available / required</th><th>Planned</th><th>Next requirement</th></tr></thead><tbody>${support.join("")}</tbody></table></div><p class="help">Add evidence with distinct facts and sources to increase independent support. Duplicating tasks or renaming files does not increase it.</p>`:""}${candidates.length?`<div class="table-wrap"><table><caption>Noise candidate training results</caption><thead><tr><th>Candidate</th><th>Outcome</th><th>Passed / trials</th><th>Pass-rate interval</th><th>Decision</th></tr></thead><tbody>${candidates.join("")}</tbody></table></div>`:""}${rows.length?`<div class="table-wrap"><table><thead><tr><th>Phase</th><th>Outcome</th><th>Passed / trials</th><th>Pass-rate interval</th><th>Support</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`:""}${c.findings?.length?`<p>${esc(c.findings.map(findingText).join("; "))}</p>`:""}`;
 }
 function nativePage() {
   const s=state.company.spec,plans=s.native_corpus||[],tasks=s.native_tasks||[];
   const jobs=state.company.jobs.filter(j=>j.options.operation==="native"&&j.revision===state.company.revision);
-  return head("Documents & files","Read, analyze, update and create files grounded in this company's accepted content.",button("Browse accepted sources","native-sources")+button("Edit corpus plans","edit-native-corpus")+button("Edit file tasks","edit-native-tasks")+button("Configure difficulty","edit-native-calibration")+button(state.harness?"Generate & evaluate files":"Generate file queryset","native","primary",!plans.length||!tasks.length?"disabled":""))+
+  return head("Documents & files","Read, analyze, update and create files grounded in this company's accepted content.",button("Prepare from accepted sources","prepare-native","primary")+button("Browse accepted sources","native-sources")+button("Edit corpus plans","edit-native-corpus")+button("Edit file tasks","edit-native-tasks")+button("Configure difficulty","edit-native-calibration")+button(state.harness?"Generate & evaluate files":"Generate file queryset","native","primary",!plans.length||!tasks.length?"disabled":""))+
     `<div class="two-col"><section class="panel"><h2>Grounded corpus</h2><p class="small muted">Long files assemble distinct accepted sections and canonical facts. Explicit page breaks establish a page floor; rendered pagination can vary.</p>${plans.length?plans.map(p=>`<article class="unit"><h3>${esc(p.title)}</h3>${badge(p.format)} ${badge(`${p.minimum_units} minimum units`)} ${badge(`${p.minimum_distinct_facts||1} distinct facts required`)}<p class="small">${fmt(p.contents.length)} source sections</p></article>`).join(""):'<p>Use the company interview to specify source sections, document sizes and evidence coverage. Narrate and select accepted evidence before generating the files.</p>'}</section>
     <section class="panel"><h2>Executable outcomes</h2>${tasks.length?tasks.map(t=>`<article class="unit"><h3>${esc(t.id)}</h3>${badge(t.operation)}<p>${esc(t.prompt)}</p><p class="small muted">Use case: ${esc(t.use_case_id)} · ${t.inputs.length} source files</p><details><summary>Inspect grading contract</summary><pre>${esc(pretty(t))}</pre></details></article>`).join(""):'<p>Each task declares citations and answer checks, or output content and permitted changes. Updates preserve all unaffected extracted content, including formulas and notes.</p>'}</section></div>
-    <section class="panel"><h2>Native file runs</h2><p class="small muted">Difficulty calibration seals independent train and holdout evidence before target trials. Shared files and facts cannot inflate support.</p>${jobs.map(j=>`<article class="unit"><div class="spaced"><strong>${esc(j.result?.status||j.status)}</strong>${button("Inspect run","inspect-job","quiet",`data-id="${esc(j.id)}"`)}</div>${j.error?`<p>${esc(j.error)}</p>`:""}${nativeCalibrationResults(j.result)}<details><summary>Files, evidence components and grades</summary>${Object.entries(j.result?.corpus_artifacts||{}).map(([id,a])=>`<p><a href="${route("native-artifact")}?job=${encodeURIComponent(j.id)}&artifact=${encodeURIComponent(id)}" download="${esc(id)}.${esc(a.format)}">${esc(id)}.${esc(a.format)}</a> · ${fmt(a.content_units)} units · ${fmt(a.distinct_fact_count)} facts</p>`).join("")}<pre>${esc(pretty(j.result||{}))}</pre></details></article>`).join("")||'<p class="muted">No native file run for this revision.</p>'}</section>`;
+    <section class="panel"><h2>Native file runs</h2><p class="small muted">Difficulty calibration seals independent train and holdout evidence before target trials. Shared files and facts cannot inflate support.</p>${jobs.map(j=>`<article class="unit"><div class="spaced">${badge(label(j.result?.status||j.status),statusColor(j.result?.status||j.status))}${button("Inspect run","inspect-job","quiet",`data-id="${esc(j.id)}"`)}</div>${j.error?`<p>${esc(j.error)}</p>`:""}${j.result?`<p class="small">${fmt(j.result.tasks)} tasks · ${fmt(j.result.observed_trials)} observed trials · ${fmt(j.result.passed_trials)} passed</p>`:""}${nativeCalibrationResults(j.result)}<details><summary>Files, evidence components and grades</summary>${Object.entries(j.result?.corpus_artifacts||{}).map(([id,a])=>`<p><a href="${route("native-artifact")}?job=${encodeURIComponent(j.id)}&artifact=${encodeURIComponent(id)}" download="${esc(id)}.${esc(a.format)}">${esc(id)}.${esc(a.format)}</a> · ${fmt(a.content_units)} units · ${fmt(a.distinct_fact_count)} facts</p>`).join("")}<pre>${esc(pretty(j.result||{}))}</pre></details></article>`).join("")||'<p class="muted">No native file run for this revision.</p>'}</section>`;
 }
 function changesPage() {
   return head("Changes & runs","Every revision preserves its intent. Every run keeps its original company snapshot.",button("Refresh history","load-history")+button("Build company","build","primary"))+
@@ -200,11 +227,37 @@ async function loadEvals() { const data=await api(route("evals")+`?offset=${stat
 async function run(operation, message="") { const job=await api(route("run"), {revision:state.company.revision, options:{operation,message}});await refresh();render();notify(`${label(operation)} queued. You can keep exploring while it runs.`);return job; }
 async function action(name, target) {
   if(name.startsWith("go-")){state.page=name.slice(3);render();return;}
+  if(name==="workflow"){
+    const a=JSON.parse(target.dataset.workflow);
+    if(a.kind==="navigate"){state.page=a.page;render();}
+    else if(a.kind==="run")await run(a.operation);
+    else if(a.kind==="prepare_native")nativeSuiteEditor();
+    else if(a.kind==="select_narration"){await api(route("select-narration"),{revision:state.company.revision,job_id:a.job_id});await refresh();render();}
+    return;
+  }
+  if(name==="prepare-native"){nativeSuiteEditor();return;}
+  if(name==="review-native-proposal"){
+    const project=state.company.id;
+    if(!state.company.jobs.some(j=>j.id===target.dataset.id&&j.options.operation==="prepare_native"))throw new Error("Proposal does not belong to this company.");
+    const job=await api(`/api/jobs/${encodeURIComponent(target.dataset.id)}`);
+    if(job.status!=="complete"||!job.result?.spec)throw new Error("Preparation is not complete. Refresh the run to see its progress.");
+    if(state.company.id!==project||job.revision!==state.company.revision)throw new Error("Company changed. Prepare a fresh proposal before applying it.");
+    reviewNativeProposal(job.result,project,job.revision);return;
+  }
+  if(name==="apply-native-proposal"){
+    const p=state.nativeProposal;
+    if(!p||p.project!==state.company.id||p.revision!==state.company.revision)throw new Error("Company changed. Prepare a fresh proposal before applying it.");
+    if(!p.summary?.tasks)throw new Error("No executable tasks were prepared. Adjust the source selection or requested operations.");
+    await revise(p.spec,"Prepared grounded file corpus and evaluation tasks");state.nativeProposal=null;$("#editor").close();return;
+  }
   if(name==="close"){$("#editor").close();return;}
   if(name==="new-company"){state.company=null;render();return;}
   if(name==="example"||name==="connected-example"){const spec=await api(name==="connected-example"?"/api/preset?engine=retail-connected":"/api/preset");const p=await api("/api/projects",spec);state.projects.push(p);await selectCompany(p.id);return;}
   if(name==="harness"){modal("Connect your coding harness",`<p>Use your installed, signed-in Codex or Claude Code CLI. Studio sends bounded requests and validates the returned proposals.</p><pre>worldloom studio serve --harness codex
-worldloom studio serve --harness claude</pre><p class="small muted">Custom adapters can use <code>--harness-command</code>. Commands are configured when Studio starts.</p><p>Without an adapter, use <strong>Export request</strong> and <strong>Import response</strong> in the interview.</p>`);return;}
+worldloom studio serve --harness claude
+
+# Codex native file updates and creation
+worldloom studio serve --harness codex --allow-native-writes</pre><p class="small muted">Custom adapters can use <code>--harness-command</code>. Commands are configured when Studio starts.</p><p>Without an adapter, use <strong>Export request</strong> and <strong>Import response</strong> in the interview.</p>`);return;}
   if(["compile","build","narrate","foundry","native"].includes(name)){await run(name);return;}
   if(name==="retry"){await api(`/api/jobs/${target.dataset.id}/retry`,{});await refresh();render();notify("Run queued to resume from its recorded checkpoints.");return;}
   if(name==="native-sources"){
@@ -212,7 +265,7 @@ worldloom studio serve --harness claude</pre><p class="small muted">Custom adapt
     modal("Accepted source sections",`<p>${data.total} grounded sections available. Use these identifiers in corpus plans. ${data.status==="select_accepted_narration"?"Narrate company evidence and select the accepted narration first.":""}</p><pre>${esc(pretty(data.sources))}</pre>${data.next_offset!==null?button("Next source page","native-sources","quiet",`data-offset="${data.next_offset}"`):""}`);return;
   }
   if(name==="edit-native-corpus"){jsonEditor("Native corpus plans",state.company.spec.native_corpus||[],"native_corpus");return;}
-  if(name==="edit-native-calibration"){jsonEditor("Native difficulty calibration",state.company.spec.native_calibration||{cohort:"",target_low:0.3,target_high:0.7,min_support:32,max_training_attempts:384,max_holdout_attempts:128,holdout_percent:25},"native_calibration");return;}
+  if(name==="edit-native-calibration"){nativeCalibrationEditor();return;}
   if(name==="edit-native-tasks"){jsonEditor("Native file tasks",state.company.spec.native_tasks||[],"native_tasks");return;}
   if(name==="edit-calibration"){calibrationEditor();return;}
   if(name==="inspect-construction"){modal("Compiled construction obligations",`<p class="muted small">This plan belongs to the current company revision.</p><pre>${esc(pretty(state.company.construction_plan))}</pre>`);return;}
@@ -220,7 +273,7 @@ worldloom studio serve --harness claude</pre><p class="small muted">Custom adapt
     const job=await api(`/api/jobs/${encodeURIComponent(target.dataset.id)}`),stage=target.dataset.stage;
     modal(stage?stageLabels[stage]:"Foundry run record",`<p class="small muted">Recorded for revision <code>${esc(job.revision)}</code>. ${["running","queued"].includes(job.status)?"This run is still active; reopen to see later checkpoints.":""}</p><pre>${esc(pretty(stage?job.progress?.stages?.[stage]||{status:"pending"}:job))}</pre>`);return;
   }
-  if(name==="select-narration"){const spec=copy(state.company.spec);spec.narration_job=target.dataset.id;await revise(spec,"Selected accepted narration for evaluation evidence");return;}
+  if(name==="select-narration"){await api(route("select-narration"),{revision:state.company.revision,job_id:target.dataset.id});await refresh();render();return;}
   if(name==="edit-divisions"){jsonEditor("Revenue divisions",state.company.division_contract,"divisions");return;}
   if(name==="edit-project"){jsonEditor("Company contract",state.company.spec,"project");return;}
   if(name==="edit-structure"){let structure=state.company.spec.structure;if(!structure){const sample=await api("/api/preset?engine=retail&name="+encodeURIComponent(companyName(state.company)));structure=sample.structure;}jsonEditor("Operating structure",structure,"structure");return;}
@@ -266,6 +319,21 @@ document.addEventListener("submit", async event=>{
       const parsed=JSON.parse(values.value),kind=form.dataset.kind;let spec=copy(state.company.spec);
       if(kind==="project")spec=parsed;else if(kind.startsWith("case:"))spec.use_cases=spec.use_cases.map(c=>c.id===kind.slice(5)?parsed:c);else spec[kind]=parsed;
       await revise(spec,values.reason);$("#editor").close();
+    } else if(form.id==="native-suite-form"){
+      const revision=state.company.revision;
+      const request={use_case_id:values.use_case_id,formats:["docx","pptx","xlsx"].filter(v=>values["format_"+v]),operations:["read","analyze","update","create"].filter(v=>values["operation_"+v]),minimum_units:Number(values.minimum_units),max_cases:Number(values.max_cases),source_artifact_ids:(values.source_artifact_ids||"").split(",").map(v=>v.trim()).filter(Boolean)};
+      if(!request.formats.length||!request.operations.length)throw new Error("Select at least one format and operation.");
+      await api(route("prepare-native"),{revision,request});
+      state.nativeProposal=null;$("#editor").close();await refresh();state.page="changes";render();
+      notify("File preparation queued. Review its proposal in Changes & runs when it finishes.");
+    } else if(form.id==="native-calibration-form"){
+      const spec=copy(state.company.spec),c={...(spec.native_calibration||{}),cohort:values.cohort.trim()};
+      for(const name of ["target_low","target_high"])c[name]=Number(values[name])/100;
+      for(const name of ["min_support","holdout_percent","max_training_attempts","max_holdout_attempts"])c[name]=Number(values[name]);
+      if(!c.cohort)throw new Error("Enter the target-agent cohort name.");
+      if(c.target_low>=c.target_high)throw new Error("The minimum pass rate must be below the maximum pass rate.");
+      c.noise_variants=values.noise_enabled?Array.from({length:16},(_,i)=>i).filter(i=>values[`noise_name_${i}`]!==undefined).map(i=>({name:values[`noise_name_${i}`].trim(),distractor_files:Number(values[`noise_files_${i}`])})):[];
+      spec.native_calibration=c;await revise(spec,values.reason);$("#editor").close();
     } else if(form.id==="calibration-form"){
       const spec=copy(state.company.spec),calibration={...(spec.calibration||{}),cohort:values.cohort.trim(),variants:JSON.parse(values.variants)};
       for(const name of ["target_low","target_high","reader_share"])calibration[name]=Number(values[name])/100;

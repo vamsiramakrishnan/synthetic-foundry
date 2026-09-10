@@ -1,0 +1,260 @@
+{
+  "calibrated": false,
+  "company": "Northstar Retail",
+  "default_calibration_feasible": false,
+  "episodes": [
+    "2026-01",
+    "2026-02",
+    "2026-03",
+    "2026-04",
+    "2026-05",
+    "2026-06",
+    "2026-07",
+    "2026-08",
+    "2026-09",
+    "2026-10",
+    "2026-11",
+    "2026-12",
+    "2027-01",
+    "2027-02",
+    "2027-03",
+    "2027-04",
+    "2027-05",
+    "2027-06"
+  ],
+  "evidence_components": 12,
+  "observed_target_trials": 0,
+  "proposal_digest": "ace30ea0c4ddf1b27d7b97db1a1be0b9",
+  "queryset_digest": "33a5189e2a4b6dc8e9be47f015cf9542",
+  "request": {
+    "formats": [
+      "docx",
+      "pptx",
+      "xlsx"
+    ],
+    "max_cases": 12,
+    "minimum_units": 2,
+    "operations": [
+      "read",
+      "analyze",
+      "update",
+      "create"
+    ],
+    "source_artifact_ids": [],
+    "use_case_id": "native-close-review"
+  },
+  "sample_questions": [
+    "For Review retail close evidence, retrieve the complete evidence at paragraph:5 in ART-SUITE-7c696aa86fae9445988f-docx and cite it exactly.",
+    "For Review retail close evidence, change only the heading at paragraph:1 in ART-SUITE-7c696aa86fae9445988f-docx to 'Reviewed evidence'. Preserve all other content and properties. Return an updated copy with its original source checksum.",
+    "For Review retail close evidence, create a new docx evidence excerpt. Copy the complete content at paragraph:5 from ART-SUITE-7c696aa86fae9445988f-docx verbatim into paragraph:1 in the new file.",
+    "For Review retail close evidence, retrieve the complete evidence at slide:2/notes in ART-SUITE-7c696aa86fae9445988f-pptx and cite it exactly.",
+    "For Review retail close evidence, change only the heading at slide:1/shape:1/text in ART-SUITE-7c696aa86fae9445988f-pptx to 'Reviewed evidence'. Preserve all other content and properties. Return an updated copy with its original source checksum.",
+    "For Review retail close evidence, create a new pptx evidence excerpt. Copy the complete content at slide:2/notes from ART-SUITE-7c696aa86fae9445988f-pptx verbatim into slide:1/shape:1/text in the new file.",
+    "For Review retail close evidence, retrieve the complete evidence at sheet:Evidence/cell:B3 in ART-SUITE-7c696aa86fae9445988f-xlsx and cite it exactly.",
+    "For Review retail close evidence, change only the heading at sheet:Evidence/cell:A2 in ART-SUITE-7c696aa86fae9445988f-xlsx to 'Reviewed evidence'. Preserve all other content and properties. Return an updated copy with its original source checksum.",
+    "For Review retail close evidence, create a new xlsx evidence excerpt. Copy the complete content at sheet:Evidence/cell:B3 from ART-SUITE-7c696aa86fae9445988f-xlsx verbatim into sheet:Evidence/cell:A1 in the new file.",
+    "For Review retail close evidence, retrieve the complete evidence at paragraph:5 in ART-SUITE-52c5a11811d13d06d5a5-docx and cite it exactly."
+  ],
+  "schema": "worldloom.native-suite-measurement/v1",
+  "seed": 8128,
+  "summary": {
+    "artifacts": 36,
+    "available_cases": 29,
+    "case_shortfall": 0,
+    "limitations": [
+      "Explicit-location capability contracts; semantic fit to the business objective requires review.",
+      "Task count is not independent support. Calibration seals the complete project's evidence graph.",
+      "No target observations or calibrated difficulty are implied by reference qualification."
+    ],
+    "minimum_units": 2,
+    "prepared_cases": 12,
+    "reference_qualified": 113,
+    "requested_cases": 12,
+    "source_components": 47,
+    "source_sections": 252,
+    "tasks": 113,
+    "unsupported": [
+      {
+        "case": "7c696aa86fae9445988f",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "e842d2134b44d69b886b",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "5c6c32d8d1ec86ce4c80",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "c0e1e2876dca2691741c",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "aa977295062d6d8eae3c",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "34156fb43b4a98ca8352",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "1e7021909dec559e5a3a",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      }
+    ]
+  },
+  "support": {
+    "holdout": {
+      "1a1e74e7ed726c792782248433b41759": {
+        "available": 3,
+        "operation": "read",
+        "planned": 3,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "35625b59c40e76332016df307912d781": {
+        "available": 3,
+        "operation": "create",
+        "planned": 3,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "3fab98a1c9e4e5b4edd5e8d90249529b": {
+        "available": 1,
+        "operation": "analyze",
+        "planned": 1,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "5069fca647c0b8afbf40cba0b3572f87": {
+        "available": 3,
+        "operation": "read",
+        "planned": 3,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "6232d302c4dc6fe2df7538ea1ce88299": {
+        "available": 3,
+        "operation": "create",
+        "planned": 3,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "673bd8dfbefdc654396ed951e9edd005": {
+        "available": 3,
+        "operation": "update",
+        "planned": 3,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "6c5700a7f5df1da65656c0d74d5fc9c2": {
+        "available": 3,
+        "operation": "read",
+        "planned": 3,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "8131119bfd2bf0fa77a80021184a7526": {
+        "available": 3,
+        "operation": "update",
+        "planned": 3,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "96d0d0dc9c23068276a31002cac0bf91": {
+        "available": 3,
+        "operation": "create",
+        "planned": 3,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "a3b17d9093f0239615d8d2ad9f68cf35": {
+        "available": 3,
+        "operation": "update",
+        "planned": 3,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      }
+    },
+    "train": {
+      "1a1e74e7ed726c792782248433b41759": {
+        "available": 9,
+        "operation": "read",
+        "planned": 9,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "35625b59c40e76332016df307912d781": {
+        "available": 9,
+        "operation": "create",
+        "planned": 9,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "3fab98a1c9e4e5b4edd5e8d90249529b": {
+        "available": 4,
+        "operation": "analyze",
+        "planned": 4,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "5069fca647c0b8afbf40cba0b3572f87": {
+        "available": 9,
+        "operation": "read",
+        "planned": 9,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "6232d302c4dc6fe2df7538ea1ce88299": {
+        "available": 9,
+        "operation": "create",
+        "planned": 9,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "673bd8dfbefdc654396ed951e9edd005": {
+        "available": 9,
+        "operation": "update",
+        "planned": 9,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "6c5700a7f5df1da65656c0d74d5fc9c2": {
+        "available": 9,
+        "operation": "read",
+        "planned": 9,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "8131119bfd2bf0fa77a80021184a7526": {
+        "available": 9,
+        "operation": "update",
+        "planned": 9,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "96d0d0dc9c23068276a31002cac0bf91": {
+        "available": 9,
+        "operation": "create",
+        "planned": 9,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      },
+      "a3b17d9093f0239615d8d2ad9f68cf35": {
+        "available": 9,
+        "operation": "update",
+        "planned": 9,
+        "required": 32,
+        "use_case_id": "native-close-review"
+      }
+    }
+  }
+}
