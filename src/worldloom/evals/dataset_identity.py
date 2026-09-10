@@ -103,6 +103,20 @@ def assign_splits(entries: list[DatasetEntry], plan: DatasetPlan) -> tuple[dict[
         groups.setdefault(root(i), []).append(entry)
     counts: Counter[str] = Counter({name: 0 for name in plan.split_weights})
     assignment: dict[str, str] = {}
+    fixed = getattr(plan, "split_assignments", {})
+    if fixed:
+        for group in groups.values():
+            keys = [digest([e.stratum, e.query_id]) for e in group]
+            if any(key not in fixed for key in keys):
+                raise ValueError("variant added a task outside the sealed split assignment")
+            splits = {fixed[key] for key in keys}
+            if len(splits) != 1:
+                raise ValueError("variant evidence merged opposite sides of the sealed holdout")
+            split = next(iter(splits))
+            for entry in group:
+                assignment[entry.id] = split
+                counts[split] += 1
+        return assignment, dict(sorted(counts.items())), len(groups), max((len(g) for g in groups.values()), default=0)
     total_weight = sum(plan.split_weights.values())
     ordered = sorted(groups.values(), key=lambda g: (-len(g), min(e.id for e in g)))
     for index, group in enumerate(ordered):

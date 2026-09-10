@@ -93,7 +93,7 @@ def test_unobservable_constraints_are_explicit_failures() -> None:
     assert all(not check.satisfied and "unsupported" in check.detail for check in unsupported)
     assert {check.requirement_id for check in unsupported} >= {
         "shape.records[0].custom_fields", "shape.records[0].maximum_read_bytes",
-        "shape.artifacts[0].slides", "shape.threads[0].pagination_required",
+        "shape.artifacts[0].locator_required", "shape.threads[0].pagination_required",
     }
 
 
@@ -194,3 +194,81 @@ def test_reply_depth_cannot_join_different_threads_or_count_cycles() -> None:
     records[:] = [_message("a", thread_id="one", in_reply_to="b"),
                   _message("b", thread_id="one", in_reply_to="a")]
     assert not check_candidate_shape(shape, world, project=lambda _: records)[0].satisfied
+
+
+def test_native_shape_reads_office_structure_and_rejects_corrupt_size_witness() -> None:
+    from io import BytesIO
+
+    from pptx import Presentation
+
+    from worldloom.render import Rendered
+
+    world = RetailWorld(seed=8128).build().run(MonthEndClose(period="2026-03"))
+    intent = world.artifact_intents[0]
+    presentation = Presentation()
+    for index in range(100):
+        slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+        if index == 99:
+            slide._element.set("show", "0")
+            slide.notes_slide.notes_text_frame.text = "Late evidence"
+    stream = BytesIO()
+    presentation.save(stream)
+    rendered = Rendered(artifact_id=intent.id, path="artifacts/large.pptx", media_type="application/octet-stream", payload=stream.getvalue())
+    native = replace(world, _rendered=(rendered,))
+    shape = EvalShape(artifacts=(ArtifactShapeRequirement(
+        artifact_type="pptx", slides=100, hidden_slides=1, speaker_note_slides=1, locator_required=False,
+    ),))
+    checks = check_candidate_shape(shape, native)
+    assert len(checks) == 1 and checks[0].satisfied
+    oversized = shape.model_copy(update={"artifacts": (shape.artifacts[0].model_copy(update={"slides": 101}),)})
+    assert not check_candidate_shape(oversized, native)[0].satisfied
+    corrupt = replace(native, _rendered=(replace(rendered, payload=b"x" * len(rendered.payload)),))
+    size_only = EvalShape(artifacts=(ArtifactShapeRequirement(artifact_type="pptx", file_size_bytes=10, locator_required=False),))
+    assert not check_candidate_shape(size_only, corrupt)[0].satisfied
+
+
+def test_workbook_shape_requires_minima_on_every_sheet() -> None:
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    from worldloom.render import Rendered
+
+    world = RetailWorld(seed=8128).build().run(MonthEndClose(period="2026-03"))
+    workbook = Workbook()
+    workbook.active["B10"] = "=1+1"
+    workbook.create_sheet("Short")["A1"] = "Header"
+    stream = BytesIO()
+    workbook.save(stream)
+    rendered = Rendered(artifact_id=world.artifact_intents[0].id, path="artifacts/data.xlsx", media_type="application/octet-stream", payload=stream.getvalue())
+    native = replace(world, _rendered=(rendered,))
+    shape = EvalShape(artifacts=(ArtifactShapeRequirement(
+        artifact_type="xlsx", sheets=2, rows_per_sheet=10, columns_per_sheet=2, formulas=1, locator_required=False,
+    ),))
+    assert not check_candidate_shape(shape, native)[0].satisfied
+    workbook["Short"]["B10"] = "Complete"
+    stream = BytesIO()
+    workbook.save(stream)
+    native = replace(native, _rendered=(replace(rendered, payload=stream.getvalue()),))
+    assert check_candidate_shape(shape, native)[0].satisfied
+
+
+def test_native_docx_paragraphs_do_not_claim_rendered_page_count() -> None:
+    from io import BytesIO
+
+    from docx import Document
+
+    from worldloom.render import Rendered
+
+    world = RetailWorld(seed=8128).build().run(MonthEndClose(period="2026-03"))
+    document = Document()
+    document.add_paragraph("Authoritative procedure")
+    document.add_paragraph("Approved update")
+    stream = BytesIO()
+    document.save(stream)
+    native = replace(world, _rendered=(Rendered(artifact_id=world.artifact_intents[0].id, path="artifacts/policy.docx", media_type="application/octet-stream", payload=stream.getvalue()),))
+    shape = EvalShape(artifacts=(ArtifactShapeRequirement(artifact_type="docx", paragraphs=2, locator_required=False),))
+    assert check_candidate_shape(shape, native)[0].satisfied
+    pages = shape.model_copy(update={"artifacts": (shape.artifacts[0].model_copy(update={"pages": 1}),)})
+    checks = check_candidate_shape(pages, native)
+    assert any(not check.supported and check.requirement_id.endswith(".pages") for check in checks)

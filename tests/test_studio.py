@@ -98,6 +98,12 @@ def test_accepted_narration_can_be_selected_and_replayed_without_calls(project, 
     assert len(calls) == 1
     chosen = spec.model_copy(update={"narration_job": job["id"]})
     current = studio.store.revise(p["id"], p["revision"], chosen, reason="Use accepted authored evidence")
+    sources = studio.native_sources(p["id"], current["revision"], limit=1)
+    assert sources["status"] == "accepted" and sources["total"] > 1
+    assert len(sources["sources"]) == 1 and sources["next_offset"] == 1
+    assert sources["sources"][0]["fact_ids"]
+    request = studio.interview_request(p["id"], current["revision"], "Plan a long native corpus using accepted evidence")
+    assert request["native_sources"]["sources"][0] == sources["sources"][0]
     compile_job = studio.store.enqueue(p["id"], current["revision"], RunOptions(operation="compile", batch_limit=1))
     run_job(studio, compile_job["id"])
     result = studio.store.job(compile_job["id"])
@@ -303,3 +309,18 @@ def test_console_javascript_parses_and_assets_are_packaged(project):
                                 input=json.dumps({"company": studio.describe(p["id"]), "catalogue": studio.catalogue()}),
                                 text=True, capture_output=True)
         assert result.returncode == 0, result.stderr
+
+
+def test_snapshot_recovers_crash_before_intent_write(project):
+    import shutil
+
+    studio, p = project
+    spec = ProjectSpec.model_validate(p["spec"])
+    _, location = studio.snapshot(spec)
+    expected = _files(location)
+    staging = location.with_name(location.name + ".pending")
+    staging.mkdir()
+    shutil.rmtree(location)
+    _, recovered = studio.snapshot(spec)
+    assert recovered == location and _files(recovered) == expected
+    assert not staging.exists()

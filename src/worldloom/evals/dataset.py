@@ -13,6 +13,7 @@ import hashlib
 import json
 import shutil
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from fractions import Fraction
 from itertools import islice
@@ -22,7 +23,7 @@ from typing import Any, Protocol
 from ..corpus import write_json
 from ..enterprise_io import load_exported_corpus
 from ..enterprise_qualification import QualificationProof, qualify_queries
-from ..enterprise_queries import plan_queries
+from ..enterprise_queries import PlannedEnterpriseQuery, plan_queries
 from ..enterprise_sdk import EnterpriseEvalHarness
 from ..providers import digest
 from .dataset_contract import DatasetEntry, DatasetPlan, DatasetReport, DatasetRequest
@@ -42,6 +43,7 @@ class DatasetRefused(ValueError):
 class DatasetBuild:
     harness: EnterpriseEvalHarness
     metadata: dict[str, Any]
+    query_transform: Callable[[PlannedEnterpriseQuery], PlannedEnterpriseQuery] | None = None
 
 
 class DatasetBuilder(Protocol):
@@ -134,6 +136,8 @@ def _commit_batch(root: Path, request: DatasetRequest, builder: DatasetBuilder, 
         inspected = equivalent = 0
         for query in bounded:
             inspected += 1
+            if built.query_transform is not None:
+                query = built.query_transform(query)
             if not all(query.dimensions.get(k) == v for k, v in source.where.items()):
                 continue
             task = program_identity(query)
@@ -306,6 +310,9 @@ def compile_dataset(
         while pool and remaining[cell.id]:
             candidate = min(pool, key=lambda e: (tasks[e.task_id], requests[e.request_id], cases[e.case_id], e.id))
             pool.remove(candidate)
+            if isinstance(plan, CompanyDatasetPlan) and plan.split_assignments and digest([candidate.stratum, candidate.query_id]) not in plan.split_assignments:
+                refusals["outside_sealed_case_set"] += 1
+                continue
             key = digest([candidate.task_id, candidate.case_id, candidate.request_id])
             reason = (
                 "duplicate_variant" if key in exact else

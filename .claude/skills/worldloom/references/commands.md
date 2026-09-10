@@ -1170,7 +1170,7 @@ worldloom studio run <PROJECT>
 | --- | --- |
 | `--batch-limit` |  |
 | `--harness-command` |  |
-| `--operation` | build, compile or narrate |
+| `--operation` | build, compile, narrate, foundry or native |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
 ### `worldloom studio serve`

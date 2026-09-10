@@ -1,8 +1,8 @@
 """Measure candidate shape without treating generation requests as evidence.
 
-The World exposes canonical records and compiled content. Native layout and
-tool execution require different witnesses; until supplied, those constraints
-are explicitly unsupported and cannot admit a candidate.
+The World exposes canonical records and compiled content. Office structure is
+measured from the actual package bytes. Layout, evidence placement and tool
+execution need independent witnesses and remain explicit failures without them.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 from .connector_data import ConnectorRecord, builtin_projections
 from .eval_design import EvalShape
 from .models import Model
+from .native_artifacts import NativeArtifactError, NativeSnapshot, inspect_artifact
 
 if TYPE_CHECKING:
     from .world import World
@@ -99,8 +100,40 @@ def artifact_byte_witnesses(world: World) -> dict[tuple[str, str], ArtifactByteW
     return witnesses
 
 
-def _artifact_sizes(world: World) -> dict[tuple[str, str], int]:
-    return {key: witness.size_bytes for key, witness in artifact_byte_witnesses(world).items()}
+def _native_snapshot(world: World, witness: ArtifactByteWitness) -> NativeSnapshot | None:
+    if witness.size_bytes > 512 * 1024 * 1024:
+        return None
+    payload: bytes | None = None
+    if world._rendered:
+        for item in world._rendered:
+            if item.artifact_id == witness.artifact_id and item.path == witness.path:
+                payload = item.payload
+                break
+    elif world.root is not None:
+        try:
+            root = world.root.resolve()
+            source = (root / witness.path).resolve(strict=True)
+            if source.is_relative_to(root):
+                payload = source.read_bytes()
+        except (OSError, RuntimeError):
+            return None
+    if payload is None or hashlib.sha256(payload).hexdigest() != witness.payload_digest:
+        return None
+    try:
+        return inspect_artifact(payload, witness.format)
+    except NativeArtifactError:
+        return None
+
+
+_NATIVE_METRICS = {
+    "docx": {"paragraphs": "paragraphs", "image_bytes": "image_bytes"},
+    "pptx": {"slides": "slides", "image_bytes": "image_bytes",
+             "speaker_note_slides": "speaker_notes", "hidden_slides": "hidden_slides",
+             "native_charts": "native_charts"},
+    "xlsx": {"sheets": "sheets", "rows_per_sheet": "rows_per_sheet",
+             "columns_per_sheet": "columns_per_sheet", "image_bytes": "image_bytes",
+             "formulas": "formula_cells", "comments": "comments"},
+}
 
 
 def check_candidate_shape(
@@ -161,21 +194,24 @@ def check_candidate_shape(
     native_formats = {suffix[1:] for suffix in _NATIVE_SUFFIXES} | {"markdown"}
     irs = {ir.id: ir for ir in world.artifact_irs}
     intents = {intent.id: intent for intent in world.artifact_intents}
-    artifact_sizes = _artifact_sizes(world) if shape.artifacts else {}
+    artifact_witnesses = artifact_byte_witnesses(world) if shape.artifacts else {}
+    snapshots: dict[tuple[str, str], NativeSnapshot | None] = {}
     for index, artifact_requirement in enumerate(shape.artifacts):
         key = f"shape.artifacts[{index}]"
         native = artifact_requirement.artifact_type in native_formats
+        metric_fields = _NATIVE_METRICS.get(artifact_requirement.artifact_type, {})
         unsupported_fields = [name for name in (
             "pages", "slides", "sheets", "rows_per_sheet", "columns_per_sheet",
             "image_bytes", "speaker_note_slides", "hidden_slides", "native_charts",
             "formulas", "comments", "evidence_index", "evidence_modality", "locator_required",
-        ) if getattr(artifact_requirement, name)]
-        if native and artifact_requirement.paragraphs:
+        ) if getattr(artifact_requirement, name) and name not in metric_fields]
+        if native and artifact_requirement.paragraphs and "paragraphs" not in metric_fields:
             unsupported_fields.append("paragraphs")
         unsupported(key, unsupported_fields)
         suffix = "md" if artifact_requirement.artifact_type == "markdown" else artifact_requirement.artifact_type
         rendered: dict[str, int] = {}
-        for (identifier, extension), size in artifact_sizes.items():
+        for (identifier, extension), byte_witness in artifact_witnesses.items():
+            size = byte_witness.size_bytes
             if identifier not in intents:
                 continue
             if not native or extension == f".{suffix}":
@@ -184,12 +220,26 @@ def check_candidate_shape(
             identifier for identifier, intent in intents.items()
             if intent.artifact_type == artifact_requirement.artifact_type and identifier in irs
         }
+        if artifact_requirement.artifact_type in _NATIVE_METRICS:
+            for identifier in sorted(candidates):
+                snapshot_key = (identifier, f".{suffix}")
+                if snapshot_key not in snapshots:
+                    snapshots[snapshot_key] = _native_snapshot(world, artifact_witnesses[snapshot_key])
+            # A revision chain must consist of readable native versions too.
+            candidates = {identifier for identifier in candidates if snapshots[(identifier, f".{suffix}")] is not None}
         eligible: list[str] = []
         for identifier in sorted(candidates):
             ir = irs.get(identifier)
+            if artifact_requirement.artifact_type in _NATIVE_METRICS:
+                snapshot = snapshots[(identifier, f".{suffix}")]
+                if snapshot is None or any(
+                    snapshot.metrics.get(metric, 0) < getattr(artifact_requirement, field)
+                    for field, metric in metric_fields.items()
+                ):
+                    continue
             if artifact_requirement.file_size_bytes and rendered.get(identifier, 0) < artifact_requirement.file_size_bytes:
                 continue
-            if artifact_requirement.paragraphs:
+            if artifact_requirement.paragraphs and not native:
                 paragraphs = sum(len(re.split(r"\n\s*\n", section.body.strip()))
                                  for section in ir.sections if section.body and section.body.strip()) if ir else 0
                 if paragraphs < artifact_requirement.paragraphs:
@@ -203,7 +253,7 @@ def check_candidate_shape(
             if len(chain) >= artifact_requirement.versions:
                 eligible.append(identifier)
         count(key, eligible, artifact_requirement.instances,
-              "rendered native artifacts or compiled logical artifacts meeting size, paragraph and revision minima")
+              "parsed native bytes or compiled logical artifacts jointly meeting supported size, structure and revision minima; pages and evidence placement require independent witnesses")
 
     for index, thread_requirement in enumerate(shape.threads):
         key = f"shape.threads[{index}]"

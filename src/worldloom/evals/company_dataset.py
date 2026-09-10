@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from ..corpus import write_json
 from ..enterprise_sdk import EnterpriseEvalHarness
@@ -31,6 +37,16 @@ class CompanyDatasetPlan(DatasetPlan):
     split_by: Literal["task", "company", "case"] = "case"
     world_digest: str | None = None
     lineage: dict[str, dict[str, str]] = Field(default_factory=dict)
+    generation_contracts: dict[str, str] = Field(default_factory=dict)
+    split_assignments: dict[str, str] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _existing_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = handler(self)
+        for name in ("generation_contracts", "split_assignments"):
+            if not getattr(self, name):
+                data.pop(name, None)
+        return data
 
     @model_validator(mode="after")
     def _one_company(self) -> CompanyDatasetPlan:
@@ -41,6 +57,10 @@ class CompanyDatasetPlan(DatasetPlan):
             raise ValueError("one company cannot populate company-disjoint splits; choose case or task")
         if set(self.lineage) - {s.id for s in self.strata}:
             raise ValueError("lineage names an unknown dataset stratum")
+        if set(self.generation_contracts) - {s.id for s in self.strata}:
+            raise ValueError("generation contract names an unknown dataset stratum")
+        if set(self.split_assignments.values()) - self.split_weights.keys():
+            raise ValueError("fixed assignment names an unknown split")
         return self
 
 
@@ -56,9 +76,13 @@ class FrozenCompanyBuilder:
 
     id = "worldloom-company-dataset/v1"
 
-    def __init__(self, world: World, *, seed: int = 8128) -> None:
+    def __init__(self, world: World, *, seed: int = 8128,
+                 query_transforms: Mapping[str, Callable[[Any], Any]] | None = None,
+                 bind_cases: bool = False) -> None:
         self.world = world
         self.seed = seed
+        self.query_transforms = query_transforms or {}
+        self.bind_cases = bind_cases
         self._harnesses: dict[str, EnterpriseEvalHarness] = {}
 
     def __call__(self, request: DatasetRequest) -> DatasetBuild:
@@ -70,6 +94,8 @@ class FrozenCompanyBuilder:
                       source.incident_rule.model_dump(mode="json") if source.incident_rule else None])
         if key not in self._harnesses:
             harness = EnterpriseEvalHarness.from_world(self.world)
+            if self.bind_cases:
+                harness = harness.with_operational_case_binding()
             if source.simulation is not None and source.incident_rule is not None:
                 # The same process is the same evidence across normal/fault
                 # strata. An incident title or batch number cannot reseed it.
@@ -82,7 +108,7 @@ class FrozenCompanyBuilder:
         return DatasetBuild(self._harnesses[key], {
             "scope": "company", "company_spec": source.company,
             "source_seed": self.seed, "acknowledged_unmet": list(source.acknowledged_unmet),
-        })
+        }, self.query_transforms.get(request.stratum))
 
 
 def prepare_company(

@@ -343,7 +343,7 @@ def enrich_ir(world: World, intent: ArtifactIntent, ir: ArtifactIR) -> ArtifactI
 
 
 def enrich_world(world: World) -> World:
-    staged = world if world.artifact_irs else world.compile()
+    staged = world if world.artifact_irs or not world.artifact_intents else world.compile()
     irs = tuple(enrich_ir(staged, staged.artifact_intents.by_id(ir.intent_id), ir) for ir in staged.artifact_irs)
     recipe = dict(staged.recipe)
     recipe["artifact_realism"] = "ecology/v1"
@@ -353,7 +353,7 @@ def enrich_world(world: World) -> World:
 
 
 def episode_graph(world: World) -> EpisodeGraph:
-    staged = world if world.artifact_irs else world.compile()
+    staged = world if world.artifact_irs or not world.artifact_intents else world.compile()
     episode_id = f"EP-{content_key(staged.seed, staged.company.id, staged.period or 'current')[:12].upper()}"
     nodes: list[EvidenceNode] = []
     edges: list[EvidenceEdge] = []
@@ -398,7 +398,9 @@ def episode_graph(world: World) -> EpisodeGraph:
 
 
 def profile(world: World) -> RealismProfile:
-    staged = world if world.artifact_irs else world.compile()
+    # A structured-only World has an empty artifact ecology, not missing
+    # compilation. Nonempty intents still have to pass the real compiler.
+    staged = world if world.artifact_irs or not world.artifact_intents else world.compile()
     functions = sorted({person.function for person in staged.people})
     plans: list[SurfacePlan] = []
     lifecycles: list[ArtifactLifecycle] = []

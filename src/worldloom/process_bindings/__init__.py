@@ -23,6 +23,7 @@ from .models import (
     CoverageCell,
     Finding,
 )
+from .ownership import materialize_owners
 from .situations import Situation, coverage, situations, situations_for
 from .storage import (
     baseline_parity,
@@ -36,6 +37,7 @@ __all__ = [
     "ActivityBinding", "BusinessUnit", "CompanySpec", "CompiledCatalogue", "CoverageCell", "Finding",
     "ProcessDemand", "Situation", "compile_company", "coverage", "default_company",
     "load_catalogue", "situations", "situations_for",
+    "materialize_owners",
     "authoring_brief", "dataset", "demands", "lexicon_records", "sample_channels", "tool_surface", "verify_ownership",
     "baseline_parity", "replay_builtin", "summary", "verify_export", "write_compilation",
 ]
