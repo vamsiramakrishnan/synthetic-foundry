@@ -200,12 +200,17 @@ def _install() -> None:
     from . import eval_interventions as _eval_interventions  # noqa: F401
     from . import eval_witnesses as _eval_witnesses  # noqa: F401
 
+    # Connected operational evidence must replay and validate in a fresh
+    # process, including callers that never import the Studio application.
+    from . import retail_replenishment as _retail_replenishment  # noqa: F401
+
     # And for the `eval_plausibility` check group, for the same reason as
     # `cohorts` above: the group reads the request tuple on a corpus's own
     # evaluation cases at check time, so nothing on the way to building or
     # loading a world imports it, and `worldloom validate <corpus>` in a fresh
     # process would otherwise report a clean run having checked none of them.
     from .evals import plausibility as _eval_plausibility
+    from .process_bindings import ownership as _process_ownership  # noqa: F401
 
     _eval_plausibility.install()
 

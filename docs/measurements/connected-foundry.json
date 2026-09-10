@@ -1,0 +1,199 @@
+{
+  "byte_identical_dataset_replay": true,
+  "company": "Northstar Retail",
+  "examples": [
+    {
+      "batch": 0,
+      "case_id": "3d5250f2d48406022cb636bb7d652af6",
+      "company_id": "83243a33f06f3e2d25405e45035e8276",
+      "dimensions": {
+        "dag_shape": "conditional",
+        "failure": "partial_write",
+        "operation": "draft",
+        "output_format": "html",
+        "source_set": "servicenow",
+        "workflow": "inventory_exception"
+      },
+      "evidence": [
+        "19950d2f33c09f58e17bee1761b2249f",
+        "3b998c4ba8262a8091bccd5d3906746d",
+        "95b1b712c97d67d2a478f9db2ebd5ca8",
+        "ad384bbff4988044a215aa97be1bd464"
+      ],
+      "id": "13c0d357984c908bd10a99d4967e5e2a",
+      "lineage": {
+        "activities": "f2r.02",
+        "business_unit": "Food",
+        "lob": "",
+        "project": "844be8440c93181bbd2eec260957e71c",
+        "revision": "875b9e0f5bba6b4045395d54268d5ece",
+        "use_case": "inventory-exception"
+      },
+      "proof_digest": "b69cc6f2a83274446e2ce3544abc3e51",
+      "qualification": "batches/00000000/qualified",
+      "query": "For Northstar Retail, Review lost demand and the inventory-position replenishment order it caused. Use the relevant ServiceNow incident; join case_id and inspect source observation histories and upstream_event_ids. Preserve each stage's observation cutoff. Draft a HTML in Email, then verify the result against the authoritative source. Report completed and incomplete write branches separately. Choose the primary write when the first source returns at least two records; otherwise use the fallback write. Verify only the branch that ran. Scope this work to these source records: servicenow incident 9acb925252d10f69d766b2fb (Inventory exception: SYN-888E78C93A440CDEB53C7F7D1D493252 at tick 1); servicenow incident b18379ac496ca342f313dfdd (Inventory exception: SYN-705ED952D7C64ABFCB76E7C1A444E6B2 at tick 5).",
+      "query_id": "ca6459b8208d36e445154abf377ba174",
+      "request_id": "fde9f4ca520420f19eed5354d6cfe202",
+      "split": "train",
+      "stratum": "inventory-exception",
+      "task_id": "43437a012d7083a89ca9d85a01591979"
+    },
+    {
+      "batch": 2,
+      "case_id": "2bf00eac1f01355b319a1005219e576c",
+      "company_id": "83243a33f06f3e2d25405e45035e8276",
+      "dimensions": {
+        "dag_shape": "conditional",
+        "failure": "none",
+        "operation": "draft",
+        "output_format": "html",
+        "source_set": "email",
+        "workflow": "supplier_replenishment"
+      },
+      "evidence": [
+        "5e312c9d5d8fe4dd3140847fb6b47acc",
+        "5f38dbc190f50300bf904bdfd1e1ad9a",
+        "745f216ea6d653708e98967c881708f9",
+        "8d9ad28642200bdf3ffb41132356131e"
+      ],
+      "id": "456530486828ed354d4c3a68fa7d5dff",
+      "lineage": {
+        "activities": "p2p.04",
+        "business_unit": "Supply Chain",
+        "lob": "",
+        "project": "844be8440c93181bbd2eec260957e71c",
+        "revision": "875b9e0f5bba6b4045395d54268d5ece",
+        "use_case": "supplier-replenishment"
+      },
+      "proof_digest": "acd3f54ffc1dc602669d185c176b0f6b",
+      "qualification": "batches/00000002/qualified",
+      "query": "For Northstar Retail, Trace the supplier order to its actual two-tick goods receipt and stock movement. Use the relevant email thread; join case_id and inspect source observation histories and upstream_event_ids. Preserve each stage's observation cutoff. Draft a HTML in Email, then verify the result against the authoritative source. Choose the primary write when the first source returns at least two records; otherwise use the fallback write. Verify only the branch that ran. Scope this work to these source records: email thread f7241a9c40eda74b68b19cf9 (Supplier replenishment: SYN-46D5896EB0B249C9035C28BE1552AF5C at tick 3).",
+      "query_id": "83f71b3b857bef54d396866e358a11e9",
+      "request_id": "b15da414c994da1204bdc776ec74b911",
+      "split": "train",
+      "stratum": "supplier-replenishment",
+      "task_id": "678589391fb8f6b26b6f77dfb55195e3"
+    },
+    {
+      "batch": 1,
+      "case_id": "a884193e7c44032ee813d1e3ab6af675",
+      "company_id": "83243a33f06f3e2d25405e45035e8276",
+      "dimensions": {
+        "dag_shape": "diamond",
+        "failure": "none",
+        "operation": "draft",
+        "output_format": "html",
+        "source_set": "jira+servicenow",
+        "workflow": "invoice_reconciliation"
+      },
+      "evidence": [
+        "2bcbcff77f76d0e19ecda0c2957c074b",
+        "6e57133a85770ecae82deaf8cdcd9759",
+        "a0d4e792d32f58577d82da8e8a03b219",
+        "ae00a16016f871ceecf9d904c16151ec",
+        "ff738cf0bfca50c9abea2800582e7d2c"
+      ],
+      "id": "1aa29f16189b944a8d051afd4fad5660",
+      "lineage": {
+        "activities": "p2p.09",
+        "business_unit": "Supply Chain",
+        "lob": "",
+        "project": "844be8440c93181bbd2eec260957e71c",
+        "revision": "875b9e0f5bba6b4045395d54268d5ece",
+        "use_case": "invoice-reconciliation"
+      },
+      "proof_digest": "b299b69074bdbe2c7452a145117cd554",
+      "qualification": "batches/00000001/qualified",
+      "query": "For Northstar Retail, Reconcile the invoice with the contracted price and actual receipt, retaining clean controls and reporting price exceptions. Use the relevant Jira issue, and the relevant ServiceNow incident; join case_id and inspect source observation histories and upstream_event_ids. Preserve each stage's observation cutoff. Draft a HTML in Email, then read the saved result back and verify the change. Project record identifiers and titles independently, join both projections into the write, and verify it. Scope this work to these source records: jira issue RPL-94831221169489 (Invoice reconciliation: SYN-46D5896EB0B249C9035C28BE1552AF5C at tick 9); servicenow incident b25c765970d7a0bc32f454c5 (Invoice reconciliation: SYN-46D5896EB0B249C9035C28BE1552AF5C at tick 9).",
+      "query_id": "b7dbb44315ac375efcec0ea5ec076953",
+      "request_id": "682fb86d0f5eebe71ed5438a78c87b70",
+      "split": "train",
+      "stratum": "invoice-reconciliation",
+      "task_id": "59094f528e898f5dedca78927ad85f2a"
+    }
+  ],
+  "native_artifact_analysis_measured": false,
+  "process_evidence": {
+    "cases": 48,
+    "clean_invoices": 24,
+    "contested_invoices": 24,
+    "eligible_complete_cases": 129,
+    "excluded_by_case_budget": 81,
+    "maximum_cases": 48,
+    "orders_beyond_receipt_horizon": 16,
+    "scope": "operational_simulation_not_macro_reconciliation",
+    "stages": {
+      "inventory_exception": 48,
+      "invoice_reconciliation": 48,
+      "supplier_replenishment": 48
+    },
+    "unresolved_obligations": [
+      "Partial deliveries",
+      "Credit-note settlement and payment approval",
+      "Macro ledger reconciliation"
+    ]
+  },
+  "real_agent_difficulty_measured": false,
+  "reference_qualification_only": true,
+  "report": {
+    "accepted": 36,
+    "batches": 3,
+    "cases": 36,
+    "companies": 1,
+    "complete": true,
+    "equivalent_plans_removed": 925,
+    "facets": {
+      "dag_shape": {
+        "conditional": 7,
+        "deep_chain": 7,
+        "diamond": 5,
+        "fan_in": 6,
+        "fan_out": 6,
+        "map_read": 5
+      },
+      "failure": {
+        "none": 14,
+        "partial_write": 22
+      },
+      "operation": {
+        "draft": 36
+      },
+      "output_format": {
+        "html": 36
+      },
+      "source_set": {
+        "email": 11,
+        "jira": 7,
+        "jira+servicenow": 9,
+        "servicenow": 9
+      },
+      "workflow": {
+        "inventory_exception": 12,
+        "invoice_reconciliation": 12,
+        "supplier_replenishment": 12
+      }
+    },
+    "findings": [],
+    "largest_split_group": 8,
+    "planned_candidates": 1536,
+    "refusals": {},
+    "remaining": {
+      "inventory-exception": 0,
+      "invoice-reconciliation": 0,
+      "supplier-replenishment": 0
+    },
+    "requests": 36,
+    "split_counts": {
+      "test": 4,
+      "train": 29,
+      "validation": 3
+    },
+    "split_groups": 14,
+    "target": 36,
+    "tasks": 27
+  },
+  "reproduce": "python tools/measure_connected_foundry.py --out ./connected-pilot --report ./connected-pilot.json",
+  "schema": "worldloom.connected-foundry-measurement/v1",
+  "seed": 8128,
+  "source_digest": "6d2506067817546ae1fab2eff4d0281d"
+}

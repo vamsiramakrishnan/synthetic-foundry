@@ -78,7 +78,7 @@ def show_command(project: str, workspace: Workspace = Path("./worldloom-workspac
 
 @studio_app.command("run")
 def run_command(
-    project: str, operation: Annotated[str, typer.Option(help="build, compile or narrate")] = "compile",
+    project: str, operation: Annotated[str, typer.Option(help="build, compile, narrate, foundry or native")] = "compile",
     workspace: Workspace = Path("./worldloom-workspace"),
     batch_limit: Annotated[int | None, typer.Option(min=1)] = None,
     harness_command: Annotated[str | None, typer.Option("--harness-command")] = None,
@@ -93,17 +93,23 @@ def run_command(
         studio = Studio(workspace)
         revision = studio.store.get(project)["revision"]
         options = RunOptions.model_validate({"operation": operation, "batch_limit": batch_limit,
-                                             "harness_identity": digest(harness_command) if operation == "narrate" else ""})
+                                             "harness_identity": digest(harness_command) if operation in {"narrate", "foundry", "native"} else ""})
         if options.operation == "interview":
             raise ValueError("use studio interview request for interviews")
         job = studio.store.enqueue(project, revision, options)
+        if job["status"] == "paused":
+            job = studio.store.retry(job["id"])
         run_job(studio, job["id"], harness_command=harness_command)
         result = studio.store.job(job["id"])
     except (OSError, ValueError, KeyError) as error:
         _refuse("studio_rejected", str(error))
     typer.echo(json.dumps(result, sort_keys=True))
+    if result["status"] == "paused":
+        _refuse("dataset_incomplete", "batch limit reached; repeat the command to resume committed work", exit_code=3)
     if result["status"] != "complete":
         _refuse("studio_rejected", result["error"] or "run is waiting for the active worker")
+    if result["result"].get("status") == "blocked":
+        _refuse("studio_rejected", "run has unmet gates; see its findings and calibration report", exit_code=3)
     if result["result"].get("report", {}).get("complete") is False:
         _refuse("dataset_incomplete", "company dataset has unmet quotas; see the run report", exit_code=3)
 

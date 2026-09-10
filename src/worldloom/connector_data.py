@@ -783,11 +783,13 @@ class ConnectorProjectionRegistry:
         self._projections = dict(projections)
 
     def project(self, connector: str, world: World) -> list[ConnectorRecord]:
+        from .retail_replenishment import project_records as retail_records
+
         projection = self._projections.get(connector)
         if projection is None and connector not in _defined_connectors():
             raise ValueError(f"unknown connector projection {connector!r}")
         base = projection(world) if projection is not None else []
-        return [*base, *generate_witnesses(world, connector)]
+        return [*base, *generate_witnesses(world, connector), *retail_records(world, connector)]
 
     @property
     def names(self) -> tuple[str, ...]:

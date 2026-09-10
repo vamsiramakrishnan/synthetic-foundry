@@ -250,6 +250,7 @@ def narrate_loop(
     timeout: float = DEFAULT_TIMEOUT,
     shell: bool = False,
     on_round: Callable[[LoopRound], None] | None = None,
+    exchange: Callable[[dict[str, Any]], ExecReply] | None = None,
 ) -> LoopResult:
     """Drive *command* until every section's prose is accepted, or rounds run out.
 
@@ -292,7 +293,7 @@ def narrate_loop(
 
     for number in range(1, max_rounds + 1):
         payload = {**document, "requests": [requests_by_id[i] for i in outstanding]}
-        reply = run_exec(command, payload, timeout=timeout, shell=shell)
+        reply = exchange(payload) if exchange else run_exec(command, payload, timeout=timeout, shell=shell)
         try:
             responses = handshake.parse_responses(reply.document)
         except ValueError as exc:

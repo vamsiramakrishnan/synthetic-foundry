@@ -8,13 +8,19 @@ from pydantic import Field, model_validator
 
 from ..company import from_document, resolve
 from ..enterprise_specs import ScenarioProfile
+from ..eval_design import EvalSpec
 from ..evals.dataset_contract import DatasetSource
 from ..lob import Lob, lint_lob
 from ..models import Model
+from ..native_corpus import NativeCorpusPlan
+from ..native_tasks import NativeTask
 from ..packs import Pack, PackUnit
 from ..process_bindings.models import CompanySpec as ProcessCompany
+from ..retail_replenishment import RetailProcess
 from ..synthesis.connectors import IncidentRule
 from ..synthesis.models import Program
+from .calibration import CompanyCalibrationPlan
+from .native_calibration import NativeCalibrationPlan
 
 
 class UseCase(Model):
@@ -30,6 +36,7 @@ class UseCase(Model):
     incident_rule: IncidentRule | None = None
     dag_shapes: tuple[str, ...] = ("*",)
     where: dict[str, str] = Field(default_factory=dict)
+    construction: EvalSpec | None = None
 
     def source(self, project: ProjectSpec) -> DatasetSource:
         if self.scenario is None:
@@ -50,6 +57,11 @@ class ProjectSpec(Model):
     divisions: tuple[PackUnit, ...] = ()
     episodes: tuple[str, ...] = ()
     narration_job: str | None = Field(default=None, pattern=r"^[a-f0-9]{30,64}$")
+    calibration: CompanyCalibrationPlan | None = None
+    retail_process: RetailProcess | None = None
+    native_calibration: NativeCalibrationPlan | None = None
+    native_corpus: tuple[NativeCorpusPlan, ...] = ()
+    native_tasks: tuple[NativeTask, ...] = ()
     use_cases: tuple[UseCase, ...] = ()
     acknowledged_unmet: tuple[str, ...] = ()
     max_batches: int = Field(default=16, ge=1, le=10_000, strict=True)
@@ -88,6 +100,18 @@ class ProjectSpec(Model):
             raise ValueError("process structure and company profile must name the same company")
         if len({u.id for u in self.use_cases}) != len(self.use_cases):
             raise ValueError("use case IDs must be unique")
+        if len({plan.artifact_id for plan in self.native_corpus}) != len(self.native_corpus):
+            raise ValueError("native corpus artifact IDs must be unique")
+        if len({task.id for task in self.native_tasks}) != len(self.native_tasks):
+            raise ValueError("native task IDs must be unique")
+        native_ids = {plan.artifact_id for plan in self.native_corpus}
+        for task in self.native_tasks:
+            if not task.prompt.strip():
+                raise ValueError("native task requires a business question for the target")
+            if task.use_case_id not in {case.id for case in self.use_cases}:
+                raise ValueError("native task must name its owning use case")
+            if any(source.artifact_id not in native_ids for source in task.inputs):
+                raise ValueError("native task names an artifact outside this company's native corpus")
         if len({lob.name for lob in self.lobs}) != len(self.lobs):
             raise ValueError("LOB names must be unique")
         if any(lob.engine != resolution.engine for lob in self.lobs):
@@ -103,6 +127,16 @@ class ProjectSpec(Model):
             date.fromisoformat(period + "-01")
         rows = compile_company(self.structure).rows if self.structure else ()
         units = {bu.name for bu in self.structure.bus} if self.structure else set()
+        if self.retail_process is not None:
+            if resolution.engine != "retail":
+                raise ValueError("retail processes require the retail company engine")
+            for scope in self.retail_process.scopes:
+                if scope.business_unit not in units:
+                    raise ValueError("retail process names an unknown business unit")
+                if scope.activity_id not in {row.activity_id for row in rows if row.owner_bu == scope.business_unit}:
+                    raise ValueError("retail process names an activity outside its owner")
+                if scope.lob and scope.lob not in {lob.name for lob in self.lobs}:
+                    raise ValueError("retail process names an unknown LOB")
         for case in self.use_cases:
             if case.owner and case.owner not in units:
                 raise ValueError(f"use case {case.id} names an unknown business unit")
@@ -126,7 +160,7 @@ class InterviewReply(Model):
 
 
 class RunOptions(Model):
-    operation: Literal["build", "compile", "interview", "narrate"]
+    operation: Literal["build", "compile", "interview", "narrate", "foundry", "native"]
     batch_limit: int | None = Field(default=None, ge=1, le=10_000, strict=True)
     message: str = Field(default="", max_length=8000)
     max_rounds: int = Field(default=2, ge=1, le=8, strict=True)

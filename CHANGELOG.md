@@ -11,6 +11,61 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: native difficulty measurement and retail pilot
+
+- Add opt-in fixed-corpus native calibration using existing empirical
+  calibration observations and Wilson intervals. Seal independent evidence
+  components before trials, commit the training decision before holdout, and
+  require supported intervals within the declared band for every outcome group.
+  Native noise evolution is not implied by this measurement.
+- Add a reproducible retail pilot using actual company episodes, accepted
+  reference narration and native read, calculation, update and creation tasks.
+  Keep reference qualification separate from observed target performance.
+- Expose native calibration contracts and results in Studio. Fix Windows
+  subprocess test quoting and consume bounded rejected HTTP request bodies
+  before returning the refusal, preventing connection resets hiding the 403.
+
+### Generation: grounded native corpora and executable file tasks
+
+- Add opt-in native corpus plans that assemble accepted company ArtifactIR
+  sections into DOCX, PPTX and XLSX. Enforce content and distinct-fact quotas,
+  deterministic bytes and evidence locators verified against actual files.
+  Reuse canonical numeric facts in workbook cells for arithmetic evaluations.
+- Add byte-bound read, analysis, update and creation contracts. Grade cited
+  answers and submitted native files; updates require the original checksum
+  and preserve unaffected extracted content. Retain explicit refusals for
+  unsupported PDF inspection and rendered pagination.
+- Add Studio Documents & files and the native run operation, sharing company
+  revisions, narration, coding-harness exchanges and replay checkpoints.
+  Report observed native outcomes separately from noise calibration; shared
+  source evidence forms one component rather than independent samples.
+- Inspect native file shape requirements against parsed Office bytes instead
+  of treating requested dimensions as observed evidence.
+
+### Generation: eval-driven company construction and measured selection
+
+- Add opt-in Studio foundry runs that compile explicit use-case construction
+  contracts, detect shared-world conflicts and bind source predicates into
+  executable queries. Reuse existing recipe tactics and require domain evidence
+  for scoped owners and processes. Revalidate all obligations after construction.
+- Materialize declared support units without trading revenue allocation. Add a
+  connected retail mechanism for lost demand, orders, two-tick receipts and
+  invoice price arithmetic. Company events own the evidence projected into
+  Jira, ServiceNow and email. Partial delivery, payment and ledger settlement
+  remain explicit unresolved obligations. These opt-in steps change recipe,
+  event, connector and fixture bytes.
+- Compose narration, reference qualification, reader recovery and target-agent
+  connector trials through durable checkpoints. Compare noise versions of one
+  company using independent evidence components per use case and the existing
+  Wilson estimator. Freeze selection before target holdout outcomes; an unmet
+  gate publishes no calibrated dataset. Reference and reader quality inspect
+  all candidate evidence before that selection.
+- Add Studio stage, obligation, noise, coverage and measured-difficulty views,
+  plus CLI `--operation foundry`. Reconstruct isolated connector effects from
+  recorded proposals on resume. Target grading establishes observed connector
+  contracts, not free-form answer correctness. Default generation and existing
+  collection replay contracts remain unchanged.
+
 ### Generation: one-company datasets and local Studio
 
 - Add `CompanyDatasetPlan`, separate from the existing multi-company

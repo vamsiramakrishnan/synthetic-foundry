@@ -206,18 +206,20 @@ def check_requirement(
 ) -> RequirementCheck:
     """Evaluate one declarative requirement against a completed candidate."""
 
-    realism = realism or realism_profile(world)
     if requirement.kind == RequirementKind.FACT:
         return _check_records(requirement, world.facts)
     if requirement.kind == RequirementKind.EVENT:
         return _check_records(requirement, world.events)
     if requirement.kind in {RequirementKind.ARTIFACT, RequirementKind.DISTRACTOR}:
+        realism = realism or realism_profile(world)
         return _check_records(requirement, _artifact_records(world, realism))
     if requirement.kind == RequirementKind.PERMISSION:
         return _check_records(requirement, world.access_policies)
     if requirement.kind == RequirementKind.REVISION_CHAIN:
+        realism = realism or realism_profile(world)
         return _check_revision_chain(requirement, world, realism)
     if requirement.kind == RequirementKind.TEMPORAL_RELATION:
+        realism = realism or realism_profile(world)
         return _check_temporal_relation(requirement, realism)
     if requirement.kind == RequirementKind.CONNECTOR:
         connector = requirement.selector.get("connector")
@@ -260,7 +262,12 @@ def validate_candidate(plan: CandidatePlan, spec: EvalSpec, world: World) -> Can
     if (plan.design_digest != design_digest(spec) or plan.requirements != spec.requirements
             or plan.shape != spec.shape):
         raise ValueError("candidate plan does not match the immutable eval design")
-    realism = realism_profile(world)
+    # Structured evidence does not require a document compiler. Share ecology
+    # only for requirements that actually inspect its lifecycle or graph.
+    ecology_kinds = {RequirementKind.ARTIFACT, RequirementKind.DISTRACTOR,
+                    RequirementKind.REVISION_CHAIN, RequirementKind.TEMPORAL_RELATION}
+    realism = (realism_profile(world)
+               if any(r.kind in ecology_kinds for r in plan.requirements) else None)
     checks = tuple(
         check_requirement(requirement, world, realism=realism)
         for requirement in plan.requirements

@@ -134,15 +134,16 @@ class ProjectStore:
 
     def retry(self, key: str) -> dict[str, Any]:
         with self.connection() as db:
-            changed = db.execute("UPDATE jobs SET status='queued', error=NULL WHERE id=? AND status IN ('failed','interrupted')", (key,))
+            changed = db.execute("UPDATE jobs SET status='queued', error=NULL WHERE id=? AND status IN ('failed','interrupted','paused')", (key,))
             if changed.rowcount != 1:
-                raise StudioConflict("only failed or interrupted runs can be retried")
+                raise StudioConflict("only failed, interrupted or paused runs can be retried")
         return self.job(key)
 
     def finish(self, key: str, *, result: dict[str, Any] | None = None, error: str | None = None) -> None:
         with self.connection() as db:
             db.execute("UPDATE jobs SET status=?, result=?, error=? WHERE id=?",
-                       ("failed" if error else "complete", canonical(result) if result is not None else None,
+                       ("failed" if error else "paused" if result and result.get("status") == "paused" else "complete",
+                        canonical(result) if result is not None else None,
                         error[:4000] if error else None, key))
 
 

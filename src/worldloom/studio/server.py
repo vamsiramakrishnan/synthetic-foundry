@@ -88,6 +88,18 @@ class StudioHandler(BaseHTTPRequestHandler):
         if mutation:
             valid = valid and self.headers.get("X-Worldloom-Studio") == "1" and self.headers.get("Content-Type", "").split(";")[0] == "application/json"
         if not valid:
+            # Closing with a normal POST body still unread can reset the TCP
+            # connection on Windows before the client receives its 403. Drain
+            # only bounded, explicitly sized bodies; never parse or dispatch them.
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = 0
+            if 0 < length <= MAX_BODY and not self.headers.get("Transfer-Encoding"):
+                try:
+                    self.rfile.read(length)
+                except (TimeoutError, OSError):
+                    self.close_connection = True
             self.send(403, {"error": "This console accepts local, same-origin requests only"})
         return bool(valid)
 
@@ -139,6 +151,9 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             if method == "GET" and len(parts) == 3 and parts[:2] == ["api", "jobs"]:
                 job = studio.store.job(parts[2])
+                if job["options"]["operation"] == "foundry":
+                    from .foundry import progress as foundry_progress
+                    job["progress"] = foundry_progress(studio, job["id"])
                 if job["options"]["operation"] == "compile":
                     from ..providers import digest
                     progress = studio.path("datasets", digest([job["project"], job["revision"]])) / "progress.json"
@@ -152,6 +167,17 @@ class StudioHandler(BaseHTTPRequestHandler):
                 if len(parts) == 3:
                     self.send(200, studio.describe(project, query.get("revision", [None])[0]))
                     return
+                if parts[3:] == ["native-sources"]:
+                    self.send(200, studio.native_sources(project, query.get("revision", [None])[0],
+                              offset=int(query.get("offset", ["0"])[0]), limit=int(query.get("limit", ["256"])[0])))
+                    return
+                if parts[3:] == ["native-artifact"]:
+                    payload, format = studio.native_artifact(project, query.get("job", [""])[0], query.get("artifact", [""])[0])
+                    types = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                             "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                             "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+                    self.send(200, payload, content_type=types[format])
+                    return
                 if parts[3:] == ["history"]:
                     self.send(200, studio.store.history(project))
                     return
@@ -162,7 +188,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 if parts[3:] == ["evals"]:
                     current = studio.store.get(project, query.get("revision", [None])[0])
                     from ..providers import digest
-                    location = studio.path("datasets", digest([project, current["revision"]]))
+                    location = studio.dataset_location(project, current["revision"])
                     source = location / "queryset.jsonl"
                     complete = source.exists()
                     if not complete:
@@ -197,12 +223,14 @@ class StudioHandler(BaseHTTPRequestHandler):
                         result = studio.apply_interview(project, body["request_id"])
                     elif action == "run":
                         options = RunOptions.model_validate(body["options"])
-                        if options.operation in {"interview", "narrate"} and not self.server.harness_command:
+                        if options.operation in {"interview", "narrate", "foundry"} and not self.server.harness_command:
                             raise ValueError("start Studio with a coding harness command, or export a request for your harness")
                         from ..providers import digest
                         options = options.model_copy(update={"harness_identity":
-                            digest(self.server.harness_command) if options.operation in {"interview", "narrate"} else ""})
+                            digest(self.server.harness_command) if options.operation in {"interview", "narrate", "foundry", "native"} else ""})
                         result = studio.store.enqueue(project, body["revision"], options)
+                        if result["status"] == "paused":
+                            result = studio.store.retry(result["id"])
                     else:
                         raise KeyError("unknown project action")
                     self.send(200, result)
