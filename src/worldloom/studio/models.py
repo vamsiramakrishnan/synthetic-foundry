@@ -20,6 +20,7 @@ from ..retail_replenishment import RetailProcess
 from ..synthesis.connectors import IncidentRule
 from ..synthesis.models import Program
 from .calibration import CompanyCalibrationPlan
+from .native_calibration import NativeCalibrationPlan
 
 
 class UseCase(Model):
@@ -58,6 +59,7 @@ class ProjectSpec(Model):
     narration_job: str | None = Field(default=None, pattern=r"^[a-f0-9]{30,64}$")
     calibration: CompanyCalibrationPlan | None = None
     retail_process: RetailProcess | None = None
+    native_calibration: NativeCalibrationPlan | None = None
     native_corpus: tuple[NativeCorpusPlan, ...] = ()
     native_tasks: tuple[NativeTask, ...] = ()
     use_cases: tuple[UseCase, ...] = ()

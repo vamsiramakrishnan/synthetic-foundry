@@ -1,0 +1,150 @@
+{
+  "accepted_narration_entries": 336,
+  "author": "deterministic-fake-1",
+  "byte_identical_run_replay": true,
+  "company": "Northstar Retail",
+  "company_facts": 10788,
+  "editorial_realism_measured": false,
+  "episodes": [
+    "2026-01",
+    "2026-02",
+    "2026-03",
+    "2026-04",
+    "2026-05",
+    "2026-06",
+    "2026-07",
+    "2026-08",
+    "2026-09",
+    "2026-10",
+    "2026-11",
+    "2026-12",
+    "2027-01",
+    "2027-02",
+    "2027-03",
+    "2027-04",
+    "2027-05",
+    "2027-06"
+  ],
+  "limitations": [
+    "Explicit location tasks do not measure evidence discovery.",
+    "Shared source facts form one evidence component; these tasks are not independent calibration samples.",
+    "Template authoring proves accepted provenance, not realistic human prose.",
+    "DOCX explicit page floor is not a measured renderer pagination count.",
+    "Formula expressions are graded without spreadsheet recalculation.",
+    "Creation grades evidence transfer, not original narrative synthesis or visual design."
+  ],
+  "project": "06bdb8125ae4a01f20beac03d8e93d11",
+  "queryset_digest": "a186f210fe53032f5186f00231a28a0a",
+  "reference_authoring_only": true,
+  "reference_qualified_tasks": 6,
+  "reproduce": "python tools/measure_native_pilot.py --out ./native-pilot --report ./native-pilot.json --periods 18 --units 200",
+  "result": {
+    "artifacts": 3,
+    "calibrated": false,
+    "calibration": {
+      "accepted": false,
+      "configured": false,
+      "findings": [],
+      "mode": "fixed_corpus"
+    },
+    "corpus_artifacts": {
+      "ART-RETAIL-CLOSE-BOOK": {
+        "artifact_id": "ART-RETAIL-CLOSE-BOOK",
+        "ballast_is_evidence": false,
+        "content_units": 200,
+        "distinct_fact_count": 533,
+        "evidence_digest": "5b4d45d4517d30acbca5ea4396357485",
+        "evidence_entries": 733,
+        "explicit_page_floor": 0,
+        "file_size_bytes": 30318,
+        "format": "xlsx",
+        "path": "inputs/a52edac23e9057085418574beed80af3.xlsx",
+        "sha256": "0605eef80abfa91beaab3eed5acad0aa7cbcf9c2378fa815316a340243b0d01d",
+        "source_artifact_count": 101
+      },
+      "ART-RETAIL-CLOSE-DECK": {
+        "artifact_id": "ART-RETAIL-CLOSE-DECK",
+        "ballast_is_evidence": false,
+        "content_units": 200,
+        "distinct_fact_count": 533,
+        "evidence_digest": "30bea65fa572245292c6e3deb3314b83",
+        "evidence_entries": 200,
+        "explicit_page_floor": 0,
+        "file_size_bytes": 246125,
+        "format": "pptx",
+        "path": "inputs/7b0926cdaa386594fe5e57414b2fa714.pptx",
+        "sha256": "ed380fae5f7434fe76215eb0a45889669e2b95d4909de0913f349c5e8e833ce3",
+        "source_artifact_count": 101
+      },
+      "ART-RETAIL-CLOSE-DOC": {
+        "artifact_id": "ART-RETAIL-CLOSE-DOC",
+        "ballast_is_evidence": false,
+        "content_units": 200,
+        "distinct_fact_count": 533,
+        "evidence_digest": "0b9e38ba991a4b53072ecf839557584a",
+        "evidence_entries": 200,
+        "explicit_page_floor": 200,
+        "file_size_bytes": 42099,
+        "format": "docx",
+        "path": "inputs/8de0778f6a62dd332da2fa587da1880a.docx",
+        "sha256": "cf7ff33a896ac29544071d6c109ea68cc4cd250289e5f5f52a1ce3543540ad6d",
+        "source_artifact_count": 101
+      }
+    },
+    "evidence_components": 1,
+    "native": "07d2c7472c0fd85613a1e71d5547bdaa",
+    "noise_calibrated": false,
+    "observed_trials": 0,
+    "outcomes": [],
+    "passed_trials": 0,
+    "schema": "worldloom.native-run/v1",
+    "snapshot": "4e7bd0afc47cee2bebd3ebb2dba21f32",
+    "split": "unassigned",
+    "status": "prepared",
+    "tasks": 6
+  },
+  "revision": "a7880321280da0a0b6d9b60b3a0e6a64",
+  "schema": "worldloom.native-retail-pilot/v1",
+  "seed": 8128,
+  "source_artifacts": 162,
+  "source_digest": "ea4e0a908b293db9491e02996a8cd3c8",
+  "target_command_configured": false,
+  "tasks": [
+    {
+      "evidence_component": "37c6e825ac3077ea60ed655bf8c3bf7d",
+      "id": "retail-read-late-document",
+      "operation": "read",
+      "prompt": "Retrieve the complete evidence paragraph at paragraph:599 in the retail close archive and cite it exactly."
+    },
+    {
+      "evidence_component": "37c6e825ac3077ea60ed655bf8c3bf7d",
+      "id": "retail-read-speaker-notes",
+      "operation": "read",
+      "prompt": "Retrieve the complete speaker notes at slide:200/notes from the retail close committee deck and cite them exactly."
+    },
+    {
+      "evidence_component": "37c6e825ac3077ea60ed655bf8c3bf7d",
+      "id": "retail-revenue-variance",
+      "operation": "analyze",
+      "prompt": "For retail revenue subject CO-0001 in 2027-03, compute actual minus budget in AUD_thousands. Actual is at sheet:Facts/cell:B516; budget is at sheet:Facts/cell:B520. Cite both cells."
+    },
+    {
+      "evidence_component": "37c6e825ac3077ea60ed655bf8c3bf7d",
+      "id": "retail-update-workbook",
+      "operation": "update",
+      "prompt": "Using revenue actual at sheet:Facts/cell:B516 and budget at sheet:Facts/cell:B520, replace the first Evidence row with a reviewed calculation: set Evidence!A2 to Revenue variance and Evidence!B2 to the formula =Facts!B516-Facts!B520. Preserve every other cell, formula and property; return the source checksum."
+    },
+    {
+      "evidence_component": "37c6e825ac3077ea60ed655bf8c3bf7d",
+      "id": "retail-update-document",
+      "operation": "update",
+      "prompt": "Change only the first paragraph heading to 'Retail close review evidence' in an updated copy of the archive. Preserve every other paragraph, table and property; return the source checksum."
+    },
+    {
+      "evidence_component": "37c6e825ac3077ea60ed655bf8c3bf7d",
+      "id": "retail-create-briefing",
+      "operation": "create",
+      "prompt": "Create a new one-slide PowerPoint evidence excerpt. Copy the complete paragraph at paragraph:599 in the archive verbatim into the first text shape on slide one. Put no title shape before it."
+    }
+  ]
+}

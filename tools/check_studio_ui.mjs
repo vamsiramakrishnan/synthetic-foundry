@@ -81,3 +81,8 @@ vm.runInContext("state.company=null; render();", context);
 assert.ok(document.querySelector("#app").innerHTML.includes('id="create-form"'));
 assert.ok(document.querySelector("#app").innerHTML.includes("Load connected retail pilot"));
 process.stdout.write("All seven views, calibration edits, run/resume, measured intervals, publication boundaries and HTML escaping passed.\n");
+
+const nativeSummary=vm.runInContext("nativeCalibrationResults({calibrated:false,calibration:{configured:true,training:{estimates:{read:{use_case_id:'retail',operation:'read',successes:2,trials:4,interval_low:0.1,interval_high:0.9,status:'insufficient_support'}}},findings:['training_not_supported']}})",context);
+assert.ok(nativeSummary.includes("Calibration incomplete"));
+assert.ok(nativeSummary.includes("2 / 4"));
+assert.ok(nativeSummary.includes("training_not_supported"));

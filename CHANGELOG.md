@@ -11,6 +11,20 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: native difficulty measurement and retail pilot
+
+- Add opt-in fixed-corpus native calibration using existing empirical
+  calibration observations and Wilson intervals. Seal independent evidence
+  components before trials, commit the training decision before holdout, and
+  require supported intervals within the declared band for every outcome group.
+  Native noise evolution is not implied by this measurement.
+- Add a reproducible retail pilot using actual company episodes, accepted
+  reference narration and native read, calculation, update and creation tasks.
+  Keep reference qualification separate from observed target performance.
+- Expose native calibration contracts and results in Studio. Fix Windows
+  subprocess test quoting and consume bounded rejected HTTP request bodies
+  before returning the refusal, preventing connection resets hiding the 403.
+
 ### Generation: grounded native corpora and executable file tasks
 
 - Add opt-in native corpus plans that assemble accepted company ArtifactIR

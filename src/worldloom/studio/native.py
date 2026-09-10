@@ -30,6 +30,7 @@ from ..providers import digest
 from ..world import World
 from .checkpoints import Exchanges, atomic_json, document
 from .models import ProjectSpec
+from .native_calibration import seal, summarize
 
 if TYPE_CHECKING:
     from .service import Studio
@@ -98,6 +99,15 @@ def _components(tasks: tuple[NativeTask, ...], evidence: dict[str, set[str]]) ->
 
     owners: dict[str, str] = {}
     for task in tasks:
+        if not task.inputs:
+            # Without source provenance, differently named creation prompts
+            # cannot establish independent company evidence. Keep them together.
+            key = "ungrounded-create:" + task.use_case_id
+            if key in owners:
+                left, right = sorted((find(task.id), find(owners[key])))
+                parents[right] = left
+            else:
+                owners[key] = task.id
         for item in task.inputs:
             keys = {"artifact:" + item.artifact_id} | evidence[item.artifact_id]
             for key in sorted(keys):
@@ -175,7 +185,11 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
         tasks.append(NativeTask.model_validate({**task.model_dump(mode="json"),
                      "inputs": [item.model_dump(mode="json") for item in bound]}))
     components = _components(tuple(tasks), evidence)
-    public = [{**public_contract(task), "evidence_component": components[task.id], "split": "unassigned"}
+    sealed = seal(spec.native_calibration, tasks, components) if spec.native_calibration else None
+    if sealed:
+        document(root / "calibration-seal.json", sealed)
+    splits = sealed["splits"] if sealed else {task.id: "unassigned" for task in tasks}
+    public = [{**public_contract(task), "evidence_component": components[task.id], "split": splits[task.id]}
               for task in tasks]
     # Oracle export supports audit and replay but its path never enters a target
     # request. An untrusted coding harness still requires host-level isolation.
@@ -193,44 +207,72 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
         raise ValueError("native reference qualification failed; inspect qualification.json before running a target")
     outcomes: list[dict[str, Any]] = []
     exchange = Exchanges(root / "exchanges", harness_command, timeout)
-    if harness_command:
-        for task in tasks:
-            request_id = digest([identity, task.model_dump(mode="json")])
-            output_directory = root / "outputs" / digest(task.id)
-            output_directory.mkdir(parents=True, exist_ok=True)
-            payload = {"schema": "worldloom.native-trial/v1", "request_id": request_id,
-                       "task": public_contract(task), "output_directory": str(output_directory.resolve()), "input_files": {
-                           item.artifact_id: str((root / item.path).resolve()) for item in task.inputs},
-                       "response_schema": NativeReply.model_json_schema()}
-            reply = exchange(payload)
-            # A filesystem-capable harness must not alter shared input versions.
-            for artifact in metadata.values():
-                input_path = root / artifact["path"]
-                if input_path.is_symlink() or hashlib.sha256(input_path.read_bytes()).hexdigest() != artifact["sha256"]:
-                    raise ValueError("target modified an immutable native input")
-            try:
-                proposed = NativeReply.model_validate(reply.document)
-                if proposed.request_id != request_id:
-                    raise ValueError("native reply request id mismatch")
-                grade = grade_native_task(task, {item.artifact_id: inputs[item.artifact_id] for item in task.inputs},
-                                          _submission(proposed, output_directory))
-                outcome = TrialOutcome(passed=grade.passed, details=grade.model_dump(mode="json"))
-            except (ValidationError, ValueError) as error:
-                outcome = TrialOutcome(passed=False, details={"findings": ["invalid_native_submission"],
-                                                               "detail": str(error)[:2000]})
-            value = {"task_id": task.id, "trial_id": request_id, "evidence_component": components[task.id],
-                     "split": "unassigned", **outcome.model_dump(mode="json")}
-            document(root / "trials" / (digest(task.id) + ".json"), value)
-            outcomes.append(value)
+    calibration: dict[str, Any] = {"mode": "fixed_corpus", "configured": sealed is not None}
+    feasible = sealed is None or sealed["feasible"]
+    if sealed:
+        calibration["support"] = sealed["support"]
+    if harness_command and feasible:
+        phases = ("train", "holdout") if sealed else ("unassigned",)
+        for phase in phases:
+            if phase == "holdout" and not calibration["training"]["accepted"]:
+                break
+            selected = [task for task in tasks if task.id in sealed["samples"][phase]] if sealed else tasks
+            if sealed:
+                selected.sort(key=lambda task: sealed["samples"][phase].index(task.id))
+            for task in selected:
+                request_id = digest([identity, task.model_dump(mode="json")])
+                output_directory = root / "outputs" / digest(task.id)
+                output_directory.mkdir(parents=True, exist_ok=True)
+                payload = {"schema": "worldloom.native-trial/v1", "request_id": request_id,
+                           "task": public_contract(task), "output_directory": str(output_directory.resolve()), "input_files": {
+                               item.artifact_id: str((root / item.path).resolve()) for item in task.inputs},
+                           "response_schema": NativeReply.model_json_schema()}
+                reply = exchange(payload)
+                # A filesystem-capable harness must not alter shared input versions.
+                for artifact in metadata.values():
+                    input_path = root / artifact["path"]
+                    if input_path.is_symlink() or hashlib.sha256(input_path.read_bytes()).hexdigest() != artifact["sha256"]:
+                        raise ValueError("target modified an immutable native input")
+                try:
+                    proposed = NativeReply.model_validate(reply.document)
+                    if proposed.request_id != request_id:
+                        raise ValueError("native reply request id mismatch")
+                    grade = grade_native_task(task, {item.artifact_id: inputs[item.artifact_id] for item in task.inputs},
+                                              _submission(proposed, output_directory))
+                    outcome = TrialOutcome(passed=grade.passed, details=grade.model_dump(mode="json"))
+                except (ValidationError, ValueError) as error:
+                    outcome = TrialOutcome(passed=False, details={"findings": ["invalid_native_submission"],
+                                                                   "detail": str(error)[:2000]})
+                value = {"task_id": task.id, "trial_id": request_id, "evidence_component": components[task.id],
+                         "split": splits[task.id], **outcome.model_dump(mode="json")}
+                document(root / "trials" / (digest(task.id) + ".json"), value)
+                outcomes.append(value)
+            if sealed and spec.native_calibration:
+                summary = summarize(spec.native_calibration, tasks, outcomes, sealed,
+                                    corpus_digest=digest(metadata), evaluator_digest=digest([harness_command, timeout]),
+                                    split="train" if phase == "train" else "holdout")
+                label = "training" if phase == "train" else "holdout"
+                calibration[label] = summary
+                # The training decision is immutable before the first held-out
+                # target invocation. Replay cannot tune a band after seeing it.
+                document(root / ("calibration-" + label + ".json"), summary)
+    calibrated = bool(calibration.get("training", {}).get("accepted") and
+                      calibration.get("holdout", {}).get("accepted"))
+    calibration["accepted"] = calibrated
+    calibration["findings"] = ([] if calibrated or not sealed else sealed["findings"] if not feasible else
+        ["target_required" if not harness_command else "native_difficulty_band_not_supported"])
+    document(root / "calibration.json", calibration)
     # Bind all public and private exports after trials, catching deleted receipts
     # and changed oracles on completed replay without making another agent call.
-    result = {"schema": "worldloom.native-run/v1", "status": "complete" if harness_command else "prepared",
+    result = {"schema": "worldloom.native-run/v1", "status": ("blocked" if not feasible or (sealed and harness_command and not calibrated) else
+                         "complete" if harness_command else "prepared"),
               "native": root.name, "directory": str(root), "snapshot": snapshot.name,
               "queryset": str(root / "queryset.json"), "corpus": str(root / "corpus.json"),
               "artifacts": len(metadata), "corpus_artifacts": metadata, "tasks": len(tasks), "observed_trials": len(outcomes),
               "passed_trials": sum(item["passed"] for item in outcomes), "outcomes": outcomes,
-              "evidence_components": len(set(components.values())), "calibrated": False,
-              "noise_calibrated": False, "split": "unassigned"}
+              "evidence_components": len(set(components.values())), "calibrated": calibrated,
+              "calibration": calibration,
+              "noise_calibrated": False, "split": "sealed" if sealed else "unassigned"}
     document(root / "result.json", result)
     manifest = {"identity": identity, "files": _files(root)}
     if (root / "manifest.json").exists():

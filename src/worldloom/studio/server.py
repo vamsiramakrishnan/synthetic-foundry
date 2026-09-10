@@ -88,6 +88,18 @@ class StudioHandler(BaseHTTPRequestHandler):
         if mutation:
             valid = valid and self.headers.get("X-Worldloom-Studio") == "1" and self.headers.get("Content-Type", "").split(";")[0] == "application/json"
         if not valid:
+            # Closing with a normal POST body still unread can reset the TCP
+            # connection on Windows before the client receives its 403. Drain
+            # only bounded, explicitly sized bodies; never parse or dispatch them.
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = 0
+            if 0 < length <= MAX_BODY and not self.headers.get("Transfer-Encoding"):
+                try:
+                    self.rfile.read(length)
+                except (TimeoutError, OSError):
+                    self.close_connection = True
             self.send(403, {"error": "This console accepts local, same-origin requests only"})
         return bool(valid)
 

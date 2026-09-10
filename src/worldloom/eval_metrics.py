@@ -79,7 +79,19 @@ def features_for(spec: EvalSpec) -> EvalFeatures:
     )
 
 
-FeatureSchema = Literal["eval/v1", "request/v1"]
+class NativeFeatures(Model):
+    operation: Literal["read", "analyze", "update", "create"]
+    formats: tuple[Literal["docx", "pptx", "xlsx", "pdf"], ...]
+    input_count: int = Field(ge=0)
+    assertion_count: int = Field(ge=0)
+
+    def slice_key(self) -> str:
+        # Counts describe individual trials, while this slice measures the
+        # declared mixed task population for an operation and set of formats.
+        return f"native:{self.operation}:formats={','.join(self.formats)}"
+
+
+FeatureSchema = Literal["eval/v1", "request/v1", "native/v1"]
 ObservationSplit = Literal["train", "validation", "holdout"]
 EvaluatorKind = Literal["agent", "reader", "reference_executor"]
 EstimateStatus = Literal["unfitted", "insufficient_data", "fitted", "unverified", "reference_only"]
@@ -105,12 +117,12 @@ class FeatureSlice(Model):
     """
 
     feature_schema: FeatureSchema
-    values: EvalFeatures | RequestFeatures
+    values: EvalFeatures | RequestFeatures | NativeFeatures
     conditions: tuple[tuple[str, str], ...] = ()
 
     @model_validator(mode="after")
     def _contract(self) -> FeatureSlice:
-        expected = EvalFeatures if self.feature_schema == "eval/v1" else RequestFeatures
+        expected = {"eval/v1": EvalFeatures, "request/v1": RequestFeatures, "native/v1": NativeFeatures}[self.feature_schema]
         if not isinstance(self.values, expected):
             raise ValueError("feature namespace does not match its structural values")
         if self.conditions != tuple(sorted(set(self.conditions))):
@@ -133,18 +145,19 @@ class FeatureSlice(Model):
 
 
 def feature_slice(
-    value: EvalSpec | EvalFeatures | RequestFeatures,
+    value: EvalSpec | EvalFeatures | RequestFeatures | NativeFeatures,
     *, conditions: Mapping[str, str] | None = None,
 ) -> FeatureSlice:
     if isinstance(value, EvalSpec):
         value = features_for(EvalSpec.model_validate(value.model_dump(mode="json")))
-    if not isinstance(value, (EvalFeatures, RequestFeatures)):
-        raise TypeError("calibration requires EvalSpec, EvalFeatures, or RequestFeatures")
+    if not isinstance(value, (EvalFeatures, RequestFeatures, NativeFeatures)):
+        raise TypeError("calibration requires EvalSpec, EvalFeatures, RequestFeatures, or NativeFeatures")
     # Revalidate even model_copy/model_construct inputs: an infinite density
     # must never reach a slice label and thereby look like a measured cohort.
     checked = type(value).model_validate(value.model_dump(mode="json"))
     return FeatureSlice(
-        feature_schema="eval/v1" if isinstance(checked, EvalFeatures) else "request/v1",
+        feature_schema=("eval/v1" if isinstance(checked, EvalFeatures) else
+                        "native/v1" if isinstance(checked, NativeFeatures) else "request/v1"),
         values=checked, conditions=tuple(sorted((conditions or {}).items())),
     )
 
@@ -468,5 +481,5 @@ class DifficultyCalibrator:
 __all__ = [
     "DifficultyCalibrator", "DifficultyEstimate", "EvalFeatures", "features_for",
     "FeatureSlice", "feature_slice", "CalibrationObservation", "CalibrationSnapshot",
-    "CalibrationReport", "CalibrationBin",
+    "CalibrationReport", "CalibrationBin", "NativeFeatures",
 ]

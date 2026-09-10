@@ -109,7 +109,7 @@ def run_command(
     if result["status"] != "complete":
         _refuse("studio_rejected", result["error"] or "run is waiting for the active worker")
     if result["result"].get("status") == "blocked":
-        _refuse("studio_rejected", "foundry has unmet gates; see stage findings", exit_code=3)
+        _refuse("studio_rejected", "run has unmet gates; see its findings and calibration report", exit_code=3)
     if result["result"].get("report", {}).get("complete") is False:
         _refuse("dataset_incomplete", "company dataset has unmet quotas; see the run report", exit_code=3)
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import shlex
+import subprocess
 import sys
 from datetime import UTC, datetime
 
@@ -59,7 +61,8 @@ assert "oracles" not in p and "expected" not in json.dumps(p["task"])
 w = load_workbook(p["input_files"]["ART-BOOK"])
 print(json.dumps({"request_id":p["request_id"],"submission":{"answers":[{"assertion_id":"disposition","value":w["Evidence"]["B2"].value,"citations":[{"artifact_id":"ART-BOOK","locator":"sheet:Evidence/cell:B2"}]}]}}))
 ''')
-    command = shlex.join([sys.executable, str(agent)])
+    argv = [sys.executable, str(agent)]
+    command = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
     result = studio.execute(job["id"], harness_command=command, timeout=30)
     assert result["passed_trials"] == result["observed_trials"] == 2
     assert result["evidence_components"] == 1
@@ -155,7 +158,8 @@ w["Evidence"]["B2"] = "Reconciled"
 w.save(Path(p["output_directory"]) / "updated.xlsx")
 print(json.dumps({"request_id":p["request_id"],"output_files":[{"artifact_id":"ART-UPDATED","format":"xlsx","path":"updated.xlsx","source_sha256":p["task"]["inputs"][0]["sha256"]}]}))
 ''')
-    command = shlex.join([sys.executable, str(agent)])
+    argv = [sys.executable, str(agent)]
+    command = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
     result = studio.execute(job["id"], harness_command=command, timeout=30)
     assert result["passed_trials"] == result["observed_trials"] == 1
     output = next((studio.path("native", job["id"]) / "outputs").rglob("updated.xlsx"))

@@ -163,6 +163,7 @@ class Studio:
                        "Reuse registered company, LOB, process, scenario and synthesis contracts. A new label does not implement a workflow.",
                        "For a Foundry run each use case needs an explicit construction EvalSpec. Its connector selectors must constrain the declared business unit, LOB and activity. Do not claim unsupported business evidence.",
                        "For native file tasks, declare native_corpus plans referencing accepted company ArtifactIR sections and native_tasks linked to a use_case_id. Specify read/analyze/update/create outcomes, citations, calculations and preserved content. Long documents need enough distinct grounded sections; padding is not evidence.",
+                       "Native difficulty measurement uses native_calibration: name the actual target cohort, a pass-rate band, independent support and finite train/holdout budgets. Shared source files and facts form one evidence component; no native noise evolution is implied.",
                        "Declare calibration cohort, noise variants and finite trial budgets. Query counts do not establish independent case support or observed difficulty.",
                        "Return one JSON object matching response_schema. Proposals are reviewed before becoming a revision.",
                    ], "response_schema": InterviewReply.model_json_schema()}
