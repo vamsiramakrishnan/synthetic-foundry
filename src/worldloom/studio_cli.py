@@ -20,12 +20,15 @@ def serve_command(
     port: Annotated[int, typer.Option(min=1, max=65535)] = 8765,
     harness_command: Annotated[str | None, typer.Option("--harness-command", help="Trusted local adapter: JSON stdin, JSON stdout; no shell.")] = None,
     harness: Annotated[str | None, typer.Option("--harness", help="Use an installed codex or claude CLI with its existing login.")] = None,
+    allow_native_writes: Annotated[bool, typer.Option("--allow-native-writes", help="With --harness codex, allow native update/create writes in the task output directory.")] = False,
     timeout: Annotated[float, typer.Option(min=1, max=3600)] = 600,
 ) -> None:
     """Open the local company console; slow work runs in a separate process."""
     from .cli import _refuse
     from .studio.server import StudioServer
 
+    if allow_native_writes and harness != "codex":
+        _refuse("studio_rejected", "--allow-native-writes requires --harness codex")
     if harness:
         if harness_command or harness not in {"codex", "claude"}:
             _refuse("studio_rejected", "choose --harness codex/claude or --harness-command, not both")
@@ -34,6 +37,8 @@ def serve_command(
         import subprocess
         import sys
         args = [sys.executable, "-m", "worldloom.studio.harness", harness, "--timeout", str(max(1, timeout - 5))]
+        if allow_native_writes:
+            args.append("--allow-native-writes")
         harness_command = subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
 
     server = StudioServer(workspace, port=port, harness_command=harness_command, timeout=timeout)
@@ -112,6 +117,64 @@ def run_command(
         _refuse("studio_rejected", "run has unmet gates; see its findings and calibration report", exit_code=3)
     if result["result"].get("report", {}).get("complete") is False:
         _refuse("dataset_incomplete", "company dataset has unmet quotas; see the run report", exit_code=3)
+
+
+@studio_app.command("next")
+def next_command(project: str, workspace: Workspace = Path("./worldloom-workspace")) -> None:
+    """Inspect compact readiness and next actions without generating anything."""
+    from .cli import _refuse
+    from .studio import Studio
+    try:
+        result = Studio(workspace).workflow(project).model_dump(mode="json")
+    except (OSError, ValueError, KeyError) as error:
+        _refuse("studio_rejected", str(error))
+    typer.echo(json.dumps(result, sort_keys=True))
+
+
+@studio_app.command("advance")
+def advance_command(
+    project: str, workspace: Workspace = Path("./worldloom-workspace"),
+    harness_command: Annotated[str | None, typer.Option("--harness-command")] = None,
+    timeout: Annotated[float, typer.Option(min=1, max=3600)] = 600,
+) -> None:
+    """Execute one ready stage; stop at a proposal, configuration gap or refusal."""
+    from .cli import _refuse
+    from .studio import Studio
+    try:
+        studio = Studio(workspace)
+        result = studio.advance(project, studio.store.get(project)["revision"],
+                                harness_command=harness_command, timeout=timeout)
+    except (OSError, ValueError, KeyError) as error:
+        _refuse("studio_rejected", str(error))
+    typer.echo(json.dumps(result, sort_keys=True))
+    job = result.get("job") or {}
+    if job.get("status") == "failed" or (job.get("result") or {}).get("status") == "blocked":
+        _refuse("studio_rejected", job.get("error") or "run has unmet gates; inspect the workflow findings", exit_code=3)
+
+
+@studio_app.command("prepare-native")
+def prepare_native_command(
+    project: str,
+    use_case: Annotated[str, typer.Option("--use-case")],
+    workspace: Workspace = Path("./worldloom-workspace"),
+    formats: Annotated[str, typer.Option(help="Comma-separated docx,pptx,xlsx formats.")] = "docx,pptx,xlsx",
+    operations: Annotated[str, typer.Option(help="Comma-separated read,analyze,update,create operations.")] = "read,analyze,update,create",
+    minimum_units: Annotated[int, typer.Option(min=1, max=10000)] = 2,
+    max_cases: Annotated[int, typer.Option(min=1, max=256)] = 12,
+    source_artifact_id: Annotated[list[str] | None, typer.Option("--source-artifact-id", help="Repeat to constrain accepted source artifacts; required for scoped use cases.")] = None,
+) -> None:
+    """Print a reference-qualified native proposal for review; do not apply it."""
+    from .cli import _refuse
+    from .studio import NativeSuiteRequest, Studio
+    try:
+        studio = Studio(workspace)
+        request = NativeSuiteRequest.model_validate({"use_case_id": use_case, "formats": formats.split(","),
+            "operations": operations.split(","), "minimum_units": minimum_units, "max_cases": max_cases,
+            "source_artifact_ids": source_artifact_id or []})
+        result = studio.prepare_native(project, studio.store.get(project)["revision"], request)
+    except (OSError, ValueError, KeyError) as error:
+        _refuse("studio_rejected", str(error))
+    typer.echo(json.dumps(result, sort_keys=True))
 
 
 @interview_app.command("request")

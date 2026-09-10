@@ -165,7 +165,11 @@ class StudioHandler(BaseHTTPRequestHandler):
             if method == "GET" and len(parts) >= 3 and parts[:2] == ["api", "projects"]:
                 project = parts[2]
                 if len(parts) == 3:
-                    self.send(200, studio.describe(project, query.get("revision", [None])[0]))
+                    self.send(200, studio.describe(project, query.get("revision", [None])[0], harness_configured=bool(self.server.harness_command)))
+                    return
+                if parts[3:] == ["workflow"]:
+                    self.send(200, studio.workflow(project, query.get("revision", [None])[0],
+                              harness_configured=bool(self.server.harness_command)).model_dump(mode="json"))
                     return
                 if parts[3:] == ["native-sources"]:
                     self.send(200, studio.native_sources(project, query.get("revision", [None])[0],
@@ -221,6 +225,14 @@ class StudioHandler(BaseHTTPRequestHandler):
                         result = studio.accept_interview(project, InterviewReply.model_validate(body))
                     elif action == "interview-apply":
                         result = studio.apply_interview(project, body["request_id"])
+                    elif action == "select-narration":
+                        result = studio.select_narration(project, body["revision"], body["job_id"])
+                    elif action == "prepare-native":
+                        current = studio.store.get(project)
+                        if current["revision"] != body["revision"]:
+                            raise StudioConflict("company changed; reload before preparing native tasks")
+                        options = RunOptions.model_validate({"operation": "prepare_native", "native_suite": body["request"]})
+                        result = studio.store.enqueue(project, body["revision"], options)
                     elif action == "run":
                         options = RunOptions.model_validate(body["options"])
                         if options.operation in {"interview", "narrate", "foundry"} and not self.server.harness_command:

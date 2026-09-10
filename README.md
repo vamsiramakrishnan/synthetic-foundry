@@ -21,6 +21,12 @@ operating structure, use cases, generation runs and qualified evaluations.
 Start it with `worldloom studio serve`. Each company retains its own revisions
 and evidence; eval batches reuse that company rather than generate replacements.
 
+For document evaluations, select accepted company prose and prepare a native
+suite in **Documents & files**. Review its source coverage, then generate DOCX,
+PPTX and XLSX tasks for reading, comparison, updates and creation. The console,
+`worldloom studio next` and `Studio.workflow()` share the same readiness checks.
+Optional calibration measures target outcomes with independent held-out evidence.
+
 Status: 0.1.0, the first release. The source-install path below targets this
 repository checkout. The library never calls an LLM service by itself.
 

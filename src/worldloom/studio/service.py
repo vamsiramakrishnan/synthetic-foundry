@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .. import company, sdk
 from ..corpus import write_json
@@ -17,6 +17,17 @@ from ..providers import digest
 from ..world import World
 from .models import InterviewReply, ProjectSpec, RunOptions, UseCase
 from .store import ProjectStore, StudioConflict, canonical
+
+if TYPE_CHECKING:
+    from .native_suite import NativeSuiteRequest
+    from .workflow import WorkflowReport
+
+
+def snapshot_intent(spec: ProjectSpec) -> dict[str, Any]:
+    """One identity for generation, narration selection and read-only readiness."""
+    return {"company": spec.company, "seed": spec.seed,
+            "lobs": [lob.model_dump(mode="json") for lob in spec.lobs],
+            "divisions": [unit.model_dump(mode="json") for unit in spec.divisions], "episodes": list(spec.episodes)}
 
 
 def changes(before: Any, after: Any, path: str = "") -> list[dict[str, Any]]:
@@ -95,7 +106,7 @@ class Studio:
                 "dag_shapes": sorted(shape_catalogue()),
                 "project_schema": ProjectSpec.model_json_schema()}
 
-    def describe(self, project: str, revision: str | None = None) -> dict[str, Any]:
+    def describe(self, project: str, revision: str | None = None, *, harness_configured: bool = False) -> dict[str, Any]:
         from .construction import compile_project
         from .foundry import progress
         current = self.store.get(project, revision)
@@ -105,7 +116,7 @@ class Studio:
         findings = [{"code": "company_unmet", "message": finding,
                      "acknowledged": finding in spec.acknowledged_unmet} for finding in resolution.unmet]
         findings.extend({"code": "workflow_missing", "message": f"{c.title}: define an executable workflow", "acknowledged": False}
-                        for c in spec.use_cases if c.scenario is None)
+                        for c in spec.use_cases if c.scenario is None and c.id not in {t.use_case_id for t in spec.native_tasks})
         if not spec.use_cases:
             findings.append({"code": "use_cases_missing", "message": "Add the work this company needs to evaluate", "acknowledged": False})
         previous = self.store.get(project, current["parent"]) if current["parent"] else None
@@ -113,7 +124,8 @@ class Studio:
         for job in jobs:
             if job["options"]["operation"] == "foundry":
                 job["progress"] = progress(self, job["id"])
-        return {**current, "construction_plan": compile_project(spec).model_dump(mode="json"),
+        return {**current, "workflow": self.workflow(project, current["revision"], harness_configured=harness_configured).model_dump(mode="json"),
+                "construction_plan": compile_project(spec).model_dump(mode="json"),
                 "resolution": {"engine": resolution.engine, "unmet": list(resolution.unmet)},
                 "division_contract": [u.model_dump(mode="json") for u in
                                       (spec.divisions or (tuple(resolution.pack.units) if resolution.pack else ()))],
@@ -121,6 +133,53 @@ class Studio:
                 "processes": compilation.model_dump(mode="json") if compilation else None,
                 "changes": changes(previous["spec"] if previous else {}, current["spec"]),
                 "jobs": jobs, "interviews": self.interviews(project)}
+
+    def workflow(self, project: str, revision: str | None = None, *, harness_configured: bool = False) -> WorkflowReport:
+        """Inspect readiness without generating files or invoking a target."""
+        from .workflow import report
+        return report(self, project, revision, harness_configured=harness_configured)
+
+    def select_narration(self, project: str, revision: str, job_id: str) -> dict[str, Any]:
+        """Authenticate the selected prose before committing its company revision."""
+        from .native import source_world
+        current = self.store.get(project)
+        if current["revision"] != revision:
+            raise StudioConflict("company changed; reload before selecting narration")
+        spec = ProjectSpec.model_validate({**current["spec"], "narration_job": job_id})
+        source_world(self, spec, project)
+        return self.store.revise(project, revision, spec, reason="Selected accepted company narration")
+
+    def prepare_native(self, project: str, revision: str, request: NativeSuiteRequest | dict[str, Any]) -> dict[str, Any]:
+        """Return a qualified proposal. Applying it remains an explicit revision."""
+        from .native import source_world
+        from .native_suite import NativeSuiteRequest, propose
+        current = self.store.get(project)
+        if current["revision"] != revision:
+            raise StudioConflict("company changed; reload before preparing native tasks")
+        spec = ProjectSpec.model_validate(current["spec"])
+        if not spec.narration_job:
+            raise ValueError("select accepted company narration before preparing native tasks")
+        request = NativeSuiteRequest.model_validate(request.model_dump(mode="json") if isinstance(request, NativeSuiteRequest) else request)
+        world, _ = source_world(self, spec, project)
+        proposal = propose(world, spec, request)
+        return {"revision": revision, **proposal}
+
+    def advance(self, project: str, revision: str, *, harness_command: str | None = None, timeout: float = 600) -> dict[str, Any]:
+        """Run at most one ready stage; never accept proposals or loop on a gate."""
+        from .worker import run_job
+        current = self.store.get(project)
+        if current["revision"] != revision:
+            raise StudioConflict("company changed; reload before advancing")
+        workflow = self.workflow(project, revision, harness_configured=bool(harness_command))
+        action = workflow.next_action
+        if action is None or action.kind != "run":
+            return {"advanced": False, "workflow": workflow.model_dump(mode="json")}
+        options = RunOptions.model_validate({"operation": action.operation, "harness_identity":
+            digest(harness_command) if action.operation in {"narrate", "native", "foundry"} else ""})
+        job = self.store.enqueue(project, revision, options)
+        advanced = run_job(self, job["id"], harness_command=harness_command, timeout=timeout)
+        return {"advanced": advanced, "job": self.store.job(job["id"]),
+                "workflow": self.workflow(project, revision, harness_configured=bool(harness_command)).model_dump(mode="json")}
 
     def dataset_location(self, project: str, revision: str) -> Path:
         from ..evals.dataset import verify_dataset
@@ -163,7 +222,7 @@ class Studio:
                        "Reuse registered company, LOB, process, scenario and synthesis contracts. A new label does not implement a workflow.",
                        "For a Foundry run each use case needs an explicit construction EvalSpec. Its connector selectors must constrain the declared business unit, LOB and activity. Do not claim unsupported business evidence.",
                        "For native file tasks, declare native_corpus plans referencing accepted company ArtifactIR sections and native_tasks linked to a use_case_id. Specify read/analyze/update/create outcomes, citations, calculations and preserved content. Long documents need enough distinct grounded sections; padding is not evidence.",
-                       "Native difficulty measurement uses native_calibration: name the actual target cohort, a pass-rate band, independent support and finite train/holdout budgets. Shared source files and facts form one evidence component; no native noise evolution is implied.",
+                       "Native difficulty uses native_calibration: declare the actual target cohort, pass-rate band, independent support and finite total budgets. Optional noise_variants expose grounded extra files within the same evidence component; the training choice is sealed before one holdout. Never claim prose mutation or independent support from shared files or facts.",
                        "Declare calibration cohort, noise variants and finite trial budgets. Query counts do not establish independent case support or observed difficulty.",
                        "Return one JSON object matching response_schema. Proposals are reviewed before becoming a revision.",
                    ], "response_schema": InterviewReply.model_json_schema()}
@@ -214,9 +273,7 @@ class Studio:
         unresolved = sorted(set(resolution.unmet) - set(spec.acknowledged_unmet))
         if unresolved:
             raise ValueError("unacknowledged company limitations: " + "; ".join(unresolved))
-        intent = {"company": spec.company, "seed": spec.seed,
-                  "lobs": [lob.model_dump(mode="json") for lob in spec.lobs],
-                  "divisions": [unit.model_dump(mode="json") for unit in spec.divisions], "episodes": list(spec.episodes)}
+        intent = snapshot_intent(spec)
         key = digest(intent)
         location = self.path("snapshots", key)
         if location.exists():
@@ -289,6 +346,16 @@ class Studio:
         spec = ProjectSpec.model_validate(self.store.get(project, revision)["spec"])
         if not spec.narration_job:
             return {"sources": [], "total": 0, "next_offset": None, "status": "select_accepted_narration"}
+        try:
+            selected = self.store.job(spec.narration_job)
+        except KeyError:
+            return {"sources": [], "total": 0, "next_offset": None, "status": "stale_narration"}
+        if (selected["project"] != project or selected["status"] != "complete"
+                or selected["options"]["operation"] != "narrate"
+                or (selected["result"] or {}).get("snapshot") != digest(snapshot_intent(spec))):
+            # A changed company needs a fresh interview before new narration.
+            # Do not let the old source selection block that recovery path.
+            return {"sources": [], "total": 0, "next_offset": None, "status": "stale_narration"}
         world, _ = source_world(self, spec, project)
         sources = [{"source_artifact_id": ir.id, "section_index": index,
                     "title": ir.title, "heading": section.heading,
@@ -364,6 +431,9 @@ class Studio:
         options = RunOptions.model_validate(job["options"])
         if options.harness_identity and options.harness_identity != digest(harness_command):
             raise ValueError("run belongs to a different harness configuration; issue a new request")
+        if options.operation == "prepare_native":
+            assert options.native_suite is not None
+            return self.prepare_native(job["project"], job["revision"], options.native_suite)
         if options.operation == "native":
             from .native import execute as execute_native
             return execute_native(self, job, harness_command=harness_command, timeout=timeout)

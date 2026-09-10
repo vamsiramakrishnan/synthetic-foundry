@@ -71,6 +71,98 @@ reconciliation with the company's financial aggregates.
    service verifies the committed dataset before exposing that evidence.
    Earlier runs retain earlier intent.
 
+## Resume a company workflow
+
+The workflow report is the common entry point for the console, CLI and SDK.
+It describes the current revision, completed work, missing prerequisites and
+next actions without returning the complete company corpus or private oracles.
+Use it after an interview, revision, interrupted job or completed evaluation.
+
+```bash
+worldloom studio next PROJECT_ID --workspace ./worldloom-workspace
+worldloom studio advance PROJECT_ID --workspace ./worldloom-workspace
+worldloom studio advance PROJECT_ID --harness-command 'python /path/to/adapter.py' --workspace ./worldloom-workspace
+```
+
+`next` only inspects state. `advance` performs one ready step and returns an
+updated report. It retains the existing revision, job and checkpoint contracts.
+It does not apply an interview response or a proposed native suite. Those
+change the evaluation contract and remain separate, reviewable revisions.
+A missing harness or unmet prerequisite remains visible in the report.
+
+For native evaluations, first build the company's episodes, narrate the source
+evidence and select the accepted narration. Then request tasks from that
+source catalogue:
+
+```bash
+worldloom studio prepare-native PROJECT_ID --use-case USE_CASE_ID --formats docx,pptx,xlsx --operations read,analyze,update,create --minimum-units 2 --max-cases 12 --workspace ./worldloom-workspace
+```
+
+The command returns a project proposal and coverage summary as JSON. Read,
+update and creation tasks use each selected format; arithmetic analysis uses
+XLSX comparisons of compatible measures in an explicit common period. Review
+the source coverage, prepared case count and unsupported analysis
+findings before applying it. Applying the proposal
+creates a revision; preparing it does not. The planner reuses authored sections
+and canonical facts. It cannot invent a missing numeric measure or claim
+independence by renaming a question. Increasing `minimum-units` requires more
+distinct authored content. Increasing `max-cases` only permits more eligible
+cases; it does not create new business evidence.
+
+In the console, preparation runs in the existing background worker. Open the
+completed preparation run, review its proposal, then apply it. Large files do
+not keep the HTTP handler occupied while rendering and reference grading.
+
+The SDK exposes the same workflow. For a use case with declared ownership,
+LOB or activities, supply source artifact IDs selected from its accepted
+catalogue. Selection narrows the evidence scope; the operator still checks that
+the sources address the business question.
+
+```python
+from worldloom.studio import NativeSuiteRequest, ProjectSpec, Studio
+
+studio = Studio("./worldloom-workspace")
+project = studio.store.get(project_id)
+report = studio.workflow(project_id, project["revision"])
+proposal = studio.prepare_native(
+    project_id,
+    project["revision"],
+    NativeSuiteRequest(
+        use_case_id=use_case_id,
+        source_artifact_ids=tuple(selected_source_ids),
+        minimum_units=200,
+        max_cases=12,
+    ),
+)
+print(proposal["summary"])
+```
+
+After reviewing the proposal, commit it with the original revision as the
+compare-and-swap condition:
+
+```python
+revised = studio.store.revise(
+    project_id,
+    project["revision"],
+    ProjectSpec.model_validate(proposal["spec"]),
+    reason="Reviewed native evidence and task coverage",
+)
+report = studio.advance(project_id, revised["revision"])
+```
+
+To select a completed narration job through Python, use
+`studio.select_narration(project_id, revision, job_id)`. It authenticates the
+job's source snapshot and commits the selection as a project revision.
+Use `harness_command` and `timeout` on `advance` when running target trials.
+The same checkpoint identities and acceptance rules apply from every surface.
+
+Treat generated tasks, reference qualification and observed target performance
+as separate results. A useful delivery includes the public queryset, native
+input files, source provenance, qualification receipts, and any observed
+trial results. Calibration additionally requires enough independent components
+in every requested outcome group on both sides of the sealed split. A short
+pilot can prove that files and graders work while leaving that gate unmet.
+
 ## Coding harnesses
 
 Use an installed, signed-in coding CLI:
@@ -371,9 +463,20 @@ Reference qualification creates or edits actual Office bytes and applies the sam
 
 Native inputs bind exact generated SHA-256 versions. Public requests contain
 the task question, submission contract and input files; expected assertions
-remain in the private oracle export. Large output files may be written into the supplied per-task output directory and returned by relative file descriptor; small outputs may use base64. A filesystem-capable adapter must support those writes. The built-in authoring adapters retain their existing permission settings. The configured executable is trusted
+remain in the private oracle export. Large output files may be written into the supplied per-task output directory and returned by relative file descriptor; small outputs may use base64. A filesystem-capable adapter must support those writes. The built-in authoring adapters default to read-only or planning permissions. To enable native output-file writes with Codex, start Studio with the explicit option below. The configured executable is trusted
 and must be isolated by the host when evaluating an untrusted agent. This
 JSON separation is not an operating-system sandbox.
+
+```bash
+worldloom studio serve --harness codex --allow-native-writes
+```
+
+This opt-in selects Codex workspace-write only for native update/create trials,
+with the task output directory as its working root. Interview, narration and
+read requests keep read-only permissions. It does not bypass approvals or
+change network settings. The adapter uses the documented
+[Codex sandbox and working-directory options](https://developers.openai.com/codex/cli/reference/).
+The planning-mode adapter requires a custom file-writing adapter for this path.
 
 Runs retain generated bytes, public queryset, provenance, private oracles and
 actual trial outcomes. Replaying recorded exchanges makes no further target
@@ -391,7 +494,21 @@ format, without claiming measured industry realism or live-agent performance.
 Configure difficulty in **Documents & files** or declare `native_calibration`
 with a named `cohort`, `target_low`, `target_high`, `min_support`,
 `max_training_attempts`, `max_holdout_attempts` and `holdout_percent`.
-This measures a fixed corpus. It does not apply or select noise variants.
+Without `noise_variants`, this measures a fixed corpus. To measure context
+distraction, declare an ordered, bounded set of named candidates:
+
+```json
+"noise_variants": [
+  {"name": "baseline", "distractor_files": 0},
+  {"name": "context", "distractor_files": 1}
+]
+```
+
+Additional files come only from the task's existing evidence component. Files
+from another component cannot be used as distractors because they might expose
+held-out evidence. The intervention seal records exact file selections before
+trials. If any sampled task lacks the requested eligible files, the run blocks
+before target calls. It never pads the corpus with invented content.
 
 The sampler takes at most one task per independent evidence component and
 use-case/operation/format group, distributes finite budgets across groups,
@@ -408,7 +525,15 @@ training interval must fit the requested band with the declared support before
 holdout calls begin. The training decision is recorded before holdout, and
 holdout must independently meet the same gate. Missing support or an out-of-band
 result leaves the run blocked; it cannot publish a calibrated result.
-`noise_calibrated` remains false even when fixed-corpus difficulty is verified.
+With candidates configured, the total training budget is divided across them.
+Candidates are evaluated in declared order; the first to pass every training
+gate is selected. Its selection receipt is committed before holdout calls.
+A failed holdout blocks the run and does not select another candidate. This is
+a bounded search over grounded file context, not open-ended noise evolution.
+`noise_calibrated` is true only when a candidate adding distractor files passes
+both phases. A selected zero-distractor baseline can establish calibrated
+difficulty while leaving `noise_calibrated` false. These trials do not establish
+robustness to OCR corruption, layout changes or semantic contradictions.
 
 The retail pilot generates actual monthly company episodes, accepts reference
 authorship through the existing narration handshake, and constructs native read,
@@ -431,3 +556,11 @@ The [recorded long retail pilot](measurements/native-retail-pilot.json) contains
 200 distinct authored units and references 533 distinct facts. Six tasks
 reference-qualify and the run replays byte-for-byte. All tasks share one evidence
 component, so these six tasks do not establish calibrated difficulty.
+
+The [prepared native retail suite](measurements/native-retail-suite.json) reuses
+the same accepted company source. It contains 113 reference-qualified tasks
+across 36 Office files and 12 independent evidence cases. Seven arithmetic
+requests lacked compatible evidence and are reported as unsupported. The
+default calibration support gate remains unmet; no live target observations
+are claimed. Reproduce this measurement with `tools/measure_native_suite.py`
+against the accepted pilot workspace.

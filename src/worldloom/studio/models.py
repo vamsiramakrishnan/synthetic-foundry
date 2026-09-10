@@ -21,6 +21,7 @@ from ..synthesis.connectors import IncidentRule
 from ..synthesis.models import Program
 from .calibration import CompanyCalibrationPlan
 from .native_calibration import NativeCalibrationPlan
+from .native_suite_contract import NativeSuiteRequest
 
 
 class UseCase(Model):
@@ -160,11 +161,18 @@ class InterviewReply(Model):
 
 
 class RunOptions(Model):
-    operation: Literal["build", "compile", "interview", "narrate", "foundry", "native"]
+    operation: Literal["build", "compile", "interview", "narrate", "foundry", "native", "prepare_native"]
     batch_limit: int | None = Field(default=None, ge=1, le=10_000, strict=True)
     message: str = Field(default="", max_length=8000)
     max_rounds: int = Field(default=2, ge=1, le=8, strict=True)
     harness_identity: str = ""
+    native_suite: NativeSuiteRequest | None = None
+
+    @model_validator(mode="after")
+    def _native_request(self) -> RunOptions:
+        if (self.operation == "prepare_native") != (self.native_suite is not None):
+            raise ValueError("native_suite is required only for prepare_native jobs")
+        return self
 
 
 __all__ = ["ProjectSpec", "UseCase", "InterviewReply", "RunOptions"]

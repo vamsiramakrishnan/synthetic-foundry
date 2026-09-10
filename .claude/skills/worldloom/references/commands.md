@@ -1114,6 +1114,20 @@ worldloom status <CORPUS>
 
 Interview, build and evaluate one persistent company.
 
+### `worldloom studio advance`
+
+Execute one ready stage; stop at a proposal, configuration gap or refusal.
+
+```
+worldloom studio advance <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--harness-command` |  |
+| `--timeout` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
 ### `worldloom studio init`
 
 Create a project from an explicit company contract.
@@ -1158,6 +1172,36 @@ worldloom studio interview request <PROJECT>
 | `--out`, `-o` |  |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
+### `worldloom studio next`
+
+Inspect compact readiness and next actions without generating anything.
+
+```
+worldloom studio next <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
+### `worldloom studio prepare-native`
+
+Print a reference-qualified native proposal for review; do not apply it.
+
+```
+worldloom studio prepare-native <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--formats` | Comma-separated docx,pptx,xlsx formats. |
+| `--max-cases` |  |
+| `--minimum-units` |  |
+| `--operations` | Comma-separated read,analyze,update,create operations. |
+| `--source-artifact-id` | Repeat to constrain accepted source artifacts; required for scoped use cases. |
+| `--use-case` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
 ### `worldloom studio run`
 
 Run an exact company revision synchronously, retaining resumable checkpoints.
@@ -1179,6 +1223,7 @@ Open the local company console; slow work runs in a separate process.
 
 | Option | Purpose |
 | --- | --- |
+| `--allow-native-writes` | With --harness codex, allow native update/create writes in the task output directory. |
 | `--harness` | Use an installed codex or claude CLI with its existing login. |
 | `--harness-command` | Trusted local adapter: JSON stdin, JSON stdout; no shell. |
 | `--port` |  |

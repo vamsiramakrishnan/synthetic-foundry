@@ -198,6 +198,26 @@ def test_installed_harness_adapters_parse_only_final_output(tmp_path, monkeypatc
         command_for("arbitrary-command", tmp_path / "result")
 
 
+def test_native_codex_write_scope_requires_operator_opt_in(tmp_path, monkeypatch):
+    commands = []
+    def run(argv, **kwargs):
+        commands.append(argv)
+        Path(argv[argv.index("--output-last-message") + 1]).write_text('{"request_id":"one"}')
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    monkeypatch.setattr(subprocess, "run", run)
+    payload = {"schema": "worldloom.native-trial/v1", "task": {"operation": "update"}, "output_directory": str(tmp_path)}
+    invoke("codex", payload)
+    assert "read-only" in commands[-1] and "--cd" not in commands[-1]
+    invoke("codex", payload, allow_native_writes=True)
+    assert "workspace-write" in commands[-1]
+    assert commands[-1][commands[-1].index("--cd") + 1] == str(tmp_path)
+    assert not any("bypass" in arg or arg == "--ignore-rules" for arg in commands[-1])
+    invoke("codex", {**payload, "schema": "worldloom.company-interview/v1"}, allow_native_writes=True)
+    assert "read-only" in commands[-1]
+    with pytest.raises(ValueError, match="existing absolute directory"):
+        invoke("codex", {**payload, "output_directory": "relative"}, allow_native_writes=True)
+
+
 @pytest.fixture
 def http_server(tmp_path):
     server = StudioServer(tmp_path, port=0, launch_workers=False)
@@ -215,6 +235,26 @@ def http(server, path, body=None, **headers):
     request = Request(f"http://127.0.0.1:{server.server_port}" + path,
                       data=json.dumps(body).encode() if body is not None else None, headers=headers)
     return urlopen(request, timeout=10)
+
+
+def test_http_native_preparation_uses_existing_worker_and_requires_review(http_server, monkeypatch):
+    server = http_server
+    p = server.studio.store.create(preset())
+    with http(server, f"/api/projects/{p['id']}/workflow") as response:
+        assert json.load(response)["next_action"]["operation"] == "build"
+    calls = []
+    def prepare(project, revision, request):
+        calls.append(request.use_case_id)
+        return {"revision": revision, "spec": p["spec"], "summary": {"tasks": 1}}
+    monkeypatch.setattr(server.studio, "prepare_native", prepare)
+    body = {"revision": p["revision"], "request": {"use_case_id": p["spec"]["use_cases"][0]["id"]}}
+    with http(server, f"/api/projects/{p['id']}/prepare-native", body) as response:
+        job = json.load(response)
+    assert calls == [] and job["status"] == "queued"
+    assert run_job(server.studio, job["id"])
+    assert len(calls) == 1
+    assert server.studio.store.get(p["id"])["revision"] == p["revision"]
+    assert server.studio.store.job(job["id"])["result"]["summary"]["tasks"] == 1
 
 
 def test_http_create_interview_revision_and_content_security(http_server):

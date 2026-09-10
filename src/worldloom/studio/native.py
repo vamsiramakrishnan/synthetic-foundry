@@ -31,6 +31,7 @@ from ..world import World
 from .checkpoints import Exchanges, atomic_json, document
 from .models import ProjectSpec
 from .native_calibration import seal, summarize
+from .native_noise import interventions
 
 if TYPE_CHECKING:
     from .service import Studio
@@ -188,6 +189,10 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
     sealed = seal(spec.native_calibration, tasks, components) if spec.native_calibration else None
     if sealed:
         document(root / "calibration-seal.json", sealed)
+    noise = (interventions(tasks, components, spec.native_calibration.noise_variants, sealed)
+             if sealed and spec.native_calibration and spec.native_calibration.noise_variants else None)
+    if noise:
+        document(root / "noise-seal.json", noise)
     splits = sealed["splits"] if sealed else {task.id: "unassigned" for task in tasks}
     public = [{**public_contract(task), "evidence_component": components[task.id], "split": splits[task.id]}
               for task in tasks]
@@ -208,58 +213,90 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
     outcomes: list[dict[str, Any]] = []
     exchange = Exchanges(root / "exchanges", harness_command, timeout)
     calibration: dict[str, Any] = {"mode": "fixed_corpus", "configured": sealed is not None}
-    feasible = sealed is None or sealed["feasible"]
+    feasible = (sealed is None or sealed["feasible"]) and (noise is None or noise["feasible"])
     if sealed:
         calibration["support"] = sealed["support"]
+    if noise:
+        calibration.update(mode="grounded_distractor_files", noise=noise, candidates=[], selected_variant=None)
+
+    def observe(phase: str, variant: str | None) -> list[dict[str, Any]]:
+        selected = [task for task in tasks if task.id in sealed["samples"][phase]] if sealed else tasks
+        if sealed:
+            selected.sort(key=lambda task: sealed["samples"][phase].index(task.id))
+        rows: list[dict[str, Any]] = []
+        for task in selected:
+            distractors = noise["candidates"][variant][task.id] if noise and variant else []
+            intervention = {"variant": variant, "distractor_artifacts": distractors} if noise else None
+            request_id = digest([identity, task.model_dump(mode="json")] + ([intervention] if noise else []))
+            trial_key = digest([task.id, variant]) if noise else digest(task.id)
+            output_directory = root / "outputs" / trial_key
+            output_directory.mkdir(parents=True, exist_ok=True)
+            payload: dict[str, Any] = {"schema": "worldloom.native-trial/v1", "request_id": request_id,
+                       "task": public_contract(task), "output_directory": str(output_directory.resolve()), "input_files": {
+                           item.artifact_id: str((root / item.path).resolve()) for item in task.inputs},
+                       "response_schema": NativeReply.model_json_schema()}
+            # These are authentic related company files, not fabricated claims.
+            # The explicit task contract still identifies its required originals.
+            for artifact in distractors:
+                payload["input_files"][artifact] = str((root / metadata[artifact]["path"]).resolve())
+            reply = exchange(payload)
+            for artifact in metadata.values():
+                input_path = root / artifact["path"]
+                if input_path.is_symlink() or hashlib.sha256(input_path.read_bytes()).hexdigest() != artifact["sha256"]:
+                    raise ValueError("target modified an immutable native input")
+            try:
+                proposed = NativeReply.model_validate(reply.document)
+                if proposed.request_id != request_id:
+                    raise ValueError("native reply request id mismatch")
+                grade = grade_native_task(task, {item.artifact_id: inputs[item.artifact_id] for item in task.inputs},
+                                          _submission(proposed, output_directory))
+                outcome = TrialOutcome(passed=grade.passed, details=grade.model_dump(mode="json"))
+            except (ValidationError, ValueError) as error:
+                outcome = TrialOutcome(passed=False, details={"findings": ["invalid_native_submission"],
+                                                               "detail": str(error)[:2000]})
+            value = {"task_id": task.id, "trial_id": request_id, "evidence_component": components[task.id],
+                     "split": splits[task.id], **outcome.model_dump(mode="json")}
+            if noise:
+                value["intervention"] = intervention
+            document(root / "trials" / (trial_key + ".json"), value)
+            rows.append(value)
+        outcomes.extend(rows)
+        return rows
+
     if harness_command and feasible:
-        phases = ("train", "holdout") if sealed else ("unassigned",)
-        for phase in phases:
-            if phase == "holdout" and not calibration["training"]["accepted"]:
-                break
-            selected = [task for task in tasks if task.id in sealed["samples"][phase]] if sealed else tasks
-            if sealed:
-                selected.sort(key=lambda task: sealed["samples"][phase].index(task.id))
-            for task in selected:
-                request_id = digest([identity, task.model_dump(mode="json")])
-                output_directory = root / "outputs" / digest(task.id)
-                output_directory.mkdir(parents=True, exist_ok=True)
-                payload = {"schema": "worldloom.native-trial/v1", "request_id": request_id,
-                           "task": public_contract(task), "output_directory": str(output_directory.resolve()), "input_files": {
-                               item.artifact_id: str((root / item.path).resolve()) for item in task.inputs},
-                           "response_schema": NativeReply.model_json_schema()}
-                reply = exchange(payload)
-                # A filesystem-capable harness must not alter shared input versions.
-                for artifact in metadata.values():
-                    input_path = root / artifact["path"]
-                    if input_path.is_symlink() or hashlib.sha256(input_path.read_bytes()).hexdigest() != artifact["sha256"]:
-                        raise ValueError("target modified an immutable native input")
-                try:
-                    proposed = NativeReply.model_validate(reply.document)
-                    if proposed.request_id != request_id:
-                        raise ValueError("native reply request id mismatch")
-                    grade = grade_native_task(task, {item.artifact_id: inputs[item.artifact_id] for item in task.inputs},
-                                              _submission(proposed, output_directory))
-                    outcome = TrialOutcome(passed=grade.passed, details=grade.model_dump(mode="json"))
-                except (ValidationError, ValueError) as error:
-                    outcome = TrialOutcome(passed=False, details={"findings": ["invalid_native_submission"],
-                                                                   "detail": str(error)[:2000]})
-                value = {"task_id": task.id, "trial_id": request_id, "evidence_component": components[task.id],
-                         "split": splits[task.id], **outcome.model_dump(mode="json")}
-                document(root / "trials" / (digest(task.id) + ".json"), value)
-                outcomes.append(value)
-            if sealed and spec.native_calibration:
-                summary = summarize(spec.native_calibration, tasks, outcomes, sealed,
-                                    corpus_digest=digest(metadata), evaluator_digest=digest([harness_command, timeout]),
-                                    split="train" if phase == "train" else "holdout")
-                label = "training" if phase == "train" else "holdout"
-                calibration[label] = summary
-                # The training decision is immutable before the first held-out
-                # target invocation. Replay cannot tune a band after seeing it.
-                document(root / ("calibration-" + label + ".json"), summary)
+        if sealed and spec.native_calibration:
+            variants = [variant.name for variant in spec.native_calibration.noise_variants] if noise else [None]
+            for variant in variants:
+                training = observe("train", variant)
+                summary = summarize(spec.native_calibration, tasks, training, sealed,
+                                    corpus_digest=digest(metadata), evaluator_digest=digest([harness_command, timeout, variant]),
+                                    split="train")
+                if noise:
+                    candidate = {"variant": variant, **summary}
+                    calibration["candidates"].append(candidate)
+                    document(root / "candidates" / (str(variant) + ".json"), candidate)
+                calibration["training"] = summary
+                if summary["accepted"]:
+                    if noise:
+                        calibration["selected_variant"] = variant
+                    # Commit selection and its training evidence before any heldout call.
+                    document(root / "calibration-training.json", summary)
+                    document(root / "calibration-selection.json", {"variant": variant,
+                             "training_digest": digest(summary), "noise_digest": digest(noise)})
+                    holdout = observe("holdout", variant)
+                    calibration["holdout"] = summarize(spec.native_calibration, tasks, training + holdout, sealed,
+                        corpus_digest=digest(metadata), evaluator_digest=digest([harness_command, timeout, variant]),
+                        split="holdout")
+                    document(root / "calibration-holdout.json", calibration["holdout"])
+                    break
+            if "holdout" not in calibration:
+                document(root / "calibration-training.json", calibration["training"])
+        else:
+            observe("unassigned", None)
     calibrated = bool(calibration.get("training", {}).get("accepted") and
                       calibration.get("holdout", {}).get("accepted"))
     calibration["accepted"] = calibrated
-    calibration["findings"] = ([] if calibrated or not sealed else sealed["findings"] if not feasible else
+    calibration["findings"] = ([] if calibrated or not sealed else sealed["findings"] + (noise["findings"] if noise else []) if not feasible else
         ["target_required" if not harness_command else "native_difficulty_band_not_supported"])
     document(root / "calibration.json", calibration)
     # Bind all public and private exports after trials, catching deleted receipts
@@ -272,7 +309,9 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
               "passed_trials": sum(item["passed"] for item in outcomes), "outcomes": outcomes,
               "evidence_components": len(set(components.values())), "calibrated": calibrated,
               "calibration": calibration,
-              "noise_calibrated": False, "split": "sealed" if sealed else "unassigned"}
+              "noise_calibrated": bool(calibrated and noise and spec.native_calibration and
+                  any(v.name == calibration["selected_variant"] and v.distractor_files > 0
+                      for v in spec.native_calibration.noise_variants)), "split": "sealed" if sealed else "unassigned"}
     document(root / "result.json", result)
     manifest = {"identity": identity, "files": _files(root)}
     if (root / "manifest.json").exists():
