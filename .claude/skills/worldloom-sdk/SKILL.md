@@ -14,6 +14,13 @@ flag, a new command, or a shell script gluing JSON between processes.
 
 You write Python. Use it.
 
+## Evaluating agents
+
+Use `worldloom.evalrun.EvalSession` when the question is how an agent performs
+on a compiled enterprise case set: `from_export("./cases")`, `coverage()`,
+`reference()`, `run(agent)`, `compare(a, b)`, `write(label, dir)`. The
+`worldloom-evalrun` skill owns the procedure and the harness protocol.
+
 ## Persistent company workflows
 
 Use `worldloom.studio.Studio` when the loop includes an interview, accepted

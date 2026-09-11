@@ -422,3 +422,147 @@ def test_the_cli_runs_compares_and_names_the_gaps(grammar_corpus: Any, tmp_path:
     result = runner.invoke(app, ["evalrun", "run", str(tmp_path / "corpus"), "-o", str(tmp_path / "x"), "--agent", "magic"])
     assert result.exit_code != 0
     assert "is not one of" in result.output
+
+
+# -- harness transports ----------------------------------------------------------
+
+
+def _exec_cmd(*parts: object) -> str:
+    import os
+    import shlex
+    import subprocess
+    import sys
+
+    argv = [sys.executable, *(str(part) for part in parts)]
+    return subprocess.list2cmdline(argv) if os.name == "nt" else " ".join(shlex.quote(part) for part in argv)
+
+
+_CHILD = """
+import json, sys
+doc = json.load(sys.stdin)
+assert doc["schema"] == "worldloom.evalrun-turn/v1", doc.get("schema")
+assert all(tool["name"] for tool in doc["tools"])
+if not doc["transcript"]:
+    read = next(t for t in doc["tools"] if t["name"] == "servicenow.get_record")
+    print(json.dumps({"call": {"tool": read["name"], "arguments": {"id": "INC0000001"}}}))
+elif len(doc["transcript"]) == 1:
+    seen = doc["transcript"][0]["result"]
+    assert "error" not in doc["transcript"][0], doc["transcript"][0]
+    print(json.dumps({"call": {"tool": "servicenow.update_record", "arguments": {"id": "INC0000001", "fields": {"state": "open"}}}}))
+elif len(doc["transcript"]) == 2:
+    print(json.dumps({"call": {"tool": "servicenow.get_record", "arguments": {"id": "INC0000001"}}}))
+else:
+    state = doc["transcript"][-1]["result"].get("state")
+    print(json.dumps({"answer": f"INC0000001 is now {state}.", "artifacts": [{"name": "note", "text": "moved", "cites": ["f1"]}]}))
+"""
+
+
+def test_an_executable_is_the_agent_one_subprocess_per_turn(tmp_path: Path) -> None:
+    from worldloom.evalrun import ExecAgent
+
+    child = tmp_path / "child.py"
+    child.write_text(_CHILD, encoding="utf-8")
+    update, _ = _hand_cases()
+    result = run_case(_hand_service(), update, ExecAgent(_exec_cmd(child), timeout=60))
+    assert result.status == "graded", result.error
+    assert result.score is not None and result.score.passed, result.score.model_dump()
+    assert result.notes == ("answered on turn 4",)
+    assert result.score.outcomes.artifacts_produced == 1
+    assert result.agent.startswith("exec:")
+
+
+def test_a_child_that_breaks_the_turn_contract_is_an_error_row_with_its_stderr(tmp_path: Path) -> None:
+    from worldloom.evalrun import ExecAgent
+
+    crashes = tmp_path / "crash.py"
+    crashes.write_text("import sys; sys.stderr.write('adapter exploded\\n'); sys.exit(3)", encoding="utf-8")
+    update, _ = _hand_cases()
+    result = run_case(_hand_service(), update, ExecAgent(_exec_cmd(crashes), timeout=60))
+    assert result.status == "error"
+    assert result.error is not None and "exec_failed" in result.error and "adapter exploded" in result.error
+
+    silent = tmp_path / "silent.py"
+    silent.write_text("print('{}')", encoding="utf-8")
+    result = run_case(_hand_service(), update, ExecAgent(_exec_cmd(silent), timeout=60))
+    assert result.status == "error" and "neither" in (result.error or "")
+
+    looping = tmp_path / "loop.py"
+    looping.write_text("import json; print(json.dumps({'call': {'tool': 'servicenow.get_record', 'arguments': {'id': 'INC0000001'}}}))", encoding="utf-8")
+    result = run_case(_hand_service(), update, ExecAgent(_exec_cmd(looping), timeout=60, max_turns=3))
+    assert result.status == "graded" and result.calls == 3
+    assert "turn budget of 3 exhausted" in result.notes[0]
+
+
+def test_requests_carry_only_what_the_agent_may_know_and_responses_replay(tmp_path: Path) -> None:
+    from worldloom.evalrun import ResponsesAgent, load_responses, requests_document
+
+    cases = _hand_cases()
+    document = requests_document(_hand_service(), cases)
+    assert document["schema"] == "worldloom.evalrun-requests/v1"
+    assert [entry["case_id"] for entry in document["cases"]] == ["upd", "del"]
+    text = json.dumps(document)
+    assert "expected_dag" not in text and "assertions" not in text and '"f1"' not in text
+    delete_tools = {tool["name"] for tool in document["cases"][1]["tools"]}
+    assert "sharepoint.delete_list_item" in delete_tools and "servicenow.get_record" not in delete_tools
+
+    responses = tmp_path / "responses.json"
+    responses.write_text(json.dumps({"schema": "worldloom.evalrun-responses/v1", "cases": {
+        "upd": {"calls": [["servicenow.get_record", {"id": "INC0000001"}],
+                          ["servicenow.update_record", {"id": "INC0000001", "fields": {"state": "open"}}],
+                          ["servicenow.get_record", {"id": "INC0000001"}]],
+                "answer": "Moved to open.", "artifacts": [{"name": "n", "text": "moved", "cites": ["f1"]}]},
+    }}), encoding="utf-8")
+    agent = ResponsesAgent(load_responses(responses))
+    service = _hand_service()
+    report = run_cases(service, cases, agent)
+    assert report.results[0].graded and report.results[0].score is not None and report.results[0].score.passed
+    assert report.results[1].status == "error" and "not_attempted" in (report.results[1].error or "")
+
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"upd": {"calls": [["only-a-tool"]]}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="list of \\[tool, arguments\\]"):
+        load_responses(bad)
+
+
+def test_the_session_is_the_sdk_entry(grammar_corpus: Any, tmp_path: Path) -> None:
+    from worldloom.evalrun import EvalSession
+
+    export_corpus(grammar_corpus, tmp_path / "corpus")
+    session = EvalSession.from_export(tmp_path / "corpus", limit=3)
+    assert session.coverage().cases == 3
+    ceiling = session.reference()
+    floor = session.run(ScriptedAgent([], name="lazy"), label="lazy")
+    assert ceiling.case_set == floor.case_set
+    assert session.summary("reference").pass_rate == 1.0
+    assert set(session.compare("reference", "lazy").regressions) == {case.id for case in session.cases}
+    session.write("lazy", tmp_path / "lazy")
+    assert read_run(tmp_path / "lazy").agent == "lazy"
+    with pytest.raises(KeyError, match="no run labelled"):
+        session.summary("nope")
+
+
+def test_the_mcp_tools_and_the_seam_expose_the_same_surface(grammar_corpus: Any, tmp_path: Path) -> None:
+    from worldloom import mcp
+    from worldloom.evalrun import seam_contract
+    from worldloom.seams import seam_manifest
+
+    export_corpus(grammar_corpus, tmp_path / "corpus")
+    coverage = mcp.call("evalrun_cases", {"cases": str(tmp_path / "corpus"), "limit": 2})
+    assert coverage["cases"] == 2
+    summary = mcp.call("evalrun_run", {"cases": str(tmp_path / "corpus"), "out": str(tmp_path / "ref"), "limit": 2})
+    assert summary["pass_rate"] == 1.0
+    lazy = mcp.call("evalrun_run", {"cases": str(tmp_path / "corpus"), "out": str(tmp_path / "lazy"), "limit": 2, "agent": "lazy"})
+    assert lazy["pass_rate"] == 0.0
+    delta = mcp.call("evalrun_compare", {"baseline": str(tmp_path / "ref"), "recent": str(tmp_path / "lazy")})
+    assert len(delta["regressions"]) == 2
+    assert mcp.call("evalrun_summarize", {"run": str(tmp_path / "ref")})["graded"] == 2
+    assert "error" in mcp.call("evalrun_run", {"cases": str(tmp_path / "corpus"), "out": str(tmp_path / "x"), "agent": "magic"})
+    for tool in mcp.TOOLS:
+        assert any(subject in tool["schema"]["required"] for subject in mcp.SUBJECTS), tool["name"]
+
+    seam = {item["name"]: item for item in seam_manifest()["seams"]}["evalrun"]
+    assert seam["canonical_import"] == "worldloom.evalrun"
+    contract = seam["contract"]
+    assert contract == seam_contract()
+    assert contract["axes"] == ["plan", "trajectory", "outcomes"]
+    assert set(contract["mcp_tools"]) == {tool["name"] for tool in mcp.TOOLS if tool["name"].startswith("evalrun_")}

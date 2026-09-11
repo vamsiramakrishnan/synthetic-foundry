@@ -36,6 +36,14 @@ first written up, before the waves above it landed.
   `spans`, `snapshot` and `tool_catalog` to the SDK path.
 - The Studio interview now states that evaluation is not retrieval and asks
   which axes and write operations each use case exercises.
+- Make the run drivable by any harness: `evalrun run --exec` runs an
+  executable as the agent one subprocess per turn over the existing seam
+  (`worldloom.evalrun-turn/v1`); `evalrun requests` writes cases and tool
+  catalogs as a document a harness answers offline
+  (`worldloom.evalrun-requests/v1`, `-responses/v1`); `EvalSession` is the
+  SDK entry; `worldloom mcp` gains `evalrun_*` tools; `evalrun` is a declared
+  seam in `worldloom seams`; the `worldloom-evalrun` skill and
+  `/worldloom-evalrun` command carry the procedure.
 
 ### Generation: reviewed company-data sizing
 

@@ -80,7 +80,8 @@ def cases_command(
 
 def _agent(spec: str, cases: tuple[Any, ...]) -> Any:
     from ..cli import _refuse
-    from .agents import ReferenceAgent, ScriptedAgent, ToolCall
+    from .agents import ReferenceAgent, ScriptedAgent
+    from .harness import ResponsesAgent, load_responses
 
     if spec == "reference":
         return ReferenceAgent(cases)
@@ -89,29 +90,57 @@ def _agent(spec: str, cases: tuple[Any, ...]) -> Any:
     if spec.startswith("scripted:"):
         path = Path(spec.removeprefix("scripted:"))
         try:
-            script = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
+            scripts = load_responses(path)
+        except OSError as error:
             _refuse("script_unreadable", f"{path}: {error}")
-        if not isinstance(script, dict) or not all(isinstance(value, dict) for value in script.values()):
-            _refuse("script_invalid", f"{path}: expected {{case_id: {{calls: [[tool, args]...], answer: str}}}}")
+        except ValueError as error:
+            _refuse("script_invalid", str(error))
+        return ResponsesAgent(scripts, name=f"scripted:{path.name}")
+    _refuse("unknown_agent", f"{spec!r} is not one of {AGENTS} (scripted takes scripted:<responses.json>)")
 
-        class _PerCase:
-            name = f"scripted:{path.name}"
 
-            def run(self, task: Any, tools: Any) -> Any:
-                entry = script.get(task.case_id, {})
-                calls = [ToolCall(tool=str(call[0]), arguments=dict(call[1] or {})) for call in entry.get("calls", ())]
-                return ScriptedAgent(calls, answer=str(entry.get("answer", "")), name=self.name).run(task, tools)
+@app.command("requests")
+def requests_command(
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`."),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write requests.json here instead of stdout."),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    principal: str = typer.Option("agent", "--principal"),
+) -> None:
+    """Write every case as a request a harness can answer offline: query, persona, tools.
 
-        return _PerCase()
-    _refuse("unknown_agent", f"{spec!r} is not one of {AGENTS} (scripted takes scripted:<path.json>)")
+    The document carries what the agent may know and nothing else: no
+    expected DAG, no fixture ids, no assertions. A harness answers with a
+    responses document (`worldloom.evalrun-responses/v1`), replayed by
+    `evalrun run --agent scripted:responses.json`. Replay cannot observe a
+    call's result; an agent that needs one runs through `evalrun run --exec`.
+    """
+    from ..corpus import write_json
+    from .harness import requests_document
+    from .runner import service_for
+
+    loaded, cases = _corpus_cases(corpus, limit)
+    document = requests_document(service_for(cases, loaded.connector_data.records), cases, principal=principal)
+    if out is None:
+        typer.echo(json.dumps(document, indent=2, sort_keys=True))
+        return
+    write_json(out, document)
+    typer.echo(f"{len(document['cases'])} request(s) written to {out}")
 
 
 @app.command("run")
 def run_command(
     corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`."),
     out: Path = typer.Option(..., "--out", "-o", help="Run directory to write (run.json, results.jsonl, summary.json)."),
-    agent: str = typer.Option("reference", "--agent", help="reference | lazy | scripted:<path.json>"),
+    agent: str = typer.Option("reference", "--agent", help="reference | lazy | scripted:<responses.json>"),
+    exec_command: str | None = typer.Option(
+        None, "--exec",
+        help=("The agent as an executable, one subprocess per turn: reads a "
+              "`worldloom.evalrun-turn/v1` JSON document on stdin, prints {\"call\": ...} "
+              "or {\"answer\": ...} on stdout. Run without a shell (shlex argv) unless --shell is given."),
+    ),
+    timeout: float = typer.Option(600.0, "--timeout", help="Seconds the --exec child may run per turn before it is killed."),
+    shell: bool = typer.Option(False, "--shell", help="Run the --exec command through the shell (the opt-in for pipelines)."),
+    max_turns: int = typer.Option(64, "--max-turns", min=1, help="Turns the --exec child may take per case."),
     limit: int | None = typer.Option(None, "--limit", min=1),
     principal: str = typer.Option("agent", "--principal", help="The principal every run is begun under."),
     rater: str | None = typer.Option(None, "--rater", help="grounded: rate answers without a model, where the shape allows."),
@@ -122,7 +151,10 @@ def run_command(
 
     The reference agent walks each expected DAG through the same tool surface
     an external agent gets; its run is the executable ceiling for the set.
-    An agent that raises produces an error row, excluded from every mean.
+    `--exec` makes any executable the agent, one subprocess per turn, with the
+    transcript so far as its only memory. An agent that raises, exits
+    non-zero or breaks the turn contract produces an error row, excluded from
+    every mean and carrying the child's stderr tail.
     """
     from ..cli import _refuse
     from .rater import GroundedRater
@@ -132,7 +164,14 @@ def run_command(
     loaded, cases = _corpus_cases(corpus, limit)
     if not cases:
         _refuse("no_cases", f"{corpus} compiled to no cases")
-    under_test = _agent(agent, cases)
+    if exec_command is not None:
+        if agent != "reference":
+            _refuse("cannot_combine", "--exec and --agent both name the agent under test; give one")
+        from .harness import ExecAgent
+
+        under_test: Any = ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns)
+    else:
+        under_test = _agent(agent, cases)
     grader = None
     if rater is not None:
         if rater != "grounded":

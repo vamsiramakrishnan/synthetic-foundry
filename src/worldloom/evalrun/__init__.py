@@ -63,6 +63,15 @@ from .grading import (
     grade_trajectory,
     score_case,
 )
+from .harness import (
+    REQUESTS_SCHEMA,
+    RESPONSES_SCHEMA,
+    TURN_SCHEMA,
+    ExecAgent,
+    ResponsesAgent,
+    load_responses,
+    requests_document,
+)
 from .rater import GroundedRater, judge_prompt, model_rater, parse_score
 from .results import (
     Comparison,
@@ -95,6 +104,35 @@ from .safety import (
     error_code_for,
     tool_annotations,
 )
+from .session import EvalSession
+
+__worldloom_seam__ = {
+    "name": "evalrun",
+    "purpose": "Execute an agent against a compiled case set and grade plan, trajectory and outcomes separately.",
+    "canonical_import": "worldloom.evalrun",
+    "compatibility_imports": [],
+}
+
+
+def seam_contract() -> dict[str, object]:
+    """What a harness can rely on: schemas, axes, agents, laws, commands."""
+
+    from .grading import SAFETY_LAWS
+
+    return {
+        "schemas": {
+            "run": RUN_SCHEMA, "turn": TURN_SCHEMA, "requests": REQUESTS_SCHEMA, "responses": RESPONSES_SCHEMA,
+        },
+        "axes": ["plan", "trajectory", "outcomes"],
+        "outcome_kinds": ["create", "update", "delete"],
+        "agents": ["reference", "lazy", "scripted:<responses.json>", "--exec <command>"],
+        "safety_laws": list(SAFETY_LAWS),
+        "assertion_authority": "worldloom.connector_trace.grade_trace",
+        "commands": ["evalrun cases", "evalrun requests", "evalrun run", "evalrun summarize", "evalrun compare",
+                     "evalrun import-studio"],
+        "mcp_tools": ["evalrun_cases", "evalrun_run", "evalrun_summarize", "evalrun_compare"],
+    }
+
 
 __all__ = [
     # Contracts.
@@ -138,6 +176,17 @@ __all__ = [
     "judge_prompt",
     "model_rater",
     "parse_score",
+    # Harness transport.
+    "REQUESTS_SCHEMA",
+    "RESPONSES_SCHEMA",
+    "TURN_SCHEMA",
+    "ExecAgent",
+    "ResponsesAgent",
+    "load_responses",
+    "requests_document",
+    # Session.
+    "EvalSession",
+    "seam_contract",
     # Execution.
     "RUN_SCHEMA",
     "CaseResult",

@@ -1,0 +1,96 @@
+---
+name: worldloom-evalrun
+description: "Run an agent against a Worldloom enterprise case set and grade three axes separately: the plan it formed (which connector DAG), the trajectory it took (order, budget, designed failures, safety laws) and the outcomes it left (records created, updated and deleted as a state diff; artifact grounding; a rated answer). Use when asked to evaluate an agent, a model or a harness on enterprise workflows, to compare two agents or two versions, to be the agent under test yourself, or to bring Gemini Enterprise Eval Studio results alongside a local run. Not for retrieval scoring: that is `worldloom evaluate`."
+metadata: {tags: [worldloom, evalrun, agents, trajectory, outcomes, mcp, eval-studio]}
+---
+
+# Worldloom eval execution
+
+Evaluation here is not retrieval. A case is a request over several business
+systems; the agent forms a plan, works through it, and leaves state behind.
+`worldloom evalrun` grades those three things separately and reports each.
+Read `docs/eval-execution.md` for the contracts; this skill is the procedure.
+
+## The loop
+
+```bash
+worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*'
+worldloom evalrun cases ./cases                     # 1. what the set can grade
+worldloom evalrun run ./cases -o ./runs/reference   # 2. the executable ceiling
+worldloom evalrun run ./cases -o ./runs/mine --exec "python3 my_agent.py"   # 3. the agent under test
+worldloom evalrun compare ./runs/reference ./runs/mine                       # 4. what moved, per axis
+```
+
+1. **Read the coverage before running anything.** `cases` prints counts per
+   axis and names every zero (`gap: no case grades deletes`). A set that
+   grades no updates cannot show an agent updates correctly; say so in the
+   report rather than reading a pass rate as complete.
+2. **Run the reference first.** It walks every expected DAG through the same
+   tool surface an external agent gets. Its pass rate is the ceiling of the
+   set, not a claim about any model. A reference case that fails is a finding
+   about the case; report it, do not grade an agent against it.
+3. **Run the agent under test.** Three transports; pick by what the agent can do:
+   - `--exec "<command>"`: the agent as an executable, one subprocess per
+     **turn**. It reads a turn document on stdin (query, tools, transcript so
+     far) and prints one call or the final answer. This is the interactive
+     path and the one to use when you are the agent yourself: write a small
+     script and be honest in it. Contract in `references/protocol.md`.
+   - `--agent scripted:responses.json`: replay a responses document written
+     against `worldloom evalrun requests ./cases -o requests.json`. Replay
+     cannot see a call's result, so it suits fixed trajectories, not an agent
+     that must find an id before acting on it.
+   - MCP: `worldloom enterprise-evals serve` exposes the same tools over
+     StreamableHTTP for an agent that speaks MCP; `eval_grade` there returns
+     the assertion verdict. Bring its results back through a run directory
+     only if you captured them into the ledger schema.
+4. **Compare by case id, never by eye.** `compare` reports improvements and
+   regressions under ±0.10 bands, which axis moved, and cases graded on one
+   side and errored on the other as reliability changes, not score changes.
+
+`summarize ./runs/mine --json` recomputes a summary from the ledger; `import-studio ./cases eval_results.csv -o ./runs/studio` brings Eval Studio's CSV in as an answer-axis-only run.
+
+## Reading a result
+
+- A case has `plan`, `trajectory` and `outcomes` grades, each with a score
+  in `[0, 1]` and `passed`, plus `assertion_status` from `grade_trace`. A case
+  passes only when all four hold.
+- An **error row** means the agent raised, exited non-zero, or broke the turn
+  contract. It is excluded from every mean and carries the stderr tail.
+  Never read it as a zero, and never fix it by editing the grader.
+- `outcomes.collateral` lists records the run changed that no expectation
+  covers. A write to the wrong record is collateral, not credit.
+- `trajectory.safety` names Anvil's laws broken: `duplicate_write`,
+  `unsafe_retry`, `destructive_without_read`. A delete without a prior read
+  of the record fails the trajectory even when the record is gone.
+- A designed failure (`failures_expected`) is honoured when the agent met the
+  error at the node and wrote nothing on the nodes it blocks. Writing past a
+  refusal is what those cases exist to catch.
+
+## From Python
+
+```python
+from worldloom.evalrun import EvalSession, ExecAgent
+
+session = EvalSession.from_export("./cases")
+print(session.coverage().deletes)          # 0 means no case grades a delete
+session.reference()                        # label "reference"
+session.run(ExecAgent("python3 my_agent.py"), label="mine")
+print(session.compare("reference", "mine").regressions)
+session.write("mine", "./runs/mine")
+```
+
+Any object with `.name` and `.run(task, tools) -> AgentResponse` is an agent;
+`tools.call("<connector.tool>", **arguments)` is the whole surface.
+
+## Rules
+
+- The agent never sees the expected DAG, fixture ids or assertions, and
+  cannot submit its own trace. Do not add a channel that lets it.
+- Runs are byte-reproducible; `--timed` is the only thing that reads a clock,
+  and it is off by default. Compare runs on the same `case_set` digest.
+- Grading is derived from spans and snapshots the service recorded. The
+  answer axis is the only judged one; the built-in `--rater grounded` refuses
+  shapes a lexical check cannot honestly grade rather than scoring them.
+- A failing reference case, a refused row, a zero in the coverage: report
+  each as a finding. Widening the grader to pass is the failure mode this
+  layer exists to make visible.

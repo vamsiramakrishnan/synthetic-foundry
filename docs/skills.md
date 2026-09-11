@@ -38,6 +38,7 @@ terminal-capable agent can use it without slash-command support.
 | Render and inspect files | `worldloom render`, `worldloom validate` | [Artifact compiler](artifact-compiler.md) |
 | Measure the result | `worldloom evaluate`, `worldloom diversity` | [Enterprise corpus gates](enterprise-corpus.md#quality-gates) |
 | Generate many configurations | `worldloom mosaic`, `worldloom fleet` | [Fleets](agents/fleets.md) |
+| Evaluate an agent on enterprise workflows | `worldloom evalrun cases`, `worldloom evalrun run`, `worldloom evalrun compare` | [Eval execution](eval-execution.md) |
 
 Report the stage result and relevant receipt. A build count, narration
 acceptance, coherence result, and retrieval score answer different questions.
@@ -174,6 +175,16 @@ agent-trajectory scoring, all grounded in one `World`.
 
 Source: [`.claude/skills/worldloom-agent-evals/SKILL.md`](../.claude/skills/worldloom-agent-evals/SKILL.md)
 
+### `worldloom-evalrun`
+
+Run an agent against a compiled enterprise case set and grade three axes
+separately: the plan it formed, the trajectory it took, the outcomes it left.
+Three transports let any harness be the agent under test: an executable driven
+one turn at a time over the `--exec` seam, a requests/responses document pair,
+or MCP through `worldloom enterprise-evals serve`.
+
+Source: [`.claude/skills/worldloom-evalrun/SKILL.md`](../.claude/skills/worldloom-evalrun/SKILL.md)
+
 ### `worldloom-artifact-realism`
 
 Improve how a world materialises into documents, decks, workbooks, tickets,
@@ -263,6 +274,20 @@ worldloom narrate accept ./corpus \
 
 Narration requests are independent by section. Workers may propose them in
 parallel; acceptance binds each response to the exact request and corpus ledger.
+
+### Agent evaluation
+
+```bash
+worldloom evalrun requests ./cases -o requests.json
+worldloom evalrun run ./cases --agent scripted:responses.json -o ./runs/mine
+worldloom evalrun run ./cases --exec "python3 my_agent.py" -o ./runs/mine
+```
+
+The requests document carries each case's query and tool catalog and nothing
+the agent must not know. A responses document replays a fixed trajectory; the
+`--exec` form runs the agent one turn at a time with the transcript as its
+only memory, so it can act on what a tool returned. Either way the grader
+reads only the spans and snapshots the service recorded.
 
 ### Actor decisions
 

@@ -69,6 +69,22 @@ with an `error`, counted and excluded from every mean, never a zero.
 Latency is recorded only under `--timed`. Without it a run reads no clock,
 and two runs of one agent over one case set write identical ledgers.
 
+## Driving it from another harness
+
+Three transports, each carrying only what the agent may know:
+
+| Transport | Command | When |
+| --- | --- | --- |
+| Executable, one subprocess per turn | `evalrun run ./cases --exec "<command>"` | The agent must act on what a tool returned. The child reads a `worldloom.evalrun-turn/v1` document (query, tools, transcript) and prints one call or the final answer. Stateless between turns. |
+| Requests and responses files | `evalrun requests ./cases -o requests.json`, then `evalrun run ./cases --agent scripted:responses.json` | A fixed trajectory: a regression set, a hand-authored baseline, a harness that cannot be called back. Replay cannot see a call's result. |
+| MCP | `enterprise-evals serve ./cases` | An agent that speaks MCP; `eval_grade` returns the assertion verdict there. |
+
+The same surface is reachable as MCP tools of `worldloom mcp`
+(`evalrun_cases`, `evalrun_run`, `evalrun_summarize`, `evalrun_compare`), as
+the `evalrun` entry of `worldloom seams --json` (schemas, axes, laws,
+commands), and from Python through `EvalSession`. The exact documents are in
+the `worldloom-evalrun` skill's `references/protocol.md`.
+
 ## What Eval Studio contributed, and what it could not
 
 [Gemini Enterprise Eval Studio][studio] is an Angular client that calls

@@ -180,6 +180,11 @@ def grade_plan(case: EvalCase, spans: Spans, response: AgentResponse | None = No
 # -- trajectory ---------------------------------------------------------------
 
 
+#: The laws `grade_trajectory` decides, named once so the seam contract, the
+#: docs and the finding names cannot drift apart.
+SAFETY_LAWS: tuple[str, ...] = ("duplicate_write", "unsafe_retry", "destructive_without_read")
+
+
 class SafetyFinding(Model):
     """One law broken, where. Anvil's vocabulary: the law is the finding's name."""
 
@@ -540,6 +545,7 @@ def score_case(plan: PlanGrade, trajectory: TrajectoryGrade, outcomes: OutcomeGr
 
 
 __all__ = [
+    "SAFETY_LAWS",
     "CaseScore",
     "OutcomeGrade",
     "OutcomeMatch",

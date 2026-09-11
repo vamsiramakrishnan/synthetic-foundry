@@ -412,6 +412,20 @@ worldloom evalrun import-studio <CORPUS> <RESULTS>
 | `--json` |  |
 | `--out`, `-o` | Run directory to write. |
 
+### `worldloom evalrun requests`
+
+Write every case as a request a harness can answer offline: query, persona, tools.
+
+```
+worldloom evalrun requests <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--limit` |  |
+| `--out`, `-o` | Write requests.json here instead of stdout. |
+| `--principal` |  |
+
 ### `worldloom evalrun run`
 
 Run one agent over the case set, one isolated connector state per case, and grade.
@@ -422,13 +436,17 @@ worldloom evalrun run <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
-| `--agent` | reference \| lazy \| scripted:<path.json> |
+| `--agent` | reference \| lazy \| scripted:<responses.json> |
+| `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v1` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
+| `--max-turns` | Turns the --exec child may take per case. |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
 | `--principal` | The principal every run is begun under. |
 | `--rater` | grounded: rate answers without a model, where the shape allows. |
+| `--shell` | Run the --exec command through the shell (the opt-in for pipelines). |
 | `--timed` | Record wall-clock latency per case. Off by default so a run is byte-reproducible. |
+| `--timeout` | Seconds the --exec child may run per turn before it is killed. |
 
 ### `worldloom evalrun summarize`
 
