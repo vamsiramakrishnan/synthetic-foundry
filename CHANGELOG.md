@@ -11,6 +11,32 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Eval execution: three-axis agent runs
+
+- Add `worldloom evalrun` and `worldloom.evalrun`: run any agent against a
+  compiled enterprise case set, one isolated connector state per case, and
+  grade three axes separately. Plan (the DAG the request should produce),
+  trajectory (order, budget, designed failures honoured, retry storms,
+  Anvil's `duplicate_write`, `unsafe_retry` and `destructive_without_read`
+  laws) and outcomes (records created, updated and deleted as a state diff
+  with collateral writes named; artifact grounding on the pinned source
+  records; a rated answer). `grade_trace`'s verdict rides beside them.
+- Ship a reference agent that walks each expected DAG through the same tool
+  surface an external agent gets, a scripted agent, and a callable seam. An
+  agent that raises is an error row excluded from every mean. Runs are
+  byte-reproducible unless `--timed` records latency.
+- Adapt Gemini Enterprise Eval Studio's judge prompt, score parser (clamped,
+  with "no number" as an error), latency fields and ±0.10 comparison bands;
+  import its results CSV as an answer-axis-only run. Port Anvil's effect,
+  risk, idempotency and closed error-code vocabulary as `evalrun.safety`, and
+  expose the same MCP annotations from the service's `tool_catalog`.
+- Fix `ConnectorEvaluationService` grammar attribution, which demanded an
+  `entity` argument on tools that do not declare one and so could not
+  attribute any email-source search made through the served surface. Add
+  `spans`, `snapshot` and `tool_catalog` to the SDK path.
+- The Studio interview now states that evaluation is not retrieval and asks
+  which axes and write operations each use case exercises.
+
 ### Generation: reviewed company-data sizing
 
 - Add opt-in data creation proposals that reuse the canonical retail inventory,

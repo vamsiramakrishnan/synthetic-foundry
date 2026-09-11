@@ -369,6 +369,79 @@ Validate a materialized enterprise evaluation corpus.
 worldloom enterprise-evals validate <PATH>
 ```
 
+### `worldloom evalrun`
+
+Execute an agent against a compiled case set and grade plan, trajectory and outcomes.
+
+### `worldloom evalrun cases`
+
+Compile the corpus into three-axis cases and report what the set can grade.
+
+```
+worldloom evalrun cases <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit the axis coverage as JSON. |
+| `--limit` |  |
+| `--out`, `-o` | Write cases.jsonl here. |
+
+### `worldloom evalrun compare`
+
+Compare two runs case by case: improvements, regressions, and which axis moved.
+
+```
+worldloom evalrun compare <BASELINE> <RECENT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` |  |
+
+### `worldloom evalrun import-studio`
+
+Bring an Eval Studio results CSV in as a run, so it can be compared with a local one.
+
+```
+worldloom evalrun import-studio <CORPUS> <RESULTS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` |  |
+| `--out`, `-o` | Run directory to write. |
+
+### `worldloom evalrun run`
+
+Run one agent over the case set, one isolated connector state per case, and grade.
+
+```
+worldloom evalrun run <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent` | reference \| lazy \| scripted:<path.json> |
+| `--json` | Emit the summary as JSON. |
+| `--limit` |  |
+| `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
+| `--principal` | The principal every run is begun under. |
+| `--rater` | grounded: rate answers without a model, where the shape allows. |
+| `--timed` | Record wall-clock latency per case. Off by default so a run is byte-reproducible. |
+
+### `worldloom evalrun summarize`
+
+Recompute a run's summary from its results ledger.
+
+```
+worldloom evalrun summarize <RUN>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` |  |
+
 ### `worldloom evals`
 
 Work with a corpus's evaluation set.

@@ -107,6 +107,7 @@ evals_app.add_typer(calibration_app, name="calibration")
 evals_app.add_typer(dataset_app, name="dataset")
 
 # Keep operational generation in its own command module, not this monolith.
+from .evalrun.cli import app as evalrun_app
 from .gemini_enterprise.cli import app as gemini_enterprise_app
 from .seams_cli import seams_command
 from .studio_cli import studio_app
@@ -116,6 +117,7 @@ app.command("seams")(seams_command)
 app.add_typer(synthesis_app, name="synth")
 app.add_typer(studio_app, name="studio")
 app.add_typer(gemini_enterprise_app, name="gemini-enterprise")
+app.add_typer(evalrun_app, name="evalrun")
 
 
 @enterprise_evals_app.command("space")
@@ -571,6 +573,16 @@ _REFUSALS: dict[str, str] = {
     "resume_invalid": "a completed world does not validate for resume",
     "scenario_profile_rejected": "the enterprise scenario profile names something this registry does not hold, or selects nothing",
     "results_unjoinable": "an external harness's results cannot be attributed to cases in this corpus",
+    # `worldloom evalrun`.
+    "corpus_unreadable": "the enterprise-evals directory cannot be read or is not one",
+    "cases_uncompilable": "the row compiler refused a query in the corpus; the message names the first reasons",
+    "no_cases": "the corpus compiled to no cases, so there is nothing to run",
+    "unknown_agent": "the --agent value is not reference, lazy or scripted:<path.json>",
+    "unknown_rater": "the --rater value is not one this package ships",
+    "script_unreadable": "the scripted agent's JSON file cannot be read",
+    "script_invalid": "the scripted agent's JSON file is not {case_id: {calls, answer}}",
+    "service_unbuildable": "the connector evaluation service refused the case set; the message is the serving error",
+    "run_unreadable": "the run directory is missing run.json or results.jsonl, or is not an eval run",
     "results_unreadable": "an external harness's results file cannot be read",
     "schema_version": "the corpus's schema version cannot be carried to this engine's by the migration chain",
     "shard_state_error": "the shard state on disk cannot be read or does not match this plan",

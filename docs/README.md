@@ -28,6 +28,7 @@ For an enterprise dataset, define breadth and admission criteria before scaling.
 | Calibrate physics from real data, drive archive mess from a cause, or measure fidelity | [Extension seams](extension-seams.md) | [Architecture and invariants](architecture.md) |
 | Score an agent against multi-connector workflows | [Agent workflow evals](agent-workflow-evals.md) | [Enterprise agent evals](enterprise-agent-evals.md) and [Eval-first generation](eval-first.md) |
 | Run a corpus against Gemini Enterprise | [Gemini Enterprise](gemini-enterprise.md) | [Agent workflow evals](agent-workflow-evals.md) |
+| Run an agent over a case set and grade plan, trajectory and outcomes | [Eval execution](eval-execution.md) | [Enterprise agent evals](enterprise-agent-evals.md) and [Connector serving](connector-serving.md) |
 | Make rendered artifacts read like their real products | [Artifact ecology](artifact-ecology.md) | [Artifact compiler](artifact-compiler.md) |
 | Look up an exact CLI flag | [Generated command reference](../.claude/skills/worldloom/references/commands.md) | The relevant workflow guide above |
 

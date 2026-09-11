@@ -57,6 +57,24 @@ The lower-level seams remain useful for inspecting individual stages:
 7. Execute against an MCP server or `ConnectorSimulator` without leaking connector implementation jargon into the customer request.
 8. Record `TraceCall` objects and score them with `score_trace(...)`.
 
+## Execute an agent and grade three axes
+
+Evaluation here is not retrieval. `worldloom evalrun` grades a run on the plan
+it formed (which connector DAG), the trajectory it took (order, budget,
+designed failures, Anvil's safety laws) and the outcomes it left (records
+created, updated and deleted as a state diff; artifact grounding; a rated
+answer). Read `docs/eval-execution.md` before interpreting a score.
+
+```bash
+worldloom evalrun cases ./cases                    # per-axis coverage; a zero is a named gap
+worldloom evalrun run ./cases -o ./runs/reference  # the reference agent is the executable ceiling
+worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json
+worldloom evalrun compare ./runs/reference ./runs/mine
+```
+
+An error row (the agent raised) is excluded from every mean; never read it as
+a zero. A regression names the axis that moved.
+
 ## Non-negotiable rules
 
 - Generate only connector/entity/operation/format combinations admitted by a workflow and connector spec.

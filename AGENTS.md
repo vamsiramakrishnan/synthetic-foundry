@@ -78,6 +78,7 @@ Determinism spine:
 | `src/worldloom/` | The package; `cli.py`, `world.py`, `models.py`, `validate.py`, `documents.py`, `episodes.py` are the modules everything else depends on |
 | `src/worldloom/generators/` | Vertical generators (retail, banking, insurance, procurement, org, estate, …) |
 | `src/worldloom/{narrative,render,evaluate,compiler,actors}/` | Pipeline stages above |
+| `src/worldloom/evalrun/` | Eval execution: the three-axis case contract (plan, trajectory, outcomes), the agent seam (`ToolSurface`, `ReferenceAgent`), per-axis grading over the service's snapshots and spans, the run ledger, comparison, Eval Studio import; `docs/eval-execution.md` |
 | `src/worldloom/{connectors,evals,pipeline}/` | The three library seams `worldloom seams` names: product-shaped connector emulation and trace grading; eval-first design → demands → candidates → proof; typed orchestration shared by SDK, CLI and skills |
 | `src/worldloom/{synthesis,process_bindings,process_planning}/` | Operational relational synthesis (causal microdata, paired interventions); the supplied 12-industry process catalogue compiled into company bindings and process plans |
 | `tests/` | ~225 pytest files; scripted agent stand-ins (`scripted_composer.py`, `scripted_actor.py`, `scripted_agent.py`) |
@@ -117,6 +118,18 @@ worldloom validate ./corpus
 worldloom evaluate ./corpus --retriever all --vectors ./corpus/vectors.json
 worldloom workspace ./corpus -o ./drive
 worldloom status ./corpus --json   # names the stage and the exact next command
+```
+
+Agent evaluation loop (querying, iteration, outcomes; not retrieval):
+
+```bash
+worldloom enterprise-evals build ./corpus ./cases --exhaustive --limit 200 --dag-shape '*'
+worldloom evalrun cases ./cases                    # per-axis coverage; a zero is a named gap
+worldloom evalrun run ./cases -o ./runs/reference  # the reference agent: the executable ceiling
+worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json
+worldloom evalrun compare ./runs/reference ./runs/mine
+worldloom evalrun summarize ./runs/mine --json
+worldloom evalrun import-studio ./cases eval_results.csv -o ./runs/studio
 ```
 
 Docs site: `cd site && npm ci && npm run build` (deployed by

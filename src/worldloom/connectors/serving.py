@@ -238,7 +238,8 @@ class ConnectorEvaluationService:
         program = program_for(row)
         outputs, producers = observed_flow(row, run.spans)
         wire = {node["id"]: node for node in row["expected_dag"]["nodes"]}
-        connector, _ = self.tools[name]
+        connector, tool = self.tools[name]
+        declared = self.definitions[connector].tool(tool)
         emulator = run.emulators[connector]
         for node in program.nodes:
             if node.kind == "transform" or f"{node.connector}.{wire[node.id]['tool']}" != name:
@@ -257,7 +258,11 @@ class ConnectorEvaluationService:
                 wanted = bound_arguments(node, outputs, items[index])
             except ValueError:
                 continue
-            if node.operation in {"search", "create", "send", "post", "upload"}:
+            if node.operation in {"search", "create", "send", "post", "upload"} and "entity" in declared.params:
+                # Only when the tool declares it. `call` refuses an undeclared
+                # argument before reaching here, so demanding `entity` of a
+                # tool without one (email's `search_threads`) made every such
+                # node unattributable through the very surface it is served on.
                 wanted["entity"] = node.entity
             actual = dict(arguments)
             if node.operation == "search" and prior:
@@ -380,6 +385,53 @@ class ConnectorEvaluationService:
                     "spans": selected,
                     "next_offset": next_offset if next_offset < len(run.spans) else None,
                     "attempts": run.attempts}
+
+    def spans(self, principal: str, run_id: str) -> tuple[ConnectorSpan, ...]:
+        """Every span of a run, unpaged. The SDK path for a trusted embedding.
+
+        `trace` is the wire: paged and byte-bounded because it answers an
+        external client. A grader running in the same process wants the
+        whole thing once, and paging it back through the wire budget only
+        adds a place to lose a span.
+        """
+        with self._lock:
+            return tuple(self._run(principal, run_id).spans)
+
+    def snapshot(self, principal: str, run_id: str) -> dict[str, dict[str, Any]]:
+        """The run's connector state, every record by fid, copied.
+
+        Taken at `begin` and again after the agent finishes, the two snapshots
+        are the outcome axis: created is in the second and not the first,
+        deleted the reverse, updated is the same fid with different fields.
+        Copied, so a caller holding the pre-state cannot watch it change.
+        """
+        with self._lock:
+            run = self._run(principal, run_id)
+            return {fid: copy.deepcopy(dict(record)) for server in sorted(run.emulators)
+                    for fid, record in sorted(run.emulators[server].records.items())}
+
+    def tool_catalog(self, principal: str, run_id: str) -> tuple[dict[str, Any], ...]:
+        """The tools this run may call, with parameters and safety annotations.
+
+        The `tools/list` an MCP client would see, minus the five evaluation
+        tools: only connectors the query names, each with the read-only,
+        destructive and idempotent hints the same classification derives.
+        """
+        from ..evalrun.safety import classify_tool, tool_annotations
+
+        with self._lock:
+            run = self._run(principal, run_id)
+            out = []
+            for name in sorted(self.tools):
+                connector, tool = self.tools[name]
+                if connector not in run.emulators:
+                    continue
+                declared = self.definitions[connector].tool(tool)
+                safety = classify_tool(connector, tool, declared)
+                out.append({"name": name, "op": declared.op, "entities": list(declared.entities),
+                            "params": dict(declared.params), "annotations": tool_annotations(safety),
+                            "risk": safety.risk.value, "idempotency": safety.idempotency.value})
+            return tuple(out)
 
     def grade(self, principal: str, run_id: str) -> dict[str, Any]:
         with self._lock:
