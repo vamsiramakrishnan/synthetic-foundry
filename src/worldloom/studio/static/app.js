@@ -22,7 +22,8 @@ const icons = {
   foundry:'<path d="M4 4h16v5H4ZM4 15h7v5H4Zm12 0h4v5h-4M8 9v6m9-6v6M11 17h5"/>',
   changes:'<path d="M3 11a9 9 0 1 1 3 8M3 5v6h6M12 7v6l4 2"/>'
 };
-const navItems = [["overview","Overview"],["company","Company & processes"],["interview","Interview"],["usecases","Use cases"],["foundry","Foundry run"],["native","Documents & files"],["evals","Evaluations"],["changes","Changes & runs"]];
+icons.creation='<path d="M12 3v18M3 12h18M5 5h3M16 5h3M5 19h3M16 19h3"/>';
+const navItems = [["overview","Overview"],["creation","Create data & evals"],["company","Company & processes"],["interview","Interview"],["usecases","Use cases"],["foundry","Foundry run"],["native","Documents & files"],["evals","Evaluations"],["changes","Changes & runs"]];
 function notify(message) { $("#notice").textContent = message; setTimeout(()=> {$("#notice").textContent="";}, 7000); }
 async function api(path, body) {
   const response = await fetch(path, {method:body===undefined?"GET":"POST", headers:body===undefined?{}:{"Content-Type":"application/json","X-Worldloom-Studio":"1"}, body:body===undefined?undefined:JSON.stringify(body)});
@@ -34,9 +35,9 @@ function route(action="") { return `/api/projects/${state.company.id}${action?"/
 async function refresh() {
   const previous=state.company.revision;
   state.company=await api(route());state.projects=state.projects.map(p=>p.id===state.company.id?state.company:p);
-  if(state.company.revision!==previous){state.evals=[];state.offset=0;state.history=[];}
+  if(state.company.revision!==previous){state.evals=[];state.offset=0;state.history=[];resetCreation();}
 }
-async function selectCompany(id) { state.nativeProposal=null; state.company=await api(`/api/projects/${id}`);state.evals=[];state.offset=0;state.history=[];state.filter="";render(); }
+async function selectCompany(id) { resetCreation(); state.nativeProposal=null; state.company=await api(`/api/projects/${id}`);state.evals=[];state.offset=0;state.history=[];state.filter="";render(); }
 function latestCompile() { return state.company?.jobs.find(j=>j.revision===state.company.revision && (j.options.operation==="compile" || j.options.operation==="foundry" && j.result?.frozen_dataset) && j.result?.report); }
 function report() { return latestCompile()?.result.report; }
 function latestFoundry() { return state.company?.jobs.find(j=>j.revision===state.company.revision && j.options.operation==="foundry"); }
@@ -64,7 +65,7 @@ function render() {
   if (!state.company) { $("#app").innerHTML=onboarding();return; }
   const p=state.company;
   const page=navItems.find(([key])=>key===state.page)?.[1];
-  $("#app").innerHTML=`<div class="shell"><aside class="sidebar"><div class="wordmark">worldloom <span>STUDIO</span></div><div class="company-select"><label class="sr-only" for="company-switch">Company workspace</label><select id="company-switch">${state.projects.map(c=>option(c.id,companyName(c),p.id)).join("")}</select></div><nav class="nav" aria-label="Company workspace">${navItems.map(([key,title])=>`<button type="button" data-page="${key}" class="${state.page===key?"active":""}" ${state.page===key?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${icons[key]}</svg>${title}</button>`).join("")}</nav><div class="sidebar-bottom">One company per dataset.<br>Every run keeps its revision.${button("+ New company","new-company")}</div></aside><div class="main-shell"><header class="topbar"><div class="breadcrumb">Company workspace &nbsp;/&nbsp; <strong>${esc(page)}</strong></div><div class="actions">${badge(`Revision ${p.ordinal}`)}${button(state.harness?"Harness configured":"Connect harness","harness","quiet")}</div></header><main id="main" class="workspace">${({overview:overview,company:companyPage,interview:interviewPage,usecases:usecasesPage,evals:evalsPage,foundry:foundryPage,native:nativePage,changes:changesPage}[state.page])()}</main></div></div>`;
+  $("#app").innerHTML=`<div class="shell"><aside class="sidebar"><div class="wordmark">worldloom <span>STUDIO</span></div><div class="company-select"><label class="sr-only" for="company-switch">Company workspace</label><select id="company-switch">${state.projects.map(c=>option(c.id,companyName(c),p.id)).join("")}</select></div><nav class="nav" aria-label="Company workspace">${navItems.map(([key,title])=>`<button type="button" data-page="${key}" class="${state.page===key?"active":""}" ${state.page===key?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${icons[key]}</svg>${title}</button>`).join("")}</nav><div class="sidebar-bottom">One company per dataset.<br>Every run keeps its revision.${button("+ New company","new-company")}</div></aside><div class="main-shell"><header class="topbar"><div class="breadcrumb">Company workspace &nbsp;/&nbsp; <strong>${esc(page)}</strong></div><div class="actions">${badge(`Revision ${p.ordinal}`)}${button(state.harness?"Harness configured":"Connect harness","harness","quiet")}</div></header><main id="main" class="workspace">${({creation:creationPage,overview:overview,company:companyPage,interview:interviewPage,usecases:usecasesPage,evals:evalsPage,foundry:foundryPage,native:nativePage,changes:changesPage}[state.page])()}</main></div></div>`;
 }
 function journey() {
   const p=state.company,r=report();
@@ -77,12 +78,6 @@ function workflowPanel() {
   const w=state.company.workflow;
   if(!w)return "";
   return `<section class="panel workflow-panel" aria-label="Company dataset workflow"><div class="panel-head"><div><h2>Your next step</h2><p class="small muted">Progress is measured against this company revision.</p></div>${workflowButton(w.next_action,"primary")}</div><ol class="workflow-stages">${w.stages.map(stage=>`<li><div class="spaced"><h3>${esc(stage.title)}</h3>${badge(label(stage.status),statusColor(stage.status))}</div><p class="small muted">${esc(stage.detail)}</p>${workflowButton(stage.action,"quiet")}</li>`).join("")}</ol>${w.findings?.length?`<details><summary>What needs attention (${w.findings.length})</summary><ul class="findings">${w.findings.map(f=>`<li>${esc(f.message)} ${workflowButton(f.action,"quiet")}</li>`).join("")}</ul></details>`:""}</section>`;
-}
-function nativeSuiteEditor() {
-  const cases=state.company.spec.use_cases;
-  if(!cases.length){state.page="usecases";render();notify("Add a business use case before preparing file evaluations.");return;}
-  const choices=(name,values)=>`<fieldset class="choice-group"><legend>${name==="format"?"File formats":"Evaluated operations"}</legend>${values.map(v=>`<label><input type="checkbox" name="${name}_${v}" checked> ${esc(label(v))}</label>`).join("")}</fieldset>`;
-  modal("Prepare file evaluations",`<p class="small muted">Compile accepted company evidence into a proposed file corpus and executable tasks. Review the proposal before saving a revision.</p><form id="native-suite-form"><div class="field"><label for="native-use-case">Business use case</label><select name="use_case_id" id="native-use-case">${cases.map(c=>option(c.id,c.title,cases[0].id)).join("")}</select></div>${field("Source artifact IDs","source_artifact_ids","","text","Optional comma-separated artifact IDs from Browse accepted sources. Required for use cases scoped to a business unit, line of business or process activity.")}${choices("format",["docx","pptx","xlsx"])}${choices("operation",["read","analyze","update","create"])}<div class="form-grid"><div class="field"><label for="native-units">Minimum content units per file</label><input id="native-units" name="minimum_units" type="number" min="1" max="10000" value="2" required><p class="help">A unit is a document section, slide or worksheet evidence row. Distinct accepted evidence must support the requested size.</p></div><div class="field"><label for="native-cases">Maximum evaluation cases</label><input id="native-cases" name="max_cases" type="number" min="1" max="256" value="12" required></div></div><p class="help">Repeated facts and shared sources do not count as independent calibration samples.</p><div class="actions end"><button type="submit" class="primary">Prepare proposal</button></div></form>`);
 }
 function reviewNativeProposal(proposal, project, revision) {
   state.nativeProposal={...proposal,revision,project};
@@ -226,16 +221,17 @@ async function caseEditor(id) {
 async function loadEvals() { const data=await api(route("evals")+`?offset=${state.offset}`);state.evals=data.rows;render(); }
 async function run(operation, message="") { const job=await api(route("run"), {revision:state.company.revision, options:{operation,message}});await refresh();render();notify(`${label(operation)} queued. You can keep exploring while it runs.`);return job; }
 async function action(name, target) {
+  if(await creationAction(name,target))return;
   if(name.startsWith("go-")){state.page=name.slice(3);render();return;}
   if(name==="workflow"){
     const a=JSON.parse(target.dataset.workflow);
     if(a.kind==="navigate"){state.page=a.page;render();}
     else if(a.kind==="run")await run(a.operation);
-    else if(a.kind==="prepare_native")nativeSuiteEditor();
+    else if(a.kind==="prepare_native")await sourceSuiteEditor();
     else if(a.kind==="select_narration"){await api(route("select-narration"),{revision:state.company.revision,job_id:a.job_id});await refresh();render();}
     return;
   }
-  if(name==="prepare-native"){nativeSuiteEditor();return;}
+  if(name==="prepare-native"){await sourceSuiteEditor();return;}
   if(name==="review-native-proposal"){
     const project=state.company.id;
     if(!state.company.jobs.some(j=>j.id===target.dataset.id&&j.options.operation==="prepare_native"))throw new Error("Proposal does not belong to this company.");
@@ -260,10 +256,6 @@ worldloom studio serve --harness claude
 worldloom studio serve --harness codex --allow-native-writes</pre><p class="small muted">Custom adapters can use <code>--harness-command</code>. Commands are configured when Studio starts.</p><p>Without an adapter, use <strong>Export request</strong> and <strong>Import response</strong> in the interview.</p>`);return;}
   if(["compile","build","narrate","foundry","native"].includes(name)){await run(name);return;}
   if(name==="retry"){await api(`/api/jobs/${target.dataset.id}/retry`,{});await refresh();render();notify("Run queued to resume from its recorded checkpoints.");return;}
-  if(name==="native-sources"){
-    const data=await api(route("native-sources")+`?revision=${encodeURIComponent(state.company.revision)}&offset=${Number(target.dataset.offset||0)}`);
-    modal("Accepted source sections",`<p>${data.total} grounded sections available. Use these identifiers in corpus plans. ${data.status==="select_accepted_narration"?"Narrate company evidence and select the accepted narration first.":""}</p><pre>${esc(pretty(data.sources))}</pre>${data.next_offset!==null?button("Next source page","native-sources","quiet",`data-offset="${data.next_offset}"`):""}`);return;
-  }
   if(name==="edit-native-corpus"){jsonEditor("Native corpus plans",state.company.spec.native_corpus||[],"native_corpus");return;}
   if(name==="edit-native-calibration"){nativeCalibrationEditor();return;}
   if(name==="edit-native-tasks"){jsonEditor("Native file tasks",state.company.spec.native_tasks||[],"native_tasks");return;}
@@ -303,6 +295,7 @@ document.addEventListener("click", async event=>{
 document.addEventListener("submit", async event=>{
   event.preventDefault();const form=event.target,values=Object.fromEntries(new FormData(form)),submit=event.submitter;if(submit)submit.disabled=true;
   try {
+    if(await creationSubmit(form,values))return;
     if(form.id==="create-form"){
       const spec={company:{engine:values.engine,geo:values.geo,identity:{company_name:values.name.trim()}},seed:Number(values.seed)};
       const p=await api("/api/projects",spec);state.projects.push(p);await selectCompany(p.id);
@@ -321,7 +314,7 @@ document.addEventListener("submit", async event=>{
       await revise(spec,values.reason);$("#editor").close();
     } else if(form.id==="native-suite-form"){
       const revision=state.company.revision;
-      const request={use_case_id:values.use_case_id,formats:["docx","pptx","xlsx"].filter(v=>values["format_"+v]),operations:["read","analyze","update","create"].filter(v=>values["operation_"+v]),minimum_units:Number(values.minimum_units),max_cases:Number(values.max_cases),source_artifact_ids:(values.source_artifact_ids||"").split(",").map(v=>v.trim()).filter(Boolean)};
+      const request={use_case_id:values.use_case_id,formats:["docx","pptx","xlsx"].filter(v=>values["format_"+v]),operations:["read","analyze","update","create"].filter(v=>values["operation_"+v]),minimum_units:Number(values.minimum_units),max_cases:Number(values.max_cases),source_artifact_ids:[...creationState.selectedSources].sort()};
       if(!request.formats.length||!request.operations.length)throw new Error("Select at least one format and operation.");
       await api(route("prepare-native"),{revision,request});
       state.nativeProposal=null;$("#editor").close();await refresh();state.page="changes";render();
@@ -355,6 +348,7 @@ document.addEventListener("submit", async event=>{
 });
 document.addEventListener("change",async event=>{
   try{
+    if(await creationChange(event.target))return;
     if(event.target.id==="company-switch")await selectCompany(event.target.value);
     if(event.target.id==="response-file"){
       const file=event.target.files[0];if(!file)return;if(file.size>4_000_000)throw new Error("Response exceeds 4 MB");
@@ -363,6 +357,13 @@ document.addEventListener("change",async event=>{
   }catch(error){notify(error.message);}
 });
 document.addEventListener("input",event=>{if(event.target.id==="process-filter"){state.filter=event.target.value;$("#process-table").innerHTML=processTable();}});
+document.addEventListener("keydown",async event=>{
+  // Enter in the source search is a search, never an implicit generation run.
+  if(event.key==="Enter"&&!event.isComposing&&event.target.id==="source-search"){
+    event.preventDefault();
+    try{await creationAction("search-sources",event.target);}catch(error){notify(error.message);}
+  }
+});
 async function poll() {
   if(!state.company||document.hidden||state.pending)return;
   const jobs=state.company.jobs.filter(j=>["queued","running"].includes(j.status));if(!jobs.length)return;

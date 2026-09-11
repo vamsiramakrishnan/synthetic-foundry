@@ -1,0 +1,442 @@
+{
+  "accepted_source_artifacts": 138,
+  "calibrated": false,
+  "company": "Northstar Retail",
+  "evidence_components": 12,
+  "file_count": 36,
+  "files": {
+    "ART-SUITE-085559e83ea45421cbec-docx": {
+      "bytes": 36870,
+      "content_units": 2,
+      "distinct_facts": 11,
+      "format": "docx",
+      "sha256": "aa08f07d5342ebc31f8eb1a6b5223a1f4aaf9bb8cfba9f5b22743ce42bdcc097"
+    },
+    "ART-SUITE-085559e83ea45421cbec-pptx": {
+      "bytes": 35067,
+      "content_units": 2,
+      "distinct_facts": 11,
+      "format": "pptx",
+      "sha256": "df776488056db1a41edaa5d9a8bb66943d7a79590205b14111e6a66f53b4a96a"
+    },
+    "ART-SUITE-085559e83ea45421cbec-xlsx": {
+      "bytes": 6271,
+      "content_units": 2,
+      "distinct_facts": 11,
+      "format": "xlsx",
+      "sha256": "f03d5c74d3ea3d4274c7431041ffc04410429eeeb7a93d228b2d339737783a12"
+    },
+    "ART-SUITE-1b203835f35b6e497370-docx": {
+      "bytes": 36873,
+      "content_units": 2,
+      "distinct_facts": 11,
+      "format": "docx",
+      "sha256": "c3eb117036e68519ce2cd652e76f53f8e9980a8a607f8719fba888fe6dcefd50"
+    },
+    "ART-SUITE-1b203835f35b6e497370-pptx": {
+      "bytes": 35069,
+      "content_units": 2,
+      "distinct_facts": 11,
+      "format": "pptx",
+      "sha256": "320bdee46c96e57571a9dc93f9b0933fe36176f2502ced187522b1aebc701709"
+    },
+    "ART-SUITE-1b203835f35b6e497370-xlsx": {
+      "bytes": 6273,
+      "content_units": 2,
+      "distinct_facts": 11,
+      "format": "xlsx",
+      "sha256": "719632d0fe6b2873933ab86882a30125e568c70961a4ef11ffe68f2cb02d34aa"
+    },
+    "ART-SUITE-1e7021909dec559e5a3a-docx": {
+      "bytes": 36703,
+      "content_units": 2,
+      "distinct_facts": 2,
+      "format": "docx",
+      "sha256": "a5746fefd022e93cdaaffc8e647125f70572734971b4f8bbd8ddc13ce3bbc806"
+    },
+    "ART-SUITE-1e7021909dec559e5a3a-pptx": {
+      "bytes": 34908,
+      "content_units": 2,
+      "distinct_facts": 2,
+      "format": "pptx",
+      "sha256": "91524412970dd6664a2d6871f650208e7b0eaec5da674893e41524aa4a6da9db"
+    },
+    "ART-SUITE-1e7021909dec559e5a3a-xlsx": {
+      "bytes": 5770,
+      "content_units": 2,
+      "distinct_facts": 2,
+      "format": "xlsx",
+      "sha256": "a1eea7f8c20a608a5da6a3b49d45fca667d86e9f2fa26dddc5fffc5ab83230d6"
+    },
+    "ART-SUITE-34156fb43b4a98ca8352-docx": {
+      "bytes": 36701,
+      "content_units": 2,
+      "distinct_facts": 2,
+      "format": "docx",
+      "sha256": "98c744fd3ed7b23d31a450c904009c72c19b74f7aa173e9e05038eaf2ac685b2"
+    },
+    "ART-SUITE-34156fb43b4a98ca8352-pptx": {
+      "bytes": 34906,
+      "content_units": 2,
+      "distinct_facts": 2,
+      "format": "pptx",
+      "sha256": "eeaa775da78a5175caa58bcde2f1881fc1e5b31085f9085ace5105d000f0faaa"
+    },
+    "ART-SUITE-34156fb43b4a98ca8352-xlsx": {
+      "bytes": 5769,
+      "content_units": 2,
+      "distinct_facts": 2,
+      "format": "xlsx",
+      "sha256": "1a401f6812106cc9a2bcf7b25cd63feb9690da2ba48f43696c44a4b10d6093dd"
+    },
+    "ART-SUITE-52c5a11811d13d06d5a5-docx": {
+      "bytes": 36891,
+      "content_units": 2,
+      "distinct_facts": 12,
+      "format": "docx",
+      "sha256": "b9356ad7891704187e4150af62fa369152870be3cc14cf5967170a14ea901bfd"
+    },
+    "ART-SUITE-52c5a11811d13d06d5a5-pptx": {
+      "bytes": 35171,
+      "content_units": 2,
+      "distinct_facts": 12,
+      "format": "pptx",
+      "sha256": "1695572180b5e08ca0252e228a5e61715a307ae7cc5625d611e1f075bf2722af"
+    },
+    "ART-SUITE-52c5a11811d13d06d5a5-xlsx": {
+      "bytes": 6308,
+      "content_units": 2,
+      "distinct_facts": 12,
+      "format": "xlsx",
+      "sha256": "3a986afe7ce325f4469b304dcc5428ad1a9a95f69546856158ff419735c436d1"
+    },
+    "ART-SUITE-5c6c32d8d1ec86ce4c80-docx": {
+      "bytes": 36720,
+      "content_units": 2,
+      "distinct_facts": 4,
+      "format": "docx",
+      "sha256": "e9a820b76f6fba8e1279407866d40cdd3f8c7efcced40cf652bce3bc91e42e0a"
+    },
+    "ART-SUITE-5c6c32d8d1ec86ce4c80-pptx": {
+      "bytes": 34977,
+      "content_units": 2,
+      "distinct_facts": 4,
+      "format": "pptx",
+      "sha256": "0dcf6b79f2757eec5c53215ab31e6991e7738fe3fb55b74894bcce8d22b81978"
+    },
+    "ART-SUITE-5c6c32d8d1ec86ce4c80-xlsx": {
+      "bytes": 5847,
+      "content_units": 2,
+      "distinct_facts": 4,
+      "format": "xlsx",
+      "sha256": "bee6c725435fcd32ac5f3b024efcc648083ae36b2a86f37a5e9eabceeb043e0f"
+    },
+    "ART-SUITE-7c696aa86fae9445988f-docx": {
+      "bytes": 36837,
+      "content_units": 2,
+      "distinct_facts": 9,
+      "format": "docx",
+      "sha256": "04d908b048e1ab14e14f8a4458d67d4d45a47c12347fdf12fc964d8b2e09b5cd"
+    },
+    "ART-SUITE-7c696aa86fae9445988f-pptx": {
+      "bytes": 35034,
+      "content_units": 2,
+      "distinct_facts": 9,
+      "format": "pptx",
+      "sha256": "e20d908abd9207b95e29f9090536a921e7582e830bebfc090699cbd4472f5ec8"
+    },
+    "ART-SUITE-7c696aa86fae9445988f-xlsx": {
+      "bytes": 6188,
+      "content_units": 2,
+      "distinct_facts": 9,
+      "format": "xlsx",
+      "sha256": "ce1de71ee562c666bf9d6b34d24f17c71c7a9352436246f97f0e870fa6d8265b"
+    },
+    "ART-SUITE-aa977295062d6d8eae3c-docx": {
+      "bytes": 36870,
+      "content_units": 2,
+      "distinct_facts": 4,
+      "format": "docx",
+      "sha256": "5e5fed2437ccb9ed46c797c3b8382430f440278c02f33359def576f987a19c84"
+    },
+    "ART-SUITE-aa977295062d6d8eae3c-pptx": {
+      "bytes": 35066,
+      "content_units": 2,
+      "distinct_facts": 4,
+      "format": "pptx",
+      "sha256": "99926376f48c3b828e6472f7938a3a2cd42c2da1462bb6f0c8743a149365b89f"
+    },
+    "ART-SUITE-aa977295062d6d8eae3c-xlsx": {
+      "bytes": 6121,
+      "content_units": 2,
+      "distinct_facts": 4,
+      "format": "xlsx",
+      "sha256": "b62dc56d682411d2fedcf9c723bfb03fc295ab010fb2ae3e9104fa439054503e"
+    },
+    "ART-SUITE-ad9bb688ba5d13286948-docx": {
+      "bytes": 36891,
+      "content_units": 2,
+      "distinct_facts": 12,
+      "format": "docx",
+      "sha256": "0c303f1194177724cd4d7c9e5a8f3b0d93561a8b36b20afd1eb4220b90d80b5c"
+    },
+    "ART-SUITE-ad9bb688ba5d13286948-pptx": {
+      "bytes": 35167,
+      "content_units": 2,
+      "distinct_facts": 12,
+      "format": "pptx",
+      "sha256": "9665c0ae36d594cc1e7eb52ef35ad76be36d23122977292aae82c9ffafa8f3c2"
+    },
+    "ART-SUITE-ad9bb688ba5d13286948-xlsx": {
+      "bytes": 6307,
+      "content_units": 2,
+      "distinct_facts": 12,
+      "format": "xlsx",
+      "sha256": "723537c107e23c347db6ae97833f951b215c87055ad11e71fc9e29b54bc73943"
+    },
+    "ART-SUITE-c0e1e2876dca2691741c-docx": {
+      "bytes": 36702,
+      "content_units": 2,
+      "distinct_facts": 2,
+      "format": "docx",
+      "sha256": "a20a8aeca2486840cb08337c8c034da83f6def376f22d61a57911d9ac69fb6c9"
+    },
+    "ART-SUITE-c0e1e2876dca2691741c-pptx": {
+      "bytes": 34906,
+      "content_units": 2,
+      "distinct_facts": 2,
+      "format": "pptx",
+      "sha256": "ab46135a06af6322fef0c46dfb604f4e303a3b075f2f4ee3867fb08104c10ef3"
+    },
+    "ART-SUITE-c0e1e2876dca2691741c-xlsx": {
+      "bytes": 5768,
+      "content_units": 2,
+      "distinct_facts": 2,
+      "format": "xlsx",
+      "sha256": "b85b1c0bf806ab7ed19420775aff393daa509acd26f3da19dec1e1e6a3713968"
+    },
+    "ART-SUITE-e842d2134b44d69b886b-docx": {
+      "bytes": 36795,
+      "content_units": 2,
+      "distinct_facts": 4,
+      "format": "docx",
+      "sha256": "0d10206aa8adf4b41ecf63fe5f2eb6a2ac298d495b01f8e613bca0f272d329bc"
+    },
+    "ART-SUITE-e842d2134b44d69b886b-pptx": {
+      "bytes": 35014,
+      "content_units": 2,
+      "distinct_facts": 4,
+      "format": "pptx",
+      "sha256": "1b86d709b74ed29a10b0fec9cd7a0947a0b9041d5073e4603fdd63d98a48a4bb"
+    },
+    "ART-SUITE-e842d2134b44d69b886b-xlsx": {
+      "bytes": 5976,
+      "content_units": 2,
+      "distinct_facts": 4,
+      "format": "xlsx",
+      "sha256": "0accf00555e4db78035ab82b4a0a40c82c043e033277d601e38275adb7d3cc75"
+    },
+    "ART-SUITE-f34c19185eb41885d364-docx": {
+      "bytes": 36892,
+      "content_units": 2,
+      "distinct_facts": 12,
+      "format": "docx",
+      "sha256": "9ff7e8ee9d68945b7bf13b9a27a99821aa9b4e3e64bb80e30ceec19e8a106842"
+    },
+    "ART-SUITE-f34c19185eb41885d364-pptx": {
+      "bytes": 35170,
+      "content_units": 2,
+      "distinct_facts": 12,
+      "format": "pptx",
+      "sha256": "f50fb9505f35e32097da5a75b979a062a507a62abc768a5a385e9fef1c869067"
+    },
+    "ART-SUITE-f34c19185eb41885d364-xlsx": {
+      "bytes": 6308,
+      "content_units": 2,
+      "distinct_facts": 12,
+      "format": "xlsx",
+      "sha256": "b47d274e5fab35d1004f645082dfb873c0e075b692fe722ca2192286639bc3a7"
+    }
+  },
+  "observed_target_trials": 0,
+  "operations": {
+    "analyze": 5,
+    "create": 36,
+    "read": 36,
+    "update": 36
+  },
+  "proposal_summary": {
+    "artifacts": 36,
+    "available_cases": 29,
+    "case_shortfall": 0,
+    "limitations": [
+      "Explicit-location capability contracts; semantic fit to the business objective requires review.",
+      "Task count is not independent support. Calibration seals the complete project's evidence graph.",
+      "No target observations or calibrated difficulty are implied by reference qualification."
+    ],
+    "minimum_units": 2,
+    "prepared_cases": 12,
+    "reference_qualified": 113,
+    "requested_cases": 12,
+    "source_components": 47,
+    "source_sections": 252,
+    "tasks": 113,
+    "unsupported": [
+      {
+        "case": "7c696aa86fae9445988f",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "e842d2134b44d69b886b",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "5c6c32d8d1ec86ce4c80",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "c0e1e2876dca2691741c",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "aa977295062d6d8eae3c",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "34156fb43b4a98ca8352",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      },
+      {
+        "case": "1e7021909dec559e5a3a",
+        "operation": "analyze",
+        "reason": "No same-measure numeric pair with an explicit common period across distinct subjects"
+      }
+    ]
+  },
+  "public_queryset_digest": "762ee647a3814e59482179534db73eba",
+  "replay_identical": true,
+  "revision": "20c6739da4573d7c9c5faef081aa692f",
+  "sample_public_tasks": [
+    {
+      "answers": [
+        {
+          "assertion_id": "evidence",
+          "requires_citations": true
+        }
+      ],
+      "evidence_component": "cb676ab25c04325eb9440c0f86a1009e",
+      "id": "suite-7c696aa86fae9445988f-docx-read",
+      "inputs": [
+        {
+          "artifact_id": "ART-SUITE-7c696aa86fae9445988f-docx",
+          "format": "docx",
+          "path": "inputs/e80619438c41e63912163c05ddf4888c.docx",
+          "sha256": "04d908b048e1ab14e14f8a4458d67d4d45a47c12347fdf12fc964d8b2e09b5cd"
+        }
+      ],
+      "operation": "read",
+      "output": null,
+      "prompt": "For Review retail close evidence, retrieve the complete evidence at paragraph:5 in ART-SUITE-7c696aa86fae9445988f-docx and cite it exactly.",
+      "split": "unassigned",
+      "use_case_id": "native-close-review"
+    },
+    {
+      "answers": [],
+      "evidence_component": "cb676ab25c04325eb9440c0f86a1009e",
+      "id": "suite-7c696aa86fae9445988f-docx-update",
+      "inputs": [
+        {
+          "artifact_id": "ART-SUITE-7c696aa86fae9445988f-docx",
+          "format": "docx",
+          "path": "inputs/e80619438c41e63912163c05ddf4888c.docx",
+          "sha256": "04d908b048e1ab14e14f8a4458d67d4d45a47c12347fdf12fc964d8b2e09b5cd"
+        }
+      ],
+      "operation": "update",
+      "output": {
+        "artifact_id": "ART-SUITE-7c696aa86fae9445988f-docx-update",
+        "format": "docx",
+        "source_artifact_id": "ART-SUITE-7c696aa86fae9445988f-docx"
+      },
+      "prompt": "For Review retail close evidence, change only the heading at paragraph:1 in ART-SUITE-7c696aa86fae9445988f-docx to 'Reviewed evidence'. Preserve all other content and properties. Return an updated copy with its original source checksum.",
+      "split": "unassigned",
+      "use_case_id": "native-close-review"
+    },
+    {
+      "answers": [],
+      "evidence_component": "cb676ab25c04325eb9440c0f86a1009e",
+      "id": "suite-7c696aa86fae9445988f-docx-create",
+      "inputs": [
+        {
+          "artifact_id": "ART-SUITE-7c696aa86fae9445988f-docx",
+          "format": "docx",
+          "path": "inputs/e80619438c41e63912163c05ddf4888c.docx",
+          "sha256": "04d908b048e1ab14e14f8a4458d67d4d45a47c12347fdf12fc964d8b2e09b5cd"
+        }
+      ],
+      "operation": "create",
+      "output": {
+        "artifact_id": "ART-SUITE-7c696aa86fae9445988f-docx-create",
+        "format": "docx",
+        "source_artifact_id": null
+      },
+      "prompt": "For Review retail close evidence, create a new docx evidence excerpt. Copy the complete content at paragraph:5 from ART-SUITE-7c696aa86fae9445988f-docx verbatim into paragraph:1 in the new file.",
+      "split": "unassigned",
+      "use_case_id": "native-close-review"
+    },
+    {
+      "answers": [
+        {
+          "assertion_id": "evidence",
+          "requires_citations": true
+        }
+      ],
+      "evidence_component": "cb676ab25c04325eb9440c0f86a1009e",
+      "id": "suite-7c696aa86fae9445988f-pptx-read",
+      "inputs": [
+        {
+          "artifact_id": "ART-SUITE-7c696aa86fae9445988f-pptx",
+          "format": "pptx",
+          "path": "inputs/c32b1441da97c5cbfc030ff577d3233c.pptx",
+          "sha256": "e20d908abd9207b95e29f9090536a921e7582e830bebfc090699cbd4472f5ec8"
+        }
+      ],
+      "operation": "read",
+      "output": null,
+      "prompt": "For Review retail close evidence, retrieve the complete evidence at slide:2/notes in ART-SUITE-7c696aa86fae9445988f-pptx and cite it exactly.",
+      "split": "unassigned",
+      "use_case_id": "native-close-review"
+    }
+  ],
+  "schema": "worldloom.creation-workbench-measurement/v1",
+  "screenshots": {
+    "captured": false,
+    "reason": "This offline mechanism check does not perform browser capture"
+  },
+  "separate_operational_recipe_check": {
+    "dimensions": {
+      "products": 8,
+      "stores": 4,
+      "ticks": 30
+    },
+    "emitted_rows": {
+      "inventory": 960,
+      "product": 8,
+      "store": 4
+    },
+    "planned_rows": {
+      "inventory": 960,
+      "product": 8,
+      "store": 4
+    },
+    "queries_generated_in_recipe_check": 0,
+    "requested_queries": 1000
+  },
+  "task_count": 113
+}

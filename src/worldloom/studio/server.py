@@ -138,8 +138,9 @@ class StudioHandler(BaseHTTPRequestHandler):
             parts = path.path.strip("/").split("/")
             query = parse_qs(path.query)
             studio = self.server.studio
-            if method == "GET" and path.path in {"/", "/app.js", "/style.css"}:
-                asset = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"), "/style.css": ("style.css", "text/css")}[path.path]
+            if method == "GET" and path.path in {"/", "/app.js", "/creation.js", "/style.css"}:
+                asset = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
+                         "/creation.js": ("creation.js", "text/javascript"), "/style.css": ("style.css", "text/css")}[path.path]
                 self.send(200, files("worldloom.studio").joinpath("static", asset[0]).read_bytes(), content_type=asset[1])
                 return
             if method == "GET" and parts == ["api", "bootstrap"]:
@@ -171,9 +172,19 @@ class StudioHandler(BaseHTTPRequestHandler):
                     self.send(200, studio.workflow(project, query.get("revision", [None])[0],
                               harness_configured=bool(self.server.harness_command)).model_dump(mode="json"))
                     return
+                if parts[3:] == ["creation"]:
+                    self.send(200, studio.creation(project, query.get("revision", [None])[0]))
+                    return
                 if parts[3:] == ["native-sources"]:
                     self.send(200, studio.native_sources(project, query.get("revision", [None])[0],
-                              offset=int(query.get("offset", ["0"])[0]), limit=int(query.get("limit", ["256"])[0])))
+                              offset=int(query.get("offset", ["0"])[0]), limit=int(query.get("limit", ["256"])[0]),
+                              search=query.get("search", [""])[0], group_by=query.get("group_by", ["section"])[0]))
+                    return
+                if parts[3:] == ["native-queryset"]:
+                    self.send(200, studio.native_queryset(project, query.get("job", [""])[0],
+                              offset=int(query.get("offset", ["0"])[0]), limit=int(query.get("limit", ["25"])[0]),
+                              operation=query.get("operation", [""])[0], format=query.get("format", [""])[0],
+                              use_case_id=query.get("use_case_id", [""])[0]))
                     return
                 if parts[3:] == ["native-artifact"]:
                     payload, format = studio.native_artifact(project, query.get("job", [""])[0], query.get("artifact", [""])[0])
@@ -227,6 +238,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                         result = studio.apply_interview(project, body["request_id"])
                     elif action == "select-narration":
                         result = studio.select_narration(project, body["revision"], body["job_id"])
+                    elif action == "prepare-data":
+                        result = studio.prepare_data(project, body["revision"], body["request"])
                     elif action == "prepare-native":
                         current = studio.store.get(project)
                         if current["revision"] != body["revision"]:

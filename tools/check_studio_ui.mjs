@@ -27,10 +27,11 @@ const context = vm.createContext({document, structuredClone, Blob, URL,
       ? {projects:[data.company],catalogue:data.catalogue,harness_configured:false}
       : path.startsWith("/api/jobs/")?jobResponse:data.company};
   }});
+vm.runInContext(fs.readFileSync(new URL("../src/worldloom/studio/static/creation.js", import.meta.url), "utf8"), context);
 vm.runInContext(fs.readFileSync(new URL("../src/worldloom/studio/static/app.js", import.meta.url), "utf8"), context);
 await new Promise(setImmediate);
 assert.ok(document.querySelector("#app").innerHTML.includes("Company map"), "bootstrap should render the company");
-for (const page of ["overview", "company", "interview", "usecases", "foundry", "native", "evals", "changes"]) {
+for (const page of ["overview", "creation", "company", "interview", "usecases", "foundry", "native", "evals", "changes"]) {
   vm.runInContext(`state.page = ${JSON.stringify(page)}; render();`, context);
   assert.ok(document.querySelector("#app").innerHTML.includes('id="main"'), page);
 }
@@ -102,7 +103,7 @@ const originalFetch=context.fetch;
 context.fetch=async(path,options)=>path.endsWith('/prepare-native')
   ? (requests.push({path,body:JSON.parse(options.body)}),{ok:true,json:async()=>context.proposalResponse})
   : originalFetch(path,options);
-await listeners.get('submit')({preventDefault(){},target:{id:'native-suite-form',values:{use_case_id:data.company.spec.use_cases[0].id,format_docx:'on',operation_read:'on',minimum_units:'200',max_cases:'12'}}});
+await listeners.get('submit')({preventDefault(){},target:{id:'native-suite-form',dataset:{project:data.company.id,revision:data.company.revision},values:{use_case_id:data.company.spec.use_cases[0].id,format_docx:'on',operation_read:'on',minimum_units:'200',max_cases:'12'}}});
 const prepared=requests.findLast(r=>r.path.endsWith('/prepare-native'));
 assert.deepEqual(prepared.body.request.formats,['docx']);
 assert.deepEqual(prepared.body.request.operations,['read']);
@@ -141,3 +142,155 @@ vm.runInContext("state.company.jobs[0].result.status='prepared';render()",contex
 assert.ok(document.querySelector('#app').innerHTML.includes('badge amber">prepared'),'prepared does not claim measured completion');
 vm.runInContext("state.nativeProposal={spec:state.company.spec,project:state.company.id,revision:state.company.revision,summary:{tasks:0}}",context);
 await assert.rejects(vm.runInContext("action('apply-native-proposal',{})",context),/No executable tasks/);
+
+// A displayed form owns its original company scope even when polling clears
+// shared creation state while the dialog remains open.
+context.creationCompany=structuredClone(data.company);
+vm.runInContext('state.company=structuredClone(creationCompany);resetCreation();',context);
+context.suiteForm={id:'native-suite-form',dataset:{project:data.company.id,revision:data.company.revision},
+  values:{use_case_id:data.company.spec.use_cases[0].id,format_docx:'on',operation_read:'on',minimum_units:'2',max_cases:'12'}};
+vm.runInContext("creationState.suiteContext=creationScope();state.company.revision='newer-revision';resetCreation();",context);
+await assert.rejects(vm.runInContext('creationSubmit(suiteForm,suiteForm.values)',context),/Company changed/);
+const beforeStaleSuite=requests.filter(r=>r.path.endsWith('/prepare-native')).length;
+await listeners.get('submit')({preventDefault(){},target:context.suiteForm});
+assert.equal(requests.filter(r=>r.path.endsWith('/prepare-native')).length,beforeStaleSuite,'a stale form cannot submit against the new revision');
+await assert.rejects(vm.runInContext("creationSubmit({id:'native-suite-form'}, {})",context),/Company changed/,'a missing form scope must fail closed');
+
+const sourcePage=(id,offset=0)=>({status:'accepted',total:21,next_offset:offset===0?20:null,sources:[{
+  source_artifact_id:id,title:`Accepted ${id}`,sections:[{index:0,heading:'Quarterly evidence'}],
+  section_count:1,fact_ids:[`FACT-${id}`],preview:'Accepted company evidence'}]});
+const pendingCreation=[];
+const beforeCreationFetch=context.fetch;
+context.fetch=(path,options)=>{
+  if(path.includes('/native-queryset?')||path.includes('/native-sources?')){
+    requests.push({path});
+    return new Promise(resolve=>pendingCreation.push({path,resolve:value=>resolve({ok:true,json:async()=>value})}));
+  }
+  return beforeCreationFetch(path,options);
+};
+context.nativeRun={id:'native-creation',revision:data.company.revision,options:{operation:'native'},status:'complete',result:{
+  status:'prepared',artifacts:1,tasks:2,observed_trials:0,evidence_components:1,calibrated:false,
+  corpus_artifacts:{'ART-BOOK':{title:'Quarterly evidence',format:'xlsx',content_units:200,distinct_fact_count:40}}}};
+vm.runInContext("state.company=structuredClone(creationCompany);state.company.jobs=[nativeRun];resetCreation();state.page='creation';creationState.queryOperation='read';",context);
+const firstQuery=vm.runInContext('loadNativeQueries()',context);
+vm.runInContext("creationState.queryOperation='update'",context);
+const secondQuery=vm.runInContext('loadNativeQueries()',context);
+pendingCreation[1].resolve({job:'native-creation',rows:[],total:0,unfiltered_total:2,observed_trials:0,offset:0,next_offset:null,marker:'newer-query'});
+await secondQuery;
+pendingCreation[0].resolve({job:'native-creation',rows:[],total:0,unfiltered_total:2,observed_trials:0,offset:0,next_offset:null,marker:'older-query'});
+await firstQuery;
+assert.equal(vm.runInContext('creationState.queries.marker',context),'newer-query','a slow prior filter must not replace newer query results');
+assert.equal(vm.runInContext('creationState.queryOperation',context),'update');
+vm.runInContext("creationState.sourceSearch='old'",context);
+const firstSource=vm.runInContext('loadSources()',context);
+vm.runInContext("creationState.sourceSearch='new'",context);
+const secondSource=vm.runInContext('loadSources(20)',context);
+pendingCreation[3].resolve(sourcePage('ART-NEW',20));
+assert.equal(await secondSource,true);
+pendingCreation[2].resolve(sourcePage('ART-OLD'));
+assert.equal(await firstSource,false);
+assert.equal(vm.runInContext('creationState.sources.sources[0].source_artifact_id',context),'ART-NEW');
+assert.equal(vm.runInContext('creationState.sourceOffset',context),20,'late source pages cannot replace the current page');
+const resetSource=vm.runInContext('loadSources()',context);
+vm.runInContext('resetCreation()',context);
+pendingCreation[4].resolve(sourcePage('ART-BEFORE-RESET'));
+assert.equal(await resetSource,false);
+assert.equal(vm.runInContext('creationState.sources',context),null,'reset invalidates requests even if the company revision did not change');
+
+// Checkbox choices survive source pagination and are the identifiers sent to
+// native preparation, rather than whichever page was most recently displayed.
+context.fetch=async(path,options)=>path.includes('/native-sources?')
+  ? (requests.push({path}),{ok:true,json:async()=>new URL(path,'http://studio').searchParams.get('offset')==='20'
+      ?sourcePage('ART-B',20):sourcePage('ART-A')})
+  : beforeCreationFetch(path,options);
+await vm.runInContext('sourceSuiteEditor()',context);
+assert.ok(document.querySelector('#dialog-content').innerHTML.includes(`data-revision="${data.company.revision}"`));
+await vm.runInContext("creationChange({dataset:{sourceId:'ART-A'},checked:true})",context);
+await vm.runInContext("creationAction('source-page',{dataset:{offset:'20'}})",context);
+await vm.runInContext("creationChange({dataset:{sourceId:'ART-B'},checked:true})",context);
+assert.equal(document.querySelector('#source-selection-count').textContent,'2 source artifacts selected');
+await vm.runInContext("creationAction('source-page',{dataset:{offset:'0'}})",context);
+assert.match(document.querySelector('#source-selection-list').innerHTML,/data-source-id="ART-A" checked/);
+await listeners.get('submit')({preventDefault(){},target:context.suiteForm});
+assert.deepEqual(requests.findLast(r=>r.path.endsWith('/prepare-native')).body.request.source_artifact_ids,['ART-A','ART-B']);
+
+// Data sizing is a proposal, not a generation run or an implicit revision.
+const creationCase=data.company.spec.use_cases.find(c=>c.scenario);
+context.dataProposal={project:data.company.id,revision:data.company.revision,spec:structuredClone(data.company.spec),summary:{
+  history:{before:data.company.spec.episodes,after:data.company.spec.episodes,changed:false},invalidated:{},
+  simulation:{mechanism:'retail_operations',target:creationCase.id,table_rows:{store:5,inventory:90},total_rows:95},
+  requested_query_total:36,requested_queries:{[creationCase.id]:36},limitations:['No data or files have been generated.']}};
+context.dataProposal.spec.use_cases.find(c=>c.id===creationCase.id).count=36;
+context.fetch=async(path,options)=>{
+  if(path.endsWith('/prepare-data'))return requests.push({path,body:JSON.parse(options.body)}),{ok:true,json:async()=>context.dataProposal};
+  if(path.includes('/creation?'))return {ok:true,json:async()=>({simulations:[{target:creationCase.id,mechanism:'retail_operations',
+    supported:true,dimensions:{stores:3,products:6,ticks:24},total_rows:500}]})};
+  return beforeCreationFetch(path,options);
+};
+vm.runInContext('state.company=structuredClone(creationCompany);resetCreation();',context);
+await vm.runInContext('dataEditor()',context);
+assert.match(document.querySelector('#dialog-content').innerHTML,/id="data-creation-form"/);
+assert.ok(document.querySelector('#dialog-content').innerHTML.includes(`data-project="${data.company.id}"`));
+context.dataForm={id:'data-creation-form',dataset:{project:data.company.id,revision:data.company.revision},
+  values:{simulation_target:creationCase.id,stores:'5',products:'6',ticks:'18',[`query_${creationCase.id}`]:'36'}};
+const beforeDataRevision=requests.filter(r=>r.path.endsWith('/revise')).length;
+const beforeDataRuns=requests.filter(r=>r.path.endsWith('/run')).length;
+await listeners.get('submit')({preventDefault(){},target:context.dataForm});
+assert.deepEqual(requests.findLast(r=>r.path.endsWith('/prepare-data')).body,{revision:data.company.revision,
+  request:{query_counts:{[creationCase.id]:36},simulation_target:creationCase.id,stores:5,products:6,ticks:18}});
+assert.equal(requests.filter(r=>r.path.endsWith('/revise')).length,beforeDataRevision);
+assert.equal(requests.filter(r=>r.path.endsWith('/run')).length,beforeDataRuns);
+assert.equal(vm.runInContext('state.company.spec.use_cases.find(c=>c.scenario).count',context),creationCase.count);
+assert.match(document.querySelector('#dialog-content').innerHTML,/95 total operational rows/);
+assert.match(document.querySelector('#dialog-content').innerHTML,/has not generated files or measured query diversity/);
+await vm.runInContext("creationAction('apply-data-proposal',{})",context);
+assert.equal(requests.filter(r=>r.path.endsWith('/revise')).length,beforeDataRevision+1);
+assert.deepEqual(requests.findLast(r=>r.path.endsWith('/revise')).body.spec,context.dataProposal.spec);
+vm.runInContext("creationState.proposal=dataProposal;state.company.revision='newer-revision'",context);
+await assert.rejects(vm.runInContext("creationAction('apply-data-proposal',{})",context),/Company changed/);
+await assert.rejects(vm.runInContext('creationSubmit(dataForm,dataForm.values)',context),/Company changed/);
+assert.equal(requests.filter(r=>r.path.endsWith('/revise')).length,beforeDataRevision+1);
+vm.runInContext('state.company=structuredClone(creationCompany);resetCreation()',context);
+let resolveLateProposal;
+context.fetch=(path,options)=>path.endsWith('/prepare-data')
+  ?new Promise(resolve=>{resolveLateProposal=()=>resolve({ok:true,json:async()=>context.dataProposal});})
+  :beforeCreationFetch(path,options);
+const lateProposal=vm.runInContext('creationSubmit(dataForm,dataForm.values)',context);
+vm.runInContext("state.company.revision='newer-revision'",context);
+resolveLateProposal();
+await assert.rejects(lateProposal,/Company changed/,'a proposal arriving after its company changed cannot reopen review');
+assert.equal(vm.runInContext('creationState.proposal',context),null);
+
+vm.runInContext("state.company=structuredClone(creationCompany);state.company.jobs=[nativeRun];resetCreation();creationState.tab='corpus';state.page='creation';render()",context);
+let creationRendered=document.querySelector('#app').innerHTML;
+assert.match(creationRendered,/Observed target trials<\/div><strong>0<\/strong>/);
+assert.match(creationRendered,/Generated corpus files<\/div><strong>1<\/strong>/);
+assert.ok(creationRendered.includes('Difficulty not verified')&&!creationRendered.includes('Difficulty band verified'));
+assert.ok(creationRendered.includes('reference-qualified tasks')&&creationRendered.includes('prepared'));
+assert.match(creationRendered,/class="corpus-card"/);
+assert.ok(creationRendered.includes('Quarterly evidence')&&creationRendered.includes('Download XLSX'));
+assert.ok(creationRendered.includes('are not interchangeable with pages'));
+assert.ok(!creationRendered.includes('Authenticated run available'),'a job record alone does not authenticate current file bytes');
+context.mixedFormatQuery={job:'native-creation',offset:0,next_offset:null,total:1,unfiltered_total:2,observed_trials:0,rows:[{
+  id:'create-report',operation:'create',prompt:'Create a DOCX report from the workbook.',inputs:[{format:'xlsx',artifact_id:'ART-BOOK'}],
+  output:{format:'docx',artifact_id:'ART-REPORT'},split:'unassigned',use_case_id:creationCase.id,evidence_component:'component-one'}]};
+vm.runInContext("creationState.queries=mixedFormatQuery;creationState.tab='queries';render()",context);
+creationRendered=document.querySelector('#app').innerHTML;
+assert.match(creationRendered,/<span class="badge ">(?:XLSX \/ DOCX|DOCX \/ XLSX)<\/span>/,'format badges describe inputs and outputs');
+assert.ok(creationRendered.includes('0 target trials recorded')&&creationRendered.includes('Reference qualification does not measure target-agent success'));
+vm.runInContext("state.company.jobs[0]={...state.company.jobs[0],revision:'older-revision'};creationState.tab='corpus';render()",context);
+assert.ok(!document.querySelector('#app').innerHTML.includes('class="corpus-card"'),'earlier runs must not masquerade as current generated corpus');
+context.fetch=beforeCreationFetch;
+process.stdout.write('Creation proposals, source selections, stale forms and responses, truthful native metrics and mixed-format task cards passed.\n');
+
+vm.runInContext('state.company=structuredClone(creationCompany);resetCreation()',context);
+let searchEntered=false;
+const beforeSearchRuns=requests.filter(r=>r.path.endsWith('/prepare-native')).length;
+context.fetch=async(path,options)=>path.includes('/native-sources?')
+  ?{ok:true,json:async()=>({status:'accepted',total:0,sources:[],next_offset:null})}:beforeCreationFetch(path,options);
+document.querySelector('#source-search').value='reconciliation';
+await listeners.get('keydown')({key:'Enter',target:{id:'source-search'},preventDefault(){searchEntered=true;}});
+assert.ok(searchEntered,'Enter searches instead of submitting the native suite');
+assert.equal(vm.runInContext('creationState.sourceSearch',context),'reconciliation');
+assert.equal(requests.filter(r=>r.path.endsWith('/prepare-native')).length,beforeSearchRuns);
+context.fetch=beforeCreationFetch;

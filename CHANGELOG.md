@@ -11,6 +11,28 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: reviewed company-data sizing
+
+- Add opt-in data creation proposals that reuse the canonical retail inventory,
+  connected replenishment and banking servicing programs. Preserve authored
+  parameter values, validate execution limits and report exact planned table
+  rows. Protect custom programs and ambiguous targets from silent replacement.
+- Bound monthly-history sizing and require explicit acknowledgement when a
+  change invalidates selected narration, native file plans, tasks and calibration.
+  Earlier revisions and generated files remain intact. Existing generation
+  defaults and golden corpora are unchanged.
+
+### Studio: data, corpus and evaluation workbench
+
+- Add **Create data & evals**, shared sizing proposals in the SDK and HTTP API,
+  searchable accepted-source selection, generated file downloads and paginated
+  public file-task inspection by operation, format and use case.
+- Authenticate native exports before access without exposing private answers;
+  distinguish requested connector queries, planned rows, generated files,
+  reference qualification and observed target trials.
+- Bind creation forms to company revisions and discard out-of-order source and
+  query responses. Preserve explicit review before applying generation changes.
+
 ### Generation: guided native suites and bounded context selection
 
 - Compile reviewable read, arithmetic, update and creation contracts from

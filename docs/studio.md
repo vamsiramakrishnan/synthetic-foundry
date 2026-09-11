@@ -71,6 +71,98 @@ reconciliation with the company's financial aggregates.
    service verifies the committed dataset before exposing that evidence.
    Earlier runs retain earlier intent.
 
+## Create data, corpus files and evaluations
+
+Open **Create data & evals** for the creation workspace. Its three controls do
+different work; none treats a large query request as proof of diversity.
+
+| Control | Mechanism | What the result means |
+| --- | --- | --- |
+| Configure data | Resize an existing retail, connected-retail or banking program; optionally replace monthly history | Planned table rows, checked against execution limits |
+| Select sources & prepare | Search accepted artifacts, select relevant evidence, choose formats, operations, minimum units and case budget | A reviewable, reference-qualified corpus/task proposal; shortages are visible |
+| Generate file queryset | Render actual files and run the existing native evaluation pipeline | Authenticated downloads and public tasks; target trials are recorded separately |
+
+Data proposals preserve company identity and seed. Resizing preserves mutable
+parameter values, relationships and business constraints. A customized program
+cannot be replaced through the sizing form. Increasing simulation ticks does
+not extend company history, reconcile operational amounts to financial-close
+aggregates, or increase a connected process's separately declared `max_cases`.
+The form reports unsupported programs instead of inventing volume controls.
+
+Monthly history can be specified as a first period and 1–120 periods. Replacing
+the timeline requires explicit acknowledgement: selected narration, native
+corpus plans, native tasks and native calibration are cleared **only from the
+proposed revision**. Review the invalidation counts before applying. Existing
+revisions, files and jobs remain available. After applying, build and narrate
+the changed company before preparing new file tasks.
+
+The source picker searches the entire accepted catalogue before pagination.
+Selections persist across search results and pages. Selecting an artifact makes
+all its accepted sections available; it does not assert that they are independent
+or that every section will be consumed. An empty selection means all eligible
+sources for company-wide use cases. Scoped business-unit, LOB and process cases
+require an explicit selection whose business relevance the operator must review.
+The compiler still enforces grounding, distinctness and evidence-component limits.
+
+The **Corpus files** tab displays generated files for the current revision.
+Downloads verify the run manifest and file checksum. **File evaluations** pages
+the authenticated public task export, filtering by operation, input/output
+format and owning use case. Expected answers and private oracles are excluded.
+Prepared or calibration-blocked runs can provide reference-qualified tasks;
+they are not presented as successful target-agent trials or verified difficulty.
+
+The same data proposal mechanism is available through the SDK:
+
+```python
+from worldloom.studio import DataCreationRequest, ProjectSpec, Studio
+
+studio = Studio("./worldloom-workspace")
+project = studio.store.get("PROJECT_ID")
+mechanisms = studio.creation(project["id"], project["revision"])
+proposal = studio.prepare_data(
+    project["id"], project["revision"],
+    DataCreationRequest(
+        simulation_target="operations-review",  # Existing retail use case
+        stores=4, products=8, ticks=30,
+        query_counts={"operations-review": 1000},
+    ),
+)
+print(proposal["summary"])  # Planned rows and requested demand; no generation
+# Apply only after reviewing the proposal:
+updated = studio.store.revise(
+    project["id"], proposal["revision"],
+    ProjectSpec.model_validate(proposal["spec"]),
+    reason="Reviewed operational scale and query demand",
+)
+```
+
+For history changes use `start_period`, `periods` and
+`acknowledge_invalidation=True`. Native task coverage is sized with
+`NativeSuiteRequest`, not connector query quotas. SDK callers can inspect
+`studio.native_sources(..., group_by="artifact", search="...")` and
+`studio.native_queryset(project_id, job_id, operation="update", format="docx")`.
+HTTP clients use `GET /api/projects/PROJECT_ID/creation`,
+`POST /api/projects/PROJECT_ID/prepare-data`, and the existing revision review
+route. The new API does not weaken the local same-origin boundary.
+
+### Reproducible mechanism check
+
+`tools/measure_creation_workbench.py` copies a workspace containing accepted
+narration, prepares and applies a suite in that temporary copy, runs the real
+native pipeline, reads its public queryset, authenticates every file download
+and verifies identical replay. The source workspace is unchanged. Its separate
+retail sizing check compares planned row counts with actual simulator output;
+those operational rows are not silently joined into the native company corpus.
+
+```bash
+python tools/measure_creation_workbench.py --workspace ./native-pilot --project PROJECT_ID --use-case native-close-review --report ./creation-workbench.json
+```
+
+See the [recorded creation measurement](measurements/creation-workbench.json).
+This is an offline mechanism check, not browser visual QA or a live target-agent
+evaluation. UI screenshots must be captured separately from a running Studio;
+do not represent generated mockups or populated test fixtures as live captures.
+
 ## Resume a company workflow
 
 The workflow report is the common entry point for the console, CLI and SDK.
