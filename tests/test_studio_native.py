@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import subprocess
@@ -94,6 +95,92 @@ def test_native_studio_export_does_not_claim_target_observation(tmp_path, monkey
         execute(studio, job, harness_command=None, timeout=30)
     with pytest.raises(ValueError, match="changed after checkpoint"):
         studio.native_artifact(job["project"], job["id"], "ART-BOOK")
+
+
+def test_native_queryset_pages_public_contracts_from_the_job_revision(tmp_path, monkeypatch):
+    from worldloom.studio import ProjectSpec
+
+    studio, job = _setup(tmp_path, monkeypatch)
+    result = execute(studio, job, harness_command=None, timeout=30)
+    studio.store.finish(job["id"], result=result)
+    original = ProjectSpec.model_validate(studio.store.get(job["project"], job["revision"])["spec"])
+    # The current project may evolve; run ownership must still be joined against
+    # its immutable revision, not the latest native task contracts.
+    case = original.use_cases[0].model_copy(update={"id": "revised-operations"})
+    revised = original.model_copy(update={"use_cases": (case,), "native_tasks": tuple(
+        task.model_copy(update={"use_case_id": case.id}) for task in original.native_tasks)})
+    studio.store.revise(job["project"], job["revision"], revised, reason="Revise ownership after run")
+    page = studio.native_queryset(job["project"], job["id"], limit=1)
+    assert page["project"] == job["project"] and page["revision"] == job["revision"]
+    assert page["job"] == job["id"] and page["status"] == "prepared"
+    assert page["total"] == page["unfiltered_total"] == 2
+    assert page["observed_trials"] == 0 and page["offset"] == 0 and page["next_offset"] == 1
+    second = studio.native_queryset(job["project"], job["id"], offset=1, limit=1,
+                                    operation="read", format="xlsx", use_case_id=original.use_cases[0].id)
+    assert second["total"] == 2 and second["next_offset"] is None
+    rows = page["rows"] + second["rows"]
+    exported = json.loads((studio.path("native", job["id"]) / "queryset.json").read_text())
+    assert rows == [{**row, "use_case_id": original.use_cases[0].id} for row in exported]
+    assert {row["id"] for row in rows} == {"read-one", "read-two"}
+    assert all(set(row) == {"id", "operation", "prompt", "inputs", "answers", "output", "submission_schema",
+                            "use_case_id", "evidence_component", "split"}
+               for row in rows)
+    assert "expected" not in json.dumps(rows) and "oracles" not in json.dumps(rows)
+    for filters in ({"operation": "update"}, {"format": "docx"}, {"use_case_id": case.id}, {"offset": 2}):
+        empty = studio.native_queryset(job["project"], job["id"], **filters)
+        assert empty["rows"] == [] and empty["next_offset"] is None and empty["unfiltered_total"] == 2
+
+
+@pytest.mark.parametrize("tampered_file", ["oracles.json", "manifest.json"])
+def test_native_queryset_refuses_unfinished_foreign_and_tampered_runs(tmp_path, monkeypatch, tampered_file):
+    studio, job = _setup(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="completed run"):
+        studio.native_queryset(job["project"], job["id"])
+    result = execute(studio, job, harness_command=None, timeout=30)
+    studio.store.finish(job["id"], result=result)
+    with pytest.raises(ValueError, match="belonging to this project"):
+        studio.native_queryset("another-project", job["id"])
+    build = studio.store.enqueue(job["project"], job["revision"], RunOptions(operation="build"))
+    studio.store.finish(build["id"], result={"status": "complete"})
+    with pytest.raises(ValueError, match="completed run"):
+        studio.native_queryset(job["project"], build["id"])
+    for invalid in ({"offset": -1}, {"limit": 0}, {"limit": 101}, {"operation": "delete"}, {"format": "pdf"}):
+        with pytest.raises(ValueError, match="invalid native queryset"):
+            studio.native_queryset(job["project"], job["id"], **invalid)
+    root = studio.path("native", job["id"])
+    # Authenticate every run artifact, even when the requested task filter would
+    # otherwise return no rows. Private-oracle tampering must not be overlooked.
+    (root / tampered_file).write_text("{}\n")
+    with pytest.raises(ValueError, match="changed after checkpoint"):
+        studio.native_queryset(job["project"], job["id"], operation="create")
+
+
+def test_native_queryset_http_matches_public_service(tmp_path, monkeypatch):
+    from threading import Thread
+    from urllib.error import HTTPError
+    from urllib.request import urlopen
+
+    from worldloom.studio.server import StudioServer
+
+    studio, job = _setup(tmp_path, monkeypatch)
+    result = execute(studio, job, harness_command=None, timeout=30)
+    studio.store.finish(job["id"], result=result)
+    server = StudioServer(studio.root, port=0, launch_workers=False)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/api/projects/{job['project']}/native-queryset"
+    try:
+        with urlopen(url + f"?job={job['id']}&offset=1&limit=1&operation=read&format=xlsx&use_case_id=operations-review", timeout=10) as response:
+            assert json.load(response) == studio.native_queryset(job["project"], job["id"],
+                offset=1, limit=1, operation="read", format="xlsx", use_case_id="operations-review")
+        (studio.path("native", job["id"]) / "queryset.json").write_text("[]\n")
+        with pytest.raises(HTTPError) as error:
+            urlopen(url + f"?job={job['id']}", timeout=10)
+        assert error.value.code == 422
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_native_output_file_boundary_reads_bytes_and_refuses_escape(tmp_path):

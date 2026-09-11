@@ -102,6 +102,23 @@ def test_accepted_narration_can_be_selected_and_replayed_without_calls(project, 
     assert sources["status"] == "accepted" and sources["total"] > 1
     assert len(sources["sources"]) == 1 and sources["next_offset"] == 1
     assert sources["sources"][0]["fact_ids"]
+    sections = studio.native_sources(p["id"], current["revision"], limit=1000)["sources"]
+    grouped = studio.native_sources(p["id"], current["revision"], group_by="artifact", limit=1000)
+    assert 1 < grouped["total"] <= len(sections)
+    first_page = studio.native_sources(p["id"], current["revision"], group_by="artifact", limit=1)
+    assert first_page["sources"] == grouped["sources"][:1] and first_page["next_offset"] == 1
+    # Search the entire catalogue before pagination, including identifiers whose
+    # artifact would not appear on the unfiltered first page.
+    last = grouped["sources"][-1]
+    filtered = studio.native_sources(p["id"], current["revision"], group_by="artifact", limit=1,
+                                     search=last["source_artifact_id"].lower())
+    assert filtered["sources"] == [last] and filtered["total"] == 1
+    assert filtered["next_offset"] is None
+    constituents = [item for item in sections if item["source_artifact_id"] == last["source_artifact_id"]]
+    assert last["section_count"] == len(constituents)
+    assert last["sections"] == [{"index": item["section_index"], "heading": item["heading"]} for item in constituents]
+    assert last["fact_ids"] == sorted({fact for item in constituents for fact in item["fact_ids"]})
+    assert studio.native_sources(p["id"], current["revision"], search="missing-artifact-search")["total"] == 0
     request = studio.interview_request(p["id"], current["revision"], "Plan a long native corpus using accepted evidence")
     assert request["native_sources"]["sources"][0] == sources["sources"][0]
     compile_job = studio.store.enqueue(p["id"], current["revision"], RunOptions(operation="compile", batch_limit=1))
@@ -255,6 +272,76 @@ def test_http_native_preparation_uses_existing_worker_and_requires_review(http_s
     assert len(calls) == 1
     assert server.studio.store.get(p["id"])["revision"] == p["revision"]
     assert server.studio.store.job(job["id"])["result"]["summary"]["tasks"] == 1
+
+
+def test_data_creation_proposals_are_readonly_and_revision_bound(project, monkeypatch):
+    studio, p = project
+    case_id = p["spec"]["use_cases"][0]["id"]
+    monkeypatch.setattr(studio, "snapshot", lambda *a, **k: pytest.fail("planning generated company data"))
+    proposal = studio.prepare_data(p["id"], p["revision"], {"query_counts": {case_id: 36}})
+    assert proposal["project"] == p["id"] and proposal["revision"] == p["revision"]
+    assert proposal["summary"]["requested_queries"][case_id] == 36
+    assert proposal["spec"]["use_cases"][0]["count"] == 36
+    assert studio.store.get(p["id"])["spec"] == p["spec"]
+    assert len(studio.store.history(p["id"])) == 1 and studio.store.jobs(p["id"]) == []
+    applied = studio.store.revise(p["id"], p["revision"], ProjectSpec.model_validate(proposal["spec"]),
+                                  reason="Reviewed requested coverage")
+    assert applied["revision"] != p["revision"]
+    with pytest.raises(StudioConflict, match="company changed"):
+        studio.prepare_data(p["id"], p["revision"], {"query_counts": {case_id: 48}})
+
+
+def test_native_source_selection_requires_accepted_narration_and_valid_filters(project):
+    studio, p = project
+    assert studio.native_sources(p["id"], group_by="artifact", search="annual") == {
+        "sources": [], "total": 0, "next_offset": None, "status": "select_accepted_narration"}
+    for invalid in ({"offset": -1}, {"limit": 0}, {"limit": 1001}, {"group_by": "fact"}, {"search": "x" * 201}):
+        with pytest.raises(ValueError, match="invalid native source"):
+            studio.native_sources(p["id"], **invalid)
+
+
+def test_http_data_creation_inspection_review_and_stale_refusal(http_server, monkeypatch):
+    server = http_server
+    p = server.studio.store.create(preset())
+    monkeypatch.setattr(server.studio, "snapshot", lambda *a, **k: pytest.fail("planning generated company data"))
+    with http(server, f"/api/projects/{p['id']}/creation") as response:
+        creation = json.load(response)
+    assert creation["project"] == p["id"] and creation["revision"] == p["revision"]
+    assert creation["simulations"] and all(item["supported"] for item in creation["simulations"])
+    simulation = creation["simulations"][0]
+    assert simulation["total_rows"] == sum(simulation["table_rows"].values())
+    request = {"simulation_target": simulation["target"], "stores": 4}
+    with http(server, f"/api/projects/{p['id']}/prepare-data", {"revision": p["revision"], "request": request}) as response:
+        proposal = json.load(response)
+    assert proposal["summary"]["simulation"]["dimensions"]["stores"] == 4
+    assert server.studio.store.get(p["id"])["revision"] == p["revision"]
+    assert server.studio.store.jobs(p["id"]) == []
+    with http(server, f"/api/projects/{p['id']}/revise", {
+            "revision": p["revision"], "spec": proposal["spec"], "reason": "Reviewed data sizing"}) as response:
+        applied = json.load(response)
+    assert applied["revision"] != p["revision"]
+    with pytest.raises(HTTPError) as error:
+        http(server, f"/api/projects/{p['id']}/prepare-data", {"revision": p["revision"], "request": request})
+    assert error.value.code == 409
+    with pytest.raises(HTTPError) as error:
+        http(server, f"/api/projects/{p['id']}/prepare-data", {
+            "revision": applied["revision"], "request": {"start_period": "2026-01"}})
+    assert error.value.code == 422
+    with http(server, "/creation.js") as response:
+        assert "text/javascript" in response.headers["Content-Type"]
+        assert response.read()
+
+
+def test_http_native_source_filters_are_forwarded(http_server, monkeypatch):
+    p = http_server.studio.store.create(preset())
+    calls = []
+    def sources(project, revision, **kwargs):
+        calls.append((project, revision, kwargs))
+        return {"sources": [], "total": 0, "next_offset": None, "status": "accepted"}
+    monkeypatch.setattr(http_server.studio, "native_sources", sources)
+    with http(http_server, f"/api/projects/{p['id']}/native-sources?revision={p['revision']}&offset=2&limit=5&group_by=artifact&search=annual") as response:
+        assert json.load(response)["sources"] == []
+    assert calls == [(p["id"], p["revision"], {"offset": 2, "limit": 5, "group_by": "artifact", "search": "annual"})]
 
 
 def test_http_create_interview_revision_and_content_security(http_server):

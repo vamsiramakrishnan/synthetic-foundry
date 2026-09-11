@@ -19,6 +19,7 @@ from .models import InterviewReply, ProjectSpec, RunOptions, UseCase
 from .store import ProjectStore, StudioConflict, canonical
 
 if TYPE_CHECKING:
+    from .data_creation import DataCreationRequest
     from .native_suite import NativeSuiteRequest
     from .workflow import WorkflowReport
 
@@ -138,6 +139,24 @@ class Studio:
         """Inspect readiness without generating files or invoking a target."""
         from .workflow import report
         return report(self, project, revision, harness_configured=harness_configured)
+
+    def creation(self, project: str, revision: str | None = None) -> dict[str, Any]:
+        """Inspect available sizing mechanisms without generating a second world."""
+        from .data_creation import inspect_simulations
+        current = self.store.get(project, revision)
+        spec = ProjectSpec.model_validate(current["spec"])
+        return {"project": project, "revision": current["revision"],
+                "simulations": [item.model_dump(mode="json") for item in inspect_simulations(spec)]}
+
+    def prepare_data(self, project: str, revision: str, request: DataCreationRequest | dict[str, Any]) -> dict[str, Any]:
+        """Propose bounded generation inputs; the caller must review and revise."""
+        from .data_creation import DataCreationRequest, propose
+        current = self.store.get(project)
+        if current["revision"] != revision:
+            raise StudioConflict("company changed; reload before preparing data")
+        parsed = DataCreationRequest.model_validate(request.model_dump(mode="json") if isinstance(request, DataCreationRequest) else request)
+        proposal = propose(ProjectSpec.model_validate(current["spec"]), parsed)
+        return {"project": project, "revision": revision, **proposal.model_dump(mode="json")}
 
     def select_narration(self, project: str, revision: str, job_id: str) -> dict[str, Any]:
         """Authenticate the selected prose before committing its company revision."""
@@ -336,13 +355,16 @@ class Studio:
         staging.rename(location)
         return world, location
 
-    def native_sources(self, project: str, revision: str | None = None, *, offset: int = 0, limit: int = 256) -> dict[str, Any]:
+    def native_sources(self, project: str, revision: str | None = None, *, offset: int = 0, limit: int = 256,
+                       search: str = "", group_by: str = "section") -> dict[str, Any]:
         """Expose accepted source identifiers so interviews need not invent them."""
         from ..narrative.references import referenced
         from .native import source_world
 
         if offset < 0 or not 1 <= limit <= 1000:
             raise ValueError("invalid native source page")
+        if group_by not in {"section", "artifact"} or len(search) > 200:
+            raise ValueError("invalid native source filter")
         spec = ProjectSpec.model_validate(self.store.get(project, revision)["spec"])
         if not spec.narration_job:
             return {"sources": [], "total": 0, "next_offset": None, "status": "select_accepted_narration"}
@@ -363,9 +385,49 @@ class Studio:
                     "preview": (section.body or "")[:300]}
                    for ir in sorted(world.artifact_irs, key=lambda item: item.id)
                    for index, section in enumerate(ir.sections) if section.body and referenced(section.body)]
+        if group_by == "artifact":
+            grouped: dict[str, dict[str, Any]] = {}
+            for item in sources:
+                key = str(item["source_artifact_id"])
+                if key not in grouped:
+                    grouped[key] = {"source_artifact_id": key, "title": item["title"],
+                                    "sections": [], "fact_ids": [], "preview": item["preview"]}
+                grouped[key]["sections"].append({"index": item["section_index"], "heading": item["heading"]})
+                grouped[key]["fact_ids"].extend(item["fact_ids"])
+            sources = [{**item, "fact_ids": sorted(set(item["fact_ids"])), "section_count": len(item["sections"])}
+                       for item in grouped.values()]
+        needle = search.strip().casefold()
+        if needle:
+            sources = [item for item in sources if needle in json.dumps(item, ensure_ascii=False).casefold()]
         end = offset + limit
         return {"sources": sources[offset:end], "total": len(sources),
                 "next_offset": end if end < len(sources) else None, "status": "accepted"}
+
+    def native_queryset(self, project: str, job_id: str, *, offset: int = 0, limit: int = 25,
+                        operation: str = "", format: str = "", use_case_id: str = "") -> dict[str, Any]:
+        """Page the authenticated public task export, never the private oracle."""
+        if offset < 0 or not 1 <= limit <= 100:
+            raise ValueError("invalid native queryset page")
+        if operation not in {"", "read", "analyze", "update", "create"} or format not in {"", "docx", "pptx", "xlsx"}:
+            raise ValueError("invalid native queryset filter")
+        job = self.store.job(job_id)
+        if job["project"] != project or job["options"]["operation"] != "native" or job["status"] != "complete":
+            raise ValueError("native queryset needs a completed run belonging to this project")
+        root = self.path("native", job_id)
+        if _read(root / "manifest.json").get("files") != _files(root):
+            raise ValueError("native run changed after checkpoint")
+        spec = ProjectSpec.model_validate(self.store.get(project, job["revision"])["spec"])
+        ownership = {task.id: task.use_case_id for task in spec.native_tasks}
+        public = [{**row, "use_case_id": ownership[row["id"]]} for row in _read(root / "queryset.json")]
+        rows = [row for row in public if (not operation or row["operation"] == operation)
+                and (not use_case_id or row["use_case_id"] == use_case_id)
+                and (not format or any(item["format"] == format for item in row["inputs"])
+                     or (row.get("output") or {}).get("format") == format)]
+        end = offset + limit
+        return {"project": project, "revision": job["revision"], "job": job_id,
+                "rows": rows[offset:end], "offset": offset, "total": len(rows), "unfiltered_total": len(public),
+                "next_offset": end if end < len(rows) else None,
+                "status": job["result"]["status"], "observed_trials": job["result"]["observed_trials"]}
 
     def native_artifact(self, project: str, job_id: str, artifact_id: str) -> tuple[bytes, str]:
         """Serve only version-authenticated files belonging to this project run."""
