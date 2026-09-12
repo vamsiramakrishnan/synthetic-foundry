@@ -11,6 +11,23 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Documents: sections that repeat over units, and framed long documents
+
+- A section plan may declare `repeat: "unit"` (`doctypes.SectionSpec`,
+  `documents.SectionPlan`): one authored step becomes a section per
+  business unit with facts for it, each handed only that unit's facts (the
+  unit, its categories, its sites), each with `{{var:unit.name}}` resolved
+  in its heading and purpose, and each its own narration request under the
+  same per-section validator. A long document now grows from facts rather
+  than from a longer brief. Unset, the field stays off the wire.
+- Once a document has more than eight visible sections, every section's
+  narration request carries the outline as standing context: the sections
+  in order, and where this one sits between its neighbours, with the
+  instruction to refer to another section by heading rather than restate
+  it. Built from the compiled outline, not asked of a model, so no ledger
+  gains a call site; the threshold sits above every outline the engines
+  ship, so every existing request digest and ledger is unchanged.
+
 ### Documents: decks for any document type
 
 - The deck renderer handled one artifact type, pinned its size class to

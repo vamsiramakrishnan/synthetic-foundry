@@ -212,6 +212,15 @@ class SectionSpec(DocModel):
     would not find the absence strange, because the section that carried a
     required fact going missing is a narration rejection, not variety."""
 
+    repeat: Literal["", "unit"] = ""
+    """``"unit"`` makes this one step a section per business unit with facts
+    for it, each handed only that unit's facts and each with
+    ``{{var:unit.name}}`` in its heading and purpose resolved — see
+    ``documents.SectionPlan.repeat``. The way an authored document grows to a
+    division-by-division review without an author writing a section per
+    division, or a pack knowing how many divisions a company has. Left off
+    the wire when empty."""
+
     def as_plan(self) -> SectionPlan:
         return SectionPlan(
             heading=self.heading,
@@ -219,7 +228,17 @@ class SectionSpec(DocModel):
             scope=self.scope,
             purpose=self.purpose,
             required=self.required,
+            repeat=self.repeat,
         )
+
+    @model_serializer(mode="wrap")
+    def _repeat_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # A section is embedded in every pack-built corpus's recipe; an unset
+        # repeat stays off it so those recipes keep their exact bytes.
+        data: dict[str, Any] = handler(self)
+        if not self.repeat:
+            data.pop("repeat", None)
+        return data
 
 
 class FilingSpec(DocModel):
@@ -477,6 +496,7 @@ def describe(artifact_type: str) -> DocumentType:
                 scope=plan.scope,  # type: ignore[arg-type]
                 purpose=plan.purpose,
                 required=plan.required,
+                repeat=plan.repeat,  # type: ignore[arg-type]
             )
             for plan in documents._OUTLINES.get(artifact_type, ())
         ],
@@ -857,6 +877,26 @@ def lint(
         for position, section in enumerate(spec.sections):
             at = f"{where}.sections[{position}] ({section.heading!r})"
 
+            # -- repetition ------------------------------------------------
+            unit_variable = documents.UNIT_NAME_VARIABLE[len("{{var:"):-2]
+            if section.repeat == "unit" and unit_variable not in templating.referenced(section.heading):
+                findings.append(
+                    f"{at}: repeats over business units but its heading never names"
+                    f" the unit — put `{documents.UNIT_NAME_VARIABLE}` in it, or every"
+                    " repeated section carries the same heading and a reader cannot"
+                    " tell which division a paragraph is about."
+                )
+            if section.repeat == "unit" and section.scope == "group":
+                findings.append(
+                    f"{at}: repeats over business units at scope 'group' — a group"
+                    " figure has no unit to repeat over, so the step expands to"
+                    " nothing. Repeated sections read unit-level facts; scope 'unit'"
+                    " or 'any'."
+                )
+            section_variables = (
+                valid_variables | {unit_variable} if section.repeat == "unit" else valid_variables
+            )
+
             # Check for malformed variables in heading and purpose
             malformed_heading = templating.unresolved(section.heading)
             if malformed_heading:
@@ -879,7 +919,7 @@ def lint(
             # Check for unknown variables
             unknown_heading = [
                 var for var in templating.referenced(section.heading)
-                if var not in valid_variables
+                if var not in section_variables
             ]
             if unknown_heading:
                 findings.append(
@@ -890,7 +930,7 @@ def lint(
 
             unknown_purpose = [
                 var for var in templating.referenced(section.purpose)
-                if var not in valid_variables
+                if var not in section_variables
             ]
             if unknown_purpose:
                 findings.append(

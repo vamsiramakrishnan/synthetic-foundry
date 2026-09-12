@@ -41,6 +41,16 @@ a duration string, so two packs cannot disagree about what `P1DT15H` means),
   nothing maps falls to the world's narrowest policy: if that excludes the
   author, the corpus fails `author_cannot_see_own_artifact`. Name the receiver
   in the purposes.
+- **`sections[].repeat: "unit"`** makes one authored step a section per
+  business unit that has facts for it, each handed only that unit's facts
+  (the unit, its categories, its sites) and each with `{{var:unit.name}}` in
+  its heading and purpose resolved. This is how a document grows to a
+  division-by-division review from facts rather than filler; each expanded
+  section is its own narration request. The lint refuses a repeated step
+  whose heading never names the unit, or one at scope `group`. Once a
+  document has more than eight visible sections, every section's request
+  carries the outline as standing context (the sections in order, and where
+  this one sits) so writers stop restating each other.
 - **`deck: true`** makes the type a slide deck as well: the same outline
   composes through the compiler's `pptx` components, opens with an agenda
   once it has more than six visible sections, and continues prose or a table
