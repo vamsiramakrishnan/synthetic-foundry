@@ -42,6 +42,7 @@ from .models import (
     FormulaKind,
     Lifecycle,
     Row,
+    SizeBudget,
     Table,
 )
 from .narrative import references
@@ -146,6 +147,10 @@ class FilingPlan:
     size: str = "medium"
     rationale: str = ""
     facts: tuple[str, ...] = ()
+    budget: SizeBudget | None = None
+    """The numbers behind ``size`` when the author declared them rather than
+    naming a preset — copied onto the intent at plan time, see
+    ``sizing.budget_of``. ``None`` means the preset ``size`` names."""
     """Which of the planner's fact bundles this document is given. See
     ``generators/planning.FILING_BUNDLES`` for the closed set and what each
     one is."""
@@ -2812,7 +2817,7 @@ def intent_minter(
         facts: list[str], events: list[str], size: str, rationale: str, *,
         supersedes: str | None = None, derived_from: list[str] | None = None,
         revises: str | None = None, restates: str | None = None,
-        approver_role: str | None = None,
+        approver_role: str | None = None, budget: SizeBudget | None = None,
     ) -> ArtifactIntent:
         made = ArtifactIntent(
             id=minter.next("ART"),
@@ -2826,6 +2831,7 @@ def intent_minter(
             triggered_by=events,
             required_fact_ids=facts,
             size_profile=size,  # type: ignore[arg-type]
+            budget=budget,
             rationale=rationale,
             supersedes=supersedes,
             derived_from=[a for a in (derived_from or []) if a],

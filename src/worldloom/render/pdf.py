@@ -50,6 +50,7 @@ from ..models import (
     FlowDiagram,
     MagnitudeBand,
     Quotation,
+    SizeBudget,
     Table,
 )
 from ..narrative import references
@@ -213,7 +214,8 @@ class DocumentPlan:
     """
 
 
-def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> DocumentPlan:
+def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass,
+          budget: SizeBudget | None = None) -> DocumentPlan:
     """Derive a page plan from *ir* via the artifact compiler.
 
     Composed against ``pdf`` in its own right. This originally borrowed
@@ -223,7 +225,7 @@ def _plan(ir: ArtifactIR, artifact_type: str, size_class: SizeClass) -> Document
     spellable in Word is spellable in a fixed-page projection of the same IR,
     so the registry now says so, and this asks for what it actually renders.
     """
-    plan = plan_from_ir(ir, artifact_type=artifact_type, size_class=size_class)
+    plan = plan_from_ir(ir, artifact_type=artifact_type, size_class=size_class, budget=budget)
     try:
         composition = compose(plan, fmt="pdf")
     except ValueError as exc:
@@ -1022,6 +1024,7 @@ def render(
     size_class: SizeClass = "medium",
     locale: Locale = DEFAULT_LOCALE,
     presentation: Presentation = DEFAULT_PRESENTATION,
+    budget: SizeBudget | None = None,
 ) -> bytes:
     """Render one IR to PDF bytes.
 
@@ -1040,7 +1043,7 @@ def render(
     from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph
     from reportlab.platypus.doctemplate import LayoutError
 
-    plan = _plan(ir, artifact_type, size_class)
+    plan = _plan(ir, artifact_type, size_class, budget)
     g = _genome_for(ir)
     faces = fonts.named(g.typeface)
     styles = _styles(g)
@@ -1159,6 +1162,7 @@ def render_all(world: World) -> list[Rendered]:
                     ir, facts, artifact_type=intent.artifact_type,
                     size_class=intent.size_profile, locale=locale,
                     presentation=profile.for_doctype(intent.artifact_type),
+                    budget=intent.budget,
                 ),
             )
         )

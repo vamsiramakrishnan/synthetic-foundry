@@ -14,7 +14,7 @@ from enum import StrEnum
 
 from .compiler.compose import Composition, compose, plan_from_ir
 from .compiler.plan import DensityProfile, SizeClass
-from .models import ArtifactIR, ArtifactSection
+from .models import ArtifactIR, ArtifactSection, SizeBudget
 
 
 class VisualKind(StrEnum):
@@ -85,6 +85,7 @@ def build(
     fmt: str,
     size_class: SizeClass,
     density_profile: DensityProfile,
+    budget: SizeBudget | None = None,
 ) -> Storyboard:
     """Compose *ir* once and preserve the compiler's exact beat mapping."""
     plan = plan_from_ir(
@@ -92,6 +93,7 @@ def build(
         artifact_type=artifact_type,
         size_class=size_class,
         density_profile=density_profile,
+        budget=budget,
     )
     composition = compose(plan, fmt=fmt)
     section_by_key = {

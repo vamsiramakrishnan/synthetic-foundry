@@ -709,6 +709,14 @@ def accept(world: World, responses: dict[str, ProposedPlan], *, model_id: str) -
             continue
 
         assert plan is not None  # violations is empty iff plan is built
+        # The budget is the intent's, never the proposal's: a model may shape
+        # the argument, not decide how long the document is allowed to be.
+        # Attached here, where the world is in hand, rather than carried on
+        # `PlanRequest` — the request document is a wire format harnesses
+        # already answer, and a field there would change its digest.
+        intent = world.artifact_intents.by_id(request.artifact_id)
+        if intent.budget is not None:
+            plan = plan.model_copy(update={"budget": intent.budget})
         verdicts[request.id] = PlanVerdict(accepted=True)
         plans[request.id] = plan
         new_entries.append(

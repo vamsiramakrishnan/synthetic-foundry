@@ -11,6 +11,28 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Documents: declared size budgets
+
+- The component cap `compiler.compose` enforced per size class and the word
+  brief `narrative.compiler` gave each section's writer were two literal
+  tables two modules apart, with no flag, no pack field and no fourth entry;
+  the longest document a corpus could carry was twelve sections of three
+  hundred words. Both now read one table, `sizing.PRESETS`, which holds the
+  old numbers verbatim (so every default build composes and narrates exactly
+  as before) and adds `xlong` (40 components, a 420-word brief) for a report
+  with chapters.
+- A document type may declare its budget outright: `filing.budget` on an
+  authored type and `budget` on an episode artifact take
+  `{"components", "words"}` and win over the size word. The planner copies it
+  onto `ArtifactIntent.budget`, so a process that only loads the corpus
+  narrates and renders to it without the pack that declared it; the plan
+  handshake attaches the intent's budget to every accepted plan. An unset
+  budget is left off the wire of the intent, the plan and the doctype, so
+  every corpus, ledger and port built before this serialises byte for byte.
+- `doctypes.lint` refuses a budget smaller than the outline's required
+  sections, naming the `over_budget` refusal the composer would otherwise
+  raise on every document of the type.
+
 ### Generation: planned deletes in the DAG grammar
 
 - Add the `delete_chain` shape to `enterprise-dag@1`: write, read back,

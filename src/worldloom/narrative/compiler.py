@@ -43,6 +43,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from .. import sizing
 from ..ids import content_key, format_id, highest_numeric_suffix
 from ..models import ArtifactIR, ArtifactSection, GenerationLedgerEntry
 from . import claims as claim_checks
@@ -244,14 +245,15 @@ def _request_for(
             if constraint.kind.value == "terminology"
         },
         # Briefs, not physics: what the writer is asked for, not what the world
-        # contains. Raised from 70/130/200 after rendered corpora read as
-        # telegrams — three sentences could not carry a variance memo's
-        # argument, and the optional-fact budget below scales off this number,
-        # so shorter briefs also meant thinner evidence per section. Measured
-        # both ways when it moved: with pools widened but briefs held at the
-        # old numbers, retrieval hardness reads exactly as before (26 of 51),
-        # so the pin's move is attributable here and nowhere else.
-        target_words={"small": 110, "medium": 190, "long": 300}.get(intent.size_profile, 190),
+        # contains. The presets were raised from 70/130/200 after rendered
+        # corpora read as telegrams — three sentences could not carry a
+        # variance memo's argument, and the optional-fact budget scales off
+        # this number, so shorter briefs also meant thinner evidence per
+        # section. Read from `sizing` now rather than a literal here, so the
+        # brief and the composer's component cap for the same size are one
+        # declared pair, and a document type that declares its own budget
+        # reaches the writer with it.
+        target_words=sizing.budget_of(intent).words,
     )
     return request.model_copy(update={"fact_digest": content_key(
         "narration-request/v2", request.model_dump(mode="json", exclude={"fact_digest"}),

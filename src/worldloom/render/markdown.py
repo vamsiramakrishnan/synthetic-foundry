@@ -38,6 +38,7 @@ from ..models import (
     FlowDiagram,
     MagnitudeBand,
     Quotation,
+    SizeBudget,
     Table,
 )
 from ..narrative import references
@@ -232,6 +233,7 @@ def render(
     presentation: Presentation = DEFAULT_PRESENTATION,
     artifact_type: str = "",
     size_class: SizeClass = "medium",
+    budget: SizeBudget | None = None,
 ) -> bytes:
     """Render one IR to Markdown bytes.
 
@@ -257,7 +259,7 @@ def render(
     shape-based dispatch is the only path a component-less mapping can reach.
     """
     components = section_components(ir, artifact_type=artifact_type, fmt="markdown",
-                                     size_class=size_class)
+                                     size_class=size_class, budget=budget)
     parts: list[str] = [f"# {ir.title}"]
     if ir.subtitle:
         parts.append(f"**{ir.subtitle}**")
@@ -405,7 +407,8 @@ def orphans(world: World, artifact_ids: set[str]) -> list[Rendered]:
                 payload=render(ir, facts, locale=locale,
                                presentation=profile.for_doctype(intent.artifact_type),
                                artifact_type=intent.artifact_type,
-                               size_class=intent.size_profile),
+                               size_class=intent.size_profile,
+                               budget=intent.budget),
             )
         )
     return out
@@ -436,7 +439,8 @@ def render_all(world: World) -> list[Rendered]:
                                detail=by_intent.get(ir.intent_id, ()),
                                presentation=profile.for_doctype(intent.artifact_type),
                                artifact_type=intent.artifact_type,
-                               size_class=intent.size_profile),
+                               size_class=intent.size_profile,
+                               budget=intent.budget),
             )
         )
     return out

@@ -41,6 +41,14 @@ a duration string, so two packs cannot disagree about what `P1DT15H` means),
   nothing maps falls to the world's narrowest policy: if that excludes the
   author, the corpus fails `author_cannot_see_own_artifact`. Name the receiver
   in the purposes.
+- **`filing.size`** names how long the document may be: `small`, `medium`,
+  `long` or `xlong` (`worldloom.sizing.PRESETS`, each a component cap the
+  composer enforces and a word brief every section's writer is given). When
+  no preset fits, declare **`filing.budget`** outright,
+  `{"components": 60, "words": 450}`, and it wins over the word. The budget
+  rides the planned intent, so a process that only loads the corpus narrates
+  and renders to it without the pack. The lint refuses a budget smaller than
+  the outline's required sections, since the composer never drops one.
 - **`lag`** is how long after its newest cited fact the document is written.
   Keep it at or under a day and fifteen hours: `scenarios._period_boundary`
   places a departure eight business days after period end and chose eight

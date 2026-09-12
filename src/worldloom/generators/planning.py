@@ -760,7 +760,8 @@ def artifact_intents(
         if not cited:
             continue
         intent(artifact_type, plan.domain, plan.audience, author,
-               cited, [episode.close_event_id], plan.size, plan.rationale)
+               cited, [episode.close_event_id], plan.size, plan.rationale,
+               budget=plan.budget)
 
     # The company timeline — planned by the first episode that runs, and never
     # again. The `MFACT-` milestone facts have existed since the org builder

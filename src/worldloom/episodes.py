@@ -34,14 +34,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+)
 
 from . import benchmark as benchmark_module
 from . import detail as detail_module
 from . import validate as validate_module
 from .benchmark import EvalSpec, QuestionFamily  # re-exported: a spec's own vocabulary
 from .models import ArtifactIntent as ArtifactIntentModel
-from .models import Authority, CanonicalFact, EnterpriseEvent, Quantity
+from .models import Authority, CanonicalFact, EnterpriseEvent, Quantity, SizeBudget
 
 if TYPE_CHECKING:  # pragma: no cover
     from .ids import Minter
@@ -407,8 +414,25 @@ class ArtifactIntentSpec(Model):
     required_facts: list[str] = Field(default_factory=list)
     """Which fact kinds must be provided to this artifact for it to compile."""
 
-    size: Literal["small", "medium", "long"] = "medium"
-    """Expected prose length."""
+    size: Literal["small", "medium", "long", "xlong"] = "medium"
+    """Expected prose length, as a named budget (``sizing.PRESETS``)."""
+
+    budget: SizeBudget | None = None
+    """The budget outright — components and words per section — when no
+    preset fits. Wins over ``size``; see ``doctypes.FilingSpec.budget``."""
+
+    @model_serializer(mode="wrap")
+    def _budget_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # A spec is embedded verbatim in the recipe of every pack-built corpus
+        # (`packs.to_recipe`), so `FilingSpec._budget_wire`'s rule holds here
+        # too: an artifact that declared no budget keeps the exact document it
+        # had, and `world.json` of every pack corpus built before this is
+        # byte-identical. Caught by the pack byte-comparison, not by a test
+        # on this model — the leak was five `"budget": null` lines in a recipe.
+        data: dict[str, Any] = handler(self)
+        if self.budget is None:
+            data.pop("budget", None)
+        return data
 
     structured: bool = False
     """Whether this artifact has structured tables (compiled from facts)."""
@@ -1898,6 +1922,7 @@ def run(
             triggered_by=[event_ids[k] for k in artifact.triggered_by_events],
             required_fact_ids=required,
             size_profile=artifact.size,
+            budget=artifact.budget,
             rationale=artifact.rationale,
         ))
 

@@ -106,12 +106,18 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+)
 
 from . import columns as columns_module
-from . import documents, registries, templating
+from . import documents, registries, sizing, templating
 from .documents import FilingPlan, SectionPlan
-from .models import Authority, FormulaKind, Lifecycle
+from .models import Authority, FormulaKind, Lifecycle, SizeBudget
 from .roles import parse_unit_role
 
 #: Headings ``outline()`` appends itself, after the authored sections.
@@ -228,7 +234,16 @@ class FilingSpec(DocModel):
     fallback_role: str = ""
     domain: str = Field(default="finance", min_length=1)
     audience: str = Field(default="all_staff", min_length=1)
-    size: Literal["small", "medium", "long"] = "medium"
+    size: Literal["small", "medium", "long", "xlong"] = "medium"
+    """A named budget — ``sizing.PRESETS`` — for how many sections the document
+    may compose to and how many words each is written to. ``xlong`` is the
+    size a report with chapters needs; the other three are what every engine
+    type has always been."""
+    budget: SizeBudget | None = None
+    """The numbers outright, when no preset fits: ``{"components": 60,
+    "words": 450}`` is an annual report. Wins over ``size``, which then
+    describes rather than binds. Left off the wire when unset, so a type
+    authored before budgets existed dumps byte for byte as it did."""
     facts: list[str] = Field(min_length=1)
     """Which of the planner's fact bundles the document is given. Closed
     vocabulary — see ``generators/planning.FILING_BUNDLES``."""
@@ -246,7 +261,18 @@ class FilingSpec(DocModel):
             size=self.size,
             rationale=self.rationale,
             facts=tuple(self.facts),
+            budget=self.budget,
         )
+
+    @model_serializer(mode="wrap")
+    def _budget_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # `ArtifactIntent._budget_wire`'s rule: `to_document` and `pack export`
+        # dump this model, and an authored type that never declared a budget
+        # must keep the exact document it had.
+        data: dict[str, Any] = handler(self)
+        if self.budget is None:
+            data.pop("budget", None)
+        return data
 
 
 class DocumentType(DocModel):
@@ -451,6 +477,7 @@ def _filing_spec(plan: FilingPlan | None) -> FilingSpec | None:
         size=plan.size,  # type: ignore[arg-type]
         facts=list(plan.facts),
         rationale=plan.rationale,
+        budget=plan.budget,
     )
 
 
@@ -914,6 +941,21 @@ def lint(
                 " only Markdown. That is a real choice for a chat log or a ticket;"
                 " it is a bug for anything a reader would call a document."
             )
+
+        # -- the budget ----------------------------------------------------
+        if spec.filing is not None:
+            required_sections = sum(1 for section in spec.sections if section.required)
+            budget = sizing.budget_for(spec.filing.size, override=spec.filing.budget)
+            if required_sections > budget.components:
+                findings.append(
+                    f"{where}.filing: size {spec.filing.size!r}"
+                    + (" with a declared budget" if spec.filing.budget is not None else "")
+                    + f" allows {budget.components} component(s), but the outline"
+                    f" declares {required_sections} required section(s). The composer"
+                    " refuses that as `over_budget` on every document of this type —"
+                    " it never drops a required section — so raise the budget or"
+                    " mark sections optional."
+                )
 
         # -- the filing --------------------------------------------------
         if spec.filing is None:

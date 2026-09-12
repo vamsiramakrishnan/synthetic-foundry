@@ -226,9 +226,11 @@ def test_try_compose_does_not_swallow_an_unrelated_failure(
     either a `CompositionError` or an internal defect, and an internal defect is
     exactly what must not be caught.
     """
-    from worldloom.compiler import compose as compose_module
+    from worldloom import sizing
 
-    monkeypatch.delitem(compose_module._COMPONENT_CAP, "small")
+    # `sizing.PRESETS` is read-only on purpose; the internal defect is staged
+    # by swapping the whole mapping for one missing the size the plan names.
+    monkeypatch.setattr(sizing, "PRESETS", {k: v for k, v in sizing.PRESETS.items() if k != "small"})
     with pytest.raises(KeyError):
         try_compose(_plan(beats=[_beat("b", "explanation")]), fmt="docx")
 

@@ -574,6 +574,29 @@ class CanonicalFact(Model):
 # ---------------------------------------------------------------------------
 
 
+class SizeBudget(Model):
+    """How much of an artifact there is to write: components and words per section.
+
+    A size used to be one of three words, and each word was a pair of literals
+    two modules apart: the component cap ``compiler.compose`` allowed and the
+    word brief ``narrative.compiler`` asked the writer for. Neither literal was
+    reachable from a pack, so an authored document type could say ``"long"``
+    and get twelve sections of three hundred words, and could not say anything
+    else. This is the pair as one declared value. ``sizing.PRESETS`` keeps the
+    three words (and adds ``xlong``) as named budgets, so every intent that
+    carries only a size name resolves to exactly what it did before.
+    """
+
+    components: int = Field(ge=1, le=400)
+    """The most components the artifact may compose to after every optional
+    beat is dropped — the cap ``compiler.compose`` enforces."""
+
+    words: int = Field(ge=20, le=5000)
+    """The word brief each section's writer is given. The optional-fact budget
+    a section carries scales off it (``narrative.providers``), so a longer
+    brief is also a section that cites more."""
+
+
 class ArtifactIntent(Model):
     """The decision that an artifact should exist, before it has any content.
 
@@ -607,7 +630,18 @@ class ArtifactIntent(Model):
     """
     triggered_by: list[str] = Field(default_factory=list)
     required_fact_ids: list[str] = Field(default_factory=list)
-    size_profile: Literal["small", "medium", "long"] = "small"
+    size_profile: Literal["small", "medium", "long", "xlong"] = "small"
+    """Which named budget this document is written to — see ``sizing.PRESETS``.
+    A label rather than the numbers, so the thirty types the engines plan keep
+    the one word they always carried on the wire."""
+    budget: SizeBudget | None = None
+    """The budget itself, when the document type declared one of its own rather
+    than naming a preset. Set by the planner from the authored type's
+    ``filing.budget`` (or an episode artifact's ``budget``) at build time, so a
+    process that only *loads* the corpus — to narrate or render it — has the
+    numbers in hand without the pack that declared them. ``None`` means the
+    preset ``size_profile`` names, and is left off the wire so every corpus
+    built before budgets existed serialises byte for byte as it did."""
     rationale: str | None = None
     revises: str | None = None
     """A new version of the *same* document, not a different one.
@@ -651,6 +685,16 @@ class ArtifactIntent(Model):
                 " of an immutable filing wearing a different name"
             )
         return self
+
+    @model_serializer(mode="wrap")
+    def _budget_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # `CanonicalFact._legacy_wire`'s rule, for its reason: an additive field
+        # must not rewrite every historic corpus. A declared budget is written
+        # when set; an intent on a preset keeps the exact shape it always had.
+        data: dict[str, Any] = handler(self)
+        if self.budget is None:
+            data.pop("budget", None)
+        return data
 
 
 class FormulaKind(StrEnum):
