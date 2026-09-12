@@ -20,6 +20,7 @@ worldloom evalrun run ./cases -o ./runs/reference   # 2. the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --exec "python3 my_agent.py"   # 3. the agent under test
 worldloom evalrun compare ./runs/reference ./runs/mine                       # 4. what moved, per axis
 worldloom evalrun plan ./cases -o ./runs/planner --exec "python3 my_planner.py"  # 5. querying alone
+worldloom enterprise-evals housekeeping ./corpus ./hk --kind drive --records 300   # a hero use case: organise my drive
 ```
 
 1. **Read the coverage before running anything.** `cases` prints counts per
@@ -69,6 +70,17 @@ a judge over the same seam as `--exec`: the child gets the Eval Studio
 prompt for the case's shape and prints `{"score": 0.85}` or
 `{"text": "<model reply>"}`. A judge that fails is a rating error on that
 case, excluded from the answer mean, never a zero.
+
+**Hero use cases.** `enterprise-evals housekeeping WORLD OUT --kind
+drive|inbox|chats [--connector ...] [--records N] [--mess] [--stale]
+[--duplicates]` builds a corpus that needs tidying and the cases that grade
+the tidying: a folder tree, a mailbox or a channel list in the company's own
+words, with a stated share misfiled, mislabelled, stale or duplicated. Each
+case is one rule the request states and one group of records; the search is
+bound to the rule's predicate and every record is graded by fid, so the
+outcome score is the share that landed. Run it through the same loop; the
+count is the point, so say how many records the corpus held and how many
+the agent left behind.
 
 ## Reading a result
 

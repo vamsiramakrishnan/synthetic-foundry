@@ -31,7 +31,11 @@ class ServingError(ValueError):
 class ServingLimits:
     max_runs: int = 32
     max_runs_per_principal: int = 4
-    max_calls_per_run: int = 512
+    # High enough for a mapped reorganisation of a thousand records (one
+    # search page per hundred, a write and a readback per record); a
+    # run that needs more is a retry storm, which the trajectory grade
+    # names on its own.
+    max_calls_per_run: int = 4096
     max_tools: int = 100
     max_request_bytes: int = 65536
     max_response_bytes: int = 1048576

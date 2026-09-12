@@ -116,6 +116,11 @@ class StructuredOutcome(Model):
     fixture: str | None = None
     #: Field values the record must carry afterwards (an update's target state).
     fields: dict[str, Any] = Field(default_factory=dict)
+    #: Every record a mapped (`for_each`) write must leave in `fields` (or
+    #: gone, for a delete), by fid. Empty for an ordinary node. The grade is
+    #: the fraction met, so a reorganisation of three hundred files is scored
+    #: by how many landed, not by whether one did.
+    records: tuple[str, ...] = ()
     #: True when a designed failure stops the run before this write: the
     #: expectation is then that it does *not* happen, and a record that
     #: appears anyway is the agent writing past a refusal.
@@ -205,11 +210,17 @@ def _structured(row: Mapping[str, Any], nodes: tuple[NodeContract, ...]) -> tupl
                 blocked.add(str(assertion["node"]))
     states: dict[str, dict[str, Any]] = {}
     deleted: dict[str, str | None] = {}
+    per_record: dict[str, tuple[str, ...]] = {}
     for assertion in row.get("assertions", ()):
         if assertion.get("type") == "state_equals":
             states[str(assertion["node"])] = {str(assertion.get("field") or "state"): assertion.get("state")}
+        elif assertion.get("type") == "per_record_state":
+            states[str(assertion["node"])] = dict(assertion.get("fields", {}))
+            per_record[str(assertion["node"])] = tuple(str(fid) for fid in assertion.get("records", ()))
         elif assertion.get("type") == "deleted":
             deleted[str(assertion["node"])] = str(assertion["fixture"]) if assertion.get("fixture") else None
+            if assertion.get("records"):
+                per_record[str(assertion["node"])] = tuple(str(fid) for fid in assertion["records"])
     out: list[StructuredOutcome] = []
     for node in nodes:
         if node.kind != "write":
@@ -229,7 +240,8 @@ def _structured(row: Mapping[str, Any], nodes: tuple[NodeContract, ...]) -> tupl
         fixture = deleted.get(node.id) or node.fixture
         out.append(StructuredOutcome(
             kind=kind, connector=node.connector, entity=node.entity, node=node.id,
-            fixture=fixture, fields=states.get(node.id, {}), blocked=node.id in blocked,
+            fixture=fixture, fields=states.get(node.id, {}), records=per_record.get(node.id, ()),
+            blocked=node.id in blocked,
         ))
     return tuple(out)
 

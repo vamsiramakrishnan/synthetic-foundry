@@ -11,6 +11,42 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Hero use cases: organise my drive, my inbox, my chats
+
+- `worldloom enterprise-evals housekeeping WORLD OUT --kind drive|inbox|chats
+  --connector ... --records N --mess --stale --duplicates` builds a corpus
+  that needs tidying and the cases that grade the tidying
+  (`worldloom.housekeeping`). The corpus is in the world's own words: a
+  folder tree per business unit and period (Drive, SharePoint, OneDrive), a
+  mailbox with subject-tagged categories and mail folders (email, Outlook),
+  or a channel list per unit (Slack, Teams), with a stated share of items
+  misfiled, mislabelled, stale or duplicated. Nothing on a record says where
+  it should be; the rule is in the request and the ground truth in the row.
+  Each case is one rule, one group of records that share a destination: a
+  search bound to the rule's own predicate, a mapped write per record (a
+  move, an update, an archive, a delete) and a mapped readback, in the
+  executable DAG grammar and compiled through `compile_dag_row` like every
+  other row. The reference agent passes every case on every connector, and
+  the count is the point: a corpus of five thousand items is one flag away.
+- Scoring a reorganisation. A mapped write over a pinned search now carries
+  a `per_record_state` assertion (or a `deleted` one listing its records),
+  graded in `grade_trace` by fid, and `evalrun`'s outcome grade holds the
+  same list on `StructuredOutcome.records`: the match is the fraction of
+  records that landed (`OutcomeMatch.ratio`), so three hundred files with
+  one left behind score 0.997 on that expectation rather than 0.
+- `SourceRequirement.bind = "predicate"` compiles a search to the
+  requirement's own predicate instead of the fixture's `id IN [...]`, so an
+  agent that reads the rule can search by it; the reads it must return are
+  still exactly the fixture's, and the cap on a bound search rises from
+  100 to the grammar's 1000, paged at the tool's page size. Off the wire
+  when unset, so every existing row compiles byte for byte.
+- The emulator's search under an alias entity (`file` over docx, xlsx, ...)
+  matched nothing when it carried a `where` predicate, because the
+  predicate kept the alias name and every member record failed the entity
+  test. The pool already holds exactly the alias's members, so the
+  predicate now drops the alias. The served surface's per-run call limit
+  rises to 4096 so a mapped reorganisation of a thousand records fits.
+
 ### Connectors: a record can be moved, and mail and chat can be tidied
 
 - Every file connector declared its `move_file`/`move_item` tool as an

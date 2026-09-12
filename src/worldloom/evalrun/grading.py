@@ -375,6 +375,10 @@ def diff_state(before: Mapping[str, Mapping[str, Any]], after: Mapping[str, Mapp
 class OutcomeMatch(Model):
     expected: StructuredOutcome
     met: bool
+    #: The fraction of the expectation that held: 1.0 or 0.0 for an ordinary
+    #: node, the share of listed records left in the stated state for a
+    #: mapped one. `met` is `ratio == 1.0`.
+    ratio: float = 0.0
     record: str | None = None
     #: Every record the expectation claimed: one for an ordinary node, all
     #: of them for a mapped (`for_each`) write, which produces one per item.
@@ -451,12 +455,34 @@ def grade_outcomes(
         met, record, detail = False, None, ""
         claimed: tuple[str, ...] = ()
         if expected.node in skipped:
-            matches.append(OutcomeMatch(expected=expected, met=True, detail="branch not taken"))
+            matches.append(OutcomeMatch(expected=expected, met=True, ratio=1.0, detail="branch not taken"))
             continue
         if expected.blocked:
             # Stopped by design. Met when nothing of the kind happened; the
             # collateral check below catches a write that happened anyway.
-            matches.append(OutcomeMatch(expected=expected, met=True, detail="blocked by the designed failure"))
+            matches.append(OutcomeMatch(expected=expected, met=True, ratio=1.0, detail="blocked by the designed failure"))
+            continue
+        if expected.records:
+            # A mapped write with its records named: each is checked by fid,
+            # and the match is the share that held. Every listed record the
+            # run touched is this expectation's, never collateral.
+            held: list[str] = []
+            for listed in expected.records:
+                if expected.kind == "delete":
+                    if listed not in after and (listed in before or listed in transient):
+                        held.append(listed)
+                else:
+                    current = after.get(listed)
+                    if current is not None and all(current.get(key) == value for key, value in expected.fields.items()):
+                        held.append(listed)
+            ratio = _round(len(held) / len(expected.records))
+            touched_here = tuple(listed for listed in expected.records
+                                 if listed in diff.updated or listed in diff.deleted or listed in diff.created)
+            covered.update(touched_here)
+            covered.update(held)
+            detail = "" if ratio == 1.0 else f"{len(held)} of {len(expected.records)} records ended as expected"
+            matches.append(OutcomeMatch(expected=expected, met=ratio == 1.0, ratio=ratio,
+                                        record=held[0] if held else None, records=tuple(held), detail=detail))
             continue
         if expected.kind == "create":
             members = _members(definitions, expected.connector, expected.entity)
@@ -520,7 +546,7 @@ def grade_outcomes(
             covered.add(record)
         if met and claimed:
             covered.update(claimed)
-        matches.append(OutcomeMatch(expected=expected, met=met, record=record,
+        matches.append(OutcomeMatch(expected=expected, met=met, ratio=1.0 if met else 0.0, record=record,
                                     records=claimed if claimed else ((record,) if record is not None else ()), detail=detail))
     touched = (*diff.created, *diff.updated, *diff.deleted)
     collateral = tuple(fid for fid in touched if fid not in covered)
@@ -560,7 +586,9 @@ def grade_outcomes(
     if case.outcomes.no_write:
         parts.append(0.0 if touched else 1.0)
     elif live:
-        parts.append(_round(sum(1 for match in live if match.met) / len(live)))
+        # The share held, per expectation: a mapped write contributes the
+        # fraction of its records that landed rather than a single 0 or 1.
+        parts.append(_round(sum(match.ratio for match in live) / len(live)))
         parts.append(0.0 if collateral else 1.0)
     elif expected_count:
         parts.append(_round(met_count / expected_count))

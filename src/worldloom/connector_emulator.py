@@ -430,6 +430,12 @@ class ConnectorEmulator:
                 raise ConnectorError(400, str(error), "validation") from error
         elif predicate is not None:
             active = _coerce_predicate(predicate, entity=entity)
+        if active is not None and active.entity is not None and active.entity not in self.definition.entities:
+            # The requested entity is an alias (`file` over docx, xlsx, ...).
+            # The pool below already holds exactly its members, and a
+            # predicate carrying the alias name would match none of them —
+            # every `where` search under an alias returned nothing until this.
+            active = active.model_copy(update={"entity": None})
         pool = self._pool(entity, tool)
         if name is not None:
             hits = [

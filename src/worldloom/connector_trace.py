@@ -34,6 +34,7 @@ _KNOWN_ASSERTIONS = frozenset(
         "per_item",
         "branch_exclusive",
         "state_equals",
+        "per_record_state",
         "deleted",
         "denial_surfaced",
         "report_not_found",
@@ -303,7 +304,7 @@ def grade_trace(
             # never applied.
             fails.append(f"unknown_assertion:{kind}")
             continue
-        if kind in {"artifact_created", "state_equals", "deleted", "reads_contain", "fields_used", "fact_coverage"} and str(assertion.get("node")) in failure_stopped:
+        if kind in {"artifact_created", "state_equals", "per_record_state", "deleted", "reads_contain", "fields_used", "fact_coverage"} and str(assertion.get("node")) in failure_stopped:
             continue
         if kind == "execution_contract":
             from .enterprise_dag_trace import grade_execution_contract
@@ -488,8 +489,31 @@ def grade_trace(
                                if not span.get("error") for fid in span.get("writes", ())]
                     if not created or any(fid in post_state for fid in created):
                         fails.append(f"not_deleted:{node_id}")
+                elif assertion.get("records"):
+                    # A mapped delete names every record it must remove.
+                    for fid in assertion["records"]:
+                        if str(fid) in post_state:
+                            fails.append(f"not_deleted:{node_id}:{fid}")
                 elif not assertion.get("per_item") and str(assertion["fixture"]) in post_state:
                     fails.append(f"not_deleted:{node_id}")
+        elif kind == "per_record_state":
+            # Every record a mapped write iterates must end with the stated
+            # fields, by fid: the assertion anchors on the row's own list,
+            # never on what the agent wrote (`state_equals`'s rule).
+            node_id = str(assertion["node"])
+            if node_id in skipped or node_id in stopped:
+                continue
+            if post_state is None:
+                fails.append(f"state_unavailable:{node_id}")
+                continue
+            for fid in assertion.get("records", ()):
+                record = post_state.get(str(fid))
+                if record is None:
+                    fails.append(f"record_missing:{node_id}:{fid}")
+                    continue
+                for field, value in dict(assertion.get("fields", {})).items():
+                    if record.get(field) != value:
+                        fails.append(f"record_state_mismatch:{node_id}:{fid}:{field}")
         elif kind == "denial_surfaced":
             if not any(error.get("code") == 403 for error in errors.values()) and "denial_surfaced" not in behavior_set:
                 fails.append("no_denial")

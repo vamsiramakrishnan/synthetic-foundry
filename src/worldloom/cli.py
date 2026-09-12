@@ -213,6 +213,51 @@ def enterprise_evals_plan(
         typer.echo(report.model_dump_json())
 
 
+@enterprise_evals_app.command("housekeeping")
+def enterprise_evals_housekeeping(
+    world_path: Path = typer.Argument(..., help="A built world directory."),
+    output: Path = typer.Argument(..., help="Where to write the corpus `evalrun` reads."),
+    kind: str = typer.Option("drive", "--kind", help="What to tidy: drive, inbox or chats."),
+    connector: str = typer.Option(None, "--connector", help="Whose tools tidy it; default is the kind's first connector."),
+    records: int = typer.Option(120, "--records", min=4, max=5000, help="How many files, messages or channels the corpus holds."),
+    mess: float = typer.Option(0.35, "--mess", min=0.0, max=1.0, help="The share of items in the wrong place."),
+    stale: float = typer.Option(0.15, "--stale", min=0.0, max=1.0, help="The share of items past the archive rule."),
+    duplicates: float = typer.Option(0.1, "--duplicates", min=0.0, max=1.0, help="Drive only: the share of files with a stray copy."),
+    salt: str = typer.Option("", "--salt", help="Vary the draw without changing the seed."),
+) -> None:
+    """Build a hero use case: a drive, inbox or channel list that needs tidying, and the cases that grade it.
+
+    The corpus is in the world's own words (its units, periods and people),
+    with a stated share of items misfiled, mislabelled, stale or duplicated.
+    Each case is one rule the request states — every Finance file for
+    2026-03 belongs in Finance/2026-03; a channel silent since a date is
+    archived — compiled into the executable DAG grammar as a search bound to
+    that rule and a mapped write per record, so `worldloom evalrun` grades
+    the reorganisation by how many records landed. Deterministic from the
+    world's seed and these knobs.
+    """
+    from . import housekeeping
+    from .enterprise_io import export_corpus
+    from .world import World
+
+    try:
+        spec = housekeeping.HousekeepingSpec(
+            kind=kind, connector=connector or housekeeping.CONNECTORS.get(kind, ("",))[0],
+            records=records, mess=mess, stale=stale, duplicates=duplicates, salt=salt,
+        )
+    except ValueError as exc:
+        _refuse("bad_housekeeping_spec", f"[red]error:[/red] {escape(str(exc))}")
+    world = World.load(world_path)
+    built = housekeeping.plan(world, spec)
+    corpus = housekeeping.corpus(world, spec)
+    export_corpus(corpus, output)
+    console.print(
+        f"[green]✓[/green] {spec.kind} on {spec.connector}: {len(built.records)} records,"
+        f" {len(corpus.queries)} cases, {built.moves} records to move or relabel,"
+        f" {built.deletions} to delete → {output}"
+    )
+
+
 @enterprise_evals_app.command("validate")
 def enterprise_evals_validate(path: Path) -> None:
     """Validate a materialized enterprise evaluation corpus."""

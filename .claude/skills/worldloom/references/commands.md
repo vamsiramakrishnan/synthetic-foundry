@@ -271,6 +271,24 @@ worldloom enterprise-evals build <WORLD_PATH> <OUTPUT>
 | `--shard-index` |  |
 | `--strength` |  |
 
+### `worldloom enterprise-evals housekeeping`
+
+Build a hero use case: a drive, inbox or channel list that needs tidying, and the cases that grade it.
+
+```
+worldloom enterprise-evals housekeeping <WORLD_PATH> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--connector` | Whose tools tidy it; default is the kind's first connector. |
+| `--duplicates` | Drive only: the share of files with a stray copy. |
+| `--kind` | What to tidy: drive, inbox or chats. |
+| `--mess` | The share of items in the wrong place. |
+| `--records` | How many files, messages or channels the corpus holds. |
+| `--salt` | Vary the draw without changing the seed. |
+| `--stale` | The share of items past the archive rule. |
+
 ### `worldloom enterprise-evals plan`
 
 Write grounded query plans as JSONL.

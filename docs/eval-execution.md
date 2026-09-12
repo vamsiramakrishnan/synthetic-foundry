@@ -28,7 +28,7 @@ and every run reports a grade per axis (`CaseScore`).
 | --- | --- | --- | --- |
 | **plan** (querying) | Given the request, which connector DAG should exist | `PlanContract`: nodes, edges, shape, which nodes read, write, verify | node recall and precision, edge recall, missing verifies, writes outside the plan |
 | **trajectory** (iteration) | How the agent got through it | `TrajectoryContract`: call budget, designed failures and what they block, retry tolerance | exact / in-order / any-order match, precision, recall, retry storm, budget, failures honoured, Anvil's safety laws |
-| **outcomes** | What is true afterwards | `OutcomeContract`: records to create, update, delete; the artifact and the facts it rests on; the answer and its rubric | a state diff (created, updated, deleted, collateral), artifact grounding, a rated answer |
+| **outcomes** | What is true afterwards | `OutcomeContract`: records to create, update, delete (by fid, for a mapped write); the artifact and the facts it rests on; the answer and its rubric | a state diff (created, updated, deleted, collateral), the share of a mapped write's records that landed, artifact grounding, a rated answer |
 
 The compiled row stays beside the contract, unchanged, and `grade_trace` still
 decides its assertions. The axes are a reading of the row; they cannot
@@ -138,6 +138,46 @@ The same surface is reachable as MCP tools of `worldloom mcp`
 the `evalrun` entry of `worldloom seams --json` (schemas, axes, laws,
 commands), and from Python through `EvalSession`. The exact documents are in
 the `worldloom-evalrun` skill's `references/protocol.md`.
+
+## Hero use cases: organise my drive, my inbox, my chats
+
+The tasks people actually hand an agent are reorganisations: file the
+quarter's documents, clear the inbox, archive the dead channels. A
+reorganisation is hundreds of small, checkable moves whose whole point is the
+count, and no planned query could pose one: every row wrote one record.
+`worldloom enterprise-evals housekeeping` builds both halves of such an
+evaluation from a world:
+
+```bash
+worldloom enterprise-evals housekeeping ./corpus ./hk --kind drive --connector drive --records 300 --mess 0.35 --stale 0.15 --duplicates 0.1
+worldloom evalrun cases ./hk
+worldloom evalrun run ./hk -o ./runs/reference
+worldloom evalrun run ./hk -o ./runs/mine --exec "python3 my_agent.py"
+```
+
+| Kind | Connectors | The corpus | The rules |
+| --- | --- | --- | --- |
+| `drive` | drive, sharepoint, onedrive | a folder per business unit and reporting period, plus Archive; files named for the artifact, period and unit | every unit's files for a period belong in that folder; files past the last three periods belong in Archive; a copy named `(1)` is deleted |
+| `inbox` | email, outlook | a mailbox of subject-tagged messages (`[Invoice]`, `[Approval]`, ...) and conversation; Outlook adds mail folders | tagged messages are filed under their category (a folder, or a `folder` field on the native connector); old unread conversation is marked read |
+| `chats` | slack, teams | a channel per unit and purpose with a last-activity date | a channel silent since the cut-off is archived |
+
+The corpus is in the world's own words (its units, periods and people) and
+nothing on a record says where it should be: the rule is in the request and
+the ground truth is in the row. A stated share of items is misfiled,
+mislabelled, stale or duplicated (`--mess`, `--stale`, `--duplicates`), and
+the count is a flag (`--records`, up to five thousand).
+
+Each case is one rule and one group of records that share a destination,
+in the executable DAG grammar: a search bound to the rule's own predicate
+(`SourceRequirement.bind = "predicate"`, so an agent that reads the rule can
+search by it, paged at the tool's page size), a mapped write per record (a
+`move`, an update, a transition, a delete) and a mapped readback. The row
+carries a `per_record_state` assertion listing every record and the fields
+it must end with, and the outcome grade is the fraction that did
+(`OutcomeMatch.ratio`): three hundred files with one left behind score
+0.997 on that expectation, not 0. The reference agent passes every case on
+every connector; the plan and trajectory axes grade a reorganisation exactly
+as they grade any other row.
 
 ## What Eval Studio contributed, and what it could not
 

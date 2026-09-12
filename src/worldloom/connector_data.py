@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -794,6 +794,24 @@ class ConnectorProjectionRegistry:
     @property
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(set(self._projections) | set(_defined_connectors())))
+
+    def extended(self, connector: str, records: Sequence[ConnectorRecord]) -> ConnectorProjectionRegistry:
+        """A registry that projects *records* on *connector* beside everything it did.
+
+        The seam a constructed corpus (a housekeeping drive, a seeded
+        mailbox) plugs into: the engine's own projection of the connector
+        still runs first, the witnesses still follow, and the extra records
+        ride the same path every evaluator reads. A new registry, never a
+        mutation of this one.
+        """
+        base = self
+        extra = tuple(records)
+
+        def project(world: World) -> list[ConnectorRecord]:
+            held = base._projections.get(connector)
+            return [*(held(world) if held is not None else []), *extra]
+
+        return ConnectorProjectionRegistry({**self._projections, connector: project})
 
 
 def builtin_projections() -> ConnectorProjectionRegistry:
