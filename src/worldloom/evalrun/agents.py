@@ -75,8 +75,10 @@ class ToolSurface:
 
     Errors propagate to the agent as the connector would raise them: a
     ``ConnectorError`` for a refused call, a ``ServingError`` for a call the
-    run does not admit. Both are recorded before they propagate, so an agent
-    that swallows an error still leaves the attempt in the trace.
+    run does not admit. Both are recorded before they propagate: the first as
+    an error span, the second in the run's refusals (there is no span for a
+    call that never reached a connector), so an agent that swallows an error
+    still leaves the attempt where the grader reads it.
     """
 
     def __init__(self, service: ConnectorEvaluationService, principal: str, run_id: str) -> None:
@@ -97,6 +99,11 @@ class ToolSurface:
     @property
     def spans(self) -> tuple[ConnectorSpan, ...]:
         return self._service.spans(self._principal, self.run_id)
+
+    @property
+    def refusals(self) -> tuple[dict[str, Any], ...]:
+        """Calls the run did not admit: unknown tool, undeclared argument, a limit."""
+        return self._service.refusals(self._principal, self.run_id)
 
 
 class AgentUnderTest(Protocol):

@@ -233,8 +233,8 @@ def _print_summary(summary: Any, json_output: bool) -> None:
     typer.echo(f"{summary.agent}: {summary.passed}/{summary.graded} passed ({summary.pass_rate}),"
                f" {summary.errors} error(s) excluded; plan {axis(summary.means.plan)},"
                f" trajectory {axis(summary.means.trajectory)}, outcomes {axis(summary.means.outcomes)}")
-    typer.echo(f"trajectory: exact {summary.exact_match_rate}, in-order {summary.in_order_match_rate},"
-               f" any-order {summary.any_order_match_rate}; mean calls {summary.mean_calls}")
+    typer.echo(f"trajectory: exact {axis(summary.exact_match_rate)}, in-order {axis(summary.in_order_match_rate)},"
+               f" any-order {axis(summary.any_order_match_rate)}; mean calls {axis(summary.mean_calls)}")
     typer.echo(f"outcomes: {summary.structured_met}/{summary.structured_expected} structured expectations met,"
                f" {summary.collateral_cases} case(s) with collateral writes")
     if summary.error_codes:

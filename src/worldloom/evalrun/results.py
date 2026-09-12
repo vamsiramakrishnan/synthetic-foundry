@@ -73,11 +73,12 @@ class RunSummary(Model):
     passed: int
     pass_rate: float
     means: AxisMeans
-    #: Trajectory vocabulary, as rates over graded cases.
-    exact_match_rate: float
-    in_order_match_rate: float
-    any_order_match_rate: float
-    mean_calls: float
+    #: Trajectory vocabulary, as rates over the graded cases that observed a
+    #: trajectory; absent when none did (a plan-only run, a Studio import).
+    exact_match_rate: float | None
+    in_order_match_rate: float | None
+    any_order_match_rate: float | None
+    mean_calls: float | None
     error_codes: dict[str, int]
     safety_findings: dict[str, int]
     assertion_status: dict[str, int]
@@ -130,6 +131,8 @@ def summarize(report: RunReport) -> RunSummary:
         rated += score.outcomes.answer_score is not None
         unrated += score.outcomes.answer_error is not None
     timed = [row.latency.ttlt for row in rows if row.latency is not None]
+    executed = [score for score in scores if "trajectory" in score.observed]
+    walked = [row for row in graded if row.score is not None and "trajectory" in row.score.observed]
     by_connector: dict[str, list[CaseResult]] = defaultdict(list)
     for row in rows:
         for connector in sorted({str(span.get("tool", "")).split(".")[0] for span in row.spans} or {"none"}):
@@ -144,10 +147,10 @@ def summarize(report: RunReport) -> RunSummary:
         errors=len(rows) - len(graded), passed=sum(1 for score in scores if score.passed),
         pass_rate=_mean([1.0 if score.passed else 0.0 for score in scores]),
         means=_slice("all", rows).means,
-        exact_match_rate=_mean([1.0 if score.trajectory.exact_match else 0.0 for score in scores]),
-        in_order_match_rate=_mean([1.0 if score.trajectory.in_order_match else 0.0 for score in scores]),
-        any_order_match_rate=_mean([1.0 if score.trajectory.any_order_match else 0.0 for score in scores]),
-        mean_calls=_mean([float(row.calls) for row in graded]),
+        exact_match_rate=_mean([1.0 if score.trajectory.exact_match else 0.0 for score in executed]) if executed else None,
+        in_order_match_rate=_mean([1.0 if score.trajectory.in_order_match else 0.0 for score in executed]) if executed else None,
+        any_order_match_rate=_mean([1.0 if score.trajectory.any_order_match else 0.0 for score in executed]) if executed else None,
+        mean_calls=_mean([float(row.calls) for row in walked]) if walked else None,
         error_codes=dict(sorted(codes.items())), safety_findings=dict(sorted(laws.items())),
         assertion_status=dict(sorted(statuses.items())),
         structured_met=met, structured_expected=expected, collateral_cases=collateral,
@@ -250,9 +253,10 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
             deltas.append(CaseDelta(case_id=case_id, baseline=a.score.score if a.score else None,
                                     recent=b.score.score if b.score else None, delta=None, axes={}, verdict="ungraded"))
             continue
-        delta = round(b.score.score - a.score.score, 4)
         # An axis only one side observed has no delta: a plan-only run
-        # against an executed one compares on the plan axis and nowhere else.
+        # against an executed one compares on the plan axis and nowhere else,
+        # and its overall delta is the mean over the axes both observed. Two
+        # runs with no axis in common have no delta at all.
         axes = {
             axis: round(getattr(b.score, axis).score - getattr(a.score, axis).score, 4)
             for axis in ("plan", "trajectory", "outcomes")
@@ -260,6 +264,12 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
         }
         for axis, value in axes.items():
             axis_totals[axis].append(value)
+        if not axes:
+            deltas.append(CaseDelta(case_id=case_id, baseline=a.score.score, recent=b.score.score, delta=None,
+                                    axes={}, verdict="unobserved"))
+            continue
+        same_axes = set(a.score.observed) == set(b.score.observed)
+        delta = round(b.score.score - a.score.score, 4) if same_axes else _mean(list(axes.values()))
         if delta > DELTA_BAND:
             verdict = "improvement"
             improvements.append(case_id)

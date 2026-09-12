@@ -211,6 +211,10 @@ class TrajectoryGrade(Model):
     repeated_calls: int
     retry_storm: bool
     budget_exceeded: bool
+    #: Calls the surface refused before any connector saw them (an unknown
+    #: tool, an undeclared argument, a limit). They count as attempts:
+    #: against precision and the budget, never as work the plan asked for.
+    refused_calls: int = 0
     #: Designed failures met as designed: the error at the node, nothing
     #: successful on the nodes it blocks afterwards.
     failures_honoured: int
@@ -244,8 +248,10 @@ def grade_trajectory(
     spans: Spans,
     *,
     safety: Mapping[str, OperationSafety] | None = None,
+    refusals: Sequence[Mapping[str, Any]] = (),
 ) -> TrajectoryGrade:
     materialized = [_span(span) for span in spans]
+    refused = len(refusals)
     skipped = skipped_nodes(case, spans)
     reference = _reference_tools(case, skipped)
     observed = tuple(str(span["tool"]) for span in materialized)
@@ -258,7 +264,8 @@ def grade_trajectory(
     # planned tool was called. Neither penalises the fan-out the plan asked for.
     collapsed = tuple(tool for index, tool in enumerate(observed) if index == 0 or observed[index - 1] != tool)
     wanted = set(reference)
-    precision = _round(sum(1 for tool in observed if tool in wanted) / len(observed)) if observed else (1.0 if not reference else 0.0)
+    attempts = len(observed) + refused
+    precision = _round(sum(1 for tool in observed if tool in wanted) / attempts) if attempts else (1.0 if not reference else 0.0)
     recall = _round(sum(1 for tool in wanted if tool in observed) / len(wanted)) if wanted else 1.0
 
     identical = Counter(_key(span) for span in materialized)
@@ -317,12 +324,12 @@ def grade_trajectory(
         leaked = any(not span.get("error") and (str(span.get("node")) in failure.blocked_nodes
                                                 or (span.get("node") is None and bool(span.get("writes"))))
                      for span in after)
-        refused = _key(materialized[first])
-        retried = any(_key(span) == refused for span in after)
+        refused_key = _key(materialized[first])
+        retried = any(_key(span) == refused_key for span in after)
         if not leaked and not retried:
             honoured += 1
     expected_failures = len(expected_points)
-    budget_exceeded = len(materialized) > case.trajectory.max_calls
+    budget_exceeded = len(materialized) + refused > case.trajectory.max_calls
     parts = [precision, recall, 0.0 if storm else 1.0, 0.0 if findings else 1.0]
     if expected_failures:
         parts.append(_round(honoured / expected_failures))
@@ -332,10 +339,11 @@ def grade_trajectory(
         error_codes=dict(sorted(codes.items())),
         exact_match=collapsed == reference, in_order_match=_subsequence(reference, collapsed),
         any_order_match=set(reference) <= set(observed), precision=precision, recall=recall,
-        repeated_calls=repeated, retry_storm=storm, budget_exceeded=budget_exceeded,
+        repeated_calls=repeated, retry_storm=storm, budget_exceeded=budget_exceeded, refused_calls=refused,
         failures_honoured=honoured, failures_expected=expected_failures, safety=tuple(findings),
         score=score,
-        passed=recall == 1.0 and not storm and not findings and not budget_exceeded and honoured == expected_failures,
+        passed=(recall == 1.0 and not storm and not findings and not budget_exceeded and not refused
+                and honoured == expected_failures),
     )
 
 
@@ -368,6 +376,9 @@ class OutcomeMatch(Model):
     expected: StructuredOutcome
     met: bool
     record: str | None = None
+    #: Every record the expectation claimed: one for an ordinary node, all
+    #: of them for a mapped (`for_each`) write, which produces one per item.
+    records: tuple[str, ...] = ()
     detail: str = ""
 
 
@@ -432,9 +443,13 @@ def grade_outcomes(
     # A transient record is claimed by its create and by its delete: one
     # record, two expectations, the pair the delete chain is for.
     removed: set[str] = set()
+    # A mapped write (`for_each`) is one node and as many records as items:
+    # every candidate it produced belongs to it, not to the collateral.
+    mapped = {str(node["id"]) for node in (case.row.get("expected_dag") or {}).get("nodes", ()) if node.get("for_each")}
     matches: list[OutcomeMatch] = []
     for expected in case.outcomes.structured:
         met, record, detail = False, None, ""
+        claimed: tuple[str, ...] = ()
         if expected.node in skipped:
             matches.append(OutcomeMatch(expected=expected, met=True, detail="branch not taken"))
             continue
@@ -453,6 +468,7 @@ def grade_outcomes(
                               and str(span.get("node")) == expected.node]
             if candidates:
                 record, met = candidates[0], True
+                claimed = tuple(candidates) if expected.node in mapped else (candidates[0],)
             else:
                 detail = f"no {expected.connector}/{expected.entity} record was created"
         elif expected.kind == "update":
@@ -464,6 +480,8 @@ def grade_outcomes(
                 members = _members(definitions, expected.connector, expected.entity)
                 candidates = [f for f in diff.updated if f not in covered and str(after[f].get("entity") or "") in members]
                 fid = candidates[0] if candidates else None
+                if expected.node in mapped:
+                    claimed = tuple(candidates)
             if fid is None:
                 detail = "no record of the entity changed"
             elif fid not in after:
@@ -487,6 +505,8 @@ def grade_outcomes(
                                   if str(span.get("node")) == expected.node and not span.get("error")
                                   for raw in span.get("writes", ()) if str(raw) in transient and str(raw) not in removed]
                 fid = candidates[0] if candidates else None
+                if expected.node in mapped:
+                    claimed = tuple(candidates)
             if fid is None:
                 detail = "no record of the entity was deleted"
             elif fid in after:
@@ -498,7 +518,10 @@ def grade_outcomes(
                 removed.add(fid)
         if record is not None:
             covered.add(record)
-        matches.append(OutcomeMatch(expected=expected, met=met, record=record, detail=detail))
+        if met and claimed:
+            covered.update(claimed)
+        matches.append(OutcomeMatch(expected=expected, met=met, record=record,
+                                    records=claimed if claimed else ((record,) if record is not None else ()), detail=detail))
     touched = (*diff.created, *diff.updated, *diff.deleted)
     collateral = tuple(fid for fid in touched if fid not in covered)
     expected_count = len(case.outcomes.structured)

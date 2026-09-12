@@ -34,13 +34,24 @@ The compiled row stays beside the contract, unchanged, and `grade_trace` still
 decides its assertions. The axes are a reading of the row; they cannot
 disagree with it about what a call was for.
 
+**A refused call is still an attempt.** A call the surface does not admit
+(an unknown tool, an undeclared argument, a limit) never reaches a connector,
+so no span exists for it; the service records it as a refusal instead, the
+ledger carries it beside the spans, and the trajectory axis counts it against
+precision and the budget and withholds its pass. An agent that probes the
+surface a dozen times before finding the right call is not the trajectory an
+agent that did not probe took, and the plan axis, which reads only what
+reached a connector, still says the same plan was executed.
+
 **Outcomes are a diff, not a claim.** The service snapshots every connector's
 records after `begin` and again after the agent returns. Created is in the
 second and not the first; deleted is the reverse; updated is the same record
 with different fields. A write to the wrong record is *collateral*, reported
 by fid, never credit. A case whose designed failure blocks a write expects
 that write *not* to happen, and a record that appears anyway is the agent
-writing past a refusal. A delete is graded the same way an update is: the
+writing past a refusal. A mapped write (a `for_each` node) is one expectation and one
+record per item; every record it produced belongs to it, none is collateral.
+A delete is graded the same way an update is: the
 record is gone from the post-state, and the trajectory shows the agent read
 it first. A record the run created and then deleted is in neither snapshot;
 the spans the service recorded show the write that made it and the delete
@@ -103,7 +114,11 @@ scripted:plans.json` replays a `worldloom.evalrun-plans/v1` file written
 against `evalrun requests ./cases --for plan`. A plan-only run's trajectory
 and outcome axes are unobserved: the summary reports no mean for them and
 `compare` reports no delta on them, so a plan-only run and an executed run of
-the same case set compare on the plan axis and nowhere else.
+the same case set compare on the plan axis and nowhere else: a case's overall
+delta is then the mean over the axes both runs observed, two runs with no axis
+in common have no delta and no verdict, and the summary's trajectory rates
+(exact, in-order, any-order, mean calls) are absent rather than zero where no
+trajectory was observed.
 
 ## Driving it from another harness
 

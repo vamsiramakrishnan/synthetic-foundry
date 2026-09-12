@@ -304,3 +304,17 @@ def test_every_mutation_lands_on_a_different_signal(grammar: dict[str, Subject])
         for other, signal in signals.items():
             fired = bool(signal(result.score))
             assert fired == (other == name), (name, other, signal(result.score))
+
+
+def test_probing_the_surface_with_malformed_calls_costs_precision(grammar: dict[str, Subject]) -> None:
+    """A refused call has no span; it is still an attempt the ledger and the grade see."""
+    subject = grammar["clean"]
+    probes = [("probe", ToolCall(tool="jira.no_such_tool", arguments={})),
+              ("probe", ToolCall(tool=subject.calls[0][1].tool, arguments={**subject.calls[0][1].arguments, "sudo": True}))]
+    mutated = subject.replay([*probes, *subject.calls], name="prober")
+    _dropped(subject, mutated)
+    assert mutated.refused == 2 and [item["error"].split(":")[0] for item in mutated.refusals] == ["tool_not_allowed", "unknown_arguments"]
+    assert mutated.score.trajectory.refused_calls == 2 and mutated.score.trajectory.precision < 1.0
+    assert mutated.score.trajectory.exact_match, "the connector saw exactly the reference trajectory"
+    assert mutated.score.plan == subject.reference.score.plan, "the plan axis reads only what reached a connector"
+

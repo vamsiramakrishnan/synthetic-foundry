@@ -51,6 +51,11 @@ class _Run:
     emulators: dict[str, ConnectorEmulator]
     spans: list[ConnectorSpan] = field(default_factory=list)
     attempts: int = 0
+    #: Calls the run did not admit (unknown tool, undeclared argument, a
+    #: limit): no span exists for them, so they are kept here and graded as
+    #: attempts. An agent that keeps probing the surface is not the same
+    #: trajectory as one that did not.
+    refusals: list[dict[str, Any]] = field(default_factory=list)
     #: Every record as it stood when the run began. `score` diffs the live
     #: state against it, so an external agent's outcomes are graded from what
     #: it changed, never from what it reported.
@@ -317,21 +322,26 @@ class ConnectorEvaluationService:
     def call(self, principal: str, run_id: str, name: str, arguments: Mapping[str, Any]) -> Any:
         with self._lock:
             run = self._run(principal, run_id)
+
+            def refuse(message: str) -> ServingError:
+                run.refusals.append({"tool": name, "arguments": sorted(str(key) for key in arguments), "error": message})
+                return ServingError(message)
+
             if name not in self.tools:
-                raise ServingError(f"tool_not_allowed: {name}")
+                raise refuse(f"tool_not_allowed: {name}")
             connector, tool = self.tools[name]
             if connector not in run.emulators:
-                raise ServingError(f"connector_not_in_query: {connector}")
+                raise refuse(f"connector_not_in_query: {connector}")
             if run.attempts >= self.limits.max_calls_per_run:
-                raise ServingError("call_limit: retrieve the trace and end this run")
+                raise refuse("call_limit: retrieve the trace and end this run")
             run.attempts += 1
             supplied = dict(arguments)
             declared = self.definitions[connector].tool(tool)
             unknown = set(supplied) - set(declared.params)
             if unknown:
-                raise ServingError(f"unknown_arguments: {sorted(unknown)}")
+                raise refuse(f"unknown_arguments: {sorted(unknown)}")
             if len(json.dumps(supplied, sort_keys=True, allow_nan=False).encode()) > self.limits.max_request_bytes:
-                raise ServingError("request_limit: reduce the tool arguments")
+                raise refuse("request_limit: reduce the tool arguments")
             if self.rows[run.query_id].get("grammar") == "enterprise-dag@1":
                 node, consumed = self._grammar_attribution(run, name, supplied)
             else:
@@ -407,6 +417,11 @@ class ConnectorEvaluationService:
         with self._lock:
             return tuple(self._run(principal, run_id).spans)
 
+    def refusals(self, principal: str, run_id: str) -> tuple[dict[str, Any], ...]:
+        """Every call this run refused before a span could exist, in order."""
+        with self._lock:
+            return tuple(dict(item) for item in self._run(principal, run_id).refusals)
+
     def snapshot(self, principal: str, run_id: str) -> dict[str, dict[str, Any]]:
         """The run's connector state, every record by fid, copied.
 
@@ -475,14 +490,17 @@ class ConnectorEvaluationService:
             response = AgentResponse(answer=answer, artifacts=produced,
                                      planned_dag=dict(planned_dag) if planned_dag else None)
             spans = tuple(run.spans)
+            refusals = tuple(dict(item) for item in run.refusals)
             after = {fid: copy.deepcopy(dict(record)) for server in sorted(run.emulators)
                      for fid, record in sorted(run.emulators[server].records.items())}
             assertions = self.grade(principal, run_id)
             score = grade_run(case, spans, run.before, after, assertions, response,
-                              definitions=self.definitions, rater=rater, safety=safety_for(self.definitions))
+                              definitions=self.definitions, rater=rater, safety=safety_for(self.definitions),
+                              refusals=refusals)
             result = CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
                                 agent=f"served:{principal}", status="graded", score=score, answer=answer,
-                                calls=len(spans), spans=tuple(_span_json(span) for span in spans))
+                                calls=len(spans), spans=tuple(_span_json(span) for span in spans),
+                                refused=len(refusals), refusals=refusals)
             return result.model_dump(mode="json")
 
     def grade(self, principal: str, run_id: str) -> dict[str, Any]:

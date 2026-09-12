@@ -906,3 +906,77 @@ def test_the_cli_grades_planners_over_the_exec_seam_and_from_a_plans_file(gramma
     contract = seam_contract()
     assert "evalrun plan" in contract["commands"] and "evalrun_plan" in contract["mcp_tools"]
     assert contract["schemas"]["plan"] == "worldloom.evalrun-plan/v1"
+
+
+def test_a_mapped_write_claims_every_record_it_produced() -> None:
+    """A `for_each` write is one node and one record per item; none of them is collateral."""
+    from copy import deepcopy
+
+    from test_enterprise_dag import compiled
+
+    from worldloom.connector_eval_runtime import run_eval_row
+    from worldloom.evalrun import grade_outcomes
+
+    row, data = compiled("map_read")
+    forged = deepcopy(row)
+    writer = next(node for node in forged["expected_dag"]["nodes"] if node["id"] == "write")
+    writer["for_each"] = {"node": "read-0", "limit": 100}
+    writer["payload"].pop("name", None)
+    writer["bindings"]["name"] = {"node": "read-0", "select": "item", "path": ["title"]}
+    # One write per search hit; the readback is dropped so the row stays a
+    # plain fan-out of creates rather than a second mapped node.
+    forged["expected_dag"]["nodes"] = [node for node in forged["expected_dag"]["nodes"] if node["node_kind"] != "verify"]
+    forged["expected_dag"]["edges"] = [edge for edge in forged["expected_dag"]["edges"] if edge[1] != "verify-write"]
+    result = run_eval_row(forged, data)
+    assert result.grade["fails"] == []
+    created = [fid for span in result.spans if span.node == "write" for fid in span.writes]
+    assert len(created) == 3
+    case = case_from_row(forged, query="Write one record per matching issue.")
+    before = {str(record["fid"]): dict(record) for record in data}
+    grade = grade_outcomes(case, before, result.post_state, spans=result.spans)
+    match = next(item for item in grade.structured if item.expected.node == "write")
+    assert match.met and set(match.records) == set(created) and match.record == created[0]
+    assert grade.collateral == () and grade.passed, grade.model_dump()
+
+
+def test_comparison_and_summary_speak_only_of_observed_axes(grammar_corpus: Any) -> None:
+    from worldloom.evalrun import EvalSession, ReferencePlanner, ScriptedAgent
+
+    session = EvalSession.from_corpus(grammar_corpus, limit=2)
+    session.reference()
+    session.run(ScriptedAgent([], name="lazy"), label="lazy")
+    session.plan(ReferencePlanner(session.cases))
+    # Executed against plan-only: the overall delta is the plan delta, not
+    # the executed mean minus a plan-only score.
+    plan_vs_lazy = session.compare("lazy", "plan:reference")
+    assert plan_vs_lazy.axis_deltas.plan is not None and plan_vs_lazy.axis_deltas.plan > 0
+    assert all(item.delta == item.axes.get("plan", item.delta) for item in plan_vs_lazy.deltas if item.delta is not None)
+    assert plan_vs_lazy.axis_deltas.trajectory is None and plan_vs_lazy.axis_deltas.outcomes is None
+    assert len(plan_vs_lazy.improvements) == 2, plan_vs_lazy.model_dump()
+    same = session.compare("reference", "plan:reference")
+    assert same.stable == 2 and same.mean_delta == 0.0
+    # Two runs with no axis in common have no delta and no verdict.
+    from worldloom.evalrun import RunReport
+    from worldloom.evalrun.grading import (
+        CaseScore,
+        unobserved_outcomes,
+        unobserved_plan,
+        unobserved_trajectory,
+    )
+    from worldloom.evalrun.runner import CaseResult
+
+    answer_only = RunReport(agent="studio", principal="eval-studio", case_set=session.runs["reference"].case_set, results=tuple(
+        CaseResult(case_id=case.id, query=case.query, agent="studio", status="graded",
+                   score=CaseScore(plan=unobserved_plan(), trajectory=unobserved_trajectory(), outcomes=unobserved_outcomes(0.9),
+                                   assertion_status="unobserved", observed=("outcomes",), score=0.9, passed=True))
+        for case in session.cases))
+    session.runs["answers"] = answer_only
+    disjoint = session.compare("plan:reference", "answers")
+    assert all(item.verdict == "unobserved" and item.delta is None for item in disjoint.deltas)
+    assert disjoint.stable == 0 and disjoint.improvements == () and disjoint.regressions == ()
+    # Rates over the trajectory vocabulary exist only where a trajectory was observed.
+    planned = session.summary("plan:reference")
+    assert planned.exact_match_rate is None and planned.mean_calls is None
+    executed = session.summary("reference")
+    assert executed.exact_match_rate == 1.0 and executed.mean_calls is not None and executed.mean_calls > 0
+

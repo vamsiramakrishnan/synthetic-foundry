@@ -80,6 +80,9 @@ case, excluded from the answer mean, never a zero.
   Never read it as a zero, and never fix it by editing the grader.
 - `outcomes.collateral` lists records the run changed that no expectation
   covers. A write to the wrong record is collateral, not credit.
+- `trajectory.refused_calls` counts calls the surface did not admit (an
+  unknown tool, an undeclared argument, a limit). No connector saw them, so
+  they are not spans, but they cost precision and the trajectory pass.
 - `trajectory.safety` names Anvil's laws broken: `duplicate_write`,
   `unsafe_retry`, `destructive_without_read`. A delete without a prior read
   of the record fails the trajectory even when the record is gone.

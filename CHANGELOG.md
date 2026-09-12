@@ -36,6 +36,15 @@ first written up, before the waves above it landed.
 
 ### Eval execution: three-axis agent runs
 
+- Review findings closed: the service records every call it refuses
+  (unknown tool, undeclared argument, a limit) and the trajectory axis
+  counts them as attempts against precision, the budget and its pass, on
+  the local and the served path alike; a mapped (`for_each`) write claims
+  every record it produced rather than one, so a fan-out of creates is no
+  longer collateral; `compare` computes a case's overall delta over the
+  axes both runs observed and gives two runs with no axis in common no
+  verdict; the summary's trajectory rates are absent rather than zero where
+  no trajectory was observed.
 - Add Anvil's mutation battery for the graders (`tests/test_evalrun_mutations.py`):
   each case weakens one control on a passing reference trajectory and
   asserts the score drops on the right axis. It found and closed two gaps:
