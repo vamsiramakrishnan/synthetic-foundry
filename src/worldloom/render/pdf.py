@@ -57,7 +57,7 @@ from ..narrative import references
 from ..presentation import DEFAULT as DEFAULT_PRESENTATION
 from ..presentation import Presentation
 from ..presentation import of as presentation_of
-from . import Rendered, RenderError, fonts, ooxml, slug_for
+from . import Rendered, RenderError, chaptered, fonts, ooxml, slug_for
 from .docx import HANDLES
 from .values import corpus_locale, format_value
 
@@ -1040,7 +1040,13 @@ def render(
     the same way and for the same reason; ``render_all`` passes the corpus's.
     """
     _require_reportlab()
-    from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph
+    from reportlab.platypus import (
+        BaseDocTemplate,
+        Frame,
+        PageBreak,
+        PageTemplate,
+        Paragraph,
+    )
     from reportlab.platypus.doctemplate import LayoutError
 
     plan = _plan(ir, artifact_type, size_class, budget)
@@ -1065,9 +1071,22 @@ def render(
         styles["notice"],
     ))
 
+    chapters = chaptered(ir)
+    visible_seen = 0
+    appendix_opened = False
     for section in plan.sections:
         if section.hidden and presentation.appendix != "append":
             continue
+        if chapters and not section.hidden:
+            # Each chapter on its own page, as `render/docx.py` does; the
+            # first follows the front matter on the opening page.
+            if visible_seen:
+                story.append(PageBreak())
+            visible_seen += 1
+        if chapters and section.hidden and not appendix_opened:
+            story.append(PageBreak())
+            story.append(Paragraph(_escape("Appendix"), styles["heading"]))
+            appendix_opened = True
         story.extend(_section_flowables(section, facts, styles, frame_width, locale,
                                         presentation,
                                         component_id=plan.components.get(section.heading),

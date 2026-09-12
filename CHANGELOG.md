@@ -11,6 +11,17 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Documents: chapter furniture past eight sections
+
+- A document with more than eight visible sections (`render.chaptered`,
+  the same threshold that frames its writers) renders with chapters: Word
+  and PDF open every section on its own page, Word's running head carries
+  the current section as a `STYLEREF` field beside the title, the hidden
+  sections gather under one `Appendix` heading on their own page, and the
+  Markdown twin opens with a linked contents list and the same `Appendix`
+  heading. The threshold sits above every outline the engines ship, so
+  every existing document renders byte for byte.
+
 ### Documents: sections that repeat over units, and framed long documents
 
 - A section plan may declare `repeat: "unit"` (`doctypes.SectionSpec`,

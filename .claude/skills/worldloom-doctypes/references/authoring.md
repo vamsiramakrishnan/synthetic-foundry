@@ -51,6 +51,11 @@ a duration string, so two packs cannot disagree about what `P1DT15H` means),
   document has more than eight visible sections, every section's request
   carries the outline as standing context (the sections in order, and where
   this one sits) so writers stop restating each other.
+- **Long documents get chapters.** Past eight visible sections, Word and PDF
+  open every section on its own page, Word's running head names the current
+  section, the hidden sections gather under one `Appendix` heading, and the
+  Markdown twin opens with a linked contents list. Nothing to declare; the
+  outline's length decides, and a shorter document renders as it always did.
 - **`deck: true`** makes the type a slide deck as well: the same outline
   composes through the compiler's `pptx` components, opens with an agenda
   once it has more than six visible sections, and continues prose or a table

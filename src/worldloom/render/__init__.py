@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
+    from ..models import ArtifactIR
     from ..world import World
 
 
@@ -79,6 +80,36 @@ _SLUGS: dict[str, str] = {
 def slug_for(artifact_type: str) -> str:
     """The basename for an artifact of this type."""
     return _SLUGS.get(artifact_type, artifact_type.replace("_", "-"))
+
+
+#: A document is *chaptered* once it has more visible prose sections than
+#: this: each section opens on its own page, the running head names the
+#: section, a Markdown twin opens with a linked contents list, and the hidden
+#: sections are gathered under one "Appendix" heading. Below it a document is
+#: a memo and gets none of that. The same number `narrative.compiler.FRAMED_FROM`
+#: uses to hand a writer the outline, for the same reason: a reader of a
+#: twelve-section report needs a map, a reader of a three-section memo would
+#: be slowed by one. Strictly greater, and above every narrative outline the
+#: engines ship, so every existing document renders byte for byte.
+CHAPTERED_FROM = 8
+
+
+def chaptered(ir: ArtifactIR) -> bool:
+    """Whether *ir* is long enough for chapter furniture.
+
+    Counts the visible sections that are prose-shaped — written or still
+    awaiting prose — and not the tables. A workbook's Markdown twin runs to
+    nine sheets and is a workbook, not a report: chapters, a contents list
+    and an appendix heading on it would be furniture for a document nobody
+    reads front to back. This is the case the byte-identity gate caught the
+    first time the count included every visible section.
+    """
+    prose = sum(
+        1 for section in ir.sections
+        if not section.hidden and section.table is None and section.quote is None
+        and (section.flow is None or not (section.flow.nodes or section.flow.edges))
+    )
+    return prose > CHAPTERED_FROM
 
 
 #: Format name to the function that renders it.
@@ -190,5 +221,5 @@ def _install() -> None:
 
 _install()
 
-__all__ = ["Rendered", "RenderError", "available", "citation_sidecars", "register",
-           "renderer", "slug_for"]
+__all__ = ["CHAPTERED_FROM", "Rendered", "RenderError", "available", "chaptered",
+           "citation_sidecars", "register", "renderer", "slug_for"]
