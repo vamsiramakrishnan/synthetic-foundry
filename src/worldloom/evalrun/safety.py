@@ -155,6 +155,9 @@ _MUTATIONS: dict[str, tuple[OperationAction, RiskLevel, bool, bool]] = {
     "comment": (OperationAction.CREATE, RiskLevel.LOW, True, False),
     "update": (OperationAction.UPDATE, RiskLevel.MEDIUM, True, True),
     "transition": (OperationAction.UPDATE, RiskLevel.MEDIUM, True, True),
+    # A move re-parents a record it leaves intact: reversible (move it back),
+    # naturally idempotent (moving to where it already is changes nothing).
+    "move": (OperationAction.UPDATE, RiskLevel.MEDIUM, True, True),
     "delete": (OperationAction.DELETE, RiskLevel.DESTRUCTIVE, False, True),
     "send": (OperationAction.SEND, RiskLevel.HIGH, False, False),
     "reply": (OperationAction.SEND, RiskLevel.HIGH, False, False),

@@ -43,7 +43,7 @@ _READ_RESOLVED = frozenset({"get", "read", "search", "download", "extract", "lis
 _OP_ALIASES = {"read": "get", "readback": "get", "cross_system": "get", "draft": "create"}
 _VERIFY_OPS = frozenset({"readback", "cross_system"})
 _CREATE_OPS = frozenset({"create", "send", "post", "upload", "transform", "reply", "forward", "comment", "draft"})
-_UPDATE_OPS = frozenset({"update", "transition", "patch", "upsert"})
+_UPDATE_OPS = frozenset({"update", "transition", "patch", "upsert", "move"})
 
 #: Adversarial rows whose correct outcome is *no* write, matching the set
 #: ``grade_trace`` refuses a write under for its ``no_write`` assertion.

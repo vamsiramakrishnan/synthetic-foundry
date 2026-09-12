@@ -11,6 +11,26 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Connectors: a record can be moved, and mail and chat can be tidied
+
+- Every file connector declared its `move_file`/`move_item` tool as an
+  `update` on the folder entity alone, so `tool_for("docx", "move")` had
+  nothing to answer and no hero use case (organise my drive, my inbox, my
+  chats) could be planned, executed or graded as what it is. `move` is now
+  a connector operation of its own (`connector_definition.ConnectorOperation`,
+  the DAG grammar's write vocabulary, `enterprise_specs.Operation.MOVE`):
+  Drive, SharePoint and OneDrive move files and folders between folders
+  with `{id, parent}`, Outlook moves messages between mail folders
+  (`move_message`) and creates folders (`create_folder`), the native email
+  connector updates a message's labels and read state (`update_message`),
+  and Slack creates and archives channels (`create_conversation`,
+  `archive_conversation`) through the workflow its definition always
+  declared. The emulator's `_op_move` re-parents the record it leaves
+  intact and refuses a destination that is not a container (validation)
+  or does not exist (not found). `evalrun` grades a move as an update
+  outcome on the record's `parent`, and `safety` classifies it as a
+  reversible, naturally idempotent mutation, never destructive.
+
 ### Packs: the organisation as pack data
 
 - The rung of the de-hardcoding ladder left open the longest. `voices`

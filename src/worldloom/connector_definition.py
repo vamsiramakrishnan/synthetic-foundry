@@ -66,6 +66,7 @@ ConnectorOperation = Literal[
     "transition",
     "transform",
     "delete",
+    "move",
     "send",
     "reply",
     "forward",

@@ -22,6 +22,7 @@ class Operation(StrEnum):
     PATCH = "patch"
     UPSERT = "upsert"
     DELETE = "delete"
+    MOVE = "move"
     COMMENT = "comment"
     ATTACH = "attach"
     LINK = "link"
@@ -227,8 +228,8 @@ FILES = ("docx", "xlsx", "pptx", "pdf", "csv", "html", "markdown")
 BUILTIN_CONNECTORS = (
     ConnectorSpec(name="jira", display_name="Jira", entities=(_entity("issue", "key", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH, Operation.LINK)),), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
     ConnectorSpec(name="confluence", display_name="Confluence", entities=(_entity("page", "page_id", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH), "html", "markdown", "pdf"),), content_actions=tuple(ContentAction)),
-    ConnectorSpec(name="sharepoint", display_name="SharePoint", entities=(_entity("file", "item_id", READ + MUTATE + (Operation.DELETE,), *FILES), _entity("list_item", "item_id", READ + MUTATE)), content_actions=tuple(ContentAction)),
-    ConnectorSpec(name="drive", display_name="Google Drive", entities=(_entity("file", "file_id", READ + MUTATE + (Operation.DELETE,), *FILES),), content_actions=tuple(ContentAction)),
+    ConnectorSpec(name="sharepoint", display_name="SharePoint", entities=(_entity("file", "item_id", READ + MUTATE + (Operation.DELETE, Operation.MOVE), *FILES), _entity("list_item", "item_id", READ + MUTATE)), content_actions=tuple(ContentAction)),
+    ConnectorSpec(name="drive", display_name="Google Drive", entities=(_entity("file", "file_id", READ + MUTATE + (Operation.DELETE, Operation.MOVE), *FILES),), content_actions=tuple(ContentAction)),
     ConnectorSpec(name="servicenow", display_name="ServiceNow", entities=(_entity("incident", "sys_id", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH)), _entity("change_request", "sys_id", READ + MUTATE + (Operation.COMMENT, Operation.ATTACH))), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT)),
     ConnectorSpec(name="salesforce", display_name="Salesforce", entities=(_entity("account", "id", READ + MUTATE), _entity("contact", "id", READ + MUTATE), _entity("opportunity", "id", READ + MUTATE), _entity("case", "id", READ + MUTATE)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.COMPARE)),
     ConnectorSpec(name="email", display_name="Email", entities=(_entity("message", "message_id", READ + (Operation.DRAFT, Operation.SEND, Operation.REPLY, Operation.FORWARD, Operation.ATTACH)), _entity("thread", "thread_id", READ)), content_actions=(ContentAction.SUMMARIZE, ContentAction.EXTRACT, ContentAction.CLASSIFY, ContentAction.GENERATE)),

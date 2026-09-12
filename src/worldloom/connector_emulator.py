@@ -352,6 +352,7 @@ class ConnectorEmulator:
             write_ops = {
                 "create",
                 "update",
+                "move",
                 "transition",
                 "comment",
                 "delete",
@@ -658,6 +659,49 @@ class ConnectorEmulator:
         patch = dict(fields or {})
         self._validate_update(fid, patch)
         record = copy.deepcopy(self.records[fid])
+        record.update(patch)
+        record["modified_at"] = self.definition.clock
+        record.setdefault("updates", []).append(patch)
+        self.records[fid] = record
+        span.writes.append(fid)
+        span.items = 1
+        return shape_payload(self.definition, record)
+
+    def _op_move(
+        self,
+        tool: ConnectorToolDefinition,
+        span: _PendingSpan,
+        *,
+        id: Any = None,
+        parent: Any = None,
+        fields: Mapping[str, Any] | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        """Re-parent a record into a container the same connector holds.
+
+        The record stays what it was — same identity, same body — and only
+        its place changes, which is what makes a move reversible and
+        naturally idempotent (``evalrun.safety``). The destination must be a
+        container the definition knows (a folder, a mail folder); moving into
+        a document is refused as validation, and into nothing as not found,
+        so an agent that guessed a folder id learns which of the two it got
+        wrong.
+        """
+        fid = self.resolve(id)
+        self._check_acl(fid, "update")
+        target = parent if parent is not None else (fields or {}).get("parent")
+        if target in (None, ""):
+            raise self._error("validation", field="parent")
+        destination = self.resolve(target)
+        container = self.definition.entities.get(str(self.records[destination].get("entity")))
+        if container is None or container.kind != "container":
+            raise ConnectorError(
+                400, f"'{target}' is not a folder this connector can move a record into", "validation",
+            )
+        if destination == fid:
+            raise ConnectorError(400, "a record cannot be moved into itself", "validation")
+        record = copy.deepcopy(self.records[fid])
+        patch = {"parent": destination}
         record.update(patch)
         record["modified_at"] = self.definition.clock
         record.setdefault("updates", []).append(patch)
