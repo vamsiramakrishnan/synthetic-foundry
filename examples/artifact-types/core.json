@@ -310,6 +310,7 @@
         "minutes": 0
       },
       "word": true,
+      "deck": true,
       "sections": [
         {
           "heading": "In brief",

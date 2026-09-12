@@ -298,7 +298,25 @@ class DocumentType(DocModel):
     is *silently skipped* by both renderers and survives only as Markdown,
     which is the exact bug ``docx.py``'s own comment records the seven
     conditional filings having shipped with."""
+    deck: bool = False
+    """Whether this is also a slide deck. Registering into ``render.pptx.HANDLES``
+    is what makes it one — the deck renderer composes every prose- and
+    table-shaped component the compiler declares for ``pptx``, so a board
+    pack, a steering-committee update or a results presentation needs no
+    Python, only this flag and an outline. Off by default and left off the
+    wire when off, so every type authored before decks were declarable dumps
+    byte for byte as it did."""
     filing: FilingSpec | None = None
+
+    @model_serializer(mode="wrap")
+    def _deck_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # `word` has always been on the wire; `deck` arrived later and is
+        # embedded in every pack-built corpus's recipe, so an unset flag stays
+        # off it — the rule every additive field in this package follows.
+        data: dict[str, Any] = handler(self)
+        if not self.deck:
+            data.pop("deck", None)
+        return data
 
     def title(self) -> str:
         """The document heading this type will carry — ``documents._title``'s
@@ -443,6 +461,7 @@ def describe(artifact_type: str) -> DocumentType:
     """
     authority, lifecycle = documents.standing(artifact_type)
     from .render import docx as docx_render
+    from .render import pptx as pptx_render
 
     return DocumentType(
         key=artifact_type,
@@ -450,6 +469,7 @@ def describe(artifact_type: str) -> DocumentType:
         lifecycle=lifecycle,
         lag=Lag.of(documents._LAG.get(artifact_type, timedelta(hours=1))),
         word=artifact_type in docx_render.HANDLES,
+        deck=artifact_type in pptx_render.HANDLES,
         sections=[
             SectionSpec(
                 heading=plan.heading,
@@ -557,6 +577,19 @@ registries.declare(
     why="a leftover name makes Word and PDF claim a type nothing in this world"
     " can build",
 )
+registries.declare(
+    lambda: _pptx_handles(),
+    owner="doctypes",
+    name="render.pptx.HANDLES",
+    why="a leftover name makes the deck renderer claim a type nothing in this"
+    " world can build, and render a deck the next world never planned",
+)
+
+
+def _pptx_handles() -> set[str]:
+    from .render import pptx as pptx_render
+
+    return pptx_render.HANDLES
 
 
 def _docx_handles() -> set[str]:
@@ -619,11 +652,13 @@ def install(types: Sequence[DocumentType]) -> None:
     )
 
     from .render import docx as docx_render
+    from .render import pptx as pptx_render
 
     # Registered after the tables, not before: `docx.register` cannot fail, and
     # a type that reached the renderer but not the compiler would be a type
     # Word claims and nothing can build.
     docx_render.register(*[s.key for s in fresh if s.word])
+    pptx_render.register(*[s.key for s in fresh if s.deck])
 
     for spec in fresh:
         _INSTALLED[spec.key] = spec

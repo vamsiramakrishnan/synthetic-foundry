@@ -41,6 +41,11 @@ a duration string, so two packs cannot disagree about what `P1DT15H` means),
   nothing maps falls to the world's narrowest policy: if that excludes the
   author, the corpus fails `author_cannot_see_own_artifact`. Name the receiver
   in the purposes.
+- **`deck: true`** makes the type a slide deck as well: the same outline
+  composes through the compiler's `pptx` components, opens with an agenda
+  once it has more than six visible sections, and continues prose or a table
+  that outgrows one slide onto the next. `word` still decides Word and PDF;
+  a type may be both.
 - **`filing.size`** names how long the document may be: `small`, `medium`,
   `long` or `xlong` (`worldloom.sizing.PRESETS`, each a component cap the
   composer enforces and a word brief every section's writer is given). When

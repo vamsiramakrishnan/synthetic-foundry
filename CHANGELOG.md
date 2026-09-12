@@ -11,6 +11,21 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Documents: decks for any document type
+
+- The deck renderer handled one artifact type, pinned its size class to
+  `small` and its grammar to the executive summary's, so no pack could ship
+  a board pack and no deck could exceed four content slides. `render.pptx`
+  now composes under the intent's own type, size and budget, and a document
+  type declares `deck: true` to be rendered as one (`doctypes.install`
+  registers it, `registries.scoped` restores the set, `describe` reads it
+  back, and the core port marks the executive summary). A deck opens with an
+  agenda once it has more than six visible sections; prose that outgrows one
+  slide continues onto the next at paragraph or sentence boundaries, as a
+  long table already did. Every deck an old size class could hold renders
+  byte for byte: the agenda threshold is strictly above the shipped
+  summaries and no section they carry exceeds one slide's estimate.
+
 ### Documents: declared size budgets
 
 - The component cap `compiler.compose` enforced per size class and the word

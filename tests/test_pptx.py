@@ -26,7 +26,16 @@ import pptx as python_pptx
 import pytest
 
 from worldloom import MonthEndClose, RetailWorld, World
-from worldloom.models import Cell, Chart, ChartKind, Column, Row, Table
+from worldloom.models import (
+    ArtifactIR,
+    ArtifactSection,
+    Cell,
+    Chart,
+    ChartKind,
+    Column,
+    Row,
+    Table,
+)
 from worldloom.narrative import DeterministicProvider, references
 from worldloom.render import RenderError, ooxml
 from worldloom.render import docx as docx_renderer
@@ -178,10 +187,20 @@ def test_slide_count_matches_the_plan(rendered: World) -> None:
     ir = _executive_summary_ir(rendered)
     plan = pptx_renderer._plan(ir)
 
+    g = pptx_renderer._genome_for(ir)
     expected = 0
     for slide_plan in plan.slides:
         if slide_plan.table is None:
-            expected += 1
+            if slide_plan.kind == "content" and slide_plan.body:
+                # Prose paginates the way a table does: recompute the
+                # renderer's own chunking rather than assuming one slide.
+                style = pptx_renderer._PROSE_STYLE.get(slide_plan.component_id, pptx_renderer._DEFAULT_PROSE_STYLE)
+                size = pptx_renderer._clamped_pt(g.type_scale[style["band"]])
+                per_line, lines = pptx_renderer._prose_lines(pptx_renderer.BODY, size)
+                paragraphs = [b.strip() for b in slide_plan.body.split("\n\n") if b.strip()]
+                expected += len(pptx_renderer._prose_chunks(paragraphs, per_line=per_line, lines=lines))
+            else:
+                expected += 1
             continue
         rows = len(slide_plan.table.rows)
         columns = len(slide_plan.table.columns)
@@ -718,3 +737,94 @@ def test_the_divider_and_cover_are_in_bounds() -> None:
     pptx_renderer._draw_cover(presentation, plan)
     assert_shapes_in_bounds_and_non_overlapping(presentation)
     assert_font_floor(presentation)
+
+
+# ---------------------------------------------------------------------------
+# Any document type may be a deck; a deck may be long
+# ---------------------------------------------------------------------------
+
+
+def _long_ir(sections: int, *, words: int = 60) -> ArtifactIR:
+    """An IR of *sections* prose sections, each *words* long, of a type no
+    grammar constrains — the shape a pack-authored board pack arrives in."""
+    sentence = "The position held through the period and the movement is explained below."
+    body = " ".join([sentence] * max(1, words // len(sentence.split())))
+    return ArtifactIR(
+        id="ART-9001", intent_id="ART-9001", title="Board Pack", subtitle="A long deck",
+        metadata={"company": "Test Co", "worldloom_seed": "8128"},
+        sections=[
+            ArtifactSection(heading=f"Section {chr(ord('A') + i)}", body=body,
+                            purpose="argue", semantic_role="summary")
+            for i in range(sections)
+        ],
+    )
+
+
+def test_a_deck_composes_under_the_intents_own_size_not_the_summary_pin() -> None:
+    """Eight sections refuse at `small` (cap four) and compose at `xlong`; the
+    renderer no longer pins every deck to the executive summary's size."""
+    ir = _long_ir(8)
+    with pytest.raises(RenderError, match="over_budget"):
+        pptx_renderer._plan(ir, artifact_type="board_pack", size_class="small")
+    plan = pptx_renderer._plan(ir, artifact_type="board_pack", size_class="xlong")
+    assert sum(1 for s in plan.slides if s.kind == "content") == 8
+
+    # And a declared budget wins over the size word, exactly as it does in
+    # every other format.
+    from worldloom.models import SizeBudget
+
+    plan = pptx_renderer._plan(
+        ir, artifact_type="board_pack", size_class="small", budget=SizeBudget(components=8, words=200),
+    )
+    assert sum(1 for s in plan.slides if s.kind == "content") == 8
+
+
+def test_a_long_deck_opens_with_an_agenda_and_a_short_one_does_not() -> None:
+    long_plan = pptx_renderer._plan(_long_ir(8), artifact_type="board_pack", size_class="xlong")
+    assert [s.kind for s in long_plan.slides[:2]] == ["cover", "agenda"]
+    assert long_plan.slides[1].items == tuple(f"Section {c}" for c in "ABCDEFGH")
+
+    short_plan = pptx_renderer._plan(_long_ir(3), artifact_type="board_pack", size_class="medium")
+    assert "agenda" not in {s.kind for s in short_plan.slides}
+
+    payload = pptx_renderer.render(_long_ir(8), {}, artifact_type="board_pack", size_class="xlong")
+    deck = _deck(payload)
+    assert len(deck.slides) == 1 + 1 + 8 + 1  # cover, agenda, eight sections, closing
+    assert "Section H" in _deck_text(deck)
+    assert_shapes_in_bounds_and_non_overlapping(deck)
+    assert_font_floor(deck)
+
+
+def test_prose_taller_than_one_slide_continues_onto_the_next() -> None:
+    """The prose analogue of table pagination: an `xlong` brief at the
+    subheading band is taller than a slide, and is carried over at a
+    paragraph or sentence boundary rather than clipped."""
+    sentences = [
+        f"Sentence {chr(ord('a') + i // 26)}{chr(ord('a') + i % 26)} states one more thing about the period."
+        for i in range(80)
+    ]
+    body = "\n\n".join(" ".join(sentences[i:i + 20]) for i in range(0, 80, 20))
+    slide_plan = pptx_renderer.SlidePlan(
+        kind="content", component_id="core.executive_summary", heading="Position", body=body,
+    )
+    presentation = _blank_deck()
+    pptx_renderer._draw_prose_content(presentation, slide_plan, {}, "Test · Deck")
+
+    assert len(presentation.slides) >= 2
+    text = _deck_text(presentation)
+    assert "Position (continued)" in text
+    for sentence in sentences:
+        assert text.count(sentence) == 1, sentence
+    assert_shapes_in_bounds_and_non_overlapping(presentation)
+    assert_font_floor(presentation)
+
+
+def test_a_section_that_fits_one_slide_is_one_slide() -> None:
+    """Every deck the vertical slice ever rendered stays byte-identical: a
+    small brief (110 words) is a fraction of one slide's capacity."""
+    per_line, lines = pptx_renderer._prose_lines(pptx_renderer.BODY, 15)
+    paragraphs = [" ".join(["word"] * 110)]
+    assert pptx_renderer._prose_chunks(paragraphs, per_line=per_line, lines=lines) == [paragraphs]
+    # And a 300-word `long` brief still fits at the subheading band's ceiling.
+    paragraphs = [" ".join(["word"] * 300)]
+    assert len(pptx_renderer._prose_chunks(paragraphs, per_line=per_line, lines=lines)) == 1
