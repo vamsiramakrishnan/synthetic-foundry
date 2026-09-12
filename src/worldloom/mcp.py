@@ -280,6 +280,21 @@ def evalrun_run(cases: str, out: str, agent: str = "reference", limit: int | Non
     return session.write("run", out).model_dump(mode="json", by_alias=True)
 
 
+def evalrun_plan(cases: str, out: str, agent: str = "reference", limit: int | None = None) -> dict[str, Any]:
+    """Grade a planner on the plan axis alone and write the run directory."""
+    from .evalrun import ReferencePlanner, ScriptedPlanner, load_plans
+
+    session = _evalrun_session(cases, limit)
+    if agent == "reference":
+        planner: Any = ReferencePlanner(session.cases)
+    elif agent.startswith("scripted:"):
+        planner = ScriptedPlanner(load_plans(Path(agent.removeprefix("scripted:"))))
+    else:
+        raise ValueError(f"agent must be reference or scripted:<plans.json>, not {agent!r}")
+    session.plan(planner, label="plan")
+    return session.write("plan", out).model_dump(mode="json", by_alias=True)
+
+
 def evalrun_summarize(run: str) -> dict[str, Any]:
     """Recompute a run directory's summary from its results ledger."""
     from .evalrun import read_run, summarize
@@ -571,6 +586,31 @@ TOOLS: tuple[dict[str, Any], ...] = (
             "required": ["cases", "out"],
         },
         "call": evalrun_run,
+    },
+    {
+        "name": "evalrun_plan",
+        "description": (
+            "Grade a planner on the plan axis alone: each case's request and tool "
+            "catalog go to the planner, it states a DAG of tool calls, nothing is "
+            "executed, and the stated DAG is graded against the expected one by tool "
+            "name and dependency reachability. `reference` restates every expected "
+            "DAG and is the ceiling; `scripted:<plans.json>` replays a plans document "
+            "written against `worldloom evalrun requests --for plan`. An interactive "
+            "planner runs through `worldloom evalrun plan --exec`. The run directory "
+            "compares with an executed run on the plan axis; its trajectory and "
+            "outcome axes are unobserved."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "cases": {"type": "string", "description": "The enterprise-evals directory."},
+                "out": {"type": "string", "description": "Run directory to write."},
+                "agent": {"type": "string", "description": "reference | scripted:<plans.json>. Default reference."},
+                "limit": {"type": "integer", "description": "Only the first N cases."},
+            },
+            "required": ["cases", "out"],
+        },
+        "call": evalrun_plan,
     },
     {
         "name": "evalrun_summarize",

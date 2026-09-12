@@ -19,12 +19,15 @@ worldloom evalrun cases ./cases                     # 1. what the set can grade
 worldloom evalrun run ./cases -o ./runs/reference   # 2. the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --exec "python3 my_agent.py"   # 3. the agent under test
 worldloom evalrun compare ./runs/reference ./runs/mine                       # 4. what moved, per axis
+worldloom evalrun plan ./cases -o ./runs/planner --exec "python3 my_planner.py"  # 5. querying alone
 ```
 
 1. **Read the coverage before running anything.** `cases` prints counts per
    axis and names every zero (`gap: no case grades deletes`). A set that
    grades no updates cannot show an agent updates correctly; say so in the
-   report rather than reading a pass rate as complete.
+   report rather than reading a pass rate as complete. Deletes are planned
+   only by `--dag-shape delete_chain` on a destination whose connector serves
+   a delete (SharePoint and Drive files); email drafts never report one.
 2. **Run the reference first.** It walks every expected DAG through the same
    tool surface an external agent gets. Its pass rate is the ceiling of the
    set, not a claim about any model. A reference case that fails is a finding
@@ -47,6 +50,13 @@ worldloom evalrun compare ./runs/reference ./runs/mine                       # 4
 4. **Compare by case id, never by eye.** `compare` reports improvements and
    regressions under ±0.10 bands, which axis moved, and cases graded on one
    side and errored on the other as reliability changes, not score changes.
+5. **Measure querying alone when execution muddies it.** `plan` hands the
+   planner the request and the tool catalog and grades only the DAG it
+   states; nothing runs. `--exec` (one subprocess per case, a plan document
+   on stdin), `--agent scripted:plans.json` (written against `requests
+   --for plan`), or `--agent reference` for the ceiling. Its trajectory and
+   outcome axes are unobserved, and `compare` against an executed run
+   reports the plan axis only.
 
 `summarize ./runs/mine --json` recomputes a summary from the ledger; `import-studio ./cases eval_results.csv -o ./runs/studio` brings Eval Studio's CSV in as an answer-axis-only run.
 
@@ -77,7 +87,7 @@ case, excluded from the answer mean, never a zero.
 ## From Python
 
 ```python
-from worldloom.evalrun import EvalSession, ExecAgent
+from worldloom.evalrun import EvalSession, ExecAgent, ExecPlanner
 
 session = EvalSession.from_export("./cases")
 print(session.coverage().deletes)          # 0 means no case grades a delete
@@ -85,6 +95,7 @@ session.reference()                        # label "reference"
 session.run(ExecAgent("python3 my_agent.py"), label="mine")
 print(session.compare("reference", "mine").regressions)
 session.write("mine", "./runs/mine")
+session.plan(ExecPlanner("python3 my_planner.py"), label="planner")   # plan axis only
 ```
 
 Any object with `.name` and `.run(task, tools) -> AgentResponse` is an agent;

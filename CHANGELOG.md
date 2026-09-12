@@ -11,7 +11,41 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Generation: planned deletes in the DAG grammar
+
+- Add the `delete_chain` shape to `enterprise-dag@1`: write, read back,
+  delete that exact returned record, read it back expecting `not_found`. The
+  compiled row carries a `deleted` assertion naming the write that created
+  the record and a `failure_at` expecting the error on the final readback,
+  so the record being gone and the readback failing are both graded. Opt-in
+  through `--dag-shape`; a build without it is byte-identical.
+- Serve `delete_file` on SharePoint and Drive file entities. The specs
+  declared `DELETE` on both; the definitions served no tool for it, so no
+  destination in the builtin registry could host a delete. `MUTATE` still
+  excludes delete, so the legacy planner's output is unchanged and
+  `--dag-shape '*'` now includes `delete_chain` wherever a file destination
+  admits it.
+- Graders learn about records that existed only during a run: the
+  execution contract stops reading a deleted record's fields and entity from
+  the post-state, aliases an id through the results the trace recorded, and
+  skips an expected failure on a node an earlier designed failure blocked;
+  the served surface attributes a readback by the id a deleted record
+  answered to; the outcome axis meets a create and a delete on the same
+  transient record from the spans and grounds the artifact on the write the
+  service saw.
+
 ### Eval execution: three-axis agent runs
+
+- Add `worldloom evalrun plan`, `EvalSession.plan`, the `evalrun_plan` MCP
+  tool and `worldloom.evalrun.plans`: the plan axis graded alone. A planner
+  receives the request and the tool catalog and returns a DAG of tool calls;
+  nothing executes, and the DAG is graded by tool name and dependency
+  reachability with `grade_plan`'s formula. Planners: `reference`,
+  `--exec <command>` (a `worldloom.evalrun-plan/v1` document per case) and
+  `scripted:<plans.json>` (`worldloom.evalrun-plans/v1`, written against
+  `evalrun requests --for plan`). Scores now record which axes they
+  observed; a summary reports no mean and `compare` no delta on an axis a
+  run did not observe.
 
 - Add `worldloom evalrun` and `worldloom.evalrun`: run any agent against a
   compiled enterprise case set, one isolated connector state per case, and

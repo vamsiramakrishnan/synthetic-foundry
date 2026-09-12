@@ -378,14 +378,20 @@ def enterprise_evals_simulate(
                         str(assertion["node"]): assertion["kind"]
                         for assertion in row["assertions"] if assertion["type"] == "failure_at"
                     }
-                    designed_write = (
-                        failed is not None and failed.node in write_nodes
-                        and (failed.error or {}).get("kind") == expected_failures.get(str(failed.node))
-                    )
+                    blocking = {
+                        str(assertion["node"]): bool(assertion.get("blocked_nodes"))
+                        for assertion in row["assertions"] if assertion["type"] == "failure_at"
+                    }
+                    met = failed is not None and (failed.error or {}).get("kind") == expected_failures.get(str(failed.node))
+                    designed_write = met and failed is not None and failed.node in write_nodes
+                    # An expected error that blocks nothing (the readback after a
+                    # planned delete) is the trajectory reaching its end, not stopping.
+                    terminal = met and failed is not None and not blocking.get(str(failed.node), False)
+                    completed = failed is None or terminal
                     results.append({
                         "query_id": query.id,
-                        "outcome": "completed" if failed is None else "blocked_at_designed_write" if designed_write else "stopped_before_failure_point",
-                        "finding": None if failed is None else f"node {failed.node} failed: {(failed.error or {}).get('kind')}",
+                        "outcome": "completed" if completed else "blocked_at_designed_write" if designed_write else "stopped_before_failure_point",
+                        "finding": None if completed else f"node {failed.node} failed: {(failed.error or {}).get('kind')}",
                         "failed_node": None if failed is None else failed.node,
                         # Assertion grades and the legacy weighted semantic score
                         # have different denominators. Never average them together.

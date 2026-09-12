@@ -181,7 +181,8 @@ Run an agent against a compiled enterprise case set and grade three axes
 separately: the plan it formed, the trajectory it took, the outcomes it left.
 Three transports let any harness be the agent under test: an executable driven
 one turn at a time over the `--exec` seam, a requests/responses document pair,
-or MCP through `worldloom enterprise-evals serve`.
+or MCP through `worldloom enterprise-evals serve`. `worldloom evalrun plan`
+grades a planner on the plan axis alone, nothing executed.
 
 Source: [`.claude/skills/worldloom-evalrun/SKILL.md`](../.claude/skills/worldloom-evalrun/SKILL.md)
 
@@ -281,13 +282,15 @@ parallel; acceptance binds each response to the exact request and corpus ledger.
 worldloom evalrun requests ./cases -o requests.json
 worldloom evalrun run ./cases --agent scripted:responses.json -o ./runs/mine
 worldloom evalrun run ./cases --exec "python3 my_agent.py" -o ./runs/mine
+worldloom evalrun plan ./cases --exec "python3 my_planner.py" -o ./runs/planner
 ```
 
 The requests document carries each case's query and tool catalog and nothing
 the agent must not know. A responses document replays a fixed trajectory; the
 `--exec` form runs the agent one turn at a time with the transcript as its
 only memory, so it can act on what a tool returned. Either way the grader
-reads only the spans and snapshots the service recorded.
+reads only the spans and snapshots the service recorded. `plan` sends the
+same request and catalog to a planner and grades only the DAG it states.
 
 ### Actor decisions
 

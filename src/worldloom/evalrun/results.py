@@ -27,6 +27,7 @@ from pydantic import ConfigDict, Field
 from ..corpus import write_json
 from ..models import Model
 from .contract import EvalCase
+from .grading import CaseScore
 from .runner import RUN_SCHEMA, CaseResult, Latency, RunReport, case_set_digest
 
 #: Eval Studio's delta bands, from `compare-evals.component.ts`: a change
@@ -39,10 +40,17 @@ def _mean(values: Sequence[float]) -> float:
 
 
 class AxisMeans(Model):
-    plan: float
-    trajectory: float
-    outcomes: float
+    """Per-axis means over the rows that observed the axis; absent when none did."""
+
+    plan: float | None
+    trajectory: float | None
+    outcomes: float | None
     overall: float
+
+
+def _axis_mean(scores: Sequence[CaseScore], axis: str) -> float | None:
+    observed = [getattr(score, axis).score for score in scores if axis in score.observed]
+    return _mean(observed) if observed else None
 
 
 class RunSlice(Model):
@@ -98,10 +106,8 @@ def _slice(key: str, rows: Sequence[CaseResult]) -> RunSlice:
         passed=sum(1 for score in scores if score.passed),
         pass_rate=_mean([1.0 if score.passed else 0.0 for score in scores]),
         means=AxisMeans(
-            plan=_mean([score.plan.score for score in scores]),
-            trajectory=_mean([score.trajectory.score for score in scores]),
-            outcomes=_mean([score.outcomes.score for score in scores]),
-            overall=_mean([score.score for score in scores]),
+            plan=_axis_mean(scores, "plan"), trajectory=_axis_mean(scores, "trajectory"),
+            outcomes=_axis_mean(scores, "outcomes"), overall=_mean([score.score for score in scores]),
         ),
     )
 
@@ -245,10 +251,12 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
                                     recent=b.score.score if b.score else None, delta=None, axes={}, verdict="ungraded"))
             continue
         delta = round(b.score.score - a.score.score, 4)
+        # An axis only one side observed has no delta: a plan-only run
+        # against an executed one compares on the plan axis and nowhere else.
         axes = {
-            "plan": round(b.score.plan.score - a.score.plan.score, 4),
-            "trajectory": round(b.score.trajectory.score - a.score.trajectory.score, 4),
-            "outcomes": round(b.score.outcomes.score - a.score.outcomes.score, 4),
+            axis: round(getattr(b.score, axis).score - getattr(a.score, axis).score, 4)
+            for axis in ("plan", "trajectory", "outcomes")
+            if axis in a.score.observed and axis in b.score.observed
         }
         for axis, value in axes.items():
             axis_totals[axis].append(value)
@@ -272,8 +280,10 @@ def compare(baseline: RunReport, recent: RunReport) -> Comparison:
         improvements=tuple(improvements), regressions=tuple(regressions), stable=stable,
         newly_errored=tuple(newly_errored), newly_graded=tuple(newly_graded),
         mean_delta=_mean(graded_deltas),
-        axis_deltas=AxisMeans(plan=_mean(axis_totals["plan"]), trajectory=_mean(axis_totals["trajectory"]),
-                              outcomes=_mean(axis_totals["outcomes"]), overall=_mean(graded_deltas)),
+        axis_deltas=AxisMeans(plan=_mean(axis_totals["plan"]) if axis_totals["plan"] else None,
+                              trajectory=_mean(axis_totals["trajectory"]) if axis_totals["trajectory"] else None,
+                              outcomes=_mean(axis_totals["outcomes"]) if axis_totals["outcomes"] else None,
+                              overall=_mean(graded_deltas)),
         deltas=tuple(deltas),
     )
 
@@ -367,7 +377,12 @@ def import_studio_results(path: Path, cases: Iterable[EvalCase], *, agent: str =
     score is the answer score alone, and a duplicate query text refuses.
     """
 
-    from .grading import CaseScore, OutcomeGrade, PlanGrade, StateDiff, TrajectoryGrade
+    from .grading import (
+        CaseScore,
+        unobserved_outcomes,
+        unobserved_plan,
+        unobserved_trajectory,
+    )
 
     listed = list(cases)
     by_query: dict[str, EvalCase] = {}
@@ -401,19 +416,10 @@ def import_studio_results(path: Path, cases: Iterable[EvalCase], *, agent: str =
                                       answer=fetched, latency=latency))
             continue
         value = max(0.0, min(1.0, value))
-        empty_diff = StateDiff(created=(), updated=(), deleted=(), changed_fields={})
-        outcomes = OutcomeGrade(diff=empty_diff, structured=(), structured_met=0, structured_expected=0,
-                                collateral=(), artifacts_produced=0, answer_score=value, score=value,
-                                passed=value >= 0.8)
-        plan = PlanGrade(expected_nodes=(), observed_nodes=(), missing_nodes=(), unattributed_calls=0,
-                         node_recall=0.0, node_precision=0.0, edge_recall=0.0, missing_verify=(), extra_writes=0,
-                         score=0.0, passed=False)
-        trajectory = TrajectoryGrade(reference=(), observed=(), calls=0, errors=0, error_codes={}, exact_match=False,
-                                     in_order_match=False, any_order_match=False, precision=0.0, recall=0.0,
-                                     repeated_calls=0, retry_storm=False, budget_exceeded=False, failures_honoured=0,
-                                     failures_expected=0, safety=(), score=0.0, passed=False)
-        score = CaseScore(plan=plan, trajectory=trajectory, outcomes=outcomes, assertion_status="unobserved",
-                          assertion_fails=(), score=value, passed=outcomes.passed)
+        outcomes = unobserved_outcomes(value)
+        score = CaseScore(plan=unobserved_plan(), trajectory=unobserved_trajectory(), outcomes=outcomes,
+                          assertion_status="unobserved", assertion_fails=(), observed=("outcomes",),
+                          score=value, passed=outcomes.passed)
         results.append(CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
                                   agent=agent, status="graded", score=score, answer=fetched, latency=latency,
                                   notes=("answer axis only: Eval Studio observes no tool call",)))

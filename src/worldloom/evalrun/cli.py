@@ -1,4 +1,4 @@
-"""`worldloom evalrun`: compile cases, run an agent, summarize, compare, import Eval Studio.
+"""`worldloom evalrun`: compile cases, run an agent, grade a planner, summarize, compare, import Eval Studio.
 
 Every command delegates to a library operation and adds argument handling and
 refusals. The corpus argument is always a directory written by
@@ -99,12 +99,31 @@ def _agent(spec: str, cases: tuple[Any, ...]) -> Any:
     _refuse("unknown_agent", f"{spec!r} is not one of {AGENTS} (scripted takes scripted:<responses.json>)")
 
 
+def _planner(spec: str, cases: tuple[Any, ...]) -> Any:
+    from ..cli import _refuse
+    from .plans import ReferencePlanner, ScriptedPlanner, load_plans
+
+    if spec == "reference":
+        return ReferencePlanner(cases)
+    if spec.startswith("scripted:"):
+        path = Path(spec.removeprefix("scripted:"))
+        try:
+            plans = load_plans(path)
+        except OSError as error:
+            _refuse("script_unreadable", f"{path}: {error}")
+        except ValueError as error:
+            _refuse("script_invalid", str(error))
+        return ScriptedPlanner(plans, name=f"plan:scripted:{path.name}")
+    _refuse("unknown_agent", f"{spec!r} is not reference or scripted:<plans.json>")
+
+
 @app.command("requests")
 def requests_command(
     corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`."),
     out: Path | None = typer.Option(None, "--out", "-o", help="Write requests.json here instead of stdout."),
     limit: int | None = typer.Option(None, "--limit", min=1),
     principal: str = typer.Option("agent", "--principal"),
+    purpose: str = typer.Option("run", "--for", help="run: answered with trajectories for `evalrun run`; plan: answered with DAGs for `evalrun plan`."),
 ) -> None:
     """Write every case as a request a harness can answer offline: query, persona, tools.
 
@@ -113,13 +132,21 @@ def requests_command(
     responses document (`worldloom.evalrun-responses/v1`), replayed by
     `evalrun run --agent scripted:responses.json`. Replay cannot observe a
     call's result; an agent that needs one runs through `evalrun run --exec`.
+    `--for plan` asks for a stated DAG per case instead (`worldloom.evalrun-plans/v1`),
+    replayed by `evalrun plan --agent scripted:plans.json`.
     """
+    from ..cli import _refuse
     from ..corpus import write_json
     from .harness import requests_document
+    from .plans import plan_requests_document
     from .runner import service_for
 
+    if purpose not in {"run", "plan"}:
+        _refuse("unknown_agent", f"--for must be run or plan, not {purpose!r}")
     loaded, cases = _corpus_cases(corpus, limit)
-    document = requests_document(service_for(cases, loaded.connector_data.records), cases, principal=principal)
+    service = service_for(cases, loaded.connector_data.records)
+    document = (plan_requests_document(service, cases, principal=principal) if purpose == "plan"
+                else requests_document(service, cases, principal=principal))
     if out is None:
         typer.echo(json.dumps(document, indent=2, sort_keys=True))
         return
@@ -200,9 +227,12 @@ def _print_summary(summary: Any, json_output: bool) -> None:
     if json_output:
         typer.echo(json.dumps(summary.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
         return
+    def axis(value: float | None) -> str:
+        return "unobserved" if value is None else str(value)
+
     typer.echo(f"{summary.agent}: {summary.passed}/{summary.graded} passed ({summary.pass_rate}),"
-               f" {summary.errors} error(s) excluded; plan {summary.means.plan}, trajectory {summary.means.trajectory},"
-               f" outcomes {summary.means.outcomes}")
+               f" {summary.errors} error(s) excluded; plan {axis(summary.means.plan)},"
+               f" trajectory {axis(summary.means.trajectory)}, outcomes {axis(summary.means.outcomes)}")
     typer.echo(f"trajectory: exact {summary.exact_match_rate}, in-order {summary.in_order_match_rate},"
                f" any-order {summary.any_order_match_rate}; mean calls {summary.mean_calls}")
     typer.echo(f"outcomes: {summary.structured_met}/{summary.structured_expected} structured expectations met,"
@@ -215,6 +245,59 @@ def _print_summary(summary: Any, json_output: bool) -> None:
         typer.echo(f"  shape {part.key}: {part.passed}/{part.graded} passed, overall {part.means.overall}")
     if summary.mean_ttlt is not None:
         typer.echo(f"latency: mean ttlt {summary.mean_ttlt}s over {summary.timed} timed case(s)")
+
+
+@app.command("plan")
+def plan_command(
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`."),
+    out: Path = typer.Option(..., "--out", "-o", help="Run directory to write (run.json, results.jsonl, summary.json)."),
+    agent: str = typer.Option("reference", "--agent", help="reference | scripted:<plans.json>"),
+    exec_command: str | None = typer.Option(
+        None, "--exec",
+        help=("The planner as an executable, one subprocess per case: reads a "
+              "`worldloom.evalrun-plan/v1` JSON document on stdin (query, tools), prints "
+              "{\"plan\": {\"nodes\": [...]}} on stdout. Nothing is executed."),
+    ),
+    timeout: float = typer.Option(600.0, "--timeout", help="Seconds the --exec child may run per case."),
+    shell: bool = typer.Option(False, "--shell", help="Run the --exec command through the shell."),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    principal: str = typer.Option("agent", "--principal", help="The principal the tool catalog is advertised to."),
+    json_output: bool = typer.Option(False, "--json", help="Emit the summary as JSON."),
+) -> None:
+    """Grade the plan axis alone: the planner states each case's DAG and nothing runs.
+
+    Querying measured apart from execution. The planner receives what an
+    agent receives (the request and the tool catalog) and returns only a
+    DAG of tool calls; it is graded against the expected DAG by tool name
+    and dependency reachability with `grade_plan`'s formula, so the run
+    compares with an executed run on the plan axis. Trajectory and outcomes
+    are reported as unobserved, never as zeros.
+    """
+    from ..cli import _refuse
+    from .plans import plan_cases
+    from .results import write_run
+    from .runner import service_for
+
+    loaded, cases = _corpus_cases(corpus, limit)
+    if not cases:
+        _refuse("no_cases", f"{corpus} compiled to no cases")
+    if exec_command is not None:
+        if agent != "reference":
+            _refuse("cannot_combine", "--exec and --agent both name the planner under test; give one")
+        from .plans import ExecPlanner
+
+        planner: Any = ExecPlanner(exec_command, timeout=timeout, shell=shell)
+    else:
+        planner = _planner(agent, cases)
+    try:
+        service = service_for(cases, loaded.connector_data.records)
+    except Exception as error:  # ServingError and its causes are all refusals here
+        _refuse("service_unbuildable", str(error))
+    report = plan_cases(service, cases, planner, principal=principal)
+    summary = write_run(out, report)
+    if not json_output:
+        typer.echo("plan axis only: nothing was executed; trajectory and outcomes are unobserved", err=True)
+    _print_summary(summary, json_output)
 
 
 @app.command("summarize")
@@ -261,8 +344,10 @@ def compare_command(
     typer.echo(f"{result.baseline_agent} -> {result.recent_agent}: {result.compared} shared case(s),"
                f" {len(result.improvements)} improved, {len(result.regressions)} regressed, {result.stable} stable;"
                f" mean delta {result.mean_delta}")
-    typer.echo(f"axis deltas: plan {result.axis_deltas.plan}, trajectory {result.axis_deltas.trajectory},"
-               f" outcomes {result.axis_deltas.outcomes}")
+    typer.echo("axis deltas: " + ", ".join(
+        f"{axis} {'unobserved on one side' if value is None else value}"
+        for axis, value in (("plan", result.axis_deltas.plan), ("trajectory", result.axis_deltas.trajectory),
+                            ("outcomes", result.axis_deltas.outcomes))))
     if result.newly_errored or result.newly_graded:
         typer.echo(f"reliability: {len(result.newly_errored)} newly errored, {len(result.newly_graded)} newly graded")
     for item in result.deltas:

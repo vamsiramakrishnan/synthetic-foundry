@@ -17,7 +17,8 @@ corpus can actually support:
   deleted, checked as a state diff; the artifact and the answer, grounded).
 
 Contracts: ``EvalCase``. Agents: ``AgentUnderTest`` and the three shipped
-ones. Execution: ``run_cases``. Ledger and comparison: ``write_run``,
+ones. Execution: ``run_cases``. Plan-only grading, where a planner states a
+DAG and nothing runs: ``plan_cases``. Ledger and comparison: ``write_run``,
 ``summarize``, ``compare``, ``import_studio_results``. Every module's
 docstring argues the design; the CLI is ``worldloom evalrun``.
 """
@@ -71,6 +72,23 @@ from .harness import (
     ResponsesAgent,
     load_responses,
     requests_document,
+)
+from .plans import (
+    PLAN_SCHEMA,
+    PLANS_SCHEMA,
+    ExecPlanner,
+    PlannedDag,
+    PlannedNode,
+    Planner,
+    ReferencePlanner,
+    ScriptedPlanner,
+    grade_planned,
+    load_plans,
+    parse_plan,
+    plan_cases,
+    plan_request,
+    plan_requests_document,
+    reference_plan,
 )
 from .rater import (
     RATING_SCHEMA,
@@ -130,18 +148,19 @@ def seam_contract() -> dict[str, object]:
     return {
         "schemas": {
             "run": RUN_SCHEMA, "turn": TURN_SCHEMA, "requests": REQUESTS_SCHEMA, "responses": RESPONSES_SCHEMA,
-            "rating": RATING_SCHEMA,
+            "rating": RATING_SCHEMA, "plan": PLAN_SCHEMA, "plans": PLANS_SCHEMA,
         },
         "axes": ["plan", "trajectory", "outcomes"],
         "outcome_kinds": ["create", "update", "delete"],
         "agents": ["reference", "lazy", "scripted:<responses.json>", "--exec <command>", "served (eval_score over MCP)"],
+        "planners": ["reference", "scripted:<plans.json>", "--exec <command>"],
         "raters": ["grounded", "exec:<command>"],
         "safety_laws": list(SAFETY_LAWS),
         "assertion_authority": "worldloom.connector_trace.grade_trace",
-        "commands": ["evalrun cases", "evalrun requests", "evalrun run", "evalrun summarize", "evalrun compare",
-                     "evalrun import-studio", "evalrun import-served"],
+        "commands": ["evalrun cases", "evalrun requests", "evalrun run", "evalrun plan", "evalrun summarize",
+                     "evalrun compare", "evalrun import-studio", "evalrun import-served"],
         "served_tools": ["eval_list", "eval_begin", "eval_trace", "eval_grade", "eval_score", "eval_end"],
-        "mcp_tools": ["evalrun_cases", "evalrun_run", "evalrun_summarize", "evalrun_compare"],
+        "mcp_tools": ["evalrun_cases", "evalrun_run", "evalrun_plan", "evalrun_summarize", "evalrun_compare"],
     }
 
 
@@ -197,6 +216,22 @@ __all__ = [
     "ResponsesAgent",
     "load_responses",
     "requests_document",
+    # Plan-only grading.
+    "PLAN_SCHEMA",
+    "PLANS_SCHEMA",
+    "ExecPlanner",
+    "PlannedDag",
+    "PlannedNode",
+    "Planner",
+    "ReferencePlanner",
+    "ScriptedPlanner",
+    "grade_planned",
+    "load_plans",
+    "parse_plan",
+    "plan_cases",
+    "plan_request",
+    "plan_requests_document",
+    "reference_plan",
     # Session.
     "EvalSession",
     "seam_contract",

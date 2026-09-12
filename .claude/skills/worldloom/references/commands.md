@@ -426,6 +426,25 @@ worldloom evalrun import-studio <CORPUS> <RESULTS>
 | `--json` |  |
 | `--out`, `-o` | Run directory to write. |
 
+### `worldloom evalrun plan`
+
+Grade the plan axis alone: the planner states each case's DAG and nothing runs.
+
+```
+worldloom evalrun plan <CORPUS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent` | reference \| scripted:<plans.json> |
+| `--exec` | The planner as an executable, one subprocess per case: reads a `worldloom.evalrun-plan/v1` JSON document on stdin (query, tools), prints {"plan": {"nodes": [...]}} on stdout. Nothing is executed. |
+| `--json` | Emit the summary as JSON. |
+| `--limit` |  |
+| `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
+| `--principal` | The principal the tool catalog is advertised to. |
+| `--shell` | Run the --exec command through the shell. |
+| `--timeout` | Seconds the --exec child may run per case. |
+
 ### `worldloom evalrun requests`
 
 Write every case as a request a harness can answer offline: query, persona, tools.
@@ -436,6 +455,7 @@ worldloom evalrun requests <CORPUS>
 
 | Option | Purpose |
 | --- | --- |
+| `--for` | run: answered with trajectories for `evalrun run`; plan: answered with DAGs for `evalrun plan`. |
 | `--limit` |  |
 | `--out`, `-o` | Write requests.json here instead of stdout. |
 | `--principal` |  |

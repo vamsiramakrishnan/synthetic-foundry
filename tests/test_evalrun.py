@@ -683,3 +683,226 @@ def test_the_cli_takes_an_exec_rater_and_imports_served_results(grammar_corpus: 
     result = runner.invoke(app, ["evalrun", "import-served", str(tmp_path / "corpus"), str(served), "-o", str(tmp_path / "served")])
     assert result.exit_code == 0, result.output
     assert "0/0 passed" in result.output and f"{len(grammar_corpus.queries)} error(s) excluded" in result.output
+
+
+# -- planned deletes ---------------------------------------------------------------
+
+
+def _delete_corpus() -> Any:
+    from worldloom.enterprise_specs import DestinationRole, Operation
+
+    world = RetailWorld(seed=8128).build()
+    program = with_parameters(retail(stores=2, products=3, ticks=12), {"initial_stock": 8, "target_stock": 15})
+    rule = IncidentRule(table="inventory", signal="lost", title="Stock availability")
+    scenario = operational_profile("retail")
+    scenario = scenario.model_copy(update={"coverage": scenario.coverage.model_copy(update={"failures": ("none",)})})
+    # A delete chain needs a destination whose connector can remove what it
+    # created; the retail profile drafts email, which nothing deletes.
+    workflow = scenario.additional_workflows[0].model_copy(update={
+        "destinations": (DestinationRole(connector="sharepoint", entities=("file",),
+                                         operations=(Operation.CREATE,), formats=("docx",)),),
+    })
+    scenario = scenario.model_copy(update={"additional_workflows": (workflow,),
+                                           "connectors": (*scenario.connectors, "sharepoint")})
+    harness = (
+        EnterpriseEvalHarness.from_world(world)
+        .with_scenario(scenario)
+        .with_operational_data(Simulator(program, seed=8128), rule, include_world_records=False)
+        .exhaustive().take(3).with_dag_grammar("delete_chain")
+    )
+    corpus, _ = harness.build()
+    return corpus
+
+
+@pytest.fixture(scope="module")
+def delete_corpus() -> Any:
+    return _delete_corpus()
+
+
+def test_a_planned_delete_chain_is_graded_on_every_axis(delete_corpus: Any) -> None:
+    cases = cases_from_corpus(delete_corpus)
+    coverage = axis_coverage(cases)
+    assert coverage.deletes == len(cases) == 3 and coverage.shapes == {"delete_chain": 3}
+    case = cases[0]
+    assert [node.id for node in case.plan.tool_nodes][-4:] == ["write", "verify-write", "delete", "verify-deleted"]
+    assert case.plan.tool_nodes[-2].op == "delete"
+    # The record to delete is the one the run creates: no fixture can name it.
+    assert case.outcomes.of_kind("delete")[0].fixture is None
+    assert [(failure.node, failure.kind) for failure in case.trajectory.failures] == [("verify-deleted", "not_found")]
+
+    report = run_cases(service_for(cases, delete_corpus.connector_data.records), cases, ReferenceAgent(cases))
+    for result in report.results:
+        assert result.graded and result.score is not None and result.score.passed, (result.error, result.score)
+        matches = {match.expected.kind: match for match in result.score.outcomes.structured}
+        assert matches["create"].met and matches["delete"].met
+        assert matches["create"].record == matches["delete"].record
+        # Created and deleted within the run: invisible to the diff, visible to the spans.
+        assert result.score.outcomes.diff.created == () and result.score.outcomes.diff.deleted == ()
+        assert result.score.outcomes.collateral == () and result.score.outcomes.grounding == 1.0
+        assert (result.score.trajectory.failures_honoured, result.score.trajectory.failures_expected) == (1, 1)
+        assert result.score.trajectory.error_codes == {"not_found": 1} and result.score.trajectory.safety == ()
+        assert result.score.assertion_status == "behavior" and result.score.assertion_fails == ()
+
+
+def test_an_agent_that_creates_and_keeps_fails_the_delete_not_the_create(delete_corpus: Any) -> None:
+    from worldloom.evalrun import ToolCall
+
+    cases = cases_from_corpus(delete_corpus)[:1]
+    case = cases[0]
+    records = delete_corpus.connector_data.records
+    ceiling = run_case(service_for(cases, records), case, ReferenceAgent(cases))
+    assert ceiling.graded
+    kept_calls = [ToolCall(tool=span["tool"], arguments=span["args"]) for span in ceiling.spans
+                  if span["node"] not in {"delete", "verify-deleted"}]
+    kept = run_case(service_for(cases, records), case, ScriptedAgent(kept_calls, name="keeper", answer="Filed it."))
+    assert kept.graded and kept.score is not None and not kept.score.passed
+    matches = {match.expected.kind: match for match in kept.score.outcomes.structured}
+    assert matches["create"].met and not matches["delete"].met
+    assert matches["delete"].detail == "no record of the entity was deleted"
+    assert kept.score.outcomes.diff.created == (matches["create"].record,)
+    assert kept.score.plan.missing_nodes == ("delete", "verify-deleted")
+    assert kept.score.trajectory.failures_honoured == 0
+    assert "not_deleted:delete" in kept.score.assertion_fails
+    assert "failure_not_observed:verify-deleted:not_found" in kept.score.assertion_fails
+
+
+def test_a_delete_by_the_id_the_readback_returned_attributes_after_the_record_is_gone(delete_corpus: Any) -> None:
+    from worldloom.connector_emulator import ConnectorError
+    from worldloom.evalrun import CallableAgent, ToolSurface
+
+    cases = cases_from_corpus(delete_corpus)[:1]
+    case = cases[0]
+    records = delete_corpus.connector_data.records
+    ceiling = run_case(service_for(cases, records), case, ReferenceAgent(cases))
+    prefix = [(span["tool"], span["args"]) for span in ceiling.spans if span["node"] not in {"verify-write", "delete", "verify-deleted"}]
+    readback = next(span for span in ceiling.spans if span["node"] == "verify-write")
+
+    def native_id_agent(task: Any, tools: ToolSurface) -> AgentResponse:
+        for tool, arguments in prefix:
+            tools.call(tool, **arguments)
+        # An external agent addresses the record by the id the connector
+        # returned, not by the fid the emulator keeps; after the delete the
+        # emulator has forgotten that id and the readback must still attribute.
+        seen = tools.call(readback["tool"], **readback["args"])
+        native = str(seen["id"])
+        tools.call("sharepoint.delete_file", id=native)
+        with pytest.raises(ConnectorError):
+            tools.call("sharepoint.get_file", id=native)
+        return AgentResponse(answer="Removed it again.")
+
+    result = run_case(service_for(cases, records), case, CallableAgent(native_id_agent, name="native-id"))
+    assert result.graded and result.score is not None, result.error
+    assert result.score.plan.observed_nodes == result.score.plan.expected_nodes
+    assert result.score.passed, result.score.model_dump()
+
+
+# -- plan-only grading -------------------------------------------------------------
+
+
+def test_the_plan_axis_is_graded_without_executing(grammar_corpus: Any) -> None:
+    from worldloom.evalrun import (
+        EvalSession,
+        PlannedDag,
+        PlannedNode,
+        ReferencePlanner,
+        grade_planned,
+        parse_plan,
+        plan_requests_document,
+    )
+
+    session = EvalSession.from_corpus(grammar_corpus)
+    ceiling = session.plan(ReferencePlanner(session.cases))
+    assert all(row.graded and row.score is not None and row.score.passed and row.calls == 0 for row in ceiling.results)
+    assert all(row.score is not None and row.score.observed == ("plan",) for row in ceiling.results)
+    session.reference()
+    delta = session.compare("reference", "plan:reference")
+    assert delta.axis_deltas.plan == 0.0 and delta.regressions == () and delta.stable == len(session.cases)
+    # An axis one side never observed has no delta and no mean.
+    assert delta.axis_deltas.trajectory is None and delta.axis_deltas.outcomes is None
+    summary = session.summary("plan:reference")
+    assert summary.means.plan == 1.0 and summary.means.trajectory is None and summary.means.outcomes is None
+    assert summary.assertion_status == {"unobserved": len(session.cases)}
+
+    document = plan_requests_document(session.service(), session.cases[:1])
+    text = json.dumps(document)
+    assert document["for"] == "plan" and "expected_dag" not in text and "assertions" not in text
+    assert document["response_schema"]["schema"] == "worldloom.evalrun-plans/v1"
+
+    case = next(case for case in session.cases if case.plan.shape == "map_read")
+    tools = [f"{node.connector}.{node.tool}" for node in case.plan.tool_nodes]
+    assert [node.id for node in case.plan.tool_nodes] == ["read-0", "fetch-0", "write", "verify-write"]
+    # Graded by tool name and reachability: a planner's own ids and an extra
+    # hop of its own do not cost it the edge.
+    renamed = PlannedDag(nodes=tuple(PlannedNode(id=f"step{index}", tool=tool, depends_on=(f"step{index - 1}",) if index else ())
+                                     for index, tool in enumerate(tools)))
+    assert grade_planned(case, renamed).passed
+    partial = parse_plan({"plan": {"nodes": [{"tool": tools[0]}, {"tool": tools[-2], "depends_on": ["n0"]},
+                                             {"tool": "servicenow.create_record", "depends_on": ["n0"]}]}})
+    grade = grade_planned(case, partial)
+    assert grade.missing_verify == (case.plan.of_kind("verify")[-1],) and grade.extra_writes == 1
+    assert grade.unattributed_calls == 1 and not grade.passed
+    # The readback planned before the write it reads back: the edge is missing.
+    backwards = PlannedDag(nodes=(PlannedNode(id="r", tool=tools[0]), PlannedNode(id="v", tool=tools[-1], depends_on=("r",)),
+                                  PlannedNode(id="w", tool=tools[-2], depends_on=("v",))))
+    assert grade_planned(case, backwards).edge_recall == 0.0
+    with pytest.raises(ValueError, match="cycle"):
+        PlannedDag(nodes=(PlannedNode(id="a", tool=tools[0], depends_on=("b",)), PlannedNode(id="b", tool=tools[1], depends_on=("a",))))
+    with pytest.raises(ValueError, match="unknown node"):
+        parse_plan({"nodes": [{"tool": tools[0], "depends_on": ["ghost"]}]})
+
+
+_PLANNER = """
+import json, sys
+doc = json.load(sys.stdin)
+assert doc["schema"] == "worldloom.evalrun-plan/v1", doc.get("schema")
+assert "transcript" not in doc and doc["tools"]
+reads = [t["name"] for t in doc["tools"] if t["annotations"]["readOnlyHint"]]
+print(json.dumps({"plan": {"nodes": [{"id": "r", "tool": reads[0]}]}}))
+"""
+
+
+def test_the_cli_grades_planners_over_the_exec_seam_and_from_a_plans_file(grammar_corpus: Any, tmp_path: Path) -> None:
+    from worldloom import mcp
+    from worldloom.evalrun import (
+        EvalSession,
+        ExecPlanner,
+        reference_plan,
+        seam_contract,
+    )
+
+    export_corpus(grammar_corpus, tmp_path / "corpus")
+    child = tmp_path / "planner.py"
+    child.write_text(_PLANNER, encoding="utf-8")
+    result = runner.invoke(app, ["evalrun", "plan", str(tmp_path / "corpus"), "-o", str(tmp_path / "exec"), "--limit", "2",
+                                 "--exec", _exec_cmd(child), "--timeout", "60"])
+    assert result.exit_code == 0, result.output
+    assert "plan axis only" in result.output and "0/2 passed" in result.output
+    ledger = read_run(tmp_path / "exec")
+    assert all(row.graded and row.calls == 0 and row.score is not None and 0 < row.score.plan.score < 1 for row in ledger.results)
+
+    crash = tmp_path / "crash.py"
+    crash.write_text("import sys; sys.stderr.write('planner exploded\\n'); sys.exit(2)", encoding="utf-8")
+    session = EvalSession.from_corpus(grammar_corpus, limit=1)
+    report = session.plan(ExecPlanner(_exec_cmd(crash), timeout=60))
+    assert report.results[0].status == "error" and "planner exploded" in (report.results[0].error or "")
+
+    result = runner.invoke(app, ["evalrun", "requests", str(tmp_path / "corpus"), "--for", "plan", "-o", str(tmp_path / "requests.json")])
+    assert result.exit_code == 0, result.output
+    requests = json.loads((tmp_path / "requests.json").read_text(encoding="utf-8"))
+    plans = {"schema": "worldloom.evalrun-plans/v1",
+             "cases": {entry["case_id"]: reference_plan(next(case for case in session.cases if case.id == entry["case_id"])).model_dump(mode="json")
+                       for entry in requests["cases"][:1]}}
+    (tmp_path / "plans.json").write_text(json.dumps(plans), encoding="utf-8")
+    result = runner.invoke(app, ["evalrun", "plan", str(tmp_path / "corpus"), "-o", str(tmp_path / "scripted"), "--limit", "2",
+                                 "--agent", f"scripted:{tmp_path / 'plans.json'}", "--json"])
+    assert result.exit_code == 0, result.output
+    summary = json.loads(result.output)
+    assert summary["graded"] == 1 and summary["errors"] == 1 and summary["means"]["trajectory"] is None
+    result = runner.invoke(app, ["evalrun", "plan", str(tmp_path / "corpus"), "-o", str(tmp_path / "x"), "--agent", "magic"])
+    assert result.exit_code != 0 and "scripted:<plans.json>" in result.output
+
+    planned = mcp.call("evalrun_plan", {"cases": str(tmp_path / "corpus"), "out": str(tmp_path / "mcp"), "limit": 2})
+    assert planned["pass_rate"] == 1.0 and planned["means"]["outcomes"] is None
+    contract = seam_contract()
+    assert "evalrun plan" in contract["commands"] and "evalrun_plan" in contract["mcp_tools"]
+    assert contract["schemas"]["plan"] == "worldloom.evalrun-plan/v1"

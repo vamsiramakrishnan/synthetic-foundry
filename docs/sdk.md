@@ -422,7 +422,7 @@ executes it, and the runs it has produced. Open one from an exported
 the reference agent for the ceiling, run yours, compare, write.
 
 ```python
-from worldloom.evalrun import AgentResponse, EvalSession, ExecAgent
+from worldloom.evalrun import AgentResponse, EvalSession, ExecAgent, ExecPlanner
 
 session = EvalSession.from_export("./cases")
 print(session.coverage().model_dump())      # per-axis counts; a zero is a gap
@@ -441,6 +441,7 @@ session.run(Mine(), label="mine")
 session.run(ExecAgent("python3 my_agent.py"), label="exec")
 print(session.compare("reference", "mine").axis_deltas)
 session.write("mine", "./runs/mine")
+session.plan(ExecPlanner("python3 my_planner.py"), label="planner")   # plan axis only, nothing runs
 ```
 
 Every run begins its cases on fresh forks of the same records; the session

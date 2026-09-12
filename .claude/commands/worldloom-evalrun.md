@@ -12,6 +12,7 @@ worldloom evalrun cases <CASES>                       # what the set can grade; 
 worldloom evalrun run <CASES> -o ./runs/reference     # the reference agent: the executable ceiling
 worldloom evalrun run <CASES> -o ./runs/mine --exec "python3 my_agent.py"
 worldloom evalrun compare ./runs/reference ./runs/mine
+worldloom evalrun plan <CASES> -o ./runs/planner --exec "python3 my_planner.py"   # querying alone
 ```
 
 Read the coverage first and report every zero. Run the reference before any
@@ -31,4 +32,8 @@ An error row means the agent broke; it is excluded from every mean and is
 never a zero. `compare` names which axis moved and which cases changed
 reliability rather than score. `import-studio <CASES> results.csv -o
 ./runs/studio` brings Gemini Enterprise Eval Studio's CSV in as an
-answer-axis-only run for the same comparison.
+answer-axis-only run for the same comparison. `plan` grades a planner on the
+plan axis alone (a plan document on stdin, a DAG on stdout, nothing run); its
+other axes are unobserved, never zero. Deletes are graded only on a build
+made with `--dag-shape delete_chain` against a destination whose connector
+serves a delete.

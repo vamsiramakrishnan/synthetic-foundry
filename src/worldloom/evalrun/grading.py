@@ -405,7 +405,23 @@ def grade_outcomes(
 ) -> OutcomeGrade:
     diff = diff_state(before, after)
     skipped = skipped_nodes(case, spans)
+    materialized = [_span(span) for span in spans]
+    # Records that existed only during the run: created by a successful span
+    # and absent from both snapshots. A delete chain leaves exactly this. The
+    # diff cannot see them; the spans the service recorded can, and a span is
+    # the service's record of what happened, not the agent's claim.
+    transient: dict[str, dict[str, Any]] = {}
+    for span in materialized:
+        if span.get("error"):
+            continue
+        for raw in span.get("writes", ()):
+            written = str(raw)
+            if written not in before and written not in after and written not in transient:
+                transient[written] = span
     covered: set[str] = set()
+    # A transient record is claimed by its create and by its delete: one
+    # record, two expectations, the pair the delete chain is for.
+    removed: set[str] = set()
     matches: list[OutcomeMatch] = []
     for expected in case.outcomes.structured:
         met, record, detail = False, None, ""
@@ -422,6 +438,9 @@ def grade_outcomes(
             candidates = [fid for fid in diff.created if fid not in covered
                           and str(after[fid].get("server") or expected.connector) == expected.connector
                           and str(after[fid].get("entity") or "") in members]
+            if not candidates:
+                candidates = [made for made, span in transient.items() if made not in covered
+                              and str(span.get("node")) == expected.node]
             if candidates:
                 record, met = candidates[0], True
             else:
@@ -451,15 +470,22 @@ def grade_outcomes(
             if fid is None:
                 members = _members(definitions, expected.connector, expected.entity)
                 candidates = [f for f in diff.deleted if f not in covered and str(before[f].get("entity") or "") in members]
+                if not candidates:
+                    # Created and deleted within the run: the delete node's
+                    # own successful spans name what it removed.
+                    candidates = [str(raw) for span in materialized
+                                  if str(span.get("node")) == expected.node and not span.get("error")
+                                  for raw in span.get("writes", ()) if str(raw) in transient and str(raw) not in removed]
                 fid = candidates[0] if candidates else None
             if fid is None:
                 detail = "no record of the entity was deleted"
             elif fid in after:
                 detail = f"{fid} still exists"
-            elif fid not in before:
+            elif fid not in before and fid not in transient:
                 detail = f"{fid} was never there"
             else:
                 met, record = True, fid
+                removed.add(fid)
         if record is not None:
             covered.add(record)
         matches.append(OutcomeMatch(expected=expected, met=met, record=record, detail=detail))
@@ -482,6 +508,11 @@ def grade_outcomes(
         # artifact when the connector is the document store.
         produced = [artifact.text for artifact in artifacts]
         produced.extend(json.dumps(after[fid], sort_keys=True, default=str) for fid in diff.created)
+        # A transient record is gone from the post-state; what the run
+        # produced is the write the service recorded: the arguments the agent
+        # bound into it and the receipt the connector returned.
+        produced.extend(json.dumps({"args": span.get("args"), "result": span.get("result")}, sort_keys=True, default=str)
+                        for span in transient.values())
         cited = {cite for artifact in artifacts for cite in artifact.cites}
         present = sum(1 for wanted in required if wanted in cited or any(wanted in text for text in produced))
         grounding = _round(present / len(required))
@@ -519,6 +550,33 @@ def grade_outcomes(
     )
 
 
+def unobserved_trajectory() -> TrajectoryGrade:
+    """The trajectory axis of a run that executed nothing. Zero, and said so."""
+
+    return TrajectoryGrade(reference=(), observed=(), calls=0, errors=0, error_codes={}, exact_match=False,
+                           in_order_match=False, any_order_match=False, precision=0.0, recall=0.0,
+                           repeated_calls=0, retry_storm=False, budget_exceeded=False, failures_honoured=0,
+                           failures_expected=0, safety=(), score=0.0, passed=False)
+
+
+def unobserved_plan() -> PlanGrade:
+    """The plan axis of a run that exposed no plan and no calls."""
+
+    return PlanGrade(expected_nodes=(), observed_nodes=(), missing_nodes=(), unattributed_calls=0,
+                     node_recall=0.0, node_precision=0.0, edge_recall=0.0, missing_verify=(), extra_writes=0,
+                     score=0.0, passed=False)
+
+
+def unobserved_outcomes(answer_score: float | None = None) -> OutcomeGrade:
+    """The outcome axis of a run whose state was never observed; an answer score may still stand."""
+
+    empty = StateDiff(created=(), updated=(), deleted=(), changed_fields={})
+    return OutcomeGrade(diff=empty, structured=(), structured_met=0, structured_expected=0, collateral=(),
+                        artifacts_produced=0, answer_score=answer_score,
+                        score=answer_score if answer_score is not None else 0.0,
+                        passed=answer_score is not None and answer_score >= 0.8)
+
+
 class CaseScore(Model):
     """The three axes, plus the assertion verdict, for one case and one agent."""
 
@@ -528,6 +586,10 @@ class CaseScore(Model):
     #: ``grade_trace``'s own verdict over the same spans, unchanged.
     assertion_status: str
     assertion_fails: tuple[str, ...] = Field(default=())
+    #: The axes this score actually measured. A plan-only run observes
+    #: ``plan`` alone, an Eval Studio import ``outcomes`` alone; a mean or a
+    #: delta over an axis nobody observed is not a measurement.
+    observed: tuple[str, ...] = ("plan", "trajectory", "outcomes")
     score: float
     passed: bool
 
@@ -559,4 +621,7 @@ __all__ = [
     "grade_plan",
     "grade_trajectory",
     "score_case",
+    "unobserved_outcomes",
+    "unobserved_plan",
+    "unobserved_trajectory",
 ]

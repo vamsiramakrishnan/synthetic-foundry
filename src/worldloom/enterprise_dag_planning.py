@@ -30,6 +30,18 @@ def _admits_update(connector: str, entity: str, output_format: str) -> bool:
     return True
 
 
+@lru_cache(maxsize=128)
+def _admits_delete(connector: str, entity: str, output_format: str) -> bool:
+    from .connector_definition import load_connector_definition
+    try:
+        definition = load_connector_definition(connector)
+        concrete = output_format if output_format in definition.entity_members(entity) else entity
+        definition.tool_for(concrete, "delete")
+    except (KeyError, ValueError):
+        return False
+    return True
+
+
 def compatible_shapes(row: dict[str, str], requested: tuple[str, ...]) -> tuple[str, ...]:
     catalogue = shape_catalogue()
     names = tuple(sorted(catalogue)) if requested == ("*",) else requested
@@ -47,6 +59,8 @@ def compatible_shapes(row: dict[str, str], requested: tuple[str, ...]) -> tuple[
         if name == "fan_out" and row["operation"] not in {"create", "draft", "send"}:
             continue
         if name == "write_chain" and not _admits_update(row["destination"], row["destination_entity"], row["output_format"]):
+            continue
+        if name == "delete_chain" and not _admits_delete(row["destination"], row["destination_entity"], row["output_format"]):
             continue
         compatible.append(name)
     return tuple(compatible)
@@ -147,6 +161,25 @@ def apply_dag_shape(query: PlannedEnterpriseQuery, shape: str) -> PlannedEnterpr
                     connector=mutation.connector, entity=mutation.entity,
                     depends_on=("write-marker",),
                     bindings={"id": ResultReference(node="write-marker", path=("id",))},
+                ),
+            ))
+        elif control == "delete_chain":
+            # The delete addresses the record the readback returned, never the
+            # write's own receipt, so an agent must have read what it removes;
+            # the final readback is expected to fail, and the compiler states
+            # that failure so the grader can demand it.
+            nodes.extend((
+                EnterpriseDagNode(
+                    id="delete", kind="write", operation="delete",
+                    connector=mutation.connector, entity=mutation.entity,
+                    depends_on=("verify-write",),
+                    bindings={"id": ResultReference(node="verify-write", path=("id",))},
+                ),
+                EnterpriseDagNode(
+                    id="verify-deleted", kind="verify", operation="read",
+                    connector=mutation.connector, entity=mutation.entity,
+                    depends_on=("delete",),
+                    bindings={"id": ResultReference(node="delete", path=("id",))},
                 ),
             ))
     dag = EnterpriseDag(nodes=tuple(nodes))

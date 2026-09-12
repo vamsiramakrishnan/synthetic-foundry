@@ -10,6 +10,7 @@ worldloom evalrun cases ./cases                     # what the set can grade, pe
 worldloom evalrun run ./cases -o ./runs/reference   # the executable ceiling
 worldloom evalrun run ./cases -o ./runs/mine --agent scripted:trajectories.json
 worldloom evalrun compare ./runs/reference ./runs/mine
+worldloom evalrun plan ./cases -o ./runs/planner --exec "python3 my_planner.py"   # querying alone
 worldloom evalrun import-studio ./cases eval_results.csv -o ./runs/studio
 worldloom evalrun summarize ./runs/mine --json
 ```
@@ -41,7 +42,20 @@ by fid, never credit. A case whose designed failure blocks a write expects
 that write *not* to happen, and a record that appears anyway is the agent
 writing past a refusal. A delete is graded the same way an update is: the
 record is gone from the post-state, and the trajectory shows the agent read
-it first.
+it first. A record the run created and then deleted is in neither snapshot;
+the spans the service recorded show the write that made it and the delete
+that removed it, and both expectations are met on that record, with the
+artifact grounded on the write the service saw.
+
+**Deletes are planned, not hand-authored.** `enterprise-evals build --dag-shape
+delete_chain` adds a `delete` and a final readback to every case whose
+destination connector serves a delete: write, read back, delete that exact
+returned record, read it back expecting `not_found`. The row states the
+expected error as a designed failure, so an agent that skips the last readback
+has not honoured it, and the `deleted` assertion names the write that created
+the record. SharePoint and Drive files now serve `delete_file`, which the
+specs had declared and the definitions did not; the default build plans no
+delete, so bytes without `--dag-shape` are unchanged.
 
 **Unstructured outcomes rest on records.** Every grammar write binds the
 collected evidence into the record it creates. The artifact contract names
@@ -69,6 +83,28 @@ with an `error`, counted and excluded from every mean, never a zero.
 Latency is recorded only under `--timed`. Without it a run reads no clock,
 and two runs of one agent over one case set write identical ledgers.
 
+## Plan-only grading
+
+`evalrun run` grades the DAG the agent executed, so its plan axis measures
+querying and execution together. `evalrun plan` measures querying alone: the
+planner receives what an agent receives (the request and the tool catalog
+with its safety annotations) and returns a DAG of tool calls, nothing runs,
+and the stated DAG is graded with `grade_plan`'s formula: node recall and
+precision by tool name (a planner cannot know the case's node ids), edge
+recall as reachability through the planned `depends_on` with the expected
+DAG's transforms compressed out, missing verifies, writes outside the plan.
+A designed failure is a runtime discovery and does not shrink the expected
+plan; both branches of a conditional shape are expected.
+
+Three planners: `reference` restates each expected DAG and is the ceiling,
+`--exec "<command>"` runs a command once per case with a
+`worldloom.evalrun-plan/v1` document on stdin, and `--agent
+scripted:plans.json` replays a `worldloom.evalrun-plans/v1` file written
+against `evalrun requests ./cases --for plan`. A plan-only run's trajectory
+and outcome axes are unobserved: the summary reports no mean for them and
+`compare` reports no delta on them, so a plan-only run and an executed run of
+the same case set compare on the plan axis and nowhere else.
+
 ## Driving it from another harness
 
 Three transports, each carrying only what the agent may know:
@@ -78,9 +114,11 @@ Three transports, each carrying only what the agent may know:
 | Executable, one subprocess per turn | `evalrun run ./cases --exec "<command>"` | The agent must act on what a tool returned. The child reads a `worldloom.evalrun-turn/v1` document (query, tools, transcript) and prints one call or the final answer. Stateless between turns. |
 | Requests and responses files | `evalrun requests ./cases -o requests.json`, then `evalrun run ./cases --agent scripted:responses.json` | A fixed trajectory: a regression set, a hand-authored baseline, a harness that cannot be called back. Replay cannot see a call's result. |
 | MCP | `enterprise-evals serve ./cases`, then `evalrun import-served ./cases scores.jsonl` | An agent that speaks MCP, Gemini Enterprise included. It calls `eval_score` before `eval_end` and keeps each document; those are complete three-axis results graded by the serving service, and `import-served` collects them into a comparable run. |
+| Planner, one subprocess per case | `evalrun plan ./cases --exec "<command>"`, or `evalrun requests ./cases --for plan` then `evalrun plan ./cases --agent scripted:plans.json` | The plan axis alone. The child reads a `worldloom.evalrun-plan/v1` document (query, tools) and prints the DAG it would run; nothing executes. |
 
 The same surface is reachable as MCP tools of `worldloom mcp`
-(`evalrun_cases`, `evalrun_run`, `evalrun_summarize`, `evalrun_compare`), as
+(`evalrun_cases`, `evalrun_run`, `evalrun_plan`, `evalrun_summarize`,
+`evalrun_compare`), as
 the `evalrun` entry of `worldloom seams --json` (schemas, axes, laws,
 commands), and from Python through `EvalSession`. The exact documents are in
 the `worldloom-evalrun` skill's `references/protocol.md`.
@@ -160,7 +198,15 @@ the findings, with where each was:
    tombstone and recovery assertions exist"; the emulator could delete and
    `grade_trace` could check `deleted`, but no case contract carried one.
    `StructuredOutcome(kind="delete")` does, the reference walker issues it,
-   and the trajectory grader requires the read before it.
+   and the trajectory grader requires the read before it. The planner then
+   still planned none: no destination connector served a delete, though the
+   specs declared one on SharePoint and Drive files. `delete_chain` and
+   `delete_file` close that, and `evalrun cases` on such a build reports the
+   deletes it can grade.
+7. **Querying could not be measured apart from execution.** The plan axis
+   graded the executed DAG, so a planner that emits a DAG without acting had
+   no wire to a grade. `evalrun plan` is that wire, with the same formula,
+   and a plan-only run's other axes are unobserved rather than zero.
 5. **The served surface could not attribute an email source.** The service
    demanded an `entity` argument on every search and create to attribute a
    call to its node, and refused the same argument as undeclared for tools
@@ -175,15 +221,18 @@ the findings, with where each was:
 
 Named and not closed here:
 
-- **No planner grades yet.** The plan axis grades the DAG the agent
-  *executed*, attributed by the service, and `planned_dag` only against that.
-  A planner that emits a DAG without executing it has no wire to reach a
-  grade. The shape catalogue is eight shapes; the external forty-two-shape
+- **The shape catalogue is nine shapes.** The external forty-two-shape
   target is not in this repository.
-- **Delete cases are hand-authored.** The retail and banking scenario
-  profiles plan no delete workflow, so `evalrun cases` reports `deletes: 0`
-  for a built corpus. Planning deletes is a Generation change to
-  `enterprise_queries` and is deliberately not made here.
+- **Deletes are opt-in.** The shipped scenario profiles draft email, which
+  nothing deletes, so a default build still reports `deletes: 0`; a profile
+  whose destination is a SharePoint or Drive file, built with `--dag-shape
+  delete_chain`, reports the deletes it grades. Deleting a preexisting
+  fixture record is compiled (the `deleted` assertion then names the
+  fixture) but no shipped profile plans an update-then-delete.
+- **A planned DAG is graded by tool name.** `evalrun plan` cannot tell two
+  calls of one tool apart by their arguments, so a planner that names the
+  right tools in the right order passes the plan axis whatever it would have
+  bound; the executed run is where bindings are graded.
 - **The answer axis needs a model for half its shapes.** `GroundedRater`
   grades lookups, comparisons and abstentions. For the rest, `--rater
   exec:"<command>"` runs a judge over the `--exec` seam: the child receives

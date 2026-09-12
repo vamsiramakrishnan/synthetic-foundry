@@ -5,8 +5,9 @@ The functions in this package compose (``cases_from_corpus`` then
 drives Worldloom from Python should not have to remember the order. An
 ``EvalSession`` remembers it. Open one from an ``EnterpriseCorpus`` or an
 exported directory, ask what the set can grade, run the reference agent for
-the ceiling, run yours, compare, write. The session holds nothing a run can
-change: every ``run`` begins its cases on fresh forks of the same records.
+the ceiling, run yours, compare, write. ``plan`` grades a planner on the
+plan axis alone. The session holds nothing a run can change: every ``run``
+begins its cases on fresh forks of the same records.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import Any
 from ..connectors.serving import ConnectorEvaluationService
 from .agents import AgentUnderTest, ReferenceAgent
 from .contract import AxisCoverage, EvalCase, axis_coverage, cases_from_corpus
+from .plans import Planner, plan_cases
 from .results import Comparison, RunSummary, compare, summarize, write_run
 from .runner import Clock, RunReport, run_cases, service_for
 
@@ -63,6 +65,13 @@ class EvalSession:
             label: str | None = None) -> RunReport:
         report = run_cases(self.service(), self.cases, agent, principal=self.principal, clock=clock, rater=rater)
         self.runs[label or agent.name] = report
+        return report
+
+    def plan(self, planner: Planner, *, label: str | None = None) -> RunReport:
+        """Grade the plan axis alone: the planner states each case's DAG, nothing runs."""
+
+        report = plan_cases(self.service(), self.cases, planner, principal=self.principal)
+        self.runs[label or planner.name] = report
         return report
 
     def reference(self, **options: Any) -> RunReport:

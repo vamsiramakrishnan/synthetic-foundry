@@ -117,6 +117,46 @@ salvaged the way Eval Studio salvages it and clamped to `[0, 1]`. A non-zero
 exit, a malformed reply or a timeout is a rating error on the case: the
 answer axis is unrated there and excluded from its mean.
 
+## The plan document (`worldloom.evalrun-plan/v1`)
+
+`worldloom evalrun plan ./cases --exec "<command>"` runs the command once per
+case with this on stdin (the same `tools` as a turn document, no transcript):
+
+```json
+{
+  "schema": "worldloom.evalrun-plan/v1",
+  "case_id": "fd3a96d6…",
+  "query": "Prepare the stock availability review … Draft a HTML in Email, then read it back.",
+  "persona": "",
+  "principal": "agent",
+  "tools": ["… as in the turn document …"],
+  "instructions": ["…"]
+}
+```
+
+The command prints exactly one JSON object: the DAG it would run. Nothing is
+executed.
+
+```json
+{"plan": {"nodes": [
+  {"id": "search", "tool": "jira.search_issues", "entity": "issue"},
+  {"id": "draft", "tool": "email.create_draft", "depends_on": ["search"], "entity": "message"},
+  {"id": "readback", "tool": "email.get_message", "depends_on": ["draft"]}
+]}}
+```
+
+- Node ids are the planner's own; grading matches by tool name, in the
+  expected order, and grades an expected edge as reachability through
+  `depends_on`. Ids must be unique, dependencies must name a node, and a
+  cycle is a contract breach.
+- A non-zero exit, a reply that is not a plan, or a timeout is an error row.
+- `worldloom evalrun requests ./cases --for plan -o requests.json` writes the
+  same requests for offline answering; the reply file
+  (`worldloom.evalrun-plans/v1`) is `{"schema": "worldloom.evalrun-plans/v1",
+  "cases": {"<case_id>": {"nodes": [...]}}}`, replayed by
+  `worldloom evalrun plan ./cases --agent scripted:plans.json`. A case left
+  out is `not_attempted`.
+
 ## Served scoring (`eval_score`)
 
 An agent reaching the corpus over `worldloom enterprise-evals serve` calls

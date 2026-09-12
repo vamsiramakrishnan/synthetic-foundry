@@ -50,7 +50,9 @@ Entity representations and MCP tool names stay in the hidden execution plan.
 - Every write carries an idempotency key derived from the case ID.
 - Every mutation has a dependent verification read.
 - Ambiguous joins are rejected rather than guessed.
-- Delete workflows are excluded until tombstone and recovery assertions exist.
+- Delete workflows are excluded from this legacy planner. The DAG grammar's
+  `delete_chain` shape plans them, graded on the record being gone and its
+  readback failing; see [eval execution](eval-execution.md).
 
 The initial API writes agent-evals.jsonl alongside a corpus without changing
 World serialisation. A later schema change can make it an optional World ledger

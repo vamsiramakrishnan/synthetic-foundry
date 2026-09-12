@@ -255,6 +255,9 @@ def grade_trace(
         for assertion in assertions if assertion.get("type") == "failure_at"
     }
     failure_stopped: set[str] = set()
+    # Nodes an observed designed failure blocked, apart from the failing node
+    # itself: an expected error on one of them cannot be observed either.
+    failure_blocked: set[str] = set()
     for assertion in assertions:
         if assertion.get("type") != "failure_at":
             continue
@@ -263,6 +266,7 @@ def grade_trace(
             if not assertion.get("writes_persist"):
                 failure_stopped.add(node_id)
             failure_stopped.update(str(value) for value in assertion.get("blocked_nodes", ()))
+            failure_blocked.update(str(value) for value in assertion.get("blocked_nodes", ()))
     branch = next(
         (assertion for assertion in assertions if assertion.get("type") == "branch_exclusive"),
         None,
@@ -330,6 +334,11 @@ def grade_trace(
             node_id = str(assertion.get("node"))
             if node_id not in nodes_by_id:
                 fails.append(f"unknown_node:{node_id}")
+                continue
+            if node_id in failure_blocked:
+                # A delete chain expects `not_found` on its last readback; when
+                # the write before it met its own designed failure, the chain
+                # never reached the readback and there is no error to observe.
                 continue
             node_spans = by_node.get(node_id, ())
             if not node_spans and nodes_by_id[node_id].get("condition") and any(item.get("type") == "execution_contract" for item in assertions):
@@ -470,6 +479,15 @@ def grade_trace(
             if node_id not in skipped and node_id not in stopped:
                 if post_state is None:
                     fails.append(f"deletion_unverified:{node_id}")
+                elif assertion.get("created_by"):
+                    # The record to be gone is whichever the named write
+                    # created in this run: every successful write of that
+                    # node must be absent afterwards, and a write that never
+                    # happened leaves nothing that could have been deleted.
+                    created = [str(fid) for span in by_node.get(str(assertion["created_by"]), ())
+                               if not span.get("error") for fid in span.get("writes", ())]
+                    if not created or any(fid in post_state for fid in created):
+                        fails.append(f"not_deleted:{node_id}")
                 elif not assertion.get("per_item") and str(assertion["fixture"]) in post_state:
                     fails.append(f"not_deleted:{node_id}")
         elif kind == "denial_surfaced":

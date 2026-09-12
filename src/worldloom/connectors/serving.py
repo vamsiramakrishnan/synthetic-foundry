@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 import hmac
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from threading import RLock
 from typing import Any
@@ -281,7 +281,11 @@ class ConnectorEvaluationService:
                     actual.pop(key, None)
             if wanted.get("id") is not None:
                 wanted["id"] = emulator.by_ident.get(str(wanted["id"]), str(wanted["id"]))
-                actual["id"] = emulator.by_ident.get(str(actual.get("id")), str(actual.get("id")))
+                raw = str(actual.get("id"))
+                # The emulator forgets a deleted record's native id; the
+                # readback the agent took it from is still in the run's
+                # recorded results, so the readback after a delete attributes.
+                actual["id"] = emulator.by_ident.get(raw, _recorded_aliases(outputs).get(raw, raw))
             if any(actual.get(key) != value for key, value in wanted.items()):
                 continue
             consumed = tuple(dict.fromkeys(identifier for parent in node.depends_on
@@ -501,6 +505,19 @@ class ConnectorEvaluationService:
             grade = self.grade(principal, run_id)
             del self._runs[run_id]
             return {"run_id": run_id, "ended": True, "grade": grade}
+
+
+def _recorded_aliases(outputs: Mapping[str, Sequence[Any]]) -> dict[str, str]:
+    """Native identifiers in recorded results, mapped to the fid each answered for."""
+    aliases: dict[str, str] = {}
+    for produced in outputs.values():
+        for entry in produced:
+            if isinstance(entry, Mapping) and isinstance(entry.get("payload"), Mapping):
+                native = entry["payload"]
+                for key in ("id", "Id", "sys_id", "key", "number", "name", "title"):
+                    if native.get(key) is not None:
+                        aliases.setdefault(str(native[key]), str(entry.get("id")))
+    return aliases
 
 
 def _span_json(span: ConnectorSpan) -> dict[str, Any]:
