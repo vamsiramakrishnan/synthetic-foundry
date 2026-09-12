@@ -857,113 +857,12 @@ register_domain(Domain(
     evaluation_text=tuple(_INSURANCE_EVAL_TEXT.items()),
 ))
 
-# Insurance's own fact kinds, in the process-global registry — the `close.*`
-# kinds the reserving episode reuses are declared once, by retail. The
-# invariants restate what `_checks` above enforces.
-from .factkinds import FactKind
-from .factkinds import register as _register_kinds
+# Insurance's own fact kinds, in the process-global registry, read from
+# `_data/factkinds/insurance@1.json`. The invariants restate what `_checks`
+# above enforces; the file's `about` says why `financial.revenue.*` is absent.
+from .factkinds import register_catalogue as _register_kinds
 
-_register_kinds([
-    FactKind(kind="reserves.philosophy", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at", "standing"),
-             about="The reserving philosophy; set once, reused every quarter."),
-    FactKind(kind="reserves.risk_margin_policy_pct", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at", "standing"),
-             about="The board's margin policy, standing beside the philosophy."),
-    # `rolls-up-to` is registered here ahead of the authored spec that will
-    # declare it: the registry is the cross-module truth about a kind, and
-    # `episodes.lint` refuses a spec claiming an invariant the registry does
-    # not hold. Registering it now means the reserving pack can state the rule
-    # its cells already keep — the cohort ultimates sum to the central
-    # estimate — rather than the lint and the pack disagreeing about what the
-    # kind means.
-    FactKind(kind="reserves.ultimate", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at", "rolls-up-to"), about="A cohort's ultimate claims cost."),
-    FactKind(kind="reserves.ibnr", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="Incurred-but-not-reported for a cohort."),
-    FactKind(kind="reserves.central_estimate_total", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The actuary's central estimate."),
-    FactKind(kind="reserves.margin_released", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The margin release the quarter booked."),
-    FactKind(kind="reserves.risk_margin_remaining", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="What margin stands after the release."),
-    FactKind(kind="reserves.committee_recommendation", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="What the reserving committee recommended."),
-    FactKind(kind="reserves.booked_strengthening", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The strengthening actually booked."),
-    FactKind(kind="reserves.booked_total", domain="insurance", generated_by="generators/reserving.py",
-             invariants=("holds-at", "never-superseded"),
-             about="What was carried at the valuation, permanently — closing or"
-                   " superseding it is `booked_total_touched`."),
-    FactKind(kind="reserves.held_vs_central_gap", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at", "standing", "carries-forward-as(reuse)"),
-             about="The standing gap phase 1 opens; a later quarter reuses it"
-                   " rather than minting a second."),
-    FactKind(kind="reserves.attribution_deterioration", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The genuine-deterioration share of the movement."),
-    FactKind(kind="reserves.attribution_pattern_change", domain="insurance",
-             generated_by="generators/reserving.py",
-             invariants=("holds-at",), about="The benign pattern-change share."),
-    # The diagonal, and `never-superseded` is not new behaviour here: check (a)
-    # above (`triangle_touched`) has refused a closed or superseded reading of
-    # either kind since this vertical shipped. What was missing was the
-    # *declaration* — so a pack authoring the same diagonal was refused for
-    # claiming a rule the registry did not hold, while the engine enforced that
-    # exact rule two hundred lines up. Declared now, which is what lets an
-    # authored observation grid mint append-only cells (`episodes.run`) instead
-    # of chaining them and then failing check (a).
-    FactKind(kind="claims.incurred_to_date", domain="insurance", generated_by="generators/triangles.py",
-             invariants=("holds-at", "never-superseded"),
-             about="A cohort's incurred position, as read at one valuation."),
-    FactKind(kind="claims.paid_to_date", domain="insurance", generated_by="generators/triangles.py",
-             invariants=("holds-at", "never-superseded"),
-             about="A cohort's paid position, as read at one valuation."),
-    FactKind(kind="claims.actual_vs_expected", domain="insurance", generated_by="generators/triangles.py",
-             invariants=("holds-at",), about="The quarter's development against the calibrated pattern."),
-    # -- the book, cut by the organisation that wrote it ---------------------
-    # `financial.revenue.*` is deliberately absent from this list: it is
-    # retail's registration and shared vocabulary, the way `close.*` is, and
-    # re-declaring it here under `domain="insurance"` would be two modules
-    # disagreeing about one kind — exactly what `factkinds.register` refuses.
-    # See `generators/insurance_book.generate` for why the book is minted into
-    # that vocabulary rather than a private one.
-    FactKind(kind="portfolio.policies_in_force", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at", "sums-to(portfolio.policies_in_force)"),
-             about="The policy book one office, unit or group carries into the"
-                   " valuation. Sites sum to their unit and units to the group."),
-    FactKind(kind="claims_ops.notified_count", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at", "sums-to(claims_ops.notified_count)"),
-             about="Claims notified in the quarter. Deliberately a separate"
-                   " prefix from `claims.*`: the triangle's diagonals are keyed"
-                   " by accident cohort over the period field, and an"
-                   " operational count keyed by the reporting quarter under the"
-                   " same prefix would make that pun ambiguous."),
-    FactKind(kind="claims_ops.settled_count", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at", "sums-to(claims_ops.settled_count)"),
-             about="Claims settled in the quarter, by claims centre, unit and group."),
-    FactKind(kind="expense.operating", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at", "sums-to(expense.operating)"),
-             about="Operating expense. Cost centres sum to the group; the"
-                   " expense *ratio* is never minted, because a ratio of totals"
-                   " is not the total of ratios."),
-    FactKind(kind="data.records_of_record", domain="insurance",
-             generated_by="generators/insurance_book.py",
-             invariants=("holds-at",),
-             about="How many records a system holds for what it is the system of"
-                   " record for. No roll-up: five systems of record for five"
-                   " different things do not add to anything anybody reports."),
-])
+_register_kinds("insurance@1")
 
 
 __all__ = [

@@ -693,6 +693,14 @@ The measured retail coupling, for whichever is chosen:
       in beside it; the three narrated builds are byte-identical. What stays
       code: the compilers, and each engine's `approved_by` table, which is an
       argument about who signs, not about the document.
+   7. *Fact kinds as data*: **done.** The vocabulary a pack has to match
+      was four Python literals. Each vertical's kinds are now
+      `_data/factkinds/<engine>@1.json`, read at import by
+      `factkinds.register_catalogue`, with the argument for each declaration
+      carried as a `note`; the registry's content and order are unchanged.
+      What stays code: the core kinds (`lore.*`, `org.*`, `estate.*`, the
+      actor tools' `close.*`/`ops.*`), which no vertical owns, and the
+      `INVARIANT_HEADS` vocabulary itself, which is closed for lore's reason.
 
 An industry pack, once extracted, has to carry eight things and only about three are nouns: archetype, dimensions, fact kinds and their units, lore, artifact types and grammars, scenario verbs and cadence, roles and personas, evaluation families. A pack that renames nouns and stops produces retail with different words.
 

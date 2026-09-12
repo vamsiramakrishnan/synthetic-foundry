@@ -1,0 +1,269 @@
+{
+  "domain": "banking",
+  "about": "Banking's own fact kinds. Only what this vertical alone mints: the `close.*` and incident-chain `ops.*` kinds the regulatory episode reuses verbatim are declared once, by retail, and a second declaration here would be refused. The invariants restate what banking's `_checks` already enforces — the registry is the index of those rules, and the episode grammar derives checks from the same strings.",
+  "fact_kinds": [
+    {
+      "kind": "capital.rwa_total",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(capital.rwa_by_book)",
+        "supersedes-prior"
+      ],
+      "about": "Risk-weighted assets; the books holding at any moment sum to it exactly, and the corrected total supersedes the filed one."
+    },
+    {
+      "kind": "capital.rwa_by_book",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior"
+      ],
+      "about": "One book's RWA; only the affected book's figure is ever corrected."
+    },
+    {
+      "kind": "capital.cet1_capital",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "CET1 capital, unchanged by the restatement — the error was in RWA."
+    },
+    {
+      "kind": "capital.cet1_ratio",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior",
+        "reconciles-against(capital.cet1_capital, capital.rwa_total)"
+      ],
+      "about": "The stated ratio; `_checks` recomputes the division it states."
+    },
+    {
+      "kind": "capital.cet1_ratio_as_filed",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "never-superseded",
+        "reconciles-against(capital.cet1_capital, capital.rwa_total)"
+      ],
+      "about": "What the filing reported, permanently — closing it would erase what the bank believed and when (`as_filed_touched`)."
+    },
+    {
+      "kind": "capital.minimum_cet1_requirement",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "standing",
+        "carries-forward-as(reuse)"
+      ],
+      "about": "The standard's floor. No period, minted once, reused by every later quarter — a duplicate is what `contested_at_equal_authority` catches."
+    },
+    {
+      "kind": "capital.rwa_understatement",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "How much the filed RWA understated the truth."
+    },
+    {
+      "kind": "capital.cet1_delta",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The ratio movement of the correction, in bps."
+    },
+    {
+      "kind": "capital.collateral_treatment",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior"
+      ],
+      "about": "The contested treatment: working paper and review coexist at different authority; the confirmed statement supersedes only the working one."
+    },
+    {
+      "kind": "capital.return_due_date",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The lodgement due date."
+    },
+    {
+      "kind": "capital.return_approval",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The CFO's approval over the open challenge."
+    },
+    {
+      "kind": "capital.return_filed_at",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "When the return was lodged."
+    },
+    {
+      "kind": "capital.return_status",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior"
+      ],
+      "about": "filed, then restated — the restated status supersedes the filed one."
+    },
+    {
+      "kind": "capital.error_materiality",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Whether the error forces a restatement."
+    },
+    {
+      "kind": "capital.affected_book",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Which book the error sat in."
+    },
+    {
+      "kind": "capital.restatement_reason",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Why the figures moved."
+    },
+    {
+      "kind": "review.challenge",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The second line's on-the-record challenge."
+    },
+    {
+      "kind": "review.challenge_status",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior"
+      ],
+      "about": "open, then upheld — the ruling supersedes the open status."
+    },
+    {
+      "kind": "regulatory.notification",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The material-error notification to the regulator."
+    },
+    {
+      "kind": "liquidity.lcr",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior"
+      ],
+      "about": "A daily observation in a gapless supersession chain; each quarter's chain starts fresh (`liquidity_cadence_gap` walks the chains)."
+    },
+    {
+      "kind": "liquidity.reconciliation_break",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at",
+        "precedes-event"
+      ],
+      "about": "The daily path's flag against the collateral register."
+    },
+    {
+      "kind": "ops.collateral_mapping_owner",
+      "generated_by": "generators/regulatory.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Who owns the revaluation schedule — 'unassigned' is the control failure."
+    },
+    {
+      "kind": "banking.deposits.balance",
+      "generated_by": "generators/banking_network.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(banking.deposits.balance)"
+      ],
+      "about": "Customer deposit balances at quarter end. Branches sum to their division and divisions to the group, exactly; a division with no branch network states none.",
+      "note": "The branch network. Every one of these decomposes group → division → branch by largest remainder, so `sums-to` is the invariant that matters and check group (h) in banking's `_checks` is what enforces it, refusing as `network_does_not_reconcile`. The kind is its own child kind because the decomposition runs across subjects at one period, exactly as retail's `financial.revenue.actual` does — unlike `capital.rwa_total`, whose children are a different kind because a book is not a smaller bank."
+    },
+    {
+      "kind": "banking.lending.balance",
+      "generated_by": "generators/banking_network.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(banking.lending.balance)"
+      ],
+      "about": "Lending balances at quarter end, derived from the quarter's filed RWA at an average risk weight so the book and the capital held against it are one number seen twice."
+    },
+    {
+      "kind": "banking.lending.settled",
+      "generated_by": "generators/banking_network.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(banking.lending.settled)"
+      ],
+      "about": "New lending settled during the quarter — the flow beside the balance, allocated on the same lending weights."
+    },
+    {
+      "kind": "banking.net_operating_income",
+      "generated_by": "generators/banking_network.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(banking.net_operating_income)"
+      ],
+      "about": "The quarter's net operating income by division and branch. Every division states one, including those with no estate."
+    },
+    {
+      "kind": "banking.network.fte",
+      "generated_by": "generators/banking_network.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(banking.network.fte)"
+      ],
+      "about": "Front-line headcount. The one measure a site that trades nothing still carries — an operations centre holds work, not income."
+    },
+    {
+      "kind": "banking.loan_to_deposit_pct",
+      "generated_by": "generators/banking_network.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(banking.lending.balance, banking.deposits.balance)"
+      ],
+      "about": "Lending over deposits, derived from the rounded amounts it describes. A rate: it is stated at group and division and never summed, because a group ratio is not the total of three."
+    },
+    {
+      "kind": "banking.shared_services_cost",
+      "generated_by": "generators/banking_network.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(banking.shared_services_cost)"
+      ],
+      "about": "What finance, treasury, risk and the data platform cost, by the cost centre that incurs it. The centres sum to the group figure."
+    },
+    {
+      "kind": "banking.shared_services_recharge",
+      "generated_by": "generators/banking_network.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(banking.shared_services_cost)"
+      ],
+      "about": "The same total carried by the divisions it is recharged to — a second decomposition of one number across a different set of entities, which is what makes either of them checkable."
+    }
+  ]
+}

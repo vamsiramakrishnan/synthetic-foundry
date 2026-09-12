@@ -1,0 +1,257 @@
+{
+  "domain": "procurement",
+  "about": "Procurement's own fact kinds. This vertical carries the project's only period-keyed carry-forward (`p2p.open_shortfall_*`), so it is where `carries-forward-as(derive)` is a measured fact rather than a design intention. `financial.accrual.grni` is registered here, not by retail, despite the prefix: the procurement cycle mints it and answers for it.",
+  "fact_kinds": [
+    {
+      "kind": "p2p.contract_rate",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at",
+        "standing"
+      ],
+      "about": "The contracted unit rate."
+    },
+    {
+      "kind": "p2p.contract_counterparty",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at",
+        "standing"
+      ],
+      "about": "Who the contract is with."
+    },
+    {
+      "kind": "p2p.approval_tolerance_pct",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at",
+        "standing"
+      ],
+      "about": "The match tolerance, in per cent."
+    },
+    {
+      "kind": "p2p.approval_tolerance",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The tolerance in currency at this order's size."
+    },
+    {
+      "kind": "p2p.ordered_quantity",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "What was committed."
+    },
+    {
+      "kind": "p2p.ordered_value",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(p2p.ordered_quantity, p2p.contract_rate)"
+      ],
+      "about": "Quantity times rate, exactly."
+    },
+    {
+      "kind": "p2p.received_quantity",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "What arrived."
+    },
+    {
+      "kind": "p2p.received_value",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "What arrived, valued at contract."
+    },
+    {
+      "kind": "p2p.invoiced_quantity",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "What was billed."
+    },
+    {
+      "kind": "p2p.invoiced_unit_price",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The billed unit price the match disputes."
+    },
+    {
+      "kind": "p2p.invoiced_value",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(p2p.invoiced_quantity, p2p.invoiced_unit_price)"
+      ],
+      "about": "Billed quantity times billed price."
+    },
+    {
+      "kind": "p2p.match_price_variance",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The price leg of the failed match."
+    },
+    {
+      "kind": "p2p.match_quantity_variance",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The quantity leg of the failed match."
+    },
+    {
+      "kind": "p2p.match_total_variance",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(p2p.match_price_variance, p2p.match_quantity_variance)"
+      ],
+      "about": "The two legs, summed — `_checks` recomputes the accrual arithmetic."
+    },
+    {
+      "kind": "p2p.exception_status",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior"
+      ],
+      "about": "The exception's state chain; exactly one status is open at a time."
+    },
+    {
+      "kind": "p2p.exception_approved_by",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Who approved paying over the tolerance."
+    },
+    {
+      "kind": "p2p.approved_payment_value",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "What was actually paid."
+    },
+    {
+      "kind": "p2p.credit_note_value",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The credit note that settles the price leg."
+    },
+    {
+      "kind": "p2p.vendor_change_status",
+      "generated_by": "generators/procurement_match.py",
+      "invariants": [
+        "holds-at",
+        "supersedes-prior"
+      ],
+      "about": "The vendor-master change request's state chain."
+    },
+    {
+      "kind": "p2p.open_shortfall_quantity",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at",
+        "carries-forward-as(derive)"
+      ],
+      "about": "Undelivered quantity at close; next month's is derived from it."
+    },
+    {
+      "kind": "p2p.open_shortfall_value",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at",
+        "carries-forward-as(derive)"
+      ],
+      "about": "Undelivered value at close — the balance the accrual carries."
+    },
+    {
+      "kind": "p2p.shortfall_released_quantity",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "Prior shortfall cleared by this month's receipts."
+    },
+    {
+      "kind": "p2p.shortfall_released_value",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at"
+      ],
+      "about": "The released balance, valued."
+    },
+    {
+      "kind": "financial.accrual.grni",
+      "generated_by": "generators/procurement_cycle.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(p2p.open_shortfall_value, p2p.match_total_variance)"
+      ],
+      "about": "Goods-received-not-invoiced accrual the close books."
+    },
+    {
+      "kind": "p2p.third_party_spend",
+      "generated_by": "generators/procurement_estate.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(p2p.third_party_spend)"
+      ],
+      "about": "Third-party spend receipted in the period, at contracted rates — by division, by spend category, and by the depots that took delivery.",
+      "note": "The estate's three, and the reason each carries `sums-to` against itself: like retail's `financial.revenue.actual`, one kind is stated at four levels — group, division, spend category or site, and (for commitment) cost centre — and the roll-up is between facts of the same kind rather than between two kinds."
+    },
+    {
+      "kind": "p2p.open_commitment",
+      "generated_by": "generators/procurement_estate.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(p2p.open_commitment)",
+        "carries-forward-as(derive)"
+      ],
+      "about": "Purchase-order commitment placed and not yet received at close — by division, by depot and project office, and by the cost centre it is coded to. Doubles as the commitment movement's closing balance: next period's p2p.commitment.opening is resolved from it."
+    },
+    {
+      "kind": "p2p.commitment.opening",
+      "generated_by": "generators/procurement_estate.py",
+      "invariants": [
+        "holds-at",
+        "carries-forward-as(derive)"
+      ],
+      "about": "The order book brought forward at the period's open — the previous close's p2p.open_commitment, restated so one period's record carries its whole movement. The first period on record draws it.",
+      "note": "The movement's two other legs. Two kinds, not four: the closing balance is `p2p.open_commitment` and the received leg is `p2p.third_party_spend` — each already registered to mean exactly that — and a `p2p.commitment.closing` or `p2p.commitment.received` stating the same figures under new names would be the copy-that-can-drift this corpus refuses at every level."
+    },
+    {
+      "kind": "p2p.commitment.placed",
+      "generated_by": "generators/procurement_estate.py",
+      "invariants": [
+        "holds-at",
+        "reconciles-against(p2p.commitment.opening, p2p.open_commitment)"
+      ],
+      "about": "Purchase-order value placed in the period — the movement's inflow. Closing less opening plus receipts, exactly; `stockflow.verify` recomputes it."
+    },
+    {
+      "kind": "p2p.materials_on_hand",
+      "generated_by": "generators/procurement_estate.py",
+      "invariants": [
+        "holds-at",
+        "sums-to(p2p.materials_on_hand)"
+      ],
+      "about": "Materials held in the yards at close. Only a yard holds any: the archetype gives one no revenue weight for exactly that reason."
+    }
+  ]
+}

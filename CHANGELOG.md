@@ -11,6 +11,22 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Fact kinds: the engines' vocabularies as versioned data
+
+- Retail, banking, insurance and procurement each registered their fact
+  kinds as a Python literal: 115 declarations across four modules, the
+  vocabulary every pack's `fact_kinds`, every LOB responsibility and every
+  sheet column has to match. Each vertical's kinds now live in
+  `_data/factkinds/<engine>@1.json` (`domain`, `about`, and one row per
+  kind), read at import by `factkinds.register_catalogue`; the version is
+  in the file name because a registry is a lineage component. A row naming
+  a field the kind does not have is refused rather than ignored. The
+  arguments that stood as comments beside the literals (why a diagonal is
+  `never-superseded`, why `financial.accrual.grni` is procurement's)
+  travel as `note` fields and as each file's `about`. The registry's
+  content and order are identical to what the literals produced, and every
+  baseline build is byte-identical.
+
 ### Documents: the engines' catalogues as versioned data
 
 - Banking, insurance and procurement registered their artifact types as
