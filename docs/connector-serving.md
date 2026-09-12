@@ -23,8 +23,12 @@ Point an MCP client at `http://127.0.0.1:8000/mcp`. The client calls:
    projections, paging and read/write annotations.
 4. `eval_trace(run_id)` to retrieve captured `worldloom.connector-trace/v1`
    spans. Follow `next_offset` until it is null.
-5. `eval_grade(run_id)` to grade actual calls and post-state; or
-   `eval_end(run_id)` to grade and release the run.
+5. `eval_grade(run_id)` to grade actual calls and post-state, or
+   `eval_score(run_id, answer?, artifacts?, planned_dag?)` for the three-axis
+   `worldloom.eval-run` case result (plan, trajectory, outcomes) graded from
+   the state snapshot taken at `eval_begin` and the live state now. Keep each
+   document; `worldloom evalrun import-served` collects them into a run.
+6. `eval_end(run_id)` to grade and release the run.
 
 Retrieve the trace before ending. Runs live in memory and are lost when the
 process stops. A request that starts a run is not idempotent: save the returned
@@ -38,7 +42,7 @@ Use `--query-id` repeatedly to select a workload and `--tool` repeatedly to
 allow exact `connector.tool` names. Startup refuses an allowlist that removes a
 tool required by the selected queries. It also refuses an unknown definition
 or unexecutable compiled row. The default ceiling is 100 tools including the
-five evaluation tools. Select a smaller workload when its connector estate
+six evaluation tools. Select a smaller workload when its connector estate
 exceeds that ceiling.
 
 Defaults permit 32 live runs, four per principal, 512 attempted connector calls

@@ -40,14 +40,22 @@ worldloom evalrun compare ./runs/reference ./runs/mine                       # 4
      cannot see a call's result, so it suits fixed trajectories, not an agent
      that must find an id before acting on it.
    - MCP: `worldloom enterprise-evals serve` exposes the same tools over
-     StreamableHTTP for an agent that speaks MCP; `eval_grade` there returns
-     the assertion verdict. Bring its results back through a run directory
-     only if you captured them into the ledger schema.
+     StreamableHTTP for an agent that speaks MCP. Have it call `eval_score`
+     before `eval_end` and keep each document, then
+     `worldloom evalrun import-served ./cases scores.jsonl -o ./runs/served`
+     collects them into a run comparable with a local one.
 4. **Compare by case id, never by eye.** `compare` reports improvements and
    regressions under ±0.10 bands, which axis moved, and cases graded on one
    side and errored on the other as reliability changes, not score changes.
 
 `summarize ./runs/mine --json` recomputes a summary from the ledger; `import-studio ./cases eval_results.csv -o ./runs/studio` brings Eval Studio's CSV in as an answer-axis-only run.
+
+**Rating answers.** `--rater grounded` needs no model and refuses the
+shapes a lexical check cannot judge. `--rater exec:"python3 judge.py"` runs
+a judge over the same seam as `--exec`: the child gets the Eval Studio
+prompt for the case's shape and prints `{"score": 0.85}` or
+`{"text": "<model reply>"}`. A judge that fails is a rating error on that
+case, excluded from the answer mean, never a zero.
 
 ## Reading a result
 

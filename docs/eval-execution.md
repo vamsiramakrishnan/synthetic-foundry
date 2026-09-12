@@ -77,7 +77,7 @@ Three transports, each carrying only what the agent may know:
 | --- | --- | --- |
 | Executable, one subprocess per turn | `evalrun run ./cases --exec "<command>"` | The agent must act on what a tool returned. The child reads a `worldloom.evalrun-turn/v1` document (query, tools, transcript) and prints one call or the final answer. Stateless between turns. |
 | Requests and responses files | `evalrun requests ./cases -o requests.json`, then `evalrun run ./cases --agent scripted:responses.json` | A fixed trajectory: a regression set, a hand-authored baseline, a harness that cannot be called back. Replay cannot see a call's result. |
-| MCP | `enterprise-evals serve ./cases` | An agent that speaks MCP; `eval_grade` returns the assertion verdict there. |
+| MCP | `enterprise-evals serve ./cases`, then `evalrun import-served ./cases scores.jsonl` | An agent that speaks MCP, Gemini Enterprise included. It calls `eval_score` before `eval_end` and keeps each document; those are complete three-axis results graded by the serving service, and `import-served` collects them into a comparable run. |
 
 The same surface is reachable as MCP tools of `worldloom mcp`
 (`evalrun_cases`, `evalrun_run`, `evalrun_summarize`, `evalrun_compare`), as
@@ -185,8 +185,12 @@ Named and not closed here:
   for a built corpus. Planning deletes is a Generation change to
   `enterprise_queries` and is deliberately not made here.
 - **The answer axis needs a model for half its shapes.** `GroundedRater`
-  grades lookups, comparisons and abstentions; `model_rater` takes any
-  `prompt -> text` callable for the rest. This package never calls one.
+  grades lookups, comparisons and abstentions. For the rest, `--rater
+  exec:"<command>"` runs a judge over the `--exec` seam: the child receives
+  a `worldloom.evalrun-rating/v1` document (the Eval Studio prompt for the
+  case's shape, its parts) and prints a score or the model's text; a child
+  that fails is a rating error on that case, not a zero. `model_rater` is
+  the same seam for a Python callable. This package never calls a model.
 - **Scale is bounded by the corpus, not the runner.** A run over ten
   thousand cases is a loop; the records under them come from the scenario's
   operational program, and a hundred thousand queries over sixty-eight

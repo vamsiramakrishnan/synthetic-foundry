@@ -171,8 +171,63 @@ def model_rater(complete: Callable[[str], str], *, name: str = "model") -> Rater
     return _ModelRater()
 
 
+RATING_SCHEMA = "worldloom.evalrun-rating/v1"
+
+
+def exec_rater(command: str, *, timeout: float | None = None, shell: bool = False, name: str | None = None) -> Rater:
+    """The judge as an executable over the ``--exec`` seam: one subprocess per answer.
+
+    The child receives a ``worldloom.evalrun-rating/v1`` document on stdin:
+    the assembled Eval Studio prompt (rubric for the case's shape, query,
+    fetched answer, golden), plus its parts, and prints ``{"score": 0.85}``
+    or ``{"text": "<what the model said>"}`` for ``parse_score`` to salvage.
+    A child that exits non-zero, prints something else, or overruns the
+    timeout is a rating *error* on that case, excluded from every mean, with
+    its stderr tail in the message. No model SDK is imported here; the child
+    owns the vendor, the key and the retry budget.
+    """
+
+    from ..execseam import DEFAULT_TIMEOUT, ExecError, run_exec
+
+    class _ExecRater:
+        def __init__(self) -> None:
+            self.name = name or f"exec:{command.split()[0] if command.split() else command}"
+
+        def __call__(self, case: EvalCase, answer: str) -> tuple[float | None, str | None]:
+            contract = case.outcomes.answer
+            if contract is None:
+                return None, "case has no answer contract"
+            instruction = rubric_for(contract.rubric)
+            payload = {
+                "schema": RATING_SCHEMA, "case_id": case.id, "query": case.query,
+                "rubric": contract.rubric.value, "instruction": instruction,
+                "fetched": answer, "golden": contract.golden,
+                "prompt": judge_prompt(instruction, case.query, answer, contract.golden),
+                "instructions": [
+                    "Rate `fetched` against `golden` for `query` under `instruction`.",
+                    "Send `prompt` to your model verbatim, or judge it yourself.",
+                    "Reply with exactly one JSON object: {\"score\": <float 0..1>} or {\"text\": \"<the model's reply>\"}.",
+                ],
+            }
+            try:
+                reply = run_exec(command, payload, timeout=DEFAULT_TIMEOUT if timeout is None else timeout, shell=shell)
+            except ExecError as error:
+                tail = getattr(error, "stderr_tail", "")
+                return None, f"{error.code}: {error}" + (f" | {tail.strip()}" if tail else "")
+            document = reply.document
+            if isinstance(document.get("score"), (int, float)) and not isinstance(document.get("score"), bool):
+                return max(0.0, min(1.0, float(document["score"]))), None
+            if isinstance(document.get("text"), str):
+                return parse_score(document["text"])
+            return None, "exec_unparseable: the rater's reply has neither `score` nor `text`"
+
+    return _ExecRater()
+
+
 __all__ = [
     "DEFAULT_INSTRUCTION",
+    "RATING_SCHEMA",
+    "exec_rater",
     "JUDGE_ONLY",
     "JUDGE_TRAILER",
     "GroundedRater",

@@ -399,6 +399,20 @@ worldloom evalrun compare <BASELINE> <RECENT>
 | --- | --- |
 | `--json` |  |
 
+### `worldloom evalrun import-served`
+
+Bring an external agent's served runs in as a run directory.
+
+```
+worldloom evalrun import-served <CORPUS> <RESULTS>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent` | How to label the agent in the ledger. |
+| `--json` |  |
+| `--out`, `-o` | Run directory to write. |
+
 ### `worldloom evalrun import-studio`
 
 Bring an Eval Studio results CSV in as a run, so it can be compared with a local one.
@@ -443,7 +457,8 @@ worldloom evalrun run <CORPUS>
 | `--max-turns` | Turns the --exec child may take per case. |
 | `--out`, `-o` | Run directory to write (run.json, results.jsonl, summary.json). |
 | `--principal` | The principal every run is begun under. |
-| `--rater` | grounded: rate answers without a model, where the shape allows. |
+| `--rater` | grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam). |
+| `--rater-timeout` | Seconds an exec: rater child may run per answer. |
 | `--shell` | Run the --exec command through the shell (the opt-in for pipelines). |
 | `--timed` | Record wall-clock latency per case. Off by default so a run is byte-reproducible. |
 | `--timeout` | Seconds the --exec child may run per turn before it is killed. |

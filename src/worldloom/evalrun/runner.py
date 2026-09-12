@@ -91,11 +91,41 @@ def service_for(cases: Iterable[EvalCase], records: Iterable[Mapping[str, Any]],
     return ConnectorEvaluationService(rows, records, **options)
 
 
-def _safety(service: ConnectorEvaluationService) -> dict[str, OperationSafety]:
+def safety_for(definitions: Mapping[str, Any]) -> dict[str, OperationSafety]:
+    """Every tool's posture across a set of definitions, keyed ``connector.tool``."""
+
     out: dict[str, OperationSafety] = {}
-    for name in sorted(service.definitions):
-        out.update(classify_definition(service.definitions[name]))
+    for name in sorted(definitions):
+        out.update(classify_definition(definitions[name]))
     return out
+
+
+def _safety(service: ConnectorEvaluationService) -> dict[str, OperationSafety]:
+    return safety_for(service.definitions)
+
+
+def grade_run(
+    case: EvalCase,
+    spans: Any,
+    before: Mapping[str, Mapping[str, Any]],
+    after: Mapping[str, Mapping[str, Any]],
+    assertions: Mapping[str, Any],
+    response: AgentResponse,
+    *,
+    definitions: Mapping[str, Any] | None = None,
+    rater: Callable[[EvalCase, str], tuple[float | None, str | None]] | None = None,
+    safety: Mapping[str, OperationSafety] | None = None,
+) -> CaseScore:
+    """The three grades plus the assertion verdict, from what a run recorded.
+
+    Shared by the in-process runner and the served `eval_score`, so an agent
+    reached over MCP is graded by exactly the code that grades a local one.
+    """
+
+    plan = grade_plan(case, spans, response)
+    trajectory = grade_trajectory(case, spans, safety=safety)
+    outcomes = grade_outcomes(case, before, after, response, definitions=definitions, rater=rater, spans=spans)
+    return score_case(plan, trajectory, outcomes, assertions)
 
 
 def run_case(
@@ -140,10 +170,8 @@ def run_case(
                           agent=agent.name, status="error", error=failure, calls=len(materialized),
                           spans=materialized, latency=latency)
     assert response is not None
-    plan = grade_plan(case, spans, response)
-    trajectory = grade_trajectory(case, spans, safety=safety if safety is not None else _safety(service))
-    outcomes = grade_outcomes(case, before, after, response, definitions=service.definitions, rater=rater, spans=spans)
-    score = score_case(plan, trajectory, outcomes, assertions)
+    score = grade_run(case, spans, before, after, assertions, response, definitions=service.definitions,
+                      rater=rater, safety=safety if safety is not None else _safety(service))
     return CaseResult(
         case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
         agent=agent.name, status="graded", score=score, answer=response.answer, notes=response.notes,
@@ -185,4 +213,4 @@ def run_cases(
                      case_set=case_set_digest(listed), results=tuple(results))
 
 
-__all__ = ["RUN_SCHEMA", "CaseResult", "Clock", "Latency", "RunReport", "case_set_digest", "run_case", "run_cases", "service_for"]
+__all__ = ["RUN_SCHEMA", "CaseResult", "Clock", "Latency", "RunReport", "case_set_digest", "grade_run", "run_case", "run_cases", "safety_for", "service_for"]

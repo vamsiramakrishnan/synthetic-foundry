@@ -321,6 +321,42 @@ def _seconds(row: Mapping[str, str], column: str) -> float | None:
     return parsed or None
 
 
+def import_served(path: Path, cases: Iterable[EvalCase], *, agent: str = "served") -> RunReport:
+    """Case results an external agent collected from `eval_score`, as a run.
+
+    One `eval_score` document per line. Each is a complete `CaseResult`
+    graded by the service that served the run, so nothing is re-graded here:
+    the ledger records what the service observed. A result whose case id is
+    not in the case set is refused, because a ledger attributed to the wrong
+    set compares against the wrong ceiling; a case with no result is an
+    `not_attempted` error row, never a pass.
+    """
+
+    listed = list(cases)
+    known = {case.id: case for case in listed}
+    collected: dict[str, CaseResult] = {}
+    with path.open(encoding="utf-8") as handle:
+        for number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                result = CaseResult.model_validate_json(line)
+            except ValueError as error:
+                raise ValueError(f"{path}:{number}: not an eval_score result") from error
+            if result.case_id not in known:
+                raise ValueError(f"{path}:{number}: case {result.case_id!r} is not in this case set")
+            if result.case_id in collected:
+                raise ValueError(f"{path}:{number}: case {result.case_id!r} appears twice; keep one result per case")
+            collected[result.case_id] = result.model_copy(update={"agent": agent})
+    results = tuple(
+        collected.get(case.id) or CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions,
+                                             shape=case.plan.shape, agent=agent, status="error",
+                                             error="not_attempted: no eval_score result for this case")
+        for case in listed
+    )
+    return RunReport(agent=agent, principal="served", case_set=case_set_digest(listed), results=results)
+
+
 def import_studio_results(path: Path, cases: Iterable[EvalCase], *, agent: str = "eval-studio") -> RunReport:
     """Eval Studio's results CSV as a run: the answer axis only, joined on query text.
 
@@ -393,6 +429,7 @@ __all__ = [
     "RunSlice",
     "RunSummary",
     "compare",
+    "import_served",
     "import_studio_results",
     "read_run",
     "summarize",

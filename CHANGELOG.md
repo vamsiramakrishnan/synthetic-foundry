@@ -44,6 +44,12 @@ first written up, before the waves above it landed.
   SDK entry; `worldloom mcp` gains `evalrun_*` tools; `evalrun` is a declared
   seam in `worldloom seams`; the `worldloom-evalrun` skill and
   `/worldloom-evalrun` command carry the procedure.
+- Close the MCP transport: the served surface snapshots state at
+  `eval_begin` and gains `eval_score`, which returns the three-axis case
+  result for an external agent's run; `evalrun import-served` collects those
+  documents into a comparable run. Add `--rater exec:<command>`, a judge
+  over the `--exec` seam (`worldloom.evalrun-rating/v1`), so the answer axis
+  can be model-rated without this package importing a model SDK.
 
 ### Generation: reviewed company-data sizing
 

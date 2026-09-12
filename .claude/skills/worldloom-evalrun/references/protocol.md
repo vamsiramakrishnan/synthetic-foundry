@@ -94,6 +94,39 @@ argument that depends on a returned id cannot be written here. A case left
 out is an error row (`not_attempted`), never a pass. The bare
 `{case_id: {...}}` form without the envelope is also accepted.
 
+## The rating document (`worldloom.evalrun-rating/v1`)
+
+`--rater exec:"<command>"` runs the command once per answer with this on stdin:
+
+```json
+{
+  "schema": "worldloom.evalrun-rating/v1",
+  "case_id": "fd3a96d6…",
+  "query": "…",
+  "rubric": "direct_lookup",
+  "instruction": "You are grading a factual lookup against a system of record. …",
+  "fetched": "<the agent's answer>",
+  "golden": "<the golden answer>",
+  "prompt": "<instruction>\n\n    Query: …\n    Fetched Response: …\n    Golden Response: …\n\n    Provide only the score as a float between 0.0 and 1.0.",
+  "instructions": ["…"]
+}
+```
+
+The command prints `{"score": 0.85}` or `{"text": "Score: 0.85"}`; text is
+salvaged the way Eval Studio salvages it and clamped to `[0, 1]`. A non-zero
+exit, a malformed reply or a timeout is a rating error on the case: the
+answer axis is unrated there and excluded from its mean.
+
+## Served scoring (`eval_score`)
+
+An agent reaching the corpus over `worldloom enterprise-evals serve` calls
+`eval_score(run_id, answer?, artifacts?, planned_dag?)` before `eval_end`.
+The reply is a complete `CaseResult` graded by the serving service from the
+state snapshot taken at `eval_begin`, the live state, and the observed spans.
+Write one per line to a JSONL file; `worldloom evalrun import-served ./cases
+scores.jsonl -o ./runs/served` collects them, refuses a case id outside the
+set, and reports a missing case as `not_attempted`.
+
 ## The run directory
 
 `run.json` (schema `worldloom.eval-run/v1`, agent, principal, `case_set`

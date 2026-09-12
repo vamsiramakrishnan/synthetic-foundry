@@ -566,3 +566,120 @@ def test_the_mcp_tools_and_the_seam_expose_the_same_surface(grammar_corpus: Any,
     assert contract == seam_contract()
     assert contract["axes"] == ["plan", "trajectory", "outcomes"]
     assert set(contract["mcp_tools"]) == {tool["name"] for tool in mcp.TOOLS if tool["name"].startswith("evalrun_")}
+
+
+# -- served scoring and the exec rater ------------------------------------------
+
+
+def test_a_served_run_is_scored_on_three_axes_from_what_the_service_observed() -> None:
+    service = _hand_service()
+    run = service.begin("alice", "upd")
+    rid = run["run_id"]
+    service.call("alice", rid, "servicenow.get_record", {"id": "INC0000001"})
+    service.call("alice", rid, "servicenow.update_record", {"id": "INC0000001", "fields": {"state": "open"}})
+    service.call("alice", rid, "servicenow.get_record", {"id": "INC0000001"})
+    document = service.score("alice", rid, answer="Moved to open.",
+                             artifacts=[{"name": "note", "text": "moved", "cites": ["f1"]}])
+    assert document["status"] == "graded" and document["agent"] == "served:alice"
+    assert document["score"]["passed"], document["score"]
+    assert document["score"]["outcomes"]["diff"]["updated"] == ["f1"]
+    assert document["score"]["assertion_status"] == "ok"
+    # Scoring leaves the run open; ending still grades the assertions.
+    assert service.end("alice", rid)["grade"]["status"] == "ok"
+
+    blind = service.begin("bob", "del")
+    service.call("bob", blind["run_id"], "sharepoint.delete_list_item", {"id": "item-1"})
+    document = service.score("bob", blind["run_id"])
+    assert [f["law"] for f in document["score"]["trajectory"]["safety"]] == ["destructive_without_read"]
+    assert document["score"]["outcomes"]["diff"]["deleted"] == ["l1"]
+    assert not document["score"]["passed"]
+    service.end("bob", blind["run_id"])
+
+
+def test_eval_score_is_served_over_mcp_and_imports_as_a_run(tmp_path: Path) -> None:
+    pytest.importorskip("mcp.server.mcpserver")
+    from starlette.testclient import TestClient
+
+    from worldloom.connectors import create_connector_app
+
+    headers = {"Accept": "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25"}
+    tokens = {"alice": "alice-private-evaluation-secret"}
+    with TestClient(create_connector_app(_hand_service(), bearer_tokens=tokens), base_url="http://localhost") as client:
+        _served_round_trip(client, headers, tokens, tmp_path)
+
+
+def _served_round_trip(client: Any, headers: dict[str, str], tokens: dict[str, str], tmp_path: Path) -> None:
+    def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        response = client.post("/mcp", headers={**headers, "Authorization": f"Bearer {tokens['alice']}"},
+                               json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                     "params": {"name": name, "arguments": arguments}})
+        assert response.status_code == 200, response.text
+        result = response.json()["result"]
+        assert not result.get("isError"), result
+        return result.get("structuredContent") or json.loads(result["content"][0]["text"])
+
+    listed = client.post("/mcp", headers={**headers, "Authorization": f"Bearer {tokens['alice']}"},
+                         json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}).json()["result"]
+    assert "eval_score" in {tool["name"] for tool in listed["tools"]}
+    rid = call("eval_begin", {"query_id": "upd"})["run_id"]
+    call("servicenow.get_record", {"run_id": rid, "id": "INC0000001"})
+    call("servicenow.update_record", {"run_id": rid, "id": "INC0000001", "fields": {"state": "open"}})
+    call("servicenow.get_record", {"run_id": rid, "id": "INC0000001"})
+    scored = call("eval_score", {"run_id": rid, "answer": "Moved to open.",
+                                 "artifacts": [{"name": "note", "text": "moved", "cites": ["f1"]}]})
+    assert scored["score"]["passed"], scored["score"]
+    call("eval_end", {"run_id": rid})
+
+    ledger = tmp_path / "served.jsonl"
+    ledger.write_text(json.dumps(scored) + "\n", encoding="utf-8")
+    from worldloom.evalrun import import_served
+
+    report = import_served(ledger, _hand_cases())
+    assert [r.status for r in report.results] == ["graded", "error"]
+    assert report.results[0].agent == "served" and report.results[0].score is not None and report.results[0].score.passed
+    assert "not_attempted" in (report.results[1].error or "")
+    ledger.write_text(json.dumps({**scored, "case_id": "nope"}) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="not in this case set"):
+        import_served(ledger, _hand_cases())
+
+
+def test_the_exec_rater_judges_over_the_seam_and_reports_outages_as_errors(tmp_path: Path) -> None:
+    from worldloom.evalrun import exec_rater
+
+    lookup = case_from_row(_update_row(), answer=AnswerOutcome(golden="Revenue was 4,200 in FY25."))
+    judge = tmp_path / "judge.py"
+    judge.write_text(
+        "import json, sys\n"
+        "doc = json.load(sys.stdin)\n"
+        "assert doc['schema'] == 'worldloom.evalrun-rating/v1' and 'Golden Response:' in doc['prompt']\n"
+        "print(json.dumps({'text': 'Score: 0.85 (between 0.0 and 1.0)'}))\n",
+        encoding="utf-8",
+    )
+    assert exec_rater(_exec_cmd(judge), timeout=60)(lookup, "4,200 in FY25") == (0.85, None)
+    numeric = tmp_path / "numeric.py"
+    numeric.write_text("import json; print(json.dumps({'score': 7}))", encoding="utf-8")
+    assert exec_rater(_exec_cmd(numeric), timeout=60)(lookup, "x") == (1.0, None)
+    broken = tmp_path / "broken.py"
+    broken.write_text("import sys; sys.stderr.write('quota\\n'); sys.exit(2)", encoding="utf-8")
+    score, error = exec_rater(_exec_cmd(broken), timeout=60)(lookup, "x")
+    assert score is None and error is not None and "exec_failed" in error and "quota" in error
+    silent = tmp_path / "silent.py"
+    silent.write_text("print('{}')", encoding="utf-8")
+    assert exec_rater(_exec_cmd(silent), timeout=60)(lookup, "x")[1] is not None
+
+
+def test_the_cli_takes_an_exec_rater_and_imports_served_results(grammar_corpus: Any, tmp_path: Path) -> None:
+    export_corpus(grammar_corpus, tmp_path / "corpus")
+    judge = tmp_path / "judge.py"
+    judge.write_text("import json; print(json.dumps({'score': 1.0}))", encoding="utf-8")
+    result = runner.invoke(app, ["evalrun", "run", str(tmp_path / "corpus"), "-o", str(tmp_path / "ref"), "--limit", "2",
+                                 "--rater", f"exec:{_exec_cmd(judge)}"])
+    assert result.exit_code == 0, result.output
+    assert "2/2 passed" in result.output
+    result = runner.invoke(app, ["evalrun", "run", str(tmp_path / "corpus"), "-o", str(tmp_path / "x"), "--rater", "magic"])
+    assert result.exit_code != 0 and "exec:<command>" in result.output
+    served = tmp_path / "served.jsonl"
+    served.write_text("", encoding="utf-8")
+    result = runner.invoke(app, ["evalrun", "import-served", str(tmp_path / "corpus"), str(served), "-o", str(tmp_path / "served")])
+    assert result.exit_code == 0, result.output
+    assert "0/0 passed" in result.output and f"{len(grammar_corpus.queries)} error(s) excluded" in result.output

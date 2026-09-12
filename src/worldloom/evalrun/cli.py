@@ -143,7 +143,8 @@ def run_command(
     max_turns: int = typer.Option(64, "--max-turns", min=1, help="Turns the --exec child may take per case."),
     limit: int | None = typer.Option(None, "--limit", min=1),
     principal: str = typer.Option("agent", "--principal", help="The principal every run is begun under."),
-    rater: str | None = typer.Option(None, "--rater", help="grounded: rate answers without a model, where the shape allows."),
+    rater: str | None = typer.Option(None, "--rater", help="grounded (no model, where the shape allows) or exec:<command> (a judge over the --exec seam)."),
+    rater_timeout: float = typer.Option(600.0, "--rater-timeout", help="Seconds an exec: rater child may run per answer."),
     timed: bool = typer.Option(False, "--timed", help="Record wall-clock latency per case. Off by default so a run is byte-reproducible."),
     json_output: bool = typer.Option(False, "--json", help="Emit the summary as JSON."),
 ) -> None:
@@ -172,11 +173,15 @@ def run_command(
         under_test: Any = ExecAgent(exec_command, timeout=timeout, shell=shell, max_turns=max_turns)
     else:
         under_test = _agent(agent, cases)
-    grader = None
-    if rater is not None:
-        if rater != "grounded":
-            _refuse("unknown_rater", f"{rater!r}; the built-in rater is 'grounded'")
+    grader: Any = None
+    if rater == "grounded":
         grader = GroundedRater()
+    elif rater is not None and rater.startswith("exec:"):
+        from .rater import exec_rater
+
+        grader = exec_rater(rater.removeprefix("exec:"), timeout=rater_timeout, shell=shell)
+    elif rater is not None:
+        _refuse("unknown_rater", f"{rater!r}; use grounded or exec:<command>")
     clock = None
     if timed:
         import time
@@ -263,6 +268,34 @@ def compare_command(
     for item in result.deltas:
         if item.verdict == "regression":
             typer.echo(f"  regression {item.case_id}: {item.baseline} -> {item.recent} {item.axes}")
+
+
+@app.command("import-served")
+def import_served_command(
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`."),
+    results: Path = typer.Argument(..., help="JSONL of `eval_score` documents, one per line, collected from the served MCP surface."),
+    out: Path = typer.Option(..., "--out", "-o", help="Run directory to write."),
+    agent: str = typer.Option("served", "--agent", help="How to label the agent in the ledger."),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Bring an external agent's served runs in as a run directory.
+
+    An agent that reached the corpus over `worldloom enterprise-evals serve`
+    calls `eval_score` before `eval_end` and keeps each document. Those
+    documents are complete three-axis case results graded by the serving
+    service; this command only collects them into a comparable ledger.
+    A case with no document is reported as not attempted, never as passed.
+    """
+    from ..cli import _refuse
+    from .results import import_served, write_run
+
+    _, cases = _corpus_cases(corpus, None)
+    try:
+        report = import_served(results, cases, agent=agent)
+    except (OSError, ValueError) as error:
+        _refuse("results_unjoinable", f"{results}: {error}")
+    summary = write_run(out, report)
+    _print_summary(summary, json_output)
 
 
 @app.command("import-studio")

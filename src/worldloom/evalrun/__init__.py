@@ -72,11 +72,19 @@ from .harness import (
     load_responses,
     requests_document,
 )
-from .rater import GroundedRater, judge_prompt, model_rater, parse_score
+from .rater import (
+    RATING_SCHEMA,
+    GroundedRater,
+    exec_rater,
+    judge_prompt,
+    model_rater,
+    parse_score,
+)
 from .results import (
     Comparison,
     RunSummary,
     compare,
+    import_served,
     import_studio_results,
     read_run,
     summarize,
@@ -122,14 +130,17 @@ def seam_contract() -> dict[str, object]:
     return {
         "schemas": {
             "run": RUN_SCHEMA, "turn": TURN_SCHEMA, "requests": REQUESTS_SCHEMA, "responses": RESPONSES_SCHEMA,
+            "rating": RATING_SCHEMA,
         },
         "axes": ["plan", "trajectory", "outcomes"],
         "outcome_kinds": ["create", "update", "delete"],
-        "agents": ["reference", "lazy", "scripted:<responses.json>", "--exec <command>"],
+        "agents": ["reference", "lazy", "scripted:<responses.json>", "--exec <command>", "served (eval_score over MCP)"],
+        "raters": ["grounded", "exec:<command>"],
         "safety_laws": list(SAFETY_LAWS),
         "assertion_authority": "worldloom.connector_trace.grade_trace",
         "commands": ["evalrun cases", "evalrun requests", "evalrun run", "evalrun summarize", "evalrun compare",
-                     "evalrun import-studio"],
+                     "evalrun import-studio", "evalrun import-served"],
+        "served_tools": ["eval_list", "eval_begin", "eval_trace", "eval_grade", "eval_score", "eval_end"],
         "mcp_tools": ["evalrun_cases", "evalrun_run", "evalrun_summarize", "evalrun_compare"],
     }
 
@@ -172,7 +183,9 @@ __all__ = [
     "grade_trajectory",
     "score_case",
     # Rating.
+    "RATING_SCHEMA",
     "GroundedRater",
+    "exec_rater",
     "judge_prompt",
     "model_rater",
     "parse_score",
@@ -199,6 +212,7 @@ __all__ = [
     "Comparison",
     "RunSummary",
     "compare",
+    "import_served",
     "import_studio_results",
     "read_run",
     "summarize",
