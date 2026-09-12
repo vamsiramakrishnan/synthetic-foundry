@@ -29,7 +29,11 @@ and two — ``jira_issues`` and ``servicenow_incident`` — because their render
 own the structure and the generic outline would fight them.
 
 That is the honest split, and this module draws its boundary on it: **an
-authored type may say everything except how to compute a table**. A type that
+authored type may say everything except how to compute a table**. The three
+verticals beyond retail now declare their own catalogues on exactly that
+line: ``_data/artifact-types/<engine>@1.json`` carries every type's standing,
+lag, outline and format flags, ``register_engine`` reads it at import, and
+the compilers are passed in beside it. A type that
 needs a compiler needs Python, and the lint says so by name rather than letting
 somebody author a ``reserve_triangle_workbook`` that comes out as an empty
 outline.
@@ -212,6 +216,12 @@ class SectionSpec(DocModel):
     would not find the absence strange, because the section that carried a
     required fact going missing is a narration rejection, not variety."""
 
+    note: str = ""
+    """Why the section is shaped as it is — most often why it is optional.
+    Documentation carried beside the data rather than lost when a catalogue
+    moved out of Python, where the same sentence was a comment; read by
+    nobody at build time, left off the wire when empty."""
+
     repeat: Literal["", "unit"] = ""
     """``"unit"`` makes this one step a section per business unit with facts
     for it, each handed only that unit's facts and each with
@@ -234,10 +244,11 @@ class SectionSpec(DocModel):
     @model_serializer(mode="wrap")
     def _repeat_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         # A section is embedded in every pack-built corpus's recipe; an unset
-        # repeat stays off it so those recipes keep their exact bytes.
+        # repeat or note stays off it so those recipes keep their exact bytes.
         data: dict[str, Any] = handler(self)
-        if not self.repeat:
-            data.pop("repeat", None)
+        for key in ("repeat", "note"):
+            if not getattr(self, key):
+                data.pop(key, None)
         return data
 
 
@@ -326,15 +337,21 @@ class DocumentType(DocModel):
     wire when off, so every type authored before decks were declarable dumps
     byte for byte as it did."""
     filing: FilingSpec | None = None
+    note: str = ""
+    """Why the type stands where it does — the argument for its authority or
+    its lag, carried as data for the same reason ``SectionSpec.note`` is."""
 
     @model_serializer(mode="wrap")
     def _deck_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        # `word` has always been on the wire; `deck` arrived later and is
-        # embedded in every pack-built corpus's recipe, so an unset flag stays
-        # off it — the rule every additive field in this package follows.
+        # `word` has always been on the wire; `deck` and `note` arrived later
+        # and are embedded in every pack-built corpus's recipe, so an unset
+        # one stays off it — the rule every additive field in this package
+        # follows.
         data: dict[str, Any] = handler(self)
         if not self.deck:
             data.pop("deck", None)
+        if not self.note:
+            data.pop("note", None)
         return data
 
     def title(self) -> str:
@@ -519,6 +536,61 @@ def _filing_spec(plan: FilingPlan | None) -> FilingSpec | None:
         rationale=plan.rationale,
         budget=plan.budget,
     )
+
+
+#: Where an engine's own catalogue lives, as versioned data. ``<engine>@1``:
+#: the version is in the file name because a catalogue is a lineage
+#: component — a corpus built under one set of outlines replays under that
+#: set — and the rule for every versioned file under ``_data/`` is a new
+#: version, never an edit in place.
+ENGINE_CATALOGUES = "_data/artifact-types"
+
+
+def engine_catalogue(name: str) -> tuple[DocumentType, ...]:
+    """The types an engine ships, read from ``_data/artifact-types/<name>.json``.
+
+    The same schema an authored pack type uses, which is the point of the
+    port: the thirty types the engines declare were always expressible as
+    data (this module's docstring measures it), and keeping three of the
+    four verticals' catalogues as Python literals meant a pack author copying
+    from them read a different shape from the one they were writing.
+    """
+    from importlib.resources import files
+
+    resource = files("worldloom").joinpath(ENGINE_CATALOGUES, f"{name}.json")
+    return load(json.loads(resource.read_text(encoding="utf-8")))
+
+
+def register_engine(name: str, *, compilers: dict[str, Any] | None = None) -> None:
+    """Register an engine's catalogue at package import, from its data file.
+
+    Registration, not installation: these types are the process's, declared
+    once when the vertical is imported (`register_artifact_types`' contract),
+    never scoped per corpus and never recorded in ``_INSTALLED``. The
+    compilers stay Python and are passed in beside the data, because a
+    compiler is the one thing the schema cannot carry.
+
+    A compiled type keeps its standing and lag in the file and its sections
+    empty, exactly as `describe` reports it; the outline table is written only
+    for types that declare sections, the rule `install` follows for the same
+    reason (a missing key falls through to the default outline, an empty
+    tuple does not).
+    """
+    types = engine_catalogue(name)
+    documents.register_artifact_types(
+        standing={s.key: (s.authority, s.lifecycle) for s in types},
+        lags={s.key: s.lag.as_timedelta() for s in types},
+        outlines={
+            s.key: tuple(section.as_plan() for section in s.sections)
+            for s in types if s.sections
+        },
+        compilers=compilers,
+    )
+    from .render import docx as docx_render
+    from .render import pptx as pptx_render
+
+    docx_render.register(*[s.key for s in types if s.word])
+    pptx_render.register(*[s.key for s in types if s.deck])
 
 
 #: Every authored type this process has installed, by key. Read only to make a
@@ -1216,8 +1288,9 @@ def to_document(types: Iterable[DocumentType]) -> dict[str, Any]:
 
 
 __all__ = [
-    "ACCESS_CLASSES", "ColumnSpec", "DerivationSpec", "DocumentType", "DocumentTypes",
-    "FILING_LAG_CEILING", "FilingSpec", "Lag", "RESERVED_HEADINGS", "SectionSpec",
-    "SheetSpec", "audit", "describe", "install", "install_sheets", "installed",
-    "lint", "lint_sheets", "load", "to_document",
+    "ACCESS_CLASSES", "ENGINE_CATALOGUES", "ColumnSpec", "DerivationSpec", "DocumentType",
+    "DocumentTypes", "FILING_LAG_CEILING", "FilingSpec", "Lag", "RESERVED_HEADINGS",
+    "SectionSpec", "SheetSpec", "audit", "describe", "engine_catalogue", "install",
+    "install_sheets", "installed", "lint", "lint_sheets", "load", "register_engine",
+    "to_document",
 ]

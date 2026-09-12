@@ -11,6 +11,20 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Documents: the engines' catalogues as versioned data
+
+- Banking, insurance and procurement registered their artifact types as
+  Python literals (`register_artifact_types` with standing, lag and outline
+  tables) while retail's thirty had long been proven expressible as
+  `doctypes` JSON. Each catalogue now lives in
+  `_data/artifact-types/<engine>@1.json`, read at import by
+  `doctypes.register_engine` with the compilers passed in beside it; the
+  version is in the file name because a catalogue is a lineage component.
+  The argument that stood as comments beside each literal (why a section is
+  optional, why a type stands where it does) travels as `note` fields on
+  `SectionSpec` and `DocumentType`, left off the wire when empty. Narrated
+  banking, insurance and procurement builds are byte-identical.
+
 ### Documents: chapter furniture past eight sections
 
 - A document with more than eight visible sections (`render.chaptered`,

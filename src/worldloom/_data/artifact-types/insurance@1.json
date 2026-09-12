@@ -1,0 +1,189 @@
+{
+  "artifact_types": [
+    {
+      "key": "reserve_triangle_workbook",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 1,
+        "minutes": 0
+      },
+      "sections": [],
+      "word": false,
+      "filing": null
+    },
+    {
+      "key": "claims_emergence_note",
+      "authority": "working_document",
+      "lifecycle": "draft",
+      "lag": {
+        "days": 0,
+        "hours": 4,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "Actual versus expected",
+          "kinds": [
+            "claims.actual_vs_expected",
+            "claims.incurred_to_date"
+          ],
+          "scope": "any",
+          "purpose": "State the deviation by cohort: what incurred was expected to be under the prior pattern, and what it actually was. Working-paper register — this is the low-authority document that happens to be right.",
+          "required": true
+        }
+      ],
+      "word": true,
+      "filing": null
+    },
+    {
+      "key": "actuarial_valuation_report",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 0,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "Central estimate",
+          "kinds": [
+            "reserves.central_estimate_total",
+            "reserves.ultimate",
+            "reserves.ibnr"
+          ],
+          "scope": "any",
+          "purpose": "State the strengthened central estimate by cohort and in total, plainly. This is the actuary's own report; it does not soften the figure for the committee that will decide how much of it to book.",
+          "required": true
+        },
+        {
+          "heading": "Attribution",
+          "kinds": [
+            "reserves.attribution_pattern_change",
+            "reserves.attribution_deterioration"
+          ],
+          "scope": "any",
+          "purpose": "The split between pattern change and genuine deterioration, and that the two do not resolve into one figure — both are on the record.",
+          "required": true
+        },
+        {
+          "heading": "Recommendation and the booked position",
+          "kinds": [
+            "reserves.committee_recommendation",
+            "reserves.booked_total"
+          ],
+          "scope": "any",
+          "purpose": "State the committee's recommendation, then — quoting the figure exactly as finance's own decision memo states it — what was actually booked. The gap between the two is not this report's decision to explain; it is the memo's.",
+          "required": true
+        },
+        {
+          "heading": "Basis of valuation",
+          "kinds": [
+            "reserves.philosophy",
+            "reserves.risk_margin_policy_pct"
+          ],
+          "scope": "any",
+          "purpose": "One paragraph: the standing margin policy this valuation was performed under.",
+          "required": false,
+          "note": "The standing policy, restated. It is the same paragraph in every valuation this actuary signs, and its absence reads as a report that assumed its reader knows the house philosophy, not as a report missing a figure. The central estimate, the attribution and the booked position stay required; they are what the committee is measured against."
+        }
+      ],
+      "word": true,
+      "filing": null
+    },
+    {
+      "key": "margin_decision_memo",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 6,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "The decision",
+          "kinds": [
+            "reserves.booked_strengthening",
+            "reserves.margin_released"
+          ],
+          "scope": "any",
+          "purpose": "State what was booked and what margin was released to cover the difference, under the standing combined-ratio target.",
+          "required": true
+        },
+        {
+          "heading": "The central estimate",
+          "kinds": [
+            "reserves.central_estimate_total",
+            "reserves.committee_recommendation"
+          ],
+          "scope": "any",
+          "purpose": "Quote the actuarial central estimate exactly as the valuation report states it — this memo's decision is measured against that figure, not against a paraphrase of it.",
+          "required": true
+        },
+        {
+          "heading": "The standing gap",
+          "kinds": [
+            "reserves.held_vs_central_gap"
+          ],
+          "scope": "any",
+          "purpose": "State that the booked reserve now sits below the central estimate, by how much, and that the policy basis for the release is the standing margin philosophy, not an exception to it.",
+          "required": true
+        }
+      ],
+      "word": true,
+      "filing": null
+    },
+    {
+      "key": "underwriting_performance_pack",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 2,
+        "minutes": 0
+      },
+      "sections": [],
+      "word": false,
+      "filing": null,
+      "note": "The pack is the ledger's own statement of the quarter's book, so it is SYSTEM_OF_RECORD beside the triangle."
+    },
+    {
+      "key": "underwriting_result_commentary",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 1,
+        "hours": 2,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "The quarter against plan",
+          "kinds": [
+            "financial.revenue."
+          ],
+          "scope": "unit",
+          "purpose": "State this division's written premium against its own plan and say plainly whether the quarter was acceptable. Lead with the position, not with the first figure in the list — the reader runs the division and already knows its shape.",
+          "required": true
+        },
+        {
+          "heading": "The book and the claims behind it",
+          "kinds": [
+            "portfolio.policies_in_force",
+            "claims_ops."
+          ],
+          "scope": "unit",
+          "purpose": "Connect the policy book to the claims coming off it: whether the division is writing more business, and whether its claims function is closing what it opens. Not every division has a claims operation of its own; do not invent one for a division whose figures are absent.",
+          "required": false,
+          "note": "An investment function has no policy book and notifies no claims, and a division that genuinely has neither should not carry an empty heading. `outline` drops a section with no facts assigned; marking it optional is what says that is intended rather than a section somebody lost."
+        }
+      ],
+      "word": true,
+      "filing": null,
+      "note": "An approved report about the pack, one authority below it: when a managing director's page and the pack disagree, the pack wins. Dated after the pack it argues from, and by more than the pack's own lag, so a commentary can never be dated before the grid it reads."
+    }
+  ]
+}

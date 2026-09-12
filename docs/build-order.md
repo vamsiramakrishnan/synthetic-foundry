@@ -683,6 +683,16 @@ The measured retail coupling, for whichever is chosen:
       DSL stays unjustified until the committed follow-on (a second episode
       interleaved on the retail engine, same decision record) produces the
       second data point.
+   6. *Artifact catalogues as data*: **done.** Banking, insurance and
+      procurement registered their document types as Python literals two
+      years after retail's thirty were proven expressible as `doctypes`
+      JSON. Each vertical's catalogue is now
+      `_data/artifact-types/<engine>@1.json` (standing, lag, outline, the
+      Word and deck flags, and the argument for each carried as a `note`),
+      read at import by `doctypes.register_engine` with the compilers passed
+      in beside it; the three narrated builds are byte-identical. What stays
+      code: the compilers, and each engine's `approved_by` table, which is an
+      argument about who signs, not about the document.
 
 An industry pack, once extracted, has to carry eight things and only about three are nouns: archetype, dimensions, fact kinds and their units, lore, artifact types and grammars, scenario verbs and cadence, roles and personas, evaluation families. A pack that renames nouns and stops produces retail with different words.
 

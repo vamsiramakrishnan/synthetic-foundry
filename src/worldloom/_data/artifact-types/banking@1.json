@@ -1,0 +1,258 @@
+{
+  "artifact_types": [
+    {
+      "key": "capital_return",
+      "authority": "system_of_record",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 0,
+        "minutes": 30
+      },
+      "sections": [],
+      "word": false,
+      "filing": null,
+      "note": "Both lodgements of a return sit at SYSTEM_OF_RECORD: the rank tie is the design, so no resolver can shortcut past `restates` and validity."
+    },
+    {
+      "key": "rwa_working_paper",
+      "authority": "working_document",
+      "lifecycle": "draft",
+      "lag": {
+        "days": 0,
+        "hours": 1,
+        "minutes": 30
+      },
+      "sections": [
+        {
+          "heading": "Methodology and treatment",
+          "kinds": [
+            "capital.collateral_treatment"
+          ],
+          "scope": "any",
+          "purpose": "State the treatment applied to each material book, and the basis for it. Written with a working paper's confidence — this is the document whose treatment the second line will dispute, and it does not know that yet.",
+          "required": true
+        },
+        {
+          "heading": "Capital position",
+          "kinds": [
+            "capital.cet1_ratio",
+            "capital.rwa_total"
+          ],
+          "scope": "any",
+          "purpose": "The computed position as the paper states it. Figures only as references; the paper argues method, not outcome.",
+          "required": true
+        },
+        {
+          "heading": "Correction",
+          "kinds": [
+            "ops.cause",
+            "capital.rwa_understatement",
+            "capital.error_materiality"
+          ],
+          "scope": "any",
+          "purpose": "Version two only: what the confirmed cause changed about the treatment and the position. State it as a correction of this paper's own earlier method, plainly.",
+          "required": true
+        },
+        {
+          "heading": "Basis of preparation",
+          "kinds": [
+            "close."
+          ],
+          "scope": "any",
+          "purpose": "One line: prepared from the locked ledger for the quarter.",
+          "required": false,
+          "note": "Standing boilerplate a reader skips: it restates the basis every working paper in the bank is prepared on. The paper argues method and position, so nothing about its purpose rests on the close facts this section is scoped to; the correction and the position, which do, stay required."
+        }
+      ],
+      "word": true,
+      "filing": null
+    },
+    {
+      "key": "second_line_challenge_memo",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 3,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "Finding",
+          "kinds": [
+            "review.challenge"
+          ],
+          "scope": "any",
+          "purpose": "The challenge, on the record: what was sampled, what could not be confirmed, and what the reviewer requires before sign-off. Formal, insistent, precise — this memo exists to be citable later.",
+          "required": true
+        },
+        {
+          "heading": "Treatment under challenge",
+          "kinds": [
+            "capital.collateral_treatment"
+          ],
+          "scope": "any",
+          "purpose": "State the preparer's treatment and the reviewer's position beside each other, without resolving them — the disagreement is the content.",
+          "required": true
+        },
+        {
+          "heading": "Status",
+          "kinds": [
+            "review.challenge_status"
+          ],
+          "scope": "any",
+          "purpose": "The challenge's standing under the filing norm: logged, open, not blocking. State the norm as the memo's author sees it — a precondition the deadline does not waive.",
+          "required": true
+        },
+        {
+          "heading": "Position as drafted",
+          "kinds": [
+            "capital.cet1_ratio",
+            "capital.rwa_total"
+          ],
+          "scope": "any",
+          "purpose": "The figures the draft return would file if lodged unaltered.",
+          "required": false,
+          "note": "Context rather than content. The memo exists to put a challenge on the record (Finding, Treatment and Status carry that and stay required), and the drafted position is the working paper's own statement, quoted here for convenience. A challenge memo that cites the paper instead of restating it is the ordinary second-line memo."
+        }
+      ],
+      "word": true,
+      "filing": null
+    },
+    {
+      "key": "internal_audit_review",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 0,
+        "hours": 4,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "Ruling",
+          "kinds": [
+            "review.challenge_status",
+            "review.challenge"
+          ],
+          "scope": "any",
+          "purpose": "The finding first: the second-line challenge is upheld. Audit writes rulings, not observations.",
+          "required": true
+        },
+        {
+          "heading": "The challenge and the filing decision",
+          "kinds": [
+            "capital.return_approval",
+            "capital.return_filed_at"
+          ],
+          "scope": "any",
+          "purpose": "Establish the sequence on the record: the challenge predated the approval, and the return was lodged with the challenge open. State it neutrally; the sequence itself is the finding.",
+          "required": true
+        },
+        {
+          "heading": "Root cause and classification",
+          "kinds": [
+            "ops.cause",
+            "ops.root_cause_classification",
+            "ops.collateral_mapping_owner"
+          ],
+          "scope": "any",
+          "purpose": "The confirmed cause and the control failure beneath it. An unregistered owner is itself a finding and is stated as one.",
+          "required": true
+        },
+        {
+          "heading": "Treatment",
+          "kinds": [
+            "capital.collateral_treatment"
+          ],
+          "scope": "any",
+          "purpose": "What the collateral actually was, against what the working paper assumed.",
+          "required": false,
+          "note": "Evidence for the ruling rather than the ruling. Audit's finding is the sequence and the cause, both required; a review that establishes those and leaves the treatment comparison to the papers it cites is a shorter review, not an incomplete one."
+        },
+        {
+          "heading": "Remediation",
+          "kinds": [
+            "ops.remediation"
+          ],
+          "scope": "any",
+          "purpose": "Which action fixes the control and which only improves detection. A reader must not be able to mistake one for the other.",
+          "required": true
+        },
+        {
+          "heading": "Restatement",
+          "kinds": [
+            "capital.restatement_reason"
+          ],
+          "scope": "any",
+          "purpose": "The correction as lodged, in one paragraph, for the committee's record.",
+          "required": false,
+          "note": "What finance then did, not what audit found: the Ruling is the review's result and it is first and required. Audit reviews routinely stop at the remediation and leave the lodgement to the return. Safe under rule 3 as well: the restatement reason is stated in prose by `board_risk_committee_summary` too, so dropping it here cannot take the corpus's only account of the correction."
+        }
+      ],
+      "word": true,
+      "filing": null
+    },
+    {
+      "key": "board_risk_committee_summary",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 4,
+        "hours": 0,
+        "minutes": 0
+      },
+      "sections": [
+        {
+          "heading": "Position",
+          "kinds": [
+            "capital.cet1_ratio",
+            "capital.cet1_delta",
+            "capital.minimum_cet1_requirement"
+          ],
+          "scope": "group",
+          "purpose": "Three sentences: the restated ratio, the movement, and that the bank remains above the minimum. Confident register; the committee wants the outcome.",
+          "required": true
+        },
+        {
+          "heading": "Restatement",
+          "kinds": [
+            "capital.return_status",
+            "capital.restatement_reason",
+            "capital.error_materiality"
+          ],
+          "scope": "group",
+          "purpose": "What was restated and why, briefly. Write only what the facts given support — this paper deliberately does not raise the control-failure classification or the review history.",
+          "required": true
+        },
+        {
+          "heading": "Regulator engagement",
+          "kinds": [
+            "regulatory.notification"
+          ],
+          "scope": "group",
+          "purpose": "That the regulator was notified within the window. Nothing about any response — none is recorded.",
+          "required": true
+        }
+      ],
+      "word": true,
+      "filing": null,
+      "note": "After the audit review it summarises (and derives from): the summary is written for the committee meeting, not the lodgement day."
+    },
+    {
+      "key": "divisional_performance_pack",
+      "authority": "approved_report",
+      "lifecycle": "published",
+      "lag": {
+        "days": 2,
+        "hours": 0,
+        "minutes": 0
+      },
+      "sections": [],
+      "word": false,
+      "filing": null,
+      "note": "An approved management report, not a filing: it is read inside the bank, it may be revised, and nothing in `FILING_TYPES` covers it. Two days after the ledger locks: a divisional pack is assembled from the close, not on the day of it, and it is out well before the return it sits beside is lodged."
+    }
+  ]
+}

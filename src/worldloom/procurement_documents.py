@@ -54,10 +54,7 @@ happened inside:
 
 from __future__ import annotations
 
-from datetime import timedelta
-
-from . import documents
-from .documents import SectionPlan
+from . import doctypes, documents
 from .generators.procurement_cycle import ProcurementEpisode
 from .generators.procurement_estate import (
     COMMITMENT,
@@ -72,13 +69,11 @@ from .models import (
     ArtifactIntent,
     ArtifactIR,
     ArtifactSection,
-    Authority,
     Cell,
     Column,
     ErrorType,
     FormulaKind,
     IntentionalError,
-    Lifecycle,
     Row,
     Table,
 )
@@ -924,7 +919,6 @@ def spend_and_commitment_ir(world, intent: ArtifactIntent, minter: Minter) -> Ar
 # Registration
 # ---------------------------------------------------------------------------
 
-from .render import docx as _docx
 from .render import markdown as _markdown
 from .render import xlsx as _xlsx
 
@@ -932,124 +926,12 @@ _xlsx.register("purchase_order", "goods_receipt_note", "supplier_invoice",
                "spend_and_commitment_workbook")
 _markdown.own_elsewhere("purchase_order", "goods_receipt_note", "supplier_invoice",
                         "spend_and_commitment_workbook")
-_docx.register(
-    "match_exception_report",
-    "payment_approval_memo",
-    "vendor_master_change",
-)
-
-documents.register_artifact_types(
-    standing={
-        # The three source documents, and the three different claims their
-        # authorities make. The order is an APPROVED_REPORT because it is an
-        # agreement somebody signed, not a measurement of anything; the receipt
-        # and the invoice are each SYSTEM_OF_RECORD *for their own system* —
-        # what arrived, and what was billed — which is exactly why rank cannot
-        # arbitrate between them.
-        "purchase_order": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
-        "goods_receipt_note": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
-        "supplier_invoice": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
-        "match_exception_report": (Authority.APPROVED_REPORT, Lifecycle.REVIEWED),
-        "payment_approval_memo": (Authority.APPROVED_REPORT, Lifecycle.PUBLISHED),
-        # The one document below approved standing, matching the one fact below
-        # it: a change nobody has countersigned is a draft, whatever the vendor
-        # master screen shows.
-        "vendor_master_change": (Authority.WORKING_DOCUMENT, Lifecycle.DRAFT),
-        # A workbook off the order book, the receipting system and the ledger,
-        # published at close — the same standing the retail month-end model has,
-        # and for the same reason: it restates no third party's claim, it
-        # reports what three systems of record hold.
-        "spend_and_commitment_workbook": (Authority.SYSTEM_OF_RECORD, Lifecycle.PUBLISHED),
-    },
-    lags={
-        "purchase_order": timedelta(hours=1),
-        "goods_receipt_note": timedelta(hours=1),
-        "supplier_invoice": timedelta(hours=2),
-        "match_exception_report": timedelta(hours=4),
-        "payment_approval_memo": timedelta(days=1),
-        "vendor_master_change": timedelta(hours=3),
-        # Longer than any of the six above: the position is assembled after the
-        # ledger locks, not while the cycle is running.
-        "spend_and_commitment_workbook": timedelta(days=1, hours=6),
-    },
-    outlines={
-        "match_exception_report": (
-            SectionPlan(
-                "The exception", ("p2p.match_total_variance", "p2p.approval_tolerance"), "group",
-                "State the total variance and the tolerance it broke, in that order. This "
-                "is the paragraph that decides whether anyone senior reads the rest; it "
-                "must say plainly that the buyer can no longer clear this.",
-            ),
-            SectionPlan(
-                "Where the variance sits",
-                ("p2p.match_quantity_variance", "p2p.match_price_variance"), "any",
-                "Split the variance two ways — billed for what did not arrive, and billed "
-                "at a rate that was not agreed — and say which line each sits on. Do not "
-                "give the clean line a paragraph; a line that matched warrants a clause.",
-            ),
-            SectionPlan(
-                "Status and what is needed", ("p2p.exception_status",), "group",
-                "Where the exception stands and what has to happen for it to move. Written "
-                "while it is still open, so it asks for a decision rather than reporting "
-                "one.",
-            ),
-        ),
-        "payment_approval_memo": (
-            SectionPlan(
-                "The settlement",
-                ("p2p.approved_payment_value", "p2p.credit_note_value", "p2p.invoiced_value"),
-                "group",
-                "What was billed, what the supplier conceded, and what is actually being "
-                "paid. Lead with the figure being approved, not with the one on the "
-                "invoice.",
-            ),
-            SectionPlan(
-                "Authority for the decision",
-                ("p2p.exception_approved_by", "p2p.approval_tolerance",
-                 "p2p.match_total_variance"), "any",
-                "Who approved this and under what delegation. State that the variance "
-                "exceeded the tolerance and that this is therefore Finance's decision — "
-                "the memo is the record that the approval chain was followed, and a memo "
-                "that leaves the approver implicit is not that record.",
-            ),
-            SectionPlan(
-                "What the close carries",
-                ("financial.accrual.grni", "p2p.received_value", "close."), "group",
-                "The accrual posted at close, and — plainly, rather than left to a "
-                "reader's inference — that it is built from what was received at the "
-                "contracted rate, not from what was invoiced. This is the sentence that "
-                "connects a site receipting note to the general ledger.",
-            ),
-            SectionPlan(
-                "Still outstanding",
-                ("p2p.open_shortfall_quantity", "p2p.open_shortfall_value"), "group",
-                "The undelivered balance carried into next month, and that it is a "
-                "commitment rather than an accrual — nothing has been received, so nothing "
-                "is owed for it yet. One short paragraph.",
-                # A "still outstanding" where nothing is. A settlement that
-                # closed the order out has no balance to carry, and the memo
-                # ends on the approval — which is where a memo about an
-                # approval should end. The three sections that make it the
-                # record of a decision (settlement, authority, what the close
-                # carries) stay required.
-                required=False,
-            ),
-        ),
-        "vendor_master_change": (
-            SectionPlan(
-                "The requested change", ("p2p.vendor_change_status",), "group",
-                "What the supplier asked for and why it is being held. State the second "
-                "approver is outstanding without naming a date it will be resolved by — "
-                "there is not one.",
-            ),
-            SectionPlan(
-                "Counterparty", ("p2p.contract_counterparty",), "any",
-                "Which agreement this supplier is engaged under. One or two sentences; "
-                "this section exists so the change can be tied to a contract, not to "
-                "restate the contract.",
-            ),
-        ),
-    },
+doctypes.register_engine(
+    # The catalogue as versioned data — standing, lag, outline and the Word
+    # flag for every type, with the argument for each carried as a note. The
+    # compilers stay here: a compiler is the one thing the schema cannot
+    # express (`doctypes`' module docstring measures where the line falls).
+    "procurement@1",
     compilers={
         "purchase_order": purchase_order_ir,
         "goods_receipt_note": goods_receipt_ir,
