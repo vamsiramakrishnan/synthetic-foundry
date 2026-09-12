@@ -64,13 +64,16 @@ def test_a_variant_round_trips_through_files_into_a_built_corpus(tmp_path, varia
 
     loaded = packs.load(written["pack"])
     physics = json.loads(written["physics"].read_text(encoding="utf-8"))["overrides"]
-    shape = json.loads(written["shape"].read_text(encoding="utf-8"))
+    # The organisation and the estate travel in the pack now, so there is no
+    # shape sidecar to read back; `from_pack` resolves both.
+    assert "shape" not in written
+    assert loaded.roles is not None and [r.key for r in loaded.roles.table] == [
+        row[0] for row in variant.role_table()
+    ]
+    assert (loaded.estate or None) == variant.estate
 
     spec = pack_export.Derived(
-        pack=loaded,
-        physics=physics,
-        role_table=tuple(tuple(row) for row in shape["role_table"]),
-        estate=shape.get("estate"),
+        pack=loaded, physics=physics,
     ).apply(RetailWorld.from_pack(loaded, seed=variant.seed))
 
     assert spec.physics == variant.physics
@@ -104,9 +107,11 @@ def test_a_skeleton_marks_what_it_could_not_derive_and_the_lint_names_it(variant
     assert all(any(path in finding for finding in findings) for path in marked)
     assert any("carries no lore" in finding for finding in findings)
 
-    # And the parts a pack may not hold at all are stated rather than dropped.
+    # And the one part a pack may not hold is stated rather than dropped; the
+    # organisation, which a pack holds now, is written in and noted.
     joined = " ".join(derived.unfilled)
-    assert "physics" in joined and "role_table" in joined and "lore" in joined
+    assert "physics" in joined and "lore" in joined and "role_table" not in joined
+    assert any(note.startswith("roles.table:") for note in derived.notes)
     # The trap this names: a mosaic's headcount is the role table's size, not a
     # payroll, and writing it into `employees` would be a fabricated scale.
     assert derived.pack.employees != variant.headcount
@@ -123,8 +128,10 @@ def test_a_base_pack_keeps_its_own_identity_and_takes_the_derived_calendar(varia
     assert derived.pack.units == base.units
     assert derived.pack.lore == base.lore
     assert derived.pack.seasonality == variant.calendar
-    # Applied to a pack, the sidecars are still sidecars — that is the point.
+    # Applied to a pack, physics is still a sidecar and the organisation is in
+    # the pack — the derivation's table, not the base's absence of one.
     assert derived.physics and derived.role_table
+    assert derived.pack.roles is not None and len(derived.pack.roles.table) == len(derived.role_table)
 
 
 def test_a_derivation_for_another_engine_is_refused_rather_than_left_inert(variant):

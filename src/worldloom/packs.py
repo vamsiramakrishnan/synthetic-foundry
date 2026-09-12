@@ -223,6 +223,59 @@ class PackNamePools(PackModel):
         return self
 
 
+class PackRole(PackModel):
+    """One row of the company's organisation: who exists, and under whom.
+
+    The same four-tuple every organisation generator consumes (``roles.Role``),
+    spelled the way ``lob.RoleSpec`` and a company description's
+    ``leadership`` rows spell it — ``reports_to``, not ``manager`` — so a LOB's
+    roles, a description's leadership and a pack's table are one wire
+    vocabulary. A ``voice`` attaches the role's register inline, so an added
+    role and how it writes are one object rather than a row here and an entry
+    under ``voices`` that has to name the same key.
+    """
+
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    title: str = Field(min_length=1)
+    function: str = Field(min_length=1)
+    reports_to: str | None = None
+    voice: PackVoice | None = None
+
+    def as_row(self) -> tuple[str, str, str, str | None]:
+        return (self.key, self.title, self.function, self.reports_to)
+
+
+class PackUnitRole(PackModel):
+    """One post minted for every business unit — ``roles.UnitRole`` as data.
+
+    ``title`` is a template with ``{unit}`` for the unit's name. The manager is
+    a fixed role key (``manager``) or a sibling post in the same unit
+    (``manager_suffix``); ``manager_suffix`` wins, the narrower claim.
+    """
+
+    suffix: str = Field(pattern=r"^_[a-z][a-z0-9_]*$")
+    title: str = Field(min_length=1)
+    function: str = Field(min_length=1)
+    manager: str | None = None
+    manager_suffix: str | None = None
+
+
+class PackRoles(PackModel):
+    """The company's organisation, authored.
+
+    ``table`` is the whole table, not a patch: the engine's spine is inside it,
+    retitled, moved or refunctioned as the author likes but never removed
+    (``roles.review`` refuses a missing spine key by name, because generator
+    code looks it up). Empty keeps the engine's own table. ``unit_roles``
+    replaces the posts minted per business unit the same way; it must still
+    mint the engine's own suffixes. ``worldloom pack targets --json`` prints
+    the shipped table and posts as a starting document.
+    """
+
+    table: list[PackRole] = Field(default_factory=list)
+    unit_roles: list[PackUnitRole] = Field(default_factory=list)
+
+
 class Pack(PackModel):
     """One industry pack. See the module docstring for what it can and cannot do."""
 
@@ -251,6 +304,18 @@ class Pack(PackModel):
     highest-leverage texture a pack owns: prose is written in these voices,
     and — see ``PackVoice`` — an entry either authors a persona for its role
     or points that role at one that already exists."""
+    roles: PackRoles | None = None
+    """The company's organisation: its role table and the posts it mints per
+    unit (``PackRoles``). The eighth thing a pack authors, and the rung of the
+    de-hardcoding ladder left open the longest: ``voices`` proved that an
+    engine can publish its role keys and lint against them, and the table
+    itself stayed a literal in each engine's organisation generator, so a
+    pack could re-voice the CFO and could not give the company a chief risk
+    officer. ``None`` keeps the engine's own table and posts, which is what
+    every pack corpus built before this existed had. The table reaches the
+    build as the builder's ``role_table`` (recorded on the recipe, as an SDK
+    or a `--spec` table always was) and the posts as its ``unit_roles``."""
+
     episode_text: dict[str, str] = Field(default_factory=dict)
     """Overrides of the engine's surface-text templates, keyed by the keys
     ``worldloom pack texts`` lists. This is where a pack re-voices the
@@ -410,6 +475,8 @@ class Pack(PackModel):
             data.pop("estate", None)
         if self.landscape is None:
             data.pop("landscape", None)
+        if self.roles is None:
+            data.pop("roles", None)
         return data
 
     @model_validator(mode="after")
@@ -450,6 +517,99 @@ def seasonality_of(pack: Pack) -> Any:
     if pack.seasonality is None:
         return None
     return profiles.from_document(pack.seasonality)
+
+
+def role_table_of(pack: Pack) -> tuple[tuple[str, str, str, str | None], ...] | None:
+    """The pack's authored role table as the builders' ``role_table``, or ``None``.
+
+    Reviewed here, at the one point between a pack and a builder, and refused
+    rather than warned about: a table that fails ``roles.review`` does not
+    build a thinner company, it raises ``KeyError`` part-way through an
+    episode — ``doctypes.install_sheets``' argument, and the same posture.
+    Reviewed with stand-ins for the per-unit posts the generator will mint
+    (``company._organisation_of`` explains why retail's ``merch_lead`` reports
+    to a row no author writes).
+    """
+    if pack.roles is None or not pack.roles.table:
+        return None
+    rejections = _review_roles(pack)
+    if rejections:
+        raise ValueError(
+            "the pack's role table cannot be built: "
+            + "; ".join(str(rejection) for rejection in rejections)
+        )
+    return tuple(role.as_row() for role in pack.roles.table)
+
+
+def _review_roles(pack: Pack) -> list[Any]:
+    from . import roles as roles_module
+
+    assert pack.roles is not None
+    rows = [role.as_row() for role in pack.roles.table]
+    have = {row[0] for row in rows}
+    unit_keys = [unit.key for unit in pack.units]
+    # Stand-ins for what the generator mints or resolves itself: the per-unit
+    # posts, and any manager token the engine's own table uses without
+    # declaring (retail's `merch_lead` reports to `gm_md`, "the MD of whichever
+    # unit merchandising sits under", which `organisation.generate` resolves).
+    # A pack that starts from `roles.published` inherits such tokens, and they
+    # are the engine's to resolve, not the author's to invent.
+    shipped = roles_module._shipped(pack.base)
+    tokens = {role.manager for role in shipped if role.manager is not None} - {role.key for role in shipped}
+    # Never the spine: a stand-in for a spine key would hide exactly the
+    # rejection this review exists to raise.
+    minted = [key for key in roles_module.required(pack.base, unit_keys) if key not in roles_module.SPINE[pack.base]]
+    stand_ins = [
+        (key, key, "Executive", roles_module.ROOT)
+        for key in (*minted, *sorted(tokens))
+        if key not in have
+    ]
+    return roles_module.review(
+        roles_module.from_rows([*rows, *stand_ins]), engine=pack.base, unit_keys=unit_keys,
+    )
+
+
+def unit_roles_of(pack: Pack) -> tuple[Any, ...] | None:
+    """The pack's authored per-unit posts as ``roles.UnitRole``, or ``None``."""
+    from . import roles as roles_module
+
+    if pack.roles is None or not pack.roles.unit_roles:
+        return None
+    return tuple(
+        roles_module.UnitRole(
+            spec.suffix, spec.title, spec.function,
+            manager=spec.manager, manager_suffix=spec.manager_suffix,
+        )
+        for spec in pack.roles.unit_roles
+    )
+
+
+def voices_of(pack: Pack) -> dict[str, PackVoice]:
+    """Every voice the pack gives a role: inline on its authored rows, then
+    ``voices``. An entry under ``voices`` wins over the row's — the lint names
+    a role voiced twice — and a pack with no authored rows gets exactly
+    ``dict(pack.voices)``, which is what the generators always received."""
+    inline = {
+        role.key: role.voice
+        for role in (pack.roles.table if pack.roles is not None else ())
+        if role.voice is not None
+    }
+    return {**inline, **pack.voices}
+
+
+def role_keys_of(pack: Pack, domain: Any) -> tuple[str, ...]:
+    """The fixed role keys this company will have: its own table's, or the
+    engine's. What the voices lint, the LOB lint and the episode lint check an
+    authored key against."""
+    if pack.roles is not None and pack.roles.table:
+        return tuple(role.key for role in pack.roles.table)
+    return tuple(domain.role_keys)
+
+
+def unit_role_suffixes_of(pack: Pack, domain: Any) -> tuple[str, ...]:
+    if pack.roles is not None and pack.roles.unit_roles:
+        return tuple(spec.suffix for spec in pack.roles.unit_roles)
+    return tuple(domain.unit_role_suffixes)
 
 
 def archetype_key(pack: Pack) -> str:
@@ -642,23 +802,26 @@ def lint(pack: Pack) -> list[str]:
                 f" slots: {', '.join(sorted(slots))}"
             )
     findings.extend(_lint_estate(pack))
+    findings.extend(_lint_roles(pack, domain))
+    role_keys = role_keys_of(pack, domain)
+    suffixes = unit_role_suffixes_of(pack, domain)
     # Only the roles whose specs author a voice mint a persona id; a remap
-    # naming any other `PERSONA-PACK-` id is pointing at nothing.
+    # naming any other `PERSONA-PACK-` id is pointing at nothing. The pack's
+    # inline voices count: a row that authors its own register mints the same
+    # id `voices` would.
+    effective_voices = voices_of(pack)
     minted = {
-        persona_id_for(role) for role, spec in pack.voices.items() if not spec.is_remap()
+        persona_id_for(role) for role, spec in effective_voices.items() if not spec.is_remap()
     }
     for role in sorted(pack.voices):
         spec = pack.voices[role]
-        known = (
-            role in domain.role_keys
-            or parse_unit_role(role, domain.unit_role_suffixes) is not None
-        )
+        known = role in role_keys or parse_unit_role(role, suffixes) is not None
         if not known:
             findings.append(
                 f"voices[{role!r}] names no {pack.base} role — roles:"
-                f" {', '.join(domain.role_keys)}; per-unit roles end in"
-                f" {', '.join(domain.unit_role_suffixes)} (e.g."
-                f" {pack.units[0].key}{domain.unit_role_suffixes[0]})"
+                f" {', '.join(role_keys)}; per-unit roles end in"
+                f" {', '.join(suffixes)} (e.g."
+                f" {pack.units[0].key}{suffixes[0]})"
             )
         # Whether a `persona` names one of the *engine's* ids cannot be decided
         # here — no domain publishes its persona ids, and the build refuses an
@@ -691,7 +854,7 @@ def lint(pack: Pack) -> list[str]:
     from .generators.names import FAMILY as _DEFAULT_FAMILY
     from .generators.names import GIVEN as _DEFAULT_GIVEN
 
-    required_people = len(domain.role_keys) + len(pack.units) * len(domain.unit_role_suffixes)
+    required_people = len(role_keys) + len(pack.units) * len(suffixes)
     for label, pool, default_pool in (
         ("given", pack.name_pools.given, _DEFAULT_GIVEN),
         ("family", pack.name_pools.family, _DEFAULT_FAMILY),
@@ -748,8 +911,20 @@ def lint(pack: Pack) -> list[str]:
     from . import episodes as episodes_module
     from . import lob as lob_module
 
-    findings.extend(episodes_module.lint(pack.episodes, base=pack.base))
+    findings.extend(episodes_module.lint(pack.episodes, base=pack.base, role_keys=role_keys))
     for lob_spec in pack.lobs:
+        # A LOB's roles are the same key space as the table: a responsibility
+        # or a seat held by a key the company's table does not contain names
+        # somebody who is nobody.
+        for lob_role in lob_spec.roles:
+            if lob_role.key not in role_keys and parse_unit_role(lob_role.key, suffixes) is None:
+                findings.append(
+                    f"lobs[{lob_spec.name!r}] declares role {lob_role.key!r}, which the"
+                    " company's role table does not contain — its responsibilities"
+                    " and seats name nobody. Add the row under `roles.table`"
+                    " (the whole table, spine included; `worldloom pack targets"
+                    " --json` prints the engine's), or drop the role."
+                )
         findings.extend(lob_module.lint_lob(
             lob_spec,
             base=pack.base,
@@ -861,6 +1036,53 @@ def lint(pack: Pack) -> list[str]:
     return findings
 
 
+def _lint_roles(pack: Pack, domain: Any) -> list[str]:
+    """The authored organisation, against what the engine will look up.
+
+    Every `roles.review` rejection, verbatim and prefixed, because each one is
+    fatal at build (`role_table_of` refuses the table): a spine key removed, a
+    second root, a manager nobody is, a circle. Then the posts: a set that does
+    not mint the engine's own suffixes raises inside the generator, and the
+    lint says so first. A role voiced both inline and under `voices` is said
+    twice; the entry under `voices` wins, and the author should know it did.
+    """
+    if pack.roles is None:
+        return []
+    findings: list[str] = []
+    if pack.roles.table:
+        for rejection in _review_roles(pack):
+            findings.append(
+                f"roles.table[{rejection.subject!r}]: {rejection.rule} — {rejection.detail}"
+                " (fatal at build: `role_table_of` refuses a table that fails review)"
+            )
+        for role in pack.roles.table:
+            if role.voice is not None and role.key in pack.voices:
+                findings.append(
+                    f"roles.table[{role.key!r}] carries a voice and voices[{role.key!r}]"
+                    " is also set — the entry under `voices` wins; keep one"
+                )
+    if pack.roles.unit_roles:
+        supplied = {spec.suffix for spec in pack.roles.unit_roles}
+        missing = [suffix for suffix in domain.unit_role_suffixes if suffix not in supplied]
+        if missing:
+            findings.append(
+                f"roles.unit_roles must mint the {pack.base} engine's own per-unit posts"
+                f" — missing suffix(es): {', '.join(missing)}. The engine looks them up"
+                " by name, so a set without them raises part-way through a build;"
+                " add rows around them instead (fatal at build)"
+            )
+        table_keys = {role.key for role in pack.roles.table} or set(domain.role_keys)
+        for spec in pack.roles.unit_roles:
+            for unit in pack.units:
+                if f"{unit.key}{spec.suffix}" in table_keys:
+                    findings.append(
+                        f"roles.unit_roles[{spec.suffix!r}] mints {unit.key}{spec.suffix},"
+                        " which the role table already declares — the post would be"
+                        " minted twice"
+                    )
+    return findings
+
+
 def _lint_estate(pack: Pack) -> list[str]:
     """The estate the pack asks for, against the vocabulary it would be built in.
 
@@ -930,7 +1152,9 @@ def to_recipe(pack: Pack) -> dict[str, Any]:
 
 
 __all__ = [
-    "PLACEHOLDER", "Pack", "PackCommitment", "PackNamePools", "PackVoice",
+    "PLACEHOLDER", "Pack", "PackCommitment", "PackNamePools", "PackRole", "PackRoles",
+    "PackUnitRole", "PackVoice",
     "archetype_key", "archetype_of", "episode_kinds", "lint", "load", "lore_of",
-    "persona_id_for", "placeholders", "to_recipe",
+    "persona_id_for", "placeholders", "role_keys_of", "role_table_of", "to_recipe",
+    "unit_role_suffixes_of", "unit_roles_of", "voices_of",
 ]

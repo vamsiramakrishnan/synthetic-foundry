@@ -342,6 +342,11 @@ class ProcureToPayWorld:
     from, for the reason the pack is embedded whole: a corpus that could only
     be rebuilt by whoever still had the probe that derived it would fail the
     reason recipes exist."""
+    unit_roles: tuple[Any, ...] | None = None
+    """The posts minted for every business unit (``roles.UnitRole``), replaced.
+    ``None`` is the engine's own, which is what every world built before this
+    field existed minted; a pack's ``roles.unit_roles`` arrives here through
+    ``from_pack``, and the recipe records it beside ``role_table``."""
 
     physics: Parameters = DEFAULT
     """The world physics the organisation is drawn under.
@@ -415,7 +420,11 @@ class ProcureToPayWorld:
         return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack,
                    # The estate the pack asks for, in the words it asks for it;
                    # `None` on both when it says nothing — `RetailWorld.from_pack`.
-                   estate=pack.estate or None, landscape=pack.landscape)
+                   estate=pack.estate or None, landscape=pack.landscape,
+                   # The organisation the pack authored, reviewed on the way in;
+                   # `None` on both when it says nothing.
+                   role_table=packs_module.role_table_of(pack),
+                   unit_roles=packs_module.unit_roles_of(pack))
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
@@ -449,6 +458,7 @@ class ProcureToPayWorld:
             landscape=self.landscape,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             # What it was given, not what it resolved to — `RetailWorld.build`.
             locale=self.locale,
             master_data=self.master_data,
@@ -460,13 +470,14 @@ class ProcureToPayWorld:
             archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
-            voices=dict(self.pack.voices) if self.pack is not None else None,
+            voices=packs_module.voices_of(self.pack) if self.pack is not None else None,
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,
             locale=locale,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             employees_total=self.employees,
         )
 

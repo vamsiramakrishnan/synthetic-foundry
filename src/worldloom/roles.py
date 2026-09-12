@@ -47,6 +47,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 #: The suffixes of the roles minted per business unit. Spelled *with* the
 #: leading underscore, deliberately: ``domains.Domain.unit_role_suffixes``
@@ -682,6 +683,43 @@ def _shipped(engine: str) -> tuple[Role, ...]:
     return from_rows(module._ROLES)
 
 
+def _shipped_unit_roles(engine: str) -> tuple[UnitRole, ...]:
+    from importlib import import_module
+
+    module = import_module({
+        "retail": "worldloom.generators.organisation",
+        "banking": "worldloom.generators.banking_org",
+        "insurance": "worldloom.generators.insurance_org",
+        "procurement": "worldloom.generators.procurement_org",
+    }[engine])
+    return tuple(module._UNIT_ROLES)
+
+
+def published(engine: str) -> dict[str, Any]:
+    """The engine's organisation as data: what a pack must keep, what it ships.
+
+    What ``worldloom pack targets --json`` prints and what a pack author
+    starts a ``roles`` block from: ``spine`` (the keys generator code looks
+    up, which a table may retitle but not remove), ``table`` (every shipped
+    row, in ``PackRole``'s spelling), and ``unit_roles`` (the posts minted per
+    unit, in ``PackUnitRole``'s). Read from the generators rather than
+    restated, so a fifth engine's rows appear the moment it ships them.
+    """
+    from dataclasses import asdict
+
+    return {
+        "engine": engine,
+        "spine": sorted(SPINE[engine]),
+        "table": [
+            {"key": role.key, "title": role.title, "function": role.function,
+             "reports_to": role.manager}
+            for role in _shipped(engine)
+        ],
+        "unit_roles": [asdict(spec) for spec in _shipped_unit_roles(engine)],
+        "rules": list(RULES),
+    }
+
+
 def check(
     table: Sequence[Role],
     *,
@@ -727,7 +765,7 @@ def to_rows(table: Sequence[Role]) -> tuple[tuple[str, str, str, str | None], ..
 
 __all__ = [
     "ROOT", "RULES", "Rejection", "Role", "SPINE", "Shape", "UNIT_ROLES",
-    "UNIT_ROLE_SUFFIXES", "UnitRole", "check", "from_rows", "from_shape",
+    "UNIT_ROLE_SUFFIXES", "UnitRole", "check", "from_rows", "from_shape", "published",
     "measure", "parse_unit_role", "request", "required", "review", "to_rows",
     "unit_role_key",
 ]

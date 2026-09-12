@@ -6933,14 +6933,37 @@ def pack_locales(
 @pack_app.command("targets")
 def pack_targets(
     engine: str = typer.Argument(None, help="Engine name; omit to list every engine."),
+    as_json: bool = typer.Option(
+        False, "--json",
+        help="Emit as data, with the engine's organisation: the spine a `roles.table`"
+             " must keep, the shipped table and per-unit posts to start from.",
+    ),
 ) -> None:
     """List the lore targets each engine consults, and what each one changes.
 
     This is the pack author's contract: a lore constraint aimed at one of
     these targets changes generation; aimed anywhere else it is carried,
     citable, and inert. Persona traits are always consulted, as ROLE/trait.
+    With --json the organisation is printed as data (`roles.published`): the
+    spine keys a pack's `roles.table` may retitle but not remove, every
+    shipped row in `PackRole`'s spelling, and the per-unit posts in
+    `PackUnitRole`'s — a starting document for authoring the company's roles.
     """
-    from . import domains
+    from . import domains, roles
+
+    if as_json:
+        document = {}
+        for name in domains.names():
+            if engine is not None and name != engine:
+                continue
+            domain = domains.by_name(name)
+            document[name] = {
+                "lore_targets": [{"target": t, "effect": e} for t, e in domain.consulted_targets],
+                "system_slots": [{"slot": s_, "what": w} for s_, w in domain.system_slots],
+                "roles": roles.published(name),
+            }
+        typer.echo(json.dumps(document, indent=2))
+        return
 
     for name in domains.names():
         if engine is not None and name != engine:
@@ -7196,11 +7219,13 @@ def pack_template(
     ``evaluation_text``, and the locale trio: ``name_pools`` (given/family
     name pools for the people the engine mints), ``headquarters`` (the
     company's one location), and ``regions`` (labels for the site estate,
-    e.g. the abbreviations behind a stock site's "Branch NSW 001"); and the
+    e.g. the abbreviations behind a stock site's "Branch NSW 001"); the
     estate pair: ``estate`` (how much technology the company runs: a size
     from ``worldloom pack landscapes``) and ``landscape`` (whose words it is
     built out of: a registered vocabulary by name, or pools of the pack's
-    own). The shipped examples are the fuller reference: examples/packs/
+    own); and ``roles`` (the company's organisation: its whole role table and
+    the posts minted per unit, started from ``worldloom pack targets
+    --json``). The shipped examples are the fuller reference: examples/packs/
     carries a general insurer on the retail engine and a mutual bank on the
     banking one, and the insurer sets all three locale fields.
     """

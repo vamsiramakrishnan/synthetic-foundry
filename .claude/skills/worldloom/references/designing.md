@@ -138,6 +138,16 @@ insurer on the retail engine, a mutual bank on the banking one). Then:
   Leave any of the three unset and that piece stays the engine's default.
   Setting only `name_pools` and leaving `headquarters` empty is legal and
   common for a pack whose story does not hinge on where the head office sits.
+- **Organisation: the role table and the posts per unit.** `roles.table` is
+  the whole organisation (`key`, `title`, `function`, `reports_to`, an
+  optional inline `voice`); start from `worldloom pack targets --json`,
+  which prints the engine's shipped rows and the spine keys generator code
+  looks up. Retitle, move and add around the spine; never remove a spine
+  key, and keep `ceo` as the one root. `roles.unit_roles` replaces the
+  posts minted for every business unit (`suffix`, `title` with `{unit}`,
+  `function`, `manager` or `manager_suffix`) and must still mint the
+  engine's own suffixes. Leave `roles` unset and the company is the
+  engine's own. `pack check` names every rejection before a build would.
 - **Estate: how much technology, and in whose words.** `estate` (`small`,
   `medium`, `large`) grows a service landscape around the services the
   episode itself names; without it the estate is the nine nodes the close

@@ -11,6 +11,31 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Packs: the organisation as pack data
+
+- The rung of the de-hardcoding ladder left open the longest. `voices`
+  proved that an engine can publish its role keys and lint against them,
+  and the role table itself stayed a literal in each engine's organisation
+  generator: a pack could re-voice the CFO and could not give the company a
+  chief risk officer. `Pack.roles` now carries the whole table (`table`,
+  in `lob.RoleSpec`'s `reports_to` spelling, a `voice` attachable on the
+  row) and the posts minted per business unit (`unit_roles`), both off the
+  wire when unset. The table is reviewed on the way into every builder
+  (`packs.role_table_of`: `roles.review` with stand-ins for the per-unit
+  posts, refused rather than warned about because a missing spine key is a
+  `KeyError` mid-episode) and reaches the build as the builder's
+  `role_table`; the posts reach it as a new `unit_roles` field on all four
+  builders, which the banking, insurance and procurement generators now
+  accept beside retail's, and the recipe records beside the table. `pack
+  check` names every review rejection, a post set missing an engine
+  suffix, a post the table already declares, a role voiced twice, and a
+  LOB role the table does not contain; the voices, name-pool and episode
+  author-role lints read the company's own keys. `worldloom pack targets
+  --json` prints each engine's organisation as data (`roles.published`):
+  the spine a table must keep, the shipped rows and posts to start from.
+  `pack export` writes a derived role table and estate into the pack
+  instead of a sidecar. Every baseline build is byte-identical.
+
 ### Procurement: an estate of its own (Generation)
 
 - `ProcureToPayWorld` refused `--estate` outright, and three modules carried

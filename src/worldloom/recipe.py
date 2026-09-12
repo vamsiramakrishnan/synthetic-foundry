@@ -161,6 +161,7 @@ def build_recipe(
     landscape: Any = None,
     physics: Any = None,
     role_table: Any = None,
+    unit_roles: Any = None,
     seasonality: Any = None,
     locale: Any = None,
     master_data: Mapping[str, Any] | None = None,
@@ -196,6 +197,8 @@ def build_recipe(
         **_physics_payload(physics),
         # Same conditional rule: the whole table, only when one was authored.
         **({} if role_table is None else {"role_table": [list(row) for row in role_table]}),
+        # The per-unit posts beside the table, under the same rule.
+        **({} if unit_roles is None else {UNIT_ROLES_KEY: _unit_roles_payload(unit_roles)}),
         # Written only when a profile was chosen. The engine's own is the
         # general-retail year every corpus before this traded on, so an
         # absent key means exactly that rather than "unknown".
@@ -720,6 +723,41 @@ def _with_master_data(spec: Any, master_data: Any) -> Any:
         ) from exc
 
 
+#: Where the per-unit posts live on a recipe, when a build replaced them.
+UNIT_ROLES_KEY = "unit_roles"
+
+
+def _unit_roles_payload(unit_roles: Any) -> list[dict[str, Any]]:
+    from dataclasses import asdict
+
+    return [asdict(spec) for spec in unit_roles]
+
+
+def _unit_roles_from(payload: Any) -> tuple[Any, ...]:
+    from .roles import UnitRole
+
+    try:
+        return tuple(UnitRole(**dict(entry)) for entry in payload)
+    except (TypeError, ValueError) as exc:
+        raise RecipeError(f"this corpus's recorded unit roles do not load: {exc}") from exc
+
+
+def _with_unit_roles(spec: Any, unit_roles: Any) -> Any:
+    """*spec* rebound to recorded per-unit posts, or untouched when none —
+    ``_with_roles``' posture exactly."""
+    if unit_roles is None:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, unit_roles=_unit_roles_from(unit_roles))
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records authored unit roles, but {type(spec).__name__}"
+            f" does not accept them: {exc}"
+        ) from exc
+
+
 def _with_roles(spec: Any, role_table: Any) -> Any:
     """*spec* rebound to an authored role table, or untouched when there is none.
 
@@ -858,6 +896,7 @@ def rebuild(
         spec = _with_master_data(spec, recipe.get("master_data"))
         spec = _with_policies(spec, recipe.get("policies"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
+        spec = _with_unit_roles(spec, recipe.get(UNIT_ROLES_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
     else:
         try:
@@ -893,6 +932,7 @@ def rebuild(
         spec = _with_master_data(spec, recipe.get("master_data"))
         spec = _with_policies(spec, recipe.get("policies"))
         spec, localised = _with_locale(spec, recipe.get(LOCALE_KEY))
+        spec = _with_unit_roles(spec, recipe.get(UNIT_ROLES_KEY))
         world = _with_seasonality(_with_roles(spec, role_table), seasonality).build()
 
     # Passed to the spec above, and this is the fallback for a spec that could

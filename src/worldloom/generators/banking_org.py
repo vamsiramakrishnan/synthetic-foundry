@@ -281,6 +281,11 @@ def generate(
     # name in generator code, and a table missing one raises `KeyError`
     # part-way through an episode rather than building a different company.
     role_table: Sequence[tuple[str, str, str, str | None]] | None = None,
+    # The per-unit posts, replaced — `organisation.generate`'s seam and its
+    # argument: a parameter rides the call and is recorded by the recipe,
+    # `None` is this module's own `_UNIT_ROLES`, and a supplied set must still
+    # mint the engine's own suffixes because generator code looks them up.
+    unit_roles: Sequence[UnitRole] | None = None,
     physics: Parameters = DEFAULT,
 ) -> BankOrganisation:
     """Build the bank for an archetype. Same seed, same graph, same ids.
@@ -309,8 +314,19 @@ def generate(
     unit_ids = {unit.key: minter.next("BU") for unit in units}
 
     role_table = list(_ROLES if role_table is None else role_table)
+    unit_role_specs = _UNIT_ROLES if unit_roles is None else tuple(unit_roles)
+    supplied_suffixes = {spec.suffix for spec in unit_role_specs}
+    missing = [spec.suffix for spec in _UNIT_ROLES if spec.suffix not in supplied_suffixes]
+    if missing:
+        raise ValueError(
+            f"unit_roles must mint the banking engine's own per-unit posts —"
+            f" missing suffix(es): {', '.join(missing)}. The engine looks"
+            " `{unit}_md` up by name, so a set without it raises part-way"
+            " through a build rather than building a different company. Add"
+            " rows around it instead."
+        )
     for unit in units:
-        for spec in _UNIT_ROLES:
+        for spec in unit_role_specs:
             role_table.append(spec.row(unit.key, unit.name))
     role_table, depth_of = sorted_roles(role_table)
 

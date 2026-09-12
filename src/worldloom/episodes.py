@@ -727,7 +727,9 @@ def replaceable_scenarios() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def lint(specs: Iterable[EpisodeSpec], *, base: str = "") -> list[str]:
+def lint(
+    specs: Iterable[EpisodeSpec], *, base: str = "", role_keys: Sequence[str] | None = None,
+) -> list[str]:
     """Findings an author should read before building.
 
     Same contract as ``doctypes.lint``: a list of strings naming divergences
@@ -1033,10 +1035,14 @@ def lint(specs: Iterable[EpisodeSpec], *, base: str = "") -> list[str]:
                 )
 
             if domain is not None and artifact.author_role:
-                if artifact.author_role not in domain.role_keys:
+                # The company's keys when a pack authored its table
+                # (`packs.role_keys_of`), the engine's otherwise: a pack that
+                # adds a role may file a document under it.
+                known_roles = tuple(role_keys) if role_keys is not None else tuple(domain.role_keys)
+                if artifact.author_role not in known_roles:
                     findings.append(
                         f"{art_where}: author_role {artifact.author_role!r} is not "
-                        f"a known {base} role. Roles: {', '.join(domain.role_keys)}"
+                        f"a known {base} role. Roles: {', '.join(known_roles)}"
                     )
 
             unknown_triggers = [

@@ -239,6 +239,11 @@ class RetailWorld:
     from, for the reason the pack is embedded whole: a corpus that could only
     be rebuilt by whoever still had the probe that derived it would fail the
     reason recipes exist."""
+    unit_roles: tuple[Any, ...] | None = None
+    """The posts minted for every business unit (``roles.UnitRole``), replaced.
+    ``None`` is the engine's own, which is what every world built before this
+    field existed minted; a pack's ``roles.unit_roles`` arrives here through
+    ``from_pack``, and the recipe records it beside ``role_table``."""
 
     physics: Parameters = DEFAULT
     """The world physics the organisation is generated under
@@ -341,7 +346,11 @@ class RetailWorld:
                    # `None` on both when the pack says nothing, which is what
                    # keeps every pack corpus built before the fields existed
                    # byte-identical; `--estate` rebinds the size afterwards.
-                   estate=pack.estate or None, landscape=pack.landscape)
+                   estate=pack.estate or None, landscape=pack.landscape,
+                   # The organisation the pack authored, reviewed on the way in;
+                   # `None` on both when it says nothing.
+                   role_table=packs_module.role_table_of(pack),
+                   unit_roles=packs_module.unit_roles_of(pack))
 
     def build(self) -> World:
         """Generate the organisation, its lore, and the lore's founding milestones.
@@ -392,6 +401,7 @@ class RetailWorld:
             landscape=self.landscape,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             seasonality=self.seasonality,
             # `self.locale`, not the resolved `locale`: the recipe stores what
             # it was given. A corpus built as "germany" replays as "germany" and
@@ -407,7 +417,7 @@ class RetailWorld:
             archetype=archetype, lore=commitments,
             company_name=self.pack.company_name if self.pack is not None else None,
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
-            voices=dict(self.pack.voices) if self.pack is not None else None,
+            voices=packs_module.voices_of(self.pack) if self.pack is not None else None,
             estate_profile=self.estate,
             landscape=landscape_module.resolve(self.landscape, default=landscape_module.RETAIL)
             if self.landscape is not None else None,
@@ -417,6 +427,7 @@ class RetailWorld:
             locale=locale,
             physics=self.physics,
             role_table=self.role_table,
+            unit_roles=self.unit_roles,
             employees_total=self.employees,
         )
 

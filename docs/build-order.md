@@ -635,9 +635,14 @@ The measured retail coupling, for whichever is chosen:
       lint and at build, published by `worldloom pack texts`. Machine values
       (statuses, dates, "unassigned") are deliberately not templates,
       because other checks match on them.
-   2. *Role tables as pack data*: engines publish required role keys
-      (episodes index by them); packs add or retitle the rest. The voices
-      surface already proved the publish-and-lint half.
+   2. *Role tables as pack data*: **done.** Engines publish their required
+      role keys (`roles.SPINE`, `worldloom pack targets --json`); a pack's
+      `roles.table` retitles, moves and adds around them and may not remove
+      one, and `roles.unit_roles` replaces the posts minted per unit. Both
+      reach every builder through `from_pack` and ride the recipe as the
+      table always did. What stays code: the spine itself, because generator
+      code looks those keys up by name; and each engine's persona
+      temperaments, which a voice inherits and never authors.
    3. *Evaluation phrasing*: **done.** Every question and authored answer
       is a keyed template in the engine's `EVAL_TEXT` table (same verbatim
       extraction, same stash-diff proof); packs override through

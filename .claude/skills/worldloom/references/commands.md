@@ -993,6 +993,10 @@ List the lore targets each engine consults, and what each one changes.
 worldloom pack targets <ENGINE>
 ```
 
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit as data, with the engine's organisation: the spine a `roles.table` must keep, the shipped table and per-unit posts to start from. |
+
 ### `worldloom pack template`
 
 Print a minimal valid pack to start from.
