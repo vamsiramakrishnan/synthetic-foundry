@@ -538,7 +538,7 @@ def named(name: str) -> Landscape:
     except KeyError:
         raise KeyError(
             f"unknown estate vocabulary {name!r}; known: {sorted(LANDSCAPES)}."
-            " A pack may also supply pools of its own."
+            " A pack's `landscape` may also supply pools of its own."
         ) from None
 
 
@@ -566,6 +566,43 @@ def from_document(payload: Mapping[str, Any] | str) -> Landscape:
         chokepoints=int(payload.get("chokepoints", 2)),
         about=str(payload.get("about", "")), source=str(payload.get("source", "")),
     )
+
+
+def resolve(value: Landscape | Mapping[str, Any] | str | None, *, default: Landscape) -> Landscape:
+    """The vocabulary a build was given: nothing, a name, a document, or one of these.
+
+    The one entry point a world spec's ``landscape`` field goes through, so
+    ``retail``, ``banking`` and ``insurance`` resolve it identically —
+    ``locales.resolve``'s shape, and for its reason. ``None`` is *default*, the
+    engine's own vocabulary, which is what every estate built before a spec
+    could carry one was made of, so an un-set landscape is byte-identical
+    rather than close. A ``Landscape`` passes through, which lets a caller
+    compose one in Python without round-tripping it through JSON.
+    """
+    if value is None:
+        return default
+    if isinstance(value, Landscape):
+        return value
+    return from_document(value)
+
+
+def document_of(value: Landscape | Mapping[str, Any] | str) -> Any:
+    """A landscape as a recipe or a pack stores it: a registry name, or its pools.
+
+    ``recipe._locale_document``'s rule, verbatim: a name says *this corpus
+    uses the vocabulary the registry calls banking* and picks up any
+    correction the registry later makes to it; a document says *these exact
+    pools*, and is what an authored vocabulary with no registry name has to
+    store. Storing the dict for a named vocabulary would freeze a copy of the
+    registry into every corpus. Round-tripped rather than passed through, so
+    a document that would not load is refused where it is written.
+    """
+    if isinstance(value, str):
+        named(value)
+        return value
+    if isinstance(value, Landscape):
+        return value.as_dict()
+    return from_document(value).as_dict()
 
 
 def publish() -> dict[str, Any]:
@@ -597,5 +634,6 @@ def register(name: str, landscape: Landscape) -> None:
 
 __all__ = [
     "BANKING", "DEFAULT", "GENERATIVE", "INSURANCE", "LANDSCAPES", "RETAIL",
-    "SIZED", "Landscape", "from_document", "named", "publish", "register",
+    "SIZED", "Landscape", "document_of", "from_document", "named", "publish", "register",
+    "resolve",
 ]

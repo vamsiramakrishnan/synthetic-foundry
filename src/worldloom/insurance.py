@@ -281,6 +281,14 @@ class InsuranceWorld:
     annual_revenue: int | None = None
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
+    landscape: Any = None
+    """Whose words the estate is built out of (``worldloom.landscape``): a
+    registered name, a document of pools, or a ``Landscape``. ``None`` is
+    insurance's own, which is what every estate built before this field
+    existed was made of, so an un-set landscape is byte-identical rather than
+    close. A pack's ``landscape`` arrives here through ``from_pack``; a
+    blueprint's through ``estate(vocabulary=)``; the recipe records it beside
+    the size, so the estate rebuilds in the same words."""
     estate: str | None = None
     """Grow a technology landscape: ``"small"``, ``"medium"`` or ``"large"``
     (``landscape.INSURANCE.profiles``).
@@ -369,7 +377,10 @@ class InsuranceWorld:
         """
         from . import packs as packs_module
 
-        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack)
+        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack,
+                   # The estate the pack asks for, in the words it asks for it;
+                   # `None` on both when it says nothing — `RetailWorld.from_pack`.
+                   estate=pack.estate or None, landscape=pack.landscape)
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
@@ -400,6 +411,7 @@ class InsuranceWorld:
             annual_revenue=self.annual_revenue,
             pack=self.pack,
             estate=self.estate,
+            landscape=self.landscape,
             physics=self.physics,
             role_table=self.role_table,
             # What it was given, not what it resolved to — `RetailWorld.build`.
@@ -430,13 +442,13 @@ class InsuranceWorld:
 
         systems, services = org.systems, org.services
         if self.estate is not None:
+            from . import landscape as landscape_module
             from .generators import estate as estate_module
-            from .landscape import INSURANCE
 
             grown = estate_module.generate(
                 rng.derive("estate"), minter,
                 profile=self.estate,
-                landscape=INSURANCE,
+                landscape=landscape_module.resolve(self.landscape, default=landscape_module.INSURANCE),
                 # Empty, and legitimately so: this is the one vertical whose
                 # core services are `()`, which makes every generated node's
                 # layer come out of the systems alone. `core_layers` handles it

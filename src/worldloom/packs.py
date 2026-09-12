@@ -39,7 +39,14 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from .archetypes import Archetype
 from .doctypes import DocumentType, SheetSpec
@@ -368,6 +375,43 @@ class Pack(PackModel):
     ``headquarters`` are the only two places a generated corpus prints bare
     geography."""
 
+    estate: str = ""
+    """How much technology the company runs: ``"small"``, ``"medium"`` or
+    ``"large"`` (the sizes ``worldloom pack landscapes`` lists, or the
+    pack's own ``landscape`` profiles). Empty grows no estate beyond the
+    services the episode itself names, which is what every pack-built corpus
+    before this field existed had. ``--estate`` on the command line wins over
+    it, the precedence a typed flag has over every authored default."""
+
+    landscape: str | dict[str, Any] | None = None
+    """Whose words the estate is built out of (``worldloom.landscape``): a
+    registered vocabulary by name (``worldloom pack landscapes``), or pools of
+    the company's own — services per layer, systems of record, purposes and
+    size profiles, the document ``landscape.from_document`` reads.
+
+    ``None`` keeps the engine's own vocabulary. This is the field
+    ``landscape.named``'s error message promised ("a pack may also supply
+    pools of its own") for as long as the module has existed, and nothing
+    read: a pack could name an insurer's divisions, books, voices and
+    documents and its estate still ran a ``click-collect-api``. Reaches the
+    build through the builder's ``landscape`` field, so a pack corpus rebuilds
+    its estate in the same words from the recipe alone."""
+
+    @model_serializer(mode="wrap")
+    def _estate_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # A pack is embedded verbatim in the recipe of every corpus built from
+        # it (`to_recipe`), so `episodes.ArtifactIntentSpec._budget_wire`'s
+        # rule holds: a pack that declared no estate keeps the exact document
+        # it had, and `world.json` of every pack corpus built before these two
+        # fields is byte-identical. The pack byte-comparison is what catches a
+        # leak, not a test on this model.
+        data: dict[str, Any] = handler(self)
+        if not self.estate:
+            data.pop("estate", None)
+        if self.landscape is None:
+            data.pop("landscape", None)
+        return data
+
     @model_validator(mode="after")
     def _units_sum_to_the_group(self) -> Pack:
         total = sum(unit.share for unit in self.units)
@@ -597,6 +641,7 @@ def lint(pack: Pack) -> list[str]:
                 f"system_brands[{slot!r}] names no {pack.base} system slot —"
                 f" slots: {', '.join(sorted(slots))}"
             )
+    findings.extend(_lint_estate(pack))
     # Only the roles whose specs author a voice mint a persona id; a remap
     # naming any other `PERSONA-PACK-` id is pointing at nothing.
     minted = {
@@ -813,6 +858,48 @@ def lint(pack: Pack) -> list[str]:
             " characterless; lore is the lever that makes an incident likely,"
             " a persona defensive, a norm binding"
         )
+    return findings
+
+
+def _lint_estate(pack: Pack) -> list[str]:
+    """The estate the pack asks for, against the vocabulary it would be built in.
+
+    Both are fatal at build — ``landscape.from_document`` refuses an unknown
+    name or a malformed document, ``Landscape.profile`` an unknown size — so
+    this is the surface that lets an author read them in ``pack check``
+    rather than hit them part-way through a build. The engine's own
+    vocabulary is looked up by base, because that is what the builder falls
+    back to: a base with none (procurement grows no estate) is named, rather
+    than the size being carried and silently inert.
+    """
+    from . import landscape as landscape_module
+
+    findings: list[str] = []
+    engine_own = landscape_module.LANDSCAPES.get(pack.base)
+    vocabulary = engine_own
+    if pack.landscape is not None:
+        try:
+            vocabulary = landscape_module.from_document(pack.landscape)
+        except (KeyError, ValueError) as exc:
+            findings.append(f"landscape: {exc}")
+            vocabulary = None
+        if engine_own is None:
+            findings.append(
+                f"landscape is set, but the {pack.base} engine grows no estate — the"
+                " vocabulary will be carried and never built. Only"
+                f" {', '.join(sorted(landscape_module.LANDSCAPES))} grow one."
+            )
+    if pack.estate:
+        if engine_own is None:
+            findings.append(
+                f"estate {pack.estate!r} is set, but the {pack.base} engine grows no"
+                " estate — the size will be carried and never built"
+            )
+        elif vocabulary is not None and pack.estate not in vocabulary.profiles:
+            findings.append(
+                f"estate {pack.estate!r} names no size the estate's vocabulary"
+                f" declares — sizes: {', '.join(sorted(vocabulary.profiles))}"
+            )
     return findings
 
 

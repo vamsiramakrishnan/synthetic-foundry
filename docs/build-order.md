@@ -701,6 +701,15 @@ The measured retail coupling, for whichever is chosen:
       What stays code: the core kinds (`lore.*`, `org.*`, `estate.*`, the
       actor tools' `close.*`/`ops.*`), which no vertical owns, and the
       `INVARIANT_HEADS` vocabulary itself, which is closed for lore's reason.
+   8. *The estate's vocabulary as pack data*: **done.** `Pack.landscape`
+      (a registered vocabulary or pools of the pack's own) and `Pack.estate`
+      (the size) reach the build through one builder field, recorded on the
+      recipe beside the size. What stays code: the estate's construction
+      (`generators/estate.py`), which decides the graph's shape and is what
+      keeps an authored vocabulary from authoring a cyclic estate; and the
+      physics and locale a company runs under, which ride the company
+      specification (`worldloom pack spec`) rather than the pack, because a
+      pack is what the company *is* and those are what a build was *asked*.
 
 An industry pack, once extracted, has to carry eight things and only about three are nouns: archetype, dimensions, fact kinds and their units, lore, artifact types and grammars, scenario verbs and cadence, roles and personas, evaluation families. A pack that renames nouns and stops produces retail with different words.
 

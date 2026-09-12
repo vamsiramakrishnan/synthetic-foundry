@@ -543,6 +543,7 @@ class Blueprint:
             "shape": dict(self.shape) if self.shape else None,
             "calendar": self.calendar_name,
             "estate": self.estate_size,
+            **({} if self.estate_vocabulary is None else {"landscape": self.estate_vocabulary}),
             **({} if self.policy_level is None else {"policies": self.policy_level}),
             "vocabulary": self.vocabulary_name,
             "locale": self.locale_name,
@@ -577,6 +578,13 @@ class Blueprint:
             changes["seasonality"] = self.seasonality
         if self.estate_size is not None:
             changes["estate"] = self.estate_size
+        if self.estate_vocabulary is not None:
+            # Carried since `estate(vocabulary=)` existed and applied nowhere
+            # — a blueprint asking for banking's words got retail's. The
+            # builder's `landscape` field is where it goes, and the recipe
+            # records it beside the size so the corpus rebuilds in the same
+            # words.
+            changes["landscape"] = self.estate_vocabulary
         if self.policy_level is not None:
             # The domain builder owns both minting and recipe recording. Applying
             # policies after build or during episodes would shift ids and dates,

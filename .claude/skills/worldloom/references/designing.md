@@ -138,6 +138,19 @@ insurer on the retail engine, a mutual bank on the banking one). Then:
   Leave any of the three unset and that piece stays the engine's default.
   Setting only `name_pools` and leaving `headquarters` empty is legal and
   common for a pack whose story does not hinge on where the head office sits.
+- **Estate: how much technology, and in whose words.** `estate` (`small`,
+  `medium`, `large`) grows a service landscape around the services the
+  episode itself names; without it the estate is the nine nodes the close
+  names and nothing has a blast radius. `landscape` says what the estate is
+  called: a registered vocabulary by name (`worldloom pack landscapes`:
+  `retail`, `banking`, `insurance`) or pools of your own (services per
+  layer, systems of record, purposes and size profiles, the document
+  `worldloom pack landscapes --json` prints for each). Leave `landscape`
+  unset and the estate speaks the engine's own words, which is how an
+  insurer on the retail engine came to run a `click-collect-api`. A typed
+  `--estate` wins over the pack's size; `pack check` names an unknown
+  vocabulary, a size the vocabulary lacks, and an estate asked of an engine
+  that grows none.
 - **Re-voice in consistent pairs, not isolated fields.** A pack's `lore`,
   `system_brands`, `voices`, and `episode_text` all have to agree with each
   other and with the `company_name`/`industry` you set at the top. An

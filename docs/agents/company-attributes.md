@@ -87,6 +87,14 @@ Frankfurt and you get Katharina Kirchgässner in Berlin at `Supermarket BW 001`.
 A pack's own `name_pools`, `regions` and `headquarters` still win over the
 locale's, the same precedence `Pack.regions` has always had.
 
+**`--estate`** grows the technology landscape, and a pack now says whose words
+it is grown in: `Pack.landscape` names a registered vocabulary or supplies
+pools of its own, and `Pack.estate` states the size, so a pack-built insurer
+on the retail engine no longer runs a `click-collect-api`. The recipe records
+the vocabulary beside the size (`landscape`), so the estate rebuilds in the
+same words from the corpus alone. A typed `--estate` still wins over the
+pack's size.
+
 The **working week** arrives too. August 2026 ends on a Monday, and four
 working days later is Friday the 4th in Sydney and Sunday the 6th in Manama,
 because the Gulf week runs Sunday to Thursday and has already spent its

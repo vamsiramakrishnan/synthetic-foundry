@@ -300,6 +300,11 @@ def generate(
     # was made of, so an un-passed locale is byte-identical rather than close.
     locale: Locale = DEFAULT_LOCALE,
     estate_profile: str | None = None,
+    # The estate's vocabulary (``worldloom.landscape``). ``None`` is the
+    # engine's own — retail's pools, which every estate this generator grew
+    # before the argument existed was made of — so an unpassed landscape is
+    # byte-identical rather than close. A pack or a blueprint supplies one.
+    landscape: Any = None,
     # Authoritative total workforce. The named roster remains the bounded
     # decision-making graph; see ``org_builder.stated_headcount``.
     employees_total: int | None = None,
@@ -510,9 +515,10 @@ def generate(
     if estate_profile is not None:
         from . import estate as estate_module
 
-        landscape = estate_module.generate(
+        grown = estate_module.generate(
             rng.derive("estate"), minter,
             profile=estate_profile,
+            **({} if landscape is None else {"landscape": landscape}),
             core_services=services,
             core_systems=systems,
             # Who may own a service. Engineering and platform roles only: a
@@ -523,8 +529,8 @@ def generate(
                 if key in role_ids
             )) or (role_ids[next(iter(role_ids))],),
         )
-        systems = (*systems, *landscape.systems)
-        services = (*services, *landscape.services)
+        systems = (*systems, *grown.systems)
+        services = (*services, *grown.services)
 
     personas = tuple(
         Persona(

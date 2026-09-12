@@ -7195,10 +7195,13 @@ def pack_template(
     ``evaluation_text``, and the locale trio: ``name_pools`` (given/family
     name pools for the people the engine mints), ``headquarters`` (the
     company's one location), and ``regions`` (labels for the site estate,
-    e.g. the abbreviations behind a stock site's "Branch NSW 001"). The
-    shipped examples are the fuller reference: examples/packs/ carries a
-    general insurer on the retail engine and a mutual bank on the banking
-    one, and the insurer sets all three locale fields.
+    e.g. the abbreviations behind a stock site's "Branch NSW 001"); and the
+    estate pair: ``estate`` (how much technology the company runs: a size
+    from ``worldloom pack landscapes``) and ``landscape`` (whose words it is
+    built out of: a registered vocabulary by name, or pools of the pack's
+    own). The shipped examples are the fuller reference: examples/packs/
+    carries a general insurer on the retail engine and a mutual bank on the
+    banking one, and the insurer sets all three locale fields.
     """
     import json as json_module
 

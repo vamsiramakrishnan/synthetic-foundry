@@ -212,6 +212,15 @@ class RetailWorld:
     """An industry ``Pack`` supplying the archetype, lore, and company name.
     Set via ``from_pack``; carried on the instance so ``build`` can embed it in
     the recipe, which is what makes a pack-built corpus rebuild itself."""
+    landscape: Any = None
+    """Whose words the estate is built out of (``worldloom.landscape``): a
+    registered name, a document of pools, or a ``Landscape``. ``None`` is the
+    engine's own vocabulary, which is what every estate built before this
+    field existed was made of, so an un-set landscape is byte-identical
+    rather than close. A pack's ``landscape`` arrives here through
+    ``from_pack``; a blueprint's through ``estate(vocabulary=)``; and the
+    recipe records it beside the size, so the estate rebuilds in the same
+    words."""
     seasonality: Any = None
     """The trading year (``worldloom.profiles``). ``None`` is the engine's own
     general-retail profile — a 21% December — which every world built before
@@ -327,7 +336,12 @@ class RetailWorld:
                    # The pack's own trading year, or None for the engine's. This
                    # is the line that stops a pack-authored insurer trading like
                    # a supermarket.
-                   seasonality=packs_module.seasonality_of(pack))
+                   seasonality=packs_module.seasonality_of(pack),
+                   # The estate the pack asks for, in the words it asks for it.
+                   # `None` on both when the pack says nothing, which is what
+                   # keeps every pack corpus built before the fields existed
+                   # byte-identical; `--estate` rebinds the size afterwards.
+                   estate=pack.estate or None, landscape=pack.landscape)
 
     def build(self) -> World:
         """Generate the organisation, its lore, and the lore's founding milestones.
@@ -336,6 +350,7 @@ class RetailWorld:
         already on the timeline — the world's beginning, not yet any close.
         """
         from . import __version__ as worldloom_version
+        from . import landscape as landscape_module
         from . import locales as locales_module
         from . import recipe as recipe_module
         from .generators import organisation
@@ -374,6 +389,7 @@ class RetailWorld:
             annual_revenue=self.annual_revenue,
             pack=self.pack,
             estate=self.estate,
+            landscape=self.landscape,
             physics=self.physics,
             role_table=self.role_table,
             seasonality=self.seasonality,
@@ -393,6 +409,8 @@ class RetailWorld:
             system_brands=dict(self.pack.system_brands) if self.pack is not None else None,
             voices=dict(self.pack.voices) if self.pack is not None else None,
             estate_profile=self.estate,
+            landscape=landscape_module.resolve(self.landscape, default=landscape_module.RETAIL)
+            if self.landscape is not None else None,
             name_pools=self.pack.name_pools.model_dump() if self.pack is not None else None,
             headquarters=self.pack.headquarters if self.pack is not None else None,
             regions=tuple(self.pack.regions) if self.pack is not None and self.pack.regions else None,

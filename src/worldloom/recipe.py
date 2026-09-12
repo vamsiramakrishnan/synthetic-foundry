@@ -158,6 +158,7 @@ def build_recipe(
     annual_revenue: int | None = None,
     pack: Any = None,
     estate: str | None = None,
+    landscape: Any = None,
     physics: Any = None,
     role_table: Any = None,
     seasonality: Any = None,
@@ -183,6 +184,11 @@ def build_recipe(
         # a new field in every recipe ever written for a value that changes
         # nothing, and the default-build byte diff is what catches that.
         **({} if estate is None else {"estate": estate}),
+        # The estate's vocabulary, only when one was chosen: a name, or the
+        # pools themselves (`landscape.document_of`). An absent key is the
+        # engine's own vocabulary, which is what every estate built before
+        # a spec could carry one was made of.
+        **({} if landscape is None else {LANDSCAPE_KEY: _landscape_document(landscape)}),
         # Same conditional rule, and here it also carries a stronger claim:
         # the key is written only when a span actually *differs* from the
         # engine's, so a recipe built with `--physics` whose file happened to
@@ -252,6 +258,16 @@ def _master_data_payload(master_data: Mapping[str, Any]) -> dict[str, int]:
     from .generators.masterdata import check_request
 
     return check_request(master_data)
+
+
+#: Where the estate's vocabulary lives on a recipe, when one was chosen.
+LANDSCAPE_KEY = "landscape"
+
+
+def _landscape_document(landscape: Any) -> Any:
+    from .landscape import document_of
+
+    return document_of(landscape)
 
 
 def _locale_payload(locale: Any) -> dict[str, Any]:
@@ -598,6 +614,26 @@ def _with_estate(spec: Any, estate: Any) -> Any:
         ) from exc
 
 
+def _with_landscape(spec: Any, landscape: Any) -> Any:
+    """*spec* rebound to a recorded estate vocabulary, or untouched when none.
+
+    ``_with_estate``'s posture exactly: a corpus whose estate spoke an authored
+    vocabulary and rebuilt in the engine's would be a different world reported
+    as the same one, so a spec that cannot carry the recorded one is an error.
+    """
+    if landscape is None:
+        return spec
+    from dataclasses import replace as _replace
+
+    try:
+        return _replace(spec, landscape=landscape)
+    except TypeError as exc:
+        raise RecipeError(
+            f"this recipe records an estate vocabulary, but {type(spec).__name__}"
+            f" does not accept one: {exc}"
+        ) from exc
+
+
 def _with_seasonality(spec: Any, seasonality: Any) -> Any:
     """*spec* rebound to a recorded trading year, or untouched when there is none."""
     if seasonality is None:
@@ -817,6 +853,7 @@ def rebuild(
             )
         spec = _under(domain.world.from_pack(pack, seed=recipe["seed"]), physics, DEFAULT)
         spec = _with_estate(spec, recipe.get("estate"))
+        spec = _with_landscape(spec, recipe.get(LANDSCAPE_KEY))
         spec = _with_lore_claims(spec, lore_claims)
         spec = _with_master_data(spec, recipe.get("master_data"))
         spec = _with_policies(spec, recipe.get("policies"))
@@ -851,6 +888,7 @@ def rebuild(
         # both branches one path and turns a domain that still does not accept
         # one into a stated error instead of a `TypeError` from a constructor.
         spec = _with_estate(spec, recipe.get("estate"))
+        spec = _with_landscape(spec, recipe.get(LANDSCAPE_KEY))
         spec = _with_lore_claims(spec, lore_claims)
         spec = _with_master_data(spec, recipe.get("master_data"))
         spec = _with_policies(spec, recipe.get("policies"))

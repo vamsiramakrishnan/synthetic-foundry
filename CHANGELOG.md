@@ -11,6 +11,25 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Packs: the estate's vocabulary as pack data
+
+- `landscape.named`'s error message promised that "a pack may also supply
+  pools of its own" for as long as the module existed, and no pack field
+  read it; the SDK's `estate(vocabulary=)` was carried and applied nowhere.
+  A pack now states `estate` (the size) and `landscape` (a registered
+  vocabulary by name, or pools of its own: services per layer, systems of
+  record, purposes and size profiles), both left off the wire when unset so
+  every pack corpus already built embeds the exact document it did. The
+  retail, banking and insurance builders carry one `landscape` field,
+  resolved through `landscape.resolve` with the engine's own vocabulary as
+  the default; `Blueprint.estate(vocabulary=)` reaches it; and the recipe
+  records the vocabulary beside the size (`landscape`, a name or the pools
+  themselves, `landscape.document_of`) so the estate rebuilds in the same
+  words from the corpus alone. `pack check` names an unknown vocabulary, a
+  size the vocabulary lacks, and an estate asked of an engine that grows
+  none. A typed `--estate` wins over the pack's size. Every baseline build
+  is byte-identical.
+
 ### Fact kinds: the engines' vocabularies as versioned data
 
 - Retail, banking, insurance and procurement each registered their fact
