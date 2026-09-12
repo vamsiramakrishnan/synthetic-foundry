@@ -36,6 +36,15 @@ first written up, before the waves above it landed.
 
 ### Eval execution: three-axis agent runs
 
+- Studio grades agents on the company's connector cases: an `evalrun` job
+  (`worldloom studio evalrun`, `studio run --operation evalrun`, the
+  console's Evaluations page, the workflow's next step once the queryset
+  exists) runs the reference agent or the connected coding harness over
+  the revision's verified dataset with lineage attached, appends every
+  graded case to a durable ledger a retried job resumes from, seals the run
+  with a receipt the results route authenticates, and pages per-case grades
+  with what each lost on which axis. The run directory is an ordinary
+  `evalrun` run, so `summarize` and `compare` read it.
 - Add `worldloom evalrun plan`, `EvalSession.plan`, the `evalrun_plan` MCP
   tool and `worldloom.evalrun.plans`: the plan axis graded alone. A planner
   receives the request and the tool catalog and returns a DAG of tool calls;

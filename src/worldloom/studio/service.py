@@ -125,6 +125,9 @@ class Studio:
         for job in jobs:
             if job["options"]["operation"] == "foundry":
                 job["progress"] = progress(self, job["id"])
+            elif job["options"]["operation"] == "evalrun":
+                from .evalrun import progress as evalrun_progress
+                job["progress"] = evalrun_progress(self, job["id"])
         return {**current, "workflow": self.workflow(project, current["revision"], harness_configured=harness_configured).model_dump(mode="json"),
                 "construction_plan": compile_project(spec).model_dump(mode="json"),
                 "resolution": {"engine": resolution.engine, "unmet": list(resolution.unmet)},
@@ -193,8 +196,9 @@ class Studio:
         action = workflow.next_action
         if action is None or action.kind != "run":
             return {"advanced": False, "workflow": workflow.model_dump(mode="json")}
-        options = RunOptions.model_validate({"operation": action.operation, "harness_identity":
-            digest(harness_command) if action.operation in {"narrate", "native", "foundry"} else ""})
+        needs_harness = action.operation in {"narrate", "native", "foundry"} or action.options.get("evalrun_agent") == "harness"
+        options = RunOptions.model_validate({"operation": action.operation, **action.options,
+                                             "harness_identity": digest(harness_command) if needs_harness else ""})
         job = self.store.enqueue(project, revision, options)
         advanced = run_job(self, job["id"], harness_command=harness_command, timeout=timeout)
         return {"advanced": advanced, "job": self.store.job(job["id"]),
@@ -463,6 +467,11 @@ class Studio:
                              "business_unit": c.owner, "lob": c.lob, "activities": ",".join(c.activities)}
                      for c in spec.use_cases})
 
+    def agent_results(self, project: str, job_id: str, *, offset: int = 0, limit: int = 25, **filters: str) -> dict[str, Any]:
+        """Page one completed agent run's graded cases; the run is authenticated first."""
+        from .evalrun import results
+        return results(self, project, job_id, offset=offset, limit=limit, **filters)
+
     def evidence(self, project: str, revision: str, row_id: str) -> dict[str, Any]:
         """Operator inspection only; the evaluated-agent export remains prompt-only."""
         from ..enterprise_io import load_exported_corpus
@@ -503,6 +512,9 @@ class Studio:
         if options.operation == "foundry":
             from .foundry import execute
             return execute(self, job, harness_command=harness_command, timeout=timeout)
+        if options.operation == "evalrun":
+            from .evalrun import execute as execute_evalrun
+            return execute_evalrun(self, job, harness_command=harness_command, timeout=timeout)
         if options.operation == "interview":
             if not harness_command:
                 raise ValueError("connect a coding harness or export the interview request")

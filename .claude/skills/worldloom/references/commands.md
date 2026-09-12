@@ -1254,6 +1254,25 @@ worldloom studio advance <PROJECT>
 | `--timeout` |  |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
+### `worldloom studio evalrun`
+
+Grade an agent on this company's connector cases, per axis, and print the run summary.
+
+```
+worldloom studio evalrun <PROJECT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--agent` | reference (the executable ceiling; no harness) or harness (the configured coding harness over the exec seam). |
+| `--harness-command` | Trusted local adapter for --agent harness: JSON stdin, JSON stdout; no shell. |
+| `--limit` | Only the first N selected rows. |
+| `--max-turns` | Turns the harness may take per case. |
+| `--mode` | run: execute through the tool surface and grade three axes; plan: state a DAG only and grade the plan axis. |
+| `--split` | Grade only this dataset split (train, validation, test); empty grades every row. |
+| `--timeout` |  |
+| `--workspace`, `-w` | Persistent local Studio workspace. |
+
 ### `worldloom studio init`
 
 Create a project from an explicit company contract.
@@ -1340,7 +1359,7 @@ worldloom studio run <PROJECT>
 | --- | --- |
 | `--batch-limit` |  |
 | `--harness-command` |  |
-| `--operation` | build, compile, narrate, foundry or native |
+| `--operation` | build, compile, narrate, foundry, native or evalrun (the reference agent) |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
 
 ### `worldloom studio serve`

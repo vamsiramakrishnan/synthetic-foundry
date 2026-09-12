@@ -64,7 +64,11 @@ reconciliation with the company's financial aggregates.
    run. Runs execute in a separate local process, so the UI remains available.
    Inspect unmet obligations, quality findings and observed difficulty. Build
    and compile remain available for intermediate work.
-6. **Explore.** Each selected evaluation carries the project, company revision,
+6. **Grade agents.** On **Evaluations**, grade the reference agent on the
+   generated connector cases (the executable ceiling, no harness needed), then
+   the connected coding harness, and read plan, trajectory and outcomes
+   separately per case. The section below has the contract.
+7. **Explore.** Each selected evaluation carries the project, company revision,
    use case, owning unit, LOB and selected process IDs, plus task/case identities
    and its exact qualification directory. Open **Inspect source evidence** to
    read the original connector records and reference qualification proof. The
@@ -294,6 +298,7 @@ worldloom studio interview request PROJECT_ID --message 'Which teams and systems
 worldloom studio interview accept PROJECT_ID --from response.json --workspace ./worldloom-workspace
 worldloom studio interview accept PROJECT_ID --from response.json --apply --workspace ./worldloom-workspace
 worldloom studio run PROJECT_ID --operation compile --batch-limit 2 --workspace ./worldloom-workspace
+worldloom studio evalrun PROJECT_ID --workspace ./worldloom-workspace
 ```
 
 `PROJECT_ID` is printed by `init`. Accepting a response is idempotent; replacing
@@ -411,6 +416,52 @@ proposals are replayed, tool observations are reconstructed and compared, and
 only missing exchanges call the harness. Changing the contract requires a new
 revision. Completed replay needs the same adapter identity but makes no new
 external calls.
+
+## Grade agents on the connector cases
+
+A generated queryset is a case set, and `worldloom evalrun` grades an agent on
+it per axis: the plan it formed, the trajectory it took, the outcomes it left
+(see [eval execution](eval-execution.md)). Studio runs that loop as a job on the
+revision's dataset (the compiled one, or the frozen one once a Foundry run has
+selected it), so the console shows which axis moved without exporting anything.
+
+```bash
+worldloom studio evalrun PROJECT_ID --workspace ./worldloom-workspace                    # the reference agent: the ceiling
+worldloom studio evalrun PROJECT_ID --agent harness --harness-command 'python /path/to/adapter.py' --workspace ./worldloom-workspace
+worldloom studio evalrun PROJECT_ID --mode plan --split test --limit 50 --workspace ./worldloom-workspace
+worldloom studio run PROJECT_ID --operation evalrun --workspace ./worldloom-workspace   # the same reference run
+worldloom evalrun compare ./worldloom-workspace/evalruns/REFERENCE_JOB ./worldloom-workspace/evalruns/HARNESS_JOB
+```
+
+The job verifies the dataset before reading it, loads each batch's qualified
+corpus, compiles the three-axis cases with their dataset lineage (use case,
+split, row) attached, and runs the agent through the served tool surface, one
+isolated connector fork per case. `--agent reference` walks every expected DAG
+and needs no harness; its pass rate is the ceiling of the dataset, not a claim
+about any model. `--agent harness` sends the same coding harness Studio uses
+for interviews a `worldloom.evalrun-turn/v1` document per turn and grades what
+it did; `--mode plan` asks for a DAG only and grades the plan axis, leaving the
+other two unobserved rather than zero. `--split` and `--limit` select rows.
+
+Every graded case is appended to the run's `results.jsonl` as it completes and
+`progress.json` counts them, so a run interrupted by a worker restart resumes
+from its ledger and never asks the harness about a case it already graded. A
+completed run is sealed by a receipt; the console's results route and a repeat
+of the job authenticate the directory before showing or reusing a row, and a
+changed ledger refuses. The run directory is an ordinary `evalrun` run:
+`worldloom evalrun summarize` and `compare` read it, so a Studio-graded harness
+compares with a CLI-graded one on the same `case_set` digest.
+
+In the console, **Evaluations** lists each agent run with its pass rate,
+per-axis means and per-shape slices, and pages the graded cases with what each
+lost on which axis (missing nodes, safety findings, structured expectations
+met, collateral writes). The workflow report makes grading the reference agent
+the next step once the queryset exists, and grading the connected harness the
+step after that. HTTP clients use `POST /api/projects/PROJECT_ID/run` with
+`{"operation": "evalrun", "evalrun_agent": "reference" | "harness", "evalrun_mode": "run" | "plan"}`
+and `GET /api/projects/PROJECT_ID/agent-results?job=JOB_ID&offset=0&limit=25&verdict=failed`.
+The harness option needs the server's configured harness; a browser request
+cannot name a command.
 
 ## Connected retailer
 

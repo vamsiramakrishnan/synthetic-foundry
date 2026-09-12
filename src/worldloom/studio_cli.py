@@ -83,7 +83,7 @@ def show_command(project: str, workspace: Workspace = Path("./worldloom-workspac
 
 @studio_app.command("run")
 def run_command(
-    project: str, operation: Annotated[str, typer.Option(help="build, compile, narrate, foundry or native")] = "compile",
+    project: str, operation: Annotated[str, typer.Option(help="build, compile, narrate, foundry, native or evalrun (the reference agent)")] = "compile",
     workspace: Workspace = Path("./worldloom-workspace"),
     batch_limit: Annotated[int | None, typer.Option(min=1)] = None,
     harness_command: Annotated[str | None, typer.Option("--harness-command")] = None,
@@ -117,6 +117,52 @@ def run_command(
         _refuse("studio_rejected", "run has unmet gates; see its findings and calibration report", exit_code=3)
     if result["result"].get("report", {}).get("complete") is False:
         _refuse("dataset_incomplete", "company dataset has unmet quotas; see the run report", exit_code=3)
+
+
+@studio_app.command("evalrun")
+def evalrun_command(
+    project: str,
+    workspace: Workspace = Path("./worldloom-workspace"),
+    agent: Annotated[str, typer.Option(help="reference (the executable ceiling; no harness) or harness (the configured coding harness over the exec seam).")] = "reference",
+    mode: Annotated[str, typer.Option(help="run: execute through the tool surface and grade three axes; plan: state a DAG only and grade the plan axis.")] = "run",
+    split: Annotated[str, typer.Option(help="Grade only this dataset split (train, validation, test); empty grades every row.")] = "",
+    limit: Annotated[int | None, typer.Option(min=1, help="Only the first N selected rows.")] = None,
+    max_turns: Annotated[int, typer.Option(min=1, max=128, help="Turns the harness may take per case.")] = 32,
+    harness_command: Annotated[str | None, typer.Option("--harness-command", help="Trusted local adapter for --agent harness: JSON stdin, JSON stdout; no shell.")] = None,
+    timeout: Annotated[float, typer.Option(min=1, max=3600)] = 600,
+) -> None:
+    """Grade an agent on this company's connector cases, per axis, and print the run summary.
+
+    The reference agent walks every expected DAG through the served tool
+    surface and is the ceiling of the dataset; `--agent harness` grades the
+    coding harness on the same cases. Results land in a run directory that
+    `worldloom evalrun summarize` and `compare` read.
+    """
+    from .cli import _refuse
+    from .providers import digest
+    from .studio import RunOptions, Studio
+    from .studio.worker import run_job
+
+    try:
+        if agent == "harness" and not harness_command:
+            raise ValueError("--agent harness needs --harness-command; the reference agent needs none")
+        studio = Studio(workspace)
+        revision = studio.store.get(project)["revision"]
+        options = RunOptions.model_validate({
+            "operation": "evalrun", "evalrun_agent": agent, "evalrun_mode": mode, "evalrun_split": split,
+            "evalrun_limit": limit, "evalrun_max_turns": max_turns,
+            "harness_identity": digest(harness_command) if agent == "harness" else "",
+        })
+        job = studio.store.enqueue(project, revision, options)
+        if job["status"] in {"failed", "interrupted", "paused"}:
+            job = studio.store.retry(job["id"])
+        run_job(studio, job["id"], harness_command=harness_command, timeout=timeout)
+        result = studio.store.job(job["id"])
+    except (OSError, ValueError, KeyError) as error:
+        _refuse("studio_rejected", str(error))
+    typer.echo(json.dumps(result, sort_keys=True))
+    if result["status"] != "complete":
+        _refuse("studio_rejected", result["error"] or "run is waiting for the active worker")
 
 
 @studio_app.command("next")

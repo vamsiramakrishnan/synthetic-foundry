@@ -161,17 +161,28 @@ class InterviewReply(Model):
 
 
 class RunOptions(Model):
-    operation: Literal["build", "compile", "interview", "narrate", "foundry", "native", "prepare_native"]
+    operation: Literal["build", "compile", "interview", "narrate", "foundry", "native", "prepare_native", "evalrun"]
     batch_limit: int | None = Field(default=None, ge=1, le=10_000, strict=True)
     message: str = Field(default="", max_length=8000)
     max_rounds: int = Field(default=2, ge=1, le=8, strict=True)
     harness_identity: str = ""
     native_suite: NativeSuiteRequest | None = None
+    #: `evalrun` jobs: which agent is graded on the revision's connector
+    #: dataset (the reference agent needs no harness; `harness` is the
+    #: configured coding harness over the exec seam), whether it executes
+    #: (`run`) or only states a DAG (`plan`), and which rows it sees.
+    evalrun_agent: Literal["reference", "harness"] = "reference"
+    evalrun_mode: Literal["run", "plan"] = "run"
+    evalrun_split: str = Field(default="", max_length=40)
+    evalrun_limit: int | None = Field(default=None, ge=1, le=100_000, strict=True)
+    evalrun_max_turns: int = Field(default=32, ge=1, le=128, strict=True)
 
     @model_validator(mode="after")
     def _native_request(self) -> RunOptions:
         if (self.operation == "prepare_native") != (self.native_suite is not None):
             raise ValueError("native_suite is required only for prepare_native jobs")
+        if self.operation == "evalrun" and self.evalrun_agent == "harness" and not self.harness_identity:
+            raise ValueError("evaluating a harness needs a configured harness; the reference agent needs none")
         return self
 
 

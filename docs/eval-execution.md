@@ -115,6 +115,7 @@ Three transports, each carrying only what the agent may know:
 | Requests and responses files | `evalrun requests ./cases -o requests.json`, then `evalrun run ./cases --agent scripted:responses.json` | A fixed trajectory: a regression set, a hand-authored baseline, a harness that cannot be called back. Replay cannot see a call's result. |
 | MCP | `enterprise-evals serve ./cases`, then `evalrun import-served ./cases scores.jsonl` | An agent that speaks MCP, Gemini Enterprise included. It calls `eval_score` before `eval_end` and keeps each document; those are complete three-axis results graded by the serving service, and `import-served` collects them into a comparable run. |
 | Planner, one subprocess per case | `evalrun plan ./cases --exec "<command>"`, or `evalrun requests ./cases --for plan` then `evalrun plan ./cases --agent scripted:plans.json` | The plan axis alone. The child reads a `worldloom.evalrun-plan/v1` document (query, tools) and prints the DAG it would run; nothing executes. |
+| Studio | `worldloom studio evalrun PROJECT_ID [--agent harness --harness-command "<command>"] [--mode plan]`, or the console's **Evaluations** page | The same run as a durable Studio job on the revision's own dataset, with lineage attached and per-axis results in the console. See [Studio](studio.md#grade-agents-on-the-connector-cases). |
 
 The same surface is reachable as MCP tools of `worldloom mcp`
 (`evalrun_cases`, `evalrun_run`, `evalrun_plan`, `evalrun_summarize`,
@@ -207,6 +208,12 @@ the findings, with where each was:
    graded the executed DAG, so a planner that emits a DAG without acting had
    no wire to a grade. `evalrun plan` is that wire, with the same formula,
    and a plan-only run's other axes are unobserved rather than zero.
+8. **Studio could build the cases and not grade an agent on them.** Its
+   Foundry trials observed a target agent for one pass/fail per trial, and
+   its console had no job that ran `evalrun` and no page that showed which
+   axis moved. The `evalrun` job grades the reference agent or the connected
+   harness on the revision's dataset, durably and authenticated, and the
+   Evaluations page reads the ledger per case.
 5. **The served surface could not attribute an email source.** The service
    demanded an `entity` argument on every search and create to attribute a
    call to its node, and refused the same argument as undeclared for tools

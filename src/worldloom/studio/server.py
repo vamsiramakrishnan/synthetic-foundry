@@ -155,6 +155,9 @@ class StudioHandler(BaseHTTPRequestHandler):
                 if job["options"]["operation"] == "foundry":
                     from .foundry import progress as foundry_progress
                     job["progress"] = foundry_progress(studio, job["id"])
+                if job["options"]["operation"] == "evalrun":
+                    from .evalrun import progress as evalrun_progress
+                    job["progress"] = evalrun_progress(studio, job["id"])
                 if job["options"]["operation"] == "compile":
                     from ..providers import digest
                     progress = studio.path("datasets", digest([job["project"], job["revision"]])) / "progress.json"
@@ -185,6 +188,13 @@ class StudioHandler(BaseHTTPRequestHandler):
                               offset=int(query.get("offset", ["0"])[0]), limit=int(query.get("limit", ["25"])[0]),
                               operation=query.get("operation", [""])[0], format=query.get("format", [""])[0],
                               use_case_id=query.get("use_case_id", [""])[0]))
+                    return
+                if parts[3:] == ["agent-results"]:
+                    self.send(200, studio.agent_results(project, query.get("job", [""])[0],
+                              offset=int(query.get("offset", ["0"])[0]), limit=int(query.get("limit", ["25"])[0]),
+                              status=query.get("status", [""])[0], shape=query.get("shape", [""])[0],
+                              use_case=query.get("use_case", [""])[0], split=query.get("split", [""])[0],
+                              verdict=query.get("verdict", [""])[0]))
                     return
                 if parts[3:] == ["native-artifact"]:
                     payload, format = studio.native_artifact(project, query.get("job", [""])[0], query.get("artifact", [""])[0])
@@ -247,12 +257,19 @@ class StudioHandler(BaseHTTPRequestHandler):
                         options = RunOptions.model_validate({"operation": "prepare_native", "native_suite": body["request"]})
                         result = studio.store.enqueue(project, body["revision"], options)
                     elif action == "run":
-                        options = RunOptions.model_validate(body["options"])
+                        from ..providers import digest
+                        requested = dict(body["options"])
+                        wants_harness = requested.get("operation") == "evalrun" and requested.get("evalrun_agent") == "harness"
+                        if wants_harness and not self.server.harness_command:
+                            raise ValueError("start Studio with a coding harness command to grade it; the reference agent needs none")
+                        if wants_harness:
+                            requested["harness_identity"] = digest(self.server.harness_command)
+                        options = RunOptions.model_validate(requested)
                         if options.operation in {"interview", "narrate", "foundry"} and not self.server.harness_command:
                             raise ValueError("start Studio with a coding harness command, or export a request for your harness")
-                        from ..providers import digest
+                        needs_identity = options.operation in {"interview", "narrate", "foundry", "native"} or wants_harness
                         options = options.model_copy(update={"harness_identity":
-                            digest(self.server.harness_command) if options.operation in {"interview", "narrate", "foundry", "native"} else ""})
+                            digest(self.server.harness_command) if needs_identity else ""})
                         result = studio.store.enqueue(project, body["revision"], options)
                         if result["status"] == "paused":
                             result = studio.store.retry(result["id"])

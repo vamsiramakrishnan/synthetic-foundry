@@ -58,6 +58,9 @@ worldloom evalrun plan ./cases -o ./runs/planner --exec "python3 my_planner.py" 
    outcome axes are unobserved, and `compare` against an executed run
    reports the plan axis only.
 
+Inside Studio the same run is a job: `worldloom studio evalrun PROJECT_ID`
+grades the reference agent on the project's own dataset and `--agent harness`
+grades the connected harness; the Evaluations page shows the axes per case.
 `summarize ./runs/mine --json` recomputes a summary from the ledger; `import-studio ./cases eval_results.csv -o ./runs/studio` brings Eval Studio's CSV in as an answer-axis-only run.
 
 **Rating answers.** `--rater grounded` needs no model and refuses the

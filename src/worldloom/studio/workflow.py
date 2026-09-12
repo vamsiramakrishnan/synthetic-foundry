@@ -17,7 +17,10 @@ if TYPE_CHECKING:
 class WorkflowAction(Model):
     kind: Literal["run", "navigate", "select_narration", "prepare_native"]
     label: str
-    operation: Literal["build", "compile", "narrate", "foundry", "native"] | None = None
+    operation: Literal["build", "compile", "narrate", "foundry", "native", "evalrun"] | None = None
+    #: Run options the action carries beyond its operation (which agent an
+    #: `evalrun` grades). Merged into `RunOptions` by whoever runs it.
+    options: dict[str, Any] = Field(default_factory=dict)
     page: str | None = None
     job_id: str | None = None
 
@@ -63,14 +66,16 @@ def report(studio: Studio, project: str, revision: str | None = None, *, harness
     def navigate(page: str, label: str) -> WorkflowAction:
         return WorkflowAction(kind="navigate", page=page, label=label)
 
-    def run(operation: Any, label: str) -> WorkflowAction:
-        return WorkflowAction(kind="run", operation=operation, label=label)
+    def run(operation: Any, label: str, **options: Any) -> WorkflowAction:
+        return WorkflowAction(kind="run", operation=operation, label=label, options=options)
 
     def stage(key: str, title: str, status: Any, detail: str, action: WorkflowAction | None = None) -> None:
         operation: str | None = action.operation if action and action.kind == "run" else None
         if action and action.kind == "prepare_native":
             operation = "prepare_native"
-        job = next((j for j in local_jobs if j["options"]["operation"] == operation), None) if operation else None
+        wanted = action.options if action and action.kind == "run" else {}
+        job = next((j for j in local_jobs if j["options"]["operation"] == operation
+                    and all(j["options"].get(key) == value for key, value in wanted.items())), None) if operation else None
         if job and job["status"] in {"queued", "running"}:
             status, detail, action = "running", "A worker owns this stage; inspect its run before starting more work.", navigate("changes", "Inspect active run")
         elif job and job["status"] in {"failed", "interrupted", "paused"}:
@@ -124,6 +129,26 @@ def report(studio: Studio, project: str, revision: str | None = None, *, harness
     stage("compile", "Connector queryset", "complete" if complete else "ready" if connector_ready and not unresolved else "blocked",
           "Connector coverage quotas met." if complete else "Every use case in this path needs an executable connector scenario; native tasks are generated separately.",
           None if complete else run("compile", "Generate connector queryset") if connector_ready and not unresolved else navigate("usecases", "Review connector contracts"))
+    graded = [j for j in local_jobs if j["options"]["operation"] == "evalrun" and j["status"] == "complete" and j["result"]]
+    reference = next((j for j in graded if j["options"].get("evalrun_agent") == "reference" and j["options"].get("evalrun_mode", "run") == "run"), None)
+    harness_run = next((j for j in graded if j["options"].get("evalrun_agent") == "harness"), None)
+    frozen_ready = any(j["options"]["operation"] == "foundry" and (j.get("result") or {}).get("frozen_dataset") for j in local_jobs)
+    dataset_ready = complete or bool(cr) or frozen_ready
+    if reference is None:
+        stage("evalrun", "Grade agents on connector cases", "ready" if dataset_ready else "blocked",
+              "Run the reference agent through the served tool surface: the executable ceiling of this dataset, per axis."
+              if dataset_ready else "A generated connector queryset is the case set an agent is graded on.",
+              run("evalrun", "Grade the reference agent") if dataset_ready else navigate("evals", "Generate the queryset first"))
+    elif harness_configured and harness_run is None:
+        stage("evalrun", "Grade agents on connector cases", "ready",
+              "The reference ceiling is recorded; grade the connected coding harness on the same cases and compare per axis.",
+              run("evalrun", "Evaluate the connected harness", evalrun_agent="harness"))
+    else:
+        means = reference["result"].get("summary", {}).get("means", {})
+        stage("evalrun", "Grade agents on connector cases", "complete",
+              f"Reference agent graded on {reference['result'].get('cases', 0)} cases (plan {means.get('plan')}, trajectory {means.get('trajectory')}, outcomes {means.get('outcomes')})."
+              + ("" if harness_run else " Connect a coding harness to grade it on the same cases."),
+              navigate("evals", "Inspect agent grades"))
     foundry = next((j for j in local_jobs if j["options"]["operation"] == "foundry"), None)
     fr = (foundry or {}).get("result") or {}
     frozen = bool(fr.get("frozen_dataset"))
@@ -141,7 +166,8 @@ def report(studio: Studio, project: str, revision: str | None = None, *, harness
                       "harness_configured": harness_configured, "accepted_narration": selected is not None},
         findings=tuple(findings), metrics={"use_cases": len(spec.use_cases), "native_tasks": len(spec.native_tasks),
             "native_artifacts": len(spec.native_corpus), "observed_native_trials": observed,
-            "native_evidence_components": nr.get("evidence_components", 0), "qualified_connector_queries": cr.get("report", {}).get("accepted", 0)})
+            "native_evidence_components": nr.get("evidence_components", 0), "qualified_connector_queries": cr.get("report", {}).get("accepted", 0),
+            "graded_connector_cases": reference["result"].get("cases", 0) if reference else 0})
 
 
 __all__ = ["WorkflowAction", "WorkflowStage", "WorkflowReport", "report"]

@@ -32,6 +32,7 @@ terminal-capable agent can use it without slash-command support.
 |---|---|---|
 | Resume a company dataset | `worldloom studio next`, `worldloom studio advance` | [Company workflow](studio.md#resume-a-company-workflow) |
 | Prepare native evaluations | `worldloom studio prepare-native` | [Native document tasks](studio.md#native-documents-and-file-tasks) |
+| Grade agents inside Studio | `worldloom studio evalrun` | [Grade agents on the connector cases](studio.md#grade-agents-on-the-connector-cases) |
 | Build a decided world | `worldloom build`, `worldloom status` | [Company specification](agents/company-specification.md) |
 | Propose an employee action | `worldloom act requests`, `worldloom act accept` | [Actors](agents/actors.md) |
 | Write fact-scoped prose | `worldloom narrate requests`, `worldloom narrate accept` | [Writing responses](agents/writing-responses.md) |
