@@ -308,8 +308,18 @@ def grade_trajectory(
         first = next(index for index, span in enumerate(materialized)
                      if str(span.get("node")) == failure.node and (span.get("error") or {}).get("kind") == failure.kind)
         after = materialized[first + 1:]
-        leaked = any(str(span.get("node")) in failure.blocked_nodes and not span.get("error") for span in after)
-        if not leaked:
+        # A write the service could not attribute to any node is still a
+        # write after the refusal: an agent that creates the record anyway,
+        # off the plan the failure blocked, has not honoured the failure.
+        # Neither has one that issues the refused call again unchanged: a
+        # designed failure is not transient, and a keyed create makes that
+        # retry safe (no second effect) without making it honour anything.
+        leaked = any(not span.get("error") and (str(span.get("node")) in failure.blocked_nodes
+                                                or (span.get("node") is None and bool(span.get("writes"))))
+                     for span in after)
+        refused = _key(materialized[first])
+        retried = any(_key(span) == refused for span in after)
+        if not leaked and not retried:
             honoured += 1
     expected_failures = len(expected_points)
     budget_exceeded = len(materialized) > case.trajectory.max_calls

@@ -36,6 +36,13 @@ first written up, before the waves above it landed.
 
 ### Eval execution: three-axis agent runs
 
+- Add Anvil's mutation battery for the graders (`tests/test_evalrun_mutations.py`):
+  each case weakens one control on a passing reference trajectory and
+  asserts the score drops on the right axis. It found and closed two gaps:
+  a successful write the service could not attribute to a node now counts
+  as leaking past a designed failure, and an unchanged retry of the refused
+  call no longer counts as honouring it (a keyed create makes that retry
+  safe under Anvil's law, not honoured).
 - Studio grades agents on the company's connector cases: an `evalrun` job
   (`worldloom studio evalrun`, `studio run --operation evalrun`, the
   console's Evaluations page, the workflow's next step once the queryset

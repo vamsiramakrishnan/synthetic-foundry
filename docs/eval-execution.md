@@ -176,6 +176,22 @@ earlier call in the run read). Anvil's judge-only rule holds for the answer
 axis: `GroundedRater` refuses the causal and authority shapes rather than
 scoring them lexically.
 
+Anvil's other habit is the mutation battery: weaken one control on purpose
+and prove the check notices. `tests/test_evalrun_mutations.py` takes a
+passing reference trajectory, removes or adds exactly one thing an agent
+could plausibly do wrong (skip the readback, write twice, add an unplanned
+write, hammer a read, write past a failed read, retry a refused call, update
+the wrong record, update before reading, delete blind, skip the readback
+after a delete, keep the record, do nothing, reverse a stated plan's edges)
+and asserts that the score drops and the right axis names the loss. Writing
+it found two gaps the graders now close: a write the service could not
+attribute to any node leaked past a designed failure without costing the
+"honoured" count, and an unchanged retry of a refused call counted as
+honouring the refusal because every shipped create carries an idempotency
+key that makes the retry *safe* under Anvil's law. Safe is not honoured. The
+battery also states what a keyed create absorbs: an identical repeat is one
+record and no law broken, though the repeated call is still off the plan.
+
 ## The gaps this closes, and the ones it names
 
 Before this layer the repository had the parts and not the loop. These are

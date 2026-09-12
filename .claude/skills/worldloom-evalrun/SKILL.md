@@ -116,3 +116,5 @@ Any object with `.name` and `.run(task, tools) -> AgentResponse` is an agent;
 - A failing reference case, a refused row, a zero in the coverage: report
   each as a finding. Widening the grader to pass is the failure mode this
   layer exists to make visible.
+- Changing a grader means extending `tests/test_evalrun_mutations.py`: weaken
+  the control you touched on purpose and show the grade drops on its axis.
