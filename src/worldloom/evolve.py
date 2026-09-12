@@ -242,8 +242,9 @@ def refusal(row: Mapping[str, str]) -> str | None:
         return f"periods {periods} is not at least 1"
 
     # A non-none estate is valid only where the engine registered the words to
-    # generate it — procurement has no landscape vocabulary, and serving it
-    # another vertical's names is worse than serving none.
+    # generate it — every shipped vertical now does, so this refuses only an
+    # out-of-tree engine, and serving one another vertical's names would be
+    # worse than serving none.
     if full["estate"] != "none" and domain.name not in landscape.LANDSCAPES:
         return (
             f"estate {full['estate']!r} on {domain.name}, which registers no"

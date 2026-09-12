@@ -704,7 +704,8 @@ The measured retail coupling, for whichever is chosen:
    8. *The estate's vocabulary as pack data*: **done.** `Pack.landscape`
       (a registered vocabulary or pools of the pack's own) and `Pack.estate`
       (the size) reach the build through one builder field, recorded on the
-      recipe beside the size. What stays code: the estate's construction
+      recipe beside the size; procurement registered the fourth vocabulary
+      (`landscape.PROCUREMENT`) and stopped refusing `--estate`. What stays code: the estate's construction
       (`generators/estate.py`), which decides the graph's shape and is what
       keeps an authored vocabulary from authoring a cyclic estate; and the
       physics and locale a company runs under, which ride the company

@@ -267,11 +267,12 @@ def test_the_gate_names_what_the_registries_refuse() -> None:
     assert "at most 1 period" in evolve.refusal(
         {"archetype": "midsize_general_insurer", "periods": "3"}
     )
-    # Procurement registers no landscape vocabulary, so an estate on it would
-    # serve another vertical's names.
-    assert "landscape" in evolve.refusal(
+    # Every shipped vertical registers a landscape vocabulary now — procurement
+    # was the last — so an estate on a contractor is a legal configuration; the
+    # refusal is reserved for an engine that registers none.
+    assert evolve.refusal(
         {"archetype": "midsize_infrastructure_services", "estate": "small"}
-    )
+    ) is None
     # The single-episode refusal block: close-loop axes belong to retail.
     assert "retail close" in evolve.refusal(
         {"archetype": "midsize_adi", "history": "incident"}

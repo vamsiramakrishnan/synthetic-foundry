@@ -11,6 +11,25 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Procurement: an estate of its own (Generation)
+
+- `ProcureToPayWorld` refused `--estate` outright, and three modules carried
+  the sentence "`landscape.LANDSCAPES` is a closed core table with no
+  registration seam" for as long as `landscape.register` has existed. The
+  contractor's vocabulary is now `landscape.PROCUREMENT`, the fourth shipped
+  landscape (`worldloom pack landscapes`): sourcing, orders, site receipting,
+  the three-way match and the accrual it books, gated on the
+  site-connectivity gateway and identity. A purchase-to-pay corpus built
+  with `--estate` grows a technology graph around the five systems the
+  cycle mints, owned by the people who own those systems; built without
+  one it is byte-identical. The pack's `estate` and `landscape` reach this
+  engine too, and `evolve` no longer refuses an estate on a contractor.
+- **Generation**: the procurement mosaic (`worldloom mosaic --engine
+  procurement`) regains the estate axis it dropped while the builder
+  refused estates, so its variants carry one more coordinate; a
+  procurement mosaic dealt before this does not replay. Every other build
+  is unchanged.
+
 ### Packs: the estate's vocabulary as pack data
 
 - `landscape.named`'s error message promised that "a pack may also supply

@@ -110,11 +110,14 @@ def test_the_lint_names_what_the_build_would_refuse() -> None:
     findings = packs.lint(_pack(INSURER, landscape=broken))
     assert any("landscape:" in f and "at least one system" in f for f in findings), findings
 
-    # A base that grows no estate is named, not silently inert.
-    procurement = json.loads(open("examples/packs/trading-retailer.json", encoding="utf-8").read())
-    procurement.update(base="procurement", estate="small", landscape="banking")
-    findings = packs.lint(packs.load(procurement))
-    assert any("procurement engine grows no estate" in f for f in findings), findings
+    # A base that grows no estate is named, not silently inert. Every shipped
+    # engine registers a vocabulary now, so the branch is reached only by an
+    # out-of-tree engine; `lint` refuses an unregistered base before this
+    # check runs, which is why it is exercised on the check itself.
+    elsewhere = _pack(INSURER, estate="small", landscape="banking").model_copy(update={"base": "logistics"})
+    findings = packs._lint_estate(elsewhere)
+    assert any("logistics engine grows no estate" in f for f in findings), findings
+    assert sum("grows no estate" in f for f in findings) == 2, "the size and the vocabulary are each named"
 
 
 def test_the_typed_size_wins_over_the_packs_and_the_recipe_says_which() -> None:

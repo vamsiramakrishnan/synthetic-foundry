@@ -234,7 +234,7 @@ class Landscape:
         return payload
 
 
-#: Shared by all three shipped vocabularies, and that is a decision rather than
+#: Shared by all four shipped vocabularies, and that is a decision rather than
 #: laziness. The profile is a statement about how big *the landscape* is, and
 #: ``--estate medium`` has to mean the same size of landscape whichever engine
 #: is running or the flag stops being comparable across corpora. What differs
@@ -509,6 +509,103 @@ INSURANCE = Landscape(
 )
 
 
+# ---------------------------------------------------------------------------
+# Procurement
+# ---------------------------------------------------------------------------
+
+#: An infrastructure-services contractor's landscape. Procurement was the
+#: vertical this table was closed to for the longest: ``ProcureToPayWorld``
+#: refused ``--estate`` outright, and three modules carried the sentence
+#: "``landscape.LANDSCAPES`` is a closed core table with no registration
+#: seam" for a year after ``register`` existed. ``procurement_org.generate``
+#: mints five systems (sourcing, the P2P suite, receipting, the AP ledger and
+#: the general ledger) and, like insurance, no services at all, so a
+#: purchase-to-pay corpus had no technology graph whatsoever — which document
+#: gates the three-way match was unanswerable rather than thin. This
+#: vocabulary extends around those five without repeating any of them.
+#:
+#: The chokepoints are the contractor's own: the site-connectivity gateway,
+#: because a depot that cannot reach head office receipts nothing and every
+#: goods-receipt note this vertical's episode turns on is raised from a site;
+#: and identity, because a delegation of authority is what lets one person
+#: clear an exception over the tolerance and nothing else may. The private
+#: store behind the gateway is the site-device register; behind identity, the
+#: delegations register.
+PROCUREMENT = Landscape(
+    services={
+        "edge": (
+            "supplier-portal", "requisition-web", "site-receipting-app",
+            "tender-response-portal", "buyer-workbench", "approver-mobile-app",
+            "invoice-capture-inbox", "contract-negotiation-workspace",
+            "plant-hire-booking-web", "subcontractor-onboarding-portal",
+            "project-cost-console", "commercial-review-workspace",
+            "yard-stock-console", "fleet-dispatch-console",
+            "supplier-performance-dashboard", "audit-evidence-portal",
+            "delegations-admin-console", "payment-status-web",
+        ),
+        "domain": (
+            "requisition-approval-service", "purchase-order-service",
+            "contract-rate-service", "rate-card-versioning-service",
+            "three-way-match-engine", "tolerance-evaluation-service",
+            "exception-routing-service", "delegation-of-authority-service",
+            "goods-receipt-service", "short-delivery-detection-service",
+            "invoice-validation-service", "duplicate-invoice-check",
+            "credit-note-service", "payment-run-scheduler",
+            "supplier-master-service", "vendor-change-workflow",
+            "bank-detail-verification-service", "commitment-ledger-service",
+            "accrual-calculation-service", "grni-ageing-service",
+            "spend-categorisation-service", "category-strategy-service",
+            "tender-evaluation-service", "contract-award-service",
+            "subcontract-progress-claim-service", "retention-release-service",
+            "plant-utilisation-service", "hire-charge-calculation-service",
+            "project-budget-service", "cost-to-complete-service",
+            "supplier-risk-scoring-service", "compliance-certificate-service",
+            "safety-prequalification-service", "materials-issue-service",
+        ),
+        "platform": (
+            "identity-provider", "site-connectivity-gateway", "event-bus",
+            "batch-scheduler", "api-gateway", "audit-log", "document-store",
+            "notification-gateway", "reference-data-service",
+            "observability-collector",
+        ),
+        "data": (
+            "open-order-extract", "goods-receipt-feed", "invoice-register-extract",
+            "match-exception-stream", "commitment-position-feed",
+            "accrual-journal-extract", "supplier-master-feed",
+            "rate-card-distribution", "spend-cube-builder",
+            "category-spend-extract", "subcontract-claim-feed",
+            "plant-hire-charge-feed", "project-cost-datamart-builder",
+            "payment-run-extract", "vendor-change-audit-feed",
+            "materials-on-hand-extract", "supplier-scorecard-builder",
+            "delegation-change-feed",
+        ),
+    },
+    systems=(
+        ("Contract Register", "Executed contracts, rate cards and their versions", "contract"),
+        ("Tender Vault", "Tenders issued, responses received and evaluations", "tender"),
+        ("Project Cost System", "Project budgets, commitments and cost to complete", "project_cost"),
+        ("Plant and Fleet Register", "Owned and hired plant, allocations and hire charges", "plant_asset"),
+        ("Subcontract Ledger", "Subcontract progress claims, certifications and retentions", "subcontract_claim"),
+        ("Payments Bureau", "Supplier payment runs and remittances as executed", "payment_run"),
+        ("Colleague Register", "Employee records, roles and site inductions", "employee_record"),
+        ("Safety Prequalification Register", "Supplier safety, insurance and licensing evidence", "prequalification"),
+        ("Complaints Register", "Supplier and site disputes and their resolution", "dispute_case"),
+        ("Yard Inventory", "Materials held in the yards, by lot and location", "materials_lot"),
+        # The chokepoints' private stores, in the order the generator reserves
+        # them: the site-device register backs the connectivity gateway, and
+        # the delegations register backs identity's authority lookup.
+        ("Site Device Register", "Receipting devices, their sites and their enrolment", "site_device"),
+        ("Delegations Register", "Delegations of authority, limits and their approvers", "delegation"),
+    ),
+    purpose=_PURPOSE,
+    profiles=_SIZES,
+    about="An infrastructure-services contractor: sourcing, orders, site"
+          " receipting, the three-way match and the accrual it books. Extends"
+          " the five systems `procurement_org` mints for the purchase-to-pay"
+          " cycle, which ships with no services at all.",
+)
+
+
 #: Named vocabularies a pack or an engine may pick by name. Deliberately few and
 #: deliberately unlike each other, ``profiles.PROFILES``'s rule: a long list of
 #: near-identical catalogues would be a menu rather than a decision.
@@ -516,6 +613,7 @@ LANDSCAPES: dict[str, Landscape] = {
     "retail": RETAIL,
     "banking": BANKING,
     "insurance": INSURANCE,
+    "procurement": PROCUREMENT,
 }
 
 #: What an un-overridden build uses, and what every estate built before this
@@ -633,7 +731,7 @@ def register(name: str, landscape: Landscape) -> None:
 
 
 __all__ = [
-    "BANKING", "DEFAULT", "GENERATIVE", "INSURANCE", "LANDSCAPES", "RETAIL",
+    "BANKING", "DEFAULT", "GENERATIVE", "INSURANCE", "LANDSCAPES", "PROCUREMENT", "RETAIL",
     "SIZED", "Landscape", "document_of", "from_document", "named", "publish", "register",
     "resolve",
 ]

@@ -313,22 +313,22 @@ class ProcureToPayWorld:
     pack: Any = None
     """An industry ``Pack``. See ``RetailWorld.pack`` — same contract."""
     estate: str | None = None
-    """Refused, and stated rather than silently ignored.
+    """Grow a technology landscape around the cycle's own five systems:
+    ``"small"``, ``"medium"`` or ``"large"`` (``landscape.PROCUREMENT.profiles``).
 
-    ``--estate`` grows a technology landscape out of a named vocabulary in
-    ``worldloom.landscape``, and ``landscape.LANDSCAPES`` is a literal dict in
-    a core module with **no registration seam** — the same gap
-    ``parameters.DEFAULTS`` has. This module could define a ``Landscape`` of
-    its own and pass it to ``generators.estate`` directly, which is what a
-    fifth vertical will want to do, but it would then be invisible to
-    ``worldloom pack landscapes`` and unreachable from ``--pack``: an estate
-    vocabulary only one code path knows about is the "carried, citable and
-    inert" failure this repository keeps finding.
-
-    So the flag is refused with its reason rather than served half-way. The
-    field exists at all because ``cli.py`` forwards ``estate=`` to whichever
-    world a domain registered, and a ``TypeError`` out of a dataclass
-    constructor is a worse answer than a sentence."""
+    Refused outright until the vocabulary existed: this module carried the
+    sentence "``landscape.LANDSCAPES`` is a closed core table with no
+    registration seam" for a year after ``landscape.register`` did, and a
+    purchase-to-pay corpus had no technology graph at all — which document
+    gates the three-way match was unanswerable rather than thin.
+    ``procurement_org.generate`` mints no services, so like insurance every
+    generated node's layer comes out of the systems alone. ``None`` still
+    mints nothing, which is what keeps every contractor built before this
+    field was honoured byte-identical."""
+    landscape: Any = None
+    """Whose words the estate is built out of (``worldloom.landscape``): a
+    registered name, a document of pools, or a ``Landscape``. ``None`` is
+    procurement's own — ``RetailWorld.landscape``, same contract."""
 
     role_table: tuple[tuple[str, str, str, str | None], ...] | None = None
     """Who exists in this organisation (``worldloom.roles``).
@@ -412,22 +412,16 @@ class ProcureToPayWorld:
         """
         from . import packs as packs_module
 
-        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack)
+        return cls(seed=seed, archetype=packs_module.archetype_of(pack), pack=pack,
+                   # The estate the pack asks for, in the words it asks for it;
+                   # `None` on both when it says nothing — `RetailWorld.from_pack`.
+                   estate=pack.estate or None, landscape=pack.landscape)
 
     def build(self) -> World:
         from . import __version__ as worldloom_version
         from . import locales as locales_module
         from . import recipe as recipe_module
         from .generators import procurement_org
-
-        if self.estate is not None:
-            raise ValueError(
-                "the procurement vertical has no estate vocabulary: `landscape.LANDSCAPES`"
-                " is a closed table in core with no registration seam, so a procurement"
-                " landscape would be invisible to `worldloom pack landscapes` and"
-                " unreachable from a pack. Build without --estate, or register a"
-                " landscape seam first."
-            )
 
         rng = Rng(self.seed)
         minter = Minter()
@@ -451,6 +445,8 @@ class ProcureToPayWorld:
             employees=self.employees,
             annual_revenue=self.annual_revenue,
             pack=self.pack,
+            estate=self.estate,
+            landscape=self.landscape,
             physics=self.physics,
             role_table=self.role_table,
             # What it was given, not what it resolved to — `RetailWorld.build`.
@@ -474,12 +470,38 @@ class ProcureToPayWorld:
             employees_total=self.employees,
         )
 
+        systems, services = org.systems, org.services
+        if self.estate is not None:
+            from . import landscape as landscape_module
+            from .generators import estate as estate_module
+
+            grown = estate_module.generate(
+                rng.derive("estate"), minter,
+                profile=self.estate,
+                landscape=landscape_module.resolve(self.landscape, default=landscape_module.PROCUREMENT),
+                # Empty, as insurance's are: this organisation mints systems and
+                # no services, so every generated node's layer comes out of the
+                # systems alone (`core_layers`).
+                core_services=org.services,
+                core_systems=org.systems,
+                # A contractor's role table has no technology roles, so
+                # ownership goes to the three people who already own its
+                # systems of record — the CPO owns sourcing and the P2P suite,
+                # the operations director the sites that receipt, the
+                # controller the ledgers. `InsuranceWorld.build`'s answer.
+                owner_ids=estate_module.owners(
+                    org.roles, "chief_procurement", "operations_director", "financial_controller",
+                ),
+            )
+            systems = (*systems, *grown.systems)
+            services = (*services, *grown.services)
+
         world = World(
             company=org.company,
             _business_units=org.business_units,
             _people=org.people,
-            _systems=org.systems,
-            _services=org.services,
+            _systems=systems,
+            _services=services,
             _cost_centres=org.cost_centres,
             _categories=org.categories,
             _sites=org.sites,
@@ -1051,14 +1073,13 @@ from .generators.procurement_evaluation import (
 from .generators.procurement_org import _ROLES as _PROCUREMENT_ROLES
 from .procurement_scenarios import PurchaseToPayCycle
 
-# Structure minus the estate axis: `ProcureToPayWorld` refuses `estate=` by
-# design — `landscape.LANDSCAPES` is a closed core table with no registration
-# seam, and a procurement landscape would be invisible to `pack landscapes` —
-# so a mosaic axis dealing estates to this engine would build worlds the world
-# builder itself rejects. The axis is dropped rather than the guard loosened.
-_mosaic_module.register_engine("procurement", tuple(
-    axis for axis in _mosaic_module.STRUCTURE if axis.name != "estate"
-) + (
+# The whole structure, estate axis included. The axis was dropped while
+# `ProcureToPayWorld` refused `estate=` — a mosaic dealing estates to an engine
+# whose builder rejects them would have built nothing — and restored with
+# `landscape.PROCUREMENT`: a contractor's landscape now varies in size the way
+# a bank's does. A procurement mosaic dealt before this carried one axis
+# fewer, so its coordinates do not replay (CHANGELOG, Generation).
+_mosaic_module.register_engine("procurement", _mosaic_module.STRUCTURE + (
     _mosaic_module.Axis(
         "tolerance", 0.6, 4.5, parameter="procurement.tolerance.pct",
         about="The approval tolerance as a share of committed order value — how"

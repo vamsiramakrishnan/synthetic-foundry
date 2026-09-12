@@ -191,7 +191,7 @@ def test_build_space_has_a_value_that_is_legal_on_every_engine() -> None:
 
     A single-episode vertical refuses `--incident`, `--timeline`,
     `--conversations`, `--actors` and a non-`standard` `--eval-density`, and
-    procurement refuses `--estate`. This space does not encode that, so what it
+    an out-of-tree engine may register no landscape. This space does not encode that, so what it
     must guarantee instead is that every constrained axis carries a value a
     caller can honestly *project to* — otherwise a row for those engines has no
     legal spelling and the fleet has to leave the axis out, which reads as a

@@ -223,25 +223,12 @@ def _check_persona_ids(voiced: dict[str, Any], minted: dict[str, str]) -> None:
 #: like the role table — see ``banking_org``'s identical comment for why these
 #: do not move to ``generators/names.py``.
 #:
-#: The suffix pool, and **it is currently unreachable from any shipped
-#: locale** — stated rather than quietly carried, because a pool nothing draws
-#: from is exactly the "carried, citable and inert" failure this repository
-#: keeps finding.
-#:
-#: ``Locale.industry_suffixes`` is a closed table in ``locales.py`` naming
-#: three engines, and ``suffixes_for`` answers an engine it has never heard of
-#: with the *retail* pool rather than raising — deliberately, so a new vertical
-#: is not made unbuildable by a naming table. So a contractor built today is
-#: named from ``company_suffixes`` and comes out as "Ardent Holdings", which is
-#: a perfectly plausible contractor and is not this engine's own vocabulary.
-#: The gap is the same class as ``parameters.DEFAULTS`` and
-#: ``landscape.LANDSCAPES``: a core table with no registration seam.
-#:
-#: This pool stays because it *is* reached the moment either of two things
-#: happens — a locale (or a pack-authored one) states an empty pool, or
-#: ``industry_suffixes`` grows a seam — and deleting it would mean rediscovering
-#: what a contracting group is called in the jurisdiction this engine was
-#: written for.
+#: The suffix pool, reached only as a fallback. Every shipped locale answers
+#: ``suffixes_for("procurement")`` from its own ``industry_suffixes`` (and
+#: refuses an engine it has no entry for), so a contractor is named in the
+#: jurisdiction's words; this pool is what an authored locale that states an
+#: empty procurement pool falls back to, and it keeps what a contracting group
+#: is called in the jurisdiction this engine was written for.
 _CONTRACTOR_SUFFIX = ("Infrastructure", "Group Services", "Contracting", "Infrastructure Group")
 _SOURCING = ("Sourcemark", "Contract Vault", "Vendorline")
 _PROCURE = ("Requisite P2P", "OrderBridge", "Procureflow")

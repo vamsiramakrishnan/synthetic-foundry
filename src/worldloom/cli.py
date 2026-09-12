@@ -1687,10 +1687,11 @@ def build(
     # It mattered most for the estate nobody asked for. Three facet values imply
     # `estate=large` — `maturity=legacy`, `scale=enterprise`,
     # `scale=multinational`, one of which appears in AGENTS.md's own example —
-    # and on procurement that reached `ProcureToPayWorld.build` and died with an
-    # unhandled `ValueError` whose remediation was "build without `--estate`", a
-    # flag the caller had not typed. Every other vertical-inapplicable flag on
-    # this branch prints a clean `error:` line; this one printed a stack.
+    # and while procurement had no vocabulary that reached its builder and died
+    # with an unhandled `ValueError` whose remediation was "build without
+    # `--estate`", a flag the caller had not typed. Every shipped vertical
+    # registers a vocabulary now; the refusal stays for an out-of-tree engine,
+    # and prints a clean `error:` line rather than a stack.
     from . import landscape
 
     if estate is not None and domain is not None and domain.name not in landscape.LANDSCAPES:
