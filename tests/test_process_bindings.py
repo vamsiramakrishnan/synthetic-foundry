@@ -5,17 +5,16 @@ import json
 import os
 import subprocess
 import sys
-from collections import Counter
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+from worldloom import pcf
 from worldloom.predicates import Predicate
 from worldloom.process_bindings import (
     CompanySpec,
     authoring_brief,
-    baseline_parity,
     compile_company,
     default_company,
     demands,
@@ -30,35 +29,65 @@ from worldloom.process_bindings import (
     write_compilation,
 )
 from worldloom.process_bindings.__main__ import main
-from worldloom.process_bindings.compiler import fingerprint, resource
+from worldloom.process_bindings.compiler import resource
 
 INDUSTRIES = tuple(sorted(resource("defaults.json")["DEFAULT_ORGS"]))
 
 
 @pytest.mark.parametrize("industry", INDUSTRIES)
-def test_all_uploaded_baselines_reproduce(industry: str) -> None:
+def test_every_default_company_compiles_replays_and_names_its_processes(industry: str) -> None:
+    """Every binding carries the process its activity belongs to, in the words of the framework
+    the stream's industry names, and the id resolves there."""
     compiled = compile_company(default_company(industry))
-    baseline = resource("bindings-provenance.json")["compiled_baselines"][f"default-{industry}.jsonl"]
-    assert len(compiled.rows) == baseline["rows"]
-    assert baseline_parity(compiled)
     assert replay_builtin(compiled)
-    assert all(r.evidence == "authored_prior" and r.pcf_status == "unverified_hint" for r in compiled.rows)
+    assert all(r.evidence == "authored_prior" for r in compiled.rows)
+    frameworks = {key: pcf.load(key) for key in {r.pcf_framework for r in compiled.rows}}
+    for row in compiled.rows:
+        element = frameworks[row.pcf_framework].element(row.pcf_id)
+        assert (element.hierarchy_id, element.name) == (row.pcf_hierarchy_id, row.pcf_name)
+    specific = [r for r in compiled.rows if r.kind == "industry_specific"]
+    universal = [r for r in compiled.rows if r.kind == "universal"]
+    assert {r.pcf_framework for r in universal} == {"cross_industry@7.4"}
+    if industry in {"banking", "insurance", "retail", "utilities", "healthcare", "public_sector"}:
+        assert specific and {r.pcf_framework for r in specific} != {"cross_industry@7.4"}
     assert all(c.calibration_status != "calibrated" for c in compiled.coverage)
     assert len({r.id for r in compiled.rows}) == len(compiled.rows)
     assert all(r.id.startswith("PCA-") for r in compiled.rows)
 
 
-def test_all_uploaded_coverage_cells_reproduced_but_claims_not_promoted() -> None:
-    baseline = resource("bindings-provenance.json")["source_coverage"]
+def test_every_catalogue_activity_resolves_and_the_join_tool_reports_it() -> None:
+    from tools.check_catalogue_pcf import rows
+
+    table, problems = rows()
+    assert problems == []
+    assert len(table) == 269
+    by_id = {(r[0], r[2]): r for r in table}
+    assert by_id["universal", "o2c.07"][4:6] == ("9.2.2.2", "Generate customer billing data")
+    assert by_id["universal", "o2c.07"][7] == "billing"
+    assert by_id["banking", "a2d.06"][4:6] == ("5.3.1.8", "Fund and disburse proceeds")
+    differs = [r for r in table if r[8]]
+    assert 0 < len(differs) < len(table) // 2
+
+
+def test_an_unknown_pcf_id_is_refused_by_name() -> None:
+    cat = load_catalogue()
+    cat["value_streams"]["order_to_cash"]["activities"][0][2] = "0"
+    with pytest.raises(ValueError, match=r"order_to_cash/o2c\.01: cross_industry@7\.4 has no element with PCF id '0'"):
+        compile_company(default_company("retail"), catalogue=cat)
+
+
+def test_coverage_cells_and_calibration_claims_stay_unresolved() -> None:
     actual = {(c.industry,c.stream):c for i in INDUSTRIES for c in compile_company(default_company(i)).coverage}
-    assert len(baseline) == 215
     assert len(actual) == 216
-    for row in baseline:
-        current = actual[row["industry"],row["stream"]]
-        assert current.activities == int(row["activities"])
-        if row["status"] == "corpus_calibrated":
-            assert current.calibration_status == "unresolved"
-            assert current.calibration_targets
+    cat = load_catalogue()
+    for (industry, stream), cell in actual.items():
+        if cell.status == "missing_definition":
+            continue
+        definition = cat["value_streams"].get(stream) or cat["industry_overlays"][industry]["specific"][stream]
+        assert cell.activities == len(definition["activities"])
+        if definition["calibrate"]:
+            assert cell.calibration_status == "unresolved"
+            assert cell.calibration_targets
     assert actual["utilities","usage_to_bill"].status == "missing_definition"
 
 
@@ -179,9 +208,10 @@ def test_seeded_channel_presence_and_authored_lexicon() -> None:
     records = lexicon_records(compiled)
     assert len(records) == 146
     assert sum(r.weight for r in records) == pytest.approx(1)
-    assert all(not r.concept.startswith("apqc:") for r in records)
-    shared_hint = [r for r in compiled.rows if r.apqc == "9.2.3"]
-    assert len({r.activity_id for r in shared_hint}) > 1
+    assert all(not r.concept.startswith("pcf:") for r in records)
+    shared = [r for r in compiled.rows if r.pcf_id == "10295"]   # Create/Distribute purchase orders
+    assert len({r.activity_id for r in shared}) > 1
+    assert all("4.2.3.4 Create/Distribute purchase orders" in r.description for r in records if r.id.endswith(":p2p.04"))
     assert all(r.evidence.value == "authored_prior" for r in records)
 
 
@@ -282,6 +312,5 @@ def test_input_source_digests_and_readonly_snapshots() -> None:
     assert compiled.digest == digest
     assert compile_company(default_company("retail"),catalogue=cat).digest != digest
     manifest = resource("bindings-provenance.json")
-    assert set(manifest["inputs"]) == {"catalogue.json","compile_processes.py","coverage.csv","VOCABULARY.md","all-12-industries.zip"}
-    assert Counter(r["status"] for r in manifest["source_coverage"])["corpus_calibrated"] == 63
-    assert fingerprint([r.legacy_record() for r in compiled.rows]) == manifest["compiled_baselines"]["default-retail.jsonl"]["semantic_sha256"]
+    assert manifest["source"] == "worldloom-process-catalogue-0.2" == compiled.rows[0].source
+    assert "APQC" in manifest["attribution"]

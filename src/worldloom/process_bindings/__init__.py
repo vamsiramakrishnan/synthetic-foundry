@@ -26,7 +26,6 @@ from .models import (
 from .ownership import materialize_owners
 from .situations import Situation, coverage, situations, situations_for
 from .storage import (
-    baseline_parity,
     replay_builtin,
     summary,
     verify_export,
@@ -39,5 +38,5 @@ __all__ = [
     "load_catalogue", "situations", "situations_for",
     "materialize_owners",
     "authoring_brief", "dataset", "demands", "lexicon_records", "sample_channels", "tool_surface", "verify_ownership",
-    "baseline_parity", "replay_builtin", "summary", "verify_export", "write_compilation",
+    "replay_builtin", "summary", "verify_export", "write_compilation",
 ]

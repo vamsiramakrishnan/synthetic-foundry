@@ -47,7 +47,7 @@ class CompanySpec(Model):
 class Activity(Model):
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
-    apqc: str
+    pcf_id: str = Field(min_length=1)
     function: str
     sor_class: str
     type: Literal["capture", "approve", "execute", "reconcile", "notify", "escalate", "decide", "report"]
@@ -76,8 +76,10 @@ class ActivityBinding(Model):
     stream: str
     stream_name: str
     activity: str
-    apqc: str
-    pcf_status: Literal["unverified_hint"] = "unverified_hint"
+    pcf_id: str
+    pcf_hierarchy_id: str
+    pcf_name: str
+    pcf_framework: str
     function: str
     owner_kind: OwnerKind
     owner_bu: str
@@ -106,17 +108,6 @@ class ActivityBinding(Model):
     @property
     def variant(self) -> dict[str, Any]:
         return json.loads(self.variant_json)
-
-    def legacy_record(self) -> dict[str, Any]:
-        """Comparable to the upload, without promoting its evidence claims."""
-        names = ("activity_id", "stream", "stream_name", "activity", "apqc", "function",
-                 "owner_kind", "owner_bu", "bu_archetype", "country", "sor_class",
-                 "sor_product", "sor_objects", "type", "channels", "channels_optional",
-                 "control", "exception", "eval_templates")
-        payload = self.model_dump(mode="json")
-        result = {name: payload[name] for name in names}
-        result["variant"] = self.variant
-        return result
 
 
 class CoverageCell(Model):

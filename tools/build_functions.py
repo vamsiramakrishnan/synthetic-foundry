@@ -37,7 +37,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from worldloom import onet, pcf
-from worldloom.process_catalogue import catalogue as load_catalogue
+from worldloom.process_bindings import load_catalogue
 
 SCHEMA = "worldloom.functions/v1"
 VERSION = 1

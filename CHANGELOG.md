@@ -11,6 +11,32 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The catalogue keyed by PCF id, and the parity apparatus retired
+
+- Every activity in the process catalogue now carries the stable APQC
+  `pcf_id` of the process it belongs to, in place of a hand-typed hierarchy
+  hint (`3.4.1`, `5.x`). Universal streams resolve in the cross-industry
+  framework; each industry overlay names its own (`pcf_framework`: banking,
+  property and casualty insurance, retail, utilities, healthcare provider,
+  city government), and overlays for industries APQC publishes no framework
+  for resolve in the cross-industry one. A compiled binding carries the
+  resolved `pcf_hierarchy_id`, `pcf_name` and `pcf_framework`; an id its
+  framework does not have refuses the compile by activity name.
+  `tools/check_catalogue_pcf.py` prints the join, with the function that owns
+  each process beside the function the row names.
+- The second compiler (`worldloom.process_planning`), the source-reference
+  importer (`worldloom.process_catalogue`), the archived upload they replayed
+  against (`_data/processes/`, `defaults.zip`, `coverage.csv`, the parity
+  fingerprints in `bindings-provenance.json`) and their tools, tests and
+  workflow are gone. The catalogue is versioned data checked against the
+  shipped frameworks, not a mirror of an upload.
+  `process.open_from_catalogue` takes a `CompiledCatalogue` and carries the
+  stream's bindings through `authoring_brief`.
+- Generation: the activity bindings that feed the industry programme and the
+  `process_catalogue` connector records carry the four PCF fields and no
+  `apqc` or `pcf_status`; the default corpora do not read them and are
+  unchanged.
+
 ### Reference data: the PCF, O*NET and the function table
 
 - The APQC Process Classification Framework ships as data: the cross-industry

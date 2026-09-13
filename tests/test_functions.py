@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from worldloom import functions, onet, pcf
-from worldloom.process_catalogue import catalogue
+from worldloom.process_bindings import load_catalogue as catalogue
 
 
 def test_every_process_has_exactly_one_owner() -> None:

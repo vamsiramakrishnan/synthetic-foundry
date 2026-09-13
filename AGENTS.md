@@ -80,7 +80,7 @@ Determinism spine:
 | `src/worldloom/{narrative,render,evaluate,compiler,actors}/` | Pipeline stages above |
 | `src/worldloom/evalrun/` | Eval execution: the three-axis case contract (plan, trajectory, outcomes), the agent seam (`ToolSurface`, `ReferenceAgent`), per-axis grading over the service's snapshots and spans, the run ledger, comparison, Eval Studio import; `docs/eval-execution.md` |
 | `src/worldloom/{connectors,evals,pipeline}/` | The three library seams `worldloom seams` names: product-shaped connector emulation and trace grading; eval-first design → demands → candidates → proof; typed orchestration shared by SDK, CLI and skills |
-| `src/worldloom/{synthesis,process_bindings,process_planning}/` | Operational relational synthesis (causal microdata, paired interventions); the supplied 12-industry process catalogue compiled into company bindings and process plans |
+| `src/worldloom/{synthesis,process_bindings}/`, `pcf.py`, `onet.py`, `functions.py` | Operational relational synthesis (causal microdata, paired interventions); the process catalogue, keyed by APQC process id, compiled into company bindings; the PCF, O*NET and function tables it resolves against |
 | `tests/` | ~225 pytest files; scripted agent stand-ins (`scripted_composer.py`, `scripted_actor.py`, `scripted_agent.py`) |
 | `tools/` | Dev-only scripts (`sweep.py` determinism sweep, `measure_retrievers.py`, `outcome_selection.py`); stdlib-only, never imported from `src/` |
 | `docs/`, `docs/agents/` | Operator guides; 16 agent topic files |

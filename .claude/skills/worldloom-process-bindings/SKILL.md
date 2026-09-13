@@ -27,9 +27,10 @@ only `bound_structural` ownership demands have an oracle. Other tasks need runti
 facts, policy predicates or workflow transitions. Do not count template slots as
 executed evals, fitted priors, or generated business records.
 
-The source is `authored_prior`. APQC codes are `unverified_hint`. Calibration
-names are targets, not measurements. The input license is `NOASSERTION` and needs
-review before redistribution. Keep the original source and provenance ledger.
+The source is `authored_prior`. PCF ids are resolved against the shipped APQC
+frameworks (`pcf_hierarchy_id`, `pcf_name`, `pcf_framework` on every row).
+Calibration names are targets, not measurements. The catalogue's own license is
+`NOASSERTION`; the frameworks carry APQC's notice.
 
 Run `pytest -q tests/test_process_bindings.py` and verify exports with
 `python -m worldloom.process_bindings --verify ./processes/company-000`.

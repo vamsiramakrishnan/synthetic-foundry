@@ -172,12 +172,12 @@ failing check forces that decision into the change that caused it.
 
 ## Authored industry process planning
 
-[Compile company process plans](process-catalogue.md) from the supplied 12-industry factors. Bind activities to owners, countries, systems and seeded channels; inspect coverage and evidence boundaries; replay pinned exports; feed the existing process authoring cascade. The source-reference catalogue API remains unchanged.
+[Read the process catalogue](process-catalogue.md): value streams and activities keyed by APQC process id, compiled against a company into owners, countries, systems and seeded channels, then carried into the process authoring cascade.
 
 
 ## Audited process bindings
 
-[Inspect activity bindings and evidence](process-bindings.md): shared-predicate search, structural ownership proofs, explicit coverage gaps and full export replay. The source-reference and operational planning APIs remain available.
+[Inspect activity bindings and evidence](process-bindings.md): shared-predicate search, structural ownership proofs, explicit coverage gaps and full export replay.
 
 ## The programme an industry implies
 

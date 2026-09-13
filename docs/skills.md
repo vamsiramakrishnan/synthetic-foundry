@@ -197,18 +197,18 @@ Source: [`.claude/skills/worldloom-artifact-realism/SKILL.md`](../.claude/skills
 
 ### `worldloom-process-bindings`
 
-Compile the supplied 12-industry catalogue into company activity bindings,
-inspect coverage and evidence boundaries, and drive process authoring from
-them without treating authored hints as measurements. Derive the whole
+Compile the twelve-industry catalogue into company activity bindings, each
+naming its APQC process, inspect coverage and evidence boundaries, and drive
+process authoring from them without treating authored priors as measurements. Derive the whole
 evaluation programme an industry implies with `worldloom industry programme`.
 
 Source: [`.claude/skills/worldloom-process-bindings/SKILL.md`](../.claude/skills/worldloom-process-bindings/SKILL.md)
 
 ### `worldloom-process-catalogue`
 
-Compile authored industry factors into company-bound process plans, then
-author executable episodes through the existing process cascade. The plan is
-context for the cascade, never an execution trace.
+Read and extend the process catalogue, whose activities are keyed by APQC
+process id, and carry compiled bindings into the process authoring cascade.
+The bindings are context for the cascade, never an execution trace.
 
 Source: [`.claude/skills/worldloom-process-catalogue/SKILL.md`](../.claude/skills/worldloom-process-catalogue/SKILL.md)
 
