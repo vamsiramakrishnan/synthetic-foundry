@@ -158,6 +158,18 @@ so construction checks the line's evidence against the world and finds it,
 and the evalrun that follows grades an agent on cases whose sources are
 those records.
 
+An industry no engine builds rides the retail shape, and the shape's
+commercial seats take the company's own revenue function
+(`industry.role_table`): the operating function, in APQC's sense, that the
+industry's own value streams bind most in the company's revenue units
+(`industry.revenue_function`), titled from the function table. A telecom seats a Customer Service Director and a
+Customer Service Manager per unit where a retailer seats a Head of
+Merchandising Systems and a Head of Buying; a logistics company seats
+Fulfilment. The finance, technology and service operations spine is the
+same for every company, and the engine still mints its per-unit posts for
+every unit, support units included. A retailer, a bank and an insurer keep
+their engine's organisation.
+
 A project seats every line of business with a supported process line by
 default, or the families named in `lobs`. A composed company's name pool is
 cut to the people its description mints, and each line adds three or four;

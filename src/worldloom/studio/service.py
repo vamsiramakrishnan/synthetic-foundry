@@ -360,14 +360,24 @@ class Studio:
         # profile/LOB edits create an explicit alternate revision from the
         # same seed, never an unlabelled replacement inside a dataset batch.
         blueprint = sdk.from_resolution(resolution, seed=spec.seed)
+        overrides: dict[str, Any] = {}
         if spec.divisions:
+            overrides["units"] = [unit.model_dump(mode="json") for unit in spec.divisions]
+        if spec.structure is not None and resolution.pack is not None and resolution.pack.roles is None:
+            # An industry no engine builds rides the retail shape; its
+            # commercial seats take the company's own revenue function.
+            from ..industry import role_table
+
+            derived_roles = role_table(spec.structure)
+            if derived_roles is not None:
+                overrides["roles"] = derived_roles
+        if overrides:
             from dataclasses import replace
 
             from ..packs import Pack
 
             assert resolution.pack is not None
-            pack = Pack.model_validate({**resolution.pack.model_dump(mode="json"),
-                                        "units": [unit.model_dump(mode="json") for unit in spec.divisions]})
+            pack = Pack.model_validate({**resolution.pack.model_dump(mode="json"), **overrides})
             blueprint = replace(blueprint, pack_source=pack)
         for lob in spec.lobs:
             blueprint = blueprint.lob(lob)

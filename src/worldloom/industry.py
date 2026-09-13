@@ -1169,6 +1169,93 @@ def geo_for(countries: Sequence[str]) -> str:
     return next((COUNTRY_LOCALES[c] for c in countries if c in COUNTRY_LOCALES), DEFAULT_GEO)
 
 
+#: The unit archetypes that earn revenue; the function they bind most is the
+#: company's revenue function, the one the engine's commercial seats take.
+REVENUE_ARCHETYPES: frozenset[str] = frozenset({"product_line", "geography", "customer_segment", "channel", "legal_entity"})
+
+#: The retail engine's commercial seats, which a company of another industry
+#: fills from its own revenue function: the spine keys and the per-unit post.
+COMMERCIAL_ROLES: dict[str, str] = {"merch_lead": "head", "merch_analyst": "professional"}
+COMMERCIAL_UNIT_ROLE = "_buyer"
+
+
+#: APQC's operating categories (1.0 to 6.0: vision and strategy, products
+#: and services, market and sell, deliver physical products, deliver
+#: services, customer service). The rest of the framework is management and
+#: support, and a support function is not what a revenue unit sells.
+OPERATING_CATEGORIES: frozenset[str] = frozenset({"1", "2", "3", "4", "5", "6"})
+
+
+def revenue_function(compiled: CompiledCatalogue, *, catalogue: dict[str, Any] | None = None) -> str:
+    """The operating function the company's own value streams bind most.
+
+    Read first from the industry overlay's specific streams (what the
+    catalogue says this industry does that others do not: a telecom's usage
+    to bill, a logistics company's book to deliver), among operating
+    functions in APQC's sense (`OPERATING_CATEGORIES`), in the revenue units
+    first and then anywhere. An industry with no specific streams takes the
+    operating function its revenue units bind most, then the one bound most
+    anywhere, and a company binding no operating function takes its
+    most-bound function. Ties go to the first key by name.
+    """
+    cat = catalogue if catalogue is not None else load_catalogue()
+    table = functions.load()
+    operating = {f.key for f in table.functions if set(f.categories) & OPERATING_CATEGORIES}
+    specific = set(cat["industry_overlays"].get(compiled.industry, {}).get("specific", {}))
+    rows = tuple(compiled.rows)
+    revenue = tuple(row for row in rows if row.bu_archetype in REVENUE_ARCHETYPES)
+    own = tuple(row for row in rows if row.stream in specific)
+    own_revenue = tuple(row for row in own if row.bu_archetype in REVENUE_ARCHETYPES)
+    for candidates, keep in ((own_revenue, operating), (own, operating), (revenue, operating), (rows, operating), (rows, None)):
+        counts = Counter(row.function for row in candidates if keep is None or row.function in keep)
+        if counts:
+            return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+    raise ValueError("a company with no bindings has no revenue function")
+
+
+def role_table(structure: CompanySpec, *, catalogue: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """The organisation a company of an engine-less industry builds with, as pack roles.
+
+    `None` for an industry with an engine of its own: its organisation is
+    the engine's. For the rest the world rides the retail shape, whose spine
+    is finance, technology, service operations and two commercial seats
+    (`COMMERCIAL_ROLES`, and a per-unit post, `COMMERCIAL_UNIT_ROLE`). The
+    commercial seats take the company's revenue function (`revenue_function`,
+    the operating function its industry's own streams bind most) and its
+    titles from the function table (`worldloom.functions`, O*NET):
+    a telecom's are Customer Service, so it seats a Customer Service Director
+    where a retailer seats a Head of Merchandising Systems. Everything else
+    in the table is the engine's own, and the keys never change, because the
+    generator looks them up.
+    """
+    from . import domains, roles
+
+    if domains.by_name(structure.industry) is not None:
+        return None
+    compiled = compile_company(structure, catalogue=catalogue)
+    function = functions.load().function(revenue_function(compiled, catalogue=catalogue))
+    titles = {tier: function.title_for(tier) for tier in ("head", "manager", "professional")}
+    head = titles["head"].title if titles["head"] else f"Head of {function.title}"
+    manager = titles["manager"].title if titles["manager"] else f"{function.title} Manager"
+    professional = titles["professional"].title if titles["professional"] else f"{function.title} Analyst"
+    table = []
+    for role in roles._shipped("retail"):
+        if role.key in COMMERCIAL_ROLES:
+            title = head if COMMERCIAL_ROLES[role.key] == "head" else professional
+            table.append({"key": role.key, "title": title, "function": function.title, "reports_to": role.manager})
+        else:
+            table.append({"key": role.key, "title": role.title, "function": role.function, "reports_to": role.manager})
+    unit_roles = []
+    for post in roles._shipped_unit_roles("retail"):
+        if post.suffix == COMMERCIAL_UNIT_ROLE:
+            unit_roles.append({"suffix": post.suffix, "title": f"{manager}, {{unit}}", "function": function.title,
+                               "manager": post.manager, "manager_suffix": post.manager_suffix})
+        else:
+            unit_roles.append({"suffix": post.suffix, "title": post.title, "function": post.function,
+                               "manager": post.manager, "manager_suffix": post.manager_suffix})
+    return {"table": table, "unit_roles": unit_roles}
+
+
 def project(
     industry: str | CompanySpec,
     name: str | None = None,
@@ -1381,4 +1468,10 @@ __all__ = [
     "geo_for",
     "rederive",
     "divisions",
+    "COMMERCIAL_ROLES",
+    "COMMERCIAL_UNIT_ROLE",
+    "OPERATING_CATEGORIES",
+    "REVENUE_ARCHETYPES",
+    "revenue_function",
+    "role_table",
 ]

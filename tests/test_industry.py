@@ -695,3 +695,30 @@ def test_the_process_kinds_are_in_the_registry_of_a_process_that_never_imported_
     assert int(result.stdout.strip()) == len(industry.stream_names())
     # Registering the same catalogue again is a harmless reload.
     assert set(industry.register_kinds()) <= set(factkinds.names())
+
+
+def test_an_engine_less_industry_seats_its_revenue_function_in_the_commercial_seats(tmp_path: Path) -> None:
+    """A telecom's commercial seats are Customer Service, titled from O*NET,
+    not retail's merchandising; a retailer keeps its own organisation."""
+    from worldloom.process_bindings import compile_company, default_company
+    from worldloom.studio.service import Studio
+
+    assert industry.revenue_function(compile_company(default_company("telecom"))) == "customer_service"
+    assert industry.revenue_function(compile_company(default_company("logistics"))) == "fulfilment"
+    assert industry.role_table(default_company("retail", name="R")) is None
+    table = industry.role_table(default_company("telecom", name="T"))
+    assert table is not None
+    rows = {row["key"]: row for row in table["table"]}
+    assert rows["merch_lead"]["title"] == "Customer Service Director" and rows["merch_lead"]["function"] == "Customer Service"
+    assert rows["merch_analyst"]["title"] == "Customer Service Administrator"
+    assert rows["merch_lead"]["reports_to"] == "gm_md" and rows["cfo"]["title"] == "Group Chief Financial Officer"
+    buyer = next(post for post in table["unit_roles"] if post["suffix"] == "_buyer")
+    assert buyer["title"] == "Customer Service Manager, {unit}" and buyer["manager_suffix"] == "_md"
+    assert {row["key"] for row in table["table"]} == {role.key for role in __import__("worldloom.roles", fromlist=["x"])._shipped("retail")}
+    spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
+    world, _ = Studio(tmp_path).snapshot(spec)
+    titles = [person.title for person in world.people]
+    assert "Customer Service Director" in titles and "Customer Service Manager, Consumer Mobile" in titles
+    assert not any("Merchandising" in title or "Buying" in title for title in titles)
+    assert "Head of Billing" in titles
+    assert world.validate().ok

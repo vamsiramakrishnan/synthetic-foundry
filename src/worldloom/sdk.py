@@ -560,16 +560,26 @@ class Blueprint:
                 engine=self.domain_name,
             )))
         else:
-            # The engine's own table, so a LOB attached to a bank joins the
-            # bank's organisation rather than displacing it with retail's.
+            # The pack's authored table when it has one, else the engine's
+            # own, so a LOB attached to a bank joins the bank's organisation
+            # rather than displacing it with retail's, and a LOB attached to
+            # a pack that authored its organisation joins that one.
             from . import roles as roles_module
 
-            try:
-                rows = list(roles_module.to_rows(roles_module._shipped(self.domain_name)))
-            except KeyError:
-                from .generators import organisation
+            authored = None
+            if self.pack_source is not None:
+                from . import packs as packs_module
 
-                rows = list(organisation._ROLES)
+                authored = packs_module.role_table_of(self.pack_source)
+            if authored is not None:
+                rows = list(authored)
+            else:
+                try:
+                    rows = list(roles_module.to_rows(roles_module._shipped(self.domain_name)))
+                except KeyError:
+                    from .generators import organisation
+
+                    rows = list(organisation._ROLES)
         have = {row[0] for row in rows}
         rows.extend(role for role in self.implied_roles if role[0] not in have)
         return tuple(rows)

@@ -11,6 +11,22 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The commercial seats take the company's revenue function
+
+- A project of an industry no engine builds rides the retail shape with
+  the shape's commercial seats (`merch_lead`, `merch_analyst`, the per-unit
+  `_buyer` post) retitled and refunctioned from the company's revenue
+  function: the operating function, in APQC's sense, that the industry's
+  own value streams bind most in its revenue units
+  (`industry.revenue_function`), titled from the function
+  table (`industry.role_table`, passed to the world as the pack's roles). A
+  telecom seats a Customer Service Director, a logistics company Fulfilment.
+  `sdk.Blueprint.role_table` takes a pack's authored table over the
+  engine's shipped one when lines of business attach, which a pack that
+  authored its organisation lost before. Generation: worlds of catalogue
+  projects for engine-less industries change titles and functions on those
+  seats; retail, banking and insurance worlds are unchanged.
+
 ### The interview describes the company, the catalogue derives the rest
 
 - `industry.project` takes a `CompanySpec` in place of an industry name:
