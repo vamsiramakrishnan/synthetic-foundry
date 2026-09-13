@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 import worldloom
-from worldloom import factkinds, industry, lob
+from worldloom import factkinds, industry
 from worldloom.enterprise_specs import apply_scenario_profile, builtin_registry
 from worldloom.evals.coverage import report
 from worldloom.process_bindings import (
@@ -56,6 +56,7 @@ def test_a_lob_is_derived_per_function_family_that_owns_a_bound_activity(
     for spec in telecom.lobs:
         assert spec.title == titles[spec.name]
         assert [role.key for role in spec.roles] == [
+            "ceo",
             f"{spec.name}_head",
             f"{spec.name}_manager",
             f"{spec.name}_analyst",
@@ -65,14 +66,25 @@ def test_a_lob_is_derived_per_function_family_that_owns_a_bound_activity(
             assert edge.fact_kinds == [f"process.{stream}" for stream in streams]
 
 
-def test_derived_lobs_lint_clean_but_for_the_root_convention(
+def test_derived_lobs_are_rooted_at_the_chief_executive_and_lint_clean(
     telecom: industry.Programme,
 ) -> None:
-    """The one finding is the one the shipped library draws too: a LOB is
-    rooted at its head, not at the chief executive."""
+    """Rooted at `ceo` because that is the convention `lint_roles` asks for and
+    a Studio project refuses any finding; `root=None` is the shipped library's
+    shape, and draws exactly the convention finding the library draws."""
     assert industry.lint(telecom.lobs) == []
-    raw = [finding for spec in telecom.lobs for finding in lob.lint_lob(spec)]
-    assert raw and all(industry.ROOT_CONVENTION in finding for finding in raw)
+    for spec in telecom.lobs:
+        assert spec.roles[0] == industry.ROOT
+        assert spec.roles[1].reports_to == "ceo"
+    headless = industry.derive_lobs(telecom.compiled, root=None)
+    assert all(
+        spec.roles[0].key.endswith("_head") and spec.roles[0].reports_to is None
+        for spec in headless
+    )
+    findings = industry.lint(headless)
+    assert findings and all(
+        "root role should be 'ceo'" in finding for finding in findings
+    )
 
 
 def test_the_stream_kinds_are_registered_from_the_catalogue() -> None:
@@ -119,9 +131,13 @@ def test_every_asker_has_standing_over_what_it_asks(
     `evals.plausibility` applies to a corpus."""
     assert industry.standing_findings(telecom.requests, telecom.lobs) == []
     assert telecom.summary.findings == ()
-    stranger = telecom.requests[0].model_copy(update={"asker": "ceo"})
+    # The chief executive asks down the line, so `ceo` has standing over every
+    # family's streams; a role the owning LOB does not declare has none.
+    executive = telecom.requests[0].model_copy(update={"asker": "ceo"})
+    assert industry.standing_findings([executive], telecom.lobs) == []
+    stranger = telecom.requests[0].model_copy(update={"asker": "outsider"})
     assert industry.standing_findings([stranger], telecom.lobs) == [
-        f"{stranger.id!r} is asked by 'ceo', which has no declared reason to ask about {stranger.kind!r}"
+        f"{stranger.id!r} is asked by 'outsider', which has no declared reason to ask about {stranger.kind!r}"
     ]
 
 
@@ -242,7 +258,8 @@ def test_a_use_case_per_supported_line_with_the_lines_count(
     assert len(cases) == len(supported)
     for case, line in zip(cases, supported, strict=True):
         assert case.count == line.situations
-        assert case.lob == line.lob and case.owner == line.owners[0]
+        assert case.lob == line.lob
+        assert case.owner == (line.owners[0] if len(line.owners) == 1 else "")
         assert case.activities == line.activities
         assert case.scenario is not None and case.construction is not None
         sources = {
@@ -257,6 +274,20 @@ def test_a_use_case_per_supported_line_with_the_lines_count(
         # Every scenario is one the enterprise planner accepts as it stands.
         apply_scenario_profile(builtin_registry(), case.scenario)
     assert sum(case.count for case in cases) > 5000
+
+
+def test_a_line_several_units_own_names_no_single_owner(
+    telecom: industry.Programme,
+) -> None:
+    """A use case's owner constrains which rows may satisfy it, and a line whose
+    activities are bound per unit spans them all."""
+    supported = [line for line in telecom.summary.lines if line.supported]
+    for case, line in zip(telecom.use_cases(), supported, strict=True):
+        assert case.owner == (line.owners[0] if len(line.owners) == 1 else "")
+        assert case.construction is not None
+        assert ("business_unit" in case.construction.requirements[0].selector) is bool(
+            case.owner
+        )
 
 
 def test_the_count_ceiling_is_applied_and_visible(telecom: industry.Programme) -> None:
@@ -340,3 +371,158 @@ def test_describe_reports_the_headline_numbers() -> None:
     assert described["situations"] == described["reads"] + described["writes"]
     assert described["lobs"] == len(described["by_lob"]) and described["findings"] == []
     assert sum(described["intents"].values()) == described["situations"]
+
+
+# -- what a description names ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        ("a federated telecom in India", "telecom"),
+        ("a Bavarian machine-tool maker", "manufacturing"),
+        ("a SaaS company with APAC sales", "technology_saas"),
+        ("NAICS 517", "telecom"),
+        ("a regional bank", "banking"),
+        ("a large Australian supermarket group", "retail"),
+        ("a scorecard vendor", None),
+        ("a planting season", None),
+    ],
+)
+def test_industry_of_matches_the_longest_declared_phrase_at_word_boundaries(
+    description: str, expected: str | None
+) -> None:
+    assert industry.industry_of(description) == expected
+
+
+def test_industry_words_come_from_the_catalogue_and_the_declared_table() -> None:
+    words = industry.industry_words()
+    assert (
+        words["telecom"] == "telecom" and words["technology saas"] == "technology_saas"
+    )
+    assert words["naics 517"] == "telecom" and words["tm forum etom"] == "telecom"
+    assert all(key in INDUSTRIES for key in words.values())
+    assert set(industry.INDUSTRY_WORDS.items()) <= set(words.items())
+
+
+def test_the_archetype_resolver_reports_a_match_or_a_miss() -> None:
+    from worldloom import archetypes
+
+    assert archetypes.matched("an omnichannel retailer") is not None
+    assert archetypes.matched("a regional widget conglomerate") is None
+    assert (
+        archetypes.inspired_by("a regional widget conglomerate").key
+        == "omnichannel_retailer"
+    )
+
+
+def test_a_company_description_is_resolved_and_its_gap_named_precisely() -> None:
+    """Three readings, three sentences: a retailer is recognised and owes no
+    limitation; a telecom is known to the catalogue but built by no engine, and
+    the limitation names the programme that exists; an unknown business is a
+    miss and says so."""
+    from worldloom import company
+
+    def unmet(description: str) -> tuple[str, ...]:
+        return company.resolve(
+            company.from_document(
+                {"industry": description, "identity": {"company_name": "X"}}
+            )
+        ).unmet
+
+    assert not any(
+        "archetype" in want or "engine for" in want
+        for want in unmet("a large Australian retailer")
+    )
+    telecom = [
+        want for want in unmet("a federated telecom in India") if "engine for" in want
+    ]
+    assert len(telecom) == 1 and "worldloom industry programme telecom" in telecom[0]
+    unknown = [
+        want for want in unmet("a Bavarian widget maker") if "archetype for" in want
+    ]
+    assert len(unknown) == 1 and "nothing recognised it" in unknown[0]
+
+
+# -- a Studio project ----------------------------------------------------------
+
+
+def test_a_project_carries_the_largest_lobs_and_their_lines_with_derived_counts() -> (
+    None
+):
+    spec = industry.project("telecom", "Ardent Telecom")
+    derived = industry.programme(spec.structure, engine="retail")  # type: ignore[arg-type]
+    assert spec.structure is not None and spec.structure.name == "Ardent Telecom"
+    assert len(spec.lobs) == industry.PROJECT_LOBS
+    ranked = sorted(
+        derived.summary.by_lob().items(), key=lambda item: (-item[1], item[0])
+    )
+    supported = {line.lob for line in derived.summary.lines if line.supported}
+    assert [lob.name for lob in spec.lobs] == sorted(
+        f for f, _ in ranked if f in supported
+    )[:0] or {lob.name for lob in spec.lobs} == set(
+        [f for f, _ in ranked if f in supported][: industry.PROJECT_LOBS]
+    )
+    assert all(lob.engine == "retail" for lob in spec.lobs), (
+        "no engine builds a telecom; the LOBs ride the resolved engine"
+    )
+    assert spec.use_cases and all(
+        case.lob in {lob.name for lob in spec.lobs} for case in spec.use_cases
+    )
+    by_key = {line.key: line.situations for line in derived.summary.lines}
+    for case in spec.use_cases:
+        line = next(
+            line
+            for line in derived.summary.lines
+            if line.lob == case.lob and line.activities == case.activities
+        )
+        assert case.count == by_key[line.key]
+    assert any(
+        "worldloom industry programme telecom" in want
+        for want in spec.acknowledged_unmet
+    )
+
+
+def test_a_project_takes_an_explicit_lob_selection_and_refuses_an_unknown_one() -> None:
+    spec = industry.project("retail", "Northstar Retail", lobs=("billing", "ap"))
+    assert [lob.name for lob in spec.lobs] == ["ap", "billing"]
+    assert spec.acknowledged_unmet == ()
+    with pytest.raises(ValueError, match="no derived LOB is named"):
+        industry.project("retail", "Northstar Retail", lobs=("wizardry",))
+
+
+def test_a_project_builds_into_a_world_that_seats_its_lobs(tmp_path: Path) -> None:
+    from worldloom.studio.service import Studio
+
+    spec = industry.project("retail", "Northstar Retail")
+    world, _ = Studio(tmp_path).snapshot(spec)
+    for lob in spec.lobs:
+        assert (
+            f"{lob.name}_head" in world._roles and f"{lob.name}_analyst" in world._roles
+        )
+    assert world.validate().ok
+
+
+def test_the_studio_preset_starts_any_catalogue_industry_from_its_programme() -> None:
+    from worldloom.studio.service import Studio, preset
+
+    spec = preset("telecom", "Ardent Telecom")
+    assert spec == industry.project("telecom", "Ardent Telecom")
+    with pytest.raises(ValueError, match="derived programme"):
+        preset("alchemy", "Gold Co")
+    headline = Studio._programme_headline(spec.model_dump(mode="json"))
+    assert (
+        headline is not None
+        and headline["industry"] == "telecom"
+        and headline["situations"] == 5550
+    )
+    assert (
+        Studio._programme_headline({"company": {"industry": "a Bavarian widget maker"}})
+        is None
+    )
+    assert (
+        Studio._programme_headline({"company": {"industry": "a regional bank"}})[
+            "industry"
+        ]
+        == "banking"
+    )  # type: ignore[index]

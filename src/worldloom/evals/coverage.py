@@ -43,11 +43,23 @@ class Requested(Protocol):
     the world afterwards. One measurement, two carriers.
     """
 
-    id: str
-    asker: str | None
-    occasion: str | None
-    intent: str | None
-    channel: str | None
+    # Read-only properties rather than attributes, so a carrier whose asker is
+    # always present (`str`) satisfies a protocol whose asker may be absent
+    # (`str | None`): a mutable attribute would have to match exactly.
+    @property
+    def id(self) -> str: ...
+
+    @property
+    def asker(self) -> str | None: ...
+
+    @property
+    def occasion(self) -> str | None: ...
+
+    @property
+    def intent(self) -> str | None: ...
+
+    @property
+    def channel(self) -> str | None: ...
 
     @property
     def has_request(self) -> bool: ...

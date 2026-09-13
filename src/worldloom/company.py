@@ -1088,22 +1088,36 @@ def _shape_of(spec: CompanySpec) -> tuple[str, Any, str, list[Conflict], list[st
             found.append(Conflict("archetype", "unknown_archetype", str(exc)))
             return engine or "retail", None, spec.archetype, found, unmet
     elif spec.industry:
-        base = archetypes.inspired_by(spec.industry)
-        fallback = archetypes.inspired_by("")
-        if base.key == fallback.key:
+        recognised = archetypes.matched(spec.industry)
+        base = recognised if recognised is not None else archetypes.inspired_by(spec.industry)
+        if recognised is None:
             # `inspired_by` falls back rather than raising, which is right for a
             # caller who would rather have a world than an error and wrong for a
             # describer: "a Bavarian machine-tool maker" would silently become a
-            # supermarket group. It does not report whether it matched, so this
-            # cannot distinguish a genuine retail match from a fallback — and
-            # says so, rather than claiming a certainty it does not have.
-            unmet.append(
-                f"an archetype for {spec.industry!r}: it resolved to"
-                f" {base.key!r}, which is also what an unrecognised industry"
-                " falls back to. Say `archetype` to be certain, `vocabulary` to"
-                " keep the shape and change the words, or write a pack whose"
-                " units are this business's own."
-            )
+            # supermarket group. `matched` says whether anything matched, so
+            # the miss is reported as a miss, and when the process catalogue
+            # knows the industry the report names the programme that does
+            # exist for it rather than only what does not.
+            from .industry import industry_of
+
+            known = industry_of(spec.industry)
+            if known is not None:
+                unmet.append(
+                    f"an engine for {spec.industry!r}: no registered domain builds"
+                    f" a {known!r} world, so the world is built with the"
+                    f" {base.key!r} shape. The process catalogue knows the industry,"
+                    f" and `worldloom industry programme {known}` derives its lines"
+                    " of business, processes, requests and counts; say `archetype`"
+                    " or write a pack to shape the world itself."
+                )
+            else:
+                unmet.append(
+                    f"an archetype for {spec.industry!r}: nothing recognised it, so"
+                    f" it resolved to {base.key!r}, the shape an unrecognised"
+                    " industry falls back to. Say `archetype` to be certain,"
+                    " `vocabulary` to keep the shape and change the words, or"
+                    " write a pack whose units are this business's own."
+                )
     elif engine:
         registered = domains.by_name(engine)
         if registered is None or not registered.default_archetype:

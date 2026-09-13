@@ -41,6 +41,22 @@ first written up, before the waves above it landed.
   (`coverage.Requested`), so a programme is measured before any case enters a
   world with the code that measures the world afterwards. A full programme
   uses every situation the catalogue offers.
+- `industry.project(industry, name)` is a Studio `ProjectSpec` derived from
+  the programme, and the Studio preset accepts any industry the catalogue
+  knows: the four largest lines of business as LOBs (rooted at the chief
+  executive, `industry.ROOT`, so they lint clean and ride the world), every
+  supported process line of theirs as a use case with the line's count, the
+  company's limitations acknowledged. The interview request carries the
+  programme's headline numbers under `programme` and its instructions say a
+  count is derived from a process line, never written as a round number.
+- `archetypes.matched` reports whether a description named a registered shape
+  at all, and `company.resolve` reads it: a retailer is recognised without the
+  caveat every retail description used to carry; an industry the catalogue
+  knows but no engine builds (`industry.industry_of`: overlay keys, crosswalk
+  codes, sector frameworks and a declared word table, longest phrase at word
+  boundaries) is reported as exactly that, naming `worldloom industry
+  programme <industry>` as what does exist; an unrecognised business is
+  reported as a miss.
 
 ### Eval execution: a question is a turn
 

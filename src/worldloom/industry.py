@@ -51,6 +51,7 @@ order over sorted, declared data; facts are valid from a declared `as_of`.
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
@@ -76,7 +77,7 @@ from .process_bindings import (
 
 if TYPE_CHECKING:
     from .evals.coverage import CoverageReport
-    from .studio.models import UseCase
+    from .studio.models import ProjectSpec, UseCase
 
 PROGRAMME_SCHEMA: Literal["worldloom.industry-programme/v1"] = (
     "worldloom.industry-programme/v1"
@@ -112,11 +113,66 @@ SEAT_BY_TYPE: dict[str, str] = {
     "escalate": "analyst",
 }
 
-#: The finding `lob.lint_roles` raises on every derived LOB and every shipped
-#: one: the root of a line of business is its head, not the chief executive.
-#: Filtered out of a programme's findings because it is the convention this
-#: module deliberately does not follow, said once here rather than per LOB.
-ROOT_CONVENTION = "by convention, the root role should be 'ceo'"
+#: The role every derived LOB is rooted at, so the family's head reports to
+#: someone the company already has. `lob.lint_roles` asks for exactly this
+#: root by convention, and a Studio project refuses a LOB with any lint
+#: finding, so the derived table follows the convention rather than carrying
+#: the finding the shipped library does. The row is the engine's own: a world
+#: seats one chief executive however many LOBs declare the key.
+ROOT = RoleSpec(key="ceo", title="Chief Executive Officer", function="Executive")
+
+#: Words a description may use for an industry the catalogue knows, beyond the
+#: industry's own key. Declared, not guessed, and matched at word boundaries
+#: with the longest phrase winning, like `archetypes.inspired_by`. The
+#: catalogue's own vocabulary (overlay keys, crosswalk codes such as
+#: `NAICS 517`, sector frameworks such as `TM Forum eTOM`) joins this table in
+#: `industry_words`, so a new overlay is recognised without a new line here.
+INDUSTRY_WORDS: dict[str, str] = {
+    "bank": "banking",
+    "lender": "banking",
+    "credit union": "banking",
+    "insurer": "insurance",
+    "underwriter": "insurance",
+    "retailer": "retail",
+    "supermarket": "retail",
+    "grocery": "retail",
+    "grocer": "retail",
+    "consumer goods": "consumer_products",
+    "fmcg": "consumer_products",
+    "packaged goods": "consumer_products",
+    "telco": "telecom",
+    "telecommunications": "telecom",
+    "mobile operator": "telecom",
+    "network operator": "telecom",
+    "utility": "utilities",
+    "electricity": "utilities",
+    "energy retailer": "utilities",
+    "gas network": "utilities",
+    "pharma": "life_sciences",
+    "pharmaceutical": "life_sciences",
+    "biotech": "life_sciences",
+    "medical devices": "life_sciences",
+    "freight": "logistics",
+    "forwarder": "logistics",
+    "shipping": "logistics",
+    "3pl": "logistics",
+    "hospital": "healthcare",
+    "health system": "healthcare",
+    "clinic": "healthcare",
+    "provider network": "healthcare",
+    "manufacturer": "manufacturing",
+    "factory": "manufacturing",
+    "machine-tool": "manufacturing",
+    "plant": "manufacturing",
+    "government": "public_sector",
+    "ministry": "public_sector",
+    "statutory board": "public_sector",
+    "agency": "public_sector",
+    "saas": "technology_saas",
+    "software": "technology_saas",
+    "technology company": "technology_saas",
+    "tech company": "technology_saas",
+}
 
 _ABSTAIN_ANSWER = "Not present in the corpus."
 
@@ -149,6 +205,49 @@ def stream_names(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
         for key, value in overlay.get("specific", {}).items():
             names.setdefault(key, value["name"])
     return dict(sorted(names.items()))
+
+
+def industry_words(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
+    """Every phrase that names a catalogue industry, lowercased, to its key.
+
+    The overlay keys themselves (with underscores spoken as spaces), the
+    crosswalk codes, each overlay's sector framework, and `INDUSTRY_WORDS`.
+    A declared table has the last word where two sources disagree.
+    """
+    cat = catalogue if catalogue is not None else load_catalogue()
+    words: dict[str, str] = {}
+    for key, overlay in cat["industry_overlays"].items():
+        words[key] = key
+        words[key.replace("_", " ")] = key
+        framework = str(overlay.get("sector_framework", "")).casefold()
+        for part in re.split(r"\s*/\s*", framework):
+            if part and part != "none":
+                words[part] = key
+    for code, key in cat.get("industry_crosswalk", {}).items():
+        if key in cat["industry_overlays"]:
+            words[code.casefold()] = key
+    words.update(INDUSTRY_WORDS)
+    return dict(sorted(words.items()))
+
+
+def industry_of(
+    description: str, *, catalogue: dict[str, Any] | None = None
+) -> str | None:
+    """The catalogue industry *description* names, or ``None``.
+
+    Longest phrase wins, matched at word boundaries so `scor` does not fire on
+    a scorecard and `plant` on a planting season, and a miss is a miss: the
+    caller decides whether to fall back, and says so when it does.
+    """
+    lowered = description.casefold()
+    best = ""
+    found: str | None = None
+    for phrase, key in industry_words(catalogue).items():
+        if len(phrase) <= len(best):
+            continue
+        if re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", lowered):
+            best, found = phrase, key
+    return found
 
 
 def register_kinds(catalogue: dict[str, Any] | None = None) -> tuple[str, ...]:
@@ -194,14 +293,17 @@ def derive_lobs(
     *,
     engine: str | None = None,
     catalogue: dict[str, Any] | None = None,
+    root: RoleSpec | None = ROOT,
 ) -> tuple[Lob, ...]:
     """One LOB per function family that owns a bound activity.
 
     Three roles per family (head, manager, analyst, keyed `<family>_head` and
-    so on) and two responsibility edges: the head and the manager answer for
-    the `process.<stream>` family of every stream the family's activities sit
-    in, so `asks_about` grants the head its own streams and status down the
-    line, and the analyst standing up the line. Nothing outside the family has
+    so on), rooted at *root* (the chief executive, or ``None`` for a LOB whose
+    head reports to nobody, the shape the shipped library uses), and two
+    responsibility edges: the head and the manager answer for the
+    `process.<stream>` family of every stream the family's activities sit in,
+    so `asks_about` grants the head its own streams and status down the line,
+    and the analyst standing up the line. Nothing outside the family has
     standing over its streams, which is the whole point of deriving the table
     from the operating model rather than typing it.
     """
@@ -236,7 +338,13 @@ def derive_lobs(
                 purpose=purpose,
                 engine=lob_engine,
                 roles=[
-                    RoleSpec(key=head, title=f"Head of {title}", function=title),
+                    *([root] if root is not None else []),
+                    RoleSpec(
+                        key=head,
+                        title=f"Head of {title}",
+                        function=title,
+                        reports_to=root.key if root is not None else None,
+                    ),
                     RoleSpec(
                         key=manager,
                         title=f"{title} Manager",
@@ -259,14 +367,9 @@ def derive_lobs(
     return tuple(lobs)
 
 
-def lint(lobs: Sequence[Lob]) -> list[str]:
-    """Every finding on the derived LOBs except the root convention."""
-    return [
-        finding
-        for spec in lobs
-        for finding in lint_lob(spec)
-        if ROOT_CONVENTION not in finding
-    ]
+def lint(lobs: Sequence[Lob], *, base: str = "") -> list[str]:
+    """Every finding on the derived LOBs, as `lob.lint_lob` reports them."""
+    return [finding for spec in lobs for finding in lint_lob(spec, base=base)]
 
 
 # ---------------------------------------------------------------------------
@@ -705,6 +808,7 @@ def programme(
     engine: str | None = None,
     catalogue: dict[str, Any] | None = None,
     as_of: datetime = EPOCH,
+    root: RoleSpec | None = ROOT,
 ) -> Programme:
     """The whole programme for an industry (its default company) or a company spec.
 
@@ -719,7 +823,7 @@ def programme(
     cat = catalogue if catalogue is not None else load_catalogue()
     company = default_company(spec) if isinstance(spec, str) else spec
     compiled = compile_company(company, catalogue=cat)
-    lobs = derive_lobs(compiled, engine=engine, catalogue=cat)
+    lobs = derive_lobs(compiled, engine=engine, catalogue=cat, root=root)
     derived_facts = facts(compiled, as_of=as_of)
     derived_requests = tuple(
         requests(compiled, lobs, fact_ids=fact_index(derived_facts))
@@ -887,11 +991,14 @@ def use_cases(
                 ),
             }
         )
-        selector: dict[str, str | int | bool] = {
-            "lob": line.lob,
-            "stream": line.stream,
-            "business_unit": line.owners[0],
-        }
+        # A line owned by one unit names it; a line several units own (the
+        # same activity bound per unit or per country) names none, because a
+        # use case's owner constrains which rows may satisfy it and the line's
+        # activities span them all.
+        owner = line.owners[0] if len(line.owners) == 1 else ""
+        selector: dict[str, str | int | bool] = {"lob": line.lob, "stream": line.stream}
+        if owner:
+            selector["business_unit"] = owner
         requirements = tuple(
             WorldRequirement(
                 id=f"source-{role.connector}",
@@ -936,7 +1043,7 @@ def use_cases(
                 id=name,
                 title=f"{line.lob_title}: {line.stream_name}",
                 objective=purpose[:1].upper() + purpose[1:],
-                owner=line.owners[0],
+                owner=owner,
                 lob=line.lob,
                 activities=line.activities,
                 count=max(1, min(line.situations, count_ceiling)),
@@ -945,6 +1052,84 @@ def use_cases(
             )
         )
     return tuple(out)
+
+
+# ---------------------------------------------------------------------------
+# A Studio project
+# ---------------------------------------------------------------------------
+
+
+#: How many derived LOBs a project seats by default. A world's name pool is
+#: the limit: every LOB adds three people, and the composed pack's pool holds
+#: forty, so a project carries the largest lines of business and names the
+#: rest in its programme rather than failing to build. Explicit `lobs` win.
+PROJECT_LOBS = 4
+
+
+def project(
+    industry: str,
+    name: str,
+    *,
+    lobs: Sequence[str] | None = None,
+    seed: int = 8128,
+    geo: str = "australia",
+    catalogue: dict[str, Any] | None = None,
+) -> ProjectSpec:
+    """A Studio project for one company of *industry*, its use cases derived.
+
+    The company document names the industry and the company; `company.resolve`
+    picks the engine (its own for retail, banking and insurance; the retail
+    shape, with the limitation acknowledged in the project, for an industry no
+    engine builds). The process structure is the catalogue's default company
+    renamed, the LOBs are the derived ones for the selected families (rooted
+    at the chief executive so they lint clean, engine set to the resolved
+    engine so they ride the world), and the use cases are every supported
+    line of those families with the line's count. `lobs` defaults to the
+    `PROJECT_LOBS` families with the most situations among those with a
+    supported line.
+    """
+    from . import company as company_module
+    from .studio.models import ProjectSpec
+
+    document = {"industry": industry, "identity": {"company_name": name}, "geo": geo}
+    resolution = company_module.resolve(company_module.from_document(document))
+    resolution.raise_for_conflicts()
+    structure = default_company(industry, name=name)
+    derived = programme(structure, engine=resolution.engine, catalogue=catalogue)
+    supported = {line.lob for line in derived.summary.lines if line.supported}
+    if lobs is None:
+        ranked = sorted(
+            derived.summary.by_lob().items(), key=lambda item: (-item[1], item[0])
+        )
+        chosen = tuple(family for family, _ in ranked if family in supported)[
+            :PROJECT_LOBS
+        ]
+    else:
+        unknown = sorted(set(lobs) - set(derived.summary.lobs))
+        if unknown:
+            raise ValueError(
+                f"no derived LOB is named {unknown}; the programme derives {list(derived.summary.lobs)}"
+            )
+        chosen = tuple(lobs)
+    selected = tuple(spec for spec in derived.lobs if spec.name in chosen)
+    lines_selected = [
+        line.key
+        for line in derived.summary.lines
+        if line.lob in chosen and line.supported
+    ]
+    cases = derived.use_cases(lines_selected=lines_selected)
+    return ProjectSpec(
+        company=document,
+        seed=seed,
+        structure=structure,
+        lobs=selected,
+        use_cases=cases,
+        acknowledged_unmet=tuple(resolution.unmet),
+        pool_size=24,
+        planning_budget=512,
+        max_batches=12,
+        max_per_case=6,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1017,7 +1202,9 @@ __all__ = [
     "EPOCH",
     "KIND_PREFIX",
     "PROGRAMME_SCHEMA",
-    "ROOT_CONVENTION",
+    "INDUSTRY_WORDS",
+    "PROJECT_LOBS",
+    "ROOT",
     "SEAT_BY_TYPE",
     "IndustryProgramme",
     "ProcessLine",
@@ -1028,10 +1215,13 @@ __all__ = [
     "emulated_systems",
     "export",
     "fact_index",
+    "industry_of",
+    "industry_words",
     "facts",
     "lines",
     "lint",
     "programme",
+    "project",
     "register_kinds",
     "requests",
     "standing_findings",

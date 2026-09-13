@@ -50,7 +50,20 @@ def preset(engine: str = "retail", name: str = "Northstar Retail") -> ProjectSpe
     from ..synthesis.connectors import operational_profile
 
     if engine not in {"retail", "banking"}:
-        raise ValueError("the runnable examples are retail and banking; other engines use the interview")
+        from ..industry import project
+        from ..process_bindings.compiler import resource
+
+        if engine in resource("defaults.json")["DEFAULT_ORGS"]:
+            # Any industry the process catalogue knows starts from its derived
+            # programme: the largest lines of business, every supported process
+            # line of theirs as a use case with the line's own count, and the
+            # company's limitations acknowledged rather than hidden.
+            return project(engine, name)
+        raise ValueError(
+            "the runnable examples are retail and banking, and any industry the process"
+            " catalogue knows starts from its derived programme (`worldloom industry list`);"
+            " other engines use the interview"
+        )
     document = {"engine": engine, "identity": {"company_name": name}, "geo": "australia"}
     resolution = company.resolve(company.from_document(document))
     structure = default_company(engine, name=name)
@@ -234,6 +247,7 @@ class Studio:
         request = {"schema": "worldloom.company-interview/v1", "request_id": request_id,
                    "revision": revision, "company": current["spec"], "message": message,
                    "native_sources": self.native_sources(project, revision),
+                   "programme": self._programme_headline(current["spec"]),
                    "conversation": [{"user": t["request"]["message"], "assistant": t["reply"]["message"]}
                                     for t in turns[-8:] if t["reply"]],
                    "instructions": [
@@ -243,6 +257,7 @@ class Studio:
                        "Return the complete proposed project only when there is enough information. Preserve existing values unless the operator requests a change.",
                        "Keep unanswered details as questions; do not acknowledge unsupported claims on the operator's behalf.",
                        "Reuse registered company, LOB, process, scenario and synthesis contracts. A new label does not implement a workflow.",
+                       "When the operator names an industry, derive its lines of business, processes, requests and counts from the process catalogue (`worldloom industry programme INDUSTRY --describe`; the `programme` field below carries the headline numbers) rather than inventing a LOB list or writing a round number as a use case count. A use case's count is the process line's situations; a system no connector emulates is named as unemulated, never replaced.",
                        "For a Foundry run each use case needs an explicit construction EvalSpec. Its connector selectors must constrain the declared business unit, LOB and activity. Do not claim unsupported business evidence.",
                        "For native file tasks, declare native_corpus plans referencing accepted company ArtifactIR sections and native_tasks linked to a use_case_id. Specify read/analyze/update/create outcomes, citations, calculations and preserved content. Long documents need enough distinct grounded sections; padding is not evidence.",
                        "Native difficulty uses native_calibration: declare the actual target cohort, pass-rate band, independent support and finite total budgets. Optional noise_variants expose grounded extra files within the same evidence component; the training choice is sealed before one holdout. Never claim prose mutation or independent support from shared files or facts.",
@@ -270,6 +285,25 @@ class Studio:
             db.execute("INSERT INTO interviews VALUES (?, ?, ?, ?, ?, NULL)",
                        (request_id, project, revision, ordinal, canonical(request)))
         return request
+
+    @staticmethod
+    def _programme_headline(spec: dict[str, Any]) -> dict[str, Any] | None:
+        """The derived programme's numbers for the company's industry, or None.
+
+        Read from the process structure when the project has one, else from
+        the company document's industry through `industry.industry_of`, so an
+        interviewer sees what the catalogue already answers before asking.
+        """
+        from ..industry import describe, industry_of
+
+        structure = spec.get("structure") or {}
+        industry = structure.get("industry") or industry_of(str((spec.get("company") or {}).get("industry", "")))
+        if not industry:
+            return None
+        try:
+            return describe(industry)
+        except ValueError:
+            return None
 
     def accept_interview(self, project: str, reply: InterviewReply) -> dict[str, Any]:
         reply = InterviewReply.model_validate(reply.model_dump(mode="json"))

@@ -45,3 +45,6 @@ situations. Read `programme.json`'s `unemulated` and `unsupported_lines` before
 quoting a count: a system no connector emulates is named there, never replaced.
 `worldloom industry programme telecom --describe` prints the numbers without
 writing; `worldloom industry list` prints every industry's.
+In the Studio, `preset("telecom", name)` (or `GET /api/preset?engine=telecom`)
+starts the company from its programme, and the interview request carries the
+programme's numbers under `programme`.

@@ -35,9 +35,10 @@ company: a head, a manager and an analyst (`billing_head`, `billing_manager`,
 streams the family's activities sit in. Standing is expressed as fact-kind
 families, `process.<stream>`, registered from the catalogue's own stream list
 so `lob.asks_about`, the plausibility check and the derived facts read one
-account. The LOBs lint clean under `lob.lint_lob` except for the root
-convention (a LOB is rooted at its head, not the chief executive), which the
-shipped library draws too.
+account. Each LOB is rooted at the chief executive (`industry.ROOT`), which is the
+convention `lob.lint_roles` asks for and the shape a Studio project accepts;
+`derive_lobs(..., root=None)` gives the headless shape the shipped library
+uses. The LOBs lint clean under `lob.lint_lob`.
 
 **A request is a situation with someone in the seat.** `process_bindings.situations`
 crosses every bound activity with the verbs that suit its type and the channels
@@ -88,6 +89,39 @@ alone: structure, requests, facts and connector use cases, but no fact ledger
 or documents of the engine's own. That is the seam the next step fills, not
 a limitation hidden behind a retail world dressed as a telecom.
 
+## In the Studio
+
+`worldloom.industry.project(industry, name)` is a `ProjectSpec` for one
+company of that industry, and the Studio preset accepts any industry the
+catalogue knows (`GET /api/preset?engine=telecom`, or `preset("telecom",
+"Ardent Telecom")`): the company document names the industry, the process
+structure is the catalogue's default company renamed, the LOBs are the derived
+ones for the selected families, and the use cases are every supported line of
+those families with the line's own count. `company.resolve` picks the engine:
+its own for a retailer, a bank or an insurer, and the retail shape for an
+industry no engine builds, with that limitation stated in the project's
+`acknowledged_unmet` and the programme it does have named in the sentence.
+
+A project seats the four largest lines of business by default
+(`PROJECT_LOBS`), or the families named in `lobs`. The limit is the world's
+name pool: every LOB adds three people and a composed company's pool holds
+forty, so a project carries its largest LOBs and names the rest in the
+programme rather than failing to build. The interview request carries the
+programme's headline numbers under `programme`, and its instructions tell the
+interviewer to derive a use case's count from its process line rather than
+write a round number.
+
+The company resolver reads industries the same way. `archetypes.matched`
+says whether a description named a registered shape at all, so a retailer is
+recognised without a caveat, a description the catalogue knows but no engine
+builds ("a federated telecom in India") is reported as exactly that, with
+`worldloom industry programme telecom` named as what does exist, and an
+unrecognised business is reported as a miss. `industry.industry_of` is the
+lookup: the overlay keys, the crosswalk codes (`NAICS 517`), each overlay's
+sector framework (`TM Forum eTOM`) and a declared word table
+(`INDUSTRY_WORDS`), matched at word boundaries with the longest phrase
+winning.
+
 ## The shipped industries
 
 Counts for each catalogue's default company, as `worldloom industry list`
@@ -127,6 +161,9 @@ derived.requests[0].to_case()        # an EvaluationCase citing the derived fact
 derived.coverage()                   # CoverageReport against every situation offered
 derived.use_cases()                  # tuple[studio.UseCase, ...] with derived counts
 derived.export("./programme")
+
+industry.project("telecom", "Ardent Telecom")   # a Studio ProjectSpec, LOBs and use cases derived
+industry.industry_of("a federated telecom")     # "telecom"
 ```
 
 `programme` also accepts a `process_bindings.CompanySpec`, an `engine` for the
