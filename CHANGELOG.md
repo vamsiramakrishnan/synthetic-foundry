@@ -11,6 +11,29 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Eval execution: a question is a turn
+
+- Every request in the shipped corpora was complete and safe to act on as
+  written, and the turn protocol had two replies, a call or an answer. An
+  agent that should stop and ask (the request is ambiguous, a parameter is
+  missing, a delete needs the user's word) had no way to, and no grade for
+  it. `QuestionPoint` is to clarification what `FailurePoint` is to a
+  designed error: a row declares the questions its request requires
+  (`question_required`: the reason, the tokens the question must mention,
+  the user's reply, the nodes that may not run first; `confirm_before` on a
+  delete derives one per destructive write), `ToolSurface.ask` records what
+  the agent asked and where (the `ask` reply of the `worldloom.evalrun-turn/v2`
+  document, the `eval_ask` tool over MCP, an `["ask", {...}]` entry in a
+  responses document), the service answers from the row and never says
+  whether the question was expected, and the trajectory grade counts the
+  points honoured under four laws named once in `QUESTION_LAWS`:
+  `acted_without_asking`, `asked_too_late`, `ignored_the_answer`,
+  `asked_without_need`. One more score term beside the designed failures,
+  absent when a case requires no question and none is asked, so every
+  existing ledger scores as it did. The reference agent asks what the row
+  requires; the questions ride the ledger (`CaseResult.questions`) and the
+  summary; `axis_coverage` reports `questions_expected` and the reasons.
+
 ### Hero use cases: organise my drive, my inbox, my chats
 
 - `worldloom enterprise-evals housekeeping WORLD OUT --kind drive|inbox|chats

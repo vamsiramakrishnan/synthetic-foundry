@@ -162,7 +162,7 @@ def run_command(
     exec_command: str | None = typer.Option(
         None, "--exec",
         help=("The agent as an executable, one subprocess per turn: reads a "
-              "`worldloom.evalrun-turn/v1` JSON document on stdin, prints {\"call\": ...} "
+              "`worldloom.evalrun-turn/v2` JSON document on stdin, prints {\"call\": ...} "
               "or {\"answer\": ...} on stdout. Run without a shell (shlex argv) unless --shell is given."),
     ),
     timeout: float = typer.Option(600.0, "--timeout", help="Seconds the --exec child may run per turn before it is killed."),

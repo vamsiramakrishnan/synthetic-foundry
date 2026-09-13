@@ -489,7 +489,7 @@ worldloom evalrun run <CORPUS>
 | Option | Purpose |
 | --- | --- |
 | `--agent` | reference \| lazy \| scripted:<responses.json> |
-| `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v1` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
+| `--exec` | The agent as an executable, one subprocess per turn: reads a `worldloom.evalrun-turn/v2` JSON document on stdin, prints {"call": ...} or {"answer": ...} on stdout. Run without a shell (shlex argv) unless --shell is given. |
 | `--json` | Emit the summary as JSON. |
 | `--limit` |  |
 | `--max-turns` | Turns the --exec child may take per case. |

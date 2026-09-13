@@ -440,7 +440,7 @@ def _exec_cmd(*parts: object) -> str:
 _CHILD = """
 import json, sys
 doc = json.load(sys.stdin)
-assert doc["schema"] == "worldloom.evalrun-turn/v1", doc.get("schema")
+assert doc["schema"] == "worldloom.evalrun-turn/v2", doc.get("schema")
 assert all(tool["name"] for tool in doc["tools"])
 if not doc["transcript"]:
     read = next(t for t in doc["tools"] if t["name"] == "servicenow.get_record")

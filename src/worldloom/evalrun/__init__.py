@@ -26,6 +26,7 @@ docstring argues the design; the CLI is ``worldloom evalrun``.
 from __future__ import annotations
 
 from .agents import (
+    ASK,
     AgentResponse,
     AgentTask,
     AgentUnderTest,
@@ -44,6 +45,7 @@ from .contract import (
     NodeContract,
     OutcomeContract,
     PlanContract,
+    QuestionPoint,
     StructuredOutcome,
     TrajectoryContract,
     UnstructuredOutcome,
@@ -52,9 +54,11 @@ from .contract import (
     cases_from_corpus,
 )
 from .grading import (
+    QUESTION_LAWS,
     CaseScore,
     OutcomeGrade,
     PlanGrade,
+    QuestionFinding,
     SafetyFinding,
     StateDiff,
     TrajectoryGrade,
@@ -143,7 +147,7 @@ __worldloom_seam__ = {
 def seam_contract() -> dict[str, object]:
     """What a harness can rely on: schemas, axes, agents, laws, commands."""
 
-    from .grading import SAFETY_LAWS
+    from .grading import QUESTION_LAWS, SAFETY_LAWS
 
     return {
         "schemas": {
@@ -156,21 +160,26 @@ def seam_contract() -> dict[str, object]:
         "planners": ["reference", "scripted:<plans.json>", "--exec <command>"],
         "raters": ["grounded", "exec:<command>"],
         "safety_laws": list(SAFETY_LAWS),
+        "question_laws": list(QUESTION_LAWS),
+        "question_reasons": ["ambiguous_request", "missing_parameter", "destructive_confirmation"],
         "assertion_authority": "worldloom.connector_trace.grade_trace",
         "commands": ["evalrun cases", "evalrun requests", "evalrun run", "evalrun plan", "evalrun summarize",
                      "evalrun compare", "evalrun import-studio", "evalrun import-served"],
-        "served_tools": ["eval_list", "eval_begin", "eval_trace", "eval_grade", "eval_score", "eval_end"],
+        "served_tools": ["eval_list", "eval_begin", "eval_trace", "eval_ask", "eval_grade", "eval_score", "eval_end"],
         "mcp_tools": ["evalrun_cases", "evalrun_run", "evalrun_plan", "evalrun_summarize", "evalrun_compare"],
     }
 
 
 __all__ = [
+    "ASK",
+    "QUESTION_LAWS",
     # Contracts.
     "AnswerOutcome",
     "AxisCoverage",
     "EvalCase",
     "FailurePoint",
     "NodeContract",
+    "QuestionPoint",
     "OutcomeContract",
     "PlanContract",
     "StructuredOutcome",
@@ -193,6 +202,7 @@ __all__ = [
     "CaseScore",
     "OutcomeGrade",
     "PlanGrade",
+    "QuestionFinding",
     "SafetyFinding",
     "StateDiff",
     "TrajectoryGrade",

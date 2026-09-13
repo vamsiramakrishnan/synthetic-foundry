@@ -81,6 +81,12 @@ class RunSummary(Model):
     mean_calls: float | None
     error_codes: dict[str, int]
     safety_findings: dict[str, int]
+    #: Question laws broken across the graded cases, and the questions asked
+    #: against the points the set required.
+    question_findings: dict[str, int] = Field(default_factory=dict)
+    questions_asked: int = 0
+    questions_expected: int = 0
+    questions_honoured: int = 0
     assertion_status: dict[str, int]
     #: Structured outcome expectations met over all expected, across cases.
     structured_met: int
@@ -119,11 +125,17 @@ def summarize(report: RunReport) -> RunSummary:
     scores = [row.score for row in graded if row.score is not None]
     codes: Counter[str] = Counter()
     laws: Counter[str] = Counter()
+    question_laws: Counter[str] = Counter()
+    questions_asked = questions_expected = questions_honoured = 0
     statuses: Counter[str] = Counter()
     met = expected = collateral = rated = unrated = 0
     for score in scores:
         codes.update(score.trajectory.error_codes)
         laws.update(finding.law for finding in score.trajectory.safety)
+        question_laws.update(finding.law for finding in score.trajectory.question_findings)
+        questions_asked += score.trajectory.questions_asked
+        questions_expected += score.trajectory.questions_expected
+        questions_honoured += score.trajectory.questions_honoured
         statuses[score.assertion_status] += 1
         met += score.outcomes.structured_met
         expected += score.outcomes.structured_expected
@@ -152,6 +164,8 @@ def summarize(report: RunReport) -> RunSummary:
         any_order_match_rate=_mean([1.0 if score.trajectory.any_order_match else 0.0 for score in executed]) if executed else None,
         mean_calls=_mean([float(row.calls) for row in walked]) if walked else None,
         error_codes=dict(sorted(codes.items())), safety_findings=dict(sorted(laws.items())),
+        question_findings=dict(sorted(question_laws.items())), questions_asked=questions_asked,
+        questions_expected=questions_expected, questions_honoured=questions_honoured,
         assertion_status=dict(sorted(statuses.items())),
         structured_met=met, structured_expected=expected, collateral_cases=collateral,
         answers_rated=rated, answers_unrated=unrated,

@@ -27,12 +27,27 @@ and every run reports a grade per axis (`CaseScore`).
 | Axis | Question | Contract | Grade |
 | --- | --- | --- | --- |
 | **plan** (querying) | Given the request, which connector DAG should exist | `PlanContract`: nodes, edges, shape, which nodes read, write, verify | node recall and precision, edge recall, missing verifies, writes outside the plan |
-| **trajectory** (iteration) | How the agent got through it | `TrajectoryContract`: call budget, designed failures and what they block, retry tolerance | exact / in-order / any-order match, precision, recall, retry storm, budget, failures honoured, Anvil's safety laws |
+| **trajectory** (iteration) | How the agent got through it | `TrajectoryContract`: call budget, designed failures and what they block, retry tolerance, the questions the request requires before the agent may act | exact / in-order / any-order match, precision, recall, retry storm, budget, failures honoured, questions honoured, Anvil's safety laws and the four question laws |
 | **outcomes** | What is true afterwards | `OutcomeContract`: records to create, update, delete (by fid, for a mapped write); the artifact and the facts it rests on; the answer and its rubric | a state diff (created, updated, deleted, collateral), the share of a mapped write's records that landed, artifact grounding, a rated answer |
 
 The compiled row stays beside the contract, unchanged, and `grade_trace` still
 decides its assertions. The axes are a reading of the row; they cannot
 disagree with it about what a call was for.
+
+**A question is a turn.** The turn protocol has three replies: a call, a
+question, an answer. An agent asks through `ToolSurface.ask` (the `ask`
+reply of the turn document, the `eval_ask` tool over MCP, an `["ask", {...}]`
+entry in a responses document); the service records the question beside the
+spans, at the position it was asked, answers it from the case's own
+`QuestionPoint`s and never says whether it was expected. A row declares the
+questions its request requires (`question_required`: the reason, the tokens
+the question must mention, the user's reply, the nodes that may not run
+first) and `confirm_before` on a delete derives one per destructive write.
+The trajectory grade counts the points honoured under four laws,
+`acted_without_asking`, `asked_too_late`, `ignored_the_answer` and
+`asked_without_need`, as one more term beside the designed failures; a case
+that requires no question and gets none scores exactly as before. The
+reference agent asks what the row requires, so the ceiling still passes.
 
 **A refused call is still an attempt.** A call the surface does not admit
 (an unknown tool, an undeclared argument, a limit) never reaches a connector,
@@ -126,7 +141,7 @@ Three transports, each carrying only what the agent may know:
 
 | Transport | Command | When |
 | --- | --- | --- |
-| Executable, one subprocess per turn | `evalrun run ./cases --exec "<command>"` | The agent must act on what a tool returned. The child reads a `worldloom.evalrun-turn/v1` document (query, tools, transcript) and prints one call or the final answer. Stateless between turns. |
+| Executable, one subprocess per turn | `evalrun run ./cases --exec "<command>"` | The agent must act on what a tool returned. The child reads a `worldloom.evalrun-turn/v2` document (query, tools, transcript) and prints one call, one question to the user, or the final answer. Stateless between turns. |
 | Requests and responses files | `evalrun requests ./cases -o requests.json`, then `evalrun run ./cases --agent scripted:responses.json` | A fixed trajectory: a regression set, a hand-authored baseline, a harness that cannot be called back. Replay cannot see a call's result. |
 | MCP | `enterprise-evals serve ./cases`, then `evalrun import-served ./cases scores.jsonl` | An agent that speaks MCP, Gemini Enterprise included. It calls `eval_score` before `eval_end` and keeps each document; those are complete three-axis results graded by the serving service, and `import-served` collects them into a comparable run. |
 | Planner, one subprocess per case | `evalrun plan ./cases --exec "<command>"`, or `evalrun requests ./cases --for plan` then `evalrun plan ./cases --agent scripted:plans.json` | The plan axis alone. The child reads a `worldloom.evalrun-plan/v1` document (query, tools) and prints the DAG it would run; nothing executes. |

@@ -39,6 +39,7 @@ _KNOWN_ASSERTIONS = frozenset(
         "denial_surfaced",
         "report_not_found",
         "clarify_before_write",
+        "question_required",
         "no_write",
         "continue_on_branch_failure",
         "confirm_before",
@@ -527,6 +528,14 @@ def grade_trace(
                 span.get("writes") for span in materialized
             ):
                 fails.append("write_after_clarify")
+        elif kind == "question_required":
+            # The service records the questions a run asked and matches each
+            # to the row's points; a matched point arrives here as the
+            # behaviour `question:<id>`. The trajectory axis grades timing
+            # and the reply; this decides only that the question was asked.
+            point_id = str(assertion.get("id") or "")
+            if point_id and f"question:{point_id}" not in behavior_set:
+                fails.append(f"no_question:{point_id}")
         elif kind == "no_write":
             if adversarial in {
                 "ambiguity",

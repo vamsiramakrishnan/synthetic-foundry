@@ -92,6 +92,34 @@ class FailurePoint(Model):
     fixture: str | None = None
 
 
+QuestionReason = Literal["ambiguous_request", "missing_parameter", "destructive_confirmation"]
+
+
+class QuestionPoint(Model):
+    """A clarification the request requires before the agent may act.
+
+    To clarification what ``FailurePoint`` is to a designed error: the row
+    declares it, the service records what the agent asked, and the grade
+    counts the points honoured. ``must_mention`` names the tokens the
+    question has to contain (case-insensitive) to count as this question;
+    ``answer`` is what the user replies; ``blocks_nodes`` may not run
+    successfully before the reply; ``proceed`` says whether the reply
+    authorises going on — a "no" that is then acted on is ignored, not honoured.
+    """
+
+    id: str
+    reason: QuestionReason
+    about: tuple[str, ...] = ()
+    must_mention: tuple[str, ...] = ()
+    answer: str = ""
+    blocks_nodes: tuple[str, ...] = ()
+    proceed: bool = True
+
+    def matches(self, question: str) -> bool:
+        lowered = question.lower()
+        return all(token.lower() in lowered for token in self.must_mention)
+
+
 class TrajectoryContract(Model):
     """How the agent should move through the plan. Graded by ``grade_trajectory``."""
 
@@ -104,6 +132,14 @@ class TrajectoryContract(Model):
     #: same trajectory. Anvil calls this the existence check; the row's
     #: ``existence_check_first`` assertion is the same rule when present.
     existence_check_before_destructive: bool = True
+    #: The clarifications the request requires, in order. Empty for a request
+    #: that is complete and safe to act on as written, which every row before
+    #: this was: a question asked on such a case is unsolicited.
+    questions: tuple[QuestionPoint, ...] = ()
+    #: A destructive write needs the user's confirmation before it runs. Set
+    #: by the row's ``confirm_before`` assertion; each destructive write node
+    #: then carries a ``destructive_confirmation`` question point.
+    confirm_before_destructive: bool = False
 
 
 class StructuredOutcome(Model):
@@ -284,7 +320,32 @@ def case_from_row(
         )
         for assertion in row.get("assertions", ()) if assertion.get("type") == "failure_at"
     )
-    trajectory = TrajectoryContract(max_calls=int(row.get("max_calls") or 1000), failures=failures)
+    questions = [
+        QuestionPoint(
+            id=str(assertion.get("id") or f"q{index}"), reason=str(assertion.get("reason") or "ambiguous_request"),  # type: ignore[arg-type]
+            about=tuple(str(value) for value in assertion.get("about", ())),
+            must_mention=tuple(str(value) for value in assertion.get("must_mention", ())),
+            answer=str(assertion.get("answer") or ""),
+            blocks_nodes=tuple(str(value) for value in assertion.get("blocks_nodes", ())),
+            proceed=bool(assertion.get("proceed", True)),
+        )
+        for index, assertion in enumerate(row.get("assertions", ()))
+        if assertion.get("type") == "question_required"
+    ]
+    confirm = any(assertion.get("type") == "confirm_before" for assertion in row.get("assertions", ()))
+    if confirm:
+        # Every destructive write on the plan is a confirmation the user
+        # must give first; the row's `confirm_before` assertion is the same
+        # rule, decided by the trace grader from the behaviours the service
+        # records.
+        for node in nodes:
+            if node.kind == "write" and node.op == "delete" and not any(q.reason == "destructive_confirmation" and node.id in q.about for q in questions):
+                questions.append(QuestionPoint(
+                    id=f"confirm-{node.id}", reason="destructive_confirmation", about=(node.id,),
+                    must_mention=(), answer="Yes, go ahead.", blocks_nodes=(node.id,),
+                ))
+    trajectory = TrajectoryContract(max_calls=int(row.get("max_calls") or 1000), failures=failures,
+                                    questions=tuple(questions), confirm_before_destructive=confirm)
 
     structured = _structured(row, nodes)
     write_ids = {outcome.node for outcome in structured}
@@ -371,6 +432,10 @@ class AxisCoverage(Model):
     connectors: dict[str, int]
     operations: dict[str, int]
     failure_kinds: dict[str, int]
+    #: Cases that require the agent to ask before acting, and why. A zero
+    #: is a set that never checks whether an agent stops to ask.
+    questions_expected: int = 0
+    question_reasons: dict[str, int] = Field(default_factory=dict)
 
 
 def axis_coverage(cases: Iterable[EvalCase]) -> AxisCoverage:
@@ -381,6 +446,7 @@ def axis_coverage(cases: Iterable[EvalCase]) -> AxisCoverage:
     connectors: Counter[str] = Counter()
     operations: Counter[str] = Counter()
     failure_kinds: Counter[str] = Counter()
+    question_reasons: Counter[str] = Counter()
     counts: Counter[str] = Counter()
     for case in listed:
         shapes[case.plan.shape or "legacy"] += 1
@@ -401,6 +467,9 @@ def axis_coverage(cases: Iterable[EvalCase]) -> AxisCoverage:
         counts["answers"] += case.outcomes.answer is not None
         for failure in case.trajectory.failures:
             failure_kinds[failure.kind] += 1
+        counts["questions_expected"] += bool(case.trajectory.questions)
+        for question in case.trajectory.questions:
+            question_reasons[question.reason] += 1
     return AxisCoverage(
         cases=len(listed), reads=counts["reads"], writes=counts["writes"], creates=counts["creates"],
         updates=counts["updates"], deletes=counts["deletes"], verifies=counts["verifies"],
@@ -408,11 +477,13 @@ def axis_coverage(cases: Iterable[EvalCase]) -> AxisCoverage:
         no_write_cases=counts["no_write_cases"], unstructured=counts["unstructured"], answers=counts["answers"],
         shapes=dict(sorted(shapes.items())), connectors=dict(sorted(connectors.items())),
         operations=dict(sorted(operations.items())), failure_kinds=dict(sorted(failure_kinds.items())),
+        questions_expected=counts["questions_expected"], question_reasons=dict(sorted(question_reasons.items())),
     )
 
 
 __all__ = [
     "AnswerOutcome",
+    "QuestionPoint",
     "AxisCoverage",
     "EvalCase",
     "FailurePoint",

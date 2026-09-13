@@ -62,6 +62,10 @@ class CaseResult(Model):
     #: the spans so a probing agent's attempts are on the ledger.
     refused: int = 0
     refusals: tuple[dict[str, Any], ...] = ()
+    #: The questions the agent asked the user, in order, with the reply each
+    #: got and the number of calls made before it. On the ledger beside the
+    #: spans and the refusals: a question is a turn.
+    questions: tuple[dict[str, Any], ...] = ()
     latency: Latency | None = None
 
     @property
@@ -120,6 +124,7 @@ def grade_run(
     rater: Callable[[EvalCase, str], tuple[float | None, str | None]] | None = None,
     safety: Mapping[str, OperationSafety] | None = None,
     refusals: Sequence[Mapping[str, Any]] = (),
+    questions: Sequence[Mapping[str, Any]] = (),
 ) -> CaseScore:
     """The three grades plus the assertion verdict, from what a run recorded.
 
@@ -128,7 +133,7 @@ def grade_run(
     """
 
     plan = grade_plan(case, spans, response)
-    trajectory = grade_trajectory(case, spans, safety=safety, refusals=refusals)
+    trajectory = grade_trajectory(case, spans, safety=safety, refusals=refusals, questions=questions)
     outcomes = grade_outcomes(case, before, after, response, definitions=definitions, rater=rater, spans=spans)
     return score_case(plan, trajectory, outcomes, assertions)
 
@@ -165,6 +170,7 @@ def run_case(
         latency = Latency(ttft=response.ttft if response else None, ttfa=response.ttfa if response else None, ttlt=elapsed)
     spans = service.spans(who, run_id)
     refusals = service.refusals(who, run_id)
+    questions = tuple(dict(item) for item in service.questions(who, run_id))
     after = service.snapshot(who, run_id)
     materialized = tuple(_span_dict(span) for span in spans)
     try:
@@ -174,14 +180,17 @@ def run_case(
     if failure is not None:
         return CaseResult(case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
                           agent=agent.name, status="error", error=failure, calls=len(materialized),
-                          spans=materialized, refused=len(refusals), refusals=refusals, latency=latency)
+                          spans=materialized, refused=len(refusals), refusals=refusals, questions=questions,
+                          latency=latency)
     assert response is not None
     score = grade_run(case, spans, before, after, assertions, response, definitions=service.definitions,
-                      rater=rater, safety=safety if safety is not None else _safety(service), refusals=refusals)
+                      rater=rater, safety=safety if safety is not None else _safety(service), refusals=refusals,
+                      questions=questions)
     return CaseResult(
         case_id=case.id, query=case.query, dimensions=case.dimensions, shape=case.plan.shape,
         agent=agent.name, status="graded", score=score, answer=response.answer, notes=response.notes,
-        calls=len(materialized), spans=materialized, refused=len(refusals), refusals=refusals, latency=latency,
+        calls=len(materialized), spans=materialized, refused=len(refusals), refusals=refusals,
+        questions=questions, latency=latency,
     )
 
 

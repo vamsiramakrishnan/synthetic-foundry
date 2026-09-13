@@ -121,6 +121,14 @@ Any object with `.name` and `.run(task, tools) -> AgentResponse` is an agent;
 
 ## Rules
 
+- **Ask when the request leaves something open.** The turn document's third
+  reply is `{"ask": {"question": ..., "about": [...]}}`; the reply comes back
+  in the transcript. Ask before acting on the point in doubt, act on what the
+  reply says, and do not ask when nothing is unclear: `acted_without_asking`,
+  `asked_too_late`, `ignored_the_answer` and `asked_without_need` are each a
+  trajectory finding. `evalrun cases` reports how many cases require a
+  question (`questions_expected`); a zero means the set never checks it.
+
 - The agent never sees the expected DAG, fixture ids or assertions, and
   cannot submit its own trace. Do not add a channel that lets it.
 - Runs are byte-reproducible; `--timed` is the only thing that reads a clock,

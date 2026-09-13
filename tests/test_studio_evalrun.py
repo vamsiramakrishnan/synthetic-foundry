@@ -123,7 +123,7 @@ def test_plan_mode_and_the_harness_agent_resume_without_asking_twice(compiled: t
     child.write_text(
         "import json, sys\n"
         "doc = json.load(sys.stdin)\n"
-        "assert doc['schema'] == 'worldloom.evalrun-turn/v1' and doc['tools'] and 'expected_dag' not in json.dumps(doc)\n"
+        "assert doc['schema'] == 'worldloom.evalrun-turn/v2' and doc['tools'] and 'expected_dag' not in json.dumps(doc)\n"
         f"open({str(counter)!r}, 'a').write(doc['case_id'] + '\\n')\n"
         "print(json.dumps({'answer': 'Nothing to do.'}))\n",
         encoding="utf-8",

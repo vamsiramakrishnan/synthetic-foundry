@@ -65,6 +65,12 @@ class AgentResponse(Model):
     notes: tuple[str, ...] = Field(default=())
 
 
+#: The pseudo-tool a scripted trajectory uses to ask the user a question:
+#: ``ToolCall(tool="ask", arguments={"question": ..., "about": [...]})``.
+#: Not a connector tool; the surface routes it to ``ToolSurface.ask``.
+ASK = "ask"
+
+
 class ToolCall(Model):
     tool: str
     arguments: dict[str, Any] = Field(default_factory=dict)
@@ -96,6 +102,21 @@ class ToolSurface:
         self.attempts += 1
         return self._service.call(self._principal, self.run_id, tool, arguments)
 
+    def ask(self, question: str, *, about: Sequence[str] = ()) -> str:
+        """Ask the user a question and get their reply.
+
+        A question is a turn: the service records it beside the spans, at the
+        position it was asked, and answers it from the case's own question
+        points. The agent never sees whether the question was expected; an
+        unexpected one is answered too, and graded as unsolicited.
+        """
+        return str(self._service.ask(self._principal, self.run_id, question, tuple(about)))
+
+    @property
+    def questions(self) -> tuple[dict[str, Any], ...]:
+        """Every question this run asked, in order, with the reply it got."""
+        return self._service.questions(self._principal, self.run_id)
+
     @property
     def spans(self) -> tuple[ConnectorSpan, ...]:
         return self._service.spans(self._principal, self.run_id)
@@ -126,6 +147,13 @@ class ScriptedAgent:
 
     def run(self, task: AgentTask, tools: ToolSurface) -> AgentResponse:
         for call in self.calls:
+            if call.tool == ASK:
+                # A scripted question: replay cannot read the reply, but the
+                # turn is recorded where it was asked, which is what the
+                # grade reads.
+                tools.ask(str(call.arguments.get("question", "")),
+                          about=tuple(str(value) for value in call.arguments.get("about", ())))
+                continue
             try:
                 tools.call(call.tool, **copy.deepcopy(call.arguments))
             except (ConnectorError, ServingError):
@@ -187,6 +215,20 @@ class ReferenceAgent:
         # pruned to what the tool advertises, which is what a real agent
         # reading ``tools/list`` would send.
         self._params = {str(tool["name"]): set(tool["params"]) for tool in tools.tools()}
+        # The questions the row requires, asked before anything runs: the
+        # reference knows the plan, so it also knows what is unclear about it.
+        # A question carries what the row says it must mention; a
+        # confirmation names the record it is about.
+        for assertion in row.get("assertions", ()):
+            if assertion.get("type") == "question_required":
+                tokens = " ".join(str(value) for value in assertion.get("must_mention", ()))
+                tools.ask(f"Before I proceed: {tokens or assertion.get('id', 'please clarify')}?",
+                          about=tuple(str(value) for value in assertion.get("about", ())))
+        if any(assertion.get("type") == "confirm_before" for assertion in row.get("assertions", ())):
+            for node in row["expected_dag"]["nodes"]:
+                if node.get("op") == "delete" or node.get("resolved_operation") == "delete":
+                    tools.ask(f"This will permanently delete {node.get('fixture') or 'the record'}; shall I go ahead?",
+                              about=(str(node["id"]),))
         notes = (self._walk_grammar(row, tools) if row.get("grammar") == "enterprise-dag@1"
                  else self._walk_legacy(row, tools))
         return AgentResponse(answer=f"Completed {task.case_id}: {len(tools.spans)} calls.", notes=tuple(notes))
@@ -242,7 +284,10 @@ class ReferenceAgent:
                             arguments[key] = payload[key]
                     page = self._call(tools, name, **arguments)
                     made.extend(_first_id([item]) for item in page.get("items", ()))
-                elif op in _READ_OPS or op in {"read", "extract"}:
+                elif op in _READ_OPS or op in {"read", "extract", "readback", "cross_system"}:
+                    # A verify is a read of what was written: the legacy
+                    # spelling of the op is `readback`, and the reference
+                    # never walked one until the hand rows asked it to.
                     for reference in list(node.get("fixtures", ())) or [target]:
                         result = self._call(tools, name, id=reference, fields=payload.get("fields"))
                         made.append(_first_id([result]) if isinstance(result, Mapping) else reference)
@@ -344,6 +389,7 @@ class ReferenceAgent:
 
 
 __all__ = [
+    "ASK",
     "AgentResponse",
     "AgentTask",
     "AgentUnderTest",
