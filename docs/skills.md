@@ -199,7 +199,8 @@ Source: [`.claude/skills/worldloom-artifact-realism/SKILL.md`](../.claude/skills
 
 Compile the supplied 12-industry catalogue into company activity bindings,
 inspect coverage and evidence boundaries, and drive process authoring from
-them without treating authored hints as measurements.
+them without treating authored hints as measurements. Derive the whole
+evaluation programme an industry implies with `worldloom industry programme`.
 
 Source: [`.claude/skills/worldloom-process-bindings/SKILL.md`](../.claude/skills/worldloom-process-bindings/SKILL.md)
 

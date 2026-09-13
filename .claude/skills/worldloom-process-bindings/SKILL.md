@@ -33,3 +33,15 @@ review before redistribution. Keep the original source and provenance ledger.
 
 Run `pytest -q tests/test_process_bindings.py` and verify exports with
 `python -m worldloom.process_bindings --verify ./processes/company-000`.
+
+## The programme an industry implies
+
+When the interview settles on an industry, do not type its lines of business,
+processes or counts. `worldloom industry programme telecom ./programme` derives
+them from the compiled catalogue (`docs/industry-programme.md`): a LOB per
+owning function family, a seated request per situation, a fact per declared
+attribute, and a Studio use case per LOB × process whose `count` is the line's
+situations. Read `programme.json`'s `unemulated` and `unsupported_lines` before
+quoting a count: a system no connector emulates is named there, never replaced.
+`worldloom industry programme telecom --describe` prints the numbers without
+writing; `worldloom industry list` prints every industry's.

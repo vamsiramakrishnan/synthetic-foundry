@@ -733,6 +733,27 @@ worldloom gemini-enterprise score <CORPUS> <RESULTS>
 | --- | --- |
 | `--json` | Emit the scorecard as JSON. |
 
+### `worldloom industry`
+
+Derive the whole evaluation programme an industry implies: its lines of business, processes, requests and counts.
+
+### `worldloom industry list`
+
+The industries the process catalogue knows, with each default company's headline count.
+
+### `worldloom industry programme`
+
+Derive the programme for one industry: LOBs, process lines, seated requests, facts and use cases with derived counts.
+
+```
+worldloom industry programme <INDUSTRY> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--describe` | Print the headline numbers and stop; write nothing. |
+| `--engine` | The registered domain whose world the derived LOBs ride. Default: the industry's own name when a domain is registered under it. |
+
 ### `worldloom inspect`
 
 Show what a corpus contains. Nothing is hidden.

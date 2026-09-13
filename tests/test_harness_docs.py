@@ -108,6 +108,7 @@ DOCUMENTS = (
     "docs/narration-programs.md",
     "docs/process-bindings.md",
     "docs/process-catalogue.md",
+    "docs/industry-programme.md",
     "docs/architecture.md",
     "docs/enterprise-corpus.md",
     "docs/sdk.md",

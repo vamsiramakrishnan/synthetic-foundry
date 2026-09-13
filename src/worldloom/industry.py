@@ -1,0 +1,1040 @@
+"""Industry X, and the whole evaluation programme it implies.
+
+An interview ends with a sentence like "a federated telecom in India, four
+business units". Everything after that sentence used to be typed by hand: which
+lines of business the company has, which processes each one runs, who in it
+would ask for what, and how many evaluation rows each use case deserves. The
+process catalogue already answers the first two questions for twelve
+industries (`process_bindings.compile_company` binds every activity of every
+value stream to an owner, a country, a system of record and the channels its
+evidence lands in), and `process_bindings.situations` crosses each binding with
+the verbs that suit it. This module carries the derivation the rest of the way,
+and everything it produces is a function of the compiled catalogue and two
+versioned data files, so the same industry yields the same programme every
+time.
+
+**A line of business is a function family the operating model owns.** The
+catalogue's thirty function families (`ap`, `billing`, `it_ops`, ...) and its
+operating models (which family a business unit, a shared service or a group
+function owns) are the LOB table nobody should type per industry.
+`derive_lobs` makes a `lob.Lob` per family that owns at least one bound
+activity: a head, a manager and an analyst, answerable for the value streams
+that family's activities sit in, expressed as fact-kind families
+(`process.order_to_cash`) so `lob.asks_about`'s standing rule and the
+plausibility check read one account. The kinds are registered from the
+catalogue's own stream list (`register_kinds`), not from a literal here.
+
+**A request is a situation with someone in the seat.** `requests` walks every
+situation a compiled catalogue supports and seats an asker from the LOB whose
+family owns the binding, by the activity type (`SEAT_BY_TYPE`: an approval is
+asked about by the head, a reconciliation by the manager, a capture by the
+analyst). The asker always has standing, by construction: the seat is in the
+family that answers for the stream. The ground truth is what the catalogue
+declares and nothing more (`facts`: who owns the activity, where it is
+recorded, what control governs it), so a request's expected answer is
+structural and says so.
+
+**The count is derived, per LOB and per process.** A `ProcessLine` is one LOB
+crossed with one value stream: its activities, bindings, situations, reads and
+writes, systems and channels. `use_cases` turns each line into a Studio
+`UseCase` whose `count` is the line's situations rather than an authored
+twelve, whose sources are the connectors that emulate the line's systems of
+record and evidence channels (`_data/process-catalogue/emulated-systems@1.json`),
+and whose construction `EvalSpec` constrains those sources to the line. A
+system no emulator stands in for is reported on the line and on the
+programme, never quietly replaced by one that does.
+
+Nothing here draws, samples or reads a clock. Ids are sequential in traversal
+order over sorted, declared data; facts are valid from a declared `as_of`.
+"""
+
+from __future__ import annotations
+
+import json
+from collections import Counter
+from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from importlib.resources import files
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
+
+from . import factkinds
+from .evals.intents import Intent, intents
+from .ids import Minter
+from .lob import Lob, Responsibility, RoleSpec, lint_lob, may_ask_about
+from .models import Authority, CanonicalFact, EvaluationCase, EvaluationType, Model
+from .process_bindings import (
+    ActivityBinding,
+    CompanySpec,
+    CompiledCatalogue,
+    compile_company,
+    default_company,
+    load_catalogue,
+    situations_for,
+)
+
+if TYPE_CHECKING:
+    from .evals.coverage import CoverageReport
+    from .studio.models import UseCase
+
+PROGRAMME_SCHEMA: Literal["worldloom.industry-programme/v1"] = (
+    "worldloom.industry-programme/v1"
+)
+
+#: Where the emulator table lives. Versioned in the name, like every file under
+#: `_data/`: which connector stands in for a system decides which records a
+#: use case reads, so a change is a new version.
+EMULATED_SYSTEMS = "emulated-systems@1.json"
+
+#: Facts derived from the catalogue are valid from a declared moment, not from
+#: a clock. The programme is a structure, and a structure does not know when it
+#: was compiled; a caller extending a world passes that world's own moment.
+EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
+
+#: The kind family every derived responsibility and fact wears. One prefix, so
+#: `process.<stream>` covers `process.<stream>.owner` at a dot boundary and a
+#: LOB's standing over a stream is one edge, not four.
+KIND_PREFIX = "process"
+
+#: Which seat in the owning family asks about an activity of each type. A
+#: declared rule rather than a draw: the head signs off and decides, the
+#: manager reconciles and reports, the analyst captures, executes, notifies and
+#: escalates. The three suffixes are the three roles `derive_lobs` makes.
+SEAT_BY_TYPE: dict[str, str] = {
+    "approve": "head",
+    "decide": "head",
+    "reconcile": "manager",
+    "report": "manager",
+    "capture": "analyst",
+    "execute": "analyst",
+    "notify": "analyst",
+    "escalate": "analyst",
+}
+
+#: The finding `lob.lint_roles` raises on every derived LOB and every shipped
+#: one: the root of a line of business is its head, not the chief executive.
+#: Filtered out of a programme's findings because it is the convention this
+#: module deliberately does not follow, said once here rather than per LOB.
+ROOT_CONVENTION = "by convention, the root role should be 'ceo'"
+
+_ABSTAIN_ANSWER = "Not present in the corpus."
+
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+
+
+def emulated_systems() -> dict[str, Any]:
+    """The emulator table: products and channels the connectors stand in for."""
+    text = (
+        files("worldloom")
+        .joinpath("_data", "process-catalogue", EMULATED_SYSTEMS)
+        .read_text(encoding="utf-8")
+    )
+    document = json.loads(text)
+    if document.get("schema") != "worldloom.emulated-systems/v1":
+        raise ValueError(
+            f"unexpected emulated-systems schema {document.get('schema')!r}"
+        )
+    return document
+
+
+def stream_names(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
+    """Every value stream the catalogue declares, universal and industry-specific."""
+    cat = catalogue if catalogue is not None else load_catalogue()
+    names = {key: value["name"] for key, value in cat["value_streams"].items()}
+    for overlay in cat["industry_overlays"].values():
+        for key, value in overlay.get("specific", {}).items():
+            names.setdefault(key, value["name"])
+    return dict(sorted(names.items()))
+
+
+def register_kinds(catalogue: dict[str, Any] | None = None) -> tuple[str, ...]:
+    """Register `process.<stream>` for every stream the catalogue declares.
+
+    Idempotent, and from data: the streams are the catalogue's, so a catalogue
+    that adds a stream adds the kind a LOB may answer for. `holds-at` is the
+    floor invariant the registry demands; a derived fact states what the
+    catalogue declares at `as_of`, which is exactly what `holds-at` claims.
+    """
+    kinds = tuple(
+        factkinds.FactKind(
+            kind=f"{KIND_PREFIX}.{stream}",
+            domain="process",
+            generated_by="worldloom.industry",
+            invariants=("holds-at",),
+            about=f"Who owns, records and controls the activities of {name}, as the process catalogue declares.",
+        )
+        for stream, name in stream_names(catalogue).items()
+    )
+    factkinds.register(kinds)
+    return tuple(kind.kind for kind in kinds)
+
+
+# ---------------------------------------------------------------------------
+# Lines of business
+# ---------------------------------------------------------------------------
+
+
+def _bound(compiled: CompiledCatalogue) -> list[ActivityBinding]:
+    return [row for row in compiled.rows if row.binding_status == "bound"]
+
+
+def _by_family(rows: Iterable[ActivityBinding]) -> dict[str, list[ActivityBinding]]:
+    grouped: dict[str, list[ActivityBinding]] = {}
+    for row in rows:
+        grouped.setdefault(row.function, []).append(row)
+    return dict(sorted(grouped.items()))
+
+
+def derive_lobs(
+    compiled: CompiledCatalogue,
+    *,
+    engine: str | None = None,
+    catalogue: dict[str, Any] | None = None,
+) -> tuple[Lob, ...]:
+    """One LOB per function family that owns a bound activity.
+
+    Three roles per family (head, manager, analyst, keyed `<family>_head` and
+    so on) and two responsibility edges: the head and the manager answer for
+    the `process.<stream>` family of every stream the family's activities sit
+    in, so `asks_about` grants the head its own streams and status down the
+    line, and the analyst standing up the line. Nothing outside the family has
+    standing over its streams, which is the whole point of deriving the table
+    from the operating model rather than typing it.
+    """
+    cat = catalogue if catalogue is not None else load_catalogue()
+    register_kinds(cat)
+    titles: dict[str, str] = cat["function_families"]
+    names = stream_names(cat)
+    # The LOB rides the company's world, so its engine is the domain that
+    # builds it when one does (`retail`, `banking`, `insurance`); otherwise the
+    # industry itself is the honest label, and the programme reports that no
+    # engine builds the world (`IndustryProgramme.engine` is empty).
+    lob_engine = engine if engine is not None else compiled.industry
+    lobs: list[Lob] = []
+    for family, rows in _by_family(_bound(compiled)).items():
+        title = titles.get(family, family.replace("_", " ").title())
+        streams = sorted({row.stream for row in rows})
+        owners = sorted({row.owner_bu for row in rows})
+        kinds = [f"{KIND_PREFIX}.{stream}" for stream in streams]
+        head, manager, analyst = (
+            f"{family}_head",
+            f"{family}_manager",
+            f"{family}_analyst",
+        )
+        purpose = (
+            f"{title} at {compiled.company}: {len({row.activity_id for row in rows})} activities across"
+            f" {', '.join(names.get(s, s) for s in streams)}, owned by {', '.join(owners)}."
+        )
+        lobs.append(
+            Lob(
+                name=family,
+                title=title,
+                purpose=purpose,
+                engine=lob_engine,
+                roles=[
+                    RoleSpec(key=head, title=f"Head of {title}", function=title),
+                    RoleSpec(
+                        key=manager,
+                        title=f"{title} Manager",
+                        function=title,
+                        reports_to=head,
+                    ),
+                    RoleSpec(
+                        key=analyst,
+                        title=f"{title} Analyst",
+                        function=title,
+                        reports_to=manager,
+                    ),
+                ],
+                responsibilities=[
+                    Responsibility(role_key=head, fact_kinds=list(kinds)),
+                    Responsibility(role_key=manager, fact_kinds=list(kinds)),
+                ],
+            )
+        )
+    return tuple(lobs)
+
+
+def lint(lobs: Sequence[Lob]) -> list[str]:
+    """Every finding on the derived LOBs except the root convention."""
+    return [
+        finding
+        for spec in lobs
+        for finding in lint_lob(spec)
+        if ROOT_CONVENTION not in finding
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Facts
+# ---------------------------------------------------------------------------
+
+
+def facts(
+    compiled: CompiledCatalogue, *, as_of: datetime = EPOCH
+) -> tuple[CanonicalFact, ...]:
+    """What the catalogue declares about each bound activity, as facts.
+
+    Owner, system of record, control and (when named) exception, one fact
+    each, subject the binding id, kind `process.<stream>.<attribute>`. The
+    authority is `approved_report`: an authored, reviewed structure, not a
+    system's own record and not a hypothesis. Ids are `PFACT-` so they cannot
+    collide with a world's `FACT-` ledger when a caller extends one.
+    """
+    minter = Minter(width=6)
+    out: list[CanonicalFact] = []
+    for row in _bound(compiled):
+        attributes = [("owner", row.owner_bu), ("system_of_record", row.sor_product)]
+        if row.control.strip():
+            attributes.append(("control", row.control.strip()))
+        if row.exception.strip():
+            attributes.append(("exception", row.exception.strip()))
+        for attribute, value in attributes:
+            out.append(
+                CanonicalFact(
+                    id=minter.next("PFACT"),
+                    kind=f"{KIND_PREFIX}.{row.stream}.{attribute}",
+                    subject=row.id,
+                    text_value=value,
+                    valid_from=as_of,
+                    authority=Authority.APPROVED_REPORT,
+                    source_system="process_catalogue",
+                )
+            )
+    return tuple(out)
+
+
+# ---------------------------------------------------------------------------
+# Requests
+# ---------------------------------------------------------------------------
+
+
+class Request(Model):
+    """A situation with someone in the seat, and the answer the catalogue grounds.
+
+    Carries the same request tuple `EvaluationCase` does (`asker`, `occasion`,
+    `intent`, `channel`, `constraint`, `deliverable`), so `evals.coverage`
+    measures it and `to_case` turns it into a case that cites the derived
+    facts. The rest is the situation's own grounding, kept so a reader can see
+    why this asker and this answer without re-deriving either.
+    """
+
+    id: str
+    lob: str
+    asker: str
+    asker_title: str
+    asker_person_id: str | None = None
+    """Never seated here: a programme has no people. Present so the request
+    tuple is complete for `coverage.report`."""
+    occasion: str
+    intent: str
+    channel: str
+    constraint: str | None = None
+    deliverable: str | None = None
+    brief: str
+    """The request in plain words: verb, activity, owner, country, system.
+    A brief, not a phrasing; phrasing is a later, sampled step."""
+    expected_answer: str
+    expected_fact_ids: tuple[str, ...] = ()
+    grading: EvaluationType
+    effect: Literal["read", "write"]
+    stream: str
+    activity: str
+    activity_type: str
+    owner: str
+    country: str
+    system_of_record: str
+
+    @property
+    def has_request(self) -> bool:
+        return True
+
+    @property
+    def kind(self) -> str:
+        """The fact-kind family this request is about."""
+        return f"{KIND_PREFIX}.{self.stream}"
+
+    def to_case(self) -> EvaluationCase:
+        """The request as a corpus case citing the derived facts.
+
+        An `abstain` request cites nothing and expects abstention, which is the
+        one shape `EvaluationCase` admits without evidence.
+        """
+        abstains = self.grading is EvaluationType.EXPECTED_ABSTENTION
+        return EvaluationCase(
+            id=self.id,
+            question=self.brief,
+            evaluation_type=self.grading,
+            expected_answer=_ABSTAIN_ANSWER if abstains else self.expected_answer,
+            expected_fact_ids=[] if abstains else list(self.expected_fact_ids),
+            expects_abstention=abstains,
+            difficulty="hard"
+            if abstains
+            else ("medium" if self.effect == "write" else "easy"),
+            reasoning=f"Derived from binding {self.occasion} by {self.intent}; the answer is the catalogue's declaration.",
+            asker=self.asker,
+            occasion=self.occasion,
+            intent=self.intent,
+            channel=self.channel,
+            constraint=self.constraint,
+            deliverable=self.deliverable,
+        )
+
+
+def _seat(family: str, activity_type: str) -> str:
+    try:
+        return f"{family}_{SEAT_BY_TYPE[activity_type]}"
+    except KeyError:
+        raise ValueError(
+            f"no seat is declared for activity type {activity_type!r}"
+        ) from None
+
+
+def _brief(intent: Intent, row: ActivityBinding, constraint: str) -> str:
+    verb = intent.verb[:1].upper() + intent.verb[1:]
+    text = (
+        f"{verb}: {row.activity} ({row.stream_name}) for {row.owner_bu}, {row.country}."
+        f" The record is in {row.sor_product}."
+    )
+    if constraint:
+        text += f" Constraint: {constraint}."
+    return text
+
+
+def _answer(row: ActivityBinding) -> str:
+    text = f"{row.owner_bu} owns {row.activity} in {row.country}; system of record {row.sor_product}"
+    if row.control.strip():
+        text += f"; control: {row.control.strip()}"
+    return text + "."
+
+
+def requests(
+    compiled: CompiledCatalogue,
+    lobs: Sequence[Lob] | None = None,
+    *,
+    fact_ids: dict[str, tuple[str, ...]] | None = None,
+    effect: Literal["read", "write"] | None = None,
+    limit: int | None = None,
+) -> Iterator[Request]:
+    """Every request the compiled catalogue supports, seated.
+
+    Rows in compiled order, verbs in id order, channels sorted: the same order
+    `process_bindings.situations` walks, so the numbers agree. `lobs` defaults
+    to `derive_lobs(compiled)`; a caller passing its own must cover every
+    family with bound rows, and a family no LOB covers is refused rather than
+    seated with nobody.
+    """
+    derived = tuple(lobs) if lobs is not None else derive_lobs(compiled)
+    by_name = {spec.name: spec for spec in derived}
+    ids = fact_ids if fact_ids is not None else fact_index(facts(compiled))
+    table = intents()
+    minter = Minter(width=6)
+    yielded = 0
+    for row in _bound(compiled):
+        spec = by_name.get(row.function)
+        if spec is None:
+            raise ValueError(
+                f"no LOB covers function family {row.function!r} (binding {row.id})"
+            )
+        titles = {role.key: role.title for role in spec.roles}
+        asker = _seat(row.function, row.type)
+        if asker not in titles:
+            raise ValueError(f"LOB {spec.name!r} declares no role {asker!r}")
+        for situation in situations_for(row, effect=effect):
+            intent = table[situation.intent]
+            constraint = situation.constraint.strip() or None
+            yield Request(
+                id=minter.next("REQ"),
+                lob=spec.name,
+                asker=asker,
+                asker_title=titles[asker],
+                occasion=row.id,
+                intent=intent.id,
+                channel=situation.channel,
+                constraint=constraint,
+                deliverable=intent.deliverable,
+                brief=_brief(intent, row, constraint or ""),
+                expected_answer=_answer(row),
+                expected_fact_ids=ids.get(row.id, ()),
+                grading=EvaluationType(intent.grading),
+                effect=intent.effect,
+                stream=row.stream,
+                activity=row.activity,
+                activity_type=row.type,
+                owner=row.owner_bu,
+                country=row.country,
+                system_of_record=row.sor_product,
+            )
+            yielded += 1
+            if limit is not None and yielded >= limit:
+                return
+
+
+def fact_index(derived: Iterable[CanonicalFact]) -> dict[str, tuple[str, ...]]:
+    """Binding id to the ids of its derived facts, in minting order."""
+    index: dict[str, list[str]] = {}
+    for fact in derived:
+        index.setdefault(fact.subject, []).append(fact.id)
+    return {subject: tuple(ids) for subject, ids in index.items()}
+
+
+def standing_findings(requested: Iterable[Request], lobs: Sequence[Lob]) -> list[str]:
+    """Every request whose asker has no declared reason to ask about its stream.
+
+    The same rule `evals.plausibility` applies to a corpus, run over requests
+    that have not entered one: `lob.may_ask_about` under the dot-boundary
+    rule. Empty is the expected reading for a derived programme, and the test
+    that says so is the proof that the seat table and the responsibility edges
+    agree.
+    """
+    by_name = {spec.name: spec for spec in lobs}
+    out: list[str] = []
+    for request in requested:
+        spec = by_name.get(request.lob)
+        if spec is None:
+            out.append(
+                f"{request.id!r} names LOB {request.lob!r}, which the programme does not derive"
+            )
+        elif not may_ask_about(spec, request.asker, request.kind):
+            out.append(
+                f"{request.id!r} is asked by {request.asker!r}, which has no declared reason"
+                f" to ask about {request.kind!r}"
+            )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Lines and the programme
+# ---------------------------------------------------------------------------
+
+
+class ProcessLine(Model):
+    """One LOB crossed with one value stream: where the count is derived."""
+
+    lob: str
+    lob_title: str
+    stream: str
+    stream_name: str
+    owners: tuple[str, ...]
+    countries: tuple[str, ...]
+    activities: tuple[str, ...]
+    """Activity ids, sorted."""
+    bindings: int
+    situations: int
+    reads: int
+    writes: int
+    systems: tuple[str, ...]
+    """Systems of record, as products."""
+    channels: tuple[str, ...]
+    sources: tuple[str, ...]
+    """Emulated evidence sources as `connector.entity`, sorted."""
+    unemulated: tuple[str, ...]
+    """Systems and channels no connector stands in for."""
+
+    @property
+    def key(self) -> str:
+        return f"{self.lob}/{self.stream}"
+
+    @property
+    def supported(self) -> bool:
+        """Whether at least one emulated source can carry this line's evidence."""
+        return bool(self.sources)
+
+
+class IndustryProgramme(Model):
+    """The derived programme for one company of one industry: the summary that ships."""
+
+    schema_version: Literal["worldloom.industry-programme/v1"] = PROGRAMME_SCHEMA
+    industry: str
+    company: str
+    operating_model: str
+    countries: tuple[str, ...]
+    engine: str
+    """The registered domain that builds this company's world, or `""` when
+    none does and the programme stands on the catalogue alone."""
+    compilation_digest: str
+    lobs: tuple[str, ...]
+    lines: tuple[ProcessLine, ...]
+    bindings: int
+    situations: int
+    requests: int
+    facts: int
+    reads: int
+    writes: int
+    unemulated: tuple[str, ...]
+    """Every system and channel some line needed and no connector emulates."""
+    unsupported_lines: tuple[str, ...]
+    """Lines with no emulated source at all, as `lob/stream`."""
+    findings: tuple[str, ...] = ()
+    """LOB lint findings (root convention excluded) and standing findings.
+    Empty for every shipped industry, and reported rather than raised so a
+    catalogue edit that breaks the derivation is seen, not hidden."""
+
+    def counts(self) -> dict[str, dict[str, int]]:
+        """Situations per LOB, per stream."""
+        out: dict[str, dict[str, int]] = {}
+        for line in self.lines:
+            out.setdefault(line.lob, {})[line.stream] = line.situations
+        return out
+
+    def by_lob(self) -> dict[str, int]:
+        return {lob: sum(streams.values()) for lob, streams in self.counts().items()}
+
+
+def _emulated(
+    rows: Sequence[ActivityBinding], table: dict[str, Any]
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Sources (`connector.entity`) and unemulated names for a set of rows."""
+    sources: set[str] = set()
+    missing: set[str] = set()
+    products = table["products"]
+    channels = table["channels"]
+    for row in rows:
+        product = products.get(row.sor_product)
+        if product is None:
+            missing.add(row.sor_product)
+        else:
+            objects = {
+                name: entity
+                for name, entity in product["objects"].items()
+                if name in row.sor_objects
+            }
+            if objects:
+                sources.update(
+                    f"{product['connector']}.{entity}" for entity in objects.values()
+                )
+            else:
+                missing.add(
+                    f"{row.sor_product} ({', '.join(row.sor_objects) or 'no objects'})"
+                )
+        for channel in row.channels:
+            mapped = channels.get(channel)
+            if mapped is None:
+                if channel in channels:
+                    missing.add(f"channel:{channel}")
+                else:
+                    missing.add(f"channel:{channel} (undeclared)")
+            else:
+                sources.add(f"{mapped['connector']}.{mapped['entity']}")
+    return tuple(sorted(sources)), tuple(sorted(missing))
+
+
+def lines(
+    compiled: CompiledCatalogue,
+    lobs: Sequence[Lob],
+    *,
+    catalogue: dict[str, Any] | None = None,
+    table: dict[str, Any] | None = None,
+) -> tuple[ProcessLine, ...]:
+    """Every LOB × stream cell with at least one bound activity, with its counts."""
+    cat = catalogue if catalogue is not None else load_catalogue()
+    emulators = table if table is not None else emulated_systems()
+    names = stream_names(cat)
+    titles = {spec.name: spec.title for spec in lobs}
+    cells: dict[tuple[str, str], list[ActivityBinding]] = {}
+    for row in _bound(compiled):
+        cells.setdefault((row.function, row.stream), []).append(row)
+    out: list[ProcessLine] = []
+    for (family, stream), rows in sorted(cells.items()):
+        reads = writes = 0
+        for row in rows:
+            for situation in situations_for(row):
+                if situation.effect == "write":
+                    writes += 1
+                else:
+                    reads += 1
+        sources, missing = _emulated(rows, emulators)
+        out.append(
+            ProcessLine(
+                lob=family,
+                lob_title=titles.get(family, family),
+                stream=stream,
+                stream_name=names.get(stream, rows[0].stream_name),
+                owners=tuple(sorted({row.owner_bu for row in rows})),
+                countries=tuple(sorted({row.country for row in rows})),
+                activities=tuple(sorted({row.activity_id for row in rows})),
+                bindings=len(rows),
+                situations=reads + writes,
+                reads=reads,
+                writes=writes,
+                systems=tuple(sorted({row.sor_product for row in rows})),
+                channels=tuple(
+                    sorted({channel for row in rows for channel in row.channels})
+                ),
+                sources=sources,
+                unemulated=missing,
+            )
+        )
+    return tuple(out)
+
+
+@dataclass(frozen=True)
+class Programme:
+    """Everything derived for one company: the summary and what it summarises."""
+
+    summary: IndustryProgramme
+    compiled: CompiledCatalogue
+    lobs: tuple[Lob, ...]
+    facts: tuple[CanonicalFact, ...]
+    requests: tuple[Request, ...]
+
+    def cases(self) -> Iterator[EvaluationCase]:
+        for request in self.requests:
+            yield request.to_case()
+
+    def coverage(self) -> CoverageReport:
+        """What the requests span, against every situation the catalogue offers."""
+        from .evals.coverage import report
+
+        return report(self.requests, situations_available=self.summary.situations)
+
+    def use_cases(self, **kwargs: Any) -> tuple[UseCase, ...]:
+        return use_cases(self, **kwargs)
+
+    def export(self, out: str | Path) -> dict[str, str]:
+        return export(self, out)
+
+
+def programme(
+    spec: str | CompanySpec,
+    *,
+    engine: str | None = None,
+    catalogue: dict[str, Any] | None = None,
+    as_of: datetime = EPOCH,
+) -> Programme:
+    """The whole programme for an industry (its default company) or a company spec.
+
+    `engine` names the domain whose world the derived LOBs ride; the default
+    is the domain registered under the industry's name, or the industry when
+    none is. The summary's `findings` carry the LOB lint and the standing
+    check; both are empty for every shipped industry, and a caller who edits
+    the catalogue reads them before trusting the count.
+    """
+    from . import domains
+
+    cat = catalogue if catalogue is not None else load_catalogue()
+    company = default_company(spec) if isinstance(spec, str) else spec
+    compiled = compile_company(company, catalogue=cat)
+    lobs = derive_lobs(compiled, engine=engine, catalogue=cat)
+    derived_facts = facts(compiled, as_of=as_of)
+    derived_requests = tuple(
+        requests(compiled, lobs, fact_ids=fact_index(derived_facts))
+    )
+    derived_lines = lines(compiled, lobs, catalogue=cat)
+    world_engine = engine if engine is not None else compiled.industry
+    if domains.by_name(world_engine) is None:
+        world_engine = ""
+    findings = lint(lobs) + standing_findings(derived_requests, lobs)
+    unemulated = sorted({name for line in derived_lines for name in line.unemulated})
+    summary = IndustryProgramme(
+        industry=compiled.industry,
+        company=compiled.company,
+        operating_model=company.operating_model,
+        countries=tuple(company.countries),
+        engine=world_engine,
+        compilation_digest=compiled.digest,
+        lobs=tuple(spec.name for spec in lobs),
+        lines=derived_lines,
+        bindings=len(_bound(compiled)),
+        situations=sum(line.situations for line in derived_lines),
+        requests=len(derived_requests),
+        facts=len(derived_facts),
+        reads=sum(line.reads for line in derived_lines),
+        writes=sum(line.writes for line in derived_lines),
+        unemulated=tuple(unemulated),
+        unsupported_lines=tuple(
+            line.key for line in derived_lines if not line.supported
+        ),
+        findings=tuple(findings),
+    )
+    return Programme(
+        summary=summary,
+        compiled=compiled,
+        lobs=lobs,
+        facts=derived_facts,
+        requests=derived_requests,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Use cases: the count, derived
+# ---------------------------------------------------------------------------
+
+
+#: The builtin process a workflow declares, chosen by the system its sources
+#: come from. The three names are the builtin `ProcessSpec`s.
+_PROCESS_BY_CONNECTOR: tuple[tuple[str, str], ...] = (
+    ("servicenow", "service_management"),
+    ("salesforce", "customer_lifecycle"),
+)
+
+_PROMPT_TEMPLATE = (
+    "For {company}, {purpose}. Use {sources}; join by the record's stable identifier"
+    " and read the observation history before acting. {action_instruction}"
+    " {output_label} in {destination}, then {verification_instruction}.{failure_instruction}"
+)
+
+#: `UseCase.count`'s ceiling. Named here so the cap is visible where the count
+#: is derived, and so a line larger than it is reported rather than truncated
+#: silently.
+COUNT_CEILING = 100_000
+
+
+def _slug(value: str) -> str:
+    return value.replace("_", "-").replace(" ", "-").lower()
+
+
+def use_cases(
+    derived: Programme,
+    *,
+    count_ceiling: int = COUNT_CEILING,
+    lines_selected: Iterable[str] | None = None,
+) -> tuple[UseCase, ...]:
+    """A Studio use case per supported line, with the line's count.
+
+    Sources are the line's emulated `connector.entity` pairs; destinations are
+    the emulators of the channels the line declares, and an email draft
+    always, because a request's deliverable goes back to whoever asked. The
+    construction `EvalSpec` requires each source constrained to the line's LOB,
+    stream and owner, so a Foundry run cannot satisfy it with another line's
+    records. `count` is the line's situations, capped at `count_ceiling`.
+    """
+    from .enterprise_specs import (
+        ContentAction,
+        DestinationRole,
+        Operation,
+        ScenarioProfile,
+        SourceRole,
+        WorkflowSpec,
+    )
+    from .eval_design import EvalSpec, EvalStepSpec, RequirementKind, WorldRequirement
+    from .studio.models import UseCase
+
+    table = emulated_systems()
+    destinations_table = table["destinations"]
+    wanted = set(lines_selected) if lines_selected is not None else None
+    out: list[UseCase] = []
+    for line in derived.summary.lines:
+        if not line.supported or (wanted is not None and line.key not in wanted):
+            continue
+        by_connector: dict[str, list[str]] = {}
+        for source in line.sources:
+            connector, entity = source.split(".", 1)
+            by_connector.setdefault(connector, []).append(entity)
+        sources = tuple(
+            SourceRole(connector=connector, entities=tuple(sorted(set(entities))))
+            for connector, entities in sorted(by_connector.items())
+        )
+        destinations: dict[str, DestinationRole] = {}
+        for channel in ("email", *line.channels):
+            mapped = destinations_table.get(channel)
+            if mapped is None or mapped["connector"] in destinations:
+                continue
+            destinations[mapped["connector"]] = DestinationRole(
+                connector=mapped["connector"],
+                entities=(mapped["entity"],),
+                operations=tuple(Operation(op) for op in mapped["operations"]),
+                formats=tuple(mapped["formats"]),
+            )
+        process = next(
+            (
+                name
+                for connector, name in _PROCESS_BY_CONNECTOR
+                if connector in by_connector
+            ),
+            "delivery_work",
+        )
+        name = f"{_slug(line.lob)}-{_slug(line.stream)}"
+        purpose = (
+            f"work {line.stream_name.lower()} for {line.lob_title}"
+            f" ({', '.join(line.owners)}; {', '.join(line.countries)})"
+        )
+        actions = (
+            (ContentAction.RECONCILE, ContentAction.GENERATE)
+            if line.writes
+            else (ContentAction.SUMMARIZE, ContentAction.EXTRACT)
+        )
+        workflow = WorkflowSpec(
+            name=name,
+            purpose=purpose,
+            process=process,
+            sources=sources,
+            destinations=tuple(destinations.values()),
+            content_actions=actions,
+            audiences=(line.lob,),
+            prompt_template=_PROMPT_TEMPLATE,
+        )
+        connectors = tuple(sorted(set(by_connector) | set(destinations)))
+        scenario = ScenarioProfile(
+            name=name,
+            industry=derived.summary.industry,
+            company_description=(
+                f"{derived.summary.company}: a {derived.summary.operating_model} {derived.summary.industry}"
+                f" company in {', '.join(derived.summary.countries)}, as its process catalogue declares."
+            ),
+            workflows=(name,),
+            connectors=connectors,
+            additional_workflows=(workflow,),
+        )
+        scenario = scenario.model_copy(
+            update={
+                "coverage": scenario.coverage.model_copy(
+                    update={"failures": ("none", "partial_write")}
+                ),
+            }
+        )
+        selector: dict[str, str | int | bool] = {
+            "lob": line.lob,
+            "stream": line.stream,
+            "business_unit": line.owners[0],
+        }
+        requirements = tuple(
+            WorldRequirement(
+                id=f"source-{role.connector}",
+                kind=RequirementKind.CONNECTOR,
+                selector={
+                    **selector,
+                    "connector": role.connector,
+                    "entity": role.entities[0],
+                },
+            )
+            for role in sources
+        )
+        steps = tuple(
+            EvalStepSpec(
+                id=f"read-{role.connector}",
+                capability="search",
+                connector=role.connector,
+                entity=role.entities[0],
+                operation="search",
+            )
+            for role in sources
+        )
+        design = EvalSpec(
+            id=name,
+            capability="evidence_reconciliation",
+            persona=f"{line.lob}_head",
+            request_template=purpose,
+            requirements=requirements,
+            steps=(
+                *steps,
+                EvalStepSpec(
+                    id="reconcile",
+                    capability="reconcile",
+                    effect="transform",
+                    depends_on=tuple(step.id for step in steps),
+                ),
+            ),
+            candidate_count=1,
+        )
+        out.append(
+            UseCase(
+                id=name,
+                title=f"{line.lob_title}: {line.stream_name}",
+                objective=purpose[:1].upper() + purpose[1:],
+                owner=line.owners[0],
+                lob=line.lob,
+                activities=line.activities,
+                count=max(1, min(line.situations, count_ceiling)),
+                scenario=scenario,
+                construction=design,
+            )
+        )
+    return tuple(out)
+
+
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+
+
+def export(derived: Programme, out: str | Path) -> dict[str, str]:
+    """Write the programme as files a harness reads back.
+
+    `programme.json` (the summary), `lobs.json`, `facts.jsonl`,
+    `requests.jsonl`, `cases.jsonl` (the requests as corpus cases),
+    `use-cases.json` and `coverage.json`. Returns each file's path by name.
+    """
+    from .corpus import write_json, write_jsonl
+
+    root = Path(out)
+    root.mkdir(parents=True, exist_ok=True)
+    written: dict[str, str] = {}
+
+    def json_file(name: str, payload: dict[str, Any]) -> None:
+        write_json(root / name, payload)
+        written[name] = str(root / name)
+
+    json_file("programme.json", derived.summary.model_dump(mode="json"))
+    json_file(
+        "lobs.json", {"lobs": [spec.model_dump(mode="json") for spec in derived.lobs]}
+    )
+    write_jsonl(root / "facts.jsonl", list(derived.facts))
+    written["facts.jsonl"] = str(root / "facts.jsonl")
+    write_jsonl(root / "requests.jsonl", list(derived.requests))
+    written["requests.jsonl"] = str(root / "requests.jsonl")
+    write_jsonl(root / "cases.jsonl", list(derived.cases()))
+    written["cases.jsonl"] = str(root / "cases.jsonl")
+    json_file(
+        "use-cases.json",
+        {"use_cases": [case.model_dump(mode="json") for case in derived.use_cases()]},
+    )
+    json_file("coverage.json", derived.coverage().model_dump(mode="json"))
+    return written
+
+
+def describe(industry: str) -> dict[str, Any]:
+    """The programme's headline numbers for one industry, as a document."""
+    derived = programme(industry)
+    summary = derived.summary
+    intent_counts = Counter(request.intent for request in derived.requests)
+    return {
+        "industry": summary.industry,
+        "company": summary.company,
+        "engine": summary.engine,
+        "lobs": len(summary.lobs),
+        "lines": len(summary.lines),
+        "bindings": summary.bindings,
+        "situations": summary.situations,
+        "reads": summary.reads,
+        "writes": summary.writes,
+        "facts": summary.facts,
+        "by_lob": summary.by_lob(),
+        "intents": dict(sorted(intent_counts.items())),
+        "unemulated": list(summary.unemulated),
+        "unsupported_lines": list(summary.unsupported_lines),
+        "findings": list(summary.findings),
+    }
+
+
+__all__ = [
+    "COUNT_CEILING",
+    "EMULATED_SYSTEMS",
+    "EPOCH",
+    "KIND_PREFIX",
+    "PROGRAMME_SCHEMA",
+    "ROOT_CONVENTION",
+    "SEAT_BY_TYPE",
+    "IndustryProgramme",
+    "ProcessLine",
+    "Programme",
+    "Request",
+    "derive_lobs",
+    "describe",
+    "emulated_systems",
+    "export",
+    "fact_index",
+    "facts",
+    "lines",
+    "lint",
+    "programme",
+    "register_kinds",
+    "requests",
+    "standing_findings",
+    "stream_names",
+    "use_cases",
+]

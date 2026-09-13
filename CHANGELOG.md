@@ -11,6 +11,37 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### Industry X, and the whole evaluation programme it implies
+
+- `worldloom industry programme INDUSTRY OUT` (`worldloom.industry`) derives
+  everything an interview used to leave to be typed: a line of business per
+  function family the operating model owns (a head, a manager and an analyst
+  answerable for the family's value streams as `process.<stream>` kinds,
+  registered from the catalogue's own stream list), a seated request per
+  situation (the seat chosen by activity type, `SEAT_BY_TYPE`, so every asker
+  has standing under the same rule `evals.plausibility` applies and
+  `standing_findings` proves it), a fact per declared attribute of every bound
+  activity (owner, system of record, control, exception) that the request's
+  expected answer names and `Request.to_case` cites, and a `ProcessLine` per
+  LOB × stream carrying the derived count. `use_cases` turns each supported
+  line into a Studio `UseCase` whose `count` is the line's situations rather
+  than an authored twelve, with sources from the connectors that emulate the
+  line's systems and channels and a construction `EvalSpec` bound to the line.
+  Twelve industries, 189,346 requests, each counted where it belongs;
+  `worldloom industry list` prints the table.
+- `_data/process-catalogue/emulated-systems@1.json` says which systems of
+  record and evidence channels a connector emulator stands in for. A product
+  it does not list is reported on the line and the programme as unemulated and
+  its bindings draw evidence from the declared channels only; a line with no
+  emulated source is listed under `unsupported_lines` with its count intact.
+  `IndustryProgramme.engine` is empty for the nine industries no engine
+  builds, and the programme says so rather than dressing a retail world as a
+  telecom.
+- `evals.coverage.report` accepts anything carrying the request tuple
+  (`coverage.Requested`), so a programme is measured before any case enters a
+  world with the code that measures the world afterwards. A full programme
+  uses every situation the catalogue offers.
+
 ### Eval execution: a question is a turn
 
 - Every request in the shipped corpora was complete and safe to act on as

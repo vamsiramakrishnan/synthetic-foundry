@@ -27,12 +27,30 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import Field
 
 from ..models import EvaluationCase, Model
 from .intents import ACTIVITY_TYPES, intents
+
+
+class Requested(Protocol):
+    """Anything carrying the request tuple: a corpus case, or an `industry.Request`.
+
+    The report reads the tuple and nothing else, so it measures a derived
+    programme before any case enters a world with the same code that measures
+    the world afterwards. One measurement, two carriers.
+    """
+
+    id: str
+    asker: str | None
+    occasion: str | None
+    intent: str | None
+    channel: str | None
+
+    @property
+    def has_request(self) -> bool: ...
 
 
 class CoverageReport(Model):
@@ -113,7 +131,7 @@ class CoverageReport(Model):
 
 
 def report(
-    cases: Iterable[EvaluationCase], *, situations_available: int | None = None
+    cases: Iterable[Requested], *, situations_available: int | None = None
 ) -> CoverageReport:
     """Measure what *cases* spans.
 
@@ -121,7 +139,7 @@ def report(
     `process_bindings.coverage`, so the report can state what share of the
     available work the set actually reached.
     """
-    materialised: Sequence[EvaluationCase] = list(cases)
+    materialised: Sequence[Requested] = list(cases)
     requests = [case for case in materialised if case.has_request]
 
     intent_counts = Counter(c.intent for c in requests if c.intent)
@@ -182,4 +200,4 @@ def available(compiled: Any) -> dict[str, int]:
     return counts
 
 
-__all__ = ["CoverageReport", "available", "report"]
+__all__ = ["CoverageReport", "Requested", "available", "report"]

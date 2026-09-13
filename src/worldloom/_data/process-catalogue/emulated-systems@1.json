@@ -1,0 +1,48 @@
+{
+  "schema": "worldloom.emulated-systems/v1",
+  "about": "Which systems of record the connector emulators can stand in for, and which record kinds each emulated connector holds. `worldloom.industry` reads this to turn a compiled catalogue's `sor_product` into connector source roles: a product listed here becomes a source on the named connector, with its catalogue objects mapped to the connector's entities; a product absent from `products` is reported by the programme as unemulated and its bindings draw evidence only from the channels the catalogue says the work lands in. A channel mapped to null has no emulator (a chat message, a workflow approval, a portal filing) and is reported the same way. The mapping is versioned in the file name: a change to which connector stands in for a system changes every programme derived from it, so it is a new version, never an edit.",
+  "products": {
+    "ServiceNow": {
+      "connector": "servicenow",
+      "objects": {"Incident": "incident", "Change": "change_request"}
+    },
+    "Jira Service Management": {
+      "connector": "jira",
+      "objects": {"Incident": "issue", "Change": "issue", "Request": "issue"}
+    },
+    "Salesforce": {
+      "connector": "salesforce",
+      "objects": {"Account": "account", "Opportunity": "opportunity", "Case": "case", "Lead": "contact"}
+    },
+    "SharePoint": {
+      "connector": "sharepoint",
+      "objects": {"Document": "file", "List": "list_item"}
+    },
+    "Confluence": {
+      "connector": "confluence",
+      "objects": {"Page": "page"}
+    },
+    "Exchange Online": {
+      "connector": "email",
+      "objects": {"Message": "thread"}
+    }
+  },
+  "channels": {
+    "email": {"connector": "email", "entity": "thread"},
+    "ticket": {"connector": "jira", "entity": "issue"},
+    "document": {"connector": "sharepoint", "entity": "file"},
+    "report": {"connector": "sharepoint", "entity": "file"},
+    "minutes": {"connector": "confluence", "entity": "page"},
+    "chat": null,
+    "system_record": null,
+    "workflow_approval": null,
+    "portal_filing": null
+  },
+  "destinations": {
+    "email": {"connector": "email", "entity": "message", "operations": ["draft"], "formats": ["html"]},
+    "document": {"connector": "sharepoint", "entity": "file", "operations": ["create", "update"], "formats": ["docx", "pdf"]},
+    "report": {"connector": "sharepoint", "entity": "file", "operations": ["create", "update"], "formats": ["xlsx", "pdf"]},
+    "minutes": {"connector": "confluence", "entity": "page", "operations": ["create", "update"], "formats": ["html", "markdown"]},
+    "ticket": {"connector": "jira", "entity": "issue", "operations": ["create", "update"], "formats": []}
+  }
+}

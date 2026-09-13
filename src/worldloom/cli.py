@@ -94,6 +94,11 @@ enterprise_evals_app = typer.Typer(
     help="Plan, generate, and validate multi-connector enterprise agent evaluations.",
 )
 app.add_typer(enterprise_evals_app, name="enterprise-evals")
+industry_app = typer.Typer(
+    no_args_is_help=True,
+    help="Derive the whole evaluation programme an industry implies: its lines of business, processes, requests and counts.",
+)
+app.add_typer(industry_app, name="industry")
 
 from .connector_serving_cli import serve_command
 from .dataset_cli import dataset_app
@@ -256,6 +261,63 @@ def enterprise_evals_housekeeping(
         f" {len(corpus.queries)} cases, {built.moves} records to move or relabel,"
         f" {built.deletions} to delete → {output}"
     )
+
+
+@industry_app.command("list")
+def industry_list() -> None:
+    """The industries the process catalogue knows, with each default company's headline count."""
+    from .industry import programme
+    from .process_bindings.compiler import resource
+
+    rows = []
+    for name in sorted(resource("defaults.json")["DEFAULT_ORGS"]):
+        summary = programme(name).summary
+        rows.append({
+            "industry": name, "company": summary.company, "engine": summary.engine or None,
+            "lobs": len(summary.lobs), "lines": len(summary.lines), "situations": summary.situations,
+            "writes": summary.writes, "unsupported_lines": len(summary.unsupported_lines),
+        })
+    typer.echo(json.dumps({"industries": rows}, indent=2, sort_keys=True))
+
+
+@industry_app.command("programme")
+def industry_programme(
+    industry: str = typer.Argument(..., help="An industry the catalogue knows (`worldloom industry list`), or a path to a company spec JSON."),
+    output: Path | None = typer.Argument(None, help="Directory to write programme.json, lobs.json, facts.jsonl, requests.jsonl, cases.jsonl, use-cases.json and coverage.json into."),
+    engine: str | None = typer.Option(None, "--engine", help="The registered domain whose world the derived LOBs ride. Default: the industry's own name when a domain is registered under it."),
+    describe_only: bool = typer.Option(False, "--describe", help="Print the headline numbers and stop; write nothing."),
+) -> None:
+    """Derive the programme for one industry: LOBs, process lines, seated requests, facts and use cases with derived counts.
+
+    Every number is a function of the compiled catalogue and the versioned
+    emulator table: the same industry yields the same programme. The summary
+    names every system no connector emulates and every line no emulated source
+    can carry, so a count is never quietly padded.
+    """
+    from .industry import describe, programme
+    from .process_bindings import CompanySpec
+
+    spec: str | CompanySpec = industry
+    if industry.endswith(".json") and Path(industry).exists():
+        spec = CompanySpec.model_validate_json(Path(industry).read_text(encoding="utf-8"))
+    if describe_only or output is None:
+        if isinstance(spec, str):
+            typer.echo(json.dumps(describe(spec), indent=2, sort_keys=True))
+        else:
+            derived = programme(spec, engine=engine)
+            typer.echo(json.dumps(derived.summary.model_dump(mode="json"), indent=2, sort_keys=True))
+        return
+    derived = programme(spec, engine=engine)
+    written = derived.export(output)
+    summary = derived.summary
+    typer.echo(json.dumps({
+        "industry": summary.industry, "company": summary.company, "engine": summary.engine or None,
+        "lobs": len(summary.lobs), "lines": len(summary.lines), "situations": summary.situations,
+        "reads": summary.reads, "writes": summary.writes, "facts": summary.facts,
+        "use_cases": len(summary.lines) - len(summary.unsupported_lines),
+        "unemulated": list(summary.unemulated), "unsupported_lines": list(summary.unsupported_lines),
+        "findings": list(summary.findings), "files": sorted(written),
+    }, indent=2, sort_keys=True))
 
 
 @enterprise_evals_app.command("validate")
