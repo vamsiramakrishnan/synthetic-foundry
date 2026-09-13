@@ -21,7 +21,10 @@ first written up, before the waves above it landed.
   (`industry.revenue_function`), titled from the function
   table (`industry.role_table`, passed to the world as the pack's roles). A
   telecom seats a Customer Service Director, a logistics company Fulfilment.
-  `sdk.Blueprint.role_table` takes a pack's authored table over the
+  A per-unit post may name the unit kinds it is minted for
+  (`roles.UnitRole.kinds`, `PackUnitRole.kinds`; empty mints it everywhere,
+  as every engine's own posts do), and the commercial post is minted in the
+  revenue units only. `sdk.Blueprint.role_table` takes a pack's authored table over the
   engine's shipped one when lines of business attach, which a pack that
   authored its organisation lost before. Generation: worlds of catalogue
   projects for engine-less industries change titles and functions on those

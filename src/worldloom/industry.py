@@ -1245,14 +1245,19 @@ def role_table(structure: CompanySpec, *, catalogue: dict[str, Any] | None = Non
             table.append({"key": role.key, "title": title, "function": function.title, "reports_to": role.manager})
         else:
             table.append({"key": role.key, "title": role.title, "function": role.function, "reports_to": role.manager})
+    # The commercial post is minted in the revenue units only: a support
+    # unit sells nothing. The unit kinds are the archetypes `divisions`
+    # gives the pack's units.
+    revenue_kinds = tuple(sorted({unit.archetype for unit in structure.bus if unit.archetype in REVENUE_ARCHETYPES}))
     unit_roles = []
     for post in roles._shipped_unit_roles("retail"):
         if post.suffix == COMMERCIAL_UNIT_ROLE:
             unit_roles.append({"suffix": post.suffix, "title": f"{manager}, {{unit}}", "function": function.title,
-                               "manager": post.manager, "manager_suffix": post.manager_suffix})
+                               "manager": post.manager, "manager_suffix": post.manager_suffix,
+                               "kinds": list(revenue_kinds)})
         else:
             unit_roles.append({"suffix": post.suffix, "title": post.title, "function": post.function,
-                               "manager": post.manager, "manager_suffix": post.manager_suffix})
+                               "manager": post.manager, "manager_suffix": post.manager_suffix, "kinds": []})
     return {"table": table, "unit_roles": unit_roles}
 
 

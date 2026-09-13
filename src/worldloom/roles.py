@@ -114,7 +114,9 @@ class UnitRole:
     role key (``manager="ceo"``) or a sibling post in the same unit
     (``manager_suffix="_md"`` — retail's buyer reports to their own unit's
     MD); exactly one of the two should be set, and ``manager_suffix`` wins
-    because a same-unit reference is the narrower claim.
+    because a same-unit reference is the narrower claim. ``kinds`` names the
+    unit kinds the post is minted for; empty mints it for every unit, which
+    is what every engine's own posts do.
     """
 
     suffix: str
@@ -122,6 +124,11 @@ class UnitRole:
     function: str
     manager: str | None = None
     manager_suffix: str | None = None
+    kinds: tuple[str, ...] = ()
+
+    def minted_for(self, kind: str) -> bool:
+        """Whether a unit of *kind* gets this post."""
+        return not self.kinds or kind in self.kinds
 
     def row(self, unit_key: str, unit_name: str) -> tuple[str, str, str, str | None]:
         """The role-table row this spec mints for one unit."""

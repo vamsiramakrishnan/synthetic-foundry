@@ -258,6 +258,8 @@ class PackUnitRole(PackModel):
     function: str = Field(min_length=1)
     manager: str | None = None
     manager_suffix: str | None = None
+    kinds: tuple[str, ...] = ()
+    """The unit kinds the post is minted for; empty means every unit."""
 
 
 class PackRoles(PackModel):
@@ -578,7 +580,7 @@ def unit_roles_of(pack: Pack) -> tuple[Any, ...] | None:
     return tuple(
         roles_module.UnitRole(
             spec.suffix, spec.title, spec.function,
-            manager=spec.manager, manager_suffix=spec.manager_suffix,
+            manager=spec.manager, manager_suffix=spec.manager_suffix, kinds=tuple(spec.kinds),
         )
         for spec in pack.roles.unit_roles
     )

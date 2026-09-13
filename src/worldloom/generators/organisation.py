@@ -388,7 +388,8 @@ def generate(
         )
     for unit in units:
         for spec in unit_role_specs:
-            role_table.append(spec.row(unit.key, unit.name))
+            if spec.minted_for(unit.kind):
+                role_table.append(spec.row(unit.key, unit.name))
     role_table, depth_of = sorted_roles(role_table)
 
     finance_cc = minter.next("CC")
@@ -457,7 +458,10 @@ def generate(
         rng.derive("hierarchy"), minter,
         units=units,
         unit_ids=unit_ids,
-        buyers={unit.key: role_ids[unit_role_key(unit.key, "_buyer")] for unit in units},
+        # A unit whose kind the buyer post is not minted for has no buyer;
+        # the hierarchy leaves its categories without one.
+        buyers={unit.key: role_ids[unit_role_key(unit.key, "_buyer")] for unit in units
+                if unit_role_key(unit.key, "_buyer") in role_ids},
         # Forwarded as-is, both of them. This used to read
         # `regions if regions else hierarchy.REGIONS`, which looked like a
         # harmless restatement of the callee's own default and was not: it

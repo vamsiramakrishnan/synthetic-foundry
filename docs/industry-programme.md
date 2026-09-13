@@ -166,9 +166,10 @@ industry's own value streams bind most in the company's revenue units
 Customer Service Manager per unit where a retailer seats a Head of
 Merchandising Systems and a Head of Buying; a logistics company seats
 Fulfilment. The finance, technology and service operations spine is the
-same for every company, and the engine still mints its per-unit posts for
-every unit, support units included. A retailer, a bank and an insurer keep
-their engine's organisation.
+same for every company; the commercial post per unit is minted in the
+revenue units only (`UnitRole.kinds`), so a shared service centre has a
+managing director and a finance business partner but no one selling. A
+retailer, a bank and an insurer keep their engine's organisation.
 
 A project seats every line of business with a supported process line by
 default, or the families named in `lobs`. A composed company's name pool is

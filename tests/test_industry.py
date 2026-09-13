@@ -714,11 +714,13 @@ def test_an_engine_less_industry_seats_its_revenue_function_in_the_commercial_se
     assert rows["merch_lead"]["reports_to"] == "gm_md" and rows["cfo"]["title"] == "Group Chief Financial Officer"
     buyer = next(post for post in table["unit_roles"] if post["suffix"] == "_buyer")
     assert buyer["title"] == "Customer Service Manager, {unit}" and buyer["manager_suffix"] == "_md"
+    assert buyer["kinds"] == ["customer_segment"]
     assert {row["key"] for row in table["table"]} == {role.key for role in __import__("worldloom.roles", fromlist=["x"])._shipped("retail")}
     spec = industry.project("telecom", "Ardent Telecom", lobs=("billing",))
     world, _ = Studio(tmp_path).snapshot(spec)
     titles = [person.title for person in world.people]
     assert "Customer Service Director" in titles and "Customer Service Manager, Consumer Mobile" in titles
+    assert "Customer Service Manager, Group Finance" not in titles and "Managing Director, Group Finance" in titles
     assert not any("Merchandising" in title or "Buying" in title for title in titles)
     assert "Head of Billing" in titles
     assert world.validate().ok
