@@ -125,6 +125,7 @@ def evalrun_command(
     workspace: Workspace = Path("./worldloom-workspace"),
     agent: Annotated[str, typer.Option(help="reference (the executable ceiling; no harness) or harness (the configured coding harness over the exec seam).")] = "reference",
     mode: Annotated[str, typer.Option(help="run: execute through the tool surface and grade three axes; plan: state a DAG only and grade the plan axis.")] = "run",
+    source: Annotated[str, typer.Option(help="Which cases: dataset (the connector queryset), programme (the process programme's record requests over the company's records) or both.")] = "dataset",
     split: Annotated[str, typer.Option(help="Grade only this dataset split (train, validation, test); empty grades every row.")] = "",
     limit: Annotated[int | None, typer.Option(min=1, help="Only the first N selected rows.")] = None,
     max_turns: Annotated[int, typer.Option(min=1, max=128, help="Turns the harness may take per case.")] = 32,
@@ -149,7 +150,7 @@ def evalrun_command(
         studio = Studio(workspace)
         revision = studio.store.get(project)["revision"]
         options = RunOptions.model_validate({
-            "operation": "evalrun", "evalrun_agent": agent, "evalrun_mode": mode, "evalrun_split": split,
+            "operation": "evalrun", "evalrun_agent": agent, "evalrun_mode": mode, "evalrun_source": source, "evalrun_split": split,
             "evalrun_limit": limit, "evalrun_max_turns": max_turns,
             "harness_identity": digest(harness_command) if agent == "harness" else "",
         })

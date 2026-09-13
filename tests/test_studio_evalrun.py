@@ -262,3 +262,22 @@ def test_a_catalogue_project_compiles_its_own_evidence_and_grades_it(tmp_path_fa
     assert graded["result"]["cases"] == 4
     page = studio.agent_results(project["id"], run["id"], limit=4)
     assert page["total"] == 4 and all(row["use_case"].startswith("billing-") for row in page["rows"])
+    # The programme's record requests run in the same job beside the dataset's
+    # cases, over the company's own records, grouped under the line's use case.
+    programme = studio.store.enqueue(project["id"], project["revision"],
+                                     RunOptions(operation="evalrun", evalrun_source="programme", evalrun_limit=3))
+    assert run_job(studio, programme["id"])
+    graded_programme = studio.store.job(programme["id"])
+    assert graded_programme["status"] == "complete", graded_programme
+    assert graded_programme["result"]["source"] == "programme" and graded_programme["result"]["programme_cases"] == 3
+    assert graded_programme["result"]["dataset"] is None and graded_programme["result"]["cases"] == 3
+    rows = studio.agent_results(project["id"], programme["id"], limit=3)["rows"]
+    use_case_ids = {case.id for case in spec.use_cases}
+    assert all(row["source"] == "programme" and row["use_case"] in use_case_ids for row in rows)
+    assert all(row["shape"] == "record_lookup" and row["plan"]["score"] == 1.0 for row in rows)
+    with pytest.raises(ValueError, match="widen the selection"):
+        from worldloom.studio.evalrun import execute
+
+        blocked = studio.store.enqueue(project["id"], project["revision"],
+                                       RunOptions(operation="evalrun", evalrun_source="programme", evalrun_split="test"))
+        execute(studio, studio.store.job(blocked["id"]), harness_command=None, timeout=60.0)

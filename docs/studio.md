@@ -446,6 +446,11 @@ about any model. `--agent harness` sends the same coding harness Studio uses
 for interviews a `worldloom.evalrun-turn/v1` document per turn and grades what
 it did; `--mode plan` asks for a DAG only and grades the plan axis, leaving the
 other two unobserved rather than zero. `--split` and `--limit` select rows.
+`--source programme` grades the process programme's record requests instead
+(see [Industry X](industry-programme.md)): a project with a process structure
+derives them for its company, filtered to the lines it seats, each grouped
+under the line's use case, over the company's own records; `--source both`
+runs them beside the dataset's cases. A split selects dataset rows only.
 
 Every graded case is appended to the run's `results.jsonl` as it completes and
 `progress.json` counts them, so a run interrupted by a worker restart resumes

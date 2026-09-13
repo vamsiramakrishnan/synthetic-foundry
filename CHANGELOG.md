@@ -26,7 +26,12 @@ first written up, before the waves above it landed.
   states a row's `expected_answer` when the row carries one, so its run is
   the ceiling on the answer axis too; rows without one are unchanged. A
   telecom's 2,927 record requests are 2,927 cases, and the reference run
-  passes every one the grounded rater can grade.
+  passes every one the grounded rater can grade. The Studio's `evalrun`
+  job takes `evalrun_source` (`dataset`, the default; `programme`; `both`):
+  a project with a process structure grades the programme's record requests
+  for the lines it seats, grouped under the line's use case, over the
+  company's own records, with or without the dataset's cases
+  (`worldloom studio evalrun --source`).
 
 ### The commercial seats take the company's revenue function
 

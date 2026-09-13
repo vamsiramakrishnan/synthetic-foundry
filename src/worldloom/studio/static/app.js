@@ -45,7 +45,7 @@ const stageLabels = {requirements:"Requirements",construction:"Connected evidenc
 const statusColor = (value) => ["failed","rejected","blocked","holdout_failed"].includes(value)?"red":["complete","accepted","selected","frozen"].includes(value)?"green":["running","queued"].includes(value)?"blue":"amber";
 const percent = (value) => typeof value === "number" && Number.isFinite(value)?`${(value*100).toFixed(1)}%`:"Unmeasured";
 const axis = (value) => typeof value === "number" && Number.isFinite(value)?value.toFixed(2):"unobserved";
-const agentLabel = (job) => `${job.options.evalrun_mode==="plan"?"Plan only":"Run"} · ${job.options.evalrun_agent==="harness"?"connected harness":"reference agent"}${job.options.evalrun_split?` · ${job.options.evalrun_split} split`:""}`;
+const agentLabel = (job) => `${job.options.evalrun_mode==="plan"?"Plan only":"Run"} · ${job.options.evalrun_agent==="harness"?"connected harness":"reference agent"}${job.options.evalrun_source&&job.options.evalrun_source!=="dataset"?` · ${job.options.evalrun_source==="both"?"dataset and programme":"programme"} cases`:""}${job.options.evalrun_split?` · ${job.options.evalrun_split} split`:""}`;
 const findingText = (finding) => typeof finding === "string"?finding:finding.message||finding.detail&&(finding.use_case_id?`${finding.use_case_id}: ${finding.detail}`:finding.detail)||pretty(finding);
 function connectorReady() { return state.company.ready && (state.company.workflow?.capabilities?.connector_ready ?? true); }
 function foundryActions() {

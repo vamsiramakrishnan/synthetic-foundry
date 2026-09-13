@@ -104,6 +104,43 @@ def _groups(directory: Path, rows: list[dict[str, Any]]) -> list[tuple[list[Eval
     return groups
 
 
+def _programme_group(studio: Studio, job: dict[str, Any], options: RunOptions) -> tuple[list[EvalCase], Any, str]:
+    """The programme's record requests as cases over the company's records, with the programme's digest.
+
+    A project with a process structure derives the programme for that
+    company (`industry.programme`); its record requests become `evalrun`
+    cases (`Programme.evalrun_cases`) filtered to the lines the project
+    seats, each carrying the use case it belongs to (`<lob>-<stream>`, the
+    id `industry.use_cases` gives the line) so the results page groups them
+    with the dataset's. The records are the programme's, which are the
+    `sor` records the project's world projects. A split never selects a
+    programme case, because the programme has no splits.
+    """
+    from .. import industry
+    from .models import ProjectSpec
+
+    spec = ProjectSpec.model_validate(studio.store.get(job["project"], job["revision"])["spec"])
+    if spec.structure is None:
+        raise ValueError("the programme's cases need a project with a process structure")
+    derived = industry.programme(spec.structure)
+    seated = {lob.name for lob in spec.lobs} or set(derived.summary.lobs)
+    use_case_ids = {case.id for case in spec.use_cases}
+    cases: list[EvalCase] = []
+    for case in derived.evalrun_cases():
+        if case.dimensions.get("lob") not in seated:
+            continue
+        use_case = f"{industry._slug(case.dimensions['lob'])}-{industry._slug(case.dimensions['stream'])}"
+        if use_case_ids and use_case not in use_case_ids:
+            continue
+        cases.append(case.model_copy(update={"dimensions": {**case.dimensions, "use_case": use_case, "split": "",
+                                                            "source": "programme"}}))
+    if options.evalrun_split:
+        cases = []
+    if options.evalrun_limit:
+        cases = cases[:options.evalrun_limit]
+    return cases, list(derived.records), derived.summary.compilation_digest
+
+
 def _agent_name(options: RunOptions) -> str:
     return f"{options.evalrun_mode}:{options.evalrun_agent}"
 
@@ -113,18 +150,30 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
     if options.evalrun_agent == "harness" and not harness_command:
         raise ValueError("connect a coding harness to evaluate it; the reference agent needs none")
     directory = studio.dataset_location(job["project"], job["revision"])
-    if not (directory / "manifest.json").exists():
-        raise ValueError("generate the connector queryset before grading an agent on it")
-    verify_dataset(directory)
-    rows, complete = _rows(directory)
-    selected = _selected(rows, options)
-    if not selected:
-        raise ValueError("no dataset row matches the requested split; generate the queryset or widen the selection")
+    with_dataset = options.evalrun_source in {"dataset", "both"}
+    selected: list[dict[str, Any]] = []
+    complete = False
+    if with_dataset:
+        if not (directory / "manifest.json").exists():
+            raise ValueError("generate the connector queryset before grading an agent on it")
+        verify_dataset(directory)
+        rows, complete = _rows(directory)
+        selected = _selected(rows, options)
+        if not selected and options.evalrun_source == "dataset":
+            raise ValueError("no dataset row matches the requested split; generate the queryset or widen the selection")
+    programme_cases: list[EvalCase] = []
+    programme_records: Any = ()
+    programme_digest = None
+    if options.evalrun_source in {"programme", "both"}:
+        programme_cases, programme_records, programme_digest = _programme_group(studio, job, options)
+        if not programme_cases and not selected:
+            raise ValueError("the programme has no record request in the selected lines; widen the selection")
     root = studio.path("evalruns", job["id"])
     root.mkdir(parents=True, exist_ok=True)
     identity = {"schema": SCHEMA, "project": job["project"], "revision": job["revision"],
-                "options": options.model_dump(mode="json"), "dataset": directory.name,
-                "dataset_files": digest(_files(directory)),
+                "options": options.model_dump(mode="json"), "dataset": directory.name if with_dataset else None,
+                "dataset_files": digest(_files(directory)) if with_dataset else None,
+                "programme": programme_digest,
                 "harness": digest(harness_command) if options.evalrun_agent == "harness" else None}
     document(root / "identity.json", identity)
     receipt = root / "receipt.json"
@@ -135,7 +184,9 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
             raise ValueError("agent run changed after its receipt was written")
         recorded: dict[str, Any] = _read(root / "result.json")
         return recorded
-    groups = _groups(directory, selected)
+    groups = _groups(directory, selected) if selected else []
+    if programme_cases:
+        groups.append((programme_cases, programme_records))
     ledger = root / "results.jsonl"
     results: dict[str, CaseResult] = {}
     if ledger.exists():
@@ -182,7 +233,9 @@ def execute(studio: Studio, job: dict[str, Any], *, harness_command: str | None,
     summary = write_run(root, report)
     state["status"] = "complete"
     account()
-    outcome: dict[str, Any] = {"schema": SCHEMA, "run": job["id"], "dataset": directory.name, "dataset_complete": complete,
+    outcome: dict[str, Any] = {"schema": SCHEMA, "run": job["id"], "dataset": directory.name if with_dataset else None,
+                               "dataset_complete": complete, "source": options.evalrun_source,
+                               "programme_cases": len(programme_cases),
                                "agent": report.agent, "mode": options.evalrun_mode, "split": options.evalrun_split,
                                "cases": len(ordered), "summary": summary.model_dump(mode="json", by_alias=True)}
     write_json(root / "result.json", outcome)
@@ -195,6 +248,7 @@ def _row(result: CaseResult) -> dict[str, Any]:
     return {
         "case_id": result.case_id, "query": result.query, "shape": result.shape or "legacy",
         "use_case": result.dimensions.get("use_case", ""), "split": result.dimensions.get("split", ""),
+        "source": result.dimensions.get("source", "dataset"),
         "dataset_row": result.dimensions.get("dataset_row", ""), "workflow": result.dimensions.get("workflow", ""),
         "failure": result.dimensions.get("failure", "none"),
         "status": result.status, "error": result.error, "calls": result.calls, "refused": result.refused,

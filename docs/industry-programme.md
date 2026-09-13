@@ -127,7 +127,10 @@ answer after its searches, so its run is the ceiling on all three axes;
 shapes the grounded rater cannot grade without a model (causal chains,
 citations, authority) stay ungraded rather than green. A request that rests
 on the declaration alone is not an `evalrun` case; it stays a corpus case in
-`cases.jsonl`. A telecom's 2,927 record requests are 2,927 cases.
+`cases.jsonl`. A telecom's 2,927 record requests are 2,927 cases. In the
+Studio, `worldloom studio evalrun PROJECT_ID --source programme` grades an
+agent on them for the lines the project seats, grouped under the line's use
+case, and `--source both` runs them beside the dataset's cases.
 
 `IndustryProgramme.engine` names the registered domain that builds the
 company's world (`retail`, `banking`, `insurance`) and is empty for the nine

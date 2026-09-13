@@ -184,6 +184,10 @@ class RunOptions(Model):
     #: (`run`) or only states a DAG (`plan`), and which rows it sees.
     evalrun_agent: Literal["reference", "harness"] = "reference"
     evalrun_mode: Literal["run", "plan"] = "run"
+    #: Which cases: the revision's connector dataset, the process programme's
+    #: record requests over the company's own records (a project with a
+    #: process structure), or both. The dataset is the default, as before.
+    evalrun_source: Literal["dataset", "programme", "both"] = "dataset"
     evalrun_split: str = Field(default="", max_length=40)
     evalrun_limit: int | None = Field(default=None, ge=1, le=100_000, strict=True)
     evalrun_max_turns: int = Field(default=32, ge=1, le=128, strict=True)

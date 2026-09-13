@@ -1326,6 +1326,7 @@ worldloom studio evalrun <PROJECT>
 | `--limit` | Only the first N selected rows. |
 | `--max-turns` | Turns the harness may take per case. |
 | `--mode` | run: execute through the tool surface and grade three axes; plan: state a DAG only and grade the plan axis. |
+| `--source` | Which cases: dataset (the connector queryset), programme (the process programme's record requests over the company's records) or both. |
 | `--split` | Grade only this dataset split (train, validation, test); empty grades every row. |
 | `--timeout` |  |
 | `--workspace`, `-w` | Persistent local Studio workspace. |
