@@ -637,3 +637,61 @@ def test_a_project_meets_its_own_evidence_requirements_from_the_world(tmp_path: 
             assert requirement.selector["lob"] == use_case.lob
             checked += 1
     assert checked >= 2 * len(spec.use_cases)
+
+
+def test_a_project_derives_from_a_described_company_and_rederives_keeping_its_selection(tmp_path: Path) -> None:
+    """The interview settles the company; the catalogue derives the rest."""
+    from worldloom.process_bindings import BusinessUnit, CompanySpec
+
+    described = CompanySpec(
+        name="Ardent Telecom", industry="telecom", operating_model="federated", countries=("IN",),
+        bus=(
+            BusinessUnit(name="Consumer", archetype="customer_segment"),
+            BusinessUnit(name="Enterprise", archetype="customer_segment"),
+            BusinessUnit(name="Shared Services", archetype="shared_service_centre"),
+        ),
+    )
+    spec = industry.project(described, lobs=("billing",))
+    assert spec.structure == described
+    assert [unit.name for unit in spec.divisions] == ["Consumer", "Enterprise", "Shared Services"]
+    assert [lob.name for lob in spec.lobs] == ["billing"]
+    assert spec.use_cases and all(case.lob == "billing" for case in spec.use_cases)
+    assert spec.company == {"industry": "telecom", "identity": {"company_name": "Ardent Telecom"}, "geo": "australia"}
+    assert industry.project(described, lobs=("billing",)) == spec
+    with pytest.raises(ValueError, match="names 'Ardent Telecom'"):
+        industry.project(described, "Other Co")
+    with pytest.raises(ValueError, match="needs the company's name"):
+        industry.project("telecom")
+    # A re-derivation keeps what is not derived and the families seated now.
+    changed = described.model_copy(update={"bus": (*described.bus, BusinessUnit(name="Wholesale", archetype="customer_segment"))})
+    again = industry.rederive(spec.model_copy(update={"structure": changed, "episodes": ("2026-03",)}))
+    assert again.episodes == ("2026-03",) and again.seed == spec.seed
+    assert [unit.name for unit in again.divisions] == ["Consumer", "Enterprise", "Shared Services", "Wholesale"]
+    assert [lob.name for lob in again.lobs] == ["billing"]
+    assert again == industry.rederive(spec.model_copy(update={"structure": changed, "episodes": ("2026-03",)}))
+    everything = industry.rederive(spec.model_copy(update={"lobs": ()}))
+    assert len(everything.lobs) > 1
+    with pytest.raises(ValueError, match="has none"):
+        industry.rederive(spec.model_copy(update={"structure": None, "divisions": (), "lobs": (), "use_cases": ()}))
+    # The locale follows the country where one is shipped.
+    assert industry.geo_for(("IN",)) == "australia" and industry.geo_for(("SG", "DE")) == "germany"
+
+
+def test_the_process_kinds_are_in_the_registry_of_a_process_that_never_imported_industry() -> None:
+    """A project written by one process lints the same in another: the
+    catalogue's `process.<stream>` kinds are registry data, not an import."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "from worldloom import factkinds\n"
+        "assert 'worldloom.industry' not in sys.modules\n"
+        "assert factkinds.resolvable('process.order_to_cash')\n"
+        "assert factkinds.get('process.usage_to_bill').generated_by == 'worldloom.industry'\n"
+        "print(len([k for k in factkinds.names() if k.startswith('process.')]))\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert int(result.stdout.strip()) == len(industry.stream_names())
+    # Registering the same catalogue again is a harmless reload.
+    assert set(industry.register_kinds()) <= set(factkinds.names())

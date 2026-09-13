@@ -57,6 +57,16 @@ def load_catalogue(path: Path | None = None) -> dict[str, Any]:
     return value
 
 
+def stream_names(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
+    """Every value stream the catalogue declares, universal and industry-specific, key to name."""
+    cat = catalogue if catalogue is not None else load_catalogue()
+    names = {key: value["name"] for key, value in cat["value_streams"].items()}
+    for overlay in cat["industry_overlays"].values():
+        for key, value in overlay.get("specific", {}).items():
+            names.setdefault(key, value["name"])
+    return dict(sorted(names.items()))
+
+
 def default_company(industry: str, *, name: str | None = None) -> CompanySpec:
     orgs = resource("defaults.json")["DEFAULT_ORGS"]
     if industry not in orgs:

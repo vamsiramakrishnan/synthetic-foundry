@@ -47,7 +47,11 @@ reconciliation with the company's financial aggregates.
 
 1. **Interview.** Describe the company and the work to evaluate. Include systems,
    record volumes, ownership, expected outcomes and changes over time. Export a
-   request to a coding harness, or send it through a configured adapter.
+   request to a coding harness, or send it through a configured adapter. A
+   reply that changes the company itself edits its process structure and sets
+   `derive`; the Studio then derives the divisions, lines of business and use
+   cases from the process catalogue for that company rather than taking them
+   from the reply (see [Industry X](industry-programme.md)).
 2. **Review.** A harness response may contain questions and a complete proposed
    project. Inspect its changes before applying it. Applying a response targets
    the revision that issued the request; a stale proposal cannot overwrite

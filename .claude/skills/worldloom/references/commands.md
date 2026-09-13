@@ -754,6 +754,20 @@ worldloom industry programme <INDUSTRY> <OUTPUT>
 | `--describe` | Print the headline numbers and stop; write nothing. |
 | `--engine` | The registered domain whose world the derived LOBs ride. Default: the industry's own name when a domain is registered under it. |
 
+### `worldloom industry project`
+
+Derive a Studio project for one company: its divisions, lines of business and use cases from the process catalogue.
+
+```
+worldloom industry project <INDUSTRY> <OUTPUT>
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--lob` | A function family to seat (repeatable). Default: every family with a supported process line. |
+| `--name` | The company's name. Required for an industry; a company spec carries its own. |
+| `--seed` | The world seed. |
+
 ### `worldloom inspect`
 
 Show what a corpus contains. Nothing is hidden.

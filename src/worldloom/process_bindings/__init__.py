@@ -14,7 +14,7 @@ from .adapters import (
     tool_surface,
     verify_ownership,
 )
-from .compiler import compile_company, default_company, load_catalogue
+from .compiler import compile_company, default_company, load_catalogue, stream_names
 from .models import (
     ActivityBinding,
     BusinessUnit,
@@ -35,7 +35,8 @@ from .storage import (
 __all__ = [
     "ActivityBinding", "BusinessUnit", "CompanySpec", "CompiledCatalogue", "CoverageCell", "Finding",
     "ProcessDemand", "Situation", "compile_company", "coverage", "default_company",
-    "load_catalogue", "situations", "situations_for",
+    "load_catalogue",
+    "stream_names", "situations", "situations_for",
     "materialize_owners",
     "authoring_brief", "dataset", "demands", "lexicon_records", "sample_channels", "tool_surface", "verify_ownership",
     "replay_builtin", "summary", "verify_export", "write_compilation",

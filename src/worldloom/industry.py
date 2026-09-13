@@ -78,6 +78,7 @@ from .process_bindings import (
     load_catalogue,
     situations_for,
 )
+from .process_bindings import stream_names as process_bindings_stream_names
 
 if TYPE_CHECKING:
     from .evals.coverage import CoverageReport
@@ -204,12 +205,7 @@ def emulated_systems() -> dict[str, Any]:
 
 def stream_names(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
     """Every value stream the catalogue declares, universal and industry-specific."""
-    cat = catalogue if catalogue is not None else load_catalogue()
-    names = {key: value["name"] for key, value in cat["value_streams"].items()}
-    for overlay in cat["industry_overlays"].values():
-        for key, value in overlay.get("specific", {}).items():
-            names.setdefault(key, value["name"])
-    return dict(sorted(names.items()))
+    return process_bindings_stream_names(catalogue)
 
 
 def industry_words(catalogue: dict[str, Any] | None = None) -> dict[str, str]:
@@ -258,21 +254,11 @@ def industry_of(
 def register_kinds(catalogue: dict[str, Any] | None = None) -> tuple[str, ...]:
     """Register `process.<stream>` for every stream the catalogue declares.
 
-    Idempotent, and from data: the streams are the catalogue's, so a catalogue
-    that adds a stream adds the kind a LOB may answer for. `holds-at` is the
-    floor invariant the registry demands; a derived fact states what the
-    catalogue declares at `as_of`, which is exactly what `holds-at` claims.
+    Idempotent, and from data (`factkinds.process_kinds`). The shipped
+    catalogue's kinds are registered the first time any process consults the
+    registry; this registers a caller's own catalogue beside them.
     """
-    kinds = tuple(
-        factkinds.FactKind(
-            kind=f"{KIND_PREFIX}.{stream}",
-            domain="process",
-            generated_by="worldloom.industry",
-            invariants=("holds-at",),
-            about=f"Who owns, records and controls the activities of {name}, as the process catalogue declares.",
-        )
-        for stream, name in stream_names(catalogue).items()
-    )
+    kinds = factkinds.process_kinds(catalogue)
     factkinds.register(kinds)
     return tuple(kind.kind for kind in kinds)
 
@@ -1164,36 +1150,71 @@ def divisions(structure: CompanySpec) -> tuple[Any, ...]:
     )
 
 
+#: The locale a company's country builds in, where one is shipped
+#: (`worldloom pack locales`). A country with no locale builds in the default
+#: one, `DEFAULT_GEO`, and says nothing about it: a locale is names, a
+#: calendar and a digit grammar, and the catalogue's countries are where the
+#: bindings apply.
+COUNTRY_LOCALES: dict[str, str] = {
+    "AU": "australia", "NZ": "australia",
+    "GB": "united_kingdom", "UK": "united_kingdom",
+    "DE": "germany", "AT": "germany",
+    "AE": "gulf",
+}
+DEFAULT_GEO = "australia"
+
+
+def geo_for(countries: Sequence[str]) -> str:
+    """The locale of the first of *countries* that has one, else `DEFAULT_GEO`."""
+    return next((COUNTRY_LOCALES[c] for c in countries if c in COUNTRY_LOCALES), DEFAULT_GEO)
+
+
 def project(
-    industry: str,
-    name: str,
+    industry: str | CompanySpec,
+    name: str | None = None,
     *,
     lobs: Sequence[str] | None = None,
     seed: int = 8128,
-    geo: str = "australia",
+    geo: str | None = None,
     catalogue: dict[str, Any] | None = None,
 ) -> ProjectSpec:
-    """A Studio project for one company of *industry*, its use cases derived.
+    """A Studio project for one company, its structure, lines and use cases derived.
 
-    The company document names the industry and the company; `company.resolve`
-    picks the engine (its own for retail, banking and insurance; the retail
-    shape, with the limitation acknowledged in the project, for an industry no
-    engine builds). The process structure is the catalogue's default company
-    renamed, the LOBs are the derived ones for the selected families (rooted
-    at the chief executive so they lint clean, engine set to the resolved
-    engine so they ride the world), and the use cases are every supported
-    line of those families with the line's count. `lobs` defaults to every
-    family with a supported line, largest first; the blueprint re-cuts the
-    composed pack's name pools to the people the LOBs add
-    (`sdk.Blueprint.lob`), so the count of lines is not capped by a pool.
+    *industry* is an industry the catalogue knows, whose default company is
+    renamed to *name*, or a `CompanySpec` describing the company itself (its
+    units, countries, operating model and landscape), as an interview
+    settles it; then *name* is the company's own. The company document names
+    the industry and the company; `company.resolve` picks the engine (its own
+    for retail, banking and insurance; the retail shape, with the limitation
+    acknowledged in the project, for an industry no engine builds). The
+    divisions are the company's units (`divisions`), the LOBs are the derived
+    ones for the selected families (rooted at the chief executive so they
+    lint clean, engine set to the resolved engine so they ride the world),
+    and the use cases are every supported line of those families with the
+    line's count. `lobs` defaults to every family with a supported line,
+    largest first; `geo` defaults to the locale of the company's first
+    country that has one (`geo_for`). The blueprint re-cuts the composed
+    pack's name pools to the people the LOBs add (`sdk.Blueprint.lob`), so
+    the count of lines is not capped by a pool.
     """
     from . import company as company_module
     from .studio.models import ProjectSpec
 
+    if isinstance(industry, CompanySpec):
+        structure = industry
+        if name is not None and name != structure.name:
+            raise ValueError(f"the company spec names {structure.name!r}, not {name!r}")
+        name = structure.name
+        industry = structure.industry
+    else:
+        if name is None:
+            raise ValueError("a project from an industry needs the company's name")
+        structure = default_company(industry, name=name)
+    if geo is None:
+        geo = geo_for(structure.countries)
     document = {"industry": industry, "identity": {"company_name": name}, "geo": geo}
     resolution = company_module.resolve(company_module.from_document(document))
     resolution.raise_for_conflicts()
-    structure = default_company(industry, name=name)
     derived = programme(structure, engine=resolution.engine, catalogue=catalogue)
     supported = {line.lob for line in derived.summary.lines if line.supported}
     if lobs is None:
@@ -1228,6 +1249,35 @@ def project(
         max_batches=12,
         max_per_case=6,
     )
+
+
+def rederive(spec: ProjectSpec, *, lobs: Sequence[str] | None = None) -> ProjectSpec:
+    """*spec* with its divisions, LOBs, use cases and acknowledged limitations derived again from its structure.
+
+    What an interview changes is the company (`structure`: its units,
+    countries, operating model, landscape); everything the catalogue derives
+    from a company follows. The seed, the episodes, the calibration, the
+    native plans and the budgets stay as they are; a native task naming a use
+    case the new company no longer has fails the project's own validation,
+    which names it. `lobs` selects families as `project` does; left unset,
+    the families the project seats now are kept where the new company still
+    supports them, and every supported family is seated when none is.
+    """
+    if spec.structure is None:
+        raise ValueError("a project derives from its process structure; this one has none")
+    geo = str(spec.company.get("geo") or "") or None
+    if lobs is None and spec.lobs:
+        supported = {line.lob for line in programme(spec.structure).summary.lines if line.supported}
+        kept = [lob.name for lob in spec.lobs if lob.name in supported]
+        lobs = kept or None
+    derived = project(spec.structure, lobs=lobs, seed=spec.seed, geo=geo)
+    return spec.model_copy(update={
+        "company": derived.company,
+        "divisions": derived.divisions,
+        "lobs": derived.lobs,
+        "use_cases": derived.use_cases,
+        "acknowledged_unmet": derived.acknowledged_unmet,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -1326,4 +1376,9 @@ __all__ = [
     "standing_findings",
     "stream_names",
     "use_cases",
+    "COUNTRY_LOCALES",
+    "DEFAULT_GEO",
+    "geo_for",
+    "rederive",
+    "divisions",
 ]

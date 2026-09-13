@@ -124,7 +124,17 @@ catalogue knows (`GET /api/preset?engine=telecom`, or `preset("telecom",
 "Ardent Telecom")`): the company document names the industry, the process
 structure is the catalogue's default company renamed, the LOBs are the derived
 ones for the selected families, and the use cases are every supported line of
-those families with the line's own count. `company.resolve` picks the engine:
+those families with the line's own count. `project` also takes a
+`CompanySpec` in place of the industry, the company as an interview settles
+it (its units, countries, operating model and landscape), and derives the
+same things from that company; `worldloom industry project company.json
+project.json` writes the result for `worldloom studio init`. An interview
+reply that changes the company edits `structure` and sets `derive`, and the
+Studio derives the divisions, LOBs, use cases and acknowledged limitations
+again (`industry.rederive`) before recording the revision, keeping the
+families the project seats where the new company still supports them. The
+seed, the episodes and every plan the catalogue does not derive stay as
+they are. `company.resolve` picks the engine:
 its own for a retailer, a bank or an insurer, and the retail shape for an
 industry no engine builds, with that limitation stated in the project's
 `acknowledged_unmet` and the programme it does have named in the sentence.

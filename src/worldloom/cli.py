@@ -320,6 +320,41 @@ def industry_programme(
     }, indent=2, sort_keys=True))
 
 
+@industry_app.command("project")
+def industry_project(
+    industry: str = typer.Argument(..., help="An industry the catalogue knows (`worldloom industry list`), or a path to a company spec JSON describing the company itself."),
+    output: Path | None = typer.Argument(None, help="File to write the Studio project (`worldloom.project/v1`) into; printed when omitted."),
+    name: str | None = typer.Option(None, "--name", help="The company's name. Required for an industry; a company spec carries its own."),
+    lob: list[str] = typer.Option([], "--lob", help="A function family to seat (repeatable). Default: every family with a supported process line."),
+    seed: int = typer.Option(8128, "--seed", help="The world seed."),
+) -> None:
+    """Derive a Studio project for one company: its divisions, lines of business and use cases from the process catalogue.
+
+    The company is an industry's default company renamed, or a company spec
+    as an interview settles it (units, countries, operating model, landscape).
+    Everything else is derived: the same company yields the same project.
+    `worldloom studio init` accepts the file.
+    """
+    from .industry import project
+    from .process_bindings import CompanySpec
+
+    spec: str | CompanySpec = industry
+    if industry.endswith(".json") and Path(industry).exists():
+        spec = CompanySpec.model_validate_json(Path(industry).read_text(encoding="utf-8"))
+    elif name is None:
+        raise typer.BadParameter("a project from an industry needs --name")
+    derived = project(spec, name, lobs=tuple(lob) or None, seed=seed)
+    text = json.dumps(derived.model_dump(mode="json"), indent=2, sort_keys=True)
+    if output is None:
+        typer.echo(text)
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text + "\n", encoding="utf-8")
+    typer.echo(json.dumps({"company": derived.structure.name if derived.structure else None,
+                           "divisions": len(derived.divisions), "lobs": [item.name for item in derived.lobs],
+                           "use_cases": len(derived.use_cases), "file": str(output)}, indent=2, sort_keys=True))
+
+
 @enterprise_evals_app.command("validate")
 def enterprise_evals_validate(path: Path) -> None:
     """Validate a materialized enterprise evaluation corpus."""

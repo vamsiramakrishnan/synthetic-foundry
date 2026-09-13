@@ -11,6 +11,24 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The interview describes the company, the catalogue derives the rest
+
+- `industry.project` takes a `CompanySpec` in place of an industry name:
+  the company as an interview settles it (units, countries, operating
+  model, landscape) yields its divisions, LOBs and use cases the way the
+  industry's default company did. `industry.rederive` does the same for an
+  existing project, keeping its seed, episodes and plans and the families
+  it seats where the new company still supports them. An interview reply
+  sets `derive` to ask for it, and the Studio derives before recording the
+  revision (the reply must carry a structure). `worldloom industry project`
+  writes a project from an industry or a company spec for `studio init`.
+  The locale follows the company's first country that has one
+  (`industry.geo_for`), `australia` otherwise. The catalogue's
+  `process.<stream>` fact kinds are registered the first time any process
+  consults the fact-kind registry (`factkinds.process_kinds`), so a project
+  written by `worldloom industry project` lints the same under `studio
+  init` in a process that never imported `worldloom.industry`.
+
 ### A catalogue project compiles and grades end to end
 
 - A Studio project derived from the catalogue (`industry.project`) now

@@ -138,6 +138,49 @@ def parse_invariant(invariant: str) -> tuple[str, tuple[str, ...]]:
 _KINDS: dict[str, FactKind] = {}
 
 
+#: The family the process catalogue's kinds live under: `process.<stream>`.
+PROCESS_PREFIX = "process"
+
+_PROCESS_REGISTERED = False
+
+
+def process_kinds(catalogue: dict[str, Any] | None = None) -> tuple[FactKind, ...]:
+    """`process.<stream>` for every value stream the process catalogue declares.
+
+    From data: the streams are the catalogue's, so a catalogue that adds a
+    stream adds the kind a line of business may answer for. `holds-at` is the
+    floor invariant the registry demands; a derived fact states what the
+    catalogue declares at a moment, which is exactly what `holds-at` claims.
+    """
+    from .process_bindings import stream_names
+
+    return tuple(
+        FactKind(
+            kind=f"{PROCESS_PREFIX}.{stream}",
+            domain="process",
+            generated_by="worldloom.industry",
+            invariants=("holds-at",),
+            about=f"Who owns, records and controls the activities of {name}, as the process catalogue declares.",
+        )
+        for stream, name in stream_names(catalogue).items()
+    )
+
+
+def _ensure_process_kinds() -> None:
+    """Register the shipped catalogue's process kinds before the registry is read.
+
+    The registry is module state so that every process answers alike; the
+    process kinds are catalogue data every process ships, so they are in the
+    registry whether or not `worldloom.industry` was imported. A project
+    written by one process and read by another lints the same.
+    """
+    global _PROCESS_REGISTERED
+    if _PROCESS_REGISTERED:
+        return
+    _PROCESS_REGISTERED = True
+    register(process_kinds())
+
+
 def register(kinds: Sequence[FactKind]) -> None:
     """Register *kinds*. Identical re-registration is a harmless reload; a
     different declaration under a known kind is refused, because a lint that
@@ -168,16 +211,19 @@ def register(kinds: Sequence[FactKind]) -> None:
 
 def get(kind: str) -> FactKind | None:
     """The declaration for *kind*, or ``None`` for an unregistered one."""
+    _ensure_process_kinds()
     return _KINDS.get(kind)
 
 
 def known() -> dict[str, FactKind]:
     """Every registered kind, by name. A copy; the registry is not a surface."""
+    _ensure_process_kinds()
     return dict(_KINDS)
 
 
 def names() -> list[str]:
     """Every registered kind name, sorted."""
+    _ensure_process_kinds()
     return sorted(_KINDS)
 
 
@@ -190,6 +236,7 @@ def resolvable(name: str) -> bool:
     three times would invite the three to disagree. The boundary is a dot, so
     ``financial.rev`` does not resolve — a truncation is a typo, not a family.
     """
+    _ensure_process_kinds()
     if name in _KINDS:
         return True
     prefix = name + "."

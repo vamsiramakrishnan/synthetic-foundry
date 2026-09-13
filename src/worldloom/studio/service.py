@@ -259,6 +259,7 @@ class Studio:
                        "Keep unanswered details as questions; do not acknowledge unsupported claims on the operator's behalf.",
                        "Reuse registered company, LOB, process, scenario and synthesis contracts. A new label does not implement a workflow.",
                        "When the operator names an industry, derive its lines of business, processes, requests and counts from the process catalogue (`worldloom industry programme INDUSTRY --describe`; the `programme` field below carries the headline numbers) rather than inventing a LOB list or writing a round number as a use case count. A use case's count is the process line's situations; a system no connector emulates is named as unemulated, never replaced.",
+                       "To change the company itself, edit `structure` (its name, industry, operating model, countries, business units with their archetypes, and the landscape naming the product per system class), set `divisions` and `use_cases` to empty lists, keep `lobs` to keep the families seated now or empty it to seat every supported family, and set `derive` to true. The Studio then derives the divisions, LOBs, use cases and acknowledged limitations from the process catalogue for that company before recording the revision. Do not write those by hand when the company changes.",
                        "For a Foundry run each use case needs an explicit construction EvalSpec. Its connector selectors must constrain the declared business unit, LOB and activity. Do not claim unsupported business evidence.",
                        "For native file tasks, declare native_corpus plans referencing accepted company ArtifactIR sections and native_tasks linked to a use_case_id. Specify read/analyze/update/create outcomes, citations, calculations and preserved content. Long documents need enough distinct grounded sections; padding is not evidence.",
                        "Native difficulty uses native_calibration: declare the actual target cohort, pass-rate band, independent support and finite total budgets. Optional noise_variants expose grounded extra files within the same evidence component; the training choice is sealed before one holdout. Never claim prose mutation or independent support from shared files or facts.",
@@ -318,14 +319,28 @@ class Studio:
                 raise StudioConflict("this interview response is already recorded")
             db.execute("UPDATE interviews SET reply=? WHERE id=?", (payload, reply.request_id))
         original = self.store.get(project, row["revision"])
+        proposed = self._proposed(reply)
         return {"reply": reply.model_dump(mode="json"), "revision": row["revision"],
-                "changes": changes(original["spec"], reply.proposal.model_dump(mode="json")) if reply.proposal else []}
+                "changes": changes(original["spec"], proposed.model_dump(mode="json")) if proposed else []}
+
+    @staticmethod
+    def _proposed(reply: InterviewReply) -> ProjectSpec | None:
+        """The project an interview reply proposes, derived from its structure when it asks."""
+        if reply.proposal is None:
+            return None
+        if not reply.derive:
+            return reply.proposal
+        from ..industry import rederive
+
+        return rederive(reply.proposal)
 
     def apply_interview(self, project: str, request_id: str) -> dict[str, Any]:
         turn = next((t for t in self.interviews(project) if t["id"] == request_id), None)
         if turn is None or not turn["reply"] or not turn["reply"].get("proposal"):
             raise ValueError("interview has no proposed company revision")
-        return self.store.revise(project, turn["revision"], ProjectSpec.model_validate(turn["reply"]["proposal"]),
+        proposed = self._proposed(InterviewReply.model_validate(turn["reply"]))
+        assert proposed is not None
+        return self.store.revise(project, turn["revision"], proposed,
                                  reason="Applied reviewed interview proposal")
 
     def snapshot(self, spec: ProjectSpec) -> tuple[World, Path]:

@@ -148,6 +148,37 @@ def test_interview_proposals_are_reviewed_and_revision_bound(project):
         studio.accept_interview(p["id"], reply.model_copy(update={"message": "Different reply"}))
 
 
+def test_an_interview_may_describe_the_company_and_let_the_catalogue_derive_the_rest(project):
+    from worldloom.process_bindings import BusinessUnit
+
+    studio, p = project
+    request = studio.interview_request(p["id"], p["revision"], "We are two retail chains and an online arm.")
+    spec = ProjectSpec.model_validate(p["spec"])
+    assert spec.structure is not None
+    described = spec.structure.model_copy(update={"bus": (
+        BusinessUnit(name="Metro Stores", archetype="product_line"),
+        BusinessUnit(name="Country Stores", archetype="product_line"),
+        BusinessUnit(name="Online", archetype="channel"),
+        *(unit for unit in spec.structure.bus if unit.archetype in {"shared_service_centre", "group_function"}),
+    )})
+    with pytest.raises(ValueError, match="derive needs a proposal"):
+        InterviewReply(request_id=request["request_id"], message="Derive.", derive=True)
+    # The reply describes the company and clears what the catalogue derives:
+    # the old use cases name units the new company does not have.
+    reply = InterviewReply(request_id=request["request_id"], message="Here is the company; derive the rest.",
+                           proposal=spec.model_copy(update={"structure": described, "use_cases": (), "divisions": ()}),
+                           derive=True)
+    result = studio.accept_interview(p["id"], reply)
+    paths = {change["path"] for change in result["changes"]}
+    assert any(path.startswith("/divisions") for path in paths) and any(path.startswith("/use_cases") for path in paths)
+    applied = studio.apply_interview(p["id"], reply.request_id)
+    assert [unit["name"] for unit in applied["spec"]["divisions"]][:3] == ["Metro Stores", "Country Stores", "Online"]
+    assert applied["spec"]["lobs"] and applied["spec"]["use_cases"]
+    owners = {case["owner"] for case in applied["spec"]["use_cases"]}
+    assert owners <= {unit.name for unit in described.bus} | {""}
+    assert applied["spec"]["seed"] == spec.seed
+
+
 def test_cross_company_and_unknown_process_references_refuse(project):
     _studio, p = project
     document = p["spec"]
