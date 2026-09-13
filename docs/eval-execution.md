@@ -360,3 +360,14 @@ cites), and optionally the DAG it planned and its first-token latencies.
 
 [studio]: https://github.com/GoogleCloudPlatform/gemini-enterprise-eval-studio
 [anvil]: https://github.com/vamsiramakrishnan/anvil
+
+## A case set without a corpus
+
+`worldloom evalrun run` and `EvalSession.from_export` also take a case set:
+a directory holding `evalrun-cases.jsonl` (one `EvalCase` per line) beside
+`records.jsonl` (the `ConnectorRecord`s the cases run over). `worldloom
+industry programme INDUSTRY OUT` writes one for a programme's record
+requests (see [Industry X](industry-programme.md)); `evalrun.contract.
+read_case_set` reads it and `is_case_set` tells the two apart. A case set
+without records is refused, because a case whose plan searches records it
+cannot be served is not runnable.

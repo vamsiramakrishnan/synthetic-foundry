@@ -48,8 +48,15 @@ class EvalSession:
 
     @classmethod
     def from_export(cls, directory: str | Path, **options: Any) -> EvalSession:
+        """A session over an exported enterprise corpus, or over a case set (`industry export` writes one)."""
         from ..enterprise_io import load_exported_corpus
+        from .contract import is_case_set, read_case_set
 
+        if is_case_set(directory):
+            cases, records = read_case_set(directory)
+            limit = options.pop("limit", None)
+            options.pop("definitions", None)
+            return cls(cases[:limit] if limit else cases, records, **options)
         return cls.from_corpus(load_exported_corpus(Path(directory)), **options)
 
     def service(self) -> ConnectorEvaluationService:

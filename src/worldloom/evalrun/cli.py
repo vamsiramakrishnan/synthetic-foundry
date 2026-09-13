@@ -23,15 +23,34 @@ app = typer.Typer(
 AGENTS = ("reference", "lazy", "scripted")
 
 
+class _CaseSet:
+    """A case set read from disk, shaped like the corpus the commands expect: its records under `connector_data.records`."""
+
+    class _Data:
+        def __init__(self, records: tuple[Any, ...]) -> None:
+            self.records = records
+
+    def __init__(self, records: tuple[Any, ...]) -> None:
+        self.connector_data = self._Data(records)
+
+
 def _corpus_cases(corpus: Path, limit: int | None) -> tuple[Any, tuple[Any, ...]]:
+    """The cases of an enterprise corpus, or of a case set (`industry export` writes one)."""
     from ..cli import _refuse
     from ..enterprise_io import load_exported_corpus
-    from .contract import cases_from_corpus
+    from .contract import cases_from_corpus, is_case_set, read_case_set
 
+    if is_case_set(corpus):
+        try:
+            cases, records = read_case_set(corpus)
+        except (OSError, ValueError) as error:
+            _refuse("case_set_unreadable", f"{corpus}: {error}")
+        return _CaseSet(records), cases[:limit] if limit else cases
     try:
         loaded = load_exported_corpus(corpus)
     except (OSError, ValueError) as error:
-        _refuse("corpus_unreadable", f"{corpus}: {error}", fix="point at a directory written by `worldloom enterprise-evals build`")
+        _refuse("corpus_unreadable", f"{corpus}: {error}",
+                fix="point at a directory written by `worldloom enterprise-evals build` or `worldloom industry programme`")
     try:
         cases = cases_from_corpus(loaded)
     except ValueError as error:
@@ -156,7 +175,7 @@ def requests_command(
 
 @app.command("run")
 def run_command(
-    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`."),
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`, or a case set written by `worldloom industry programme` (evalrun-cases.jsonl beside records.jsonl)."),
     out: Path = typer.Option(..., "--out", "-o", help="Run directory to write (run.json, results.jsonl, summary.json)."),
     agent: str = typer.Option("reference", "--agent", help="reference | lazy | scripted:<responses.json>"),
     exec_command: str | None = typer.Option(
@@ -249,7 +268,7 @@ def _print_summary(summary: Any, json_output: bool) -> None:
 
 @app.command("plan")
 def plan_command(
-    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`."),
+    corpus: Path = typer.Argument(..., help="Directory written by `worldloom enterprise-evals build`, or a case set written by `worldloom industry programme` (evalrun-cases.jsonl beside records.jsonl)."),
     out: Path = typer.Option(..., "--out", "-o", help="Run directory to write (run.json, results.jsonl, summary.json)."),
     agent: str = typer.Option("reference", "--agent", help="reference | scripted:<plans.json>"),
     exec_command: str | None = typer.Option(

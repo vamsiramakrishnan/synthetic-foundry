@@ -231,7 +231,13 @@ class ReferenceAgent:
                               about=(str(node["id"]),))
         notes = (self._walk_grammar(row, tools) if row.get("grammar") == "enterprise-dag@1"
                  else self._walk_legacy(row, tools))
-        return AgentResponse(answer=f"Completed {task.case_id}: {len(tools.spans)} calls.", notes=tuple(notes))
+        # A row that states its expected answer (a programme's record request
+        # does: the answer is read off the records the plan searches) has the
+        # reference say it, so the ceiling covers the answer axis too. A row
+        # without one reports what it did, as before.
+        stated = str(row.get("expected_answer") or "").strip()
+        answer = stated or f"Completed {task.case_id}: {len(tools.spans)} calls."
+        return AgentResponse(answer=answer, notes=tuple(notes))
 
     def _call(self, tools: ToolSurface, tool: str, /, **arguments: Any) -> Any:
         allowed = self._params.get(tool)

@@ -837,6 +837,10 @@ class Programme:
         for request in self.requests:
             yield request.to_case()
 
+    def evalrun_cases(self) -> tuple[Any, ...]:
+        """The record requests as `evalrun` cases over the company's records (`evalrun_cases`)."""
+        return evalrun_cases(self)
+
     def coverage(self) -> CoverageReport:
         """What the requests span, against every situation the catalogue offers."""
         from .evals.coverage import report
@@ -1373,6 +1377,101 @@ def rederive(spec: ProjectSpec, *, lobs: Sequence[str] | None = None) -> Project
 
 
 # ---------------------------------------------------------------------------
+# The record requests as evalrun cases
+# ---------------------------------------------------------------------------
+
+#: The shape a programme's record request takes as an `evalrun` case: one
+#: search per record kind the binding holds in the period, the answer read
+#: off what comes back.
+RECORD_LOOKUP_SHAPE = "record_lookup"
+
+#: Calls a record request allows beyond one search per record kind: a
+#: second page or a re-read, not a retry storm.
+RECORD_LOOKUP_SLACK = 2
+
+
+def evalrun_row(request: Request, records: Sequence[ConnectorRecord]) -> dict[str, Any]:
+    """One record request as the row an `evalrun` case is read from.
+
+    The plan is a search on the `sor` connector per record kind the binding
+    holds in the request's period, with the binding and the period as the
+    predicate; `expected_reads` and a `reads_contain` assertion name every
+    record of that kind and period, so the outcome is graded on what the
+    search returned, not on whether a search happened. `expected_answer` is
+    the answer read off those records (`sor.answer`), which the reference
+    agent states and a rater grades. A request that rests on the
+    declaration alone has no records to search and is refused here.
+    """
+    if not request.expected_record_ids or request.period is None:
+        raise ValueError(f"request {request.id} rests on the catalogue's declaration; it has no records to search")
+    by_id = {record.id: record for record in records}
+    cited = [by_id[record_id] for record_id in request.expected_record_ids if record_id in by_id]
+    if not cited:
+        raise ValueError(f"request {request.id} cites records absent from the record set")
+    binding_id = str(cited[0].fields["binding_id"])
+    population = [record for record in records
+                  if record.fields.get("binding_id") == binding_id and record.fields.get("period") == request.period]
+    nodes: list[dict[str, Any]] = []
+    assertions: list[dict[str, Any]] = []
+    for kind in sorted({str(record.fields["object"]) for record in population}):
+        entity = sor.entity_name(kind)
+        wanted = [record.id for record in population if record.fields["object"] == kind]
+        node_id = f"search-{entity}"
+        nodes.append({
+            "id": node_id, "server": sor.CONNECTOR, "tool": "search_records", "entity": entity,
+            "node_kind": "search", "op": "search",
+            "payload": {"predicate": {"binding_id": binding_id, "period": request.period}, "max_results": 50},
+            "expected_reads": wanted,
+        })
+        assertions.append({"type": "reads_contain", "node": node_id, "records": wanted})
+    return {
+        "id": request.id,
+        "query": request.brief,
+        "shape": RECORD_LOOKUP_SHAPE,
+        "expected_dag": {"nodes": nodes, "edges": []},
+        "assertions": assertions,
+        "max_calls": len(nodes) + RECORD_LOOKUP_SLACK,
+        "expected_fact_ids": list(request.expected_fact_ids),
+        "expected_record_ids": list(request.expected_record_ids),
+        "expected_answer": request.expected_answer,
+        "period": request.period,
+        "lob": request.lob,
+        "stream": request.stream,
+        "activity_id": request.occasion,
+        "intent": request.intent,
+    }
+
+
+def evalrun_cases(derived: Programme, *, requests_selected: Iterable[str] | None = None) -> tuple[Any, ...]:
+    """The programme's record requests as `evalrun` cases, in request order.
+
+    Each case's plan searches the company's own records (`Programme.records`,
+    served through the `sor` connector), its outcome is the records the
+    search must return and the answer read off them, graded by the rater
+    (`AnswerOutcome` with the request's own rubric), and its dimensions carry
+    the line, stream, intent, channel and activity type for the summary's
+    slices. Requests that rest on the declaration alone are not cases here;
+    they stay corpus cases (`Programme.cases`). `requests_selected` narrows
+    by request id.
+    """
+    from .evalrun.contract import AnswerOutcome, case_from_row
+
+    wanted = set(requests_selected) if requests_selected is not None else None
+    out = []
+    for request in derived.requests:
+        if not request.expected_record_ids or (wanted is not None and request.id not in wanted):
+            continue
+        row = evalrun_row(request, derived.records)
+        out.append(case_from_row(
+            row, query=request.brief, persona=request.asker,
+            dimensions={"lob": request.lob, "stream": request.stream, "intent": request.intent,
+                        "channel": request.channel, "activity_type": request.activity_type},
+            answer=AnswerOutcome(golden=request.expected_answer, rubric=request.grading),
+        ))
+    return tuple(out)
+
+
+# ---------------------------------------------------------------------------
 # Export
 # ---------------------------------------------------------------------------
 
@@ -1382,6 +1481,8 @@ def export(derived: Programme, out: str | Path) -> dict[str, str]:
 
     `programme.json` (the summary), `lobs.json`, `facts.jsonl`,
     `requests.jsonl`, `cases.jsonl` (the requests as corpus cases),
+    `records.jsonl`, `evalrun-cases.jsonl` (the record requests as `evalrun`
+    cases over those records, which `worldloom evalrun run` takes),
     `use-cases.json` and `coverage.json`. Returns each file's path by name.
     """
     from .corpus import write_json, write_jsonl
@@ -1406,6 +1507,10 @@ def export(derived: Programme, out: str | Path) -> dict[str, str]:
     written["cases.jsonl"] = str(root / "cases.jsonl")
     write_jsonl(root / "records.jsonl", list(derived.records))
     written["records.jsonl"] = str(root / "records.jsonl")
+    from .evalrun.contract import CASE_SET_FILE
+
+    write_jsonl(root / CASE_SET_FILE, list(derived.evalrun_cases()))
+    written[CASE_SET_FILE] = str(root / CASE_SET_FILE)
     json_file(
         "use-cases.json",
         {"use_cases": [case.model_dump(mode="json") for case in derived.use_cases()]},
@@ -1479,4 +1584,8 @@ __all__ = [
     "REVENUE_ARCHETYPES",
     "revenue_function",
     "role_table",
+    "RECORD_LOOKUP_SHAPE",
+    "RECORD_LOOKUP_SLACK",
+    "evalrun_cases",
+    "evalrun_row",
 ]

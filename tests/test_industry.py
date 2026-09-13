@@ -363,6 +363,7 @@ def test_export_writes_the_programme_and_reads_back(
         "use-cases.json",
         "coverage.json",
         "records.jsonl",
+        "evalrun-cases.jsonl",
     }
     records = (tmp_path / "out" / "records.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(records) == telecom.summary.records == len(telecom.records)
@@ -724,3 +725,67 @@ def test_an_engine_less_industry_seats_its_revenue_function_in_the_commercial_se
     assert not any("Merchandising" in title or "Buying" in title for title in titles)
     assert "Head of Billing" in titles
     assert world.validate().ok
+
+
+def test_record_requests_run_as_evalrun_cases_over_the_companys_records(tmp_path: Path) -> None:
+    """The evalset the catalogue implies is runnable: each record request is an
+    `evalrun` case whose plan searches the company's records, whose outcome is
+    the records the search must return and the answer read off them, and
+    whose reference run passes wherever the rubric can be graded without a model."""
+    from typer.testing import CliRunner
+
+    from worldloom.cli import app
+    from worldloom.enterprise_rows import runtime_records
+    from worldloom.evalrun.agents import ReferenceAgent
+    from worldloom.evalrun.contract import CASE_SET_FILE, is_case_set, read_case_set
+    from worldloom.evalrun.rater import JUDGE_ONLY, GroundedRater
+    from worldloom.evalrun.runner import run_cases, service_for
+    from worldloom.evalrun.session import EvalSession
+    from worldloom.process_bindings import BusinessUnit, CompanySpec
+
+    company = CompanySpec(name="Ardent Telecom", industry="telecom", operating_model="centralised", countries=("IN",),
+                          bus=(BusinessUnit(name="Consumer", archetype="customer_segment"),
+                               BusinessUnit(name="Group Finance", archetype="group_function")))
+    derived = industry.programme(company)
+    cases = derived.evalrun_cases()
+    assert len(cases) == derived.summary.record_requests > 0
+    assert cases == industry.evalrun_cases(derived)
+    first = cases[0]
+    request = next(r for r in derived.requests if r.id == first.id)
+    assert first.query == request.brief and first.outcomes.answer is not None
+    assert first.outcomes.answer.golden == request.expected_answer and first.outcomes.answer.rubric is request.grading
+    assert all(node.connector == "sor" and node.kind == "search" for node in first.plan.nodes)
+    assert first.row["expected_answer"] == request.expected_answer and first.row["shape"] == industry.RECORD_LOOKUP_SHAPE
+    assert set(request.expected_record_ids) <= set(first.outcomes.unstructured.required_records if first.outcomes.unstructured else ()) | {
+        rid for assertion in first.row["assertions"] for rid in assertion["records"]}
+    assert first.dimensions["lob"] == request.lob and first.dimensions["intent"] == request.intent
+    declaration_only = next(r for r in derived.requests if not r.expected_record_ids)
+    with pytest.raises(ValueError, match="declaration"):
+        industry.evalrun_row(declaration_only, derived.records)
+    # The reference run is the ceiling: every gradable case passes, the
+    # judge-only shapes stay ungraded rather than green.
+    subset = [case for case in cases if case.outcomes.answer.rubric not in JUDGE_ONLY][:3] + [
+        case for case in cases if case.outcomes.answer.rubric in JUDGE_ONLY][:1]
+    service = service_for(subset, runtime_records(list(derived.records)))
+    report = run_cases(service, subset, ReferenceAgent(subset), rater=GroundedRater())
+    by_id = {result.case_id: result for result in report.results}
+    for case in subset:
+        result = by_id[case.id]
+        assert result.score is not None and result.score.plan.score == 1.0 and result.score.trajectory.score == 1.0
+        assert result.score.assertion_status == "ok", result.score.assertion_fails
+        if case.outcomes.answer.rubric in JUDGE_ONLY:
+            assert not result.score.passed
+        else:
+            assert result.score.passed, (case.id, result.score.outcomes)
+    # The export writes the case set beside the records, and the CLI and the SDK read it back.
+    written = derived.export(tmp_path / "programme")
+    assert CASE_SET_FILE in written and is_case_set(tmp_path / "programme")
+    read, records = read_case_set(tmp_path / "programme")
+    assert read == cases and len(records) == len(derived.records) and records[0]["fid"] == derived.records[0].id
+    session = EvalSession.from_export(tmp_path / "programme", limit=2)
+    assert session.cases == cases[:2]
+    runner = CliRunner()
+    result = runner.invoke(app, ["evalrun", "run", str(tmp_path / "programme"), "--out", str(tmp_path / "run"),
+                                 "--limit", "2", "--rater", "grounded", "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["cases"] == 2

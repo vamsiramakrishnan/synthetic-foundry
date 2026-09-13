@@ -109,6 +109,26 @@ review against policy) still answers with the catalogue's declaration. One
 request per situation either way, so the counts below are unchanged; what
 changes is how many of them have an answer of their own.
 
+## The requests run as evalrun cases
+
+A record request is also an `evalrun` case (`Programme.evalrun_cases`,
+`industry.evalrun_cases`): its plan is one search on the `sor` connector per
+record kind the binding holds in the request's period, with the binding and
+the period as the predicate; its outcome is the records that search must
+return (a `reads_contain` assertion names every one) and the answer read off
+them, graded by the rater under the request's own rubric; its dimensions
+carry the line, the stream, the intent, the channel and the activity type,
+so a run's summary slices by them. `industry export` writes the cases as
+`evalrun-cases.jsonl` beside `records.jsonl`, and `worldloom evalrun run
+PROGRAMME_DIR --rater grounded --out RUN` runs an agent over them with the
+company's records as the connector state; `EvalSession.from_export` reads
+the same directory. The reference agent states the request's expected
+answer after its searches, so its run is the ceiling on all three axes;
+shapes the grounded rater cannot grade without a model (causal chains,
+citations, authority) stay ungraded rather than green. A request that rests
+on the declaration alone is not an `evalrun` case; it stays a corpus case in
+`cases.jsonl`. A telecom's 2,927 record requests are 2,927 cases.
+
 `IndustryProgramme.engine` names the registered domain that builds the
 company's world (`retail`, `banking`, `insurance`) and is empty for the nine
 industries no engine builds. For those the programme stands on the catalogue

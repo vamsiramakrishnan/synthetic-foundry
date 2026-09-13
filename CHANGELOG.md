@@ -11,6 +11,23 @@ The first release. Everything below it is what 0.1.0 ships; the notes run
 newest first, and the section headed *The foundation* is the release as it was
 first written up, before the waves above it landed.
 
+### The programme's record requests run as evalrun cases
+
+- Every record request of a programme is an `evalrun` case
+  (`Programme.evalrun_cases`, `industry.evalrun_cases`, `industry.evalrun_row`):
+  its plan searches the `sor` connector per record kind the binding holds
+  in the request's period, its outcome is the records the search must
+  return (`reads_contain`) and the answer read off them under the request's
+  own rubric, and its dimensions carry line, stream, intent, channel and
+  activity type. `industry export` writes them as `evalrun-cases.jsonl`
+  beside `records.jsonl`; `worldloom evalrun run` and `EvalSession.from_export`
+  take such a case set in place of an enterprise corpus
+  (`evalrun.contract.read_case_set`, `is_case_set`). The reference agent
+  states a row's `expected_answer` when the row carries one, so its run is
+  the ceiling on the answer axis too; rows without one are unchanged. A
+  telecom's 2,927 record requests are 2,927 cases, and the reference run
+  passes every one the grounded rater can grade.
+
 ### The commercial seats take the company's revenue function
 
 - A project of an industry no engine builds rides the retail shape with

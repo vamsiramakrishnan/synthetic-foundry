@@ -385,6 +385,46 @@ def case_from_row(
     )
 
 
+#: A case set on disk: the cases as JSON lines, beside the records they run
+#: over (`records.jsonl`, `ConnectorRecord` lines). What `industry export`
+#: writes for a programme's record requests, and what `worldloom evalrun run`
+#: takes in place of an enterprise corpus.
+CASE_SET_FILE = "evalrun-cases.jsonl"
+RECORDS_FILE = "records.jsonl"
+
+
+def is_case_set(directory: Any) -> bool:
+    """Whether *directory* holds a case set (`CASE_SET_FILE`) rather than an enterprise corpus."""
+    from pathlib import Path
+
+    return (Path(directory) / CASE_SET_FILE).is_file()
+
+
+def read_case_set(directory: Any) -> tuple[tuple[EvalCase, ...], tuple[dict[str, Any], ...]]:
+    """The cases and the runtime records of a case set on disk.
+
+    Records come back in the shape the connector emulator indexes
+    (`enterprise_rows.runtime_records`), so `runner.service_for` takes them
+    as it takes a corpus's. A case set without records refuses: a case whose
+    plan searches records it cannot be served is not runnable.
+    """
+    import json
+    from pathlib import Path
+
+    from ..connector_data import ConnectorRecord
+    from ..enterprise_rows import runtime_records
+
+    root = Path(directory)
+    cases_path, records_path = root / CASE_SET_FILE, root / RECORDS_FILE
+    if not cases_path.is_file():
+        raise ValueError(f"{root} holds no {CASE_SET_FILE}")
+    if not records_path.is_file():
+        raise ValueError(f"{root} holds {CASE_SET_FILE} but no {RECORDS_FILE}; the cases need records to run over")
+    cases = tuple(EvalCase.model_validate(json.loads(line)) for line in cases_path.read_text(encoding="utf-8").splitlines() if line.strip())
+    records = [ConnectorRecord.model_validate(json.loads(line)) for line in records_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return cases, runtime_records(records)
+
+
 def cases_from_corpus(corpus: Any, *, definitions: Mapping[str, Any] | None = None, principal: str = "agent") -> tuple[EvalCase, ...]:
     """Compile an ``EnterpriseCorpus`` into cases, refusing any row the compiler refuses.
 
